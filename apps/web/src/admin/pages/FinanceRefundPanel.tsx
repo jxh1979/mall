@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -111,7 +111,7 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
   const selected = detail?.refund;
   const latestExecution = detail?.attempts.slice().reverse().find((attempt) => ["submit", "retry", "execution"].includes(attempt.operation));
   const execution = latestExecution?.operation === "execution" ? latestExecution : undefined;
-  const projectUnresolved = selected?.sourceType === "stored_value_account" && !selected.projectId?.trim();
+  const projectUnresolved = !!selected && selected.sourceType !== "ar_ap_payment" && !selected.projectId?.trim();
   const mayExecute = !projectUnresolved && (selected?.status === "requested" || selected?.status === "failed");
   const mayRetry = mayExecute && selected?.sourceType === "ar_ap_payment" && !!selected.originalPaymentRef?.trim() && !["cash", "pos"].includes(selected.refundChannel);
   const mayConfirm = !projectUnresolved && selected?.status === "processing" && !!execution && execution.paymentOperatorId !== user.id && !(selected.refundChannel === "cash" && selected.requestedBy === user.id);
@@ -156,12 +156,12 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
     </fieldset>
     <label>受管设备编号（现金或刷卡必填）<input value={deviceId} onChange={(event) => setDeviceId(event.target.value)} disabled={blocked} /></label>
     <AdminDataState loading={refunds.loading} error={refunds.error} empty={rows.length === 0} onRetry={refunds.reload}>
-      <div className="admin-table-scroll"><table className="admin-table"><caption>退款台账</caption><thead><tr><th>退款单号</th><th>原收款或储值账户</th><th>金额（元）</th><th>状态</th><th>办理</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.id}</td><td>{row.targetId}</td><td>{yuan(row.refundAmountCent)}</td><td>{stateLabel(row.status)}</td><td><button type="button" disabled={blocked} aria-label={`查看退款 ${row.id}`} onClick={() => void showDetail(row.id)}>查看及办理</button></td></tr>)}</tbody></table></div>
+      <div className="admin-table-scroll"><table className="admin-table"><caption>退款台账</caption><thead><tr><th>退款单号</th><th>原收款、渠道回流或储值账户</th><th>金额（元）</th><th>状态</th><th>办理</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.id}</td><td>{row.targetId}</td><td>{yuan(row.refundAmountCent)}</td><td>{stateLabel(row.status)}</td><td><button type="button" disabled={blocked} aria-label={`查看退款 ${row.id}`} onClick={() => void showDetail(row.id)}>查看及办理</button></td></tr>)}</tbody></table></div>
     </AdminDataState>
     {detail && selected ? <section data-testid="finance-refund-detail" aria-label="退款详情">
       <h3>退款单 {selected.id}</h3><p>{stateLabel(selected.status)}</p>
       <p>金额：¥{yuan(selected.refundAmountCent)}；原收款流水：{selected.originalPaymentRef ?? "待核实"}；原因：{selected.reason}</p>
-      {projectUnresolved ? <p>待核实项目归属</p> : selected.sourceType === "stored_value_account" && !selected.originalPaymentRef ? <p>该笔储值退款须按原收款路径办理并核实结果。</p> : null}
+      {projectUnresolved ? <p>待核实项目归属</p> : ["ticket_payment_rejection", "channel_ticket_rejection"].includes(selected.sourceType ?? "") ? <p>停售拒收款：先核对原收款和渠道订单，按原渠道办理；真实退款凭证经另一人核实成功后才结清。</p> : selected.sourceType === "stored_value_account" && !selected.originalPaymentRef ? <p>该笔储值退款须按原收款路径办理并核实结果。</p> : null}
       <fieldset disabled={blocked || closed}>
         <legend>查询、重试与核实</legend>
         <div className="admin-form-row"><label>办理说明<input value={note} onChange={(event) => setNote(event.target.value)} /></label>

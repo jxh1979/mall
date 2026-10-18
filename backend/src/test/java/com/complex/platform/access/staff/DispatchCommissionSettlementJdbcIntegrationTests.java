@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -66,6 +68,10 @@ class DispatchCommissionSettlementJdbcIntegrationTests {
         barCompanyId = "ent_cg07_bar_" + suffix;
         dispatchedUserId = "usr_cg07_a_" + suffix;
         ownStaffUserId = "usr_cg07_b_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at)"
+                + " VALUES (?,'complex','派驻测试项目','active',now(),now())", projectId);
+        jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,project_id,status,created_at,updated_at)"
+                + " VALUES (?,'派驻测试酒吧','bar',?,'active',now(),now())", barMerchantId, projectId);
         staffUser(dispatchedUserId, platformCompanyId);
         staffUser(ownStaffUserId, barCompanyId);
         // 酒吧账单与提成计提：派驻员工 A 两笔有效（3000 + 2000）+ 一笔作废（9999）；酒吧自有员工 B 一笔 1500。

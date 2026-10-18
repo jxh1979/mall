@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import java.util.List;
@@ -50,23 +50,33 @@ public class EvidenceAttachmentValidator {
             if (!"finance_refund".equals(attachment.businessType()) || !refundId.equals(attachment.businessId())) {
                 throw ApiException.badRequest("REFUND_EVIDENCE_BINDING_MISMATCH", "凭证必须绑定当前退款");
             }
-            if (!"uploaded".equals(attachment.status())) {
-                throw ApiException.badRequest("REFUND_EVIDENCE_NOT_UPLOADED", "退款凭证尚未完成上传");
+            requireUploaded(attachment, "REFUND_EVIDENCE");
+        }
+    }
+
+    /** 客户端完成登记不能代替真实文件；提交和复核均须检查存储。 */
+    public void requireUploaded(EvidenceAttachmentRecord attachment) {
+        requireUploaded(attachment, "EVIDENCE");
+    }
+
+    private void requireUploaded(EvidenceAttachmentRecord attachment, String errorPrefix) {
+        if (!"uploaded".equals(attachment.status())) {
+            throw ApiException.badRequest(errorPrefix + "_NOT_UPLOADED", "证据附件尚未完成上传");
+        }
+        if (refundFileStorage == null) {
+            throw ApiException.conflict(errorPrefix + "_STORAGE_UNAVAILABLE", "无法核实证据附件的实际文件");
+        }
+        java.nio.file.Path file = refundFileStorage.resolveForRead(attachment.objectKey());
+        try (java.io.InputStream input = java.nio.file.Files.newInputStream(file)) {
+            long actualSize = java.nio.file.Files.size(file);
+            if (actualSize <= 0 || attachment.fileSize() == null || actualSize != attachment.fileSize()) {
+                throw ApiException.conflict(errorPrefix + "_FILE_MISMATCH", "证据附件实际文件与登记大小不符");
             }
-            if (refundFileStorage == null) {
-                throw ApiException.conflict("REFUND_EVIDENCE_STORAGE_UNAVAILABLE", "无法核实退款凭证的实际文件");
+            if (input.read() < 0) {
+                throw ApiException.conflict(errorPrefix + "_FILE_UNREADABLE", "无法读取证据附件文件");
             }
-            // uploaded 元数据不足以证明对象已上传；现有本地存储必须能读取实际文件。
-            // 未接入且未提供可信文件读取的直传对象，不能仅凭客户端 complete 结果用于退款。
-            java.nio.file.Path file = refundFileStorage.resolveForRead(attachment.objectKey());
-            try {
-                long actualSize = java.nio.file.Files.size(file);
-                if (actualSize <= 0 || attachment.fileSize() == null || actualSize != attachment.fileSize()) {
-                    throw ApiException.conflict("REFUND_EVIDENCE_FILE_MISMATCH", "退款凭证实际文件与登记大小不符");
-                }
-            } catch (java.io.IOException exception) {
-                throw ApiException.conflict("REFUND_EVIDENCE_FILE_UNREADABLE", "无法读取退款凭证文件");
-            }
+        } catch (java.io.IOException exception) {
+            throw ApiException.conflict(errorPrefix + "_FILE_UNREADABLE", "无法读取证据附件文件");
         }
     }
 
@@ -80,6 +90,22 @@ public class EvidenceAttachmentValidator {
         requireKind(attachmentIds, "video/", fieldName, "视频");
     }
 
+    /** 高价值退品生效前，两种实际文件必须齐备。 */
+    public void requirePhotoAndVideo(List<String> attachmentIds) {
+        boolean photo = false;
+        boolean video = false;
+        for (String id : attachmentIds) {
+            EvidenceAttachmentRecord attachment = repository.findAttachmentById(id)
+                    .orElseThrow(() -> ApiException.badRequest("EVIDENCE_ATTACHMENT_NOT_FOUND", "证据附件不存在：" + id));
+            requireUploaded(attachment);
+            photo |= attachment.contentType() != null && attachment.contentType().startsWith("image/");
+            video |= attachment.contentType() != null && attachment.contentType().startsWith("video/");
+        }
+        if (!photo || !video) {
+            throw ApiException.badRequest("EVIDENCE_PHOTO_VIDEO_REQUIRED", "高价值退品须同时具备照片和视频证据");
+        }
+    }
+
     private void requireKind(List<String> attachmentIds, String contentTypePrefix,
                              String fieldName, String kindLabel) {
         if (attachmentIds == null || attachmentIds.isEmpty()) {
@@ -89,6 +115,7 @@ public class EvidenceAttachmentValidator {
             EvidenceAttachmentRecord attachment = repository.findAttachmentById(id)
                     .orElseThrow(() -> ApiException.badRequest("EVIDENCE_ATTACHMENT_NOT_FOUND",
                             "证据附件不存在：" + id + "（" + fieldName + "）；请先上传证据文件再提交"));
+            requireUploaded(attachment);
             if (contentTypePrefix != null
                     && (attachment.contentType() == null
                         || !attachment.contentType().startsWith(contentTypePrefix))) {

@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -41,6 +43,7 @@ public class JdbcAmusementParkWideFaultRepository {
 
     /** 该综合体是否处于生效中的全园故障状态（售票闸依据）：生效后直至解除经双岗位确认（含待确认解除阶段）均停售。 */
     public boolean existsActive(String projectId) {
+        lockStatus(false);
         Integer n = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM amusement_park_wide_faults WHERE project_id = :project_id AND status IN ('active', 'pending_lift')",
                 new MapSqlParameterSource("project_id", projectId), Integer.class);
@@ -49,6 +52,7 @@ public class JdbcAmusementParkWideFaultRepository {
 
     /** 任一综合体处于生效中（订单无法定位综合体时 fail-closed 使用）。 */
     public boolean existsAnyActive() {
+        lockStatus(false);
         Integer n = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM amusement_park_wide_faults WHERE status IN ('active', 'pending_lift')",
                 new MapSqlParameterSource(), Integer.class);
@@ -78,6 +82,7 @@ public class JdbcAmusementParkWideFaultRepository {
     }
 
     public AmusementParkWideFaultRecord update(AmusementParkWideFaultRecord r) {
+        lockStatus(true);
         jdbcTemplate.update("""
                 UPDATE amusement_park_wide_faults
                    SET status = :status,
@@ -125,6 +130,12 @@ public class JdbcAmusementParkWideFaultRepository {
                 """, new MapSqlParameterSource("fault_id", faultId), (rs, n) -> new AmusementParkWideFaultActionRecord(
                 rs.getString("id"), rs.getString("fault_id"), rs.getString("project_id"), rs.getString("action"),
                 rs.getString("actor_id"), rs.getString("actor_role"), rs.getString("note"), instant(rs, "created_at")));
+    }
+
+    // 售票/核销读闸持共享锁至事务结束；故障生效/解除独占同锁，避免验闸后状态切换。
+    private void lockStatus(boolean writing) {
+        jdbcTemplate.queryForObject("SELECT " + (writing ? "pg_advisory_xact_lock" : "pg_advisory_xact_lock_shared")
+                + "(hashtextextended('amusement_park_wide_fault_gate', 0))", new MapSqlParameterSource(), Object.class);
     }
 
     private AmusementParkWideFaultRecord map(ResultSet rs, int n) throws SQLException {

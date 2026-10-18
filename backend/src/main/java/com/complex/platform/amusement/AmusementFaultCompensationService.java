@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.amusement.AmusementParkWideFaultService.roleLabel;
 
 import com.complex.platform.access.AccessActor;
@@ -86,8 +88,8 @@ public class AmusementFaultCompensationService {
             int value = request.validityDays();
             int min = request.minDays();
             int max = request.maxDays();
-            if (min < 1 || min > value || value > max) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "补偿有效期须满足：1 ≤ 下限 ≤ 天数 ≤ 上限");
+            if (min < 1 || min > value || value > max || max > 3650) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "补偿有效期须满足：1 ≤ 下限 ≤ 天数 ≤ 上限 ≤ 3650");
             }
             return idempotencyService.execute("configureCompensationPolicy", request.idempotencyKey(), request, () -> {
                 AccessActor actor = authorizationService.currentActor();

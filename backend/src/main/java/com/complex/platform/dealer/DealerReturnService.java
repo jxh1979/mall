@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -131,7 +131,8 @@ public class DealerReturnService {
             if (!REASONS.contains(reason)) {
                 throw ApiException.badRequest("RETURN_REASON_NOT_ALLOWED", "合同期限内仅未拆封可复售商品或质量问题商品可以申请退货");
             }
-            DealerContractRecord contract = dealers.findContract(order.dealerContractId()).orElseThrow();
+            DealerContractRecord contract = order.contractSnapshot();
+            if (contract == null) throw ApiException.conflict("DEALER_CONTRACT_SNAPSHOT_REQUIRED", "原订单缺少锁定合同快照，须先核实原合同事实");
             if (contract.validTo().isBefore(LocalDate.now())) {
                 throw ApiException.conflict("DEALER_CONTRACT_EXPIRED", "合同期限已过，不得申请退货");
             }
@@ -282,6 +283,11 @@ public class DealerReturnService {
                     returns.offsetReceivable(order.arApItemId(), offset);
                 }
                 orders.applyReturn(order.id(), acceptedAmount, "returning");
+                if (order.overdue() && !orders.dealerHasOverdueOrders(order.dealerId())) {
+                    dealers.setCreditSuspended(order.dealerId(), false);
+                    audit.recordSuccess("dealer.credit_resumed", INSPECT, "dealer", order.dealerId(), null, null,
+                            meta("order_id", order.id(), "reason", "退货冲清全部逾期应收"));
+                }
                 boolean invoiced = returns.findActiveInvoice(order.id()).map(v -> "issued".equals(v.status())).orElse(false);
                 String next = invoiced ? "pending_reversal" : (refund > 0 ? "pending_refund" : finalStatus(ret.requestedQuantity(), acceptedQty));
                 String reviewId = null;

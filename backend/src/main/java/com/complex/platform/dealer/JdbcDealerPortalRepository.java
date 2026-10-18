@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -46,10 +46,16 @@ public class JdbcDealerPortalRepository {
         return n != null && n > 0;
     }
 
+    public void activateByDealer(String dealerId) {
+        Map<String, Object> params = Map.of("d", dealerId);
+        jdbc.update("UPDATE access_users SET status = 'active' WHERE id IN (SELECT user_id FROM dealer_portal_accounts WHERE dealer_id = :d AND status = 'disabled')", params);
+        jdbc.update("UPDATE dealer_portal_accounts SET status = 'active' WHERE dealer_id = :d AND status = 'disabled'", params);
+    }
+
     /** 停用撤权：门户账号置 revoked、access_users 置 disabled（会话由 SessionIssuer 作废）。 */
     public int revokeByDealer(String dealerId, Instant now) {
         jdbc.update("UPDATE access_users SET status = 'disabled' WHERE id IN (SELECT user_id FROM dealer_portal_accounts WHERE dealer_id = :d)", Map.of("d", dealerId));
-        return jdbc.update("UPDATE dealer_portal_accounts SET status = 'revoked', revoked_at = :now WHERE dealer_id = :d AND status = 'active'",
+        return jdbc.update("UPDATE dealer_portal_accounts SET status = 'revoked', revoked_at = :now WHERE dealer_id = :d AND status IN ('active', 'disabled')",
                 new MapSqlParameterSource().addValue("d", dealerId).addValue("now", Timestamp.from(now)));
     }
 

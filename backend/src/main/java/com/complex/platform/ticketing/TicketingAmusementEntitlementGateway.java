@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.amusement.AmusementEntitlementGateway;
 import com.complex.platform.amusement.AmusementEntitlementView;
 import java.time.Instant;
@@ -62,7 +64,9 @@ public class TicketingAmusementEntitlementGateway implements AmusementEntitlemen
                 entitlement.validFrom(),
                 entitlement.validTo(),
                 entitlement.remainingTimes(),
-                entitlement.numPeople()
+                entitlement.numPeople(),
+                entitlement.orderId() == null ? null : repository.findTicketOrderById(entitlement.orderId())
+                        .map(TicketOrderRecord::projectId).orElse(null)
         );
     }
 

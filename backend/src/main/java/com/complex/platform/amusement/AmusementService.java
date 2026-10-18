@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -39,6 +41,11 @@ public class AmusementService {
     // 游乐权益类前缀（§6.4/§12.1：游乐只消费票务生成的游乐权益）。
     // entitlement_type 以 "amusement" 开头视为游乐类（amusement_single / amusement_pass / 游乐通票等）。
     private static final String AMUSEMENT_ENTITLEMENT_TYPE_PREFIX = "amusement";
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.ticketing.ParkWideFaultSalesGate parkWideFaultSalesGate;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.ticketing.BarMerchantDirectory merchantDirectory;
 
     private final AmusementRepository repository;
     private final IdempotencyService idempotencyService;
@@ -1276,6 +1283,15 @@ public class AmusementService {
         if (!"open".equals(session.status())) {
             throw ApiException.conflict("SESSION_NOT_OPEN", "该场次未开放");
         }
+        if (parkWideFaultSalesGate != null) {
+            String complexId = merchantDirectory == null || project.merchantId() == null ? null
+                    : merchantDirectory.findMerchant(project.merchantId())
+                            .map(com.complex.platform.governance.MerchantRecord::projectId).orElse(null);
+            if (complexId == null && authorizationService != null)
+                complexId = authorizationService.currentProjectScopeQuietly().orElse(null);
+            if (parkWideFaultSalesGate.salesSuspended(complexId))
+                throw ApiException.conflict("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "全园故障期间暂停游乐入场核销");
+        }
         AmusementOpenEligibilityResponse eligibility = evaluateOpenEligibility(project.id(), null, deviceId);
         if (!eligibility.allowed()) {
             throw ApiException.conflict("SAFETY_BLOCKED", "安全闸未放行，游乐核销被拦截");
@@ -1284,6 +1300,9 @@ public class AmusementService {
         // §6.4 步骤 2/3：识别票/权益实例 → 在线校验（存在、active、有效期、剩余次数、游乐类、绑定本项目）。
         AmusementEntitlementView entitlement = entitlementGateway.findEntitlementByCredential(credential)
                 .orElseThrow(() -> ApiException.notFound("TICKET_NOT_FOUND", "票券权益不存在或已被删除"));
+        if (parkWideFaultSalesGate != null && entitlement.complexProjectId() != null
+                && parkWideFaultSalesGate.salesSuspended(entitlement.complexProjectId()))
+            throw ApiException.conflict("PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "原门票所属综合体全园故障，暂停游乐入场核销");
         if (!"active".equals(entitlement.status())) {
             throw ApiException.conflict("ENTITLEMENT_USED", "该权益未生效");
         }

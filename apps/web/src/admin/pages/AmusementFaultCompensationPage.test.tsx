@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -84,6 +84,24 @@ describe("AmusementFaultCompensationPage 全园故障补偿（CG-08b，ENUM「�
     expect(raw).toContain("ent-amu");
     expect(raw).toContain("供电故障补偿");
     expect(raw).toContain("amusement_head");
+  });
+
+  it("补偿有效期只接受1至3650内整数，不向服务端提交越界上限", async () => {
+    const fetchMock = stubFetch([]);
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("compensation-policy-save")).toBeTruthy());
+    for (const value of ["0", "3651", "1.5"]) {
+      fireEvent.change(screen.getByTestId("compensation-policy-days"), { target: { value } });
+      fireEvent.change(screen.getByTestId("compensation-policy-min"), { target: { value: "1" } });
+      fireEvent.change(screen.getByTestId("compensation-policy-max"), { target: { value: "3651" } });
+      fireEvent.click(screen.getByTestId("compensation-policy-save"));
+      expect(screen.getByTestId("compensation-error").textContent).toContain("3650");
+    }
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/compensation-policies/") && (c[1] as RequestInit)?.method === "POST")).toBe(false);
+    fireEvent.change(screen.getByTestId("compensation-policy-days"), { target: { value: "3650" } });
+    fireEvent.change(screen.getByTestId("compensation-policy-max"), { target: { value: "3650" } });
+    fireEvent.click(screen.getByTestId("compensation-policy-save"));
+    await waitFor(() => expect(bodyOf(fetchMock, (url, init) => url.includes("/compensation-policies/") && init?.method === "POST").validity_days).toBe(3650));
   });
 
   it("补偿有效期参数：天数、下限、上限须同时填写，提交后按项目调后端", async () => {

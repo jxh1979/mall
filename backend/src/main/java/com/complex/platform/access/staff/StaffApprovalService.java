@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest;
@@ -50,12 +50,11 @@ public class StaffApprovalService {
 
     /** CG-12：发起员工状态变更复核（不写入 staff_profiles），返回复核单。 */
     SupervisorReviewDecisionRecord submitEmploymentStatus(StaffProfileRecord profile, StaffEmploymentStatusRequest request, String reason) {
-        requireHrApprover(request.hrApproverId());
         String before = profile.employmentStatus() == null ? "" : profile.employmentStatus();
         var review = reviews.evaluate(new SupervisorReviewEvaluateRequest(request.idempotencyKey() + ":review", reason,
                 List.of(), SupervisorReviewService.STAFF_EMPLOYMENT_STATUS_ACTION, "staff_profile", profile.id(), 0L,
                 "员工 " + displayName(profile) + " 状态 " + before + " → " + request.employmentStatus() + "：" + reason,
-                null, hrLine(request.hrApproverId()), profile.userId()));
+                null, List.of(), profile.userId()));
         repository.saveEmploymentStatusRevision(review.reviewId(), profile.id(), profile.userId(), before, request.employmentStatus(),
                 reason, authorization.currentActor().id());
         return review;
@@ -63,14 +62,13 @@ public class StaffApprovalService {
 
     /** CG-12：发起奖惩复核（不入账），奖惩记录 id 预分配为复核对象 id，通过后以同一 id 入账。 */
     SupervisorReviewDecisionRecord submitPayrollAdjustment(StaffPayrollAdjustmentRequest request) {
-        requireHrApprover(request.hrApproverId());
         String id = "adj_" + UUID.randomUUID();
         String userId = request.userId().trim();
         String reason = request.reason().trim();
         var review = reviews.evaluate(new SupervisorReviewEvaluateRequest(request.idempotencyKey() + ":review", reason,
                 List.of(), SupervisorReviewService.STAFF_ADJUSTMENT_ACTION, "staff_payroll_adjustment", id, request.amountCent(),
                 ("bonus".equals(request.adjType()) ? "奖励 " : "扣罚 ") + userId + " " + request.month() + " " + request.amountCent() + " 分："
-                        + reason, null, hrLine(request.hrApproverId()), userId));
+                        + reason, null, List.of(), userId));
         repository.saveAdjustmentRequest(id, review.reviewId(), userId, request.month(), request.adjType(), request.amountCent(), reason,
                 authorization.currentActor().id());
         return review;
@@ -79,13 +77,12 @@ public class StaffApprovalService {
     /** CG-12：员工对已生效扣罚提出申诉，同链裁定。 */
     StaffAdjustmentAppealRecord submitAdjustmentAppeal(JdbcStaffRepository.AdjustmentRow adjustment, StaffAdjustmentAppealRequest request,
             String employeeId) {
-        requireHrApprover(request.hrApproverId());
         String id = "apl_" + UUID.randomUUID();
         String reason = request.reason().trim();
         var review = reviews.evaluate(new SupervisorReviewEvaluateRequest(request.idempotencyKey() + ":review", reason,
                 List.of(), SupervisorReviewService.STAFF_ADJUSTMENT_APPEAL_ACTION, "staff_payroll_adjustment_appeal", id, adjustment.amountCent(),
                 "员工申诉扣罚 " + adjustment.id() + "（" + adjustment.month() + "，" + adjustment.amountCent() + " 分，" + adjustment.reason() + "）："
-                        + reason, null, hrLine(request.hrApproverId()), employeeId));
+                        + reason, null, List.of(), employeeId));
         var record = new StaffAdjustmentAppealRecord(id, adjustment.id(), employeeId, adjustment.month(), adjustment.adjType(),
                 adjustment.amountCent(), reason, review.reviewId(), "pending", null, employeeId, Instant.now(), null);
         repository.saveAppeal(record);
@@ -93,20 +90,6 @@ public class StaffApprovalService {
                 null, request.idempotencyKey(), Map.of("adjustment_id", adjustment.id(), "user_id", employeeId, "review_id", review.reviewId(),
                         "reason", reason));
         return record;
-    }
-
-    /** 人力会签人必填，且须经角色持有 staff.hr.review（PGM:658 HR 岗位）；员工本人充当 HR 节点由链引擎按受益人剔除（APPROVAL_LINE_EMPTY）。 */
-    private void requireHrApprover(String hrApproverId) {
-        if (hrApproverId == null || hrApproverId.isBlank()) {
-            throw ApiException.badRequest("HR_APPROVER_REQUIRED", "涉及员工的人力操作须指定 人力会签人");
-        }
-        if (authorization.canResolveRoles() && !authorization.holdsPermissionViaRole(hrApproverId.trim(), HR_PERMISSION)) {
-            throw ApiException.badRequest("HR_APPROVER_LACKS_ROLE", "指定的 人力会签人未经角色持有人力会签权限");
-        }
-    }
-
-    private static List<SupervisorReviewEvaluateRequest.ParallelLine> hrLine(String hrApproverId) {
-        return List.of(new SupervisorReviewEvaluateRequest.ParallelLine(SupervisorReviewService.HR_LINE, hrApproverId.trim()));
     }
 
     private static String displayName(StaffProfileRecord profile) {

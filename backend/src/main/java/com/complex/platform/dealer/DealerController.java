@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -12,6 +12,7 @@ import com.complex.platform.dealer.dto.DealerContractRequest;
 import com.complex.platform.dealer.dto.DealerCreateRequest;
 import com.complex.platform.dealer.dto.DealerDeactivateRequest;
 import com.complex.platform.dealer.dto.DealerIdempotentRequest;
+import com.complex.platform.dealer.dto.DealerAdmissionSubmitRequest;
 import com.complex.platform.dealer.dto.DealerInquiryRequest;
 import com.complex.platform.dealer.dto.DealerQuoteDecisionRequest;
 import com.complex.platform.dealer.dto.DealerQuoteRequest;
@@ -45,10 +46,15 @@ public class DealerController {
         return ApiResponse.ok(service.createDealer(request));
     }
 
+    @GetMapping("/{id}/admission")
+    public ApiResponse<DealerAdmissionRecord> getAdmission(@PathVariable String id) {
+        return ApiResponse.ok(service.getAdmission(id));
+    }
+
     @PostMapping("/{id}/submit")
-    public ApiResponse<DealerRecord> submitDealer(@PathVariable String id, @RequestBody DealerIdempotentRequest request) {
+    public ApiResponse<DealerRecord> submitDealer(@PathVariable String id, @RequestBody DealerAdmissionSubmitRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.submitDealer(id, request.idempotencyKey()));
+        return ApiResponse.ok(service.submitDealer(id, request));
     }
 
     @PostMapping("/{id}/review")

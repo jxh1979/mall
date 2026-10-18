@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.TicketOrderRecord;
 import com.complex.platform.ticketing.TicketPaymentIntentRecord;
@@ -30,9 +32,24 @@ import org.springframework.stereotype.Component;
 public class TicketingChannelTicketIssueAdapter implements ChannelTicketIssuePort {
 
     private final TicketingService ticketingService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.ticketing.TicketOrderService orderService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.finance.FinanceService financeService;
 
     public TicketingChannelTicketIssueAdapter(TicketingService ticketingService) {
         this.ticketingService = ticketingService;
+    }
+
+    @Override
+    public Optional<RejectionResult> rejectSuspendedPayment(IssueCommand command, String sourceId,
+            long amountCent, String originalPaymentRef, String merchantId) {
+        if (!orderService.amusementSalesSuspended(command.ticketTypeId(), merchantId)) return Optional.empty();
+        if (amountCent == 0) return Optional.of(new RejectionResult(null));
+        return Optional.of(new RejectionResult(financeService.recordRejectedTicketPaymentRefund(
+                "channel_ticket_rejection", sourceId, amountCent, command.salesChannel(), originalPaymentRef,
+                merchantId, merchantId, orderService.resolveSaleProjectId(command.ticketTypeId(), false),
+                "全园故障停售期间渠道晚回流不予受理，核实原收款后按原渠道退款")));
     }
 
     @Override

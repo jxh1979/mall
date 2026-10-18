@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -28,7 +28,7 @@ describe("StaffPayrollLeavePage 奖惩复核链与扣罚申诉（CG-12）", () =
     return { setActionResult, setGlobalError };
   }
 
-  it("奖惩手录缺 人力会签人不提交；填齐后带 hrApproverId 发起复核并提示复核单", async () => {
+  it("奖惩填写事由后发起复核，HR自动解析且不随单传入", async () => {
     const api = makeApi(async () => []);
     const { setActionResult, setGlobalError } = renderPage(api);
     await screen.findByTestId("payroll-adj-editor");
@@ -36,14 +36,10 @@ describe("StaffPayrollLeavePage 奖惩复核链与扣罚申诉（CG-12）", () =
     fireEvent.change(screen.getByTestId("adj-type-select"), { target: { value: "penalty" } });
     fireEvent.change(screen.getByTestId("adj-amount-input"), { target: { value: "30" } });
     fireEvent.change(screen.getByTestId("adj-reason-input"), { target: { value: "迟到" } });
-    fireEvent.click(screen.getByTestId("adj-save"));
-    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith(expect.stringContaining("人力会签人")));
-    expect(api.post).not.toHaveBeenCalled();
-
-    fireEvent.change(screen.getByTestId("adj-hr-input"), { target: { value: "usr_hr" } });
+    expect(screen.queryByTestId("adj-hr-input")).toBeNull();
     fireEvent.click(screen.getByTestId("adj-save"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/payroll/adjustments",
-      expect.objectContaining({ userId: "usr_e", adjType: "penalty", amountCent: 3000, reason: "迟到", hrApproverId: "usr_hr" })));
+      expect.objectContaining({ userId: "usr_e", adjType: "penalty", amountCent: 3000, reason: "迟到" })));
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "payroll_adjustment_requested", reviewId: "review_adj_1" })));
   });
 
@@ -62,9 +58,9 @@ describe("StaffPayrollLeavePage 奖惩复核链与扣罚申诉（CG-12）", () =
     await screen.findByTestId("payroll-appeal-editor");
     fireEvent.change(screen.getByTestId("appeal-adj-input"), { target: { value: "adj_1" } });
     fireEvent.change(screen.getByTestId("appeal-reason-input"), { target: { value: "当日已报备" } });
-    fireEvent.change(screen.getByTestId("appeal-hr-input"), { target: { value: "usr_hr" } });
+    expect(screen.queryByTestId("appeal-hr-input")).toBeNull();
     fireEvent.click(screen.getByTestId("appeal-submit"));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/payroll/adjustments/adj_1/appeals", { reason: "当日已报备", hrApproverId: "usr_hr" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/payroll/adjustments/adj_1/appeals", { reason: "当日已报备" }));
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "payroll_adjustment_appeal_submitted", appealId: "apl_1" })));
     await screen.findByTestId("appeal-table");
     expect(screen.getByTestId("appeal-status-apl_1").textContent).toBe("已撤销（已冲回）");

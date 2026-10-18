@@ -22,7 +22,24 @@ import org.mockito.Mockito;
 
 // M087（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点」
 // 「需要平行线审批的另行指定该条线的最终审批人……每个部门或业务线须预先设定其平行审批的最低起点层级」）：链生成规则。
+// 文件版本：V0.01
 class ApprovalChainServiceTests {
+
+    @Test
+    void hrBoundaryIsThreeOrganizationLevelsBeforeRecusingTheInitiator() {
+        repository.superiors.putAll(Map.of("employee", "s1", "s1", "s2", "s2", "s3", "s3", "s4"));
+        assertThat(chain.generate("hr1", "s1", "employee", ApprovalLevel.HR_THREE_LEVELS_UP, null, List.of()))
+                .extracting(ApprovalChainNode::approverId).containsExactly("s2", "s3");
+        assertThat(chain.generate("hr2", "employee", "employee", ApprovalLevel.HR_THREE_LEVELS_UP, null, List.of()))
+                .extracting(ApprovalChainNode::approverId).containsExactly("s1", "s2", "s3");
+    }
+
+    @Test
+    void incompleteHrHierarchyRemainsPendingWithoutBorrowingHigherLevels() {
+        repository.superiors.putAll(Map.of("employee", "s1", "s1", "s2"));
+        assertThat(chain.generate("hr3", "s1", "employee", ApprovalLevel.HR_THREE_LEVELS_UP, null, List.of())).isEmpty();
+    }
+
 
     private final HierarchyRepository repository = new HierarchyRepository();
     private final ApprovalChainService chain = new ApprovalChainService(repository,

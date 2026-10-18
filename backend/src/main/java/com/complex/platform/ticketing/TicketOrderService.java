@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.02
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -61,6 +63,10 @@ public class TicketOrderService {
     ParkWideFaultSalesGate parkWideFaultSalesGate;
 
     @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.finance.FinanceService financeService;
+
+    @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
                               ApplicationEventPublisher eventPublisher,
@@ -95,7 +101,8 @@ public class TicketOrderService {
         }
         // CG-08a：全园故障状态生效中 → 纯游乐门票与含游乐权益的通票一律拒单（置于库存扣减前，拒单零副作用）；
         // 酒吧票、演出票等不含游乐权益的票种不受影响；局部设备/单个项目故障不走此闸（付款前明确提示后仍可售）。
-        requireAmusementSalesOpen(ticketType.id(), orderBarId);
+        String projectId = resolveSaleProjectId(ticketType.id(), ticketTypeHasAmusementEntitlement(ticketType.id()));
+        requireAmusementSalesOpen(ticketType.id(), projectId);
         int quantity = requirePositive(actual.quantity(), "quantity");
         // D-024（BSM-1.6.6 / BSM-1.7.3 / PGM-1.15.3）：需要人脸照的票种，购票时必须录入购票人人脸，拒绝的不能购票——
         //   任何渠道下单即闸（置于库存扣减前，拒单零副作用）：每张票一张脸照（柜台由工作人员现场录入，客人端本人拍摄）；
@@ -172,7 +179,8 @@ public class TicketOrderService {
                 // V231：下单未支付，paid_at=null。
                 null,
                 // AUD-076：快照酒吧归属（取自票种，服务端真值；通票为 null）。
-                orderBarId
+                orderBarId,
+                projectId
         ));
         // V359：客人端 H5 下单时拍的人脸照按订单加密暂存(每张票一张)，后台出票时转绑到已发权益。
         //   客人永远调不到出票端点(ticket.ticket.issue)，这一格是「客人自己拍的脸」进系统的唯一路径。
@@ -201,6 +209,7 @@ public class TicketOrderService {
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能对自身受理订单创建支付意图（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
+        requirePaymentOpen(order);
         // D-024：需要人脸照的票种，人脸采集先于收款（第二道闸）。
         requireFaceCaptureBeforePayment(order);
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
@@ -240,12 +249,13 @@ public class TicketOrderService {
      */
     TicketOrderRecord confirmPayment(String orderId, ConfirmTicketOrderPaymentRequest request) {
         ConfirmTicketOrderPaymentRequest actual = requireRequest(request);
-        TicketOrderRecord order = repository.findTicketOrderById(requireText(orderId, "order_id"))
+        TicketOrderRecord order = repository.findTicketOrderByIdForUpdate(requireText(orderId, "order_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能确认自身受理订单的支付（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
-        // 2a-5：已取消（超时释放/手动取消）的订单不可再确认支付，防止"取消已释放库存 → 又确认 paid"导致超卖。
-        if ("cancelled".equals(order.status())) {
+        // 已取消单仍不可恢复受理；故障期间迟到的实际款只记录收款并原路待退，库存不再释放。
+        boolean suspended = amusementSalesSuspendedAtProject(order.ticketTypeId(), resolveOriginalOrderProjectId(order));
+        if ("cancelled".equals(order.status()) && !"paid".equals(order.payStatus()) && !suspended) {
             throw ApiException.conflict("ORDER_CANCELLED", "票务订单已取消");
         }
         // D-024：需要人脸照的票种，人脸采集先于收款（支付确认同样过闸，绕过支付意向也拦得住）。
@@ -268,7 +278,19 @@ public class TicketOrderService {
                     intent.id(), intent.businessOrderType(), intent.businessOrderId(), intent.amountCent(),
                     intent.currency(), intent.channel(), "succeeded", intent.createdAt(), now));
         }
-        // 回写订单 paid（幂等：已 paid 直接返回）。merchant_id 等字段保持原值。
+        // 拒收单每一笔实际到账分别待退；已受理成功订单仍直接重放，不因故障倒退。
+        boolean rejectedPayment = "cancelled".equals(order.status())
+                || (suspended && !"paid".equals(order.payStatus()));
+        if (rejectedPayment) {
+            if (financeService == null) throw ApiException.conflict("REFUND_SERVICE_UNAVAILABLE", "退款待办服务未接线");
+            financeService.recordRejectedTicketPaymentRefund("ticket_payment_rejection", intent.id(), order.amountCent(),
+                    intent.channel(), actual.gatewayRef(), order.merchantId(), order.barId(), order.projectId(),
+                    "全园故障停售后确认收款，原票订单 " + order.id() + " 取消，核实后原路退款");
+            if (repository.atomicCancelUnpaidOrder(order.id(), now) > 0) {
+                repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
+            }
+        }
+        // 同意向的退款按原来源幂等；只有首笔收款回写订单，之后不覆盖原付款时点。
         if ("paid".equals(order.payStatus())) {
             return order;
         }
@@ -277,8 +299,8 @@ public class TicketOrderService {
                 order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
                 order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
                 order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
-                "paid", order.issueStatus(), order.status(), order.createdAt(), now, order.merchantId(), now,
-                order.barId()));
+                "paid", order.issueStatus(), suspended ? "cancelled" : order.status(), order.createdAt(), now, order.merchantId(), now,
+                order.barId(), order.projectId()));
     }
 
     /**
@@ -338,10 +360,14 @@ public class TicketOrderService {
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能为自身受理订单出票（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
+        if ("cancelled".equals(order.status())) {
+            throw ApiException.conflict("ORDER_CANCELLED", "已取消的订单不能出票，已收款须按退款记录处理");
+        }
         List<IssuedEntitlementRecord> existing = repository.listIssuedEntitlementsByOrderId(orderId);
         if (!existing.isEmpty()) {
             return toIssuedTicketResponse(existing);
         }
+        if (!"paid".equals(order.payStatus())) requirePaymentOpen(order);
         if (!"paid".equals(order.payStatus()) && !"admin".equals(order.salesChannel())) {
             throw ApiException.conflict("ORDER_NOT_PAID", "订单须支付完成后才能出票");
         }
@@ -390,7 +416,8 @@ public class TicketOrderService {
                 // V231：已通过支付确认置 paid 的订单保留原 paid_at；admin 渠道免确认直接出票（转 paid）则以出票时刻为支付时刻。
                 order.paidAt() != null ? order.paidAt() : issuedAt,
                 // AUD-076：保留酒吧归属快照。
-                order.barId()
+                order.barId(),
+                order.projectId()
         ));
         // V359：脸照已转绑到已发权益，订单暂存位立即删——生物识别数据不多留一份、不多留一秒。
         if (facePhotoService != null) {
@@ -770,11 +797,22 @@ public class TicketOrderService {
     }
 
     /** CG-08a 全园故障售票闸：票种含任一游乐类权益（entitlement_type 以 amusement 开头）且所属综合体全园故障生效中 → 拒单。 */
-    private void requireAmusementSalesOpen(String ticketTypeId, String orderBarId) {
-        if (parkWideFaultSalesGate == null || !ticketTypeHasAmusementEntitlement(ticketTypeId)) {
-            return;
-        }
-        if (parkWideFaultSalesGate.salesSuspended(resolveComplexProjectId(orderBarId))) {
+    public void requirePaymentOpen(TicketOrderRecord order) {
+        if ("cancelled".equals(order.status())) throw ApiException.conflict("ORDER_CANCELLED", "票务订单已取消");
+        requireAmusementSalesOpen(order.ticketTypeId(), resolveOriginalOrderProjectId(order));
+    }
+
+    public boolean amusementSalesSuspended(String ticketTypeId, String orderBarId) {
+        return amusementSalesSuspendedAtProject(ticketTypeId, resolveSaleProjectId(ticketTypeId, false));
+    }
+
+    private boolean amusementSalesSuspendedAtProject(String ticketTypeId, String projectId) {
+        return parkWideFaultSalesGate != null && ticketTypeHasAmusementEntitlement(ticketTypeId)
+                && parkWideFaultSalesGate.salesSuspended(projectId);
+    }
+
+    private void requireAmusementSalesOpen(String ticketTypeId, String projectId) {
+        if (amusementSalesSuspendedAtProject(ticketTypeId, projectId)) {
             throw ApiException.conflict("PARK_WIDE_FAULT_SALES_SUSPENDED",
                     "游乐园全园故障状态生效中，纯游乐门票与含游乐权益的通票暂停销售，解除后恢复");
         }
@@ -794,22 +832,37 @@ public class TicketOrderService {
         return false;
     }
 
-    /** 订单所属综合体：优先当前项目范围（员工/终端 token），其次单店票归属酒吧所在综合体；都定位不到返回 null（闸内 fail-closed）。 */
-    private String resolveComplexProjectId(String orderBarId) {
+    /** 仅在创建订单时解析；已售订单必须读 projectId 快照，不用当前模板或操作者反推。 */
+    public String resolveSaleProjectId(String ticketTypeId, boolean required) {
+        List<String> candidates = repository.listTicketTypeProjectIds(ticketTypeId);
+        java.util.Optional<String> scope = java.util.Optional.empty();
         if (authorizationService != null) {
             try {
-                java.util.Optional<String> scope = authorizationService.currentProjectScopeQuietly();
-                if (scope.isPresent()) {
-                    return scope.get();
-                }
-            } catch (Exception ignored) {
-                // 无安全上下文（内部调用/单测）：继续按酒吧归属定位。
+                scope = authorizationService.currentProjectScopeQuietly();
+            } catch (ApiException ignored) {
+                // 客人/内部调用可能没有项目范围；不能据此产生候选，仍须由票种归属唯一确定。
             }
         }
-        if (orderBarId != null && barDirectory != null) {
-            return barDirectory.findMerchant(orderBarId).map(MerchantRecord::projectId).orElse(null);
+        if (candidates.size() > 1) {
+            if (required) throw ApiException.conflict("TICKET_PROJECT_UNRESOLVED", "票种关联多个综合体，请先核实商户和点位归属再售票");
+            return null;
         }
+        if (candidates.size() == 1) {
+            String project = candidates.getFirst();
+            if (scope.isPresent() && !scope.get().equals(project))
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "票种所属综合体与当前授权项目不一致");
+            return project;
+        }
+        if (scope.isPresent()) return scope.get();
+        if (required) throw ApiException.conflict("TICKET_PROJECT_UNRESOLVED", "含游乐权益的票种须先明确所属综合体再售票");
         return null;
+    }
+
+    private String resolveOriginalOrderProjectId(TicketOrderRecord order) {
+        if (trimToNull(order.projectId()) != null) return order.projectId();
+        String originalMerchant = order.barId() != null ? order.barId() : order.merchantId();
+        List<String> projects = repository.listMerchantProjectIds(originalMerchant);
+        return projects.size() == 1 ? projects.getFirst() : null;
     }
 
     /** AUD-076 停售闸：归属酒吧不存在/非 bar/已存档/停业(status≠active) → 停售 TICKET_BAR_OFFLINE（已售票不受影响）。 */

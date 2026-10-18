@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.11
+// 文件版本：V0.13
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -82,6 +82,9 @@ public class StoredValueService {
     private CustomerService customerService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.complex.platform.ticketing.TicketingRepository ticketingRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private com.complex.platform.ticketing.TicketOrderService ticketOrderService;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
@@ -315,11 +318,16 @@ public class StoredValueService {
         if (!"created".equals(order.status()) || !"unpaid".equals(order.payStatus())) {
             throw ApiException.conflict("ORDER_NOT_PAYABLE", "订单不在待支付状态");
         }
+        if (ticketOrderService == null) {
+            throw ApiException.conflict("TICKET_PAYMENT_GATE_UNAVAILABLE", "票务付款校验当前不可用");
+        }
+        ticketOrderService.requirePaymentOpen(order);
         CustomerStoredValueAccountRecord card = repository.listStoredValueAccountsByCustomer(customerId).stream()
                 .filter(a -> a.id().equals(accountId)).findFirst()
                 .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值卡不存在"));
-        // 当前票务订单未携带项目范围，不将有限定项目的卡当成全局卡使用。
-        if (card.projectId() != null || (card.merchantId() != null && !card.merchantId().equals(order.barId()))) {
+        // 以售票时的原项目快照判断项目卡范围；未知归属不得从操作者或当前商户关系猜测。
+        if ((card.projectId() != null && !card.projectId().equals(order.projectId()))
+                || (card.merchantId() != null && !card.merchantId().equals(order.barId()))) {
             throw ApiException.conflict("STORED_VALUE_SCOPE_MISMATCH", "所选储值卡不适用于该订单范围");
         }
         if (!"CNY".equals(order.currency())) {
@@ -337,7 +345,7 @@ public class StoredValueService {
                 order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
                 order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
                 "paid", order.issueStatus(), order.status(), order.createdAt(), paidAt, order.merchantId(),
-                paidAt, order.barId()));
+                paidAt, order.barId(), order.projectId()));
     }
 
     /**

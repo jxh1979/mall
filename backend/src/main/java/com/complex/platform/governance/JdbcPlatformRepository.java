@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1038,14 +1038,30 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     }
 
     @Override
+    public Optional<String> findDepartmentHrApprover(String userId) {
+        return jdbcTemplate.query("""
+                SELECT line.hr_final_approver_id
+                  FROM org_hierarchy org JOIN approval_lines line ON line.line_code = org.line_code
+                 WHERE org.user_id = :user_id AND line.status = 'active' AND line.hr_final_approver_id IS NOT NULL
+                """, new MapSqlParameterSource().addValue("user_id", userId),
+                (rs, rowNumber) -> rs.getString("hr_final_approver_id")).stream().findFirst();
+    }
+
+    @Override
     public Optional<SupervisorReviewRepository.ApprovalLine> findApprovalLine(String lineCode) {
         return jdbcTemplate.query("""
-                SELECT line_code, line_name, min_start_rank, entry_user_id, status
+                SELECT line_code, line_name, min_start_rank, entry_user_id, status, hr_final_approver_id
                   FROM approval_lines
                  WHERE line_code = :line_code
                 """, new MapSqlParameterSource().addValue("line_code", lineCode),
                 (rs, rowNumber) -> new SupervisorReviewRepository.ApprovalLine(rs.getString("line_code"), rs.getString("line_name"),
-                        rs.getInt("min_start_rank"), rs.getString("entry_user_id"), rs.getString("status"))).stream().findFirst();
+                        rs.getInt("min_start_rank"), rs.getString("entry_user_id"), rs.getString("status"), rs.getString("hr_final_approver_id"))).stream().findFirst();
+    }
+
+    @Override
+    public List<String> findApprovalLineUserIds(String lineCode) {
+        return jdbcTemplate.queryForList("SELECT user_id FROM org_hierarchy WHERE line_code = :line_code ORDER BY user_id",
+                new MapSqlParameterSource().addValue("line_code", lineCode), String.class);
     }
 
     @Override
@@ -1116,16 +1132,17 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public void saveApprovalLine(SupervisorReviewRepository.ApprovalLine line, String updatedBy, java.time.Instant updatedAt) {
         jdbcTemplate.update("""
-                INSERT INTO approval_lines (line_code, line_name, min_start_rank, entry_user_id, status, updated_by, updated_at)
-                VALUES (:line_code, :line_name, :min_start_rank, :entry_user_id, :status, :updated_by, :updated_at)
+                INSERT INTO approval_lines (line_code, line_name, min_start_rank, entry_user_id, status, hr_final_approver_id, updated_by, updated_at)
+                VALUES (:line_code, :line_name, :min_start_rank, :entry_user_id, :status, :hr_final_approver_id, :updated_by, :updated_at)
                 ON CONFLICT (line_code) DO UPDATE SET line_name = EXCLUDED.line_name, min_start_rank = EXCLUDED.min_start_rank,
-                    entry_user_id = EXCLUDED.entry_user_id, status = EXCLUDED.status, updated_by = EXCLUDED.updated_by,
+                    entry_user_id = EXCLUDED.entry_user_id, status = EXCLUDED.status, hr_final_approver_id = EXCLUDED.hr_final_approver_id, updated_by = EXCLUDED.updated_by,
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("line_code", line.lineCode())
                 .addValue("line_name", line.lineName())
                 .addValue("min_start_rank", line.minStartRank())
                 .addValue("entry_user_id", line.entryUserId())
+                .addValue("hr_final_approver_id", line.hrFinalApproverId())
                 .addValue("status", line.status())
                 .addValue("updated_by", updatedBy)
                 .addValue("updated_at", timestampWithTimeZone(updatedAt)));
@@ -1134,11 +1151,11 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     @Override
     public List<SupervisorReviewRepository.ApprovalLine> listApprovalLines() {
         return jdbcTemplate.query("""
-                SELECT line_code, line_name, min_start_rank, entry_user_id, status
+                SELECT line_code, line_name, min_start_rank, entry_user_id, status, hr_final_approver_id
                   FROM approval_lines
                  ORDER BY line_code
                 """, new MapSqlParameterSource(), (rs, rowNumber) -> new SupervisorReviewRepository.ApprovalLine(rs.getString("line_code"),
-                rs.getString("line_name"), rs.getInt("min_start_rank"), rs.getString("entry_user_id"), rs.getString("status")));
+                rs.getString("line_name"), rs.getInt("min_start_rank"), rs.getString("entry_user_id"), rs.getString("status"), rs.getString("hr_final_approver_id")));
     }
 
     private MapSqlParameterSource chainNodeParameters(ApprovalChainNode node) {

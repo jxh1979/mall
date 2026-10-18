@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,6 +45,57 @@ class FinanceRefundLifecycleJdbcIntegrationTests {
         return new FinanceRefundRecord(id, target, 3000, "已批准原路退回", "wechat", "original", status, now,
                 "ar_ap_payment", merchant, project, "operator", "original-flow", null, null, now,
                 "success".equals(status) ? now : null);
+    }
+
+    @Test
+    void rejectedPaymentBacklogHasStableOriginalSourceAndCannotRegressSuccessfulResult() {
+        AuthorizationService auth = mock(AuthorizationService.class);
+        when(auth.currentActor()).thenReturn(new AccessActor("operator", "operator", "platform_admin", "org", null, "active"));
+        FinanceService service = new FinanceService(repository, null, mock(AuditEventService.class), auth, null,
+                PaymentGatewayRouter.alwaysDisabled(), null);
+        String id = service.recordRejectedTicketPaymentRefund("channel_ticket_rejection", "sync-rejected-test", 8800,
+                "meituan", "external-payment-1", null, "project-one", "停售拒收后核实原路退");
+        FinanceRefundRecord pending = repository.findRefundById(id, true).orElseThrow();
+        assertThat(pending.status()).isEqualTo("requested");
+        assertThat(pending.originalPaymentRef()).isEqualTo("external-payment-1");
+        assertThat(pending.succeededAt()).isNull();
+        Instant now = Instant.now();
+        repository.saveRefund(new FinanceRefundRecord(pending.id(), pending.targetId(), pending.refundAmountCent(),
+                pending.reason(), pending.refundChannel(), pending.refundDirection(), "success", pending.createdAt(),
+                pending.sourceType(), pending.merchantId(), pending.projectId(), pending.requestedBy(),
+                pending.originalPaymentRef(), "manual_verified", "real-refund-rejected-test", now, now));
+        assertThat(service.recordRejectedTicketPaymentRefund("channel_ticket_rejection", "sync-rejected-test", 8800,
+                "meituan", "external-payment-1", null, "project-one", "停售拒收后核实原路退")).isEqualTo(id);
+        assertThat(repository.findRefundById(id, true).orElseThrow().status()).isEqualTo("success");
+        assertThat(repository.sumRefundedAmountByTargetId("sync-rejected-test")).isZero();
+        assertThatThrownBy(() -> service.recordRejectedTicketPaymentRefund("channel_ticket_rejection", "sync-rejected-test", 9900,
+                "meituan", "external-payment-1", null, "project-one", "错误重复回流"))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+    }
+
+    @Test
+    void rejectedTicketProjectComesFromUniqueOriginalMerchantNotOperatorScope() {
+        AuthorizationService auth = mock(AuthorizationService.class);
+        when(auth.currentActor()).thenReturn(new AccessActor("operator", "operator", "platform_admin", "org", null, "active"));
+        FinanceRepository source = mock(FinanceRepository.class, org.mockito.AdditionalAnswers.delegatesTo(repository));
+        when(source.listMerchantOperatingProjectIds("original-bar")).thenReturn(List.of("original-project"));
+        when(source.listMerchantOperatingProjectIds("shared-bar")).thenReturn(List.of("project-a", "project-b"));
+        FinanceService service = new FinanceService(source, null, mock(AuditEventService.class), auth, null,
+                PaymentGatewayRouter.alwaysDisabled(), null);
+        String original = service.recordRejectedTicketPaymentRefund("ticket_payment_rejection", "scope-original", 800,
+                "wechat", "original-payment", null, "original-bar", "停售后原路待退");
+        assertThat(source.findRefundById(original, true).orElseThrow().projectId()).isEqualTo("original-project");
+        String ambiguous = service.recordRejectedTicketPaymentRefund("ticket_payment_rejection", "scope-ambiguous", 800,
+                "wechat", "ambiguous-payment", null, "shared-bar", "项目归属待核实");
+        assertThat(source.findRefundById(ambiguous, true).orElseThrow().projectId()).isNull();
+        when(auth.currentProjectScopeQuietly()).thenReturn(java.util.Optional.of("caller-project"));
+        String unknown = service.recordRejectedTicketPaymentRefund("ticket_payment_rejection", "scope-unknown", 800,
+                "wechat", "unknown-payment", null, null, "项目归属待核实");
+        assertThat(source.findRefundById(unknown, true).orElseThrow().projectId()).isNull();
+        assertThatThrownBy(() -> service.recordRejectedTicketPaymentRefund("ticket_payment_rejection", "scope-forbidden", 800,
+                "wechat", "other-payment", null, "original-bar", "禁止改挂操作人项目"))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting(e -> ((com.complex.platform.common.api.ApiException)e).code()).isEqualTo("CROSS_PROJECT_FORBIDDEN");
     }
 
     @Test

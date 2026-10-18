@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -329,6 +331,7 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Test
     void customerChannelOrderForFaceTicketRequiresPhotosAtCreation() {
         Fixture f = seed(true);
+        seedSaleProject(f);
         jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
         assertThatThrownBy(() -> orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
                 LocalDate.now(), "miniapp", null, null, Map.of(), null, List.of(), null)))
@@ -346,6 +349,7 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Test
     void counterOrderForFaceTicketRequiresPhotosAtCreation() {
         Fixture f = seed(true);
+        seedSaleProject(f);
         jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
         Integer soldBefore = jdbcTemplate.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id = ?", Integer.class, f.ticketTypeId);
         Integer ordersBefore = jdbcTemplate.queryForObject("SELECT count(*) FROM ticket_orders WHERE ticket_type_id = ?", Integer.class, f.ticketTypeId);
@@ -404,6 +408,7 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Test
     void counterOrderWithPhotosAndOnSiteConsentCreatesOrderConsentAndStagedPhotos() {
         Fixture f = seed(true);
+        seedSaleProject(f);
         jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
         TicketOrderRecord created = orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
                 LocalDate.now(), "admin", null, null, Map.of(), null, List.of(PHOTO_BASE64), null, true, "counter"));
@@ -421,6 +426,7 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Test
     void counterOrderWithPhotosButNoConsentIsRejected() {
         Fixture f = seed(true);
+        seedSaleProject(f);
         jdbcTemplate.update("UPDATE ticket_types SET status = 'published' WHERE id = ?", f.ticketTypeId);
         Integer consentsBefore = jdbcTemplate.queryForObject("SELECT count(*) FROM customer_consents WHERE consent_type = 'ticket_face_photo'", Integer.class);
         assertThatThrownBy(() -> orderService.createOrder(new TicketOrderRequest(key(), null, List.of(), f.ticketTypeId, null, 1,
@@ -433,6 +439,19 @@ class TicketFacePhotoJdbcIntegrationTests {
     // ================= 夹具 =================
 
     private record Fixture(String ticketTypeId, String orderId) {
+    }
+
+    /** 创建订单用例须具备真实且唯一的综合体归属，不能由人脸测试绕过售票范围闸。 */
+    private void seedSaleProject(Fixture fixture) {
+        String projectId = "project_" + fixture.ticketTypeId;
+        String merchantId = "merchant_" + fixture.ticketTypeId;
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
+                + " VALUES (?, 'complex', '票务测试综合体', 'active', now(), now())", projectId);
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '票务测试游乐商户', 'amusement', 'active', now(), now(), ?)", merchantId, projectId);
+        jdbcTemplate.update("UPDATE entitlement_templates SET merchant_id=? WHERE id IN"
+                + " (SELECT entitlement_template_id FROM ticket_type_entitlements WHERE ticket_type_id=?)",
+                merchantId, fixture.ticketTypeId);
     }
 
     private Fixture seed(boolean requireFacePhoto) {

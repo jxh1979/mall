@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -419,7 +419,7 @@ class StaffJdbcIntegrationTests {
         // 事由缺失必须拒绝(钱路留痕硬约束)。
         assertThatThrownBy(() -> service.addPayrollAdjustment(
                 new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                        key(), "usr_admin", month, "penalty", 100L, " ", "usr_m010_reviewer")))
+                        key(), "usr_admin", month, "penalty", 100L, " ")))
                 .isInstanceOf(ApiException.class);
 
         // 月结前员工不可见(拍板:月结后才可见)。
@@ -572,7 +572,7 @@ class StaffJdbcIntegrationTests {
         authenticateAsPlatformAdmin();
         // CG-12：奖惩只发起复核；同幂等键重复提交=命中重放，只建一张复核单 / 一条待入账申请。
         var adjReq = new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), "usr_admin", "2099-06", "bonus", 1000L, "幂等测试奖金", "usr_m010_reviewer");
+                key(), "usr_admin", "2099-06", "bonus", 1000L, "幂等测试奖金");
         var first = service.addPayrollAdjustment(adjReq);
         assertThat(service.addPayrollAdjustment(adjReq).reviewId()).isEqualTo(first.reviewId());
         assertThat(jdbcTemplate.queryForObject(
@@ -603,7 +603,7 @@ class StaffJdbcIntegrationTests {
         authenticateAsPlatformAdmin();
         assertThatThrownBy(() -> service.addPayrollAdjustment(
                 new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                        key(), "usr_admin", "2099-05", "penalty", 100L, " ", "usr_m010_reviewer")))
+                        key(), "usr_admin", "2099-05", "penalty", 100L, " ")))
                 .isInstanceOf(ApiException.class);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM audit_events WHERE event_name='staff.payroll.adjustment_add_failed' AND event_result='failure'",

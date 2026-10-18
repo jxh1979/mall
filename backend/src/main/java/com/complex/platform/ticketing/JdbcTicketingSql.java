@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 final class JdbcTicketingSql {
 
     private JdbcTicketingSql() {
@@ -22,7 +24,7 @@ final class JdbcTicketingSql {
                        COALESCE(base_amount_cent, amount_cent) AS base_amount_cent,
                        COALESCE(dynamic_adjustment_cent, 0) AS dynamic_adjustment_cent,
                        currency, pay_status, issue_status, status, created_at, updated_at, merchant_id, paid_at,
-                       bar_id
+                       bar_id, project_id
                   FROM ticket_orders
                 """;
     }

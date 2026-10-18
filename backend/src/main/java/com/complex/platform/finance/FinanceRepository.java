@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -279,6 +279,9 @@ public interface FinanceRepository {
     OfflinePaymentConfirmationRecord saveOfflinePaymentConfirmation(OfflinePaymentConfirmationRecord confirmation);
 
     FinanceRefundRecord saveRefund(FinanceRefundRecord refund);
+
+    /** 同一外部原付款的待退建账串行，防并发回调覆盖已办理结果。 */
+    default void lockRefundSource(String refundId) { }
 
     /** 商户经营项目取主项目与追加项目的去重集合；退款不得用当前登录项目代替真实归属。 */
     default List<String> listMerchantOperatingProjectIds(String merchantId) {

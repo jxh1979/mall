@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 // M006-027：连接内临时表验证储值流水分页、支付行锁和真实事务回滚，不写共享业务表。
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -130,6 +130,7 @@ class M006StoredValueJdbcTests {
         var target=new StoredValueService(customers,mock(FinanceService.class),mock(AuditEventService.class),null,auth,null);
         ReflectionTestUtils.setField(target,"ticketingRepository",tickets);
         ReflectionTestUtils.setField(target,"customerService",mock(CustomerService.class));
+        ReflectionTestUtils.setField(target,"ticketOrderService",mock(TicketOrderService.class));
         var factory=new ProxyFactory(target);
         factory.setProxyTargetClass(true);
         factory.addAdvice(new TransactionInterceptor(new DataSourceTransactionManager(dataSource),

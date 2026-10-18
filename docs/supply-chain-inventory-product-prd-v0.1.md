@@ -1,6 +1,6 @@
-# 供应链与库存管理产品 PRD V0.19
+# 供应链与库存管理产品 PRD V0.20
 
-> 版本：V0.19｜最后更新：2026-10-17｜M09 复核：业务目标与当前实现必须分列；代码只作实现事实证据，不得反向定义 HTML 业务规则。
+> 版本：V0.20｜最后更新：2026-10-17｜M09 复核：业务目标与当前实现必须分列；代码只作实现事实证据，不得反向定义 HTML 业务规则。
 
 > **锚点口径（2026-09-03 M09 全量复核）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 冻结行号辅助」**；辅助行号对应冻结提交 `61f4fbb1be2fae9df8fcbb48f1cb2af9bb53ec68`。例如库存流水的主锚点是 BSM「库存流水」与 ENUM「库存流水类型」，不得再用旧快照 L1108 冒充现行锚点。历史变更日志只说明当时动作，不具有现行业务解释权。
 
@@ -373,6 +373,13 @@ flowchart TD
 > **实现现状（CG-11d，2026-10-17，迁移 V454）：**「准入与门户」中的独立经销商 Web 门户已落地为受控第十一端 `dealer_portal`（ENUM:233）：终端闭集 CHECK 与总开关行 `tcs_term_dealer_portal` 加入统一终端开关，关闭即逐请求 `TERMINAL_DISABLED` 并留痕 `terminal.access_rejected`，识别不出终端的写请求兜底关闭（`TERMINAL_NOT_ALLOWED`）；门户账号为 `access_users.account_type = dealer` + `dealer_portal_accounts` 归属，只挂 `role_dealer_portal`（仅 `dealer_portal.*`，不含任何内部 `dealer.*`），由内部后台持 `dealer.portal_account.manage` 开通（ADM-DLR-001）；门户接口 `/api/v1/dealer-portal/**` 只接受门户账号（`DEALER_PORTAL_ACCOUNT_REQUIRED`，留痕 `dealer.portal.access_rejected`）、只接受 `dealer_portal` 终端（`TERMINAL_NOT_ALLOWED`，留痕）、只见本企业资料 / 合同 / 询价 / 订单 / 退货（别家对象按不存在）；原批次在四项审核通过前允许登录提交资料（`DEALER_PORTAL_NOT_ENABLED`），与本轮C06确认的“四审通过才允许登录”冲突，须修正；不能据原实现允许未审登录；门户能力：注册资料提交、库存外显（只显示有货 / 紧张 / 缺货 / 预计交期）、询价、下单（建单 + 提交）、付款登记（只对公转账 / 平台线上支付）、签收、退货申请，审核 / 核验 / 出库 / 验收 / 退款仍在内部后台；停用生效时 `DealerPortalAccountService.revokeDealerPortal` 立即作废该经销商全部门户会话（`SessionIssuer.revokeUserSessions`，dev 内存与 prod `auth_sessions` 同一接口）、门户账号置 revoked / 停用并留痕 `dealer.portal.revoked`，已完成订单与审计记录保留。前端新增 `/dealer*` 独立门户壳（与后台、客人端分壳）。接口新增 18 个操作（802）。**仍未实现**：系统对接授权（经销商 API 对接凭证）尚无对象，停用撤权只覆盖门户会话；合同销售主体指定经办人与已核验企业联系人确认留证（BSM:1246）未建对象。
 
 本轮文档校正（V0.19）：以上 CG 实现段落保留当时的代码事实，不能替代第7.7节现行业务目标；审核附件与岗位、按锁定合同到期、尾款逾期通知、退款财务负责人审批、已退运费剔除及未审账号禁止登录等仍须按[70项实施待办](decisions/2026-10-18-cg-pending-decisions.md)分别验证，不将本次改文视为代码验收。
+
+> **代码补齐进展（FS-001～003，V0.20）：** 准入提交保存企业、合同、开票、银行四类实际上传资料的附件标识与提交人；附件必须绑定本经销商及对应类别，提交和批准时均校验实际文件。建档人和本次提交人不得审核。角色管理须为指定销售经办配置 `dealer.manage`、`evidence.attachment.create`，为运营复核人配置 `dealer.review`、`evidence.timeline.view`，并沿用主体范围；不能仅因职位名称自动扩权。内部预建账号为 disabled，准入批准后启用同一账号和原密码，停用立即禁用凭证并撤销会话，revoked 账号不复活。门户不再开放未审登录补资料。
+>
+> 订单审核通过时锁定经销合同的条款版本和完整快照，首付款起算可为签约、建单、通知付款或固定日期；尾款另可从出库、签收起算。固定日期直接锁定，事件尚未发生时到期日保持待定，应收仍保留并显示“待合同约定事件确定”，实际事件发生后按原锁定规则确定，不套当前合同的新期限。退货的合同期限和运费约定也读取原订单快照。条款登记沿现有经销合同入口，此批未新增租赁合同审批模型，也不将内部登记描述为已完成合同审批。
+>
+> 部分退货后以原订单金额减累计确认退货金额形成净应收；收款、超收分配、逾期扫描及账期限制解除均使用净额。退货中、部分退货和已退货状态保留，未收款继续跟进，不因实物处理完结而丢失货款；全部逾期清偿或经退货冲清才解除新增账期限制，有其他逾期订单则继续限制。本段是实现范围说明，验收以本批测试报告为准；不代表真实支付、发票渠道已联调。
+
 
 ## 8. 与其他系统关系
 

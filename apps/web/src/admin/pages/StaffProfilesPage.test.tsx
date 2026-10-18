@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -40,7 +40,7 @@ function renderPage(api: AdminApiClient, setActionResult: AdminPageProps["setAct
 }
 
 describe("StaffProfilesPage 员工档案销售岗维护（ADM-STF-004）", () => {
-  it("员工状态只提供五种业务状态，变更须填写事由与 人力会签人，只发起复核不直接写入（CG-12）", async () => {
+  it("员工状态变更只填写事由，HR自动解析，只发起复核不直接写入", async () => {
     const api = makeApi();
     (api.post as ReturnType<typeof vi.fn>).mockResolvedValue({ reviewId: "review_hr3", reviewStatus: "pending_review" });
     const setActionResult = vi.fn();
@@ -50,13 +50,10 @@ describe("StaffProfilesPage 员工档案销售岗维护（ADM-STF-004）", () =>
     fireEvent.change(select, { target: { value: "employed" } });
     expect(api.post).not.toHaveBeenCalled();
     fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "已入职" } });
-    fireEvent.change(select, { target: { value: "employed" } });
-    expect(api.post).not.toHaveBeenCalled();
-    expect(screen.getByTestId("staff-profiles-error").textContent).toContain("人力会签人");
-    fireEvent.change(screen.getByTestId("staff-profiles-hr-approver"), { target: { value: "usr_hr" } });
+    expect(screen.queryByTestId("staff-profiles-hr-approver")).toBeNull();
     fireEvent.change(select, { target: { value: "departed" } });
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/employment-status",
-      { employmentStatus: "departed", reason: "已入职", hrApproverId: "usr_hr" }));
+      { employmentStatus: "departed", reason: "已入职" }));
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ 结果: "已发起员工状态变更复核", 复核单: "review_hr3", 目标状态: "离职" })));
   });
 
@@ -136,6 +133,18 @@ describe("StaffProfilesPage 已存档档案按需拉取（U03-008）", () => {
 });
 
 describe("StaffProfilesPage 派驻记录（CG-07，BSM「派驻人员的成本与报酬」）", () => {
+  it("商户账号即使持有管理权限也不能登记或结束派驻", async () => {
+    const api = makeApi();
+    render(<StaffProfilesPage api={api} user={{ id: "merchant-admin", username: "店长", accountType: "merchant_admin", merchantId: "mch-1" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    const end = await screen.findByTestId("staff-dispatch-end-dsp-1");
+    expect((screen.getByTestId("staff-dispatch-create") as HTMLButtonElement).disabled).toBe(true);
+    expect((end as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId("staff-dispatch-create"));
+    fireEvent.click(end);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it("列出派驻记录：所属主体、派驻酒吧、起止时间分别显示，进行中才有结束入口", async () => {
     renderPage(makeApi());
     await waitFor(() => expect(screen.getByTestId("staff-dispatch-row-dsp-1")).toBeTruthy());

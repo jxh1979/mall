@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FinanceArApLedgerPage } from "./FinanceArApLedgerPage";
@@ -42,6 +42,20 @@ async function openRefund() {
 beforeEach(() => vi.spyOn(window, "confirm").mockReturnValue(true));
 
 describe("财务退款完整操作", () => {
+  it("停售拒收款复用原路凭证办理，不能直接自动重退", async () => {
+    mount("requested", grants, { sourceType: "channel_ticket_rejection", refundChannel: "meituan", attempts: [] });
+    await openRefund();
+    expect(screen.getByText(/停售拒收款：先核对原收款和渠道订单/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "在原单重试" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "登记本人已执行退款" })).toBeEnabled();
+    expect(screen.queryByText("退款成功，已结清")).not.toBeInTheDocument();
+  });
+  it("停售拒收款项目归属未明时禁止出款及核实", async () => {
+    mount("requested", grants, { sourceType: "ticket_payment_rejection", projectId: null, attempts: [] });
+    await openRefund();
+    expect(screen.getByText("待核实项目归属")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "登记本人已执行退款" })).toBeDisabled();
+  });
   it("待确认退款只允许查询，不可重试，也不将预留渠道当作成功", async () => {
     const { api } = mount("processing", grants, { attempts: [{ id: "attempt-1", operation: "submit", status: "processing" }] });
     await openRefund();

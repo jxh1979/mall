@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -15,6 +17,10 @@ public interface ChannelTicketIssuePort {
 
     IssueResult issue(IssueCommand command);
 
+    /** 停售时不承接外部新订单；有实收款才附原路待退款编号，零金额只拒单。 */
+    Optional<RejectionResult> rejectSuspendedPayment(IssueCommand command, String sourceId,
+            long amountCent, String originalPaymentRef, String merchantId);
+
     /** 自动对账系统取数：按本地票订单 id 取实收金额（平台侧期望值，直读 ticket_orders 真源）。 */
     Optional<Long> findOrderAmountCent(String ticketOrderId);
 
@@ -28,6 +34,9 @@ public interface ChannelTicketIssuePort {
             String buyerPhone,
             String reason
     ) {
+    }
+
+    record RejectionResult(String refundId) {
     }
 
     record IssueResult(

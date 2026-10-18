@@ -1,4 +1,6 @@
 package com.complex.platform.ticketing;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -259,7 +261,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("updated_at", timestampWithTimeZone(order.updatedAt()))
                 .addValue("merchant_id", order.merchantId())
                 .addValue("paid_at", timestampWithTimeZone(order.paidAt()))
-                .addValue("bar_id", order.barId());
+                .addValue("bar_id", order.barId())
+                .addValue("project_id", order.projectId());
     }
 
     MapSqlParameterSource ticketPaymentIntentParameters(TicketPaymentIntentRecord intent) {

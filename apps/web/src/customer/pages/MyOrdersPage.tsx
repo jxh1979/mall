@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { Alert, Button, Card, Empty, Input, List, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 
@@ -8,6 +8,12 @@ import type { CustomerTicket, StoredValueAccount, TicketOrder } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Text } = Typography;
+
+function cardAppliesToOrder(card: StoredValueAccount, order: TicketOrder): boolean {
+  return card.status === "active"
+    && (card.projectId === null || card.projectId === order.projectId)
+    && (card.merchantId === null || card.merchantId === order.barId);
+}
 
 // ④ 我的订单 / 我的票 / 我的权益 + ⑥ 验票二维码出示（修复 1.8）
 // 订单直接展开票实例/权益，点票出码，无需手输票 ID（GET /customer/orders/{id}/tickets）。
@@ -39,7 +45,7 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
     try {
       const ownCards = await service.getStoredValueAccounts();
       setCards(ownCards);
-      setCardId(ownCards.find((card) => card.status === "active" && card.projectId === null)?.id);
+      setCardId(ownCards.find((card) => cardAppliesToOrder(card, order))?.id);
     } catch (err) {
       setPaymentError(err instanceof Error ? err.message : "储值卡加载失败");
     } finally {
@@ -185,8 +191,8 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
           <Text>本订单应付 ¥{((payOrder?.amountCent ?? 0) / 100).toFixed(2)}</Text>
           <Select aria-label="付款储值卡" value={cardId} onChange={setCardId} style={{ width: "100%" }}
             options={cards.map((card) => ({ value: card.id,
-              disabled: card.status !== "active" || card.projectId !== null,
-              label: `${card.merchantId ? "商户卡（" + card.merchantId + "）" : "综合体通用卡"} · 余额 ¥${(card.balanceCent / 100).toFixed(2)}${card.projectId ? " · 该订单暂不支持此卡范围" : ""}` }))} />
+              disabled: !payOrder || !cardAppliesToOrder(card, payOrder),
+              label: `${card.merchantId ? "商户卡（" + card.merchantId + "）" : "综合体通用卡"} · 余额 ¥${(card.balanceCent / 100).toFixed(2)}${payOrder && !cardAppliesToOrder(card, payOrder) ? " · 不适用于该订单" : ""}` }))} />
           <label htmlFor="order-payment-phone">付款手机号</label>
           <Input id="order-payment-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
           <Button disabled={paymentBusy} onClick={() => void requestPaymentCode()}>发送扣款验证码</Button>

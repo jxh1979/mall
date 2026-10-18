@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,6 +44,7 @@ import org.junit.jupiter.api.Test;
 
 class BarServiceTests {
 
+    @org.junit.jupiter.api.io.TempDir java.nio.file.Path evidenceDirectory;
     private InMemoryBarRepository barRepository;
     private InMemoryAuditEventRepository auditEventRepository;
     private CapturingBarReceivableLedgerService receivableLedgerService;
@@ -169,8 +170,19 @@ class BarServiceTests {
                         "att-void-photo", "p.jpg", "image/jpeg", 1L, "bar_order_item_void", null,
                         "other", "evidence-files/p.jpg", "/api/v1/evidence/attachments/att-void-photo/file",
                         "uploaded", null, Instant.now(), Instant.now(), null)));
+        try {
+            java.nio.file.Files.write(evidenceDirectory.resolve("p.jpg"), new byte[]{1});
+            java.nio.file.Files.write(evidenceDirectory.resolve("v.mp4"), new byte[]{2});
+        } catch (java.io.IOException exception) {
+            throw new java.io.UncheckedIOException(exception);
+        }
+        when(evidenceRepositoryStub.findAttachmentById("att-void-video")).thenReturn(Optional.of(
+                new com.complex.platform.evidence.EvidenceAttachmentRecord(
+                        "att-void-video", "v.mp4", "video/mp4", 1L, "bar_order_item_void", null,
+                        "other", "evidence-files/v.mp4", null, "uploaded", null, Instant.now(), Instant.now(), null)));
         barOrderService.evidenceAttachmentValidator =
-                new com.complex.platform.evidence.EvidenceAttachmentValidator(evidenceRepositoryStub);
+                new com.complex.platform.evidence.EvidenceAttachmentValidator(evidenceRepositoryStub,
+                        new com.complex.platform.evidence.EvidenceFileStorage(evidenceDirectory.toString(), 1024));
         billingService = new BarBillingService(
                 barRepository, receivableLedgerService, authorizationService, auditEventService);
         // P0-D/CFG-01（V340）：提成率改后台可配。单测注入「出厂种子等值」测试双子（销售 1500bp / 非销售 1000bp）——
@@ -3189,7 +3201,7 @@ class BarServiceTests {
         HighValueVoidFixture f = highValueDeliveredItem("void-highvalue-approve", 300_000L, 2);
         long payableBefore = f.bill().payableAmountCent();
         BarOrderItemVoidRecord voided = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
-                "void-highvalue-approve-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "void-highvalue-approve-1", "quality issue", List.of("att-void-photo", "att-void-video"), f.orderItemId(),
                 "bottle spoiled", true, f.bill().id(), "quality_defect"));
 
         BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
@@ -3207,6 +3219,32 @@ class BarServiceTests {
         assertThat(decided.inventoryMovementId()).isNotNull();
         assertThat(barRepository.billAdjustments.stream()
                 .filter(a -> "waiver".equals(a.adjustmentType())).count()).isEqualTo(1L);
+    }
+
+    @Test
+    void highValueApprovalRequiresVideoAndRechecksTheStoredFile() throws Exception {
+        highValueStub.highValue = true;
+        HighValueVoidFixture f = highValueDeliveredItem("void-evidence-review", 300_000L, 2);
+        BarOrderItemVoidRecord pending = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
+                "void-evidence-review-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
+                "bottle spoiled", true, f.bill().id(), "quality_defect"));
+        assertThatThrownBy(() -> service.decideOrderItemVoid(pending.id(),
+                new BarOrderItemVoidDecisionRequest("decide-missing-video", "approved", "confirmed")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("EVIDENCE_PHOTO_VIDEO_REQUIRED"));
+        assertThat(barRepository.orderItems.get(f.orderItemId()).voided()).isFalse();
+        assertThat(barRepository.bills.get(f.bill().id()).payableAmountCent()).isEqualTo(f.bill().payableAmountCent());
+
+        HighValueVoidFixture g = highValueDeliveredItem("void-lost-evidence", 300_000L, 2);
+        BarOrderItemVoidRecord withBoth = service.voidOrderItem(g.order().id(), new BarOrderItemVoidRequest(
+                "void-lost-evidence-1", "quality issue", List.of("att-void-photo", "att-void-video"), g.orderItemId(),
+                "bottle spoiled", true, g.bill().id(), "quality_defect"));
+        java.nio.file.Files.delete(evidenceDirectory.resolve("v.mp4"));
+        assertThatThrownBy(() -> service.decideOrderItemVoid(withBoth.id(),
+                new BarOrderItemVoidDecisionRequest("decide-lost-file", "approved", "confirmed")))
+                .isInstanceOf(ApiException.class);
+        assertThat(barRepository.orderItems.get(g.orderItemId()).voided()).isFalse();
+        assertThat(barRepository.bills.get(g.bill().id()).payableAmountCent()).isEqualTo(g.bill().payableAmountCent());
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -71,6 +73,9 @@ class HrApprovalChainJdbcIntegrationTests {
                     below, superior, initiator);
             below = superior;
         }
+        jdbc.update("INSERT INTO approval_lines(line_code,line_name,min_start_rank,status,hr_final_approver_id) VALUES (?,?,1,'active',?)",
+                "dept_" + suffix, "测试部门", hr);
+        jdbc.update("UPDATE org_hierarchy SET line_code=? WHERE user_id=?", "dept_" + suffix, employee);
         profileId = "stf_cg12_" + suffix;
         jdbc.update("""
                 INSERT INTO staff_profiles (id, project_id, merchant_id, user_id, name, company_id,
@@ -90,19 +95,20 @@ class HrApprovalChainJdbcIntegrationTests {
     /** 链生成：HR 节点 + 直属上级向上三级（S1、S2、S3，不含 S4）；全部通过前不写入，全部通过后 departed 生效即「离职」。 */
     @Test
     void employmentStatusChangeNeedsHrPlusThreeSuperiorsAndAppliesOnlyAfterAllApprove() {
+        actAs(superiors.get(0));
         SupervisorReviewDecisionRecord review = service.setEmploymentStatus(profileId,
-                new StaffEmploymentStatusRequest(key(), "departed", "连续两次旷工", hr));
+                new StaffEmploymentStatusRequest(key(), "departed", "连续两次旷工"));
         assertThat(review.reviewStatus()).isEqualTo("pending_review");
         assertThat(employmentStatus()).isEqualTo("employed");
 
         List<ApprovalChainNode> nodes = reviews.chain(review.reviewId());
         assertThat(nodes.stream().filter(n -> ApprovalChainNode.MAIN_LINE.equals(n.lineCode())).map(ApprovalChainNode::approverId).toList())
-                .containsExactly(superiors.get(0), superiors.get(1), superiors.get(2));
+                .containsExactly(superiors.get(1), superiors.get(2));
         assertThat(nodes.stream().filter(n -> "hr_review".equals(n.lineCode())).map(ApprovalChainNode::approverId).toList())
                 .containsExactly(hr);
         assertThat(nodes).extracting(ApprovalChainNode::approverId).doesNotContain(initiator, employee, superiors.get(3));
 
-        for (String approver : List.of(superiors.get(0), superiors.get(1), superiors.get(2))) {
+        for (String approver : List.of(superiors.get(1), superiors.get(2))) {
             approve(review.reviewId(), approver);
             assertThat(employmentStatus()).as("未全部通过不得写入").isEqualTo("employed");
         }
@@ -117,35 +123,94 @@ class HrApprovalChainJdbcIntegrationTests {
     /** 任一目标状态都走链（含 suspended），且任一节点驳回即整单退回、不写入。 */
     @Test
     void anyEmploymentStatusTargetGoesThroughChainAndRejectionLeavesStatusUntouched() {
-        SupervisorReviewDecisionRecord review = service.setEmploymentStatus(profileId,
-                new StaffEmploymentStatusRequest(key(), "suspended", "停岗调查", hr));
-        assertThat(employmentStatus()).isEqualTo("employed");
         actAs(superiors.get(0));
+        SupervisorReviewDecisionRecord review = service.setEmploymentStatus(profileId,
+                new StaffEmploymentStatusRequest(key(), "suspended", "停岗调查"));
+        assertThat(employmentStatus()).isEqualTo("employed");
+        actAs(superiors.get(1));
         reviews.approve(review.reviewId(), new SupervisorReviewApprovalRequest(key(), "驳回", List.of(), null, "rejected", "事由不足"));
         assertThat(employmentStatus()).isEqualTo("employed");
         actAs(initiator);
         assertThat(reviews.findReview(review.reviewId()).orElseThrow().reviewStatus()).isEqualTo("rejected");
     }
 
-    /** HR 会签人必填且须经角色持有 staff.hr.review；员工本人不得充当 HR 节点。 */
     @Test
-    void hrApproverIsRequiredAndMustHoldHrPermission() {
-        assertThatThrownBy(() -> service.setEmploymentStatus(profileId, new StaffEmploymentStatusRequest(key(), "employed", "转正", null)))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("HR_APPROVER_REQUIRED"));
-        String outsider = "usr_cg12_out_" + suffix;
-        access.createUser(new com.complex.platform.access.AccessUser(outsider, outsider, "staff", "project_main", null, "active", java.time.Instant.now()));
-        assertThatThrownBy(() -> service.setEmploymentStatus(profileId, new StaffEmploymentStatusRequest(key(), "employed", "转正", outsider)))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("HR_APPROVER_LACKS_ROLE"));
-        assertThatThrownBy(() -> service.setEmploymentStatus(profileId, new StaffEmploymentStatusRequest(key(), "employed", "转正", employee)))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPROVAL_LINE_EMPTY"));
+    void missingDepartmentHrLeavesPendingAndCanRecoverAfterConfigurationIsCompleted() {
+        jdbc.update("UPDATE approval_lines SET hr_final_approver_id=NULL WHERE line_code=?", "dept_" + suffix);
+        actAs(superiors.get(0));
+        var review = service.setEmploymentStatus(profileId, new StaffEmploymentStatusRequest(key(), "suspended", "待核实"));
+        assertThat(review.reviewStatus()).isEqualTo("pending_review");
+        assertThat(reviews.chain(review.reviewId())).isEmpty();
         assertThat(employmentStatus()).isEqualTo("employed");
+        jdbc.update("UPDATE approval_lines SET hr_final_approver_id=? WHERE line_code=?", hr, "dept_" + suffix);
+        assertThat(reviews.regenerateChain(review.reviewId())).extracting(ApprovalChainNode::approverId)
+                .containsExactly(superiors.get(1), superiors.get(2), hr);
+    }
+
+    @Test
+    void genericReviewCannotReplaceDepartmentHrWithCallerSuppliedApprover() {
+        var review = reviews.evaluate(new com.complex.platform.governance.review.SupervisorReviewEvaluateRequest(key(),
+                "奖惩复核", List.of(), SupervisorReviewService.STAFF_ADJUSTMENT_ACTION, "staff_payroll_adjustment",
+                "manual_" + suffix, 100L, "测试", null,
+                List.of(new com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.ParallelLine("hr_review", superiors.get(3))),
+                employee));
+        assertThat(reviews.chain(review.reviewId()).stream().filter(n -> "hr_review".equals(n.lineCode())))
+                .extracting(ApprovalChainNode::approverId).containsExactly(hr);
+    }
+
+    @Test
+    void invalidDepartmentHrCannotProduceACompletableChain() {
+        for (String invalid : List.of(employee, initiator)) {
+            jdbc.update("UPDATE approval_lines SET hr_final_approver_id=? WHERE line_code=?", invalid, "dept_" + suffix);
+            var review = service.addPayrollAdjustment(new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "penalty", 100L, "待复核"));
+            assertThat(reviews.chain(review.reviewId())).isEmpty();
+        }
+        jdbc.update("UPDATE approval_lines SET hr_final_approver_id=? WHERE line_code=?", hr, "dept_" + suffix);
+        jdbc.update("UPDATE access_users SET organization_id='outside_project' WHERE id=?", hr);
+        var review = service.addPayrollAdjustment(new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "penalty", 100L, "待复核"));
+        assertThat(reviews.chain(review.reviewId())).isEmpty();
+    }
+
+    @Test
+    void hrPermissionRevocationAfterSubmissionBlocksApproval() {
+        var review = service.addPayrollAdjustment(new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "penalty", 100L, "待复核"));
+        jdbc.update("DELETE FROM role_permissions WHERE role_id='role_m010_fixture' AND permission_code='staff.hr.review'");
+        actAs(hr);
+        assertThatThrownBy(() -> reviews.approve(review.reviewId(), approval("approved")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("HR_APPROVER_SCOPE_INVALID"));
+        assertThat(adjustmentCount("penalty")).isZero();
+    }
+
+    @Test
+    void repeatedHrEscalationCannotAddFourthSupervisor() {
+        actAs(superiors.get(0));
+        var review = service.setEmploymentStatus(profileId, new StaffEmploymentStatusRequest(key(), "suspended", "待复核"));
+        var later = java.time.Instant.now().plus(java.time.Duration.ofDays(30));
+        reviews.escalateOverdue(later);
+        reviews.escalateOverdue(later.plus(java.time.Duration.ofDays(30)));
+        assertThat(reviews.chain(review.reviewId())).extracting(ApprovalChainNode::approverId)
+                .containsOnly(superiors.get(2), hr);
+        assertThat(employmentStatus()).isEqualTo("employed");
+    }
+
+    @Test
+    void hrForwardingRequiresTargetToHoldHrRoleAndEmployeeScope() {
+        var outsider = "usr_out_" + suffix;
+        StaffTestActors.grant(jdbc, access, outsider, "outside_project");
+        var review = service.addPayrollAdjustment(new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "penalty", 100L, "待复核"));
+        actAs(hr);
+        assertThatThrownBy(() -> reviews.forward(review.reviewId(),
+                new com.complex.platform.governance.review.SupervisorReviewForwardRequest(key(), "转交", outsider, "代办")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("HR_APPROVER_SCOPE_INVALID"));
+        assertThat(reviews.chain(review.reviewId()).stream().filter(n -> "hr_review".equals(n.lineCode())))
+                .allMatch(n -> n.forwardedTo() == null);
     }
 
     /** 奖惩：bonus / penalty 都走链，未通过不入账，全部通过后入账。 */
     @Test
     void bonusAndPenaltyAreBookedOnlyAfterChainApproval() {
         SupervisorReviewDecisionRecord penalty = service.addPayrollAdjustment(
-                new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "penalty", 3000L, "迟到", hr));
+                new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "penalty", 3000L, "迟到"));
         assertThat(adjustmentCount("penalty")).isZero();
         actAs(superiors.get(1));
         assertThatThrownBy(() -> reviews.approve(penalty.reviewId(), approval("approved")))
@@ -156,7 +221,7 @@ class HrApprovalChainJdbcIntegrationTests {
 
         actAs(initiator);
         SupervisorReviewDecisionRecord bonus = service.addPayrollAdjustment(
-                new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "bonus", 5000L, "月度之星", hr));
+                new StaffPayrollAdjustmentRequest(key(), employee, "2099-08", "bonus", 5000L, "月度之星"));
         assertThat(adjustmentCount("bonus")).isZero();
         approveAll(bonus.reviewId());
         assertThat(adjustmentCount("bonus")).isEqualTo(1);
@@ -168,7 +233,7 @@ class HrApprovalChainJdbcIntegrationTests {
     @Test
     void appealOnPenaltyIsDecidedBySameChainAndRevocationReversesWithoutDeletingOriginal() {
         SupervisorReviewDecisionRecord penalty = service.addPayrollAdjustment(
-                new StaffPayrollAdjustmentRequest(key(), employee, "2099-09", "penalty", 4000L, "绩效扣分", hr));
+                new StaffPayrollAdjustmentRequest(key(), employee, "2099-09", "penalty", 4000L, "绩效扣分"));
         approveAll(penalty.reviewId());
         String adjustmentId = penalty.objectId();
         actAs(initiator);
@@ -177,7 +242,7 @@ class HrApprovalChainJdbcIntegrationTests {
 
         actAs(employee);
         StaffAdjustmentAppealRecord appeal = service.submitAdjustmentAppeal(adjustmentId,
-                new StaffAdjustmentAppealRequest(key(), "当日已报备", hr));
+                new StaffAdjustmentAppealRequest(key(), "当日已报备"));
         assertThat(appeal.status()).isEqualTo("pending");
         List<ApprovalChainNode> nodes = reviews.chain(appeal.reviewId());
         assertThat(nodes.stream().filter(n -> ApprovalChainNode.MAIN_LINE.equals(n.lineCode())).map(ApprovalChainNode::approverId).toList())
@@ -203,11 +268,11 @@ class HrApprovalChainJdbcIntegrationTests {
         // 维持：再申诉一笔已生效扣罚并驳回 → 结论 upheld，无冲回。
         actAs(initiator);
         SupervisorReviewDecisionRecord second = service.addPayrollAdjustment(
-                new StaffPayrollAdjustmentRequest(key(), employee, "2099-10", "penalty", 1000L, "违规", hr));
+                new StaffPayrollAdjustmentRequest(key(), employee, "2099-10", "penalty", 1000L, "违规"));
         approveAll(second.reviewId());
         actAs(employee);
         StaffAdjustmentAppealRecord upheld = service.submitAdjustmentAppeal(second.objectId(),
-                new StaffAdjustmentAppealRequest(key(), "不服", hr));
+                new StaffAdjustmentAppealRequest(key(), "不服"));
         actAs(superiors.get(0));
         reviews.approve(upheld.reviewId(), approval("rejected"));
         assertThat(service.listAdjustmentAppeals(employee).items().stream().filter(a -> a.id().equals(upheld.id())).findFirst()
@@ -220,21 +285,29 @@ class HrApprovalChainJdbcIntegrationTests {
     @Test
     void appealIsOnlyForTheEmployeeAndOnlyOnPenalty() {
         SupervisorReviewDecisionRecord bonus = service.addPayrollAdjustment(
-                new StaffPayrollAdjustmentRequest(key(), employee, "2099-11", "bonus", 1000L, "奖", hr));
+                new StaffPayrollAdjustmentRequest(key(), employee, "2099-11", "bonus", 1000L, "奖"));
         approveAll(bonus.reviewId());
         actAs(employee);
-        assertThatThrownBy(() -> service.submitAdjustmentAppeal(bonus.objectId(), new StaffAdjustmentAppealRequest(key(), "不服", hr)))
+        assertThatThrownBy(() -> service.submitAdjustmentAppeal(bonus.objectId(), new StaffAdjustmentAppealRequest(key(), "不服")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPEAL_ONLY_FOR_PENALTY"));
         actAs(initiator);
         SupervisorReviewDecisionRecord penalty = service.addPayrollAdjustment(
-                new StaffPayrollAdjustmentRequest(key(), employee, "2099-11", "penalty", 1000L, "罚", hr));
+                new StaffPayrollAdjustmentRequest(key(), employee, "2099-11", "penalty", 1000L, "罚"));
         approveAll(penalty.reviewId());
         actAs(superiors.get(0));
-        assertThatThrownBy(() -> service.submitAdjustmentAppeal(penalty.objectId(), new StaffAdjustmentAppealRequest(key(), "代诉", hr)))
+        assertThatThrownBy(() -> service.submitAdjustmentAppeal(penalty.objectId(), new StaffAdjustmentAppealRequest(key(), "代诉")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("APPEAL_SELF_ONLY"));
         actAs(employee);
-        assertThatThrownBy(() -> service.submitAdjustmentAppeal(penalty.objectId(), new StaffAdjustmentAppealRequest(key(), " ", hr)))
+        assertThatThrownBy(() -> service.submitAdjustmentAppeal(penalty.objectId(), new StaffAdjustmentAppealRequest(key(), " ")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void independentStatusChangeRejectsAnUnrelatedManagerEvenWithPermission() {
+        assertThatThrownBy(() -> service.setEmploymentStatus(profileId,
+                new StaffEmploymentStatusRequest(key(), "suspended", "停岗调查")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DIRECT_SUPERVISOR_REQUIRED"));
+        assertThat(employmentStatus()).isEqualTo("employed");
     }
 
     // ── helpers ──

@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -112,7 +114,15 @@ class InventoryServiceTests {
     /**
      * 双证据闭环：附件必须真实存在且类型对得上。桩里只有 att_photo（照片）与 att_video（视频）两个已上传附件。
      */
+    @org.junit.jupiter.api.io.TempDir java.nio.file.Path evidenceDirectory;
+
     private com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator() {
+        try {
+            java.nio.file.Files.write(evidenceDirectory.resolve("p.jpg"), new byte[]{1});
+            java.nio.file.Files.write(evidenceDirectory.resolve("v.mp4"), new byte[]{2});
+        } catch (java.io.IOException exception) {
+            throw new java.io.UncheckedIOException(exception);
+        }
         com.complex.platform.evidence.EvidenceEventRepository evidenceRepository =
                 mock(com.complex.platform.evidence.EvidenceEventRepository.class);
         when(evidenceRepository.findAttachmentById(org.mockito.ArgumentMatchers.anyString()))
@@ -127,7 +137,8 @@ class InventoryServiceTests {
                         "att_video", "v.mp4", "video/mp4", 1L, "saved_bottle_void", null, "other",
                         "evidence-files/v.mp4", "/api/v1/evidence/attachments/att_video/file",
                         "uploaded", null, Instant.now(), Instant.now(), null)));
-        return new com.complex.platform.evidence.EvidenceAttachmentValidator(evidenceRepository);
+        return new com.complex.platform.evidence.EvidenceAttachmentValidator(evidenceRepository,
+                new com.complex.platform.evidence.EvidenceFileStorage(evidenceDirectory.toString(), 1024));
     }
 
     /** 当前生效阈值（分）；置 null = 「阈值未配置」，判定侧必须一律按高价值拦下。 */
@@ -750,6 +761,24 @@ class InventoryServiceTests {
         assertThat(decided.reviewStatus()).isEqualTo("approved");
         assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status())
                 .isEqualTo("cancelled");
+    }
+
+    @Test
+    void highValueApprovalRechecksFilesBeforeChangingTheBottle() throws Exception {
+        InventoryItemRecord item = createHighValueItem("hv-evidence-lost");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-hv-lost", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), "LBL-LOST", "客", null, List.of("reg_photo"), null));
+        service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-lost", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+        java.nio.file.Files.delete(evidenceDirectory.resolve("v.mp4"));
+        assertThatThrownBy(() -> service.reviewHighValue(reviewId,
+                new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest("review-lost", "approved", "confirmed")))
+                .isInstanceOf(ApiException.class);
+        assertThat(inventoryRepository.listHighValueReviews().getFirst().reviewStatus()).isEqualTo("pending");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("disputed_frozen");
     }
 
     // R5 T6: 主管 reject → 存酒保留（维持 disputed_frozen，不作废）

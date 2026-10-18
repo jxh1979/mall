@@ -1,6 +1,6 @@
 package com.complex.platform.governance.chain;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -88,11 +88,13 @@ public class ApprovalChainService {
             }
         } else if (level == ApprovalLevel.HR_THREE_LEVELS_UP) {
             // CG-12（BSM:1478 / BSM:1487「须经 HR 与该员工直属领导、向上三级复核后生效」；PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请」）：
-            // 主线自「该员工」（直接受益人）的直属上级起向上取三级（链不足三级到顶为止，与「无上级即到顶」一致），申请人与该员工不成为节点；
-            // 员工无直属上级时不生成任何节点（含平行线），fail-closed。HR 会签由调用方以平行线 hr_review 指定。
+            // 先固定直属起三个组织层级，再在该边界内排除申请人与受益人，不能借第四级补人数。
+            // 三级配置不完整时整条链保持待处理；HR 会签由服务层按员工部门自动解析。
             String start = beneficiaryId == null || beneficiaryId.isBlank() ? initiatedBy : beneficiaryId;
-            List<String> path = superiorPath(start, initiatedBy, beneficiaryId);
-            List<String> main = path.subList(0, Math.min(HR_CHAIN_LEVELS, path.size()));
+            List<String> path = superiorPath(start, null, null);
+            if (path.size() < HR_CHAIN_LEVELS) return nodes;
+            List<String> main = path.subList(0, HR_CHAIN_LEVELS).stream()
+                    .filter(id -> !Objects.equals(id, initiatedBy) && !Objects.equals(id, beneficiaryId)).toList();
             if (main.isEmpty()) {
                 return nodes;
             }

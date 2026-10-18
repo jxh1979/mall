@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
@@ -1235,6 +1237,10 @@ public class BarOrderService {
 
         // V345 A1 先审后行：审批通过才施加库存/账单/明细副作用（此前一律未动，故也从未进过分账）。
         if ("approved".equals(decision) && approvalFirst && effectsAppliedAt == null) {
+            if (evidenceAttachmentValidator == null) {
+                throw ApiException.conflict("EVIDENCE_STORAGE_UNAVAILABLE", "无法核实高价值退品证据文件");
+            }
+            evidenceAttachmentValidator.requirePhotoAndVideo(safeList(current.evidenceAttachmentIds()));
             BarOrderRecord order = repository.findOrderById(current.orderId())
                     .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
             BarOrderItemRecord item = repository.findOrderItemById(current.orderItemId())

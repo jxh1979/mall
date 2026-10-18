@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1023,6 +1025,57 @@ class IntegrationServiceTests {
     }
 
     @Test
+    void suspendedLateReflowPersistsRefundAndNeverBecomesIssuedAfterLift() {
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        ticketIssuePort.suspended = true;
+        IntegrationOrderSyncRecord first = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-blocked", "ext-tk-blocked", 8800L,
+                Map.of("external_product_id", "mt-prod-1", "paid_at", "2026-06-14T19:59:00Z")));
+        assertThat(first.status()).isEqualTo("failed");
+        assertThat(first.providerPayload()).containsEntry("rejection_code", "PARK_WIDE_FAULT_SALES_SUSPENDED")
+                .containsKey("refund_id").doesNotContainKey("local_ticket_order_id");
+        assertThat(ticketIssuePort.commands).isEmpty();
+        ticketIssuePort.suspended = false;
+        IntegrationOrderSyncRecord replay = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-blocked-replay", "ext-tk-blocked", 8800L, Map.of("external_product_id", "mt-prod-1")));
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(replay.providerPayload().get("refund_id")).isEqualTo(first.providerPayload().get("refund_id"));
+        assertThat(ticketIssuePort.commands).isEmpty();
+        assertThat(ticketIssuePort.refundCount).isEqualTo(1);
+    }
+
+    @Test
+    void suspendedZeroAmountReflowIsRejectedWithoutCreatingRefundAndCannotIssueAfterLift() {
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        ticketIssuePort.suspended = true;
+        IntegrationOrderSyncRecord first = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-zero", "ext-tk-zero", 0L, Map.of("external_product_id", "mt-prod-1")));
+        assertThat(first.status()).isEqualTo("failed");
+        assertThat(first.providerPayload()).containsEntry("rejection_code", "PARK_WIDE_FAULT_SALES_SUSPENDED")
+                .doesNotContainKeys("refund_id", "local_ticket_order_id");
+        ticketIssuePort.suspended = false;
+        IntegrationOrderSyncRecord replay = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-zero-replay", "ext-tk-zero", 0L, Map.of("external_product_id", "mt-prod-1")));
+        assertThat(replay).isEqualTo(first);
+        assertThat(ticketIssuePort.commands).isEmpty();
+        assertThat(ticketIssuePort.refundCount).isZero();
+    }
+
+    @Test
+    void previouslyAcceptedReflowStaysAcceptedDuringFault() {
+        seedTicketTypeMap("mt-prod-1", "tt_pass", null);
+        IntegrationOrderSyncRecord first = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-accepted", "ext-tk-accepted", 8800L, Map.of("external_product_id", "mt-prod-1")));
+        ticketIssuePort.suspended = true;
+        IntegrationOrderSyncRecord replay = service.createOrderSync(ticketOrderSyncRequest(
+                "tk-accepted-replay", "ext-tk-accepted", 8800L, Map.of("external_product_id", "mt-prod-1")));
+        assertThat(replay.id()).isEqualTo(first.id());
+        assertThat(replay.status()).isEqualTo("synced");
+        assertThat(ticketIssuePort.commands).hasSize(1);
+        assertThat(ticketIssuePort.refundCount).isZero();
+    }
+
+    @Test
     void ticketReflowAmountMismatchFlaggedNotBlocked() {
         // 渠道实收 9900 ≠ 本地口径 8800：客人已在渠道付讫，票照出，amount_matched=false 进对账吐差异。
         seedTicketTypeMap("mt-prod-1", "tt_pass", null);
@@ -1151,6 +1204,16 @@ class IntegrationServiceTests {
         final List<IssueCommand> commands = new ArrayList<>();
         final Map<String, Long> orderAmounts = new LinkedHashMap<>();
         long amountCent = 8800L;
+        boolean suspended;
+        int refundCount;
+
+        public Optional<RejectionResult> rejectSuspendedPayment(IssueCommand command, String sourceId,
+                long amount, String originalPaymentRef, String merchantId) {
+            if (!suspended) return Optional.empty();
+            if (amount == 0) return Optional.of(new RejectionResult(null));
+            refundCount++;
+            return Optional.of(new RejectionResult("refund_" + sourceId));
+        }
 
         @Override
         public IssueResult issue(IssueCommand command) {

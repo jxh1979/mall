@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -14,7 +15,7 @@ import { cnDate } from "../components/RowDetailDrawer";
 // 组织层级（直接上级）与平行审批线维护页。写入口与定岗同一门禁 access.role.assign。
 
 type OrgSuperiorRow = { userId: string; superiorId?: string | null; lineCode?: string | null; updatedBy?: string | null; updatedAt?: string | null };
-type ApprovalLineRow = { lineCode: string; lineName: string; minStartRank: number; entryUserId?: string | null; status: string };
+type ApprovalLineRow = { lineCode: string; lineName: string; minStartRank: number; entryUserId?: string | null; hrFinalApproverId?: string | null; status: string };
 type UserRow = { id: string; username: string };
 
 const MANAGE = ["access.role.assign"];
@@ -36,6 +37,7 @@ const TEXT = {
   minStartRank: "最低起点层级（1-30）",
   entryUser: "起点人账号（可空）",
   status: "状态",
+  hrApprover: "部门人力会签负责人（可空）",
   saveLine: "保存审批线",
   noHierarchy: "尚未维护任何直接上级",
   noLines: "尚未配置平行审批线",
@@ -65,7 +67,7 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
   const [lines, setLines] = React.useState<ApprovalLineRow[]>([]);
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [superiorForm, setSuperiorForm] = React.useState({ userId: "", superiorId: "", lineCode: "", operatorNote: "" });
-  const [lineForm, setLineForm] = React.useState({ lineCode: "", lineName: "", minStartRank: "1", entryUserId: "", status: "active" });
+  const [lineForm, setLineForm] = React.useState({ lineCode: "", lineName: "", minStartRank: "1", entryUserId: "", hrFinalApproverId: "", status: "active" });
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -130,17 +132,18 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
       lineName: lineForm.lineName.trim(),
       minStartRank: rank,
       entryUserId: lineForm.entryUserId.trim() || null,
+      hrFinalApproverId: lineForm.hrFinalApproverId.trim() || null,
       status: lineForm.status,
       operatorNote: "后台维护平行审批线",
     };
     await runAction("approval_line_saved", request, () => api.put(`/api/v1/access/approval-lines/${encodeURIComponent(code)}`, {
       idempotencyKey: request.idempotencyKey, lineName: request.lineName, minStartRank: request.minStartRank,
-      entryUserId: request.entryUserId, status: request.status, operatorNote: request.operatorNote,
+      entryUserId: request.entryUserId, hrFinalApproverId: request.hrFinalApproverId, status: request.status, operatorNote: request.operatorNote,
     }));
   }
 
   function selectLine(row: ApprovalLineRow) {
-    setLineForm({ lineCode: row.lineCode, lineName: row.lineName, minStartRank: String(row.minStartRank), entryUserId: row.entryUserId ?? "", status: row.status });
+    setLineForm({ lineCode: row.lineCode, lineName: row.lineName, minStartRank: String(row.minStartRank), entryUserId: row.entryUserId ?? "", hrFinalApproverId: row.hrFinalApproverId ?? "", status: row.status });
   }
 
   return (
@@ -173,13 +176,14 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
         </div>
 
         <h3>{TEXT.lines}</h3>
+        <p>人事事项按员工所属部门的配置自动确定人力会签负责人；未配置、权限或范围不符时保持待处理，补齐后重新生成审批链。</p>
         {lines.length === 0 ? <div className="admin-muted-action" data-testid="approval-lines-empty">{TEXT.noLines}</div> : (
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="approval-lines-table">
-              <thead><tr><th>{TEXT.lineCodeInput}</th><th>{TEXT.lineName}</th><th>{TEXT.minStartRank}</th><th>{TEXT.entryUser}</th><th>{TEXT.status}</th><th></th></tr></thead>
+              <thead><tr><th>{TEXT.lineCodeInput}</th><th>{TEXT.lineName}</th><th>{TEXT.minStartRank}</th><th>{TEXT.entryUser}</th><th>{TEXT.hrApprover}</th><th>{TEXT.status}</th><th></th></tr></thead>
               <tbody>{lines.map((row) => (
                 <tr key={row.lineCode} data-testid={`approval-line-row-${row.lineCode}`}>
-                  <td>{row.lineCode}</td><td>{row.lineName}</td><td>{row.minStartRank}</td><td>{row.entryUserId ?? "-"}</td><td>{zhStatus(row.status)}</td>
+                  <td>{row.lineCode}</td><td>{row.lineName}</td><td>{row.minStartRank}</td><td>{row.entryUserId ?? "-"}</td><td>{row.hrFinalApproverId ?? "待配置"}</td><td>{zhStatus(row.status)}</td>
                   <td><button type="button" data-testid={`approval-line-select-${row.lineCode}`} onClick={() => selectLine(row)}>编辑</button></td>
                 </tr>
               ))}</tbody>
@@ -191,6 +195,7 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
           <input aria-label={TEXT.lineName} data-testid="approval-line-name" placeholder={TEXT.lineName} value={lineForm.lineName} onChange={(event) => setLineForm({ ...lineForm, lineName: event.target.value })} />
           <input aria-label={TEXT.minStartRank} data-testid="approval-line-rank" type="number" min="1" max="30" value={lineForm.minStartRank} onChange={(event) => setLineForm({ ...lineForm, minStartRank: event.target.value })} />
           <input aria-label={TEXT.entryUser} data-testid="approval-line-entry" placeholder={TEXT.entryUser} value={lineForm.entryUserId} onChange={(event) => setLineForm({ ...lineForm, entryUserId: event.target.value })} />
+          <input aria-label={TEXT.hrApprover} data-testid="approval-line-hr" placeholder={TEXT.hrApprover} value={lineForm.hrFinalApproverId} onChange={(event) => setLineForm({ ...lineForm, hrFinalApproverId: event.target.value })} />
           <select aria-label={TEXT.status} data-testid="approval-line-status" value={lineForm.status} onChange={(event) => setLineForm({ ...lineForm, status: event.target.value })}><option value="active">启用</option><option value="inactive">停用</option></select>
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} disabled={busyAction !== ""} data-testid="approval-line-save" onClick={() => void saveLine()}>{TEXT.saveLine}</PermissionButton>
         </div>

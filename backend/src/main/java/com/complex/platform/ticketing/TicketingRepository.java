@@ -1,12 +1,18 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.Optional;
 
 public interface TicketingRepository {
     TicketTypeRecord saveTicketType(TicketTypeRecord ticketType);
+
+    /** 票种商户和明确游乐点位对应的合法综合体；多个候选不得由操作人项目覆盖。 */
+    default List<String> listTicketTypeProjectIds(String ticketTypeId) { return List.of(); }
+
+    /** 仅用于原订单已记录商户的归属核实，不按当前票种配置反推历史。 */
+    default List<String> listMerchantProjectIds(String merchantId) { return List.of(); }
 
     List<TicketTypeRecord> listTicketTypes(boolean includeArchived);
 

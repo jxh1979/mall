@@ -1,5 +1,7 @@
 package com.complex.platform.amusement;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 
 /**
@@ -13,6 +15,11 @@ public record AmusementEntitlementView(
         Instant validFrom,
         Instant validTo,
         int remainingTimes,
-        int numPeople
+        int numPeople,
+        String complexProjectId
 ) {
+    public AmusementEntitlementView(String id, String entitlementType, String status, Instant validFrom,
+            Instant validTo, int remainingTimes, int numPeople) {
+        this(id, entitlementType, status, validFrom, validTo, remainingTimes, numPeople, null);
+    }
 }

@@ -1,5 +1,7 @@
 package com.complex.platform.dealer;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 
 /**
@@ -44,8 +46,13 @@ public record DealerOrderRecord(
         Instant createdAt,
         Instant updatedAt,
         /** CG-11c：累计已退（验收确认）金额，只由退货链回写，订单保存不覆盖。 */
-        long returnedAmountCent
+        long returnedAmountCent,
+        DealerContractRecord contractSnapshot
 ) {
+    public long netReceivableCent() {
+        return Math.max(0L, totalAmountCent - returnedAmountCent);
+    }
+
     public DealerOrderRecord(String id, String orderNo, String dealerId, String dealerContractId, String salesEntityId, String centralWarehouseId, String status,
             String statusBeforeCancel, String priceCatalogId, boolean creditTerm, long goodsAmountCent, long freightCent, String freightBearer, int freightTemplateVersion,
             long totalAmountCent, long firstPaymentRequiredCent, Instant firstPaymentDeadlineAt, Instant balanceDueAt, long paidAmountCent, boolean overdue, String arApItemId,
@@ -54,6 +61,6 @@ public record DealerOrderRecord(
         this(id, orderNo, dealerId, dealerContractId, salesEntityId, centralWarehouseId, status, statusBeforeCancel, priceCatalogId, creditTerm, goodsAmountCent,
                 freightCent, freightBearer, freightTemplateVersion, totalAmountCent, firstPaymentRequiredCent, firstPaymentDeadlineAt, balanceDueAt, paidAmountCent,
                 overdue, arApItemId, reviewedBy, reviewedAt, paymentNotifiedAt, shippedBy, shippedAt, signedAt, completedAt, cancelRequestedBy, cancelReason,
-                cancelledAt, note, createdBy, createdAt, updatedAt, 0L);
+                cancelledAt, note, createdBy, createdAt, updatedAt, 0L, null);
     }
 }

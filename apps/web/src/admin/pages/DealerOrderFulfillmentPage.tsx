@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -12,12 +12,16 @@ import type { AdminPageProps } from "../types";
  * 财务核验首付款达门槛后才出库；审核 / 到账核验 / 出库不同人；取消审批与到账核验互斥；E-13 首付款截止未达门槛取消并退款；尾款逾期暂停账期订单；超收单独记录。
  */
 type DealerRow = { id: string; dealerName?: string; status?: string; creditSuspended?: boolean };
-type ContractRow = { id: string; contractNo?: string; creditTerm?: boolean; firstPaymentRatioBps?: number | null; firstPaymentAmountCent?: number | null; firstPaymentDeadlineDays?: number | null; balanceDueDays?: number | null; freightCent?: number | null; freeShippingThresholdCent?: number | null; freightBearer?: string; freightTemplateVersion?: number };
-type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null };
+type ContractRow = { id: string; contractNo?: string; creditTerm?: boolean; firstPaymentRatioBps?: number | null; firstPaymentAmountCent?: number | null; firstPaymentDeadlineDays?: number | null; balanceDueDays?: number | null; freightCent?: number | null; freeShippingThresholdCent?: number | null; freightBearer?: string; freightTemplateVersion?: number; termsVersion?: number; contractSignedAt?: string | null; firstPaymentAnchor?: string | null; firstPaymentFixedAt?: string | null; balanceDueAnchor?: string | null; balanceDueFixedAt?: string | null };
+type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null; returnedAmountCent?: number; contractSnapshot?: ContractRow | null };
 type PaymentRow = { id: string; method?: string; amountCent?: number; status?: string; appliedCent?: number; verifiedBy?: string | null; referenceNo?: string | null };
 type RefundRow = { id: string; paymentId?: string; amountCent?: number; status?: string; reviewId?: string | null; executedBy?: string | null };
 type OverpaymentRow = { id: string; orderId?: string; amountCent?: number; status?: string; targetOrderId?: string | null };
 
+const ANCHORS: Record<string, string> = { contract_signed: "合同签署", order_created: "订单创建", payment_notified: "通知付款", shipped: "实际出库", signed: "实际签收", fixed_date: "合同约定固定截止" };
+const netDue = (order: OrderRow) => Math.max(0, (order.totalAmountCent ?? 0) - (order.returnedAmountCent ?? 0));
+const unpaid = (order: OrderRow) => Math.max(0, netDue(order) - (order.paidAmountCent ?? 0));
+const localTime = (value?: string | null) => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
 const ORDER_STATUS: Record<string, string> = {
   draft: "草稿", pending_review: "待审核", rejected: "已驳回", pending_payment: "待付款", payment_verifying: "付款核验中", pending_shipment: "待出库",
   shipping: "配送中", signed: "已签收", completed: "已完成", cancelling: "取消中", cancelled: "已取消", pending_refund: "待退款",
@@ -55,6 +59,12 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
   const [termsContract, setTermsContract] = React.useState("");
   const [creditTerm, setCreditTerm] = React.useState(false);
   const [ratio, setRatio] = React.useState("");
+  const [firstAmount, setFirstAmount] = React.useState("");
+  const [firstAnchor, setFirstAnchor] = React.useState("");
+  const [balanceAnchor, setBalanceAnchor] = React.useState("");
+  const [contractSignedAt, setContractSignedAt] = React.useState("");
+  const [firstFixedAt, setFirstFixedAt] = React.useState("");
+  const [balanceFixedAt, setBalanceFixedAt] = React.useState("");
   const [deadlineDays, setDeadlineDays] = React.useState("");
   const [balanceDays, setBalanceDays] = React.useState("");
   const [freight, setFreight] = React.useState("");
@@ -121,11 +131,34 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
     } catch (e) { setFormError(e instanceof Error ? e.message : "订单读取失败"); }
   }
 
+  function selectTerms(id: string) {
+    setTermsContract(id);
+    const contract = contracts.find((value) => value.id === id);
+    setCreditTerm(contract?.creditTerm ?? false);
+    setRatio(contract?.firstPaymentRatioBps == null ? "" : String(contract.firstPaymentRatioBps / 100));
+    setFirstAmount(contract?.firstPaymentAmountCent == null ? "" : String(contract.firstPaymentAmountCent / 100));
+    setDeadlineDays(contract?.firstPaymentDeadlineDays == null ? "" : String(contract.firstPaymentDeadlineDays));
+    setBalanceDays(contract?.balanceDueDays == null ? "" : String(contract.balanceDueDays));
+    setFirstAnchor(contract?.firstPaymentAnchor ?? ""); setBalanceAnchor(contract?.balanceDueAnchor ?? "");
+    setContractSignedAt(localTime(contract?.contractSignedAt)); setFirstFixedAt(localTime(contract?.firstPaymentFixedAt)); setBalanceFixedAt(localTime(contract?.balanceDueFixedAt));
+    setFreight(contract?.freightCent == null ? "" : String(contract.freightCent / 100));
+    setFreeThreshold(contract?.freeShippingThresholdCent == null ? "" : String(contract.freeShippingThresholdCent / 100));
+    setBearer(contract?.freightBearer ?? "dealer");
+  }
+
   const saveTerms = () => run("dealer_contract_terms_updated", async () => {
     if (!termsContract) throw new Error("请先选择合同");
+    if (!firstAnchor || creditTerm && !balanceAnchor) throw new Error("首尾款起点须按合同明确选择");
+    if (creditTerm && (!!ratio === !!firstAmount)) throw new Error("首付款比例与固定金额须择一填写");
+    if ((firstAnchor === "contract_signed" || creditTerm && balanceAnchor === "contract_signed") && !contractSignedAt) throw new Error("请填写合同实际签署时间");
+    if (firstAnchor === "fixed_date" && !firstFixedAt || creditTerm && balanceAnchor === "fixed_date" && !balanceFixedAt) throw new Error("请填写合同固定截止时间");
     const c = await api.post<ContractRow>(`/api/v1/dealers/contracts/${encodeURIComponent(termsContract)}/terms`, {
       idempotencyKey: key(), creditTerm, firstPaymentRatioBps: creditTerm && ratio ? Math.round(Number(ratio) * 100) : undefined,
-      firstPaymentDeadlineDays: Number(deadlineDays), balanceDueDays: creditTerm && balanceDays ? Number(balanceDays) : undefined,
+      firstPaymentAmountCent: creditTerm && firstAmount ? Math.round(Number(firstAmount) * 100) : undefined,
+      firstPaymentDeadlineDays: firstAnchor === "fixed_date" ? null : Number(deadlineDays), balanceDueDays: creditTerm && balanceAnchor !== "fixed_date" ? Number(balanceDays) : null,
+      contractSignedAt: contractSignedAt ? new Date(contractSignedAt).toISOString() : undefined,
+      firstPaymentAnchor: firstAnchor, firstPaymentFixedAt: firstAnchor === "fixed_date" ? new Date(firstFixedAt).toISOString() : null,
+      balanceDueAnchor: creditTerm ? balanceAnchor : null, balanceDueFixedAt: creditTerm && balanceAnchor === "fixed_date" ? new Date(balanceFixedAt).toISOString() : null,
       freightCent: freight ? Math.round(Number(freight) * 100) : undefined, freeShippingThresholdCent: freeThreshold ? Math.round(Number(freeThreshold) * 100) : undefined, freightBearer: bearer,
     });
     if (dealer) await loadDealer(dealer.id);
@@ -194,17 +227,21 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
         <>
           <h3>合同付款条款与运费模板：{dealer.dealerName}</h3>
           <div className="admin-form-grid" data-testid="contract-terms-form">
-            <label>合同<select data-testid="terms-contract-select" value={termsContract} onChange={(e) => setTermsContract(e.target.value)}>
-              <option value="">请选择</option>{contracts.map((c) => <option key={c.id} value={c.id}>{c.contractNo ?? c.id}（{c.creditTerm ? "账期" : "全款"}，运费模板 V{c.freightTemplateVersion ?? 0}）</option>)}
+            <label>合同<select data-testid="terms-contract-select" value={termsContract} onChange={(e) => selectTerms(e.target.value)}>
+              <option value="">请选择</option>{contracts.map((c) => <option key={c.id} value={c.id}>{c.contractNo ?? c.id}（{c.creditTerm ? "账期" : "全款"}，条款第{c.termsVersion ?? 0}版）</option>)}
             </select></label>
             <label><input type="checkbox" data-testid="terms-credit" checked={creditTerm} onChange={(e) => setCreditTerm(e.target.checked)} />约定账期</label>
             <label>首付款比例（%）<input data-testid="terms-ratio" value={ratio} onChange={(e) => setRatio(e.target.value)} /></label>
-            <label>首付款截止（通知付款后天数）<input data-testid="terms-deadline-days" value={deadlineDays} onChange={(e) => setDeadlineDays(e.target.value)} /></label>
-            <label>尾款到期（出库后天数）<input data-testid="terms-balance-days" value={balanceDays} onChange={(e) => setBalanceDays(e.target.value)} /></label>
+            <label>首付款固定金额（元，与比例择一）<input data-testid="terms-first-amount" value={firstAmount} onChange={(e) => setFirstAmount(e.target.value)} /></label>
+            <label>合同实际签署时间<input type="datetime-local" data-testid="terms-signed-at" value={contractSignedAt} onChange={(e) => setContractSignedAt(e.target.value)} /></label>
+            <label>首付款起点<select data-testid="terms-first-anchor" value={firstAnchor} onChange={(e) => setFirstAnchor(e.target.value)}><option value="">按合同选择</option>{Object.entries(ANCHORS).filter(([code]) => !["shipped", "signed"].includes(code)).map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select></label>
+            {firstAnchor === "fixed_date" ? <label>首付款固定截止<input type="datetime-local" data-testid="terms-first-fixed" value={firstFixedAt} onChange={(e) => setFirstFixedAt(e.target.value)} /></label> : <label>首付款截止（约定起点后天数）<input data-testid="terms-deadline-days" value={deadlineDays} onChange={(e) => setDeadlineDays(e.target.value)} /></label>}
+            {creditTerm ? <><label>尾款起点<select data-testid="terms-balance-anchor" value={balanceAnchor} onChange={(e) => setBalanceAnchor(e.target.value)}><option value="">按合同选择</option>{Object.entries(ANCHORS).map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select></label>
+            {balanceAnchor === "fixed_date" ? <label>尾款固定截止<input type="datetime-local" data-testid="terms-balance-fixed" value={balanceFixedAt} onChange={(e) => setBalanceFixedAt(e.target.value)} /></label> : <label>尾款到期（约定起点后天数）<input data-testid="terms-balance-days" value={balanceDays} onChange={(e) => setBalanceDays(e.target.value)} /></label>}</> : null}
             <label>运费（元）<input data-testid="terms-freight" value={freight} onChange={(e) => setFreight(e.target.value)} /></label>
             <label>包邮门槛（元）<input data-testid="terms-free-threshold" value={freeThreshold} onChange={(e) => setFreeThreshold(e.target.value)} /></label>
             <label>运费承担方<select data-testid="terms-bearer" value={bearer} onChange={(e) => setBearer(e.target.value)}><option value="dealer">经销商</option><option value="sales_entity">销售主体</option></select></label>
-            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.manage"]} data-testid="terms-save" onClick={() => void saveTerms()}>保存条款（运费模板版本+1，只影响新订单）</PermissionButton>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.manage"]} data-testid="terms-save" onClick={() => void saveTerms()}>登记合同条款（新版本仅供后续审核订单锁定）</PermissionButton>
           </div>
 
           <h3>建单（草稿）</h3>
@@ -218,13 +255,13 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
 
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="order-table">
-              <thead><tr><th>订单号</th><th>状态</th><th>账期</th><th>货款</th><th>运费</th><th>合计</th><th>已收</th><th>首付款门槛</th><th>首付款截止</th><th>尾款到期</th><th>逾期</th><th>操作</th></tr></thead>
+              <thead><tr><th>订单号</th><th>状态</th><th>账期</th><th>货款</th><th>运费</th><th>原合计</th><th>退货后应收</th><th>已收</th><th>未收</th><th>首付款门槛</th><th>首付款截止</th><th>尾款到期</th><th>逾期</th><th>操作</th></tr></thead>
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id} data-testid={`order-row-${o.id}`} className={order?.id === o.id ? "admin-row-selected" : undefined}>
                     <td>{o.orderNo ?? o.id}</td><td data-testid={`order-status-${o.id}`}>{label(ORDER_STATUS, o.status)}</td><td>{o.creditTerm ? "账期" : "全款"}</td>
-                    <td>{money(o.goodsAmountCent)}</td><td>{money(o.freightCent)}</td><td>{money(o.totalAmountCent)}</td><td>{money(o.paidAmountCent)}</td>
-                    <td>{money(o.firstPaymentRequiredCent)}</td><td>{cnTime(o.firstPaymentDeadlineAt)}</td><td>{cnTime(o.balanceDueAt)}</td><td>{o.overdue ? "逾期" : "—"}</td>
+                    <td>{money(o.goodsAmountCent)}</td><td>{money(o.freightCent)}</td><td>{money(o.totalAmountCent)}</td><td>{money(netDue(o))}</td><td>{money(o.paidAmountCent)}</td><td data-testid={`order-unpaid-${o.id}`}>{money(unpaid(o))}</td>
+                    <td>{money(o.firstPaymentRequiredCent)}</td><td>{cnTime(o.firstPaymentDeadlineAt)}</td><td>{o.balanceDueAt ? cnTime(o.balanceDueAt) : o.creditTerm && o.contractSnapshot?.balanceDueAnchor ? `待${ANCHORS[o.contractSnapshot.balanceDueAnchor] ?? "合同事件"}` : "—"}</td><td>{o.overdue ? "逾期" : "—"}</td>
                     <td><button type="button" data-testid={`order-select-${o.id}`} onClick={() => void selectOrder(o)}>处理</button></td>
                   </tr>
                 ))}
@@ -235,6 +272,7 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
           {order ? (
             <>
               <h3>订单 {order.orderNo}：{label(ORDER_STATUS, order.status)}</h3>
+              <p data-testid="order-contract-snapshot">{order.contractSnapshot ? `锁定合同 ${order.contractSnapshot.contractNo ?? ""}，条款第 ${order.contractSnapshot.termsVersion} 版；首付按${ANCHORS[order.contractSnapshot.firstPaymentAnchor ?? ""] ?? "合同"}，尾款按${ANCHORS[order.contractSnapshot.balanceDueAnchor ?? ""] ?? "无账期"}` : "合同将在订单审核通过时锁定"}；退货后未收 {money(unpaid(order))}。</p>
               <div className="admin-form-grid" data-testid="order-actions">
                 {order.status === "draft" || order.status === "rejected" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.manage"]} data-testid="order-submit" onClick={() => void act(`/api/v1/dealers/orders/${order.id}/submit`, {}, "dealer_order_submitted", { 订单: order.orderNo, 状态: "待审核" })}>提交审核</PermissionButton> : null}
                 {order.status === "pending_review" ? (
