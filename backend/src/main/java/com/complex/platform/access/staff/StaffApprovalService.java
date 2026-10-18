@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest;
@@ -38,25 +38,33 @@ public class StaffApprovalService {
     private final AuthorizationService authorization;
     private final ObjectMapper json;
     private final AuditEventService audit;
+    private final com.complex.platform.access.AccessService access;
+    private final com.complex.platform.auth.SessionIssuer sessions;
 
     public StaffApprovalService(JdbcStaffRepository repository, SupervisorReviewService reviews,
-            AuthorizationService authorization, ObjectMapper json, AuditEventService audit) {
+            AuthorizationService authorization, ObjectMapper json, AuditEventService audit,
+            com.complex.platform.access.AccessService access, com.complex.platform.auth.SessionIssuer sessions) {
         this.repository = repository;
         this.reviews = reviews;
         this.authorization = authorization;
         this.json = json;
         this.audit = audit;
+        this.access = access;
+        this.sessions = sessions;
     }
 
     /** CG-12：发起员工状态变更复核（不写入 staff_profiles），返回复核单。 */
     SupervisorReviewDecisionRecord submitEmploymentStatus(StaffProfileRecord profile, StaffEmploymentStatusRequest request, String reason) {
+        repository.lockEmploymentStatusSubmission(profile.id());
         String before = profile.employmentStatus() == null ? "" : profile.employmentStatus();
+        Instant effectiveAt = request.effectiveAt() == null ? Instant.now() : request.effectiveAt();
         var review = reviews.evaluate(new SupervisorReviewEvaluateRequest(request.idempotencyKey() + ":review", reason,
                 List.of(), SupervisorReviewService.STAFF_EMPLOYMENT_STATUS_ACTION, "staff_profile", profile.id(), 0L,
-                "员工 " + displayName(profile) + " 状态 " + before + " → " + request.employmentStatus() + "：" + reason,
+                "员工 " + displayName(profile) + " 状态 " + before + " → " + request.employmentStatus()
+                        + "；生效时间 " + effectiveAt + "（须审批通过）：" + reason,
                 null, List.of(), profile.userId()));
         repository.saveEmploymentStatusRevision(review.reviewId(), profile.id(), profile.userId(), before, request.employmentStatus(),
-                reason, authorization.currentActor().id());
+                reason, authorization.currentActor().id(), effectiveAt);
         return review;
     }
 
@@ -140,7 +148,7 @@ public class StaffApprovalService {
         }
         if (!"approved".equals(decision.reviewStatus())) return;
         if (SupervisorReviewService.STAFF_EMPLOYMENT_STATUS_ACTION.equals(decision.actionType())) {
-            applyEmploymentStatus(decision.reviewId());
+            applyEmploymentStatus(decision.reviewId(), Instant.now());
             return;
         }
         if (SupervisorReviewService.STAFF_ADJUSTMENT_ACTION.equals(decision.actionType())) {
@@ -160,9 +168,10 @@ public class StaffApprovalService {
     }
 
     /** CG-12：全部通过 → 写入员工状态（departed 即「生效即转离职」）；复核期间状态已被别的已生效复核改动则拒绝，须重新发起。 */
-    private void applyEmploymentStatus(String reviewId) {
+    @Transactional
+    public void applyEmploymentStatus(String reviewId, Instant checkedAt) {
         var row = repository.lockPendingEmploymentStatusRevision(reviewId).orElse(null);
-        if (row == null) return;
+        if (row == null || ((java.sql.Timestamp) row.get("effective_at")).toInstant().isAfter(checkedAt)) return;
         String profileId = row.get("profile_id").toString();
         String before = row.get("before_status").toString();
         String after = row.get("after_status").toString();
@@ -172,7 +181,11 @@ public class StaffApprovalService {
         if (!current.equals(before)) {
             throw ApiException.conflict("EMPLOYMENT_STATUS_CHANGED", "员工状态在复核期间已被其他已生效复核变更，请重新发起");
         }
-        repository.saveProfile(profile.withEmploymentStatus(after, Instant.now()));
+        repository.saveProfile(profile.withEmploymentStatus(after, checkedAt));
+        if (java.util.Set.of("suspended", "departed").contains(after)) {
+            access.revokeEmploymentGrants(profile.userId(), reviewId, String.valueOf(row.get("initiated_by")), checkedAt);
+            sessions.revokeUserSessions(profile.userId());
+        }
         repository.markEmploymentStatusRevisionApplied(reviewId);
         audit.recordSuccess("staff.profile.employment_status_changed", "staff.profile.review", "staff_profile", profileId, null, null,
                 Map.of("before", before, "after", after, "reason", String.valueOf(row.get("reason")), "review_id", reviewId,

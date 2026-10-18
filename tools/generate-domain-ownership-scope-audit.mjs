@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +20,9 @@ const directColumns = [
 ];
 
 const inheritedRules = [
+  { pattern: /^dealer_order_overpayment_allocations$/, source: "overpayment_id/order_id", path: "overpayment_id -> dealer_order_overpayments -> original order contract warehouse -> project_id; target order project and same dealer/sales entity checked separately" },
+  { pattern: /^dealer_order_overpayments$/, source: "order_id", path: "order_id -> locked dealer contract warehouse -> project_id; limited dealer project must match; no default project" },
+  { pattern: /^dealer_order_refunds$/, source: "payment_id/order_id", path: "original payment order -> locked contract warehouse -> project_id; allocation target order scope also required" },
   { pattern: /^dealer_admission_submissions$/, source: "dealer_id", path: "dealer_id -> dealers -> project_id; reads and writes require authorized dealer scope" },
   { pattern: /^finance_refund_attempts$/, source: "refund_id", path: "refund_id -> finance_refunds -> project_id/merchant_id; every read and write inherits the parent refund scope" },
   { pattern: /^staff_shift_revisions$/, source: "review_id/shift_id", path: "review_id -> supervisor_reviews; published shift_id -> staff_shifts -> staff_profiles company/merchant scope" },
@@ -152,6 +155,16 @@ const ANALYTICS_SCOPE_OVERRIDES = new Map([
 ]);
 
 function classify(table, definition) {
+  if (table === "wecom_cleanup_previews") return {
+    scope_type: "global_reference", scope_source: "current master authority",
+    scope_path: "platform cleanup evidence; current master identity required; individual preview actions also require creator match",
+    multi_complex_note: "permanent exact message scope and execution evidence; never a tenant-readable or generic cleanup table",
+  };
+  if (table === "staff_business_handovers") return {
+    scope_type: "direct", scope_source: "project_id",
+    scope_path: "actual source project_id/merchant_id plus staff profile scope; nullable project only for verified platform-global source",
+    multi_complex_note: "actor and recipient require original business permissions and scope; unknown source cannot be assigned",
+  };
   if (table === "staff_policy_settings") return {
     scope_type: "direct", scope_source: "scope_id",
     scope_path: "shift_visible_days: scope_id = employer business entity; payroll_penalty_cap_bps: scope_id = global",
@@ -205,7 +218,7 @@ function buildCsv() {
     return {
       table_name: table,
       ...classification,
-      file_version: "V0.04",
+      file_version: "V0.05",
       status: "covered",
     };
   });

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.ops.productionreadiness;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,7 +42,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @WebMvcTest(controllers = ProductionReadinessController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, ProductionReadinessControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, ProductionReadinessControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.auth;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -33,7 +34,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest(controllers = AuthController.class)
 @ActiveProfiles("test")
-@Import({
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class,
         GlobalExceptionHandler.class,
         SecurityConfig.class,
         BearerAuthenticationFilter.class,

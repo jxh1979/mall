@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.compliance;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -158,11 +159,10 @@ public class ComplianceController {
 
     @PostMapping("/wecom/retention-policies")
     public ApiResponse<WecomRetentionPolicyRecord> upsertWecomRetentionPolicy(
-            @RequestBody @jakarta.validation.Valid WecomRetentionPolicyRequest request
+            @RequestBody(required = false) WecomRetentionPolicyRequest request
     ) {
         authorizationService.requirePermission("wecom.retention.manage");
         authorizationService.requirePlatformComplianceScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(wecomConversationService.upsertRetentionPolicy(request));
     }
 }

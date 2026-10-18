@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.21",
+    "version": "V0.22",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -4237,7 +4237,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。"
+        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。"
       }
     },
     "/api/v1/evidence/attachments/{attachment_id}/bind": {
@@ -4281,7 +4281,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。"
+        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。"
       }
     },
     "/api/v1/evidence/attachments/{attachment_id}/complete": {
@@ -4325,7 +4325,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。"
+        "description": "dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。"
       }
     },
     "/api/v1/evidence/events": {
@@ -5030,7 +5030,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "通用财务退款申请；与票务整票退款使用不同 DTO。混合付款按后收先退逐笔办理，失败及未知退款继续占额。"
+        "description": "通用财务退款申请；与票务整票退款使用不同 DTO。混合付款按后收先退逐笔办理，失败及未知退款继续占额。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。"
       },
       "get": {
         "tags": [
@@ -5047,7 +5047,7 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "finance_refund.listed",
         "x-audit-event-failure": "finance_refund.list_failed",
-        "description": "读取退款台账及未结状态",
+        "description": "读取退款台账及未结状态 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundList"
@@ -12857,8 +12857,8 @@
           "compliance"
         ],
         "operationId": "listWecomRetentionPolicies",
-        "summary": "企微留存策略列表",
-        "description": "R5 T8：列出企微会话留存策略（scope/retention_days/expiry_action）。需 wecom.retention.manage。",
+        "summary": "查看企微永久保存规则",
+        "description": "所有企微会话永久保存，不运行自动到期归档、删除或匿名化。返回唯一只读全局规则，retention_days 为空。需 wecom.retention.manage。",
         "x-permission": "wecom.retention.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -12869,7 +12869,34 @@
         "x-audit-event-failure": "wecom.retention_policy_view_failed",
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Page"
+            "description": "成功返回永久记录；不会包含消息原文或签名私钥。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PageResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/WecomPermanentRetention"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
           "403": {
             "$ref": "#/components/responses/Error"
@@ -12885,70 +12912,28 @@
           "compliance"
         ],
         "operationId": "upsertWecomRetentionPolicy",
-        "summary": "配置企微留存策略（默认180天） **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**",
-        "description": "R5 T8：新增/更新企微会话留存策略。retention_days 默认 180；expiry_action ∈ archive/delete/anonymize；按 scope_type+scope_id 唯一 upsert。需 wecom.retention.manage（高敏需审批）。 **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径**",
+        "summary": "拒绝设置企微自动到期策略",
+        "description": "此旧写入口已停用：有权限的请求一律返回409 WECOM_PERMANENT_RETENTION，不改变任何留存配置。确需清理须使用当前最高权限本人逐条预览、U盘动作签名、范围复核的专用路径。",
         "x-permission": "wecom.retention.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "wecom.retention_policy_set",
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
         "x-audit-event-failure": "wecom.retention_policy_failed",
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "idempotency_key",
-                  "scope_type",
-                  "expiry_action"
-                ],
-                "properties": {
-                  "idempotency_key": {
-                    "type": "string"
-                  },
-                  "scope_type": {
-                    "type": "string",
-                    "enum": [
-                      "global",
-                      "project",
-                      "merchant"
-                    ]
-                  },
-                  "scope_id": {
-                    "type": "string",
-                    "description": "global 时忽略（固定 *）；非 global 必填。"
-                  },
-                  "retention_days": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 3650,
-                    "default": 180
-                  },
-                  "expiry_action": {
-                    "type": "string",
-                    "enum": [
-                      "archive",
-                      "delete",
-                      "anonymize"
-                    ]
-                  },
-                  "enabled": {
-                    "type": "boolean",
-                    "default": true
-                  }
-                }
+                "description": "旧客户端参数不会生效；自动到期配置被明确拒绝。"
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "$ref": "#/components/responses/Page"
-          },
           "400": {
             "$ref": "#/components/responses/Error"
           },
@@ -12962,7 +12947,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "deprecated": true
       }
     },
     "/api/v1/terminals/mdm/app-whitelist": {
@@ -35882,7 +35868,7 @@
         ],
         "operationId": "listDealerOverpayments",
         "summary": "经销超收记录",
-        "description": "BSM:1228：超过订单应收的到账单独记录，用途未确认前不自动抵账。status：unconfirmed / prepayment / offset_applied。",
+        "description": "原超收总额保持，返回每次用途分配、未确认金额、可用预付款与已抵用金额。用途状态为 unconfirmed/partially_allocated/prepayment/offset_applied。目标订单取消产生原路现金退款；未完成退款不释放为可重花余额。",
         "x-permission": "dealer.order.view",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -35906,7 +35892,34 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Page"
+            "description": "真实业务记录；登记待办不代表退款到账。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PageResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/DealerOrderOverpaymentRecord"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
           "403": {
             "$ref": "#/components/responses/Error"
@@ -36324,7 +36337,7 @@
         ],
         "operationId": "verifyDealerOrderPayment",
         "summary": "财务核验到账",
-        "description": "核验人≠订单审核人（ENUM:178）；取消中不得核验（ENUM:179，DEALER_CANCEL_IN_PROGRESS）；通过后累计已收并回写应收：首付款达门槛 → 待出库；超过应收部分单独记超收（BSM:1228）；已签收且全款到账 → 已完成；逾期结清解除账期暂停。",
+        "description": "核验人不得为订单审核人。pending_verification 与取消后的 late 均须依据真实到账核验；late 本身不表示到账。正常订单核实通过按锁定合同更新已收、首付门槛及应收；超收另记。取消订单核实成功仅确认原收款可退，不恢复订单、预留或出库资格；核实为非真实收款时关联尚未办理退款作废。",
         "x-permission": "dealer.order.payment.verify",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -36738,7 +36751,7 @@
         ],
         "operationId": "listDealerOrderRefunds",
         "summary": "经销订单退款记录",
-        "description": "E-13：status pending_request / pending_approval / approved / rejected / refunded；review_id 为既有退款审批复核单。",
+        "description": "状态 pending_request/pending_approval/approved/rejected/processing/failed/refunded/voided。review_id关联原业务审批；finance_refund_id关联统一财务办理。实际成功才结清，未核实到账不得实际退款。",
         "x-permission": "dealer.order.view",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -36762,7 +36775,34 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Page"
+            "description": "真实业务记录；登记待办不代表退款到账。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PageResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/DealerOrderRefundRecord"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
           "403": {
             "$ref": "#/components/responses/Error"
@@ -36833,7 +36873,26 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Success"
+            "description": "真实业务记录；登记待办不代表退款到账。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/DealerOrderRefundRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/Error"
@@ -36862,8 +36921,8 @@
           "dealer"
         ],
         "operationId": "executeDealerOrderRefund",
-        "summary": "执行经销退款（原路退回）",
-        "description": "须既有退款审批通过；执行人≠该到账的核验人（BSM:1232）；全部退款完成后订单回到已取消。",
+        "summary": "将已批准经销退款交统一财务办理",
+        "description": "原收款须已核实且经销退款审批已通过；移交人员须具备 dealer.order.refund.execute 并在原订单真实项目范围内。后续财务执行及结果确认分别按统一财务流程核验相应权限及其项目范围。创建或返回同一 finance_refund_id，状态仍为 approved；不得仅凭人工流水标记已退。执行、处理中查询、明确失败重试、实际结果独立复核均走既有统一财务流程，不新增第二次业务审批。成功结果在同一事务同步经销退款与订单，处理中或失败不得结清或释放可再次抵用金额。",
         "x-permission": "dealer.order.refund.execute",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -36897,11 +36956,6 @@
                     "type": "string",
                     "description": "同一请求重试必须复用幂等键",
                     "maxLength": 128
-                  },
-                  "reference_no": {
-                    "type": "string",
-                    "description": "退款流水号",
-                    "maxLength": 128
                   }
                 },
                 "required": [
@@ -36913,7 +36967,26 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Success"
+            "description": "真实业务记录；登记待办不代表退款到账。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/DealerOrderRefundRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/Error"
@@ -36943,7 +37016,7 @@
         ],
         "operationId": "confirmDealerOverpaymentUse",
         "summary": "确认超收用途",
-        "description": "BSM:1228：转为同一销售主体下预付款（prepayment）或抵扣该经销商向同一销售法律主体采购的指定订单（offset_order）；同一金额不得重复抵用（OVERPAYMENT_ALREADY_CONFIRMED）。",
+        "description": "按双方确认的金额与真实附件逐笔登记用途：prepayment将未确认金额转预付；offset_order将未确认金额抵指定订单；prepayment_offset使用已有可用预付款抵指定订单。原超收总额不变，各次确认永久留痕。来源及目标须为同一经销商、同一销售主体，并分别校验真实项目权限，不能超过来源余额或目标净未收金额。同一金额不得重复使用。抵用目标未发货而取消时，生成沿原始多付款收款路径的现金退款，不回预付款余额；处理中或失败继续占用。",
         "x-permission": "dealer.order.payment.verify",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -36980,26 +37053,44 @@
                   },
                   "usage": {
                     "type": "string",
-                    "description": "用途",
+                    "description": "资金用途",
                     "enum": [
                       "prepayment",
-                      "offset_order"
+                      "offset_order",
+                      "prepayment_offset"
                     ]
                   },
                   "target_order_id": {
                     "type": "string",
-                    "description": "抵扣的订单编号（offset_order 必填）",
-                    "maxLength": 64
+                    "description": "offset_order或prepayment_offset时必填的真实目标订单"
                   },
                   "note": {
                     "type": "string",
-                    "description": "意见 / 原因",
-                    "maxLength": 1000
+                    "description": "双方确认的用途说明",
+                    "minLength": 1
+                  },
+                  "amount_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1,
+                    "description": "双方本次确认金额，单位分"
+                  },
+                  "confirmation_attachment_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "description": "已实际上传并绑定本超收记录的双方确认附件",
+                      "minLength": 1
+                    }
                   }
                 },
                 "required": [
                   "idempotency_key",
-                  "usage"
+                  "usage",
+                  "amount_cent",
+                  "confirmation_attachment_ids",
+                  "note"
                 ]
               }
             }
@@ -37007,7 +37098,26 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Success"
+            "description": "真实业务记录；登记待办不代表退款到账。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/DealerOrderOverpaymentRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/Error"
@@ -42241,7 +42351,7 @@
         ],
         "operationId": "uploadEvidenceAttachment",
         "summary": "上传证据照片/视频",
-        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。",
+        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。",
         "x-permission": "evidence.attachment.create",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -43190,7 +43300,7 @@
         ],
         "operationId": "setStaffEmploymentStatus",
         "summary": "发起员工任职状态变更复核",
-        "description": "CG-12（BSM:1478「辞退与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效，生效即转「离职」」）：任一目标状态（待入职 / 在职 / 试岗 / 停岗 / 离职）都只发起「HR 会签（hr_review 平行线，按员工所属部门配置自动解析具备 staff.hr.review 的负责人）＋该员工直属领导向上三级」复核，返回复核单（review_status=pending_review）；全部节点通过后才写入，通过前档案状态不变。注册审批时系统置的初始状态不算「变更」。失败码：APPROVAL_LINE_EMPTY（员工本人不得充当 HR 节点）、EMPLOYMENT_STATUS_CHANGED（通过落地时状态已被其他已生效复核变更）。 HR 不由申请人指定；直属领导计第一级，共取三层组织上级后再回避发起人或受益人，不额外上移补第四层。部门 HR 配置或可用链缺失时保持待处理，补齐后重新生成审批链。 独立状态变更须由有权限且在范围内的直属领导发起；本人请假和注册审批不套用此发起限制。",
+        "description": "CG-12（BSM:1478「辞退与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效，生效即转「离职」」）：任一目标状态（待入职 / 在职 / 试岗 / 停岗 / 离职）都只发起「HR 会签（hr_review 平行线，按员工所属部门配置自动解析具备 staff.hr.review 的负责人）＋该员工直属领导向上三级」复核，返回复核单（review_status=pending_review）；全部节点通过后才写入，通过前档案状态不变。注册审批时系统置的初始状态不算「变更」。失败码：APPROVAL_LINE_EMPTY（员工本人不得充当 HR 节点）、EMPLOYMENT_STATUS_CHANGED（通过落地时状态已被其他已生效复核变更）。 HR 不由申请人指定；直属领导计第一级，共取三层组织上级后再回避发起人或受益人，不额外上移补第四层。部门 HR 配置或可用链缺失时保持待处理，补齐后重新生成审批链。 独立状态变更须由有权限且在范围内的直属领导发起；本人请假和注册审批不套用此发起限制。 批准后未到effective_at只登记排期；批准且到时即撤销员工角色、岗位模板、临时及单独增权，旧业务会话和重新登录失效。权限判定同步检查已批准到期状态，不等待定时作业间隔。待办交接、设备和工资结清另行继续；无人接手不保留原权限。恢复在职不会自动复活已撤销授权。",
         "x-permission": "staff.profile.review",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -43252,6 +43362,14 @@
                     "type": "string",
                     "description": "填写改动缘由",
                     "maxLength": 1000
+                  },
+                  "effective_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "计划生效时点，可省略；未来时点审批通过仅排期，批准且到时才执行。",
+                    "format": "date-time"
                   }
                 },
                 "required": [
@@ -43937,7 +44055,7 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "finance_refund.viewed",
         "x-audit-event-failure": "finance_refund.view_failed",
-        "description": "读取退款详情和全部办理记录",
+        "description": "读取退款详情和全部办理记录 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundDetail"
@@ -43988,7 +44106,7 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "finance_refund.queried",
         "x-audit-event-failure": "finance_refund.query_failed",
-        "description": "查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。",
+        "description": "查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundResult"
@@ -44042,7 +44160,7 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "finance_refund.retried",
         "x-audit-event-failure": "finance_refund.retry_failed",
-        "description": "查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。",
+        "description": "查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundResult"
@@ -44096,7 +44214,7 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "finance_refund.execution_recorded",
         "x-audit-event-failure": "finance_refund.execution_failed",
-        "description": "实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。",
+        "description": "实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundResult"
@@ -44150,7 +44268,7 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "finance_refund.confirmed",
         "x-audit-event-failure": "finance_refund.confirm_failed",
-        "description": "独立核实本人执行记录；金额、流水号和经办人必须一致，必须提供真实附件。自动渠道未知结果只能查询，不能用本接口绕过。 必须同时具备 finance.refund.create 与 finance.payment.register 权限。",
+        "description": "独立核实本人执行记录；金额、流水号和经办人必须一致，必须提供真实附件。自动渠道未知结果只能查询，不能用本接口绕过。 必须同时具备 finance.refund.create 与 finance.payment.register 权限。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundResult"
@@ -44396,6 +44514,569 @@
           }
         ],
         "description": "按授权范围返回四类实际文件的附件编号、提交人和时间；尚未提交时返回空数据，不能当作准入已通过。"
+      }
+    },
+    "/api/v1/compliance/wecom/cleanup-previews": {
+      "post": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "previewWecomCleanup",
+        "summary": "创建逐条消息清理预览",
+        "description": "须当前最高权限本人且具备 wecom.retention.manage；普通主管或仅持该权限的员工均拒绝。逐条提供消息编号和理由，保存消息及关联命中的摘要、精确数量。此步不删除数据；预览与审计永久保存。 本批提供Web操作页；服务端沿既有可信终端与总开关检查，此交付入口声明不构成新增的仅Web访问限制。任何终端均须当前最高权限本人；实际清理执行另须本次U盘动作签名。",
+        "x-permission": "wecom.retention.manage",
+        "x-data-scope": "platform",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "wecom.cleanup_previewed",
+        "x-audit-event-failure": "wecom.cleanup_preview_failed",
+        "responses": {
+          "200": {
+            "description": "成功返回永久记录；不会包含消息原文或签名私钥。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/WecomCleanupPreview"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WecomCleanupPreviewRequest"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "listWecomCleanupPreviews",
+        "summary": "查询永久清理记录",
+        "description": "须当前最高权限本人且具备 wecom.retention.manage；返回全部清理预览及实际执行事实的数组，空列表返回[]；不返回原文或签名。此接口不使用分页字段。 本批提供Web操作页；服务端沿既有可信终端与总开关检查，此交付入口声明不构成新增的仅Web访问限制。任何终端均须当前最高权限本人；实际清理执行另须本次U盘动作签名。",
+        "x-permission": "wecom.retention.manage",
+        "x-data-scope": "platform",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "wecom.cleanup_listed",
+        "x-audit-event-failure": "wecom.cleanup_list_failed",
+        "responses": {
+          "200": {
+            "description": "成功返回永久记录；不会包含消息原文或签名私钥。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "success",
+                    "code",
+                    "message",
+                    "data",
+                    "request_id",
+                    "server_time"
+                  ],
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "请求是否成功；成功响应固定为 true。"
+                    },
+                    "code": {
+                      "type": "string",
+                      "example": "OK",
+                      "description": "业务响应码；成功响应默认 SUCCESS。",
+                      "maxLength": 128
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "面向调用方的简短结果说明。",
+                      "maxLength": 255
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WecomCleanupPreview"
+                      },
+                      "description": "全部清理预览及执行记录；未建立任何记录时为空数组。"
+                    },
+                    "request_id": {
+                      "type": "string",
+                      "description": "请求唯一 ID，用于日志追踪、客服排查和跨系统对账。",
+                      "maxLength": 64
+                    },
+                    "server_time": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "服务端响应时间，ISO 8601 格式。"
+                    },
+                    "replayed": {
+                      "type": "boolean",
+                      "description": "已完成（重复提交）标记。只在重复提交、返回的是第一次的结果时出现且为 true，此时 message 为「该操作已完成（重复提交，返回首次结果）」、data 仍是第一次的结果；第一次执行的响应不带该字段。"
+                    }
+                  },
+                  "description": "successresponse请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/wecom/cleanup-previews/{id}": {
+      "get": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "getWecomCleanupPreview",
+        "summary": "查看本人清理预览",
+        "description": "须当前最高权限本人且具备 wecom.retention.manage；普通主管或仅持该权限的员工均拒绝。仅创建人可读取该预览；返回原预览及执行证据。 本批提供Web操作页；服务端沿既有可信终端与总开关检查，此交付入口声明不构成新增的仅Web访问限制。任何终端均须当前最高权限本人；实际清理执行另须本次U盘动作签名。",
+        "x-permission": "wecom.retention.manage",
+        "x-data-scope": "platform",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "wecom.cleanup_viewed",
+        "x-audit-event-failure": "wecom.cleanup_view_failed",
+        "responses": {
+          "200": {
+            "description": "成功返回永久记录；不会包含消息原文或签名私钥。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/WecomCleanupPreview"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "清理预览编号"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/compliance/wecom/cleanup-previews/{id}/challenge": {
+      "post": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "issueWecomCleanupChallenge",
+        "summary": "申请本次清理的U盘动作挑战",
+        "description": "须当前最高权限本人且具备 wecom.retention.manage；普通主管或仅持该权限的员工均拒绝。绑定本人、预览编号与完整范围摘要；登录挑战不可替代。已执行预览拒绝重新申请。 本批提供Web操作页；服务端沿既有可信终端与总开关检查，此交付入口声明不构成新增的仅Web访问限制。任何终端均须当前最高权限本人；实际清理执行另须本次U盘动作签名。",
+        "x-permission": "wecom.retention.manage",
+        "x-data-scope": "platform",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "wecom.cleanup_challenged",
+        "x-audit-event-failure": "wecom.cleanup_challenge_failed",
+        "responses": {
+          "200": {
+            "description": "成功返回永久记录；不会包含消息原文或签名私钥。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/WecomCleanupChallenge"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "清理预览编号"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/compliance/wecom/cleanup-previews/{id}/execute": {
+      "post": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "executeWecomCleanup",
+        "summary": "签名确认并执行精确清理",
+        "description": "须当前最高权限本人且具备 wecom.retention.manage；普通主管或仅持该权限的员工均拒绝。核对创建人及本次动作签名，在同一事务锁定并重新核对消息、命中及数量。范围或事实变化返回409，不执行旧预览。只删除已明确预览的企微消息及关联命中；不删除调阅、风险告警、财务或清理审计。删除与完成证据必须同事务成功；重复执行已完成预览返回首次结果并记录 wecom.cleanup_result_viewed，不重复删除。 本批提供Web操作页；服务端沿既有可信终端与总开关检查，此交付入口声明不构成新增的仅Web访问限制。任何终端均须当前最高权限本人；实际清理执行另须本次U盘动作签名。",
+        "x-permission": "wecom.retention.manage",
+        "x-data-scope": "platform",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "wecom.cleanup_executed",
+        "x-audit-event-failure": "wecom.cleanup_execute_failed",
+        "responses": {
+          "200": {
+            "description": "成功返回永久记录；不会包含消息原文或签名私钥。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/WecomCleanupPreview"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "清理预览编号"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WecomCleanupExecuteRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/staff/profiles/{id}/handover": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "getStaffBusinessHandover",
+        "summary": "查看停离职状态与真实未结业务",
+        "description": "需员工档案复核权限且在档案范围内；按原业务范围筛选未结事项与历史。真实全平台事项按原全平台权限判断，未知来源保持待核实，不能伪造项目以放行。 当前提供后台Web页面；员工入口沿既有可信终端及终端总开关执行，无新增终端豁免。",
+        "x-permission": "staff.profile.review",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.business_handover.viewed",
+        "x-audit-event-failure": "staff.business_handover.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "员工档案编号"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "返回真实状态及原业务交接事实。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/StaffHandoverOverview"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "assignStaffBusinessHandover",
+        "summary": "将一个真实未结事项交给在岗人员",
+        "description": "须停岗或离职已批准并到生效时点；操作者同时具备staff.profile.review与原业务指派权限，接手人须在岗、具备原业务执行权限及真实项目/商户范围。审批回避发起人和直接受益人，最高权限节点保留最高权限本人限制。按原负责人及状态比较后交接，不改变原业务进度和历史操作事实；并发被他人处理时拒绝覆盖。没有合格接手人不延迟停权。 当前提供后台Web页面；员工入口沿既有可信终端及终端总开关执行，无新增终端豁免。",
+        "x-permission": "staff.profile.review",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.business_handover.assigned",
+        "x-audit-event-failure": "staff.business_handover.assign_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "员工档案编号"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "返回真实状态及原业务交接事实。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/StaffHandoverTransfer"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffHandoverRequest"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -59169,9 +59850,10 @@
               "ar_ap_payment",
               "stored_value_account",
               "ticket_payment_rejection",
-              "channel_ticket_rejection"
+              "channel_ticket_rejection",
+              "dealer_order_refund"
             ],
-            "description": "退款源单类型。"
+            "description": "退款源单类型。 dealer_order_refund为已批准且原收款已核实的经销退款。"
           },
           "merchant_id": {
             "type": [
@@ -59639,6 +60321,890 @@
             }
           }
         ]
+      },
+      "WecomPermanentRetention": {
+        "type": "object",
+        "description": "只读永久保存规则。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "固定永久规则编号",
+            "enum": [
+              "wrp_permanent"
+            ]
+          },
+          "scope_type": {
+            "type": "string",
+            "description": "统一适用范围",
+            "enum": [
+              "global"
+            ]
+          },
+          "scope_id": {
+            "type": "string",
+            "description": "全部会话",
+            "enum": [
+              "*"
+            ]
+          },
+          "retention_days": {
+            "type": "null",
+            "description": "永久保存，无自动到期天数。"
+          },
+          "expiry_action": {
+            "type": "string",
+            "description": "永久保存，不归档销毁或匿名化",
+            "enum": [
+              "permanent"
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "const": true
+          },
+          "created_at": {
+            "type": "null"
+          },
+          "updated_at": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "id",
+          "scope_type",
+          "scope_id",
+          "retention_days",
+          "expiry_action",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "additionalProperties": false
+      },
+      "WecomCleanupHit": {
+        "type": "object",
+        "description": "精确关联的风险命中摘要。",
+        "properties": {
+          "hit_id": {
+            "type": "string",
+            "description": "待清理消息关联的风险命中编号"
+          },
+          "rule_code": {
+            "type": "string",
+            "description": "规则码"
+          },
+          "status": {
+            "type": "string",
+            "description": "预览时命中状态"
+          },
+          "digest": {
+            "type": "string",
+            "description": "该命中事实摘要，执行时重新核对"
+          }
+        },
+        "required": [
+          "hit_id",
+          "rule_code",
+          "status",
+          "digest"
+        ],
+        "additionalProperties": false
+      },
+      "WecomCleanupCandidate": {
+        "type": "object",
+        "description": "不含原文的逐条清理范围，保留于永久审计记录。",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "description": "明确选择的消息编号"
+          },
+          "conversation_id": {
+            "type": "string",
+            "description": "消息所属会话编号"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "消息所属项目编号"
+          },
+          "sent_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "消息发送时间",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "description": "本条消息清理理由",
+            "minLength": 1
+          },
+          "message_digest": {
+            "type": "string",
+            "description": "消息事实摘要，执行时重新核对"
+          },
+          "risk_hits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WecomCleanupHit"
+            }
+          }
+        },
+        "required": [
+          "message_id",
+          "conversation_id",
+          "project_id",
+          "reason",
+          "message_digest",
+          "risk_hits"
+        ],
+        "additionalProperties": false
+      },
+      "WecomCleanupPreview": {
+        "type": "object",
+        "description": "永久保存的预览及实际执行证据。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "预览编号"
+          },
+          "created_by": {
+            "type": "string",
+            "description": "创建预览的最高权限本人"
+          },
+          "candidates": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/WecomCleanupCandidate"
+            }
+          },
+          "scope_digest": {
+            "type": "string",
+            "description": "候选消息及命中的完整范围摘要"
+          },
+          "message_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "risk_hit_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "created_at": {
+            "type": "string",
+            "description": "预览创建时间",
+            "format": "date-time"
+          },
+          "executed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "实际执行时间，未执行为空",
+            "format": "date-time"
+          },
+          "executed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "实际执行人，未执行为空"
+          },
+          "key_fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "授权公钥指纹，未执行为空"
+          }
+        },
+        "required": [
+          "id",
+          "created_by",
+          "candidates",
+          "scope_digest",
+          "message_count",
+          "risk_hit_count",
+          "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "WecomCleanupPreviewRequest": {
+        "type": "object",
+        "description": "仅选择企微消息；不接受任意表名、业务类型或模糊范围。",
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "description": "消息编号不允许重复。",
+            "items": {
+              "type": "object",
+              "description": "逐条指定消息及理由。",
+              "properties": {
+                "message_id": {
+                  "type": "string",
+                  "description": "待清理消息编号",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "本条消息的清理理由",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "message_id",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "WecomCleanupChallenge": {
+        "type": "object",
+        "description": "独立于登录挑战的一次动作授权；不得上传私钥或解密口令。",
+        "properties": {
+          "challenge": {
+            "type": "string",
+            "description": "由现有U盘密钥离线签名的动作挑战原文"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "挑战有效截止时间",
+            "format": "date-time"
+          },
+          "actor_id": {
+            "type": "string",
+            "description": "绑定的最高权限本人"
+          },
+          "action": {
+            "type": "string",
+            "description": "绑定本次预览编号的动作"
+          },
+          "scope_digest": {
+            "type": "string",
+            "description": "绑定的预览范围摘要"
+          }
+        },
+        "required": [
+          "challenge",
+          "expires_at",
+          "actor_id",
+          "action",
+          "scope_digest"
+        ],
+        "additionalProperties": false
+      },
+      "WecomCleanupExecuteRequest": {
+        "type": "object",
+        "description": "当前最高权限本人提交离线签名；签名不得替代范围复核。",
+        "properties": {
+          "challenge": {
+            "type": "string",
+            "description": "本次预览对应的动作挑战",
+            "minLength": 1
+          },
+          "signature": {
+            "type": "string",
+            "description": "对动作挑战原文的Base64签名",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "challenge",
+          "signature"
+        ],
+        "additionalProperties": false
+      },
+      "DealerOverpaymentAllocationRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "id"
+          },
+          "overpayment_id": {
+            "type": "string",
+            "description": "overpayment_id"
+          },
+          "confirmed_by": {
+            "type": "string",
+            "description": "confirmed_by"
+          },
+          "note": {
+            "type": "string",
+            "description": "note"
+          },
+          "usage": {
+            "type": "string",
+            "description": "该次用途",
+            "enum": [
+              "prepayment",
+              "offset_order",
+              "prepayment_offset"
+            ]
+          },
+          "amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "本次分配金额，单位分"
+          },
+          "target_order_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "抵用目标订单"
+          },
+          "confirmation_attachment_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "description": "双方确认的真实附件编号"
+            }
+          },
+          "confirmed_at": {
+            "type": "string",
+            "description": "确认时间",
+            "format": "date-time"
+          },
+          "refund_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "取消抵用后沿原收款退款的记录编号"
+          }
+        },
+        "required": [
+          "id",
+          "overpayment_id",
+          "usage",
+          "amount_cent",
+          "confirmation_attachment_ids",
+          "confirmed_by",
+          "confirmed_at",
+          "note"
+        ],
+        "description": "原超收款的逐笔用途事实；抵用取消后仍保留占用，不恢复为可再次抵用余额。"
+      },
+      "DealerOrderOverpaymentRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "id"
+          },
+          "order_id": {
+            "type": "string",
+            "description": "order_id"
+          },
+          "dealer_id": {
+            "type": "string",
+            "description": "dealer_id"
+          },
+          "sales_entity_id": {
+            "type": "string",
+            "description": "sales_entity_id"
+          },
+          "payment_id": {
+            "type": "string",
+            "description": "payment_id"
+          },
+          "amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "不可变的原超收总额"
+          },
+          "status": {
+            "type": "string",
+            "description": "综合用途状态",
+            "enum": [
+              "unconfirmed",
+              "partially_allocated",
+              "prepayment",
+              "offset_applied"
+            ]
+          },
+          "target_order_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最近操作的目标，逐笔事实以allocations为准"
+          },
+          "confirmed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最近确认人"
+          },
+          "confirmed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最近确认时间",
+            "format": "date-time"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最近说明"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "记录创建时间",
+            "format": "date-time"
+          },
+          "unconfirmed_amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "尚未确认用途的金额"
+          },
+          "prepayment_balance_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "已转预付款且尚可抵用金额"
+          },
+          "applied_amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "已抵用金额，取消待退款也不重新释放"
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DealerOverpaymentAllocationRecord"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "order_id",
+          "dealer_id",
+          "sales_entity_id",
+          "payment_id",
+          "amount_cent",
+          "status",
+          "created_at",
+          "unconfirmed_amount_cent",
+          "prepayment_balance_cent",
+          "applied_amount_cent",
+          "allocations"
+        ],
+        "description": "不可变原收款及分次用途、剩余金额。"
+      },
+      "DealerOrderRefundRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "id"
+          },
+          "order_id": {
+            "type": "string",
+            "description": "order_id"
+          },
+          "payment_id": {
+            "type": "string",
+            "description": "payment_id"
+          },
+          "reason": {
+            "type": "string",
+            "description": "reason"
+          },
+          "amount_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "本次原路退款金额，单位分"
+          },
+          "status": {
+            "type": "string",
+            "description": "真实处理状态",
+            "enum": [
+              "pending_request",
+              "pending_approval",
+              "approved",
+              "rejected",
+              "processing",
+              "failed",
+              "refunded",
+              "voided"
+            ]
+          },
+          "review_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "review_id"
+          },
+          "requested_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "requested_by"
+          },
+          "executed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "executed_by"
+          },
+          "reference_no": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "reference_no"
+          },
+          "finance_refund_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "finance_refund_id"
+          },
+          "allocation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "allocation_id"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "created_at",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "updated_at",
+            "format": "date-time"
+          },
+          "executed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "真实成功时间，未成功为空",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "order_id",
+          "payment_id",
+          "amount_cent",
+          "status",
+          "reason",
+          "created_at",
+          "updated_at"
+        ],
+        "description": "经销原路退款记录；统一财务实际成功才记refunded，处理中或失败保留原资金占用。"
+      },
+      "StaffEmploymentRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "review_id": {
+            "type": "string",
+            "description": "状态变更审批编号"
+          },
+          "before_status": {
+            "type": "string",
+            "description": "变更前状态"
+          },
+          "after_status": {
+            "type": "string",
+            "description": "目标状态"
+          },
+          "reason": {
+            "type": "string",
+            "description": "变更理由"
+          },
+          "review_status": {
+            "type": "string",
+            "description": "真实审批状态"
+          },
+          "effective_at": {
+            "type": "string",
+            "description": "计划生效时点",
+            "format": "date-time"
+          },
+          "applied_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "已实际执行时点，尚未执行为空",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "review_id",
+          "before_status",
+          "after_status",
+          "reason",
+          "review_status",
+          "effective_at"
+        ],
+        "description": "审批及计划生效、实际执行分别记录。"
+      },
+      "StaffHandoverPending": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "business_type": {
+            "type": "string",
+            "description": "真实未结业务类型",
+            "enum": [
+              "approval_node",
+              "facility_work_order",
+              "facility_inspection",
+              "merchant_work_order",
+              "service_order",
+              "leasing_lead",
+              "integration_difference",
+              "bar_table_session",
+              "risk_alert"
+            ]
+          },
+          "business_id": {
+            "type": "string",
+            "description": "原业务编号"
+          },
+          "business_name": {
+            "type": "string",
+            "description": "业务名称"
+          },
+          "status": {
+            "type": "string",
+            "description": "原业务实际状态"
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "原业务真实项目；真正全平台事项可空，不能据接手人猜测"
+          },
+          "merchant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "原业务商户"
+          },
+          "assignable": {
+            "type": "boolean",
+            "description": "当前操作者是否具备交接条件"
+          },
+          "hold_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "无法交接的具体原因"
+          }
+        },
+        "required": [
+          "business_type",
+          "business_id",
+          "business_name",
+          "status",
+          "assignable"
+        ],
+        "description": "从实际业务表读取的未结事项；未知归属不虚构默认项目。"
+      },
+      "StaffHandoverTransfer": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "交接记录编号"
+          },
+          "business_type": {
+            "type": "string",
+            "description": "业务类型",
+            "enum": [
+              "approval_node",
+              "facility_work_order",
+              "facility_inspection",
+              "merchant_work_order",
+              "service_order",
+              "leasing_lead",
+              "integration_difference",
+              "bar_table_session",
+              "risk_alert"
+            ]
+          },
+          "business_id": {
+            "type": "string",
+            "description": "原业务编号"
+          },
+          "previous_user_id": {
+            "type": "string",
+            "description": "原负责人"
+          },
+          "target_user_id": {
+            "type": "string",
+            "description": "实际接手人"
+          },
+          "reason": {
+            "type": "string",
+            "description": "交接原因"
+          },
+          "assigned_by": {
+            "type": "string",
+            "description": "交接经办人"
+          },
+          "assigned_at": {
+            "type": "string",
+            "description": "实际交接时点",
+            "format": "date-time"
+          },
+          "responsibility_started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "原卡座服务责任时段起点，其他业务可空",
+            "format": "date-time"
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "原业务真实项目"
+          },
+          "merchant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "原业务商户"
+          }
+        },
+        "required": [
+          "id",
+          "business_type",
+          "business_id",
+          "previous_user_id",
+          "target_user_id",
+          "reason",
+          "assigned_by",
+          "assigned_at"
+        ],
+        "description": "永久记录交接事实；历史销售、审批操作者、已完成履约不被覆盖。"
+      },
+      "StaffHandoverOverview": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "business_access_stopped": {
+            "type": "boolean",
+            "description": "当前是否已经批准并到停岗或离职生效时点"
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffEmploymentRevision"
+            }
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffHandoverPending"
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StaffHandoverTransfer"
+            }
+          }
+        },
+        "required": [
+          "business_access_stopped",
+          "revisions",
+          "pending",
+          "history"
+        ],
+        "description": "权限停止、审批、未结业务、真实交接记录分别显示，不以交接完毕为停权前提。"
+      },
+      "StaffHandoverRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "同一次交接重试复用的幂等键",
+            "minLength": 1
+          },
+          "business_type": {
+            "type": "string",
+            "description": "真实业务类型",
+            "enum": [
+              "approval_node",
+              "facility_work_order",
+              "facility_inspection",
+              "merchant_work_order",
+              "service_order",
+              "leasing_lead",
+              "integration_difference",
+              "bar_table_session",
+              "risk_alert"
+            ]
+          },
+          "business_id": {
+            "type": "string",
+            "description": "原业务编号",
+            "minLength": 1
+          },
+          "target_user_id": {
+            "type": "string",
+            "description": "具备原业务权限及范围的在岗接手人",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "description": "本次交接原因",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "business_type",
+          "business_id",
+          "target_user_id",
+          "reason"
+        ],
+        "description": "逐个真实未结事项交接，不批量改写历史操作人。"
       }
     }
   },

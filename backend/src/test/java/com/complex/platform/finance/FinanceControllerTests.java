@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -41,7 +42,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = FinanceController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, FinanceControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, FinanceControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,
@@ -55,6 +56,9 @@ class FinanceControllerTests {
     // StoredValueService 有必需的 @Autowired 字段；@Bean 交出的 mock 仍会被字段注入，故用 @MockitoBean。
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     private com.complex.platform.customer.StoredValueService storedValueService;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.complex.platform.dealer.JdbcDealerOrderRepository dealerOrderRepository;
 
     @Autowired
     private FinanceService service;

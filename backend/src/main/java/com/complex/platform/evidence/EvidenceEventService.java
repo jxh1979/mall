@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -45,6 +45,11 @@ public class EvidenceEventService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.dealer.JdbcDealerRepository dealerRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.dealer.JdbcDealerOrderRepository dealerOrders;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.finance.FinanceRepository dealerFinance;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -176,7 +181,7 @@ public class EvidenceEventService {
                     String businessType = requireText(actual.businessType(), "business_type");
                     String merchantId = scope.orElse(null);
                     Instant now = Instant.now();
-                    String id = "att_" + ("dealer_admission".equals(businessType)
+                    String id = "att_" + (java.util.Set.of("dealer_admission", "dealer_overpayment").contains(businessType)
                             ? UUID.randomUUID().toString().replace("-", "") : slug(actual.idempotencyKey()));
                     // F-CROSS-05 跨租户覆盖修复：object key 必须纳入 merchant scope 前缀，
                     // 否则商户 A/B 用相同 idempotency_key + file_name 会算出同一 object key，互相覆盖证据对象。
@@ -409,18 +414,41 @@ public class EvidenceEventService {
     }
 
     private Optional<String> evidenceScope(String businessType, String businessId, String dealerPermission, String evidencePermission) {
-        if (!"dealer_admission".equals(trimToNull(businessType))) {
+        String type = trimToNull(businessType);
+        if ("finance_refund".equals(type) && dealerFinance != null) {
+            var refund = dealerFinance.findRefundById(requireText(businessId, "business_id"), false).orElse(null);
+            if (refund != null && "dealer_order_refund".equals(refund.sourceType())) {
+                String permission = "evidence.timeline.view".equals(evidencePermission) ? "finance.ar_ap.view" : "finance.refund.create";
+                authorizationService.requirePermissions(permission, evidencePermission);
+                if (!authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(), permission, evidencePermission)) {
+                    throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销退款凭证不在授权项目范围内");
+                }
+                return authorizationService.currentMerchantIdQuietly();
+            }
+        }
+        if (!java.util.Set.of("dealer_admission", "dealer_overpayment").contains(type == null ? "" : type)) {
             return authorizationService.currentMerchantScope();
         }
-        authorizationService.requirePermissions(dealerPermission, evidencePermission);
-        if (dealerRepository == null) {
-            throw ApiException.badRequest("DEALER_EVIDENCE_UNAVAILABLE", "经销准入资料范围暂不可核验");
+        String dealerId = requireText(businessId, "business_id");
+        if ("dealer_overpayment".equals(type)) {
+            if (dealerOrders == null) throw ApiException.badRequest("DEALER_EVIDENCE_UNAVAILABLE", "经销资金资料范围暂不可核验");
+            var overpayment = dealerOrders.findOverpayment(dealerId)
+                    .orElseThrow(() -> ApiException.notFound("OVERPAYMENT_NOT_FOUND", "超收记录不存在"));
+            String projectId = dealerOrders.findOrderProjectId(overpayment.orderId())
+                    .orElseThrow(() -> ApiException.conflict("DEALER_ORDER_PROJECT_MISSING", "原收款订单的中心仓项目缺失或冲突"));
+            dealerPermission = "evidence.timeline.view".equals(evidencePermission) ? "dealer.order.view" : "dealer.order.payment.verify";
+            authorizationService.requirePermissions(dealerPermission, evidencePermission);
+            if (!authorizationService.canReachProject(authorizationService.currentActor(), projectId, dealerPermission, evidencePermission)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "超收款凭证不在授权项目范围内");
+            }
+            return authorizationService.currentMerchantIdQuietly();
         }
-        var dealer = dealerRepository.findDealer(requireText(businessId, "business_id"))
+        authorizationService.requirePermissions(dealerPermission, evidencePermission);
+        if (dealerRepository == null) throw ApiException.badRequest("DEALER_EVIDENCE_UNAVAILABLE", "经销资料范围暂不可核验");
+        var dealer = dealerRepository.findDealer(dealerId)
                 .orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        if (!authorizationService.canReachProject(authorizationService.currentActor(), dealer.projectId(),
-                dealerPermission, evidencePermission)) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销准入资料不在授权项目范围内");
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), dealer.projectId(), dealerPermission, evidencePermission)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销资料不在授权项目范围内");
         }
         return authorizationService.currentMerchantIdQuietly();
     }

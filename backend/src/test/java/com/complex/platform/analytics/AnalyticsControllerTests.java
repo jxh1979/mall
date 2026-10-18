@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.analytics;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -56,7 +57,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = AnalyticsController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, AnalyticsControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, AnalyticsControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

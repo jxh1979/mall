@@ -1,4 +1,5 @@
 package com.complex.platform.compliance;
+// 文件版本：V0.01
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -71,6 +72,31 @@ class WecomConversationServiceTests {
                 Mockito.mock(AuthorizationService.class),
                 FIXED
         );
+    }
+
+    @Test
+    void permanentRetentionNeverExpiresOrDestroysMessages() {
+        service.syncConversation(syncRequest("permanent", "普通消息"));
+        assertThat(repository.conversations.get(0).retentionUntil()).isNull();
+        for (String action : List.of("archive", "delete", "anonymize")) {
+            setUp();
+            seedDueConversation("permanent-" + action, action);
+            WecomRetentionRunResult result = service.applyRetention(LocalDate.parse("2099-01-01"));
+            assertThat(result.archived() + result.deleted() + result.anonymized()).isZero();
+            assertThat(repository.conversations.get(0).archiveStatus()).isEqualTo("active");
+            assertThat(repository.messages).singleElement().satisfies(message -> {
+                assertThat(message.contentRawRef()).isEqualTo("wecom-raw:abc");
+                assertThat(message.anonymized()).isFalse();
+            });
+        }
+    }
+
+    @Test
+    void automaticExpiryPolicyCannotBeConfigured() {
+        assertThatThrownBy(() -> service.upsertRetentionPolicy(new WecomRetentionPolicyRequest(
+                "no-expiry", "global", "*", 180, "delete", true)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("WECOM_PERMANENT_RETENTION");
+        assertThat(repository.policies).isEmpty();
     }
 
     @Test
@@ -348,12 +374,9 @@ class WecomConversationServiceTests {
     }
 
     @Test
-    void syncComputesRetentionUntilFromPolicyDays() {
-        // 默认 180 天：retention_until = business_date + 180。
+    void syncKeepsMessagesPermanently() {
         service.syncConversation(syncRequest("ext-4", "普通消息"));
-        WecomConversationRecord conversation = repository.conversations.get(0);
-        assertThat(conversation.retentionUntil())
-                .isEqualTo(LocalDate.parse("2026-06-18").plusDays(180));
+        assertThat(repository.conversations.get(0).retentionUntil()).isNull();
     }
 
     @Test
@@ -405,63 +428,16 @@ class WecomConversationServiceTests {
     }
 
     @Test
-    void retentionArchiveActionSetsArchivedStatus() {
-        seedDueConversation("conv-archive", "archive");
-        WecomRetentionRunResult result = service.applyRetention(LocalDate.parse("2026-06-18"));
-
-        assertThat(result.archived()).isEqualTo(1);
-        assertThat(repository.conversations.get(0).archiveStatus()).isEqualTo("archived");
-        // archive 保留消息内容（不清空）。
-        assertThat(repository.messages.get(0).anonymized()).isFalse();
-        assertThat(auditRepository.names()).contains("wecom.retention_applied");
-    }
-
-    @Test
-    void retentionDeleteActionRemovesMessagesAndMarksDeleted() {
-        seedDueConversation("conv-delete", "delete");
-        WecomRetentionRunResult result = service.applyRetention(LocalDate.parse("2026-06-18"));
-
-        assertThat(result.deleted()).isEqualTo(1);
-        assertThat(repository.conversations.get(0).archiveStatus()).isEqualTo("deleted");
-        assertThat(repository.messages).isEmpty();
-    }
-
-    @Test
-    void retentionAnonymizeActionClearsRawAndMarksAnonymized() {
-        seedDueConversation("conv-anon", "anonymize");
-        WecomRetentionRunResult result = service.applyRetention(LocalDate.parse("2026-06-18"));
-
-        assertThat(result.anonymized()).isEqualTo(1);
-        assertThat(repository.conversations.get(0).archiveStatus()).isEqualTo("anonymized");
-        WecomMessageRecord msg = repository.messages.get(0);
-        assertThat(msg.anonymized()).isTrue();
-        assertThat(msg.contentRawRef()).isNull();
-        assertThat(msg.contentRedacted()).isEqualTo("[ANONYMIZED]");
-    }
-
-    @Test
-    void retentionSkipsConversationsNotYetDue() {
-        // retention_until 未到期 → 不处理。
-        repository.conversations.add(new WecomConversationRecord(
-                "conv-future", "ext-future", "proj_1", null, null, "active",
-                LocalDate.parse("2026-12-31"), Instant.now(FIXED), Instant.now(FIXED)));
-        WecomRetentionRunResult result = service.applyRetention(LocalDate.parse("2026-06-18"));
-        assertThat(result.archived() + result.deleted() + result.anonymized()).isZero();
-    }
-
-    @Test
-    void upsertRetentionPolicyChangesEffectiveDaysForNewSync() {
-        // 配置改 365 → 新会话按新期限计算 retention_until。
-        service.upsertRetentionPolicy(new WecomRetentionPolicyRequest(
-                "policy-365", "global", "*", 365, "archive", true));
-
-        service.syncConversation(syncRequest("ext-365", "普通消息"));
-        assertThat(repository.conversations.get(0).retentionUntil())
-                .isEqualTo(LocalDate.parse("2026-06-18").plusDays(365));
+    void onlyReadOnlyPermanentPolicyIsReturned() {
+        seedDueConversation("conv-old-policy", "delete");
+        assertThat(service.listRetentionPolicies().items()).singleElement().satisfies(policy -> {
+            assertThat(policy.retentionDays()).isNull();
+            assertThat(policy.expiryAction()).isEqualTo("permanent");
+        });
     }
 
     private void seedDueConversation(String externalId, String action) {
-        repository.saveRetentionPolicy(new WecomRetentionPolicyRecord(
+        repository.policies.add(new WecomRetentionPolicyRecord(
                 "wrp_test", "global", "*", 180, action, true, Instant.now(FIXED), Instant.now(FIXED)));
         WecomConversationRecord conversation = repository.saveConversation(new WecomConversationRecord(
                 "wcv_" + externalId, externalId, "proj_1", "staff_1", "cust_1", "active",
@@ -492,36 +468,12 @@ class WecomConversationServiceTests {
         final List<WecomMessageRecord> messages = new ArrayList<>();
         final List<WecomAccessAuditRecord> audits = new ArrayList<>();
 
-        @Override
-        public WecomRetentionPolicyRecord saveRetentionPolicy(WecomRetentionPolicyRecord record) {
-            policies.removeIf(p -> p.scopeType().equals(record.scopeType()) && p.scopeId().equals(record.scopeId()));
-            policies.add(record);
-            return record;
-        }
-
-        @Override
-        public List<WecomRetentionPolicyRecord> findAllRetentionPolicies() {
-            return new ArrayList<>(policies);
-        }
-
         final java.util.Set<String> knownProjects = new java.util.HashSet<>();
 
         @Override
         public boolean projectExists(String projectId) {
             // 默认（未显式登记项目时）放行，保持既有同步测试不变；登记后只认已登记项目，供越权拒绝用例。
             return knownProjects.isEmpty() || knownProjects.contains(projectId);
-        }
-
-        @Override
-        public Optional<WecomRetentionPolicyRecord> findEffectivePolicy(String projectId) {
-            return policies.stream()
-                    .filter(WecomRetentionPolicyRecord::enabled)
-                    .filter(p -> ("project".equals(p.scopeType()) && p.scopeId().equals(projectId))
-                            || "global".equals(p.scopeType()))
-                    .sorted((a, b) -> Integer.compare(
-                            "project".equals(a.scopeType()) ? 0 : 1,
-                            "project".equals(b.scopeType()) ? 0 : 1))
-                    .findFirst();
         }
 
         @Override
@@ -545,26 +497,6 @@ class WecomConversationServiceTests {
         }
 
         @Override
-        public List<WecomConversationRecord> findConversationsDueForRetention(LocalDate today) {
-            return conversations.stream()
-                    .filter(c -> "active".equals(c.archiveStatus()))
-                    .filter(c -> c.retentionUntil() != null && c.retentionUntil().isBefore(today))
-                    .toList();
-        }
-
-        @Override
-        public void updateConversationArchiveStatus(String id, String archiveStatus) {
-            for (int i = 0; i < conversations.size(); i++) {
-                WecomConversationRecord c = conversations.get(i);
-                if (c.id().equals(id)) {
-                    conversations.set(i, new WecomConversationRecord(
-                            c.id(), c.externalConversationId(), c.projectId(), c.ownerStaffId(),
-                            c.customerRef(), archiveStatus, c.retentionUntil(), c.createdAt(), c.updatedAt()));
-                }
-            }
-        }
-
-        @Override
         public WecomMessageRecord saveMessage(WecomMessageRecord record) {
             messages.add(record);
             return record;
@@ -573,23 +505,6 @@ class WecomConversationServiceTests {
         @Override
         public List<WecomMessageRecord> findMessagesByConversation(String conversationId) {
             return messages.stream().filter(m -> m.conversationId().equals(conversationId)).toList();
-        }
-
-        @Override
-        public void anonymizeMessagesByConversation(String conversationId) {
-            for (int i = 0; i < messages.size(); i++) {
-                WecomMessageRecord m = messages.get(i);
-                if (m.conversationId().equals(conversationId)) {
-                    messages.set(i, new WecomMessageRecord(
-                            m.id(), m.conversationId(), m.senderRef(), null, "[ANONYMIZED]",
-                            m.riskFlags(), true, m.sentAt(), m.businessDate(), m.createdAt()));
-                }
-            }
-        }
-
-        @Override
-        public void deleteMessagesByConversation(String conversationId) {
-            messages.removeIf(m -> m.conversationId().equals(conversationId));
         }
 
         @Override

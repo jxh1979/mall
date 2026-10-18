@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.21
+# P0 OpenAPI Operation 验收矩阵 V0.22
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 833 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 840 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -318,8 +318,8 @@
 | access | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | `acknowledgeEmployeeNotice` | 确认/同意员工通知 | `EmployeeNoticeAcknowledgeRequest` | `staff.notice.view` | `staff-token` | `project` | staff_private_phone, web | 是 | `staff.notice_acknowledged` | `staff.notice_acknowledge_failed` |
 | compliance | `POST` | `/api/v1/compliance/wecom/conversations/sync` | `syncWecomConversation` | 企微会话同步入站（PIPL 合规，开关门控） | `object` | `wecom.sync` | `webhook-signature` | `open-endpoint` | channel: provider-webhook | 是 | `wecom.conversation_synced` | `wecom.conversation_sync_failed` |
 | compliance | `GET` | `/api/v1/compliance/wecom/conversations/{id}/messages` | `viewWecomConversationMessages` | 分级查看企微会话消息（脱敏/原文，原文需审批+审计） | `-` | `wecom.view_raw` | `staff-token` | `project` | web, mobile_admin | 否 | `wecom.raw_viewed` | `wecom.raw_view_failed` |
-| compliance | `GET` | `/api/v1/compliance/wecom/retention-policies` | `listWecomRetentionPolicies` | 企微留存策略列表 | `-` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.retention_policy_viewed` | `wecom.retention_policy_view_failed` |
-| compliance | `POST` | `/api/v1/compliance/wecom/retention-policies` | `upsertWecomRetentionPolicy` | 配置企微留存策略（默认180天） **【已作废（2026-08-03 L-19 裁决 `DEC-CFG-2026-08-03-10`）】「默认 180 天／到期归档销毁匿名化」语义已作废：企微会话永久保存、不自动到期删除；本端点不得用于配置自动到期删除；确需清理仅限最高权限 U 盘密钥手动路径** | `object` | `wecom.retention.manage` | `staff-token` | `platform` | web | 是 | `wecom.retention_policy_set` | `wecom.retention_policy_failed` |
+| compliance | `GET` | `/api/v1/compliance/wecom/retention-policies` | `listWecomRetentionPolicies` | 查看企微永久保存规则 | `-` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.retention_policy_viewed` | `wecom.retention_policy_view_failed` |
+| compliance | `POST` | `/api/v1/compliance/wecom/retention-policies` | `upsertWecomRetentionPolicy` | 拒绝设置企微自动到期策略 | `object` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `wecom.retention_policy_failed` |
 | terminals | `GET` | `/api/v1/terminals/mdm/app-whitelist` | `listMdmAppWhitelist` | 查询 MDM 应用白名单 | `-` | `mdm.policy.manage` | `staff-token` | `project-device` | web | 否 | `mdm.app_whitelist.viewed` | `mdm.app_whitelist.view_failed` |
 | terminals | `PUT` | `/api/v1/terminals/mdm/app-whitelist/{id}` | `upsertMdmAppWhitelist` | 新增或更新 MDM 应用白名单 | `MdmAppWhitelistRequest` | `mdm.policy.manage` | `staff-token` | `project-device` | web | 是 | `mdm.app_whitelist.changed` | `mdm.app_whitelist.change_failed` |
 | terminals | `GET` | `/api/v1/terminals/mdm/site-whitelist` | `listMdmSiteWhitelist` | 查询 MDM 网站白名单 | `-` | `mdm.policy.manage` | `staff-token` | `project-device` | web | 否 | `mdm.site_whitelist.viewed` | `mdm.site_whitelist.view_failed` |
@@ -737,7 +737,7 @@
 | dealer | `POST` | `/api/v1/dealers/orders/{id}/cancel-decision` | `decideDealerOrderCancel` | 取消审批 | `object` | `dealer.order.review` | `staff-token` | `project` | web | 是 | `dealer.order.cancel_decided` | `dealer.order.cancel_decide_failed` |
 | dealer | `GET` | `/api/v1/dealers/orders/{id}/refunds` | `listDealerOrderRefunds` | 经销订单退款记录 | `-` | `dealer.order.view` | `staff-token` | `project` | web | 否 | `dealer.order.viewed` | `dealer.order.view_failed` |
 | dealer | `POST` | `/api/v1/dealers/refunds/{id}/approval` | `openDealerOrderRefundApproval` | 开启经销退款审批 | `object` | `dealer.order.payment.verify` | `staff-token` | `project` | web | 是 | `dealer.order.refund_requested` | `dealer.order.refund_request_failed` |
-| dealer | `POST` | `/api/v1/dealers/refunds/{id}/execute` | `executeDealerOrderRefund` | 执行经销退款（原路退回） | `object` | `dealer.order.refund.execute` | `staff-token` | `project` | web | 是 | `dealer.order.refund_executed` | `dealer.order.refund_execute_failed` |
+| dealer | `POST` | `/api/v1/dealers/refunds/{id}/execute` | `executeDealerOrderRefund` | 将已批准经销退款交统一财务办理 | `object` | `dealer.order.refund.execute` | `staff-token` | `project` | web | 是 | `dealer.order.refund_executed` | `dealer.order.refund_execute_failed` |
 | dealer | `POST` | `/api/v1/dealers/overpayments/{id}/use` | `confirmDealerOverpaymentUse` | 确认超收用途 | `object` | `dealer.order.payment.verify` | `staff-token` | `project` | web | 是 | `dealer.order.overpayment_use_confirmed` | `dealer.order.overpayment_use_failed` |
 | dealer | `GET` | `/api/v1/dealers/orders/{id}/returns` | `listDealerReturns` | 经销订单退货单列表 | `-` | `dealer.return.view` | `staff-token` | `project` | web | 否 | `dealer.return.viewed` | `dealer.return.view_failed` |
 | dealer | `POST` | `/api/v1/dealers/orders/{id}/returns` | `requestDealerReturn` | 申请经销退货 | `object` | `dealer.return.manage` | `staff-token` | `project` | web | 是 | `dealer.return.requested` | `dealer.return.request_failed` |
@@ -854,6 +854,13 @@
 | access | `GET` | `/api/v1/access/approval-lines` | `listApprovalLines` | 查询部门和平行审批线配置 | `-` | `access.role.assign` | `staff-token` | `project` | web | 否 | `access.approval_line.listed` | `access.approval_line.list_failed` |
 | access | `PUT` | `/api/v1/access/approval-lines/{line_code}` | `upsertApprovalLine` | 维护部门和平行审批线配置 | `object` | `access.role.assign` | `staff-token` | `project` | web | 是 | `access.approval_line.saved` | `access.approval_line.save_failed` |
 | dealer | `GET` | `/api/v1/dealers/{id}/admission` | `getDealerAdmission` | 查看经销商本次准入材料 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.admission_viewed` | `dealer.admission_view_failed` |
+| compliance | `GET` | `/api/v1/compliance/wecom/cleanup-previews` | `listWecomCleanupPreviews` | 查询永久清理记录 | `-` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.cleanup_listed` | `wecom.cleanup_list_failed` |
+| compliance | `POST` | `/api/v1/compliance/wecom/cleanup-previews` | `previewWecomCleanup` | 创建逐条消息清理预览 | `WecomCleanupPreviewRequest` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.cleanup_previewed` | `wecom.cleanup_preview_failed` |
+| compliance | `GET` | `/api/v1/compliance/wecom/cleanup-previews/{id}` | `getWecomCleanupPreview` | 查看本人清理预览 | `-` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.cleanup_viewed` | `wecom.cleanup_view_failed` |
+| compliance | `POST` | `/api/v1/compliance/wecom/cleanup-previews/{id}/challenge` | `issueWecomCleanupChallenge` | 申请本次清理的U盘动作挑战 | `-` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.cleanup_challenged` | `wecom.cleanup_challenge_failed` |
+| compliance | `POST` | `/api/v1/compliance/wecom/cleanup-previews/{id}/execute` | `executeWecomCleanup` | 签名确认并执行精确清理 | `WecomCleanupExecuteRequest` | `wecom.retention.manage` | `staff-token` | `platform` | web | 否 | `wecom.cleanup_executed` | `wecom.cleanup_execute_failed` |
+| staff | `GET` | `/api/v1/staff/profiles/{id}/handover` | `getStaffBusinessHandover` | 查看停离职状态与真实未结业务 | `-` | `staff.profile.review` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 否 | `staff.business_handover.viewed` | `staff.business_handover.view_failed` |
+| staff | `POST` | `/api/v1/staff/profiles/{id}/handover` | `assignStaffBusinessHandover` | 将一个真实未结事项交给在岗人员 | `StaffHandoverRequest` | `staff.profile.review` | `staff-token` | `project` | web, staff_work_phone, staff_private_phone | 是 | `staff.business_handover.assigned` | `staff.business_handover.assign_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 

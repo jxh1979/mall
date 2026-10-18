@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.compliance;
 
 import com.complex.platform.access.AuthorizationService;
@@ -42,8 +43,7 @@ import static com.complex.platform.common.Strings.requireText;
  *       开关关时不阻塞其它功能。落库时调 {@link PiiTextRedactor} 生成展示用脱敏文本，原文落 content_raw_ref（引用/密文）。
  *   <li><b>分级查看</b>：普通展示返回脱敏文本并写 redacted 审计；查看原文需 wecom.view_raw + 审批引用，
  *       返回原文并写 raw 审计 + 事件 wecom.raw_viewed / sensitive.viewed。
- *   <li><b>留存到期</b>：{@link #applyRetention(LocalDate)} 可单测直调；按策略 expiry_action 执行
- *       archive/delete/anonymize；@Scheduled 仅薄包装（默认不注册）。
+ *   <li><b>永久留存</b>：不自动到期处理；手动清理由最高权限本人逐次授权。
  *   <li><b>质检</b>：基础关键词敏感命中（私单/私收款/辱骂/诱导私微等）标记 risk_flags 进复核。
  *       AI 语义质检（V096）按"第三方一律预留接口 + 开关默认关"经 {@link WecomQcPort} 路由：
  *       开关 {@code wecom.ai_qc.enabled} 关（默认）→ 不调 AI、仅关键词质检（行为不变）；
@@ -55,11 +55,8 @@ import static com.complex.platform.common.Strings.requireText;
 public class WecomConversationService {
 
     static final String SYNC_CAPABILITY = "integration.wecom.sync";
-    static final int DEFAULT_RETENTION_DAYS = 180;
     private static final int MAX_REDACTED_CHARS = 4000;
 
-    private static final Set<String> SCOPE_TYPES = Set.of("global", "project", "merchant");
-    private static final Set<String> EXPIRY_ACTIONS = Set.of("archive", "delete", "anonymize");
     // P0#8 命中状态：open→reviewing→confirmed/dismissed；查询过滤全集 / 复核可达目标态。
     private static final Set<String> HIT_STATUSES = Set.of("open", "reviewing", "confirmed", "dismissed");
     private static final Set<String> REVIEW_TARGET_STATUSES = Set.of("reviewing", "confirmed", "dismissed");
@@ -177,10 +174,6 @@ public class WecomConversationService {
         String externalId = request.externalConversationId().trim();
         String projectId = request.projectId().trim();
 
-        WecomRetentionPolicyRecord policy = repository.findEffectivePolicy(projectId)
-                .orElse(defaultPolicy(now));
-        int retentionDays = policy.retentionDays() > 0 ? policy.retentionDays() : DEFAULT_RETENTION_DAYS;
-
         WecomConversationRecord conversation = repository.findConversationByExternalId(externalId)
                 .orElseGet(() -> repository.saveConversation(new WecomConversationRecord(
                         "wcv_" + UUID.randomUUID(),
@@ -200,7 +193,6 @@ public class WecomConversationService {
         // P0#8：本次同步生效的企微违规规则码（读 analytics_risk_rules，domain=compliance/enabled；
         //   库内无规则时回退内置默认）。一次解析、整批复用。
         List<WecomRiskRuleRecord> activeRules = resolveActiveRules();
-        LocalDate latestRetentionUntil = conversation.retentionUntil();
         List<WecomConversationSyncRequest.Message> messages =
                 request.messages() == null ? List.of() : request.messages();
         for (WecomConversationSyncRequest.Message message : messages) {
@@ -222,10 +214,6 @@ public class WecomConversationService {
                     new WecomQcRequest(conversation.id(), content, riskFlags));
             Instant sentAt = message.sentAt() == null ? now : message.sentAt();
             LocalDate businessDate = LocalDate.ofInstant(sentAt, ZoneOffset.UTC);
-            LocalDate retentionUntil = businessDate.plusDays(retentionDays);
-            if (latestRetentionUntil == null || retentionUntil.isAfter(latestRetentionUntil)) {
-                latestRetentionUntil = retentionUntil;
-            }
             String messageId = "wmsg_" + UUID.randomUUID();
             repository.saveMessage(new WecomMessageRecord(
                     messageId,
@@ -248,21 +236,6 @@ public class WecomConversationService {
             hits += persistRiskHits(conversation, messageId, matches, now);
         }
 
-        // 按最晚消息 + 策略 retention_days 推算会话留存到期。
-        if (latestRetentionUntil != null) {
-            repository.saveConversation(new WecomConversationRecord(
-                    conversation.id(),
-                    conversation.externalConversationId(),
-                    conversation.projectId(),
-                    conversation.ownerStaffId(),
-                    conversation.customerRef(),
-                    conversation.archiveStatus(),
-                    latestRetentionUntil,
-                    conversation.createdAt(),
-                    now
-            ));
-        }
-
         auditEventService.recordSuccess(
                 "wecom.conversation_synced",
                 "wecom.sync",
@@ -271,7 +244,7 @@ public class WecomConversationService {
                 requestId(),
                 request.idempotencyKey(),
                 Map.of("messages_stored", stored, "flagged_for_review", flagged,
-                        "risk_hits", hits, "retention_days", retentionDays)
+                        "risk_hits", hits, "retention", "permanent")
         );
         return new WecomSyncResult(conversation.id(), stored, flagged);
     }
@@ -390,108 +363,28 @@ public class WecomConversationService {
     // ----------------------------------------------------------------------------------------- 留存策略
 
     public PageResponse<WecomRetentionPolicyRecord> listRetentionPolicies() {
-        List<WecomRetentionPolicyRecord> records = repository.findAllRetentionPolicies();
-        return new PageResponse<>(records, 1, 50, records.size());
-    }
-
-    public WecomRetentionPolicyRecord upsertRetentionPolicy(WecomRetentionPolicyRequest request) {
         try {
-            validatePolicyRequest(request);
-            return idempotencyService.execute(
-                    "upsertWecomRetentionPolicy",
-                    request.idempotencyKey(),
-                    request,
-                    () -> upsertRetentionPolicyOnce(request),
-                    WecomRetentionPolicyRecord.class
-            );
+            auditEventService.recordSuccess("wecom.retention_policy_viewed", "wecom.retention.manage",
+                    "wecom_retention_policy", "permanent", requestId(), null, Map.of("retention", "permanent"));
+            return new PageResponse<>(List.of(new WecomRetentionPolicyRecord(
+                    "wrp_permanent", "global", "*", null, "permanent", true, null, null)), 1, 1, 1);
         } catch (RuntimeException exception) {
-            auditEventService.recordFailure(
-                    "wecom.retention_policy_failed",
-                    "wecom.retention.manage",
-                    "wecom_retention_policy",
-                    request == null ? "unknown" : blankToUnknown(request.scopeType()),
-                    requestId(),
-                    request == null ? null : request.idempotencyKey(),
-                    errorCode(exception)
-            );
+            auditEventService.recordFailure("wecom.retention_policy_view_failed", "wecom.retention.manage",
+                    "wecom_retention_policy", "permanent", requestId(), null, errorCode(exception));
             throw exception;
         }
     }
 
-    private WecomRetentionPolicyRecord upsertRetentionPolicyOnce(WecomRetentionPolicyRequest request) {
-        Instant now = clock.instant();
-        String scopeType = request.scopeType().trim().toLowerCase(Locale.ROOT);
-        String scopeId = trimToNull(request.scopeId());
-        if ("global".equals(scopeType)) {
-            scopeId = "*";
-        } else if (scopeId == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "非全局范围必须指定范围对象（scope_id）");
-        }
-        WecomRetentionPolicyRecord record = repository.saveRetentionPolicy(new WecomRetentionPolicyRecord(
-                "wrp_" + UUID.randomUUID(),
-                scopeType,
-                scopeId,
-                request.retentionDays() == null ? DEFAULT_RETENTION_DAYS : request.retentionDays(),
-                request.expiryAction().trim().toLowerCase(Locale.ROOT),
-                request.enabled() == null || request.enabled(),
-                now,
-                now
-        ));
-        auditEventService.recordSuccess(
-                "wecom.retention_policy_set",
-                "wecom.retention.manage",
-                "wecom_retention_policy",
-                record.scopeType() + ":" + record.scopeId(),
-                requestId(),
-                request.idempotencyKey(),
-                Map.of("retention_days", record.retentionDays(), "expiry_action", record.expiryAction())
-        );
-        return record;
+    public WecomRetentionPolicyRecord upsertRetentionPolicy(WecomRetentionPolicyRequest request) {
+        auditEventService.recordFailure("wecom.retention_policy_failed", "wecom.retention.manage",
+                "wecom_retention_policy", "permanent", requestId(),
+                request == null ? null : request.idempotencyKey(), "WECOM_PERMANENT_RETENTION");
+        throw ApiException.conflict("WECOM_PERMANENT_RETENTION", "工作会话永久保存，不允许配置自动到期处理");
     }
 
-    // ----------------------------------------------------------------------------------------- 留存到期处理
-
-    /**
-     * 留存到期处理（可单测直调）：扫描 retention_until &lt; today 且 active 的会话，
-     * 按其生效策略 expiry_action 执行 archive/delete/anonymize。
-     */
+    /** 旧任务入口也不能归档、删除或匿名化任何工作会话。 */
     public WecomRetentionRunResult applyRetention(LocalDate today) {
-        int archived = 0;
-        int deleted = 0;
-        int anonymized = 0;
-        for (WecomConversationRecord conversation : repository.findConversationsDueForRetention(today)) {
-            WecomRetentionPolicyRecord policy = repository.findEffectivePolicy(conversation.projectId())
-                    .orElse(defaultPolicy(clock.instant()));
-            String action = policy.expiryAction();
-            switch (action) {
-                case "delete" -> {
-                    repository.deleteMessagesByConversation(conversation.id());
-                    repository.updateConversationArchiveStatus(conversation.id(), "deleted");
-                    deleted++;
-                }
-                case "anonymize" -> {
-                    repository.anonymizeMessagesByConversation(conversation.id());
-                    repository.updateConversationArchiveStatus(conversation.id(), "anonymized");
-                    anonymized++;
-                }
-                default -> {
-                    // archive：保留密文/脱敏，仅置归档状态（不再普通展示）。
-                    repository.updateConversationArchiveStatus(conversation.id(), "archived");
-                    archived++;
-                }
-            }
-            auditEventService.recordSuccess(
-                    "wecom.retention_applied",
-                    "wecom.retention.manage",
-                    "wecom_conversation",
-                    conversation.id(),
-                    requestId(),
-                    null,
-                    Map.of("expiry_action", action, "retention_until",
-                            conversation.retentionUntil() == null ? "" : conversation.retentionUntil().toString())
-            );
-        }
-        return new WecomRetentionRunResult(archived, deleted, anonymized);
+        return new WecomRetentionRunResult(0, 0, 0);
     }
 
     // ----------------------------------------------------------------------------------------- 质检（规则码命中）
@@ -727,29 +620,6 @@ public class WecomConversationService {
         if (!repository.projectExists(projectId)) {
             throw ApiException.badRequest("WECOM_PROJECT_NOT_FOUND", "项目编号不是已登记的项目");
         }
-    }
-
-    private void validatePolicyRequest(WecomRetentionPolicyRequest request) {
-        if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
-        }
-        requireText(request.idempotencyKey(), "idempotency_key");
-        String scopeType = requireText(request.scopeType(), "scope_type").toLowerCase(Locale.ROOT);
-        if (!SCOPE_TYPES.contains(scopeType)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "scope_type is invalid");
-        }
-        String action = requireText(request.expiryAction(), "expiry_action").toLowerCase(Locale.ROOT);
-        if (!EXPIRY_ACTIONS.contains(action)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "expiry_action is invalid");
-        }
-        if (request.retentionDays() != null && (request.retentionDays() < 1 || request.retentionDays() > 3650)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "留存天数必须在 1 到 3650 之间");
-        }
-    }
-
-    private WecomRetentionPolicyRecord defaultPolicy(Instant now) {
-        return new WecomRetentionPolicyRecord(
-                "wrp_global_default", "global", "*", DEFAULT_RETENTION_DAYS, "anonymize", true, now, now);
     }
 
     private String blankToUnknown(String value) {

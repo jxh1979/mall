@@ -1,4 +1,4 @@
-# T1 员工三表 可编码开发规格 V0.15（2026-06-18）
+# T1 员工三表 可编码开发规格 V0.16（2026-06-18）
 
 > **任务**：R5 backlog **T1（员工档案/设备凭证/通知三表）**，W0 底座，**解锁 T9（Android 设备凭证）**。
 > **裁决依据**：R5 裁决⑨——员工三表 + Android 端凭证本期 P0；MDM 自有侧字段暂缓。
@@ -16,6 +16,16 @@
 
 
 ---
+
+## 停离职生效与原业务交接（HP-H04，2026-10-18）
+
+- 独立任职状态变更仍由直属领导发起并经既有人力会签、直属起共三级复核；可填 `effective_at`，留空取提交时点。全部批准且到生效时点才执行，未批准不可直接设置员工状态，同员工有未完成变更时不得再发起冲突排期。
+- 到点判断同时检查员工现状和已批准未落地的停离职排期：角色、岗位派生、模板、临时和单独授权全部停止作为业务授权依据；原访问令牌、续期和新密码登录均阻断。调度逐笔撤除实体授权，未来生效的模板与临时授权同样撤除，显式拒绝保留；失败保留批准单待重试，不写已落地。恢复在职仍走原审批，不恢复已撤的授权。
+- 没有接手人不延后撤权；设备归还、工资核算和依法结清由在岗获授权人员继续办理。档案的历史销售、收款、核销、审批人与已完成履约提成不改给接手人。
+- 员工档案的“生效与业务交接”按原表实时查询未结责任，覆盖待批节点（含后续节点及已转交节点）、维修、巡检、商户工单、未完成服务订单、未签约招商线索、渠道对账差异、开台服务、统一异常处理九类。没有预建交接流水也能发现待办；闭合/取消/完成的历史记录不进入交接。
+- 指派人须有 `staff.profile.review` 和对应业务指派/处理权限；接手员工须注册通过、在岗、账号有效，具备原业务执行权限与原项目/商户范围，且不得接收自己申请或直接受益的审批。最高权限节点即使曾转交给停职员工，也只能由最高权限本人再次逐单交接。项目无法确定的原事项显示待核实、禁止交接；真实全平台事项按全平台权限处理并允许项目为空，不补造项目编号。
+- 交接事务比较原责任人、行版本和未结状态，只改变当前处理责任，不重置原进度；同幂等键重放返回原记录。卡座只改变服务员工并推进会话版本，保留原销售员工；交接记录保存原责任时段起止作为实际事实，小费金额算法在其专项中接入，本项不声称完成小费核算。
+- API：`GET /api/v1/staff/profiles/{id}/handover` 返回状态排期、生效阻断状态、真实待办及范围内交接历史；`POST` 同路径接收 `idempotency_key/business_type/business_id/target_user_id/reason`，原业务更新和交接记录同事务提交。成功/失败事件为 `staff.business_handover.viewed/view_failed/assigned/assign_failed`，失败独立事务留痕。`staff.business_access.revoked` 记录授权撤除；设备、工资等结清事项不借此重新授权原员工。
 
 ## 1. 数据模型（Flyway V066 草案 DDL）
 
@@ -130,7 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | POST | /api/v1/staff/registrations | staff.profile.submit | 商户代员工提交注册（merchant_id 必填，由商户经营主体公司审批） |
 | GET | /api/v1/staff/registration-companies | public | 公司员工自助注册可选公司列表 |
 | POST | /api/v1/staff/self-registrations | public（私人手机通道，须带设备公钥/指纹，频控） | 公司员工本人提交注册，只返回申请编号与待审状态 |
-| POST | /api/v1/staff/profiles/{id}/employment-status | staff.profile.review | 独立任职五态变更仅由该员工直属领导在有效权限及管理范围内发起；主线直属为第一级、共三个组织层级，HR 平行会签由系统按员工所属部门及组织/授权配置解析，不要求发起人随单指定 `hr_approver_id`；全部通过后写入，返回复核单（幂等键必填）；注册审批形成初始状态、本人请假及申诉不受本项发起限制 |
+| POST | /api/v1/staff/profiles/{id}/employment-status | staff.profile.review | 独立任职五态变更仅由该员工直属领导在有效权限及管理范围内发起；主线直属为第一级、共三个组织层级，HR 平行会签由系统按员工所属部门及组织/授权配置解析，不要求发起人随单指定 `hr_approver_id`；全部通过且达到 `effective_at` 后写入，返回复核单（幂等键必填）；留空生效时间取提交时点；注册审批形成初始状态、本人请假及申诉不受本项发起限制 |
 | POST | /api/v1/staff/payroll/adjustments | staff.payroll.manage | 奖惩（bonus/penalty）——CG-12 起只发起同档复核，通过后入账；返回复核单（object_id＝入账记录 id） |
 | POST | /api/v1/staff/payroll/adjustments/{id}/appeals | staff.payroll.view_mine | 员工本人对已生效扣罚提出申诉，同链裁定，HR 会签人由系统按部门及合法组织/授权配置解析，不由员工指定；通过＝撤销冲回、驳回＝维持；已发工资的真实补差按本节专条进入下一次应发工资 |
 | GET | /api/v1/staff/payroll/adjustments/appeals | staff.payroll.view_mine（按员工查看须 staff.payroll.manage） | 申诉清单（pending / upheld / revoked） |

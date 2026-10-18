@@ -1,6 +1,6 @@
-# 供应链与库存管理产品 PRD V0.20
+# 供应链与库存管理产品 PRD V0.21
 
-> 版本：V0.20｜最后更新：2026-10-17｜M09 复核：业务目标与当前实现必须分列；代码只作实现事实证据，不得反向定义 HTML 业务规则。
+> 版本：V0.21｜最后更新：2026-10-17｜M09 复核：业务目标与当前实现必须分列；代码只作实现事实证据，不得反向定义 HTML 业务规则。
 
 > **锚点口径（2026-09-03 M09 全量复核）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 冻结行号辅助」**；辅助行号对应冻结提交 `61f4fbb1be2fae9df8fcbb48f1cb2af9bb53ec68`。例如库存流水的主锚点是 BSM「库存流水」与 ENUM「库存流水类型」，不得再用旧快照 L1108 冒充现行锚点。历史变更日志只说明当时动作，不具有现行业务解释权。
 
@@ -366,6 +366,10 @@ flowchart TD
 >
 > **实现现状（CG-11a，2026-10-17，迁移 V451）：** 内部后台已落地「准入与门户资格」「价格与库存」「合同价与询价」三条：经销商档案 `dealers` 五态（CHECK 与 ENUM:170 逐字对应），审核时企业资料、合同、开票、银行资料四项逐项勾核，全部通过才 `approved` 并置 `portal_enabled`（`DEALER_REVIEW_INCOMPLETE`），停用即撤销门户资格且禁止新询价、新目录（`DEALER_DEACTIVATED`）；经销合同 `dealer_contracts` 指定销售主体与中心仓；价格目录 `dealer_price_catalogs` 按合同版本递增、四态 CHECK、编辑人/提交人不得审批（`DEALER_SOD_SAME_PERSON`）、新版本生效旧版本失效；询价 `dealer_inquiries` 四态、已定合同价商品不得询价（`ITEM_ALREADY_PRICED`）、报价人不得审批；库存外显按合同中心仓可用量只给 有货 / 紧张 / 缺货 / 预计交期（现行确认规则：合同中心仓0＜可用量≤商品最低库存值为紧张，各仓共用该商品阈值；零库存显示缺货或已有预计交期）。接口 `/api/v1/dealers/**`（18 个操作），后台页 ADM-DLR-001。
 >
+**经销资金补齐（FS-005、FS-006，V464）：** 取消前尚未核验、取消后迟到的款项仍保留到账核验入口。核实后不恢复订单、不计入可发货货款；核实未到账须留结论并作废相应退款事项。既有退款审批通过且到账已核实，才可交统一财务原路退款台账。交待办不代表退款成功；实际执行须上传原路凭证，执行人与原到账核验人分离，结果复核人与实际执行人分离。结果不明保持处理中，不重复出款；明确失败仍保留待退占用；真实成功才回写已退款，全部对应款项有最终结果才结束取消事项。
+
+**超收分次用途：** 原超收金额不可改写，每次必须填写分配金额、双方确认说明及真实上传的确认凭证。分别显示未分配余额、可用预付款、累计抵用和每次分配记录。未分配款可分次转预付款或抵指定其他订单；预付款也可明确金额抵该经销商在同一销售法律主体下的指定订单。单次金额超过来源余额或目标未收货款直接拒绝，不自动拆分，不重复确认现金到账。目标订单取消且未出库时，已抵部分生成引用原超收收款流水的现金退款；不回可用预付款，处理中、失败或审批驳回均不释放该笔已抵金额。原已确认用途的其他余额保持。
+
 > **实现现状（CG-11b，2026-10-17，迁移 V452）：**「订单与付款」「职责分离」「仓库、运费与销售主体固化」「取消、到账与退款」四条已落地：合同条款（首付款比例/金额、首付款截止天数、尾款到期天数、运费模板与版本）；订单 `dealer_orders` 十五态 CHECK 与 ENUM:173 逐字对应；审核通过＝按中心仓预留（守卫式 UPDATE）、固化价格目录版本与询价单、建 `ar_ap_items`（source_type `dealer_order`）应收、算首付款门槛与截止；到账只收对公转账 / 平台线上支付（CHECK + `PAYMENT_METHOD_FORBIDDEN`）；财务核验首付款达门槛才待出库，出库人≠审核人≠核验人（`DEALER_SOD_SAME_PERSON`）；签收不等于结清、全款到账才完成；取消申请与到账核验互斥、取消生效后不得出库；**E-13**：`cancelUnpaidAtDeadline` 首付款截止未达门槛 → 释放预留、已收款与迟到款各生成退款并走既有退款审批（supervisor_review `refund` 策略）、退款执行人≠核验人、全部退款完成回到已取消；尾款逾期 `markOverdue` → 应收 overdue、经销商 `credit_suspended` 暂停账期订单（全款订单仍允许，结清解除，已发货不自动取消）；超收 `dealer_order_overpayments` 单独记录、用途确认（预付款 / 抵扣同一销售主体指定订单）后才可用。接口 `/api/v1/dealers/**` 新增 19 个操作，后台页 ADM-DLR-002。**仍未实现（截至 CG-11b）**：独立经销商 Web 门户（CG-11d）、退货/退款/红冲/开票/资金归属（CG-11c）、停用时终止门户会话与系统对接授权（随 CG-11d）。
 >
 > **实现现状（CG-11c，2026-10-17，迁移 V453）：**「退货、开票与资金」「退货与开票」与职责分离中的「退货验收与退款执行分离」已落地：退货单 `dealer_returns` 十态 CHECK `chk_dealer_returns_status` 与 ENUM:174 逐字对应，原因闭集 `chk_dealer_returns_reason`（unopened_resalable / quality_issue）；申请须订单已签收（`DEALER_ORDER_STATUS_INVALID`）、合同期内（`DEALER_CONTRACT_EXPIRED`）、数量不超已出库未退（含在途退货，`RETURN_QUANTITY_EXCEEDS`）；申请人不得自审（`DEALER_SOD_SAME_PERSON`），审批通过订单转退货中；收货后验收按实际验收数量 × 原成交价确认退货金额、支持部分退货，可复售数量回中心仓可用库存（流水 `dealer_return_restock`），质量问题隔离禁售（流水 `dealer_return_quarantine`，不回可用库存）；退货金额先冲减原订单未收货款（`ar_ap_items` 同步冲减 amount / unpaid，不跨订单抵扣），超出部分进待退款并开既有退款审批（supervisor_review `refund` 策略，对象 `dealer_return`），审批通过后由持 `dealer.return.refund.execute` 的人登记执行结果，执行人≠验收人（`DEALER_SOD_SAME_PERSON`），只有成功的退款计入已退金额，失败落「退款失败」可重试；退回运费承担方质量问题固定销售主体，非质量按合同 `return_freight_bearer`，未约定为「待双方确认」并由 `freight-confirmation` 留痕确认，首程运费退不退按合同 `first_leg_freight_refundable`；电子发票 `dealer_invoices` 六态（pending / issuing / issued / failed / reversed / voided），订单签收后才可按「合计 − 已退货金额」申请，不以已收款封顶，同一订单同时只一张有效发票；已开票退货验收后先进「待红冲」，红冲把原发票置 reversed 并记录红冲退货单，剩余未退金额 > 0 且订单未全部退回则按最新未退金额重开（记录 `reissued_from_invoice_id`），全部退货不重开；发票与应收主体均为订单固化的合同销售主体。退货单结清后订单按明细是否全部退回转「已退货」或「部分退货」。接口 `/api/v1/dealers/**` 新增 13 个操作（784），后台页 ADM-DLR-003「经销退货与开票」。**仍未实现（截至 CG-11c）**：独立经销商 Web 门户与停用时终止门户会话 / 系统对接授权（CG-11d）；货款计入销售主体收入 / 分红净利润基数的分红口径仍由财务系统承接，本批只固化主体并不计门店营业额。

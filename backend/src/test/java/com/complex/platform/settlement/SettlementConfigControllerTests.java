@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.settlement;
 
 import static org.mockito.Mockito.doThrow;
@@ -36,7 +37,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * 转正须 settlement.config.manage + 平台域;缺权限 / 非平台主体一律 403(与复用的 AuthorizationService 契约对齐)。
  */
 @WebMvcTest(controllers = SettlementConfigController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, SettlementConfigControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, SettlementConfigControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.auth;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -45,7 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @WebMvcTest(controllers = {AuthController.class, AuthProbeController.class})
 @ActiveProfiles("test")
-@Import({
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class,
         GlobalExceptionHandler.class,
         SecurityConfig.class,
         BearerAuthenticationFilter.class,

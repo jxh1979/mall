@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -35,6 +35,13 @@ type StaffDispatchRow = {
   note?: string | null;
 };
 
+type HandoverOverview = {
+  businessAccessStopped: boolean;
+  revisions: { reviewId: string; beforeStatus: string; afterStatus: string; reason: string; reviewStatus: string; effectiveAt: string; appliedAt?: string | null }[];
+  pending: { businessType: string; businessId: string; businessName: string; status: string; projectId?: string | null; merchantId?: string | null; assignable: boolean; holdReason?: string | null }[];
+  history: { id: string; businessType: string; businessId: string; previousUserId: string; targetUserId: string; reason: string; assignedBy: string; assignedAt: string; responsibilityStartedAt?: string | null }[];
+};
+
 const EMPLOYMENT = { pending_entry: "待入职", employed: "在职", trial: "试岗", suspended: "停岗", departed: "离职" };
 const DISPATCH_STATUS: Record<string, string> = { active: "进行中", ended: "已结束" };
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -54,6 +61,12 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
   const canDispatch = canManage && !user.merchantId && !["merchant", "merchant_admin", "outsourced_vendor"].includes(user.accountType);
   const [rows, setRows] = React.useState<StaffProfileRow[]>([]);
   const [reason, setReason] = React.useState("");
+  const [effectiveAt, setEffectiveAt] = React.useState("");
+  const [handoverProfile, setHandoverProfile] = React.useState<StaffProfileRow | null>(null);
+  const [handover, setHandover] = React.useState<HandoverOverview | null>(null);
+  const [handoverTarget, setHandoverTarget] = React.useState("");
+  const [handoverReason, setHandoverReason] = React.useState("");
+  const [handoverLoading, setHandoverLoading] = React.useState(false);
   const [initialPassword, setInitialPassword] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submittingId, setSubmittingId] = React.useState("");
@@ -126,12 +139,32 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
     setSubmittingId(row.id);
     try {
       const review = await api.post<{ reviewId?: string }>("/api/v1/staff/profiles/" + encodeURIComponent(row.id) + "/employment-status",
-        { employmentStatus, reason: reason.trim() });
+        { employmentStatus, reason: reason.trim(), ...(effectiveAt ? { effectiveAt: new Date(effectiveAt).toISOString() } : {}) });
       setActionResult({ 结果: "已发起员工状态变更复核", 员工档案: row.id, 目标状态: EMPLOYMENT[employmentStatus as keyof typeof EMPLOYMENT] ?? employmentStatus,
-        复核单: review?.reviewId ?? "—", 说明: "人力会签按员工部门自动确定，直属起共三级；配置缺失时保持待处理，补齐后重新生成审批链，全部通过前档案状态不变" });
+        复核单: review?.reviewId ?? "—", 说明: "人力会签按员工部门自动确定，直属起共三级；配置缺失时保持待处理，补齐后重新生成审批链，全部通过且到生效时间才变更；停离职到点撤权，未交接不延后" });
       setReason("");
       await reload();
     } catch (error) { setFormError(error instanceof Error ? error.message : "员工状态变更复核发起失败"); }
+    finally { setSubmittingId(""); }
+  }
+
+  async function openHandover(row: StaffProfileRow) {
+    setHandoverProfile(row); setHandover(null); setHandoverLoading(true); setFormError("");
+    try { setHandover(await api.get<HandoverOverview>(`/api/v1/staff/profiles/${encodeURIComponent(row.id)}/handover`)); }
+    catch (error) { setFormError(error instanceof Error ? error.message : "员工交接读取失败"); }
+    finally { setHandoverLoading(false); }
+  }
+
+  async function assignHandover(item: HandoverOverview["pending"][number]) {
+    if (!handoverProfile || !handoverTarget.trim() || !handoverReason.trim()) { setFormError("交接须填写接手员工账号和交接原因。"); return; }
+    setFormError(""); setSubmittingId(item.businessType + ":" + item.businessId);
+    try {
+      await api.post(`/api/v1/staff/profiles/${encodeURIComponent(handoverProfile.id)}/handover`, {
+        businessType: item.businessType, businessId: item.businessId, targetUserId: handoverTarget.trim(), reason: handoverReason.trim(),
+      });
+      setActionResult({ 结果: "原业务责任已交接", 业务: item.businessName, 业务编号: item.businessId, 接手员工: handoverTarget.trim() });
+      await openHandover(handoverProfile);
+    } catch (error) { setFormError(error instanceof Error ? error.message : "业务交接失败"); }
     finally { setSubmittingId(""); }
   }
 
@@ -196,7 +229,7 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
     <section data-testid="staff-profiles-page">
       <AdminPageHeader
         title="员工档案"
-        description="办理员工注册审批、档案存档及删除。员工状态（待入职/在职/试岗/停岗/离职）的任何变更都只是发起复核：须经 人力会签与该员工直属起共三个组织层级全部通过后才生效，辞退通过即转离职。销售岗员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率；两档费率在「结算配置中心 → 提成与积分」维护。销售岗改动只影响此后新开的账单，不回算历史提成。"
+        description="办理员工注册审批、档案存档及删除。员工状态（待入职/在职/试岗/停岗/离职）的任何变更都只是发起复核：须经 人力会签与该员工直属起共三个组织层级全部通过且到生效时间才生效。停岗、离职生效即停止业务权限与原会话，未交接事项继续由有权人员承接；设备交接、工资结清继续办理。销售岗员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率；两档费率在「结算配置中心 → 提成与积分」维护。销售岗改动只影响此后新开的账单，不回算历史提成。"
       />
       <AuditTrailHint event="staff.profile.employment_status_change_requested / staff.profile.employment_status_changed / staff.profile.sales_position_changed" />
       <label><input type="checkbox" data-testid="staff-profiles-include-archived" checked={includeArchived} onChange={(event) => { includeArchivedRef.current = event.target.checked; setIncludeArchived(event.target.checked); void reload(); }} />显示已存档</label>
@@ -213,6 +246,9 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
+          </label>
+          <label>员工状态生效时间（本地时间，留空为批准后生效）
+            <input type="datetime-local" aria-label="员工状态生效时间" value={effectiveAt} onChange={(event) => setEffectiveAt(event.target.value)} />
           </label>
           <span className="admin-muted-action">销售岗改动直接影响提成计提档，事由必填并留审计；员工状态变更仅限直属领导发起；人力会签按员工部门自动确定，直属起共三级。配置缺失时保持待处理，补齐后重新生成审批链。</span>
         </div>
@@ -239,6 +275,9 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
                   </td>
                   <td data-testid={`staff-profile-sales-position-${row.id}`}>{row.salesPosition ? "是" : "否"}</td>
                   <td>
+                    {row.userId ? <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
+                      data-testid={`staff-profile-handover-${row.id}`} disabled={!!submittingId || handoverLoading}
+                      onClick={() => void openHandover(row)}>生效与业务交接</PermissionButton> : null}
                     <PermissionButton permissionsState={effectivePermissions} permissions={["staff.profile.submit"]}
                       data-testid={`staff-profile-${row.archivedAt ? "unarchive" : "archive"}-${row.id}`}
                       disabled={submittingId === row.id} onClick={() => void changeArchive(row, row.archivedAt ? "unarchive" : "archive")}>
@@ -270,6 +309,31 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
           </table>
         </div>
       </AdminDataState>
+      {handoverProfile ? <section aria-label="员工生效与业务交接" data-testid="staff-handover-panel">
+        <h3>{handoverProfile.name ?? handoverProfile.userId}：生效与业务交接</h3>
+        <button type="button" onClick={() => { setHandoverProfile(null); setHandover(null); }}>关闭交接</button>
+        {handoverLoading ? <p>正在读取原业务待办…</p> : handover ? <>
+          <p>{handover.businessAccessStopped ? "业务权限已停止，未结事项继续交接。" : "当前业务权限未因停离职停止；批准且到生效时间后才能办理停离职交接。"}</p>
+          <table className="admin-table"><caption>状态变更审批与生效</caption><thead><tr><th>目标状态</th><th>审批状态</th><th>计划生效</th><th>落地时间</th></tr></thead><tbody>
+            {handover.revisions.map((row) => <tr key={row.reviewId}><td>{EMPLOYMENT[row.afterStatus as keyof typeof EMPLOYMENT] ?? row.afterStatus}</td><td>{formatBusinessStatus(row.reviewStatus)}</td><td>{new Date(row.effectiveAt).toLocaleString()}</td><td>{row.appliedAt ? new Date(row.appliedAt).toLocaleString() : "尚未落地"}</td></tr>)}
+          </tbody></table>
+          <div className="admin-form-row">
+            <label>接手员工账号<input aria-label="接手员工账号" value={handoverTarget} onChange={(event) => setHandoverTarget(event.target.value)} /></label>
+            <label>交接原因<input aria-label="交接原因" value={handoverReason} onChange={(event) => setHandoverReason(event.target.value)} /></label>
+          </div>
+          <p>接手人须在岗并具备原业务权限及项目、商户范围。历史销售、审批和收入记录保留，卡座保留原负责时段。</p>
+          <table className="admin-table"><caption>原业务待交接事项</caption><thead><tr><th>业务</th><th>编号</th><th>状态</th><th>项目／商户</th><th>操作</th></tr></thead><tbody>
+            {handover.pending.length === 0 ? <tr><td colSpan={5}>暂无待交接事项</td></tr> : handover.pending.map((item) => <tr key={item.businessType + ":" + item.businessId}>
+              <td>{item.businessName}</td><td>{item.businessId}</td><td>{formatBusinessStatus(item.status)}</td><td>{item.projectId ?? "全平台或待核实"}／{item.merchantId ?? "—"}</td>
+              <td><PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} disabled={!handover.businessAccessStopped || !item.assignable || !!submittingId}
+                data-testid={`staff-handover-assign-${item.businessId}`} onClick={() => void assignHandover(item)}>确认交接</PermissionButton>{item.holdReason ? <span>{item.holdReason}</span> : null}</td>
+            </tr>)}
+          </tbody></table>
+          <table className="admin-table"><caption>已完成交接记录</caption><thead><tr><th>业务编号</th><th>原责任人</th><th>接手人</th><th>时间</th><th>原因</th></tr></thead><tbody>
+            {handover.history.map((item) => <tr key={item.id}><td>{item.businessId}</td><td>{item.previousUserId}</td><td>{item.targetUserId}</td><td>{new Date(item.assignedAt).toLocaleString()}</td><td>{item.reason}</td></tr>)}
+          </tbody></table>
+        </> : null}
+      </section> : null}
       <h3>派驻记录（所属主体 → 派驻酒吧 · 起止时间）</h3>
       <p className="admin-muted-action">
         派驻期间在该酒吧促成订单的提成，由该酒吧按月拨付给人员所属主体，列入本人工资单由所属主体统一发放并代扣个人所得税（拨付走内部结算应付，按三个付账日结清）。

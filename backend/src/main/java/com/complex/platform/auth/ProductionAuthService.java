@@ -1,4 +1,6 @@
 package com.complex.platform.auth;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -40,6 +42,16 @@ public class ProductionAuthService implements SessionIssuer {
     private final Duration refreshTokenTtl;
     private final int maxFailedAttempts;
     private final Duration lockDuration;
+    private com.complex.platform.access.AccessRepository accessRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAccessRepository(com.complex.platform.access.AccessRepository repository) {
+        this.accessRepository = repository;
+    }
+
+    private boolean employmentBlocked(String userId) {
+        return accessRepository != null && accessRepository.isEmploymentBusinessBlocked(userId, Instant.now());
+    }
 
     public ProductionAuthService(
             NamedParameterJdbcTemplate jdbcTemplate,
@@ -138,7 +150,7 @@ public class ProductionAuthService implements SessionIssuer {
             CredentialRecord credential = findCredentialByUsername(request.loginName())
                     .orElseThrow(() -> ApiException.unauthorized("INVALID_CREDENTIALS", "账号或密码不正确"));
             Instant now = Instant.now();
-            if (!"active".equals(credential.userStatus())) {
+            if (!"active".equals(credential.userStatus()) || employmentBlocked(credential.userId())) {
                 throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
             if (credential.lockedUntil() != null && now.isBefore(credential.lockedUntil())) {
@@ -208,7 +220,7 @@ public class ProductionAuthService implements SessionIssuer {
             if (SessionIssuer.MASTER_USER_ID.equals(session.userId())) {
                 throw ApiException.unauthorized("MASTER_SESSION_REFRESH_FORBIDDEN", "最高权限须重新插授权 U 盘破窗，不能续期");
             }
-            if (!"active".equals(session.userStatus())) {
+            if (!"active".equals(session.userStatus()) || employmentBlocked(session.userId())) {
                 throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
             // A locked/disabled credential must not be able to extend session life via refresh either.
@@ -307,7 +319,7 @@ public class ProductionAuthService implements SessionIssuer {
         Instant now = Instant.now();
         return findActiveSessionByAccessToken(token)
                 .filter(session -> now.isBefore(session.accessExpiresAt()))
-                .filter(session -> "active".equals(session.userStatus()))
+                .filter(session -> "active".equals(session.userStatus()) && !employmentBlocked(session.userId()))
                 // A locked or disabled credential immediately invalidates already-issued access tokens.
                 .filter(session -> credentialUsable(session, now))
                 .map(SessionWithUser::toActor);

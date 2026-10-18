@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.compliance;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -30,57 +31,6 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
     JdbcWecomComplianceRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
-    }
-
-    @Override
-    public WecomRetentionPolicyRecord saveRetentionPolicy(WecomRetentionPolicyRecord record) {
-        jdbcTemplate.update("""
-                INSERT INTO wecom_retention_policies (
-                    id, scope_type, scope_id, retention_days, expiry_action, enabled, created_at, updated_at
-                )
-                VALUES (
-                    :id, :scope_type, :scope_id, :retention_days, :expiry_action, :enabled, :created_at, :updated_at
-                )
-                ON CONFLICT (scope_type, scope_id) DO UPDATE SET
-                    retention_days = EXCLUDED.retention_days,
-                    expiry_action = EXCLUDED.expiry_action,
-                    enabled = EXCLUDED.enabled,
-                    updated_at = EXCLUDED.updated_at
-                """, new MapSqlParameterSource()
-                .addValue("id", record.id())
-                .addValue("scope_type", record.scopeType())
-                .addValue("scope_id", record.scopeId())
-                .addValue("retention_days", record.retentionDays())
-                .addValue("expiry_action", record.expiryAction())
-                .addValue("enabled", record.enabled())
-                .addValue("created_at", timestampWithTimeZone(record.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(record.updatedAt())));
-        return record;
-    }
-
-    @Override
-    public List<WecomRetentionPolicyRecord> findAllRetentionPolicies() {
-        return jdbcTemplate.query("""
-                SELECT id, scope_type, scope_id, retention_days, expiry_action, enabled, created_at, updated_at
-                  FROM wecom_retention_policies
-                 ORDER BY scope_type, scope_id
-                """, this::mapPolicy);
-    }
-
-    @Override
-    public Optional<WecomRetentionPolicyRecord> findEffectivePolicy(String projectId) {
-        // 优先 project 精确命中（enabled），否则回退全局默认（enabled）。最具体生效。
-        List<WecomRetentionPolicyRecord> rows = jdbcTemplate.query("""
-                SELECT id, scope_type, scope_id, retention_days, expiry_action, enabled, created_at, updated_at
-                  FROM wecom_retention_policies
-                 WHERE enabled = true
-                   AND (
-                        (scope_type = 'project' AND scope_id = :project_id)
-                     OR (scope_type = 'global')
-                   )
-                 ORDER BY CASE WHEN scope_type = 'project' THEN 0 ELSE 1 END
-                """, Map.of("project_id", projectId == null ? "" : projectId), this::mapPolicy);
-        return rows.stream().findFirst();
     }
 
     @Override
@@ -156,28 +106,6 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
     }
 
     @Override
-    public List<WecomConversationRecord> findConversationsDueForRetention(LocalDate today) {
-        return jdbcTemplate.query("""
-                SELECT id, external_conversation_id, project_id, owner_staff_id, customer_ref,
-                       archive_status, retention_until, created_at, updated_at
-                  FROM wecom_conversations
-                 WHERE archive_status = 'active'
-                   AND retention_until IS NOT NULL
-                   AND retention_until < :today
-                 ORDER BY retention_until, id
-                """, Map.of("today", today), this::mapConversation);
-    }
-
-    @Override
-    public void updateConversationArchiveStatus(String id, String archiveStatus) {
-        jdbcTemplate.update("""
-                UPDATE wecom_conversations
-                   SET archive_status = :archive_status, updated_at = now()
-                 WHERE id = :id
-                """, Map.of("id", id, "archive_status", archiveStatus));
-    }
-
-    @Override
     public WecomMessageRecord saveMessage(WecomMessageRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO wecom_messages (
@@ -217,26 +145,6 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
                  WHERE conversation_id = :conversation_id
                  ORDER BY sent_at, id
                 """, Map.of("conversation_id", conversationId), this::mapMessage);
-    }
-
-    @Override
-    public void anonymizeMessagesByConversation(String conversationId) {
-        // 匿名化：清原文引用，展示内容不可逆化（占位），置 anonymized=true。
-        jdbcTemplate.update("""
-                UPDATE wecom_messages
-                   SET content_raw_ref = NULL,
-                       content_redacted = '[ANONYMIZED]',
-                       anonymized = true,
-                       ai_qc_result = NULL
-                 WHERE conversation_id = :conversation_id
-                """, Map.of("conversation_id", conversationId));
-    }
-
-    @Override
-    public void deleteMessagesByConversation(String conversationId) {
-        jdbcTemplate.update("""
-                DELETE FROM wecom_messages WHERE conversation_id = :conversation_id
-                """, Map.of("conversation_id", conversationId));
     }
 
     @Override
@@ -424,19 +332,6 @@ class JdbcWecomComplianceRepository implements WecomComplianceRepository {
             // AUD-020：库内坏 JSON 是服务端数据问题，须走 500 并记堆栈（IllegalArgumentException 会被全局映射 400 掩盖）。
             throw new IllegalStateException("rule_config_json is not readable", exception);
         }
-    }
-
-    private WecomRetentionPolicyRecord mapPolicy(ResultSet rs, int rowNum) throws SQLException {
-        return new WecomRetentionPolicyRecord(
-                rs.getString("id"),
-                rs.getString("scope_type"),
-                rs.getString("scope_id"),
-                rs.getInt("retention_days"),
-                rs.getString("expiry_action"),
-                rs.getBoolean("enabled"),
-                nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at")
-        );
     }
 
     private WecomConversationRecord mapConversation(ResultSet rs, int rowNum) throws SQLException {

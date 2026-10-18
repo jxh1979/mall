@@ -1,5 +1,5 @@
 package com.complex.platform.access;
-// 文件版本：V0.22
+// 文件版本：V0.23
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -25,6 +25,26 @@ class JdbcAccessRepository implements AccessRepository {
 
     JdbcAccessRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    public boolean isEmploymentBusinessBlocked(String userId, Instant checkedAt) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM staff_profiles WHERE user_id=:user_id
+                                   AND employment_status IN ('suspended','departed'))
+                    OR EXISTS (SELECT 1 FROM staff_employment_status_revisions r
+                               JOIN supervisor_review_decisions d ON d.review_id=r.review_id
+                              WHERE r.user_id=:user_id AND r.applied_at IS NULL
+                                AND r.after_status IN ('suspended','departed')
+                                AND d.review_status='approved' AND r.effective_at<=:checked_at)
+                """, new MapSqlParameterSource().addValue("user_id", userId)
+                .addValue("checked_at", timestampWithTimeZone(checkedAt)), Boolean.class));
+    }
+
+    private void requireEmploymentGrantAllowed(String userId) {
+        if (isEmploymentBusinessBlocked(userId, Instant.now())) {
+            throw ApiException.conflict("STAFF_BUSINESS_ACCESS_STOPPED", "停岗或离职生效后不能新增员工业务授权");
+        }
     }
 
     @Override
@@ -753,6 +773,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public RoleAssignmentRecord assignUserRole(String userId, String roleId) {
+        requireEmploymentGrantAllowed(userId);
         jdbcTemplate.update("""
                 INSERT INTO user_roles (user_id, role_id)
                 VALUES (:user_id, :role_id)
@@ -943,6 +964,7 @@ class JdbcAccessRepository implements AccessRepository {
             boolean singleUse,
             String appliedBy
     ) {
+        targetUserIds.forEach(this::requireEmploymentGrantAllowed);
         Instant appliedAt = Instant.now();
         List<PermissionTemplateApplication> applications = targetUserIds.stream()
                 .map(userId -> new PermissionTemplateApplication(
@@ -978,6 +1000,7 @@ class JdbcAccessRepository implements AccessRepository {
 
     @Override
     public TemporaryGrant createTemporaryGrant(TemporaryGrant temporaryGrant) {
+        requireEmploymentGrantAllowed(temporaryGrant.targetUserId());
         List<String> permissionCodes = temporaryGrant.permissionCodes() == null
                 ? List.of()
                 : temporaryGrant.permissionCodes();
@@ -1252,6 +1275,7 @@ class JdbcAccessRepository implements AccessRepository {
     @Transactional
     public void replacePositionGrants(String userId, String roleId, String mappingId, List<String> applicationIds,
                                       String actorId, Instant changedAt) {
+        if (roleId != null || !applicationIds.isEmpty()) requireEmploymentGrantAllowed(userId);
         var parameters = new MapSqlParameterSource()
                 .addValue("user_id", userId).addValue("role_id", roleId).addValue("mapping_id", mappingId)
                 .addValue("application_ids", applicationIds.toArray(String[]::new), java.sql.Types.ARRAY)
@@ -1415,6 +1439,7 @@ class JdbcAccessRepository implements AccessRepository {
     @Override
     @Transactional
     public void saveUserPermissionOverrides(String userId, List<String> permissionCodes, Effect effect, String reason, String createdBy) {
+        if (effect == Effect.GRANT) requireEmploymentGrantAllowed(userId);
         upsertOverrides(userId, permissionCodes, effect, "explicit", reason, createdBy);
     }
 

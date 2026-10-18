@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -184,5 +184,45 @@ describe("StaffProfilesPage 派驻记录（CG-07，BSM「派驻人员的成本�
     fireEvent.change(screen.getByTestId("staff-dispatch-end-date"), { target: { value: "2026-09-30" } });
     fireEvent.click(end);
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/dispatches/dsp-1/end", { endDate: "2026-09-30", reason: "派驻期满" }));
+  });
+});
+
+
+
+describe("StaffProfilesPage 生效时间与原业务交接", () => {
+  it("指定生效时间随原审批提交，不直接改任职状态", async () => {
+    const api = makeApi(); renderPage(api);
+    await screen.findByLabelText("员工状态-sp-1");
+    fireEvent.change(screen.getByLabelText("员工状态生效时间"), { target: { value: "2026-12-01T09:00" } });
+    fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "按约定离职" } });
+    fireEvent.change(screen.getByLabelText("员工状态-sp-1"), { target: { value: "departed" } });
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/employment-status", {
+      employmentStatus: "departed", reason: "按约定离职", effectiveAt: new Date("2026-12-01T09:00").toISOString(),
+    }));
+  });
+
+  it("显示真实未结事项和挂起原因，填写接手人后提交原业务编号并刷新", async () => {
+    const api = makeApi();
+    const pending = { businessType: "facility_work_order", businessId: "repair-1", businessName: "维修工单", status: "processing", projectId: "p1", assignable: true };
+    let transferred = false;
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (url.endsWith("/handover")) return { businessAccessStopped: true, revisions: [], pending: transferred ? [] : [pending,
+        { ...pending, businessId: "unknown", assignable: false, holdReason: "原业务项目或商户归属待核实" }], history: [] } as never;
+      return (url.includes("dispatches") ? DISPATCHES : PROFILES) as never;
+    });
+    vi.mocked(api.post).mockImplementation(async () => { transferred = true; return {} as never; });
+    renderPage(api);
+    fireEvent.click(await screen.findByTestId("staff-profile-handover-sp-1"));
+    const assign = await screen.findByTestId("staff-handover-assign-repair-1");
+    expect(screen.getByText("业务权限已停止，未结事项继续交接。")).toBeTruthy();
+    expect((screen.getByTestId("staff-handover-assign-unknown") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(assign); expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("接手员工账号"), { target: { value: "usr_next" } });
+    fireEvent.change(screen.getByLabelText("交接原因"), { target: { value: "主管指定承接" } });
+    fireEvent.click(assign);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/handover", {
+      businessType: "facility_work_order", businessId: "repair-1", targetUserId: "usr_next", reason: "主管指定承接",
+    }));
+    await screen.findByText("暂无待交接事项");
   });
 });

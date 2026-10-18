@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -39,7 +40,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = BarController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, BarControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, BarControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,
