@@ -182,7 +182,7 @@ public class DealerService {
                 DealerRecord saved = new DealerRecord(dealer.id(), dealer.projectId(), dealer.dealerName(), dealer.unifiedSocialCreditCode(),
                         dealer.legalRepresentative(), dealer.contactName(), dealer.contactPhone(), DEACTIVATED, dealer.companyProfileReviewed(),
                         dealer.contractReviewed(), dealer.invoiceReviewed(), dealer.bankReviewed(), false, dealer.reviewNote(), dealer.reviewedBy(),
-                        dealer.reviewedAt(), reason.trim(), actorId(), now, dealer.createdBy(), dealer.createdAt(), now);
+                        dealer.reviewedAt(), reason.trim(), actorId(), now, dealer.createdBy(), dealer.createdAt(), now, dealer.creditSuspended());
                 repository.saveDealer(saved);
                 audit.recordSuccess("dealer.deactivated", MANAGE, "dealer", id, null, request.idempotencyKey(), Map.of("reason", reason.trim()));
                 return saved;
@@ -564,7 +564,7 @@ public class DealerService {
             String note, String reviewedBy, Instant reviewedAt) {
         return new DealerRecord(d.id(), d.projectId(), d.dealerName(), d.unifiedSocialCreditCode(), d.legalRepresentative(), d.contactName(), d.contactPhone(),
                 status, cp, ct, inv, bank, portal, note, reviewedBy, reviewedAt, d.deactivationReason(), d.deactivatedBy(), d.deactivatedAt(),
-                d.createdBy(), d.createdAt(), Instant.now());
+                d.createdBy(), d.createdAt(), Instant.now(), d.creditSuspended());
     }
 
     private static String requireDecision(String decision) {

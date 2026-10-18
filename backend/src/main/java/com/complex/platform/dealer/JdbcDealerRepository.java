@@ -33,10 +33,10 @@ public class JdbcDealerRepository {
         jdbc.update("""
                 INSERT INTO dealers (id, project_id, dealer_name, unified_social_credit_code, legal_representative, contact_name, contact_phone, status,
                     company_profile_reviewed, contract_reviewed, invoice_reviewed, bank_reviewed, portal_enabled, review_note, reviewed_by, reviewed_at,
-                    deactivation_reason, deactivated_by, deactivated_at, created_by, created_at, updated_at)
+                    deactivation_reason, deactivated_by, deactivated_at, created_by, created_at, updated_at, credit_suspended)
                 VALUES (:id, :project_id, :name, :uscc, :legal, :contact_name, :contact_phone, :status,
                     :cp, :ct, :inv, :bank, :portal, :review_note, :reviewed_by, :reviewed_at,
-                    :deact_reason, :deact_by, :deact_at, :created_by, :created_at, :updated_at)
+                    :deact_reason, :deact_by, :deact_at, :created_by, :created_at, :updated_at, :credit_suspended)
                 ON CONFLICT (id) DO UPDATE SET
                     dealer_name = EXCLUDED.dealer_name, unified_social_credit_code = EXCLUDED.unified_social_credit_code,
                     legal_representative = EXCLUDED.legal_representative, contact_name = EXCLUDED.contact_name, contact_phone = EXCLUDED.contact_phone,
@@ -44,8 +44,8 @@ public class JdbcDealerRepository {
                     invoice_reviewed = EXCLUDED.invoice_reviewed, bank_reviewed = EXCLUDED.bank_reviewed, portal_enabled = EXCLUDED.portal_enabled,
                     review_note = EXCLUDED.review_note, reviewed_by = EXCLUDED.reviewed_by, reviewed_at = EXCLUDED.reviewed_at,
                     deactivation_reason = EXCLUDED.deactivation_reason, deactivated_by = EXCLUDED.deactivated_by, deactivated_at = EXCLUDED.deactivated_at,
-                    updated_at = EXCLUDED.updated_at
-                """, new MapSqlParameterSource()
+                    updated_at = EXCLUDED.updated_at, credit_suspended = EXCLUDED.credit_suspended
+                """, new MapSqlParameterSource().addValue("credit_suspended", d.creditSuspended())
                 .addValue("id", d.id()).addValue("project_id", d.projectId()).addValue("name", d.dealerName()).addValue("uscc", d.unifiedSocialCreditCode())
                 .addValue("legal", d.legalRepresentative()).addValue("contact_name", d.contactName()).addValue("contact_phone", d.contactPhone())
                 .addValue("status", d.status()).addValue("cp", d.companyProfileReviewed()).addValue("ct", d.contractReviewed())
@@ -72,19 +72,34 @@ public class JdbcDealerRepository {
                 rs.getBoolean("company_profile_reviewed"), rs.getBoolean("contract_reviewed"), rs.getBoolean("invoice_reviewed"), rs.getBoolean("bank_reviewed"),
                 rs.getBoolean("portal_enabled"), rs.getString("review_note"), rs.getString("reviewed_by"), nullableInstant(rs, "reviewed_at"),
                 rs.getString("deactivation_reason"), rs.getString("deactivated_by"), nullableInstant(rs, "deactivated_at"), rs.getString("created_by"),
-                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getBoolean("credit_suspended"));
+    }
+
+    /** BSM:1231：逾期暂停 / 结清解除该经销商新增账期订单。 */
+    public void setCreditSuspended(String dealerId, boolean suspended) {
+        jdbc.update("UPDATE dealers SET credit_suspended = :s, updated_at = now() WHERE id = :id", Map.of("s", suspended, "id", dealerId));
     }
 
     // ── 合同 ──
 
     public void saveContract(DealerContractRecord c) {
         jdbc.update("""
-                INSERT INTO dealer_contracts (id, dealer_id, contract_no, sales_entity_id, central_warehouse_id, valid_from, valid_to, status, created_by, created_at)
-                VALUES (:id, :dealer, :no, :entity, :wh, :from, :to, :status, :by, :at)
-                ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status
+                INSERT INTO dealer_contracts (id, dealer_id, contract_no, sales_entity_id, central_warehouse_id, valid_from, valid_to, status, created_by, created_at,
+                    credit_term, first_payment_ratio_bps, first_payment_amount_cent, first_payment_deadline_days, balance_due_days,
+                    freight_cent, free_shipping_threshold_cent, freight_bearer, freight_template_version)
+                VALUES (:id, :dealer, :no, :entity, :wh, :from, :to, :status, :by, :at,
+                    :credit, :ratio, :amount, :deadline_days, :balance_days, :freight, :free_threshold, :bearer, :ft_version)
+                ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, credit_term = EXCLUDED.credit_term,
+                    first_payment_ratio_bps = EXCLUDED.first_payment_ratio_bps, first_payment_amount_cent = EXCLUDED.first_payment_amount_cent,
+                    first_payment_deadline_days = EXCLUDED.first_payment_deadline_days, balance_due_days = EXCLUDED.balance_due_days,
+                    freight_cent = EXCLUDED.freight_cent, free_shipping_threshold_cent = EXCLUDED.free_shipping_threshold_cent,
+                    freight_bearer = EXCLUDED.freight_bearer, freight_template_version = EXCLUDED.freight_template_version
                 """, new MapSqlParameterSource().addValue("id", c.id()).addValue("dealer", c.dealerId()).addValue("no", c.contractNo())
                 .addValue("entity", c.salesEntityId()).addValue("wh", c.centralWarehouseId()).addValue("from", Date.valueOf(c.validFrom()))
-                .addValue("to", Date.valueOf(c.validTo())).addValue("status", c.status()).addValue("by", c.createdBy()).addValue("at", ts(c.createdAt())));
+                .addValue("to", Date.valueOf(c.validTo())).addValue("status", c.status()).addValue("by", c.createdBy()).addValue("at", ts(c.createdAt()))
+                .addValue("credit", c.creditTerm()).addValue("ratio", c.firstPaymentRatioBps()).addValue("amount", c.firstPaymentAmountCent())
+                .addValue("deadline_days", c.firstPaymentDeadlineDays()).addValue("balance_days", c.balanceDueDays()).addValue("freight", c.freightCent())
+                .addValue("free_threshold", c.freeShippingThresholdCent()).addValue("bearer", c.freightBearer()).addValue("ft_version", c.freightTemplateVersion()));
     }
 
     public Optional<DealerContractRecord> findContract(String id) {
@@ -98,7 +113,19 @@ public class JdbcDealerRepository {
     private DealerContractRecord mapContract(ResultSet rs, int i) throws SQLException {
         return new DealerContractRecord(rs.getString("id"), rs.getString("dealer_id"), rs.getString("contract_no"), rs.getString("sales_entity_id"),
                 rs.getString("central_warehouse_id"), rs.getDate("valid_from").toLocalDate(), rs.getDate("valid_to").toLocalDate(), rs.getString("status"),
-                rs.getString("created_by"), nullableInstant(rs, "created_at"));
+                rs.getString("created_by"), nullableInstant(rs, "created_at"), rs.getBoolean("credit_term"), intOrNull(rs, "first_payment_ratio_bps"),
+                longOrNull(rs, "first_payment_amount_cent"), intOrNull(rs, "first_payment_deadline_days"), intOrNull(rs, "balance_due_days"),
+                longOrNull(rs, "freight_cent"), longOrNull(rs, "free_shipping_threshold_cent"), rs.getString("freight_bearer"), rs.getInt("freight_template_version"));
+    }
+
+    static Integer intOrNull(ResultSet rs, String column) throws SQLException {
+        Object v = rs.getObject(column);
+        return v == null ? null : ((Number) v).intValue();
+    }
+
+    static Long longOrNull(ResultSet rs, String column) throws SQLException {
+        Object v = rs.getObject(column);
+        return v == null ? null : ((Number) v).longValue();
     }
 
     public boolean businessEntityExists(String id) {

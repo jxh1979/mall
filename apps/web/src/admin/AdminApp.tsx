@@ -115,6 +115,7 @@ const ComplianceRemindersPage = React.lazy(() => import("./pages/ComplianceRemin
 const WecomComplianceReviewPage = React.lazy(() => import("./pages/WecomComplianceReviewPage").then((m) => ({ default: m.WecomComplianceReviewPage })));
 const MetricDetailPage = React.lazy(() => import("./pages/MetricDetailPage").then((m) => ({ default: m.MetricDetailPage })));
 const DealerAdmissionCatalogPage = React.lazy(() => import("./pages/DealerAdmissionCatalogPage").then((m) => ({ default: m.DealerAdmissionCatalogPage })));
+const DealerOrderFulfillmentPage = React.lazy(() => import("./pages/DealerOrderFulfillmentPage").then((m) => ({ default: m.DealerOrderFulfillmentPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
 const ICON_PATHS: Record<string, string> = {
@@ -395,6 +396,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <WecomComplianceReviewPage {...props} />;
     case "ADM-DLR-001":
       return <DealerAdmissionCatalogPage {...props} />;
+    case "ADM-DLR-002":
+      return <DealerOrderFulfillmentPage {...props} />;
     default:
       // findAdminRoute 兜底到 adminRoutes[0]，正常导航不会落到这里；保留未知页面占位仅为类型完备与极端防御。
       return <div className="admin-state admin-error">未知页面：{route.pageId}</div>;

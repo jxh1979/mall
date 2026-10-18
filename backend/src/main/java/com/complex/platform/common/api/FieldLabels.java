@@ -277,6 +277,10 @@ public final class FieldLabels {
         p("central_warehouse_id", "中心仓");
         p("catalog_id", "价格目录");
         p("inquiry_id", "询价单");
+        p("overpayment_id", "超收记录");
+        p("target_order_id", "抵扣订单");
+        p("method", "支付方式");
+        p("usage", "用途");
         p("parent_contract_id", "主合同");
         p("contract_entity_id", "合同主体");
         p("contract_subject_id", "合同签约主体");

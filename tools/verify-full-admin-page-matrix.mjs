@@ -103,6 +103,7 @@ const bespokePages = new Set([
   "ADM-AMU-006",
   "ADM-AMU-007",
   "ADM-DLR-001",
+  "ADM-DLR-002",
 ]);
 
 function read(path) {

@@ -96,6 +96,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-SVC-001", label: "服务点单", route: "/admin/services/orders" },
   { pageId: "ADM-OPS-002", label: "数据清理工具", route: "/admin/ops/data-cleanup" },
   { pageId: "ADM-DLR-001", label: "经销商准入与价格目录", route: "/admin/dealers/admission" },
+  { pageId: "ADM-DLR-002", label: "经销订单与履约", route: "/admin/dealers/orders" },
 ];
 
 async function adminLogin(page: import("@playwright/test").Page, path = "/admin/overview") {
@@ -372,6 +373,11 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("compliance-reminders-evidence")).toContainText("/api/v1/compliance");
         await expect(page.getByTestId("compliance-reminders-summary")).toBeVisible();
         await expect(page.getByTestId("compliance-reminders-table")).toContainText("续约");
+        continue;
+      }
+      if (spec.pageId === "ADM-DLR-002") {
+        await expect(page.getByTestId("dealer-orders-page")).toBeVisible();
+        await expect(page.getByTestId("dealer-orders-evidence")).toContainText("/api/v1/dealers");
         continue;
       }
       if (spec.pageId === "ADM-DLR-001") {

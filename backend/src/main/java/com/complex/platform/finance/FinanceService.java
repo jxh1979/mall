@@ -54,6 +54,8 @@ public class FinanceService implements TerminationSettlementPort {
             "dividend_reserve_withheld", "dividend_reserve_released", "termination_penalty", "deposit_refund",
             // CG-10：采购入库确认形成的供应商应付（BSM「应收应付台账」来源「含采购入库形成的供应商应付」）。
             "purchase_inbound",
+            // CG-11b 经销订单应收（BSM:1230「尾款持续列入该订单应收账款」）
+            "dealer_order",
             // D7 超池特批·超额 C 口径(甲标签法):池内额过 ticket_distribution(项目公司承担)、超出总池的超额部分过
             //   platform_incentive_subsidy(L3 娱乐平台公司承担)。DB 层 source_type 自由 VARCHAR 无 CHECK,零迁移。
             "platform_incentive_subsidy",
@@ -93,7 +95,7 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("deposit", "押金"), Map.entry("property_fee", "物业费"),
             Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
             Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
-            Map.entry("dividend_reserve_released", "分红留存已释放"),
+            Map.entry("dividend_reserve_released", "分红留存已释放"), Map.entry("dealer_order", "经销订单"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
             Map.entry("platform_incentive_subsidy", "平台激励补贴(超池特批)"),
             Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"));
