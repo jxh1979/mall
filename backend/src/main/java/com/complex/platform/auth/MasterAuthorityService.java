@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.auth;
 
 import com.complex.platform.common.api.ApiException;
@@ -48,6 +49,11 @@ public class MasterAuthorityService {
     private final Duration challengeTtl;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, Instant> challenges = new ConcurrentHashMap<>(); // challenge -> 过期时刻（一次性）
+
+    private final Map<String, ActionChallenge> actionChallenges = new ConcurrentHashMap<>();
+
+    public record ActionChallenge(String challenge, Instant expiresAt, String actorId,
+                                  String action, String scopeDigest) {}
 
     // 4.9 破窗登录限速：每个来源 60 秒窗口内最多 5 次 challenge/login 尝试，超限 429 拒并审计留痕（防离线签名暴力尝试）。
     // ponytail: 来源 = 请求方地址（反代场景由 forward-headers-strategy 还原）；来源数超过上限整体清空，防匿名来源撑爆内存。
@@ -152,6 +158,52 @@ public class MasterAuthorityService {
         return response;
     }
 
+    /** 每次高敏动作单独签名；登录挑战不能用于动作授权。 */
+    public ActionChallenge issueActionChallenge(String actorId, String action, String scopeDigest) {
+        requireEnabled();
+        requireActionBinding(actorId, action, scopeDigest);
+        enforceRateLimit("action_challenge", "action:" + actorId);
+        pruneExpired();
+        byte[] raw = new byte[32];
+        secureRandom.nextBytes(raw);
+        String challenge = "master-action:" + Base64.getUrlEncoder().withoutPadding().encodeToString(raw)
+                + ":" + actorId + ":" + action + ":" + scopeDigest;
+        ActionChallenge value = new ActionChallenge(challenge, Instant.now().plus(challengeTtl),
+                actorId, action, scopeDigest);
+        actionChallenges.put(challenge, value);
+        auditEventService.recordSuccess("auth.master.action_challenge_issued", "auth.master",
+                "master_action", action, null, null, Map.of("actor_id", actorId, "scope_digest", scopeDigest));
+        return value;
+    }
+
+    public void verifyAction(String actorId, String action, String scopeDigest,
+                             String challenge, String signatureBase64) {
+        requireEnabled();
+        requireActionBinding(actorId, action, scopeDigest);
+        enforceRateLimit("action_verify", "action:" + actorId);
+        ActionChallenge issued = challenge == null ? null : actionChallenges.remove(challenge);
+        String code = issued == null || !Instant.now().isBefore(issued.expiresAt())
+                || !actorId.equals(issued.actorId()) || !action.equals(issued.action())
+                || !scopeDigest.equals(issued.scopeDigest()) ? "MASTER_ACTION_CHALLENGE_INVALID"
+                : verifySignature(challenge, signatureBase64) ? null : "MASTER_SIGNATURE_INVALID";
+        if (code != null) {
+            auditEventService.recordFailure("auth.master.action_failed", "auth.master", "master_action",
+                    action, null, null, code);
+            throw ApiException.forbidden(code, "本次动作授权不存在、已失效、范围不符或签名错误");
+        }
+        windows.remove("action:" + actorId);
+        auditEventService.recordSuccess("auth.master.action_authorized", "auth.master", "master_action",
+                action, null, null, Map.of("actor_id", actorId, "scope_digest", scopeDigest,
+                        "key_fingerprint", publicKeyFingerprint));
+    }
+
+    private void requireActionBinding(String actorId, String action, String scopeDigest) {
+        if (!SessionIssuer.MASTER_USER_ID.equals(actorId) || action == null || action.isBlank()
+                || scopeDigest == null || !scopeDigest.matches("[0-9a-f]{64}")) {
+            throw ApiException.forbidden("MASTER_ACTION_BINDING_INVALID", "最高权限动作必须绑定本人和明确范围");
+        }
+    }
+
     private void requireEnabled() {
         if (!enabled()) {
             throw ApiException.forbidden("MASTER_AUTHORITY_DISABLED", "主授权尚未配置");
@@ -182,6 +234,7 @@ public class MasterAuthorityService {
     private void pruneExpired() {
         Instant now = Instant.now();
         challenges.entrySet().removeIf(e -> now.isAfter(e.getValue()));
+        actionChallenges.entrySet().removeIf(e -> !now.isBefore(e.getValue().expiresAt()));
     }
 
     static PublicKey parsePublicKey(String base64) {

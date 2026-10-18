@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.compliance;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,7 +38,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = ComplianceController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, ComplianceControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, ComplianceControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,
@@ -172,6 +173,41 @@ class ComplianceControllerTests {
         verify(authorizationService).requirePermission("compliance.reminder.scan");
     }
 
+    @Test
+    void retiredRetentionPolicyRejectsEmptyAndOldRequestsWithPermanentRule() throws Exception {
+        for (String body : List.of("", "{}", """
+                {"scope_type":"global","retention_days":180,"expiry_action":"delete"}
+                """, """
+                {"idempotency_key":"legacy","scope_type":"global","scope_id":"*",
+                 "retention_days":365,"expiry_action":"anonymize","enabled":true}
+                """)) {
+            mockMvc.perform(post("/api/v1/compliance/wecom/retention-policies")
+                            .requestAttr("com.complex.platform.gate.verified_terminal",
+                                    new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("web", null, true))
+                            .with(user("ops").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.detail_code").value("WECOM_PERMANENT_RETENTION"));
+        }
+    }
+
+    @Test
+    void retiredRetentionPolicyStillRequiresPermissionBeforePermanentRule() throws Exception {
+        Mockito.doThrow(com.complex.platform.common.api.ApiException.forbidden("FORBIDDEN", "无留存管理权限"))
+                .when(authorizationService).requirePermission("wecom.retention.manage");
+        for (String body : List.of("", """
+                {"scope_type":"global","retention_days":180,"expiry_action":"delete"}
+                """)) {
+            mockMvc.perform(post("/api/v1/compliance/wecom/retention-policies")
+                            .requestAttr("com.complex.platform.gate.verified_terminal",
+                                    new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("web", null, true))
+                            .with(user("ops").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("FORBIDDEN"));
+        }
+    }
+
     private ContractKeyDateRecord contractDateRecord() {
         return new ContractKeyDateRecord(
                 "ckd_1",
@@ -223,8 +259,14 @@ class ComplianceControllerTests {
         }
 
         @Bean
-        WecomConversationService wecomConversationService() {
-            return Mockito.mock(WecomConversationService.class);
+        WecomConversationService wecomConversationService(AuthorizationService authorizationService,
+                                                          TerminalSwitchGuard terminalSwitchGuard) {
+            return new WecomConversationService(Mockito.mock(WecomComplianceRepository.class),
+                    Mockito.mock(com.complex.platform.common.idempotency.IdempotencyService.class),
+                    new com.complex.platform.evidence.AuditEventService(
+                            new com.complex.platform.support.InMemoryAuditEventRepository()),
+                    terminalSwitchGuard, null, new com.fasterxml.jackson.databind.ObjectMapper(),
+                    null, authorizationService);
         }
 
         @Bean

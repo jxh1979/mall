@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.terminal;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -43,7 +44,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = TerminalDeviceController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, TerminalDeviceControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, TerminalDeviceControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.integration;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -37,7 +38,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 @WebMvcTest(controllers = IntegrationController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, IntegrationControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, IntegrationControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

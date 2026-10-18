@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,6 +67,46 @@ class MasterAuthorityServiceTests {
         s.initSign(kp.getPrivate());
         s.update(challenge.getBytes(StandardCharsets.UTF_8));
         return Base64.getEncoder().encodeToString(s.sign());
+    }
+
+    @Test
+    void actionProofIsBoundToActorPreviewAndDigestAndCannotBeReplayed() throws Exception {
+        MasterAuthorityService svc = service(Duration.ofMinutes(2), pub());
+        String digest = "a".repeat(64);
+        var challenge = svc.issueActionChallenge(SessionIssuer.MASTER_USER_ID, "wecom-cleanup:one", digest);
+        String signature = sign(keyPair, challenge.challenge());
+        svc.verifyAction(SessionIssuer.MASTER_USER_ID, "wecom-cleanup:one", digest, challenge.challenge(), signature);
+        assertThatThrownBy(() -> svc.verifyAction(SessionIssuer.MASTER_USER_ID, "wecom-cleanup:one", digest,
+                challenge.challenge(), signature)).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.code()).isEqualTo("MASTER_ACTION_CHALLENGE_INVALID"));
+    }
+
+    @Test
+    void loginProofAndDifferentPreviewCannotAuthorizeCleanup() throws Exception {
+        MasterAuthorityService svc = service(Duration.ofMinutes(2), pub());
+        String login = svc.issueChallenge("login-only");
+        String loginSignature = sign(keyPair, login);
+        assertThatThrownBy(() -> svc.verifyAction(SessionIssuer.MASTER_USER_ID, "wecom-cleanup:one",
+                "a".repeat(64), login, loginSignature)).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.code()).isEqualTo("MASTER_ACTION_CHALLENGE_INVALID"));
+        var action = svc.issueActionChallenge(SessionIssuer.MASTER_USER_ID, "wecom-cleanup:one", "a".repeat(64));
+        String signature = sign(keyPair, action.challenge());
+        assertThatThrownBy(() -> svc.verifyAction(SessionIssuer.MASTER_USER_ID, "wecom-cleanup:other",
+                "a".repeat(64), action.challenge(), signature)).isInstanceOfSatisfying(ApiException.class,
+                e -> assertThat(e.code()).isEqualTo("MASTER_ACTION_CHALLENGE_INVALID"));
+    }
+
+    @Test
+    void actionRejectsChangedDigestWrongKeyExpiredAndOrdinaryActor() throws Exception {
+        for (String failure : List.of("digest", "signature", "expiry", "actor")) {
+            MasterAuthorityService svc = service("expiry".equals(failure) ? Duration.ofMillis(1) : Duration.ofMinutes(2), pub());
+            var challenge = svc.issueActionChallenge(SessionIssuer.MASTER_USER_ID, "wecom-cleanup:one", "a".repeat(64));
+            String signature = sign("signature".equals(failure) ? generateKeyPair() : keyPair, challenge.challenge());
+            if ("expiry".equals(failure)) Thread.sleep(15);
+            assertThatThrownBy(() -> svc.verifyAction("actor".equals(failure) ? "ordinary-admin" : SessionIssuer.MASTER_USER_ID,
+                    "wecom-cleanup:one", ("digest".equals(failure) ? "b" : "a").repeat(64),
+                    challenge.challenge(), signature)).isInstanceOf(ApiException.class);
+        }
     }
 
     // 4.9 / M008-A1-05：同一来源 60 秒窗口内超过 5 次尝试(challenge+login 合计)一律 429 拒并留审计。

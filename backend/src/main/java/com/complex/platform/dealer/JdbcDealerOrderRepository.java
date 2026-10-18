@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -206,11 +206,13 @@ public class JdbcDealerOrderRepository {
     public void saveRefund(DealerOrderRefundRecord r) {
         jdbc.update("""
                 INSERT INTO dealer_order_refunds (id, order_id, payment_id, amount_cent, status, review_id, requested_by, executed_by, executed_at, reference_no, reason,
-                    created_at, updated_at)
-                VALUES (:id, :order, :payment, :amount, :status, :review, :requested_by, :executed_by, :executed_at, :ref, :reason, :created_at, :updated_at)
+                    created_at, updated_at, finance_refund_id, allocation_id)
+                VALUES (:id, :order, :payment, :amount, :status, :review, :requested_by, :executed_by, :executed_at, :ref, :reason, :created_at, :updated_at, :finance_refund, :allocation)
                 ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, review_id = EXCLUDED.review_id, requested_by = EXCLUDED.requested_by,
-                    executed_by = EXCLUDED.executed_by, executed_at = EXCLUDED.executed_at, reference_no = EXCLUDED.reference_no, updated_at = EXCLUDED.updated_at
+                    executed_by = EXCLUDED.executed_by, executed_at = EXCLUDED.executed_at, reference_no = EXCLUDED.reference_no,
+                    finance_refund_id = EXCLUDED.finance_refund_id, allocation_id = EXCLUDED.allocation_id, updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource().addValue("id", r.id()).addValue("order", r.orderId()).addValue("payment", r.paymentId()).addValue("amount", r.amountCent())
+                .addValue("finance_refund", r.financeRefundId()).addValue("allocation", r.allocationId())
                 .addValue("status", r.status()).addValue("review", r.reviewId()).addValue("requested_by", r.requestedBy()).addValue("executed_by", r.executedBy())
                 .addValue("executed_at", ts(r.executedAt())).addValue("ref", r.referenceNo()).addValue("reason", r.reason())
                 .addValue("created_at", ts(r.createdAt())).addValue("updated_at", ts(r.updatedAt())));
@@ -231,7 +233,7 @@ public class JdbcDealerOrderRepository {
     private DealerOrderRefundRecord mapRefund(ResultSet rs, int i) throws SQLException {
         return new DealerOrderRefundRecord(rs.getString("id"), rs.getString("order_id"), rs.getString("payment_id"), rs.getLong("amount_cent"), rs.getString("status"),
                 rs.getString("review_id"), rs.getString("requested_by"), rs.getString("executed_by"), nullableInstant(rs, "executed_at"), rs.getString("reference_no"),
-                rs.getString("reason"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+                rs.getString("reason"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getString("finance_refund_id"), rs.getString("allocation_id"));
     }
 
     // ── 超收 ──
@@ -247,6 +249,17 @@ public class JdbcDealerOrderRepository {
                 .addValue("confirmed_by", o.confirmedBy()).addValue("confirmed_at", ts(o.confirmedAt())).addValue("note", o.note()).addValue("created_at", ts(o.createdAt())));
     }
 
+    /** 原订单已锁定中心仓；全平台经销档案可以无项目，具体交易不得无项目。 */
+    public Optional<String> findOrderProjectId(String orderId) {
+        return jdbc.query("""
+                SELECT w.project_id FROM dealer_orders o
+                JOIN warehouses w ON w.id = o.central_warehouse_id
+                JOIN dealers d ON d.id = o.dealer_id
+                WHERE o.id = :id AND w.project_id IS NOT NULL
+                  AND (d.project_id IS NULL OR d.project_id = w.project_id)
+                """, Map.of("id", orderId), (rs, row) -> rs.getString("project_id")).stream().findFirst();
+    }
+
     public Optional<DealerOrderOverpaymentRecord> findOverpayment(String id) {
         return jdbc.query("SELECT * FROM dealer_order_overpayments WHERE id = :id", Map.of("id", id), this::mapOverpayment).stream().findFirst();
     }
@@ -255,10 +268,90 @@ public class JdbcDealerOrderRepository {
         return jdbc.query("SELECT * FROM dealer_order_overpayments WHERE dealer_id = :d ORDER BY created_at DESC", Map.of("d", dealerId), this::mapOverpayment);
     }
 
+    public Optional<DealerOrderOverpaymentRecord> lockOverpayment(String id) {
+        return jdbc.query("SELECT * FROM dealer_order_overpayments WHERE id = :id FOR UPDATE", Map.of("id", id), this::mapOverpayment).stream().findFirst();
+    }
+
+    public void lockPayment(String id) {
+        jdbc.queryForObject("SELECT id FROM dealer_order_payments WHERE id = :id FOR UPDATE", Map.of("id", id), String.class);
+    }
+
+    public Optional<DealerOrderRefundRecord> lockRefund(String id) {
+        return jdbc.query("SELECT * FROM dealer_order_refunds WHERE id = :id FOR UPDATE", Map.of("id", id), this::mapRefund).stream().findFirst();
+    }
+
+    public Optional<DealerOrderRefundRecord> findRefundByFinanceId(String id) {
+        return jdbc.query("SELECT * FROM dealer_order_refunds WHERE finance_refund_id = :id", Map.of("id", id), this::mapRefund).stream().findFirst();
+    }
+
+    public long reservedRefundAmount(String paymentId) {
+        return jdbc.queryForObject("SELECT COALESCE(SUM(amount_cent),0) FROM dealer_order_refunds WHERE payment_id = :id AND status <> 'voided'",
+                Map.of("id", paymentId), Long.class);
+    }
+
+    public List<DealerOrderRefundRecord> listRefundsForPayment(String paymentId) {
+        return jdbc.query("SELECT * FROM dealer_order_refunds WHERE payment_id = :id ORDER BY id", Map.of("id", paymentId), this::mapRefund);
+    }
+
+    public void saveAllocation(DealerOverpaymentAllocationRecord allocation) {
+        jdbc.update("""
+                INSERT INTO dealer_order_overpayment_allocations
+                (id, overpayment_id, usage, amount_cent, target_order_id, confirmation_attachment_ids, confirmed_by, confirmed_at, note, refund_id)
+                VALUES (:id, :source, :usage, :amount, :target, CAST(:attachments AS jsonb), :actor, :at, :note, :refund)
+                """, new MapSqlParameterSource().addValue("id", allocation.id()).addValue("source", allocation.overpaymentId())
+                .addValue("usage", allocation.usage()).addValue("amount", allocation.amountCent()).addValue("target", allocation.targetOrderId())
+                .addValue("attachments", json(allocation.confirmationAttachmentIds())).addValue("actor", allocation.confirmedBy())
+                .addValue("at", ts(allocation.confirmedAt())).addValue("note", allocation.note()).addValue("refund", allocation.refundId()));
+    }
+
+    public List<DealerOverpaymentAllocationRecord> listAllocations(String overpaymentId) {
+        return jdbc.query("SELECT * FROM dealer_order_overpayment_allocations WHERE overpayment_id = :id ORDER BY confirmed_at, id",
+                Map.of("id", overpaymentId), this::mapAllocation);
+    }
+
+    public List<DealerOverpaymentAllocationRecord> listOrderAllocations(String orderId) {
+        return jdbc.query("SELECT * FROM dealer_order_overpayment_allocations WHERE target_order_id = :id ORDER BY confirmed_at, id",
+                Map.of("id", orderId), this::mapAllocation);
+    }
+
+    public void linkAllocationRefund(String allocationId, String refundId) {
+        jdbc.update("UPDATE dealer_order_overpayment_allocations SET refund_id = :refund WHERE id = :id AND refund_id IS NULL",
+                Map.of("id", allocationId, "refund", refundId));
+    }
+
+    private DealerOverpaymentAllocationRecord mapAllocation(ResultSet rs, int i) throws SQLException {
+        try {
+            return new DealerOverpaymentAllocationRecord(rs.getString("id"), rs.getString("overpayment_id"),
+                    rs.getString("usage"), rs.getLong("amount_cent"), rs.getString("target_order_id"),
+                    mapper.readValue(rs.getString("confirmation_attachment_ids"), mapper.getTypeFactory().constructCollectionType(List.class, String.class)),
+                    rs.getString("confirmed_by"), nullableInstant(rs, "confirmed_at"), rs.getString("note"), rs.getString("refund_id"));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("超收用途确认凭证无法读取", exception);
+        }
+    }
+
     private DealerOrderOverpaymentRecord mapOverpayment(ResultSet rs, int i) throws SQLException {
+        List<DealerOverpaymentAllocationRecord> allocations = listAllocations(rs.getString("id"));
+        long prepayment = 0, assigned = 0, applied = 0;
+        for (DealerOverpaymentAllocationRecord allocation : allocations) {
+            if ("prepayment".equals(allocation.usage())) {
+                assigned += allocation.amountCent();
+                prepayment += allocation.amountCent();
+            } else {
+                applied += allocation.amountCent();
+                if ("prepayment_offset".equals(allocation.usage())) prepayment -= allocation.amountCent();
+                else assigned += allocation.amountCent();
+            }
+        }
+        if ((allocations.isEmpty() && !"unconfirmed".equals(rs.getString("status")))
+                || assigned > rs.getLong("amount_cent") || prepayment < 0 || applied > rs.getLong("amount_cent")) {
+            throw com.complex.platform.common.api.ApiException.conflict("OVERPAYMENT_ALLOCATION_INTEGRITY_INVALID",
+                    "超收用途状态、分配事实或余额不一致，须先核实，不能当作未确认金额重新使用");
+        }
         return new DealerOrderOverpaymentRecord(rs.getString("id"), rs.getString("order_id"), rs.getString("dealer_id"), rs.getString("sales_entity_id"),
                 rs.getString("payment_id"), rs.getLong("amount_cent"), rs.getString("status"), rs.getString("target_order_id"), rs.getString("confirmed_by"),
-                nullableInstant(rs, "confirmed_at"), rs.getString("note"), nullableInstant(rs, "created_at"));
+                nullableInstant(rs, "confirmed_at"), rs.getString("note"), nullableInstant(rs, "created_at"),
+                rs.getLong("amount_cent") - assigned, prepayment, applied, allocations);
     }
 
     // ── 中心仓预留 / 释放 / 出库（ENUM:177「审核通过时按中心仓、商品和规格预留」；守卫式 UPDATE 防超卖，与 V312 预占同款） ──
@@ -309,6 +402,11 @@ public class JdbcDealerOrderRepository {
     public void updateArApItem(String arApItemId, long paidCent, long unpaidCent, String status) {
         jdbc.update("UPDATE ar_ap_items SET paid_amount_cent = :paid, unpaid_amount_cent = :unpaid, status = :status, updated_at = now() WHERE id = :id",
                 new MapSqlParameterSource().addValue("paid", paidCent).addValue("unpaid", unpaidCent).addValue("status", status).addValue("id", arApItemId));
+    }
+
+    private String json(Object value) {
+        try { return mapper.writeValueAsString(value); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException exception) { throw new IllegalStateException("无法记录经销资金明细", exception); }
     }
 
     private static Timestamp ts(Instant at) {

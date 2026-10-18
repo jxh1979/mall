@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -501,6 +501,9 @@ public class AuthorizationService implements CallerScopeResolver {
             java.util.function.Predicate<AccessRepository.PermissionEffect> grantBasis,
             java.util.function.BiPredicate<AccessRepository.PermissionEffect, Instant> inEffect) {
         Instant checkedAt = Instant.now();
+        if (accessRepository.isEmploymentBusinessBlocked(userId, checkedAt)) {
+            return new EffectivePermissions(userId, List.of(), List.of(), false, checkedAt);
+        }
         java.util.function.Supplier<java.util.Set<String>> daily = dailyPermissions();
         List<AccessRepository.PermissionEffect> active = accessRepository.findPermissionEffects(userId, checkedAt).stream()
                 .filter(effect -> inEffect.test(effect, checkedAt))
@@ -597,6 +600,9 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     private void requireMatchesSession(AccessActor actor, AccessRepository.UserIdentity identity) {
+        if (accessRepository.isEmploymentBusinessBlocked(actor.id(), Instant.now())) {
+            throw ApiException.forbidden("STAFF_BUSINESS_ACCESS_STOPPED", "停岗或离职已生效，员工业务权限已停止");
+        }
         if (!java.util.Objects.equals(actor.organizationId(), identity.organizationId())
                 || !java.util.Objects.equals(actor.merchantId(), identity.merchantId())
                 || !java.util.Objects.equals(actor.accountType(), identity.accountType())
@@ -1014,6 +1020,7 @@ public class AuthorizationService implements CallerScopeResolver {
             return false;
         }
         try {
+            if (accessRepository.isEmploymentBusinessBlocked(userId, Instant.now())) return false;
             AccessActor self = selfOrNull(userId);
             Optional<AccessRepository.UserIdentity> identity = self == null ? Optional.empty() : identityAtStart(self);
             boolean holds = holdsViaRoleFacts(userId, permissionCode);

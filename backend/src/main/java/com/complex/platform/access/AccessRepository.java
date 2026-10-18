@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import java.time.Instant;
 import java.util.List;
@@ -49,6 +49,11 @@ public interface AccessRepository {
     AccessUser createUser(AccessUser user);
 
     List<AccessUser> listUsers();
+
+    /** 内存夹具没有人事记录；真实仓储须同时核已生效状态与已批准到点的停离职。 */
+    default boolean isEmploymentBusinessBlocked(String userId, Instant checkedAt) {
+        return false;
+    }
 
     /**
      * Lists users belonging to the given organization. Null = platform admin (all users).

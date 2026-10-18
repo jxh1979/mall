@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.settlement;
 
 import static org.mockito.Mockito.doThrow;
@@ -37,7 +38,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * postBill 抛业务冲突(超池 draft 单)→ 409 SETTLEMENT_BILL_NOT_CONFIRMED 透传前端(与既有 config controller 鉴权测试同范式)。
  */
 @WebMvcTest(controllers = SettlementController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, SettlementControllerPostBillTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, SettlementControllerPostBillTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

@@ -1,6 +1,6 @@
 package com.complex.platform.auth;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -35,6 +35,16 @@ public class AuthService implements SessionIssuer {
     // Salted, work-factored hashing — never store unsalted digests, even for the dev provider.
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
     private final Duration accessTokenTtl;
+    private com.complex.platform.access.AccessRepository accessRepository;
+
+    @Autowired
+    public void setAccessRepository(com.complex.platform.access.AccessRepository repository) {
+        this.accessRepository = repository;
+    }
+
+    private boolean employmentBlocked(String userId) {
+        return accessRepository != null && accessRepository.isEmploymentBusinessBlocked(userId, Instant.now());
+    }
 
     @Autowired
     public AuthService(
@@ -142,7 +152,7 @@ public class AuthService implements SessionIssuer {
             if (!passwordEncoder.matches(request.password(), user.passwordHash())) {
                 throw ApiException.unauthorized("INVALID_CREDENTIALS", "账号或密码不正确");
             }
-            if (!"active".equals(user.status())) {
+            if (!"active".equals(user.status()) || employmentBlocked(user.id())) {
                 throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
 
@@ -201,7 +211,7 @@ public class AuthService implements SessionIssuer {
             }
 
             UserRecord user = usersById.get(session.userId());
-            if (user == null || !"active".equals(user.status())) {
+            if (user == null || !"active".equals(user.status()) || employmentBlocked(user.id())) {
                 throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
             }
 
@@ -303,7 +313,8 @@ public class AuthService implements SessionIssuer {
                 .filter(session -> "active".equals(session.status()))
                 .filter(session -> session.accessExpiresAt() == null || Instant.now().isBefore(session.accessExpiresAt()))
                 .map(SessionRecord::userId)
-                .map(usersById::get);
+                .map(usersById::get)
+                .filter(user -> "active".equals(user.status()) && !employmentBlocked(user.id()));
     }
 
     public void attachSession(HttpServletRequest request, String token) {

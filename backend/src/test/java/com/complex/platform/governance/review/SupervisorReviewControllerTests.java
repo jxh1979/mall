@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,7 +43,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = SupervisorReviewController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, SupervisorReviewControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, SupervisorReviewControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

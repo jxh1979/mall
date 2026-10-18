@@ -2,11 +2,12 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.LocalZone;
+import java.time.Instant;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -131,16 +132,42 @@ public class JdbcStaffRepository {
     }
 
     public void saveEmploymentStatusRevision(String reviewId, String profileId, String userId, String before, String after,
-            String reason, String actor) {
+            String reason, String actor, Instant effectiveAt) {
         jdbcTemplate.update("""
-                INSERT INTO staff_employment_status_revisions (review_id, profile_id, user_id, before_status, after_status, reason, initiated_by)
-                VALUES (:review, :profile, :user_id, :before, :after, :reason, :actor)
+                INSERT INTO staff_employment_status_revisions
+                    (review_id, profile_id, user_id, before_status, after_status, reason, initiated_by, effective_at)
+                VALUES (:review, :profile, :user_id, :before, :after, :reason, :actor, :effective_at)
                 """, new MapSqlParameterSource().addValue("review", reviewId).addValue("profile", profileId).addValue("user_id", userId)
-                .addValue("before", before).addValue("after", after).addValue("reason", reason).addValue("actor", actor));
+                .addValue("before", before).addValue("after", after).addValue("reason", reason).addValue("actor", actor)
+                .addValue("effective_at", timestampWithTimeZone(effectiveAt)));
+    }
+
+    public void lockEmploymentStatusSubmission(String profileId) {
+        jdbcTemplate.queryForList("SELECT id FROM staff_profiles WHERE id=:id FOR UPDATE", Map.of("id", profileId));
+        if (!jdbcTemplate.queryForList("""
+                SELECT r.review_id FROM staff_employment_status_revisions r
+                JOIN supervisor_review_decisions d ON d.review_id=r.review_id
+                WHERE r.profile_id=:id AND r.applied_at IS NULL AND d.review_status IN ('pending_review','approved')
+                """, Map.of("id", profileId)).isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.conflict("EMPLOYMENT_STATUS_PENDING", "该员工已有待审批或待生效的状态变更");
+        }
+    }
+
+    public List<String> dueEmploymentStatusReviews(Instant checkedAt) {
+        return jdbcTemplate.queryForList("""
+                SELECT r.review_id FROM staff_employment_status_revisions r
+                JOIN supervisor_review_decisions d ON d.review_id=r.review_id
+                WHERE r.applied_at IS NULL AND r.effective_at<=:at AND d.review_status='approved'
+                ORDER BY r.effective_at,r.review_id
+                """, Map.of("at", timestampWithTimeZone(checkedAt)), String.class);
     }
 
     public Optional<Map<String, Object>> lockPendingEmploymentStatusRevision(String reviewId) {
-        return jdbcTemplate.queryForList("SELECT * FROM staff_employment_status_revisions WHERE review_id = :review AND applied_at IS NULL FOR UPDATE",
+        return jdbcTemplate.queryForList("""
+                SELECT r.* FROM staff_employment_status_revisions r
+                JOIN supervisor_review_decisions d ON d.review_id=r.review_id
+                WHERE r.review_id=:review AND r.applied_at IS NULL AND d.review_status='approved' FOR UPDATE OF r
+                """,
                 Map.of("review", reviewId)).stream().findFirst();
     }
 

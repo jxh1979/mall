@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +46,9 @@ class HrApprovalChainJdbcIntegrationTests {
     @Autowired private SupervisorReviewService reviews;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private AccessRepository access;
+    @Autowired private com.complex.platform.auth.AuthService auth;
+    @Autowired private StaffEmploymentStatusJob employmentJob;
+    @Autowired private com.complex.platform.access.AuthorizationService authorization;
 
     private String suffix;
     private String employee;
@@ -308,6 +311,96 @@ class HrApprovalChainJdbcIntegrationTests {
                 new StaffEmploymentStatusRequest(key(), "suspended", "停岗调查")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DIRECT_SUPERVISOR_REQUIRED"));
         assertThat(employmentStatus()).isEqualTo("employed");
+    }
+
+    @Test
+    void employmentStopRevokesGrantedRolesEvenWithoutAHandOverRecipient() {
+        actAs(superiors.get(0));
+        var review = service.setEmploymentStatus(profileId,
+                new StaffEmploymentStatusRequest(key(), "departed", "离职生效"));
+        assertThat(access.findUserRoleIds(employee)).isNotEmpty();
+        for (String approver : List.of(superiors.get(1), superiors.get(2), hr)) approve(review.reviewId(), approver);
+        assertThat(employmentStatus()).isEqualTo("departed");
+        assertThat(access.findUserRoleIds(employee)).as("没有接手人也必须撤销原员工全部业务角色").isEmpty();
+    }
+
+    @Test
+    void employmentStopInvalidatesExistingBusinessSessions() {
+        auth.provisionUser(employee, employee, "staff-test-password", "staff", "project_main", null, "active");
+        var session = auth.login(new com.complex.platform.auth.AuthService.LoginRequest(employee, "staff-test-password", null, null, "web"));
+        assertThat(auth.authenticateToken(session.accessToken())).isPresent();
+        actAs(superiors.get(0));
+        var review = service.setEmploymentStatus(profileId,
+                new StaffEmploymentStatusRequest(key(), "suspended", "停岗生效"));
+        for (String approver : List.of(superiors.get(1), superiors.get(2), hr)) approve(review.reviewId(), approver);
+        assertThat(auth.authenticateToken(session.accessToken())).as("停岗后旧会话立即失效").isEmpty();
+        assertThatThrownBy(() -> auth.refresh(
+                new com.complex.platform.auth.AuthService.RefreshTokenRequest(session.refreshToken(), null), session.accessToken()))
+                .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void employmentStopRejectsPasswordLoginAfterApproval() {
+        auth.provisionUser(employee, employee, "staff-test-password", "staff", "project_main", null, "active");
+        actAs(superiors.get(0));
+        var review = service.setEmploymentStatus(profileId,
+                new StaffEmploymentStatusRequest(key(), "departed", "离职生效"));
+        for (String approver : List.of(superiors.get(1), superiors.get(2), hr)) approve(review.reviewId(), approver);
+        assertThatThrownBy(() -> auth.login(
+                new com.complex.platform.auth.AuthService.LoginRequest(employee, "staff-test-password", null, null, "web")))
+                .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void futureApprovedStopBlocksAtTheDeadlineEvenBeforeTheJobMaterializesRevocation() {
+        auth.provisionUser(employee, employee, "staff-test-password", "staff", "project_main", null, "active");
+        var session = auth.login(new com.complex.platform.auth.AuthService.LoginRequest(employee, "staff-test-password", null, null, "web"));
+        actAs(superiors.get(0));
+        var review = service.setEmploymentStatus(profileId, new StaffEmploymentStatusRequest(key(), "suspended", "未来生效",
+                java.time.Instant.now().plusSeconds(3600)));
+        for (String approver : List.of(superiors.get(1), superiors.get(2), hr)) approve(review.reviewId(), approver);
+        assertThat(employmentStatus()).isEqualTo("employed");
+        assertThat(auth.authenticateToken(session.accessToken())).isPresent();
+        assertThat(access.findUserRoleIds(employee)).isNotEmpty();
+        jdbc.update("UPDATE staff_employment_status_revisions SET effective_at=now()-interval '1 second' WHERE review_id=?",review.reviewId());
+        assertThat(employmentStatus()).as("模拟调度尚未落地").isEqualTo("employed");
+        assertThat(auth.authenticateToken(session.accessToken())).isEmpty();
+        assertThat(authorization.holdsPermissionViaRole(employee,"staff.profile.review")).isFalse();
+        assertThatThrownBy(()->auth.login(new com.complex.platform.auth.AuthService.LoginRequest(employee,"staff-test-password",null,null,"web"))).isInstanceOf(ApiException.class);
+        assertThatThrownBy(()->access.assignUserRole(employee,"role_m010_fixture")).isInstanceOf(ApiException.class);
+        actAs(hr);
+        employmentJob.runOnce(java.time.Instant.now());
+        assertThat(employmentStatus()).isEqualTo("suspended");
+        assertThat(access.findUserRoleIds(employee)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT applied_at IS NOT NULL FROM staff_employment_status_revisions WHERE review_id=?",Boolean.class,review.reviewId())).isTrue();
+    }
+
+    @Test
+    void stopRevokesFutureTemporaryAndTemplateAndIndividualGrantsWithoutRevivingThemOnReturn() {
+        var now=java.time.Instant.now();
+        String temporary=UUID.randomUUID().toString(),template="tpl_stop_"+suffix;
+        jdbc.update("INSERT INTO permission_templates(id,template_name,template_code,updated_at) VALUES(?,'停权测试模板',?,now())",template,template);
+        jdbc.update("INSERT INTO permission_template_items(template_id,permission_code,effect) VALUES(?,'staff.profile.view','grant')",template);
+        var applied=access.applyTemplate(template,List.of(employee),now.plusSeconds(7200),now.plusSeconds(10800),false,initiator);
+        access.createTemporaryGrant(new com.complex.platform.access.TemporaryGrant(temporary,employee,List.of("staff.profile.view"),
+                now.plusSeconds(7200),now.plusSeconds(10800),false,false,"active","待生效",initiator,now,null,null));
+        access.saveUserPermissionOverrides(employee,List.of("staff.profile.view"),AccessRepository.Effect.GRANT,"单独授予",initiator);
+        access.saveUserPermissionOverrides(employee,List.of("staff.profile.submit"),AccessRepository.Effect.DENY,"明确拒绝保留",initiator);
+        actAs(superiors.get(0));
+        var review=service.setEmploymentStatus(profileId,new StaffEmploymentStatusRequest(key(),"suspended","停岗"));
+        for(String approver:List.of(superiors.get(1),superiors.get(2),hr)) approve(review.reviewId(),approver);
+        assertThat(jdbc.queryForObject("SELECT status FROM temporary_permission_grants WHERE grant_group_id=?",String.class,temporary)).isEqualTo("revoked");
+        assertThat(jdbc.queryForObject("SELECT status FROM permission_template_applications WHERE id=?",String.class,applied.get(0).id())).isEqualTo("revoked");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_permission_overrides WHERE user_id=? AND effect='grant'",Integer.class,employee)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_permission_overrides WHERE user_id=? AND effect='deny'",Integer.class,employee)).isEqualTo(1);
+        actAs(superiors.get(0));
+        var returned=service.setEmploymentStatus(profileId,new StaffEmploymentStatusRequest(key(),"employed","恢复在职"));
+        for(String approver:List.of(superiors.get(1),superiors.get(2),hr)) approve(returned.reviewId(),approver);
+        assertThat(employmentStatus()).isEqualTo("employed");
+        assertThat(access.findUserRoleIds(employee)).isEmpty();
+        assertThat(access.findActiveTemplateApplicationIds(employee)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT status FROM temporary_permission_grants WHERE grant_group_id=?",String.class,temporary)).isEqualTo("revoked");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_permission_overrides WHERE user_id=? AND effect='grant'",Integer.class,employee)).isZero();
     }
 
     // ── helpers ──

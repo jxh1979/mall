@@ -1,10 +1,11 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
+import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
-import { PermissionButton } from "../security/Can";
+import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
 /**
@@ -15,8 +16,8 @@ type DealerRow = { id: string; dealerName?: string; status?: string; creditSuspe
 type ContractRow = { id: string; contractNo?: string; creditTerm?: boolean; firstPaymentRatioBps?: number | null; firstPaymentAmountCent?: number | null; firstPaymentDeadlineDays?: number | null; balanceDueDays?: number | null; freightCent?: number | null; freeShippingThresholdCent?: number | null; freightBearer?: string; freightTemplateVersion?: number; termsVersion?: number; contractSignedAt?: string | null; firstPaymentAnchor?: string | null; firstPaymentFixedAt?: string | null; balanceDueAnchor?: string | null; balanceDueFixedAt?: string | null };
 type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null; returnedAmountCent?: number; contractSnapshot?: ContractRow | null };
 type PaymentRow = { id: string; method?: string; amountCent?: number; status?: string; appliedCent?: number; verifiedBy?: string | null; referenceNo?: string | null };
-type RefundRow = { id: string; paymentId?: string; amountCent?: number; status?: string; reviewId?: string | null; executedBy?: string | null };
-type OverpaymentRow = { id: string; orderId?: string; amountCent?: number; status?: string; targetOrderId?: string | null };
+type RefundRow = { id: string; paymentId?: string; amountCent?: number; status?: string; reviewId?: string | null; executedBy?: string | null; financeRefundId?: string | null };
+type OverpaymentRow = { id: string; orderId?: string; amountCent?: number; status?: string; targetOrderId?: string | null; unconfirmedAmountCent?: number; prepaymentBalanceCent?: number; appliedAmountCent?: number; allocations?: { id: string; usage: string; amountCent: number; targetOrderId?: string | null; refundId?: string | null; confirmationAttachmentIds?: string[] }[] };
 
 const ANCHORS: Record<string, string> = { contract_signed: "合同签署", order_created: "订单创建", payment_notified: "通知付款", shipped: "实际出库", signed: "实际签收", fixed_date: "合同约定固定截止" };
 const netDue = (order: OrderRow) => Math.max(0, (order.totalAmountCent ?? 0) - (order.returnedAmountCent ?? 0));
@@ -28,9 +29,9 @@ const ORDER_STATUS: Record<string, string> = {
   returning: "退货中", partially_returned: "部分退货", returned: "已退货",
 };
 const PAYMENT_METHOD: Record<string, string> = { bank_transfer: "对公转账", platform_online: "平台线上支付" };
-const PAYMENT_STATUS: Record<string, string> = { pending_verification: "待核验", verified: "已核验", rejected: "核验不通过", late: "取消后迟到（待退款）" };
-const REFUND_STATUS: Record<string, string> = { pending_request: "待发起审批", pending_approval: "退款审批中", approved: "已批准待执行", rejected: "审批驳回", refunded: "已退款" };
-const OVERPAYMENT_STATUS: Record<string, string> = { unconfirmed: "用途未确认", prepayment: "已转预付款", offset_applied: "已抵扣指定订单" };
+const PAYMENT_STATUS: Record<string, string> = { pending_verification: "待核验", verified: "已核验", rejected: "核验不通过", late: "取消后到账待核实" };
+const REFUND_STATUS: Record<string, string> = { pending_request: "待发起审批", pending_approval: "退款审批中", approved: "已批准待执行", rejected: "审批驳回", processing: "退款处理中", failed: "退款失败待办理", voided: "核实未到账，退款作废", refunded: "已退款" };
+const OVERPAYMENT_STATUS: Record<string, string> = { unconfirmed: "用途未确认", partially_allocated: "部分已分配", prepayment: "已转预付款", offset_applied: "已抵扣指定订单" };
 const DEALER_STATUS: Record<string, string> = { pending_submission: "待提交", under_review: "审核中", approved: "已通过", rejected: "已驳回", deactivated: "已停用" };
 
 function money(cent?: number | null) {
@@ -45,7 +46,7 @@ function cnTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? value : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
+export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
   const [dealers, setDealers] = React.useState<DealerRow[]>([]);
   const [dealer, setDealer] = React.useState<DealerRow | null>(null);
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
@@ -55,6 +56,17 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
   const [refunds, setRefunds] = React.useState<RefundRow[]>([]);
   const [formError, setFormError] = React.useState("");
+  const [financeRefundId, setFinanceRefundId] = React.useState<string | null>(null);
+  const [allocationSource, setAllocationSource] = React.useState<OverpaymentRow | null>(null);
+  const [allocationUsage, setAllocationUsage] = React.useState("prepayment");
+  const [allocationAmount, setAllocationAmount] = React.useState("");
+  const [allocationTarget, setAllocationTarget] = React.useState("");
+  const [allocationNote, setAllocationNote] = React.useState("");
+  const [allocationKey, setAllocationKey] = React.useState("");
+  const [allocationEvidence, setAllocationEvidence] = React.useState<{ id: string; name: string }[]>([]);
+  const [allocationBusy, setAllocationBusy] = React.useState(false);
+  const canReadFinance = useCan(effectivePermissions, ["finance.ar_ap.view"]);
+  const canUploadConfirmation = useCan(effectivePermissions, ["evidence.attachment.create", "dealer.order.payment.verify"]);
   // 条款
   const [termsContract, setTermsContract] = React.useState("");
   const [creditTerm, setCreditTerm] = React.useState(false);
@@ -100,8 +112,54 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
     }
   }
 
+  function openAllocation(source: OverpaymentRow, usage: string) {
+    setAllocationSource(source); setAllocationUsage(usage); setAllocationAmount(""); setAllocationTarget("");
+    setAllocationNote(""); setAllocationEvidence([]); setAllocationKey(key());
+  }
+  async function uploadConfirmation(files: FileList | null) {
+    if (!allocationSource || !files?.length || !canUploadConfirmation || allocationBusy) return;
+    setAllocationBusy(true);
+    try {
+      if (!api.postForm) throw new Error("当前客户端不支持上传凭证");
+      for (const file of Array.from(files)) {
+        const form = new FormData(); form.append("file", file); form.append("business_type", "dealer_overpayment");
+        form.append("business_id", allocationSource.id); form.append("attachment_role", "other");
+        const saved = await api.postForm<{ id: string }>("/api/v1/evidence/attachments/upload", form);
+        setAllocationEvidence(previous => [...previous, { id: saved.id, name: file.name }]);
+      }
+    } catch (error) { setFormError(error instanceof Error ? error.message : "确认凭证上传失败"); }
+    finally { setAllocationBusy(false); }
+  }
+  async function saveAllocation() {
+    if (!allocationSource || allocationBusy) return;
+    const amountCent = Math.round(Number(allocationAmount) * 100);
+    if (!/^\d+(\.\d{1,2})?$/.test(allocationAmount) || !Number.isSafeInteger(amountCent) || amountCent <= 0
+        || !allocationNote.trim() || allocationEvidence.length === 0 || (allocationUsage !== "prepayment" && !allocationTarget.trim())) {
+      setFormError("须填写正金额、双方确认说明及凭证；抵扣时还须填写目标订单。"); return;
+    }
+    setAllocationBusy(true);
+    await run("dealer_order_overpayment_use_confirmed", async () => {
+      await api.post("/api/v1/dealers/overpayments/" + allocationSource.id + "/use", {
+        idempotencyKey: allocationKey, usage: allocationUsage, amountCent, targetOrderId: allocationUsage === "prepayment" ? undefined : allocationTarget.trim(),
+        note: allocationNote.trim(), confirmationAttachmentIds: allocationEvidence.map(item => item.id),
+      });
+      if (dealer) await loadDealer(dealer.id);
+      setAllocationSource(null);
+      return { 金额: money(amountCent), 说明: "按双方确认分配；不重复确认现金收款" };
+    });
+    setAllocationBusy(false);
+  }
+  async function prepareRefund(row: RefundRow) {
+    await run("dealer_order_refund_executed", async () => {
+      const saved = await api.post<RefundRow>("/api/v1/dealers/refunds/" + row.id + "/execute", { idempotencyKey: key() });
+      if (order) await loadOrder(order.id);
+      if (saved.financeRefundId) setFinanceRefundId(saved.financeRefundId);
+      return { 退款: row.id, 财务退款编号: saved.financeRefundId, 状态: "已交财务待办理，尚未结清" };
+    });
+  }
+
   async function selectDealer(row: DealerRow) {
-    setDealer(row);
+    setDealer(row); setFinanceRefundId(null); setAllocationSource(null);
     setOrder(null); setPayments([]); setRefunds([]);
     await loadDealer(row.id);
   }
@@ -308,7 +366,7 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
                         <td>{p.id}</td><td>{label(PAYMENT_METHOD, p.method)}</td><td>{money(p.amountCent)}</td><td>{money(p.appliedCent)}</td>
                         <td data-testid={`payment-status-${p.id}`}>{label(PAYMENT_STATUS, p.status)}</td><td>{p.verifiedBy ?? "—"}</td><td>{p.referenceNo ?? "—"}</td>
                         <td>
-                          {p.status === "pending_verification" ? (
+                          {["pending_verification", "late"].includes(p.status ?? "") ? (
                             <>
                               <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={`payment-verify-${p.id}`} onClick={() => void act(`/api/v1/dealers/payments/${p.id}/verify`, { decision: "approve" }, "dealer_order_payment_verified", { 到账: p.id, 结论: "核验通过" })}>核验通过</PermissionButton>
                               <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={`payment-reject-${p.id}`} onClick={() => void act(`/api/v1/dealers/payments/${p.id}/verify`, { decision: "reject", note: prompt("不通过原因：") || undefined }, "dealer_order_payment_verified", { 到账: p.id, 结论: "核验不通过" })}>不通过</PermissionButton>
@@ -331,7 +389,8 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
                         <td>{r.id}</td><td>{r.paymentId ?? "—"}</td><td>{money(r.amountCent)}</td><td data-testid={`refund-status-${r.id}`}>{label(REFUND_STATUS, r.status)}</td><td>{r.reviewId ?? "—"}</td><td>{r.executedBy ?? "—"}</td>
                         <td>
                           {r.status === "pending_request" || r.status === "rejected" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={`refund-approval-${r.id}`} onClick={() => void act(`/api/v1/dealers/refunds/${r.id}/approval`, { finalApproverId: prompt("最终审批人账号（可空）：") || undefined }, "dealer_order_refund_requested", { 退款: r.id, 状态: "退款审批中" })}>发起退款审批</PermissionButton> : null}
-                          {r.status === "approved" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.refund.execute"]} data-testid={`refund-execute-${r.id}`} onClick={() => void act(`/api/v1/dealers/refunds/${r.id}/execute`, { referenceNo: prompt("退款流水号：") || undefined }, "dealer_order_refund_executed", { 退款: r.id, 状态: "已退款" })}>执行退款</PermissionButton> : null}
+                          {r.status === "approved" && !r.financeRefundId ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.refund.execute"]} data-testid={"refund-execute-" + r.id} onClick={() => void prepareRefund(r)}>交财务办理原路退款</PermissionButton> : null}
+                          {r.financeRefundId ? <><span>财务退款编号：{r.financeRefundId}</span><PermissionButton permissionsState={effectivePermissions} permissions={["finance.ar_ap.view"]} onClick={() => setFinanceRefundId(r.financeRefundId!)}>查看财务办理</PermissionButton></> : null}
                         </td>
                       </tr>
                     ))}
@@ -341,27 +400,35 @@ export function DealerOrderFulfillmentPage({ api, setGlobalError, setActionResul
             </>
           ) : null}
 
+          {financeRefundId && canReadFinance ? <FinanceRefundPanel key={financeRefundId} api={api} user={user} effectivePermissions={effectivePermissions} setGlobalError={setGlobalError} setActionResult={setActionResult} ledgerItem={null} initialRefundId={financeRefundId} onChanged={() => { if (order) void loadOrder(order.id); }} /> : null}
           <h3>超收（用途未确认前不自动抵账）</h3>
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="overpayment-table">
-              <thead><tr><th>超收</th><th>来源订单</th><th>金额</th><th>状态</th><th>抵扣订单</th><th>操作</th></tr></thead>
-              <tbody>
-                {overpayments.map((v) => (
-                  <tr key={v.id} data-testid={`overpayment-row-${v.id}`}>
-                    <td>{v.id}</td><td>{v.orderId ?? "—"}</td><td>{money(v.amountCent)}</td><td data-testid={`overpayment-status-${v.id}`}>{label(OVERPAYMENT_STATUS, v.status)}</td><td>{v.targetOrderId ?? "—"}</td>
-                    <td>
-                      {v.status === "unconfirmed" ? (
-                        <>
-                          <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={`overpayment-prepay-${v.id}`} onClick={() => void run("dealer_order_overpayment_use_confirmed", async () => { await api.post(`/api/v1/dealers/overpayments/${v.id}/use`, { idempotencyKey: key(), usage: "prepayment" }); if (dealer) await loadDealer(dealer.id); return { 超收: v.id, 用途: "转预付款" }; })}>转预付款</PermissionButton>
-                          <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={`overpayment-offset-${v.id}`} onClick={() => void run("dealer_order_overpayment_use_confirmed", async () => { const target = prompt("抵扣的订单 id（同一经销商、同一销售主体）："); await api.post(`/api/v1/dealers/overpayments/${v.id}/use`, { idempotencyKey: key(), usage: "offset_order", targetOrderId: target }); if (dealer) await loadDealer(dealer.id); return { 超收: v.id, 用途: "抵扣指定订单", 订单: target }; })}>抵扣指定订单</PermissionButton>
-                        </>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              <thead><tr><th>超收／来源订单</th><th>原超收金额</th><th>未分配</th><th>可用预付款</th><th>累计抵用</th><th>状态与记录</th><th>操作</th></tr></thead>
+              <tbody>{overpayments.map(v => <tr key={v.id} data-testid={"overpayment-row-" + v.id}>
+                <td>{v.id}<br />{v.orderId}</td><td>{money(v.amountCent)}</td><td>{money(v.unconfirmedAmountCent)}</td><td>{money(v.prepaymentBalanceCent)}</td><td>{money(v.appliedAmountCent)}</td>
+                <td><span data-testid={"overpayment-status-" + v.id}>{label(OVERPAYMENT_STATUS, v.status)}</span>
+                  <details><summary>分配记录</summary><ul>{(v.allocations ?? []).map(item => <li key={item.id}>{item.usage === "prepayment" ? "转预付款" : item.usage === "prepayment_offset" ? "预付款抵用" : "指定订单抵用"} {money(item.amountCent)}{item.targetOrderId ? "，订单 " + item.targetOrderId : ""}{item.refundId ? "，原路退款 " + item.refundId + "（不回预付余额）" : ""}</li>)}</ul></details>
+                </td><td>
+                  {(v.unconfirmedAmountCent ?? 0) > 0 ? <>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={"overpayment-prepay-" + v.id} onClick={() => openAllocation(v, "prepayment")}>转预付款</PermissionButton>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={"overpayment-offset-" + v.id} onClick={() => openAllocation(v, "offset_order")}>抵扣指定订单</PermissionButton>
+                  </> : null}
+                  {(v.prepaymentBalanceCent ?? 0) > 0 ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid={"overpayment-apply-" + v.id} onClick={() => openAllocation(v, "prepayment_offset")}>使用预付款</PermissionButton> : null}
+                </td>
+              </tr>)}</tbody>
             </table>
           </div>
+          {allocationSource ? <fieldset disabled={allocationBusy} data-testid="overpayment-allocation-form"><legend>按双方确认分配资金</legend>
+            <p>原收款：{allocationSource.id}。目标订单取消时，抵用金额沿原收款路径退现金，不回可用预付款。</p>
+            <label>本次金额（元）<input data-testid="allocation-amount" value={allocationAmount} onChange={event => setAllocationAmount(event.target.value)} /></label>
+            {allocationUsage !== "prepayment" ? <label>同一经销商、销售主体的目标订单编号<input data-testid="allocation-target" value={allocationTarget} onChange={event => setAllocationTarget(event.target.value)} /></label> : null}
+            <label>双方确认说明<input data-testid="allocation-note" value={allocationNote} onChange={event => setAllocationNote(event.target.value)} /></label>
+            <label>上传双方确认凭证<input type="file" multiple data-testid="allocation-evidence" disabled={!canUploadConfirmation || allocationBusy} onChange={event => { void uploadConfirmation(event.target.files); event.target.value = ""; }} /></label>
+            <ul>{allocationEvidence.map(item => <li key={item.id}>{item.name}</li>)}</ul>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid="allocation-save" onClick={() => void saveAllocation()}>确认本次分配</PermissionButton>
+            <button type="button" onClick={() => setAllocationSource(null)}>取消填写</button>
+          </fieldset> : null}
         </>
       ) : null}
     </section>

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.42
+// 文件版本：V0.43
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -128,6 +128,41 @@ public class AccessService {
         this.credentialProvisioner = credentialProvisioner;
         this.supervisorReviewService = supervisorReviewService;
         this.grantApprovalEnabled = grantApprovalEnabled;
+    }
+
+    /** 仅人事已批准生效调用；撤权与人事落地共用事务，交接不在此事务内。 */
+    @Transactional
+    public void revokeEmploymentGrants(String userId, String reviewId, String actorId, Instant now) {
+        repository.lockGrantAuthorizationFacts();
+        repository.lockAccessUsers(List.of(userId));
+        if (!repository.isEmploymentBusinessBlocked(userId, now)) {
+            throw ApiException.conflict("STAFF_STOP_NOT_EFFECTIVE", "停岗或离职尚未批准生效");
+        }
+        var effects = repository.findPermissionEffects(userId, now);
+        if (repository.findUserPositionAssignment(userId).isPresent()) {
+            repository.replacePositionGrants(userId, null, null, List.of(), actorId, now);
+        }
+        reconcilePositionHolds(userId, null, List.of(), Set.of(), reviewId, null, actorId, now);
+        List<String> roles = repository.findUserRoleIds(userId);
+        roles.forEach(role -> repository.unassignUserRole(userId, role));
+        List<String> applications = repository.findActiveTemplateApplicationIds(userId);
+        if (!applications.isEmpty()) repository.revokeTemplateApplications(userId, applications, actorId, now);
+        var temporary = effects.stream().filter(e -> e.source() == AccessRepository.Source.TEMPORARY_GRANT)
+                .map(AccessRepository.PermissionEffect::sourceId).distinct().toList();
+        temporary.forEach(id -> repository.revokeTemporaryGrant(id, actorId, now));
+        var overrides = effects.stream().filter(e -> e.source() == AccessRepository.Source.USER_OVERRIDE
+                        && e.effect() == AccessRepository.Effect.GRANT)
+                .map(AccessRepository.PermissionEffect::permissionCode).distinct().toList();
+        if (!overrides.isEmpty()) repository.deleteUserPermissionOverrides(userId, overrides, AccessRepository.Effect.GRANT);
+        for (var pending : repository.listGrantRequestsForTarget(userId)) {
+            if (!"pending".equals(pending.status())) continue;
+            repository.saveGrantRequest(withDecision(pending, "rejected", actorId, now));
+            if (pending.reviewId() != null) requireSupervisorReviewService().cancelPendingReview(
+                    pending.reviewId(), actorId, "停岗或离职生效，原待批授权作废");
+        }
+        auditEventService.recordSuccess("staff.business_access.revoked", "staff.profile.review", "access_user", userId,
+                null, reviewId, Map.of("review_id", reviewId, "roles", roles, "template_applications", applications,
+                        "temporary_grants", temporary, "overrides", overrides));
     }
 
     public PageResponse<PermissionTemplate> listPermissionTemplates() {

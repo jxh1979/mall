@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.integration;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -32,7 +33,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = OpenPlatformController.class)
-@Import({GlobalExceptionHandler.class, SecurityConfig.class, OpenPlatformControllerTests.TestBeans.class})
+@Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, OpenPlatformControllerTests.TestBeans.class})
 @ImportAutoConfiguration({
         SecurityAutoConfiguration.class,
         SecurityFilterAutoConfiguration.class,

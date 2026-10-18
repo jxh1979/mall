@@ -1,5 +1,7 @@
 package com.complex.platform.common.api;
 
+// 文件版本：V0.01
+
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -425,6 +427,8 @@ public final class FieldLabels {
         p("binding_scope", "绑定范围");
         p("window_key", "窗口标识");
         p("window_type", "窗口类型");
+        p("message_id", "消息");
+        p("preview_id", "清理预览");
         p("message_template", "短信模板");
         p("notice_id", "公告");
         p("template_id", "模板");

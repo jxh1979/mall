@@ -1,3 +1,4 @@
+# 文件版本：V0.01
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -23,7 +24,7 @@ spring:
     password: ${COMPLEX_DATABASE_OWNER_PASSWORD:${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}}
 
 # AUD-033 配套(HTML冲突复核用户拍板): 承接业务全景图强制"系统自动"的定时作业, prod开启;
-# 企微会话留存(compliance.wecom-retention)按用户选择保持默认关。
+# 企微工作会话永久保存，不运行自动到期清理任务。
 ticket.order.expiry.scheduled.enabled: true
 settlement.expiry.scheduled.enabled: true
 settlement.reconciliation.scheduled.enabled: true

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -11,11 +11,11 @@ const CREATE = ["finance.refund.create"];
 const CONFIRM = ["finance.refund.create", "finance.payment.register"];
 const STATUS: Record<string, string> = { requested: "待办理，尚未结清", processing: "处理中，结果待核实", failed: "明确失败，仍未结清", success: "退款成功，已结清" };
 const OPERATIONS: Record<string, string> = { submit: "首次发起", retry: "原单重试", query: "渠道查询", confirm: "凭证核实", execution: "经办人执行登记" };
-const CHANNELS: Record<string, string> = { cash: "现金", pos: "刷卡", wechat: "微信", alipay: "支付宝", bank_transfer: "银行转账", aggregate_pay: "聚合支付", original: "原支付路径" };
+const CHANNELS: Record<string, string> = { cash: "现金", pos: "刷卡", wechat: "微信", alipay: "支付宝", bank_transfer: "银行转账", aggregate_pay: "聚合支付", platform_online: "平台线上支付", original: "原支付路径" };
 const yuan = (cent: number) => (cent / 100).toFixed(2);
 const stateLabel = (status: string) => STATUS[status] ?? "状态待核实";
 
-export function FinanceRefundPanel({ api, user, effectivePermissions, setActionResult, setGlobalError, ledgerItem, onChanged }: AdminPageProps & { ledgerItem: FinanceLedgerRow | null; onChanged: () => void }) {
+export function FinanceRefundPanel({ api, user, effectivePermissions, setActionResult, setGlobalError, ledgerItem, onChanged, initialRefundId }: AdminPageProps & { ledgerItem: FinanceLedgerRow | null; onChanged: () => void; initialRefundId?: string }) {
   const [rows, setRows] = React.useState<FinanceRefundRow[]>([]);
   const [payments, setPayments] = React.useState<ArApPaymentRow[]>([]);
   const [paymentId, setPaymentId] = React.useState("");
@@ -34,7 +34,12 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
   const [paymentsLoading, setPaymentsLoading] = React.useState(false);
   const canUpload = useCan(effectivePermissions, ["evidence.attachment.create"]);
   const canReadEvidence = useCan(effectivePermissions, ["evidence.timeline.view"]);
-  const refunds = useAdminResource(async () => setRows(await api.get<FinanceRefundRow[]>("/api/v1/finance/refunds")), { onError: setGlobalError, fallbackMessage: "退款台账读取失败" });
+  const refunds = useAdminResource(async () => {
+    if (initialRefundId) {
+      const current = await api.get<FinanceRefundDetail>("/api/v1/finance/refunds/" + encodeURIComponent(initialRefundId));
+      setRows([current.refund]); setDetail(current);
+    } else setRows(await api.get<FinanceRefundRow[]>("/api/v1/finance/refunds"));
+  }, { onError: setGlobalError, fallbackMessage: "退款台账读取失败" });
 
   React.useEffect(() => {
     let active = true;
@@ -142,10 +147,10 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
 
   return <section aria-label="退款办理" data-testid="finance-refund-panel">
     <h2>退款办理</h2>
-    <p>先选择上方应收台账，再选择原收款流水。结果未明确时查询原单；明确失败才在原单重试，实际退款成功才结清。</p>
+    <p>{initialRefundId ? "该退款已完成原业务审批；按原收款路径办理，实际成功才结清。" : "先选择上方应收台账，再选择原收款流水。结果未明确时查询原单；明确失败才在原单重试，实际退款成功才结清。"}</p>
     {errorText ? <p role="alert" className="admin-inline-error">{errorText}</p> : null}
     {notice ? <p role="status">{notice}</p> : null}
-    <fieldset disabled={blocked || paymentsLoading}>
+    {!initialRefundId ? <fieldset disabled={blocked || paymentsLoading}>
       <legend>发起原路退款</legend>
       <div className="admin-form-row">
         <label>原收款流水<select value={paymentId} onChange={(event) => setPaymentId(event.target.value)}><option value="">{paymentsLoading ? "正在读取流水" : "请选择原收款流水"}</option>{payments.map((item) => <option key={item.id} value={item.id}>{item.id} · {CHANNELS[item.paymentMethod] ?? "其他支付渠道"} · ¥{yuan(item.amountCent)}</option>)}</select></label>
@@ -153,7 +158,7 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
         <label>退款原因<input value={reason} onChange={(event) => setReason(event.target.value)} /></label>
         <HighRiskConfirm label="发起原路退款" impact="按所选原收款流水退回，未结退款继续占用可退额度。" permissionsState={effectivePermissions} permissions={CREATE} disabled={blocked || paymentsLoading} precheck={validateCreate} onConfirm={() => void submit("create")} />
       </div>
-    </fieldset>
+    </fieldset> : null}
     <label>受管设备编号（现金或刷卡必填）<input value={deviceId} onChange={(event) => setDeviceId(event.target.value)} disabled={blocked} /></label>
     <AdminDataState loading={refunds.loading} error={refunds.error} empty={rows.length === 0} onRetry={refunds.reload}>
       <div className="admin-table-scroll"><table className="admin-table"><caption>退款台账</caption><thead><tr><th>退款单号</th><th>原收款、渠道回流或储值账户</th><th>金额（元）</th><th>状态</th><th>办理</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.id}</td><td>{row.targetId}</td><td>{yuan(row.refundAmountCent)}</td><td>{stateLabel(row.status)}</td><td><button type="button" disabled={blocked} aria-label={`查看退款 ${row.id}`} onClick={() => void showDetail(row.id)}>查看及办理</button></td></tr>)}</tbody></table></div>

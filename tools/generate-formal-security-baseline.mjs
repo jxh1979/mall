@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -437,7 +437,7 @@ function findingsTable() {
 
 const openapiHash = sha256(openapiText);
 
-const baseline = `# 正式安全基线 V1.02
+const baseline = `# 正式安全基线 V1.03
 
 > 本报告由 \`tools/generate-formal-security-baseline.mjs\` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
@@ -563,13 +563,13 @@ ${findingsTable()}
 
 | Gate | 目的 | 命令 |
 |---|---|---|
-| 安全基线生成 | 生成 V1.02 报告和 findings register | \`npm run docs:security-baseline\` |
+| 安全基线生成 | 生成 V1.03 报告和 findings register | \`npm run docs:security-baseline\` |
 | 安全基线验证 | 检查章节、计数、发现状态、密钥泄漏 | \`npm run verify:security-baseline\` |
 | P0 契约验证 | 检查 OpenAPI、追溯附录、客户端契约 | \`npm run verify:p0-contract\` |
 | P0 全量验证 | 检查后端、Web、Android、APK | \`/opt/complex/scripts/complex-verify-p0.sh\` |
 `;
 
-const findingsRegister = `# Findings Register V1.02
+const findingsRegister = `# Findings Register V1.03
 
 > 本清单由 \`tools/generate-formal-security-baseline.mjs\` 生成。P0 未修复或未正式豁免前，不允许进入公开生产安全准入。
 

@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -62,6 +62,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
 
     @Autowired private DealerService dealerService;
+    @Autowired private com.complex.platform.finance.FinanceService financeService;
     @Autowired private DealerOrderService orders;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private JdbcTemplate jdbc;
@@ -93,7 +94,7 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
         String role = "role_do_" + suffix;
         jdbc.update("INSERT INTO roles(id, role_name, description, data_scope, status, created_at) VALUES (?, ?, '经销订单测试', 'platform', 'active', now())",
                 role, "经销订单测试角色" + System.nanoTime());
-        jdbc.update("INSERT INTO role_permissions(role_id, permission_code) SELECT ?, permission_code FROM permissions WHERE permission_code LIKE 'dealer.%' OR permission_code = 'governance.supervisor_review.approve' ON CONFLICT DO NOTHING", role);
+        jdbc.update("INSERT INTO role_permissions(role_id, permission_code) SELECT ?, permission_code FROM permissions WHERE permission_code LIKE 'dealer.%' OR permission_code = 'governance.supervisor_review.approve' OR permission_code LIKE 'finance.%' OR permission_code LIKE 'evidence.%' ON CONFLICT DO NOTHING", role);
         for (String user : List.of(sales, reviewer, finance, warehouse, refundApprover)) {
             access.createUser(new AccessUser(user, user, "platform_admin", "project_main", null, "active", Instant.now()));
             access.assignUserRole(user, role);
@@ -241,6 +242,7 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
         assertThat(orders.getOrder(draft.id()).status()).isEqualTo("pending_refund");
         List<DealerOrderRefundRecord> twoRefunds = orders.listRefunds(draft.id()).items();
         assertThat(twoRefunds).hasSize(2);
+        orders.verifyPayment(late.id(), new DealerPaymentVerifyRequest(key(), "approve", "核实迟到款实际到账"));
 
         // 既有退款审批（refund 策略：直接上级节点 + 角色节点）：逐节点通过直至整单通过
         for (DealerOrderRefundRecord refund : twoRefunds) {
@@ -253,11 +255,15 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
         assertThat(orders.listRefunds(draft.id()).items()).extracting(DealerOrderRefundRecord::status).containsOnly("approved");
         DealerOrderRefundRecord first = orders.listRefunds(draft.id()).items().stream().filter(r -> r.amountCent() == 1_000L).findFirst().orElseThrow();
         actAs(finance);
-        assertThatThrownBy(() -> orders.executeRefund(first.id(), new DealerRefundExecuteRequest(key(), "RF-1")))
+        assertThatThrownBy(() -> isolatedFailure(() -> orders.executeRefund(first.id(), new DealerRefundExecuteRequest(key()))))
                 .as("退款执行人与到账核验人不得为同一人").isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_SOD_SAME_PERSON"));
         actAs(warehouse);
         for (DealerOrderRefundRecord refund : orders.listRefunds(draft.id()).items()) {
-            orders.executeRefund(refund.id(), new DealerRefundExecuteRequest(key(), "RF-" + refund.id()));
+            DealerOrderRefundRecord prepared = orders.executeRefund(refund.id(), new DealerRefundExecuteRequest(key()));
+            assertThat(prepared.status()).isEqualTo("approved");
+            assertThat(orders.getOrder(draft.id()).status()).isEqualTo("pending_refund");
+            executeAndConfirmRefund(prepared, "success");
+            actAs(warehouse);
         }
         assertThat(orders.listRefunds(draft.id()).items()).extracting(DealerOrderRefundRecord::status).containsOnly("refunded");
         assertThat(orders.getOrder(draft.id()).status()).as("退款完成后订单回到已取消").isEqualTo("cancelled");
@@ -419,10 +425,10 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
         assertThat(overs.get(0).status()).isEqualTo("unconfirmed");
         assertThat(jdbc.queryForMap("SELECT paid_amount_cent, unpaid_amount_cent FROM ar_ap_items WHERE id = ?", notified.arApItemId()))
                 .containsEntry("paid_amount_cent", notified.totalAmountCent()).containsEntry("unpaid_amount_cent", 0L);
-        DealerOrderOverpaymentRecord confirmed = orders.confirmOverpaymentUse(overs.get(0).id(), new DealerOverpaymentUseRequest(key(), "prepayment", null, "双方确认转预付款"));
+        DealerOrderOverpaymentRecord confirmed = orders.confirmOverpaymentUse(overs.get(0).id(), new DealerOverpaymentUseRequest(key(), "prepayment", null, "双方确认转预付款", 2_500L, confirmation(overs.get(0).id())));
         assertThat(confirmed.status()).isEqualTo("prepayment");
-        assertThatThrownBy(() -> orders.confirmOverpaymentUse(overs.get(0).id(), new DealerOverpaymentUseRequest(key(), "prepayment", null, "再确认")))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("OVERPAYMENT_ALREADY_CONFIRMED"));
+        assertThatThrownBy(() -> orders.confirmOverpaymentUse(overs.get(0).id(), new DealerOverpaymentUseRequest(key(), "prepayment", null, "再确认", 2_500L, confirmation(overs.get(0).id()))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("OVERPAYMENT_BALANCE_INSUFFICIENT"));
     }
 
     @Test
@@ -508,6 +514,424 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
         assertThatThrownBy(() -> orders.updateContractTerms(creditContract, new DealerContractTermsRequest(key(), true, 3000, 1_000L,
                 3, 30, 1_000L, 50_000L, "dealer", null, null, null, "payment_notified", null, "shipped", null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void cancelledPendingPaymentRemainsVerifiableWithoutRestoringOrder() {
+        DealerOrderRecord order = approvedOrderForClosure();
+        actAs(sales);
+        DealerOrderPaymentRecord payment = orders.registerPayment(order.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", 500L, Instant.now(), "WAITING-RECEIPT"));
+        actAs(finance);
+        orders.cancelUnpaidAtDeadline(order.firstPaymentDeadlineAt().plusSeconds(1));
+        assertThat(orders.getOrder(order.id()).status()).isEqualTo("pending_refund");
+        DealerOrderPaymentRecord verified = orders.verifyPayment(payment.id(),
+                new DealerPaymentVerifyRequest(key(), "approve", "取消后核实原收款已到账"));
+        assertThat(verified.status()).isEqualTo("verified");
+        assertThat(verified.appliedCent()).isZero();
+        assertThat(orders.getOrder(order.id()).paidAmountCent()).isZero();
+        assertThat(orders.getOrder(order.id()).status()).isEqualTo("pending_refund");
+        assertThat(orders.listOverpayments(dealerId).items()).isEmpty();
+    }
+
+    @Test
+    void approvedRefundCannotExecuteBeforeReceiptVerification() {
+        DealerOrderRecord order = approvedOrderForClosure();
+        actAs(finance);
+        orders.cancelUnpaidAtDeadline(order.firstPaymentDeadlineAt().plusSeconds(1));
+        orders.registerPayment(order.id(), new DealerPaymentRequest(key(), "bank_transfer", 500L, Instant.now(), "UNVERIFIED"));
+        DealerOrderRefundRecord refund = orders.listRefunds(order.id()).items().getFirst();
+        jdbc.update("UPDATE dealer_order_refunds SET status='approved' WHERE id=?", refund.id());
+        actAs(warehouse);
+        assertThatThrownBy(() -> orders.executeRefund(refund.id(), new DealerRefundExecuteRequest(key())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_RECEIPT_UNVERIFIED"));
+        assertThat(orders.listRefunds(order.id()).items().getFirst().status()).isEqualTo("approved");
+    }
+
+    @Test
+    void referenceAloneCannotMarkApprovedRefundSuccessful() {
+        DealerOrderRecord order = approvedOrderForClosure();
+        actAs(sales);
+        DealerOrderPaymentRecord payment = orders.registerPayment(order.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", 500L, Instant.now(), "REAL-RECEIPT"));
+        actAs(finance);
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "真实到账"));
+        orders.cancelUnpaidAtDeadline(order.firstPaymentDeadlineAt().plusSeconds(1));
+        DealerOrderRefundRecord refund = orders.listRefunds(order.id()).items().getFirst();
+        jdbc.update("UPDATE dealer_order_refunds SET status='approved' WHERE id=?", refund.id());
+        actAs(warehouse);
+        DealerOrderRefundRecord prepared = orders.executeRefund(refund.id(), new DealerRefundExecuteRequest(key()));
+        assertThat(prepared.status()).isEqualTo("approved");
+        assertThat(prepared.financeRefundId()).isNotBlank();
+        assertThat(jdbc.queryForObject("SELECT project_id FROM dealers WHERE id=?", String.class, dealerId)).isNull();
+        assertThat(jdbc.queryForObject("SELECT project_id FROM finance_refunds WHERE id=?", String.class, prepared.financeRefundId()))
+                .isEqualTo(jdbc.queryForObject("SELECT project_id FROM warehouses WHERE id=?", String.class, centralWarehouse));
+        assertThat(jdbc.queryForObject("SELECT status FROM finance_refunds WHERE id=?", String.class, prepared.financeRefundId())).isEqualTo("requested");
+        assertThat(orders.listRefunds(order.id()).items().getFirst().status()).isEqualTo("approved");
+        assertThat(orders.getOrder(order.id()).status()).isEqualTo("pending_refund");
+    }
+
+    @Test
+    void overpaymentCanSplitAndPrepaymentCancellationRefundsOriginalCashOnly() {
+        DealerOrderRecord source = approvedOrderForClosure();
+        actAs(sales);
+        DealerOrderPaymentRecord paid = orders.registerPayment(source.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", source.totalAmountCent() + 5_000L, Instant.now(), "ORIGINAL-OVERPAY"));
+        actAs(finance);
+        orders.verifyPayment(paid.id(), new DealerPaymentVerifyRequest(key(), "approve", "原款核实"));
+        DealerOrderOverpaymentRecord over = orders.listOverpayments(dealerId).items().getFirst();
+        List<String> proof = confirmation(over.id());
+        DealerOrderOverpaymentRecord prepaid = orders.confirmOverpaymentUse(over.id(),
+                new DealerOverpaymentUseRequest(key(), "prepayment", null, "双方确认留作预付", 5_000L, proof));
+        assertThat(prepaid.prepaymentBalanceCent()).isEqualTo(5_000L);
+        assertThat(prepaid.unconfirmedAmountCent()).isZero();
+        DealerOrderRecord target = approvedOrderForClosure();
+        actAs(finance);
+        DealerOverpaymentUseRequest apply = new DealerOverpaymentUseRequest(key(), "prepayment_offset", target.id(), "双方确认抵乙订单", 3_000L, proof);
+        DealerOrderOverpaymentRecord after = orders.confirmOverpaymentUse(over.id(), apply);
+        orders.confirmOverpaymentUse(over.id(), apply);
+        assertThat(after.amountCent()).isEqualTo(5_000L);
+        assertThat(after.prepaymentBalanceCent()).isEqualTo(2_000L);
+        assertThat(after.appliedAmountCent()).isEqualTo(3_000L);
+        assertThat(orders.getOrder(target.id()).paidAmountCent()).isEqualTo(3_000L);
+        assertThat(orders.listPayments(target.id()).items()).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dealer_order_overpayment_allocations WHERE overpayment_id=?", Integer.class, over.id())).isEqualTo(2);
+        actAs(sales);
+        orders.requestCancel(target.id(), new DealerCancelRequest(key(), "乙订单取消，未出库"));
+        actAs(reviewer);
+        orders.decideCancel(target.id(), new DealerOrderDecisionRequest(key(), "approve", "同意取消"));
+        DealerOrderRefundRecord refund = orders.listRefunds(target.id()).items().getFirst();
+        assertThat(refund.paymentId()).isEqualTo(paid.id());
+        assertThat(refund.amountCent()).isEqualTo(3_000L);
+        assertThat(refund.allocationId()).isNotBlank();
+        assertThat(orders.listOverpayments(dealerId).items().getFirst().prepaymentBalanceCent()).isEqualTo(2_000L);
+        jdbc.update("UPDATE dealer_order_refunds SET status='approved' WHERE id=?", refund.id());
+        actAs(warehouse);
+        DealerOrderRefundRecord prepared = orders.executeRefund(refund.id(), new DealerRefundExecuteRequest(key()));
+        assertThat(jdbc.queryForMap("SELECT original_payment_ref, refund_channel FROM finance_refunds WHERE id=?", prepared.financeRefundId()))
+                .containsEntry("original_payment_ref", "ORIGINAL-OVERPAY").containsEntry("refund_channel", "bank_transfer");
+        executeAndConfirmRefund(prepared, "failed");
+        actAs(finance);
+        assertThat(orders.listOverpayments(dealerId).items().getFirst().prepaymentBalanceCent()).isEqualTo(2_000L);
+        assertThat(orders.getOrder(target.id()).status()).isEqualTo("pending_refund");
+        actAs(warehouse);
+        executeAndConfirmRefund(prepared, "success");
+        actAs(finance);
+        assertThat(orders.getOrder(target.id()).status()).isEqualTo("cancelled");
+        assertThat(orders.listOverpayments(dealerId).items().getFirst().prepaymentBalanceCent()).isEqualTo(2_000L);
+        assertThat(orders.listOverpayments(dealerId).items().getFirst().appliedAmountCent()).isEqualTo(3_000L);
+    }
+
+    @Test
+    void partialOverpaymentAllocationRejectsExcessTargetAndWrongEvidence() {
+        DealerOrderRecord source = approvedOrderForClosure();
+        actAs(sales);
+        DealerOrderPaymentRecord paid = orders.registerPayment(source.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", source.totalAmountCent() + 5_000L, Instant.now(), "SPLIT-OVERPAY"));
+        actAs(finance);
+        orders.verifyPayment(paid.id(), new DealerPaymentVerifyRequest(key(), "approve", "原款核实"));
+        DealerOrderOverpaymentRecord over = orders.listOverpayments(dealerId).items().getFirst();
+        List<String> proof = confirmation(over.id());
+        DealerOrderOverpaymentRecord after = orders.confirmOverpaymentUse(over.id(),
+                new DealerOverpaymentUseRequest(key(), "prepayment", null, "其中2000留作预付", 2_000L, proof));
+        assertThat(after.unconfirmedAmountCent()).isEqualTo(3_000L);
+        assertThat(after.prepaymentBalanceCent()).isEqualTo(2_000L);
+        DealerOrderRecord target = approvedOrderForClosure();
+        actAs(finance);
+        assertThatThrownBy(() -> orders.confirmOverpaymentUse(over.id(),
+                new DealerOverpaymentUseRequest(key(), "offset_order", target.id(), "不可超过可分配余额", 3_001L, proof)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("OVERPAYMENT_BALANCE_INSUFFICIENT"));
+        assertThatThrownBy(() -> orders.confirmOverpaymentUse(over.id(),
+                new DealerOverpaymentUseRequest(key(), "offset_order", target.id(), "缺少双方凭证", 3_000L, List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("OVERPAYMENT_CONFIRMATION_REQUIRED"));
+        after = orders.confirmOverpaymentUse(over.id(),
+                new DealerOverpaymentUseRequest(key(), "offset_order", target.id(), "其余3000抵乙订单", 3_000L, proof));
+        assertThat(after.unconfirmedAmountCent()).isZero();
+        assertThat(after.prepaymentBalanceCent()).isEqualTo(2_000L);
+        assertThat(orders.getOrder(target.id()).paidAmountCent()).isEqualTo(3_000L);
+        assertThatThrownBy(() -> orders.confirmOverpaymentUse(over.id(),
+                new DealerOverpaymentUseRequest(key(), "prepayment_offset", target.id(), "不得自动拆分", 2_000L, proof)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("OVERPAYMENT_EXCEEDS_TARGET"));
+        assertThat(orders.listOverpayments(dealerId).items().getFirst().prepaymentBalanceCent()).isEqualTo(2_000L);
+    }
+
+    @Test
+    void globalDealerFundsStillEnforceOriginalAndTargetWarehouseProjects() {
+        DealerOrderRecord source = approvedOrderForClosure();
+        actAs(sales);
+        var payment = orders.registerPayment(source.id(), new DealerPaymentRequest(key(), "bank_transfer", source.totalAmountCent() + 5_000L, Instant.now(), "PROJECT-SOURCE"));
+        actAs(finance);
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "真实到账"));
+        var over = orders.listOverpayments(dealerId).items().getFirst();
+        List<String> proof = confirmation(over.id());
+        DealerOrderRecord target = approvedOrderForClosure();
+        String otherProject = "project_do_" + suffix;
+        String otherWarehouse = "wh_do_other_" + suffix;
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '异项目', 'active', now(),now())", otherProject);
+        jdbc.update("INSERT INTO warehouses(id,project_id,warehouse_type,name,status) VALUES (?,?,'main','异项目仓','active')", otherWarehouse, otherProject);
+        jdbc.update("UPDATE dealer_orders SET central_warehouse_id=? WHERE id=?", otherWarehouse, target.id());
+        String scopedUser = "usr_do_scoped_" + suffix;
+        String scopedRole = "role_do_scoped_" + suffix;
+        jdbc.update("INSERT INTO roles(id,role_name,data_scope,status,created_at) VALUES (?,?,'project','active',now())", scopedRole, scopedRole);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code LIKE 'dealer.%' OR permission_code LIKE 'evidence.%' OR permission_code LIKE 'finance.%'", scopedRole);
+        access.createUser(new AccessUser(scopedUser, scopedUser, "staff", "project_main", null, "active", Instant.now()));
+        access.assignUserRole(scopedUser, scopedRole);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(scopedUser, scopedUser, "staff", "project_main", null, "active"), "test", List.of()));
+        assertThatThrownBy(() -> orders.confirmOverpaymentUse(over.id(), new DealerOverpaymentUseRequest(key(), "offset_order", target.id(), "不得跨目标项目", 1_000L, proof)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(orders.listOrders(dealerId).items()).extracting(DealerOrderRecord::id).contains(source.id()).doesNotContain(target.id());
+        assertThat(orders.listOverpayments(dealerId).items()).extracting(DealerOrderOverpaymentRecord::id).contains(over.id());
+        assertThatThrownBy(() -> orders.getOrder(target.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThatThrownBy(() -> orders.listLines(target.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThatThrownBy(() -> orders.listPayments(target.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThatThrownBy(() -> orders.listRefunds(target.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThatThrownBy(() -> orders.registerPayment(target.id(), new DealerPaymentRequest(key(), "bank_transfer", 100L, Instant.now(), "DENIED")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dealer_order_payments WHERE order_id=?", Integer.class, target.id())).isZero();
+        assertThatThrownBy(() -> orders.requestCancel(target.id(), new DealerCancelRequest(key(), "不得越权取消目标")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        jdbc.update("UPDATE dealer_orders SET central_warehouse_id=? WHERE id=?", otherWarehouse, source.id());
+        assertThat(orders.listOrders(dealerId).items()).isEmpty();
+        assertThat(orders.listOverpayments(dealerId).items()).isEmpty();
+        assertThatThrownBy(() -> confirmation(over.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThatThrownBy(() -> orders.confirmOverpaymentUse(over.id(), new DealerOverpaymentUseRequest(key(), "prepayment", null, "不得跨来源项目", 1_000L, proof)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dealer_order_overpayment_allocations WHERE overpayment_id=?", Integer.class, over.id())).isZero();
+        actAs(finance);
+        assertThat(orders.listOverpayments(dealerId).items().getFirst().unconfirmedAmountCent()).isEqualTo(5_000L);
+    }
+
+    @Test
+    void confirmedOverpaymentWithoutAllocationFactsCannotBeSpentAgain() {
+        DealerOrderRecord source = approvedOrderForClosure();
+        actAs(sales);
+        var payment = orders.registerPayment(source.id(), new DealerPaymentRequest(key(), "bank_transfer", source.totalAmountCent() + 5_000L, Instant.now(), "INCOMPLETE-ALLOCATION"));
+        actAs(finance);
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "真实到账"));
+        var over = orders.listOverpayments(dealerId).items().getFirst();
+        List<String> proof = confirmation(over.id());
+        jdbc.update("UPDATE dealer_order_overpayments SET status='prepayment', confirmed_by=?, confirmed_at=now() WHERE id=?", finance, over.id());
+        assertThatThrownBy(() -> orders.confirmOverpaymentUse(over.id(), new DealerOverpaymentUseRequest(key(), "prepayment", null, "缺失原分配事实不得重新分配", 3_000L, proof)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("OVERPAYMENT_ALLOCATION_INTEGRITY_INVALID"));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dealer_order_overpayment_allocations WHERE overpayment_id=?", Integer.class, over.id())).isZero();
+    }
+
+    @Test
+    void projectStaffCannotVerifyAnotherProjectCancelledReceipt() {
+        DealerOrderRecord order = pendingRefundInAnotherProject();
+        DealerOrderPaymentRecord late = orders.listPayments(order.id()).items().getFirst();
+        assertThat(late.status()).isEqualTo("late");
+        actAsProjectScopedFinance();
+        assertThatThrownBy(() -> orders.verifyPayment(late.id(), new DealerPaymentVerifyRequest(key(), "approve", "不得跨项目核实")))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT status FROM dealer_order_payments WHERE id=?", String.class, late.id())).isEqualTo("late");
+    }
+
+    @Test
+    void projectStaffCannotReopenAnotherProjectRefundApproval() {
+        DealerOrderRecord order = pendingRefundInAnotherProject();
+        DealerOrderRefundRecord refund = orders.listRefunds(order.id()).items().getFirst();
+        actAs(refundApprover);
+        reviews.approve(refund.reviewId(), new SupervisorReviewApprovalRequest(key(), "原审批驳回", List.of(), null, "rejected", "重新核实"));
+        assertThat(orders.listRefunds(order.id()).items().getFirst().status()).isEqualTo("rejected");
+        actAsProjectScopedFinance();
+        assertThatThrownBy(() -> orders.openRefundApproval(refund.id(), new com.complex.platform.dealer.dto.DealerRefundApprovalRequest(key(), null)))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT status FROM dealer_order_refunds WHERE id=?", String.class, refund.id())).isEqualTo("rejected");
+    }
+
+    private DealerOrderRecord pendingRefundInAnotherProject() {
+        String project = "project_scope_" + suffix;
+        centralWarehouse = "wh_scope_" + suffix;
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '异项目', 'active', now(),now())", project);
+        jdbc.update("INSERT INTO warehouses(id,project_id,warehouse_type,name,status) VALUES (?,?,'main','异项目仓','active')", centralWarehouse, project);
+        jdbc.update("INSERT INTO inventory_stock_balances(id,item_id,location_id,quantity,reserved_quantity,available_quantity,updated_at,warehouse_id,project_id) VALUES (?,?,?,100,0,100,now(),?,?)",
+                "bal_scope_" + suffix, itemA, centralWarehouse, centralWarehouse, project);
+        actAs(sales);
+        creditContract = contractWithTerms("DC-SCOPE-" + suffix, true);
+        DealerOrderRecord order = approvedOrderForClosure();
+        actAs(sales);
+        orders.registerPayment(order.id(), new DealerPaymentRequest(key(), "bank_transfer", 500L, Instant.now(), "SCOPE-LATE"));
+        actAs(finance);
+        orders.cancelUnpaidAtDeadline(order.firstPaymentDeadlineAt().plusSeconds(1));
+        return order;
+    }
+
+    private void actAsProjectScopedFinance() {
+        String scopedUser = "usr_scope_" + suffix;
+        String scopedRole = "role_scope_" + suffix;
+        jdbc.update("INSERT INTO roles(id,role_name,data_scope,status,created_at) VALUES (?,?,'project','active',now())", scopedRole, scopedRole);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code LIKE 'dealer.%' OR permission_code LIKE 'evidence.%' OR permission_code LIKE 'finance.%'", scopedRole);
+        access.createUser(new AccessUser(scopedUser, scopedUser, "staff", "project_main", null, "active", Instant.now()));
+        access.assignUserRole(scopedUser, scopedRole);
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id,line_code,updated_by) VALUES (?,?,'main',?)", scopedUser, refundApprover, sales);
+        access.saveStaffLevelAssignment(new StaffLevelAssignment(scopedUser, "lvl_m3_lower", null, "CNY", null, "project_main", null, sales, Instant.now()));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(scopedUser, scopedUser, "staff", "project_main", null, "active"), "test", List.of()));
+    }
+
+    @Test
+    void projectFinanceWithoutMerchantCanExecuteAndIndependentlyConfirmDealerRefund() {
+        DealerOrderRefundRecord approved = approvedRefundForProjectFinance();
+        String refundProject = jdbc.queryForObject("SELECT project_id FROM warehouses WHERE id=?", String.class, centralWarehouse);
+        String executor = projectFinanceStaff("executor", refundProject, refundProject);
+        String confirmer = projectFinanceStaff("confirmer", refundProject, refundProject);
+        String foreignProject = "project_rf_foreign_" + suffix;
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '异项目退款', 'active', now(),now())", foreignProject);
+        String foreign = projectFinanceStaff("foreign", foreignProject, foreignProject);
+        actAsProjectFinance(executor);
+        assertThat(access.findUserById(executor).orElseThrow().merchantId()).isNull();
+        DealerOrderRefundRecord prepared = orders.executeRefund(approved.id(), new DealerRefundExecuteRequest(key()));
+        assertThat(financeService.getFinanceRefund(prepared.financeRefundId()).refund().status()).isEqualTo("requested");
+        String executionEvidence = refundEvidence(prepared.financeRefundId());
+        actAsProjectFinance(foreign);
+        assertThatThrownBy(() -> isolatedFailure(() -> financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundExecutionRequest(key(), "异项目不得执行", List.of(executionEvidence), "PROJECT-REFUND", null))))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        actAsProjectFinance(executor);
+        var processing = financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundExecutionRequest(key(), "项目财务按原路执行", List.of(executionEvidence), "PROJECT-REFUND", null));
+        assertThat(processing.status()).isEqualTo("processing");
+        actAsProjectFinance(foreign);
+        assertThatThrownBy(() -> isolatedFailure(() -> financeService.confirmFinanceRefundResult(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundResultConfirmRequest(key(), "异项目不得确认", List.of(executionEvidence),
+                        "success", prepared.amountCent(), "PROJECT-REFUND", executor, null))))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        actAsProjectFinance(confirmer);
+        assertThat(access.findUserById(confirmer).orElseThrow().merchantId()).isNull();
+        var success = financeService.confirmFinanceRefundResult(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundResultConfirmRequest(key(), "另一名项目财务独立确认", List.of(refundEvidence(prepared.financeRefundId())),
+                        "success", prepared.amountCent(), "PROJECT-REFUND", executor, null));
+        assertThat(success.status()).isEqualTo("success");
+        assertThat(orders.listRefunds(prepared.orderId()).items().getFirst().status()).isEqualTo("refunded");
+        assertThat(orders.getOrder(prepared.orderId()).status()).isEqualTo("cancelled");
+    }
+
+    @Test
+    void refundConfirmationCannotUsePaymentRegisterPermissionFromAnotherProject() {
+        DealerOrderRefundRecord approved = approvedRefundForProjectFinance();
+        String refundProject = jdbc.queryForObject("SELECT project_id FROM warehouses WHERE id=?", String.class, centralWarehouse);
+        actAs(warehouse);
+        DealerOrderRefundRecord prepared = orders.executeRefund(approved.id(), new DealerRefundExecuteRequest(key()));
+        financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundExecutionRequest(key(), "原经办人执行", List.of(refundEvidence(prepared.financeRefundId())), "MIXED-SCOPE", null));
+        String paymentProject = "project_rf_register_" + suffix;
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '仅收付款确认授权项目', 'active', now(),now())", paymentProject);
+        String confirmer = projectFinanceStaff("mixed", refundProject, paymentProject);
+        actAsProjectFinance(confirmer);
+        assertThat(financeService.getFinanceRefund(prepared.financeRefundId()).refund().status()).isEqualTo("processing");
+        String confirmationEvidence = refundEvidence(prepared.financeRefundId());
+        assertThatThrownBy(() -> isolatedFailure(() -> financeService.confirmFinanceRefundResult(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundResultConfirmRequest(key(), "A项目收付款确认权不能确认B", List.of(confirmationEvidence),
+                        "success", prepared.amountCent(), "MIXED-SCOPE", warehouse, null))))
+                .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT status FROM finance_refunds WHERE id=?", String.class, prepared.financeRefundId())).isEqualTo("processing");
+        assertThat(jdbc.queryForObject("SELECT status FROM dealer_order_refunds WHERE id=?", String.class, prepared.id())).isEqualTo("processing");
+    }
+
+    private DealerOrderRefundRecord approvedRefundForProjectFinance() {
+        DealerOrderRecord order = pendingRefundInAnotherProject();
+        actAs(finance);
+        DealerOrderPaymentRecord payment = orders.listPayments(order.id()).items().getFirst();
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "核实取消前实际到账"));
+        DealerOrderRefundRecord refund = orders.listRefunds(order.id()).items().getFirst();
+        actAs(refundApprover);
+        for (int i = 0; i < 4 && "pending_review".equals(reviews.findReview(refund.reviewId()).orElseThrow().reviewStatus()); i++) {
+            reviews.approve(refund.reviewId(), new SupervisorReviewApprovalRequest(key(), "经销原退款审批", List.of(), null, "approved", "同意原路退回"));
+        }
+        DealerOrderRefundRecord approved = orders.listRefunds(order.id()).items().getFirst();
+        assertThat(approved.status()).isEqualTo("approved");
+        return approved;
+    }
+
+    private String projectFinanceStaff(String tag, String operationProject, String confirmProject) {
+        String user = "usr_rf_" + tag + "_" + suffix;
+        String operationRole = "role_rf_op_" + tag + "_" + suffix;
+        String confirmationRole = "role_rf_pay_" + tag + "_" + suffix;
+        jdbc.update("INSERT INTO roles(id,role_name,data_scope,status,created_at) VALUES (?,?,'project','active',now()), (?,?,'project','active',now())",
+                operationRole, operationRole, confirmationRole, confirmationRole);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code LIKE 'dealer.%' OR permission_code LIKE 'evidence.%' OR permission_code IN ('finance.ar_ap.view','finance.refund.create')", operationRole);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES (?,'finance.payment.register')", confirmationRole);
+        jdbc.update("INSERT INTO role_viewable_projects(role_id,viewable_id) VALUES (?,?),(?,?)", operationRole, operationProject, confirmationRole, confirmProject);
+        access.createUser(new AccessUser(user, user, "staff", operationProject, null, "active", Instant.now()));
+        access.assignUserRole(user, operationRole);
+        access.assignUserRole(user, confirmationRole);
+        return user;
+    }
+
+    private void actAsProjectFinance(String user) {
+        AccessUser account = access.findUserById(user).orElseThrow();
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(user, user, "staff", account.organizationId(), null, "active"), "test", List.of()));
+    }
+
+    private List<String> confirmation(String overpaymentId) {
+        return List.of(admissionFiles.uploadAttachment(new org.springframework.mock.web.MockMultipartFile(
+                "file", "双方资金用途确认.png", "image/png", java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jz1sAAAAASUVORK5CYII=")),
+                "dealer_overpayment", overpaymentId, "other").id());
+    }
+
+    private String refundEvidence(String refundId) {
+        return admissionFiles.uploadAttachment(new org.springframework.mock.web.MockMultipartFile(
+                "file", "原路退款凭证.png", "image/png", java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jz1sAAAAASUVORK5CYII=")),
+                "finance_refund", refundId, "payment_receipt").id();
+    }
+
+    // 预期失败请求独立回滚到保存点，避免测试外层事务的 rollback-only 污染下一次真实准入求值。
+    private void isolatedFailure(Runnable operation) {
+        TransactionTemplate nested = new TransactionTemplate(transactionManager);
+        nested.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
+        nested.executeWithoutResult(status -> operation.run());
+    }
+
+    private void executeAndConfirmRefund(DealerOrderRefundRecord prepared, String status) {
+        actAs(warehouse);
+        String reference = "RF-" + key();
+        var execution = financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundExecutionRequest(key(), "沿原收款路径执行", List.of(refundEvidence(prepared.financeRefundId())), reference, null));
+        assertThat(execution.status()).isEqualTo("processing");
+        assertThat(orders.listRefunds(prepared.orderId()).items().stream().filter(item -> item.id().equals(prepared.id())).findFirst().orElseThrow().status()).isEqualTo("processing");
+        assertThatThrownBy(() -> isolatedFailure(() -> financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundExecutionRequest(key(), "结果未知不得重退", List.of(refundEvidence(prepared.financeRefundId())), reference, null))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("REFUND_NOT_RETRYABLE"));
+        actAs(refundApprover);
+        financeService.confirmFinanceRefundResult(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundResultConfirmRequest(key(), "独立核对银行结果", List.of(refundEvidence(prepared.financeRefundId())),
+                        status, prepared.amountCent(), reference, warehouse, null));
+    }
+
+    @Test
+    void specifiedPartialOverpaymentMustNotConsumeWholeReceipt() throws Exception {
+        DealerOrderRecord source = approvedOrderForClosure();
+        actAs(sales);
+        DealerOrderPaymentRecord payment = orders.registerPayment(source.id(),
+                new DealerPaymentRequest(key(), "bank_transfer", source.totalAmountCent() + 5_000L, Instant.now(), "PARTIAL-RED"));
+        actAs(finance);
+        orders.verifyPayment(payment.id(), new DealerPaymentVerifyRequest(key(), "approve", "真实到账"));
+        DealerOrderOverpaymentRecord over = orders.listOverpayments(dealerId).items().getFirst();
+        String attachment = admissionFiles.uploadAttachment(new org.springframework.mock.web.MockMultipartFile(
+                "file", "资金用途.png", "image/png", java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jz1sAAAAASUVORK5CYII=")),
+                "dealer_overpayment", over.id(), "other").id();
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper().disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        DealerOverpaymentUseRequest request = mapper.readValue(mapper.writeValueAsString(Map.of(
+                "idempotencyKey", key(), "usage", "prepayment", "note", "只将2000分转为预付款",
+                "amountCent", 2_000L, "confirmationAttachmentIds", List.of(attachment))), DealerOverpaymentUseRequest.class);
+        assertThat(orders.confirmOverpaymentUse(over.id(), request).status()).isEqualTo("partially_allocated");
+    }
+
+    private DealerOrderRecord approvedOrderForClosure() {
+        actAs(sales);
+        DealerOrderRecord draft = orders.createOrderDraft(dealerId, new DealerOrderDraftRequest(key(), creditContract,
+                List.of(new DealerOrderLineRequest(itemA, "箱", 3, null)), "资金闭环"));
+        orders.submitOrder(draft.id(), key());
+        actAs(reviewer);
+        return orders.reviewOrder(draft.id(), new DealerOrderDecisionRequest(key(), "approve", "核对合同"));
     }
 
     // ── helpers ──

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.compliance;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,13 +34,8 @@ class WecomComplianceJdbcIntegrationTests {
         assertThat(regclass("wecom_access_audits")).isEqualTo("wecom_access_audits");
         assertThat(currentFlywayVersion()).isEqualTo(com.complex.platform.support.MigrationVersions.latest());
 
-        // 默认留存策略：全局 180 天。
-        assertThat(repository.findEffectivePolicy("any_project"))
-                .get()
-                .satisfies(policy -> {
-                    assertThat(policy.retentionDays()).isEqualTo(180);
-                    assertThat(policy.scopeType()).isEqualTo("global");
-                });
+        // 旧迁移事实保留，但运行策略不再读取或执行旧到期动作。
+        assertThat(regclass("wecom_cleanup_previews")).isEqualTo("wecom_cleanup_previews");
 
         assertThat(permissionCodes()).contains(
                 "wecom.view", "wecom.view_raw", "wecom.retention.manage", "wecom.sync");
