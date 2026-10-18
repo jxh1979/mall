@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -65,6 +65,11 @@ public class JdbcDealerRepository {
 
     public Optional<DealerRecord> lockDealer(String id) {
         return jdbc.query("SELECT * FROM dealers WHERE id = :id FOR UPDATE", Map.of("id", id), this::mapDealer).stream().findFirst();
+    }
+
+    // 信用写入彼此互斥，同时允许发票、退货等外键检查取得 KEY SHARE。
+    public Optional<DealerRecord> lockDealerCredit(String id) {
+        return jdbc.query("SELECT * FROM dealers WHERE id = :id FOR NO KEY UPDATE", Map.of("id", id), this::mapDealer).stream().findFirst();
     }
 
     public void saveAdmission(DealerAdmissionRecord a) {

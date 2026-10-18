@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -72,6 +72,7 @@ public class DealerOrderService {
     static final String REFUND_OBJECT = "dealer_order_refund";
 
     private final JdbcDealerOrderRepository orders;
+    private final JdbcDealerDeliveryRepository delivery;
     private final JdbcDealerRepository dealers;
     private final AuthorizationService authorization;
     private final IdempotencyService idempotency;
@@ -86,8 +87,9 @@ public class DealerOrderService {
             IdempotencyService idempotency, AuditEventService audit, FinanceRepository finance, SupervisorReviewService reviews,
             com.complex.platform.finance.FinanceService financeService,
             com.complex.platform.evidence.EvidenceEventRepository evidence,
-            com.complex.platform.evidence.EvidenceAttachmentValidator attachmentValidator) {
+            com.complex.platform.evidence.EvidenceAttachmentValidator attachmentValidator, JdbcDealerDeliveryRepository delivery) {
         this.orders = orders;
+        this.delivery = delivery;
         this.dealers = dealers;
         this.authorization = authorization;
         this.idempotency = idempotency;
@@ -448,6 +450,7 @@ public class DealerOrderService {
         try {
             DealerOrderPaymentRecord payment = requirePayment(paymentId);
             requireOrderProject(payment.orderId(), PAYMENT_VERIFY);
+            lockDealerForOrder(payment.orderId());
             DealerOrderRecord order = orders.lockOrder(payment.orderId()).orElseThrow();
             orders.lockPayment(payment.id());
             payment = orders.findPayment(payment.id()).orElseThrow();
@@ -520,7 +523,7 @@ public class DealerOrderService {
         if (Set.of("pending_payment", "payment_verifying").contains(status)) {
             status = paid >= order.firstPaymentRequiredCent() ? "pending_shipment" : "pending_payment";
         }
-        if ("signed".equals(status) && paid >= order.netReceivableCent()) {
+        if ("signed".equals(status) && paid >= order.netReceivableCent() && delivery.pendingRefundCent(order.id()) == 0) {
             status = "completed";
             completedAt = now;
         }
@@ -578,6 +581,7 @@ public class DealerOrderService {
                         throw ApiException.conflict("DEALER_STOCK_INSUFFICIENT", "中心仓预留不足，无法出库：" + line.itemId());
                     }
                 }
+                delivery.createBatch(orderId, orderId, null, actor, now, orders.listLines(orderId));
                 DealerContractRecord contract = requireSnapshot(order);
                 Instant balanceDue = order.creditTerm() ? resolveDue(contract.balanceDueAnchor(), contract.balanceDueFixedAt(), contract.balanceDueDays(),
                         contract.contractSignedAt(), order.createdAt(), order.paymentNotifiedAt(), now, null) : null;
@@ -594,42 +598,6 @@ public class DealerOrderService {
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
             audit.recordFailure("dealer.order.ship_failed", SHIP, "dealer_order", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
-            throw e;
-        }
-    }
-
-    /** 签收：履约事实，不表示货款结清（BSM:1227）；全款已到账则完成。 */
-    @Transactional
-    public DealerOrderRecord signOrder(String orderId, String idempotencyKey) {
-        authorization.requirePermission(MANAGE);
-        return signOrder(orderId, idempotencyKey, MANAGE);
-    }
-
-    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
-    DealerOrderRecord signOrder(String orderId, String idempotencyKey, String permission) {
-        try {
-            requireOrder(orderId);
-            DealerOrderRecord order = orders.lockOrder(orderId).orElseThrow();
-            requireStatus(order, "shipping");
-            return idempotency.execute("dealerOrderSign:" + orderId, idempotencyKey, Map.of("id", orderId), () -> {
-                Instant now = Instant.now();
-                DealerContractRecord contract = requireSnapshot(order);
-                Instant balanceDue = order.creditTerm() ? resolveDue(contract.balanceDueAnchor(), contract.balanceDueFixedAt(), contract.balanceDueDays(),
-                        contract.contractSignedAt(), order.createdAt(), order.paymentNotifiedAt(), order.shippedAt(), now) : null;
-                boolean settled = order.paidAmountCent() >= order.netReceivableCent();
-                DealerOrderRecord saved = new DealerOrderRecord(order.id(), order.orderNo(), order.dealerId(), order.dealerContractId(), order.salesEntityId(),
-                        order.centralWarehouseId(), settled ? "completed" : "signed", null, order.priceCatalogId(), order.creditTerm(), order.goodsAmountCent(),
-                        order.freightCent(), order.freightBearer(), order.freightTemplateVersion(), order.totalAmountCent(), order.firstPaymentRequiredCent(),
-                        order.firstPaymentDeadlineAt(), balanceDue, order.paidAmountCent(), order.overdue(), order.arApItemId(), order.reviewedBy(),
-                        order.reviewedAt(), order.paymentNotifiedAt(), order.shippedBy(), order.shippedAt(), now, settled ? now : null, order.cancelRequestedBy(),
-                        order.cancelReason(), order.cancelledAt(), order.note(), order.createdBy(), order.createdAt(), now);
-                orders.saveOrder(saved);
-                if (order.creditTerm()) orders.updateArApDueDate(order.arApItemId(), balanceDue);
-                audit.recordSuccess("dealer.order.signed", permission, "dealer_order", orderId, null, idempotencyKey, meta("status", saved.status()));
-                return orders.findOrder(orderId).orElseThrow();
-            }, DealerOrderRecord.class);
-        } catch (RuntimeException e) {
-            audit.recordFailure("dealer.order.sign_failed", permission, "dealer_order", orderId, null, idempotencyKey, codeOf(e));
             throw e;
         }
     }
@@ -767,6 +735,53 @@ public class DealerOrderService {
     }
 
     // ── 退款（既有退款审批原路退回） ──
+
+    /** 差异已完成主管与财务审批、实物已处理后，先减原单未收款，超出部分沿真实原收款退现金。 */
+    void applyDeliveryAdjustment(DealerOrderRecord order, String resolutionId, long amountCent, String reviewId) {
+        var resolution = delivery.resolution(resolutionId).orElseThrow();
+        if (resolution.adjustmentAppliedAt() != null || resolution.adjustmentCent() != amountCent || !reviewId.equals(resolution.reviewId())) {
+            throw ApiException.conflict("DEALER_DELIVERY_ADJUSTMENT_INVALID", "差异调款必须匹配已批准金额且只能执行一次");
+        }
+        var review = reviews.findReview(reviewId).orElseThrow();
+        if (!"approved".equals(review.reviewStatus()) || !"dealer.delivery_resolution".equals(review.actionType())
+                || !resolutionId.equals(review.objectId()) || amountCent <= 0 || amountCent > order.netReceivableCent()) {
+            throw ApiException.conflict("DEALER_DELIVERY_ADJUSTMENT_INVALID", "须按本次已批准差异及原单应收办理调款");
+        }
+        long refundAmount = amountCent - Math.min(amountCent, Math.max(0L, order.netReceivableCent() - order.paidAmountCent()));
+        Map<String, Long> sources = new java.util.TreeMap<>();
+        orders.listPayments(order.id()).stream().filter(p -> "verified".equals(p.status()) && p.appliedCent() > 0)
+                .forEach(p -> sources.merge(p.id(), p.appliedCent(), Math::addExact));
+        for (var allocation : orders.listOrderAllocations(order.id())) {
+            var source = orders.findOverpayment(allocation.overpaymentId()).orElseThrow();
+            sources.merge(source.paymentId(), allocation.amountCent(), Math::addExact);
+        }
+        sources.keySet().forEach(orders::lockPayment);
+        long remaining = refundAmount;
+        for (var entry : sources.entrySet()) {
+            if (remaining == 0) break;
+            var payment = orders.findPayment(entry.getKey()).orElseThrow();
+            requireOrderProject(payment.orderId(), SHIP);
+            long usedForThisOrder = orders.listRefunds(order.id()).stream()
+                    .filter(r -> entry.getKey().equals(r.paymentId()) && !"voided".equals(r.status())).mapToLong(DealerOrderRefundRecord::amountCent).sum();
+            long capacity = Math.min(entry.getValue() - usedForThisOrder, payment.amountCent() - orders.reservedRefundAmount(payment.id()));
+            long amount = Math.min(remaining, Math.max(0L, capacity));
+            if (amount == 0) continue;
+            if (!"verified".equals(payment.status())) throw ApiException.conflict("DEALER_RECEIPT_UNVERIFIED", "原收款必须经核实到账");
+            Instant now = Instant.now();
+            String id = "drf_" + UUID.randomUUID();
+            orders.saveRefund(new DealerOrderRefundRecord(id, order.id(), payment.id(), amount, "approved", reviewId, actorId(),
+                    null, null, null, "交付差异 " + resolutionId + "：按已批准方案原路退回", now, now, null, null));
+            delivery.linkRefund(resolutionId, id);
+            remaining -= amount;
+        }
+        if (remaining != 0) throw ApiException.conflict("DEALER_REFUND_EXCEEDS_RECEIPT", "差异退款缺少可核实且尚未占用的原收款，不能虚构退款或重复使用原款");
+        delivery.applyAdjustment(order.id(), amountCent);
+        if (order.overdue() && !orders.dealerHasOverdueOrders(order.dealerId())) {
+            dealers.setCreditSuspended(order.dealerId(), false);
+            audit.recordSuccess("dealer.credit_resumed", SHIP, "dealer", order.dealerId(), null, null,
+                    meta("order_id", order.id(), "reason", "交付差异调款冲清全部逾期应收"));
+        }
+    }
 
     private DealerOrderRefundRecord createRefund(DealerOrderRecord order, DealerOrderPaymentRecord payment, long amountCent, String reason, String actor, String idemKey) {
         return createRefund(order, payment, amountCent, reason, actor, idemKey, null);
@@ -908,7 +923,10 @@ public class DealerOrderService {
                 .filter(attempt -> "execution".equals(attempt.operation())).reduce((first, last) -> last).orElse(null);
         orders.saveRefund(refundState(refund, status, execution == null ? null : execution.paymentOperatorId(),
                 "success".equals(state.status()) ? state.succeededAt() : null, state.gatewayRef()));
-        if ("refunded".equals(status)) finishCancelledOrder(refund.orderId());
+        if ("refunded".equals(status)) {
+            finishCancelledOrder(refund.orderId());
+            delivery.finishMoneyIfDeliveryCompleted(refund.orderId());
+        }
         audit.recordSuccess("dealer.order.refund_result_recorded", null, "dealer_order_refund", refund.id(), null, null,
                 meta("finance_refund_id", state.id(), "status", status));
     }
@@ -933,7 +951,11 @@ public class DealerOrderService {
     @Transactional
     public int markOverdue(Instant now) {
         int count = 0;
-        for (DealerOrderRecord candidate : orders.listBalanceOverdue(now)) {
+        List<DealerOrderRecord> candidates = orders.listBalanceOverdue(now);
+        // 扫描整批共用当前事务：先按统一顺序取得全部经销商锁，再取得任何订单锁。
+        candidates.stream().map(DealerOrderRecord::dealerId).distinct().sorted()
+                .forEach(id -> dealers.lockDealerCredit(id).orElseThrow());
+        for (DealerOrderRecord candidate : candidates) {
             DealerOrderRecord order = orders.lockOrder(candidate.id()).orElseThrow();
             if (order.overdue() || order.paidAmountCent() >= order.netReceivableCent()
                     || order.balanceDueAt() == null || !order.balanceDueAt().isBefore(now)) {
@@ -979,9 +1001,16 @@ public class DealerOrderService {
             if (targetId != null && targetId.equals(original.orderId())) {
                 throw ApiException.conflict("OVERPAYMENT_TARGET_MISMATCH", "超收只能抵指定其他订单");
             }
-            // 所有涉及的订单按编号锁定，再锁超收，避免两笔交叉抵用互相等待。
+            // 先核实同一经销商及销售主体，再锁共同经销商、编号排序的订单，最后沿原流程锁超收。
             List<String> orderIds = java.util.stream.Stream.of(original.orderId(), targetId).filter(Objects::nonNull).sorted().distinct().toList();
-            orderIds.forEach(id -> { requireOrder(id); requireOrderProject(id, PAYMENT_VERIFY); });
+            orderIds.forEach(id -> {
+                DealerOrderRecord candidate = requireOrder(id);
+                requireOrderProject(id, PAYMENT_VERIFY);
+                if (!candidate.dealerId().equals(original.dealerId()) || !candidate.salesEntityId().equals(original.salesEntityId())) {
+                    throw ApiException.conflict("OVERPAYMENT_TARGET_MISMATCH", "只能抵扣该经销商向同一销售法律主体采购的订单");
+                }
+            });
+            dealers.lockDealerCredit(original.dealerId()).orElseThrow();
             orderIds.forEach(id -> orders.lockOrder(id).orElseThrow());
             requireOverpaymentConfirmation(original.id(), request.confirmationAttachmentIds());
             return idempotency.execute("dealerOverpaymentUse:" + overpaymentId, request.idempotencyKey(), request, () -> {
@@ -1130,6 +1159,12 @@ public class DealerOrderService {
                 .orElseThrow(() -> ApiException.notFound("DEALER_CONTRACT_NOT_FOUND", "经销合同不存在"));
         requireDealer(contract.dealerId());
         return contract;
+    }
+
+    /** 调用入口先完成真实权限范围校验；所有信用状态写入须先持共同经销商锁，再锁订单并重读。 */
+    void lockDealerForOrder(String orderId) {
+        DealerOrderRecord candidate = requireOrder(orderId);
+        dealers.lockDealerCredit(candidate.dealerId()).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
     }
 
     private DealerOrderRecord requireOrder(String id) {

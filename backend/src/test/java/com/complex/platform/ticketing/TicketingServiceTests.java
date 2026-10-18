@@ -1,6 +1,8 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
+
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -141,7 +143,23 @@ class TicketingServiceTests {
     }
 
     @Test
-    void pointsBasePointsFollowAccrualRateConfigNotHardcode() {
+    void issuedUnusedTicketDoesNotCreatePurchaserPoints() {
+        TicketTypeRecord ticketType = createTicketType("unused-no-reward");
+        EntitlementTemplateRecord template = createTemplate("unused-no-reward", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "unused-bind", "bind", List.of(), template.id(), 1, 2, 9900L, "default", 1, 9900L));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "unused-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_unused_buyer"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "unused-issue", "issue", "paid offline", List.of()));
+
+        assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
+        assertThat(orderEvents).noneMatch(PointsConfirmRequestedEvent.class::isInstance);
+    }
+
+    @Test
+    void issuedTicketsDoNotReadMerchantConsumptionAccrualRate() {
         // P0-D/CFG-01（V340）：基础分 = 实付 ÷ 后台可配的「每积 1 分所需消费金额」，不再写死每元 1 分。
         TicketTypeRecord ticketType = createTicketType("points-rate");
         EntitlementTemplateRecord template = createTemplate("points-rate", 1, 9900L);
@@ -154,9 +172,7 @@ class TicketingServiceTests {
                 "points-rate-issue", "issue", "paid offline", List.of()));
 
         // 出厂默认 100（每元 1 分）：99.00 元 → 99 基础分（与改造前 amountCent/100 逐字等价）。
-        PointsEarnRequestedEvent defaultRate = onlyPointsEvent();
-        assertThat(defaultRate.basePoints()).isEqualTo(order.amountCent() / 100);
-        assertThat(pointsRateStub.lastMerchantId).isEqualTo(order.merchantId());
+        assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
 
         // 改配置为 50 分/分（每元 2 分）→ 同样金额基础分翻倍，证明累计率不再写死。
         orderEvents.clear();
@@ -166,11 +182,11 @@ class TicketingServiceTests {
                 LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_points_rate"));
         service.issueTicketOrder(order2.id(), new StatusChangeRequest(
                 "points-rate-issue-2", "issue", "paid offline", List.of()));
-        assertThat(onlyPointsEvent().basePoints()).isEqualTo(order2.amountCent() / 50);
+        assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
     }
 
     @Test
-    void pointsAccrualFailsLoudWhenRateConfigPortMissing() {
+    void ticketIssueDoesNotRequireMerchantConsumptionAccrualConfig() {
         // fail-closed（对齐结算配置中心 requireConfigured）：配置端口不可用时响亮报错，
         // 不静默回落硬编码「每元 1 分」、也不静默把会员该得的积分吞掉。
         TicketTypeRecord ticketType = createTicketType("points-rate-missing");
@@ -182,10 +198,9 @@ class TicketingServiceTests {
                 LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_points_missing"));
         orderService.pointsAccrualRateConfigPort = null;
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.issueTicketOrder(order.id(),
-                        new StatusChangeRequest("points-missing-issue", "issue", "paid offline", List.of())))
-                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("积分累计率配置不可用");
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "points-missing-issue", "issue", "paid offline", List.of()));
+        assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
     }
 
     /** 取本轮唯一一条积分入账事件（orderEvents 仅收 TicketOrderService 发布的事件）。 */

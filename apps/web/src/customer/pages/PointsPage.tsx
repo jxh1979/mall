@@ -1,7 +1,8 @@
 import { Alert, Button, Card, Empty, List, Space, Spin, Statistic, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 
-import type { CustomerService } from "../client/customerService";
+// 文件版本：V0.01
+import type { CustomerService, TicketRewardSummary, TicketRewardRule } from "../client/customerService";
 import type { CheckInRecord, PointsRedemption, PointsSummary, RedemptionItem } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
@@ -20,6 +21,10 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
   const [checkInsNotice, setCheckInsNotice] = useState<string | null>(null);
   const [itemsNotice, setItemsNotice] = useState<string | null>(null);
   const [redemptionsNotice, setRedemptionsNotice] = useState<string | null>(null);
+  const [ticketRewards, setTicketRewards] = useState<TicketRewardSummary | null>(null);
+  const [ticketNotice, setTicketNotice] = useState<string | null>(null);
+  const [rules, setRules] = useState<TicketRewardRule[]>([]);
+  const [ruleNotice, setRuleNotice] = useState<string | null>(null);
 
   const reload = () => {
     // 主资源=积分摘要(getPoints)决定页面级错误；签到/兑换目录/兑换历史为副资源，各自 .catch 降级为空+局部提示，不拖垮积分余额。
@@ -27,17 +32,23 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
     setCheckInsNotice(null);
     setItemsNotice(null);
     setRedemptionsNotice(null);
+    setTicketNotice(null);
+    setRuleNotice(null);
     Promise.all([
       service.getPoints(),
       service.listCheckIns().catch(() => { setCheckInsNotice("签到记录暂时加载失败，不影响积分与兑换"); return [] as CheckInRecord[]; }),
       service.listRedemptionItems().catch(() => { setItemsNotice("兑换目录暂时加载失败，可稍后重试"); return [] as RedemptionItem[]; }),
       service.listRedemptions().catch(() => { setRedemptionsNotice("兑换记录暂时加载失败，可稍后重试"); return [] as PointsRedemption[]; }),
+      service.listTicketRewards().catch(() => { setTicketNotice("门票奖励及待追回积分暂时加载失败，请稍后重试"); return null; }),
+      service.listTicketRewardRules().catch(() => { setRuleNotice("门票奖励公告暂时加载失败，请稍后重试"); return [] as TicketRewardRule[]; }),
     ])
-      .then(([points, records, catalog, history]) => {
+      .then(([points, records, catalog, history, rewards, announcements]) => {
         setSummary(points);
         setCheckIns(records ?? []);
         setItems(catalog ?? []);
         setRedemptions(history ?? []);
+        setTicketRewards(rewards);
+        setRules(announcements);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "积分加载失败"))
       .finally(() => setLoading(false));
@@ -90,6 +101,28 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
         )}
       </Card>
 
+      <Card title="门票积分与成长值" style={{ marginTop: 16 }} data-testid="ticket-rewards">
+        <Paragraph type="secondary">奖励归实际使用会员。门票积分按核销时已公布生效的固定值计算，不随会员等级变化；等待期内有退款待处理时继续等待。</Paragraph>
+        {ticketNotice ? <Alert type="warning" message={ticketNotice} /> : null}
+        {(ticketRewards?.pendingRecovery ?? 0) > 0 ? <Alert type="warning" data-testid="points-recovery" message={`待追回 ${ticketRewards!.pendingRecovery} 积分；新增积分先抵扣待追回部分，结清前暂停兑换。`} /> : null}
+        <List dataSource={ticketRewards?.rewards ?? []} locale={{ emptyText: "暂无门票奖励记录" }} renderItem={(reward) => (
+          <List.Item key={reward.id}>
+            <Space direction="vertical">
+              <Text>第 {reward.slotIndex} 人份 · 第 {reward.useIndex} 次 · {reward.points} 积分 · {reward.growth} 成长值</Text>
+              <Text type="secondary">{({ pending: "待确认", confirmed: "已确认", cancelled: "已取消", reversed: "已冲回" } as Record<string, string>)[reward.status] ?? reward.status}{reward.status === "pending" ? ` · 原等待期至 ${new Date(reward.availableAt).toLocaleString("zh-CN")}，退款处理期间不发放` : ""}</Text>
+            </Space>
+          </List.Item>
+        )} />
+      </Card>
+
+      <Card title="门票奖励规则公告" style={{ marginTop: 16 }}>
+        {ruleNotice ? <Alert type="warning" message={ruleNotice} /> : null}
+        <List dataSource={rules} locale={{ emptyText: "暂无已发布规则" }} renderItem={(rule) => <List.Item key={rule.id}>
+          <Space direction="vertical"><Text>{rule.projectName} · {rule.ticketName} · {rule.kind === "points" ? "每人次积分" : "每人次成长值"} {rule.fixedValue}</Text>
+            <Text type="secondary">{rule.version} · 公告于 {new Date(rule.publishedAt).toLocaleString("zh-CN")} · 生效于 {new Date(rule.effectiveAt).toLocaleString("zh-CN")}</Text></Space>
+        </List.Item>} />
+      </Card>
+
       <Card title="连续签到" style={{ marginTop: 16 }}>
         <Paragraph type="secondary">每日签到累积连续天数，按阶梯发放积分。</Paragraph>
         {checkInsNotice ? <Alert type="warning" showIcon message={checkInsNotice} data-testid="points-check-ins-degraded" style={{ marginBottom: 12 }} /> : null}
@@ -127,7 +160,7 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
                     key="redeem"
                     type="primary"
                     size="small"
-                    disabled={soldOut || !affordable}
+                    disabled={soldOut || !affordable || ticketRewards === null || ticketRewards.pendingRecovery > 0}
                     loading={redeemingId === item.id}
                     onClick={() => void onRedeem(item)}
                     data-testid={`redeem-${item.id}`}

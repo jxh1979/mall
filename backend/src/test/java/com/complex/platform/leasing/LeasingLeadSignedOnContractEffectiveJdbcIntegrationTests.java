@@ -1,5 +1,7 @@
 package com.complex.platform.leasing;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -146,6 +148,11 @@ class LeasingLeadSignedOnContractEffectiveJdbcIntegrationTests {
         contractService.activate(contract.id(), new ContractActivateRequest("activate_" + suffix, List.of(spaceId)));
         assertThat(leadStatusColumn()).isEqualTo("signed");
 
+        assertThatThrownBy(() -> leasingService.createIntent(new com.complex.platform.leasing.dto.LeasingIntentRequest(
+                leadId, spaceId, new java.math.BigDecimal("88"), Map.of(), "intent-again-" + suffix)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("LEASING_LEAD_ALREADY_SIGNED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM leasing_intents WHERE lead_id=?", Integer.class, leadId)).isEqualTo(1);
+
         for (String target : List.of("pending_follow_up", "following_up", "converted_to_intent", "negotiating",
                 "lost", "on_hold")) {
             assertThatThrownBy(() -> leasingService.updateLeadStatus(leadId,
@@ -154,6 +161,38 @@ class LeasingLeadSignedOnContractEffectiveJdbcIntegrationTests {
                             e -> assertThat(e.code()).isEqualTo("LEASING_LEAD_ALREADY_SIGNED"));
             assertThat(leadStatusColumn()).isEqualTo("signed");
         }
+    }
+
+    @Test
+    void manualSignedStatusCannotReplaceEffectiveContract() {
+        assertThatThrownBy(() -> leasingService.updateLeadStatus(leadId,
+                new LeasingLeadStatusRequest("signed", "人工标记", "manual-" + suffix)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("LEASING_SIGNED_REQUIRES_EFFECTIVE_CONTRACT"));
+        assertThat(leadStatusColumn()).isEqualTo("negotiating");
+    }
+
+    @Test
+    void otherProjectCannotMutateLeadOrCreateItsFollowUp() {
+        String otherProject = "other_" + suffix, user = "other_user_" + suffix, role = "other_role_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','其他项目','active',now(),now())", otherProject);
+        jdbcTemplate.update("INSERT INTO access_users(id,username,account_type,organization_id,status,created_at) VALUES(?,?,'staff',?,'active',now())", user,user,otherProject);
+        jdbcTemplate.update("INSERT INTO roles(id,role_name,created_at) VALUES(?,?,now())",role,role);
+        for (String permission : List.of("leasing.lead.manage","leasing.intent.manage")) {
+            jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,?)",role,permission);
+        }
+        jdbcTemplate.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)",user,role);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(user,user,"staff",otherProject,null,"active"),"token",List.of()));
+        List<Runnable> writes = List.of(
+                () -> leasingService.assignLead(leadId,new com.complex.platform.leasing.dto.LeasingLeadAssignRequest(user,"assign-other-"+suffix)),
+                () -> leasingService.updateLeadStatus(leadId,new LeasingLeadStatusRequest("lost","停止跟进","status-other-"+suffix)),
+                () -> leasingService.createIntent(new com.complex.platform.leasing.dto.LeasingIntentRequest(leadId,spaceId,null,Map.of(),"intent-other-"+suffix)),
+                () -> leasingService.createFollowUp(new com.complex.platform.leasing.dto.LeasingFollowUpRequest("lead",leadId,"phone","其他项目跟进",null,"follow-other-"+suffix)));
+        for (Runnable write : writes) assertThatThrownBy(write::run)
+                .isInstanceOfSatisfying(ApiException.class,e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(leadStatusColumn()).isEqualTo("negotiating");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM leasing_intents WHERE lead_id=?",Integer.class,leadId)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM leasing_follow_ups WHERE ref_id=?",Integer.class,leadId)).isZero();
     }
 
     // ---- helpers ----

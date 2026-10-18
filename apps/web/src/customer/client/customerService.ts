@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 // 客人端业务服务层：封装 P0 客旅用到的真实端点（全部 /api/v1/customer/* 与 finance/ticketing）
 // 所有接口均在 docs/openapi/openapi-p0.json 契约内；P1 能力（积分明细/礼物兑换）不在此暴露。
 
@@ -27,11 +27,23 @@ import type {
   VoucherTransfer,
 } from "../types";
 
+export type TicketUseReward = { id: string; parentTicketId: string; slotIndex: number; useIndex: number; points: number; growth: number; waitingHours: number; verifiedAt: string; availableAt: string; status: string };
+export type TicketRewardSummary = { rewards: TicketUseReward[]; pendingRecovery: number };
+export type TicketRewardRule = { id: string; ticketTypeId: string; ticketName: string; projectId: string; projectName: string; kind: string; version: string; fixedValue: number; effectiveAt: string; publishedAt: string };
+
 export class CustomerService {
   private readonly api: CustomerApi;
 
   constructor(customerToken: string) {
     this.api = new CustomerApi(customerToken);
+  }
+
+  listTicketRewards(): Promise<TicketRewardSummary> {
+    return this.api.get<TicketRewardSummary>("/api/v1/customer/ticket-rewards");
+  }
+
+  listTicketRewardRules(): Promise<TicketRewardRule[]> {
+    return this.api.get<TicketRewardRule[]>("/api/v1/customer/ticket-reward-rules");
   }
 
   // ① 票种浏览（AUD-076：barId 传入=专属入口锁定该酒吧；不传=公共入口全量）。

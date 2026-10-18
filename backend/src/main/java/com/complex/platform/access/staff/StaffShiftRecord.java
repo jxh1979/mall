@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -19,8 +19,21 @@ public record StaffShiftRecord(
         Instant createdAt,
         Instant updatedAt,
         String reviewId,
-        String publicationStatus
+        String publicationStatus,
+        String nightDutyProjectId
 ) {
+    public StaffShiftRecord(String id, String userId, LocalDate workDate, Instant startAt, Instant endAt,
+            List<String> pointSpaceIds, String note, String createdBy, Instant createdAt, Instant updatedAt,
+            String reviewId, String publicationStatus) {
+        this(id, userId, workDate, startAt, endAt, pointSpaceIds, note, createdBy, createdAt, updatedAt,
+                reviewId, publicationStatus, null);
+    }
+
+    public StaffShiftRecord withNightDutyProject(String projectId) {
+        return new StaffShiftRecord(id, userId, workDate, startAt, endAt, pointSpaceIds, note, createdBy,
+                createdAt, updatedAt, reviewId, publicationStatus, projectId);
+    }
+
     public StaffShiftRecord(String id, String userId, LocalDate workDate, Instant startAt, Instant endAt,
             List<String> pointSpaceIds, String note, String createdBy, Instant createdAt, Instant updatedAt) {
         this(id, userId, workDate, startAt, endAt, pointSpaceIds, note, createdBy, createdAt, updatedAt, null, "published");
@@ -28,6 +41,6 @@ public record StaffShiftRecord(
 
     public StaffShiftRecord awaitingReview(String reviewId) {
         return new StaffShiftRecord(id, userId, workDate, startAt, endAt, pointSpaceIds, note, createdBy,
-                createdAt, updatedAt, reviewId, "pending_review");
+                createdAt, updatedAt, reviewId, "pending_review", nightDutyProjectId);
     }
 }

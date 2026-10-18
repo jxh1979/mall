@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 
@@ -47,10 +47,12 @@ public record DealerOrderRecord(
         Instant updatedAt,
         /** CG-11c：累计已退（验收确认）金额，只由退货链回写，订单保存不覆盖。 */
         long returnedAmountCent,
-        DealerContractRecord contractSnapshot
+        DealerContractRecord contractSnapshot,
+        long deliveryAdjustmentCent,
+        Instant deliveryCompletedAt
 ) {
     public long netReceivableCent() {
-        return Math.max(0L, totalAmountCent - returnedAmountCent);
+        return Math.max(0L, totalAmountCent - returnedAmountCent - deliveryAdjustmentCent);
     }
 
     public DealerOrderRecord(String id, String orderNo, String dealerId, String dealerContractId, String salesEntityId, String centralWarehouseId, String status,
@@ -61,6 +63,6 @@ public record DealerOrderRecord(
         this(id, orderNo, dealerId, dealerContractId, salesEntityId, centralWarehouseId, status, statusBeforeCancel, priceCatalogId, creditTerm, goodsAmountCent,
                 freightCent, freightBearer, freightTemplateVersion, totalAmountCent, firstPaymentRequiredCent, firstPaymentDeadlineAt, balanceDueAt, paidAmountCent,
                 overdue, arApItemId, reviewedBy, reviewedAt, paymentNotifiedAt, shippedBy, shippedAt, signedAt, completedAt, cancelRequestedBy, cancelReason,
-                cancelledAt, note, createdBy, createdAt, updatedAt, 0L, null);
+                cancelledAt, note, createdBy, createdAt, updatedAt, 0L, null, 0L, null);
     }
 }

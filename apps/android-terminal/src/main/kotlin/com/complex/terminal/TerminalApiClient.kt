@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.net.URI
 import java.net.URLEncoder
@@ -201,6 +201,33 @@ class TerminalApiClient(
   fun listMyShifts(): List<StaffShiftRow> = get("/api/v1/staff/shifts/mine")
 
   /** 考勤打卡(NFC/扫码;时间以服务器为准;严格无宽限判定随响应返回)。 */
+  fun attendanceAnchor(request: AttendanceAnchorRequest): AttendanceAnchorResponse =
+    post("/api/v1/staff/attendance/time-anchors", request)
+
+  fun attendanceReceipt(request: AttendanceReceiptRequest): AttendanceReceiptEvent =
+    post("/api/v1/staff/attendance/receipt-events", request)
+
+  fun currentWorkPhoneContext(): WorkPhoneAttendanceContext =
+    get("/api/v1/staff/attendance/work-phone-context")
+
+  fun historicalWorkPhoneContexts(userId: String): List<WorkPhoneAttendanceContext> =
+    get("/api/v1/staff/attendance/work-phone-contexts?user_id=${urlEncode(userId)}")
+
+  fun recoverAttendanceReceipt(request: AttendanceReceiptRecoveryRequest): AttendanceReceiptEvent =
+    post("/api/v1/staff/attendance/receipt-events/recover",request)
+
+  fun attendanceReceiptEvents(userId: String? = null): List<AttendanceReceiptEvent> =
+    get("/api/v1/staff/attendance/receipt-events" + (userId?.takeIf { it.isNotBlank() }?.let { "?user_id=${urlEncode(it)}" } ?: ""))
+
+  fun submitAttendanceReceiptReview(eventId: String, request: AttendanceReceiptReviewRequest): AttendanceReceiptReview =
+    post("/api/v1/staff/attendance/receipt-events/${urlEncode(eventId)}/review", request)
+
+  fun attendanceReceiptReviewHistory(eventId: String): List<AttendanceReceiptReview> =
+    get("/api/v1/staff/attendance/receipt-events/${urlEncode(eventId)}/reviews")
+
+  fun swapWorkPhone(request: WorkPhoneSwapRequest): DeviceBinding =
+    post("/api/v1/terminals/devices/work-phone-swap", request)
+
   fun punchAttendance(request: AttendancePunchRequest): AttendanceRow =
     post("/api/v1/staff/attendance/punch", request)
 

@@ -1,4 +1,6 @@
+// 文件版本：V0.01
 import React from "react";
+import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -7,7 +9,7 @@ import { formatLocation, KNOWN_LOCATIONS } from "../i18n/locationLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { FormModal } from "../components/FormModal";
-import { PermissionButton } from "../security/Can";
+import { PermissionButton, useCan } from "../security/Can";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -103,6 +105,8 @@ function asNumber(value: unknown, fallback = 0) {
 export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [items, setItems] = React.useState<InventoryItemRow[]>([]);
   const [balances, setBalances] = React.useState<StockBalanceRow[]>([]);
+  const canReadQuarantine = useCan(effectivePermissions, ["inventory.stock.view"]);
+  const canManageQuarantine = useCan(effectivePermissions, ["inventory.stock.adjust", "evidence.attachment.create"]);
   const [movements, setMovements] = React.useState<StockMovementRow[]>([]);
   const pagedBalances = usePagedRows(balances, 10, balances.length);
   const pagedMovements = usePagedRows(movements, 10, movements.length);
@@ -334,6 +338,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="inventory-ledger-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="inventory.item.viewed / inventory.stock_balance.viewed / inventory.outbound_verified" />
+      <InventoryQuarantinePanel api={api} canRead={canReadQuarantine} canManage={canManageQuarantine} onChanged={error ? undefined : reload} />
       <AdminDataState loading={loading} error={error} empty={items.length === 0 && balances.length === 0 && movements.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

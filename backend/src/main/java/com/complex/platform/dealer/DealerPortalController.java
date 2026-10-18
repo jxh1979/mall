@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -101,9 +101,23 @@ public class DealerPortalController {
     }
 
     @PostMapping("/orders/{id}/sign")
-    public ApiResponse<DealerOrderRecord> signOrder(@PathVariable String id, @RequestBody DealerIdempotentRequest request) {
+    public ApiResponse<DealerOrderRecord> signOrder(@PathVariable String id, @RequestBody com.complex.platform.dealer.dto.DealerDeliveryReceiptRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.signOrder(id, request.idempotencyKey()));
+        return ApiResponse.ok(service.signOrder(id, request));
+    }
+
+    @GetMapping("/orders/{id}/delivery")
+    public ApiResponse<DealerDeliveryRecord> delivery(@PathVariable String id) { return ApiResponse.ok(service.delivery(id)); }
+
+    @PostMapping(value = "/orders/{id}/delivery-evidence", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<com.complex.platform.evidence.EvidenceAttachmentRecord> uploadDeliveryEvidence(@PathVariable String id,
+            @org.springframework.web.bind.annotation.RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        return ApiResponse.ok(service.uploadDeliveryEvidence(id, file));
+    }
+
+    @GetMapping("/orders/{id}/delivery-evidence/{attachmentId}")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> readDeliveryEvidence(@PathVariable String id, @PathVariable String attachmentId) {
+        return service.readDeliveryEvidence(id, attachmentId);
     }
 
     @GetMapping("/orders/{id}/returns")

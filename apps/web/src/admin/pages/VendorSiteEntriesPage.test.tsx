@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -20,6 +21,7 @@ function envelope(items: unknown[]): Response {
 function makeApi(): AdminApi {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
+    if (url.endsWith("/history")) return Promise.resolve(envelope([]));
     if (url.includes("site-entry-reports")) return Promise.resolve(envelope(ENTRIES));
     return Promise.resolve(envelope([]));
   }));

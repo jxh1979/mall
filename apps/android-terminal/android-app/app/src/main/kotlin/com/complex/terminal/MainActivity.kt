@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import android.app.Activity
 import android.content.Intent
@@ -97,29 +97,46 @@ class MainActivity : Activity() {
   // ── E批 NFC 打卡:前台分发读点位标签(NDEF 文本或标签 UID),填入当前打卡屏输入框 ──
   private var nfcAdapter: android.nfc.NfcAdapter? = null
 
-  private fun recordWorkPhoneReceipt(method: String, tag: String? = null, type: String = "check_in", status: TextView? = null) {
-    if (api.accessToken == null || api.deviceId == null) {
-      status?.text = "请先登录并在本机完成工作手机登记"
+  private val uploadingReceipts = java.util.concurrent.atomic.AtomicBoolean(false)
+
+  private fun recordWorkPhoneReceipt(method: String, tag: String? = null, status: TextView? = null) {
+    try {
+      ChargingReceiptBridge.enqueue(this, method, tag)
+      status?.text = "领取事件已保存在手机，正在同步"
+      flushWorkPhoneReceipts(status)
+    } catch (error: Exception) { status?.text = "保存失败：${friendly(error)}" }
+  }
+
+  private fun flushWorkPhoneReceipts(status: TextView? = null) {
+    val device = api.deviceId
+    if (api.accessToken == null || device == null) {
+      status?.text = "事件已保留，登录并登记后重试同步"
       return
     }
+    if (!uploadingReceipts.compareAndSet(false, true)) return
     runBackground(
-      action = { api.punchAttendance(AttendancePunchRequest(java.util.UUID.randomUUID().toString(), type, method,
-        tagRef = tag, spaceId = tag?.removePrefix("space:"))) },
-      onSuccess = { row ->
-        val text = "${if (type == "check_in") "上班领取" else "下班"}已记录：${row.punchedAt ?: "-"}"
-        status?.text = text
-        android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()
+      action = {
+        try {
+          try { ChargingReceiptBridge.rememberContext(this,api.currentWorkPhoneContext()) }
+          catch (error: Exception) { ChargingReceiptBridge.clearAnchor(this) }
+          ChargingReceiptBridge.flush(this) { pending ->
+            try { api.attendanceReceipt(pending.request(device)) }
+            catch (error: Exception) { throw IllegalStateException(friendly(error),error) }
+          }
+        } finally { uploadingReceipts.set(false) }
       },
-      onError = {
-        val text = "考勤记录失败：${friendly(it)}"
-        status?.text = text
-        android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()
+      onSuccess = { result ->
+        ChargingReceiptBridge.saveSyncMessage(this,result.message())
+        status?.text = result.message()
+        if (status == null && result.failed.isNotEmpty()) android.widget.Toast.makeText(this,"有原领取事件未同步，请打开工作手机考勤处理",android.widget.Toast.LENGTH_LONG).show()
       },
+      onError = { status?.text = "同步未完成，原事件保留可重试：${friendly(it)}" },
     )
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    ChargingReceiptBridge.clearAnchor(this)
     nfcAdapter = android.nfc.NfcAdapter.getDefaultAdapter(this)
     // U01-001：终端身份由本机绑定类型决定并只声明一次，重启后从本地绑定记录恢复（工作手机 / 平板 POS）。
     workPhonePrefs.getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = "staff_work_phone" }
@@ -127,7 +144,7 @@ class MainActivity : Activity() {
     // U01-007：私人手机在本人注册时已把 Keystore 公钥/指纹绑定为员工设备凭证，重启后按登记的指纹恢复私人手机身份（只声明一次）。
     getSharedPreferences("private_phone", MODE_PRIVATE).getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = STAFF_PRIVATE_PHONE }
     // U01-002：拔线接收器由常驻前台服务持有并在开机后重注册；本页只消费投递（进程被回收期间的拔线在下次登录后补记）。
-    ChargingReceiptBridge.handler = { runOnUiThread { recordWorkPhoneReceipt("charging_disconnect") } }
+    ChargingReceiptBridge.handler = { runOnUiThread { flushWorkPhoneReceipts() } }
     ChargingReceiptService.start(this)
     showLogin()
   }
@@ -160,6 +177,9 @@ class MainActivity : Activity() {
 
   override fun onResume() {
     super.onResume()
+    if (api.accessToken != null && api.terminalType == "staff_work_phone") {
+      flushWorkPhoneReceipts()
+    }
     val adapter = nfcAdapter ?: return
     val intent = Intent(this, javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
     val pending = android.app.PendingIntent.getActivity(
@@ -211,10 +231,10 @@ class MainActivity : Activity() {
       }
       status.text = "正在登录…"
       runBackground(
-        action = { workflow.login(u, p) },
+        action = { ChargingReceiptBridge.clearAnchor(this); workflow.login(u, p) },
         onSuccess = { session ->
           status.text = "登录成功：${session.username}"
-          if (ChargingReceiptBridge.consumePending(this@MainActivity)) recordWorkPhoneReceipt("charging_disconnect")
+          flushWorkPhoneReceipts()
           if (api.deviceId != null) showHome() else showDeviceBinding()
         },
         onError = { status.text = "登录失败：${friendly(it)}" },
@@ -272,8 +292,10 @@ class MainActivity : Activity() {
         },
         onSuccess = { binding ->
           workPhonePrefs.edit().putString("device_id", d).apply()
+          ChargingReceiptBridge.clearAnchor(this)
           api.deviceId = d
           api.terminalType = "staff_work_phone"
+          flushWorkPhoneReceipts()
           status.text = "绑定完成：${binding.deviceCode}（状态 ${deviceStatusZh(binding.status)}）"
           showHome()
         },
@@ -640,6 +662,7 @@ class MainActivity : Activity() {
   }
 
   private fun logoutAndRestart() {
+    ChargingReceiptBridge.clearAnchor(this)
     store.clearSensitiveData()
     api.accessToken = null
     showLogin()
@@ -849,6 +872,7 @@ class MainActivity : Activity() {
         list.text = if (shifts.isEmpty()) "暂无排班" else shifts.joinToString("\n\n") { s ->
           "${s.workDate}  ${s.startAt ?: "-"} ~ ${s.endAt ?: "-"}\n点位: " +
             (s.pointSpaceIds?.takeIf { it.isNotEmpty() }?.joinToString("、") ?: "未指定") +
+            (s.nightDutyProjectId?.let { "\n夜班值班职责: 项目 $it" } ?: "") +
             (s.note?.let { "\n备注: $it" } ?: "")
         }
       },
@@ -861,23 +885,172 @@ class MainActivity : Activity() {
   }
 
   private fun showPunch() {
-    val status = statusText("领取工作手机即记录上班；碰 NFC、扫码或取离充电设施，以最早一次为准。拔线由常驻服务监听并记录。")
-    val type = android.widget.Spinner(this).apply {
-      adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("上班领取", "下班"))
+    val status = statusText("领用准备时先选择本班并校准时间。领取事件先保存在手机；未登录、断网或重启不丢失。缺少可靠时间依据的事件交由复核。")
+    val shiftPicker = android.widget.Spinner(this)
+    var shifts = emptyList<StaffShiftRow>()
+    runBackground(action = { api.listMyShifts() }, onSuccess = {
+      shifts = it
+      shiftPicker.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+        it.map { row -> "${row.startAt} 至 ${row.endAt} ${row.note ?: ""}" })
+    }, onError = { status.text = "班次读取失败：${friendly(it)}" })
+    val calibrate = button("为所选班次校准时间") {
+      val shiftId = shifts.getOrNull(shiftPicker.selectedItemPosition)?.id
+      if (shiftId == null) { status.text = "请选择已发布班次"; return@button }
+      val request = AttendanceAnchorRequest(java.util.UUID.randomUUID().toString(), shiftId,
+        ChargingReceiptBridge.bootId(this), android.os.SystemClock.elapsedRealtime())
+      runBackground(action = { api.attendanceAnchor(request) }, onSuccess = {
+        ChargingReceiptBridge.rememberAnchor(this, it)
+        status.text = "已关联本班并校准；后续领取事件按实际发生时刻核验"
+      }, onError = { status.text = "校准未完成：${friendly(it)}" })
     }
     fun record(method: String, tag: String) {
       if (tag.isBlank()) { status.text = "未读取到点位标签，请重试"; return }
-      recordWorkPhoneReceipt(method, tag, if (method == "nfc" || type.selectedItemPosition == 0) "check_in" else "check_out", status)
+      recordWorkPhoneReceipt(method, tag, status)
     }
     nfcResult = { tag -> record("nfc", tag) }
-    val scan = button("扫描点位二维码并记录") {
+    val scan = button("扫描领取点位二维码") {
       scanTarget = null
       scanResult = { tag -> record("qr", tag) }
       IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
         .setPrompt("对准工作手机领取点位二维码").setBeepEnabled(true).initiateScan()
     }
-    setContentView(screen(title = "考勤打卡", children = listOf(status, type,
-      statusText(if (nfcAdapter == null) "本机不支持 NFC，请扫码。" else "碰 NFC 标签只记录上班领取；下班请选择“下班”后扫码。"), scan, backButton())))
+    setContentView(screen(title = "工作手机考勤", children = listOf(status, shiftPicker, calibrate,
+      statusText("NFC、扫码或离开充电设施均记录领取，以最早核实事件为准。下班由设备接收人办理实际归还；班中故障使用换机流程。"),
+      scan, button("重试同步待传事件") { flushWorkPhoneReceipts(status) },
+      button("查看服务器领取事件") {
+        runBackground(action = { api.attendanceReceiptEvents() }, onSuccess = { rows ->
+          status.text = rows.joinToString("\n") { row -> "${row.actualAt ?: row.observedAt ?: "-"} · ${if(row.status=="accepted") "已核实" else if(row.status=="rejected") "未采纳" else "待复核"}" }
+        }, onError = { status.text = friendly(it) })
+      },
+      button("本机待传事件与主管代补报") { showPendingReceipts() },
+      button("核时申请与审批记录") { showReceiptTimeReview() },
+      button("接收本班归还／办理故障换机") { showWorkPhoneReturn() }, backButton())))
+  }
+
+  private fun showPendingReceipts() {
+    val status = statusText(ChargingReceiptBridge.lastSyncMessage(this))
+    val picker = android.widget.Spinner(this)
+    var rows = ChargingReceiptBridge.pending(this)
+    fun reload() {
+      rows = ChargingReceiptBridge.pending(this)
+      picker.adapter = android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,
+        rows.map { "${it.eventId} · 原员工${it.holderUserId ?: "待核"} · ${it.observedAt}" })
+    }
+    reload()
+    val originalEmployee = editText("原领用员工编号（原事件无编号时须核对）")
+    val historicalPicker = android.widget.Spinner(this)
+    var historical = emptyList<WorkPhoneAttendanceContext>()
+    historicalPicker.adapter = android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,listOf("未查询原手机领用历史"))
+    val lookup = button("查询本机该员工真实领用历史") {
+      val employeeId = originalEmployee.text.toString().trim()
+      if (employeeId.isBlank()) { status.text = "请据交接记录填写原员工编号，不能用当前登录人代替"; return@button }
+      runBackground(action = { api.historicalWorkPhoneContexts(employeeId) },onSuccess = { found ->
+        historical = found
+        historicalPicker.adapter = android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,
+          listOf("请选择拟关联的原领用记录") + found.map { "${it.id} · ${it.userId} · ${it.bindingAt} 至 ${it.closedAt ?: "尚未归还"}" })
+        status.text = if (found.isEmpty()) "本机没有该员工可关联的真实领用记录，原事件继续保留" else "仅为主管提出的关联，须补证并经真实上级核实"
+      },onError = { historical = emptyList(); status.text = "领用历史查询失败：${friendly(it)}" })
+    }
+    val reason = editText("主管代补报原因")
+    val evidence = editText("原手机领用及交接核实事实")
+    val recover = button("主管代补报原事件（仍须核时审批）") {
+      val event = rows.getOrNull(picker.selectedItemPosition)
+      if (event == null) { status.text = "请选择本机保留的原事件"; return@button }
+      val proposedContextId = if (event.contextId == null) historical.getOrNull(historicalPicker.selectedItemPosition - 1)?.id else null
+      if (event.contextId == null && proposedContextId == null) { status.text = "原事件缺少领用编号；请查询真实原员工领用记录并明确选择，不能套用当前绑定"; return@button }
+      if (reason.text.isBlank() || evidence.text.isBlank()) { status.text = "请填写代补报原因和原交接核实事实"; return@button }
+      runBackground(action = { api.recoverAttendanceReceipt(AttendanceReceiptRecoveryRequest(
+        event.request(api.deviceId ?: ""),reason.text.toString().trim(),evidence.text.toString().trim(),proposedContextId)) },onSuccess = { result ->
+        if (result.id == event.eventId) { ChargingReceiptBridge.acknowledge(this,event.eventId); reload() }
+        status.text = "原事件已由主管代补报，仍待真实上一级核时审批；未直接计入考勤。可在核时申请中按原员工查询。"
+      },onError = { status.text = "代补报未完成，原事件保留：${friendly(it)}" })
+    }
+    setContentView(screen(title = "本机原领取事件",children = listOf(status,picker,
+      button("原持有人重试同步") { flushWorkPhoneReceipts(status) },originalEmployee,lookup,historicalPicker,reason,evidence,recover,
+      button("核时申请与审批记录") { showReceiptTimeReview() },backButton())))
+  }
+
+  private fun showReceiptTimeReview() {
+    val status = statusText("查看本人或获授权员工的原领取事件。主管补证由其真实上一级审批，批准前保持待核，驳回不直接认定缺勤。")
+    val employee = editText("员工编号（留空查看本人）")
+    val picker = android.widget.Spinner(this)
+    var events = emptyList<AttendanceReceiptEvent>()
+    val shift = editText("原员工已发布班次编号")
+    val actual = editText("核实的实际领取时间（如2026-10-18T20:00:00+08:00）")
+    val reason = editText("补证原因")
+    val evidence = editText("实际交接核实事实（原领用登记、交接人员及核对结论）")
+    var requestKey = java.util.UUID.randomUUID().toString()
+    val load = button("查询原领取事件") {
+      runBackground(action = { api.attendanceReceiptEvents(employee.text.toString().trim().ifEmpty { null }) }, onSuccess = {
+        events = it
+        picker.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+          it.map { event -> "${event.id} · ${event.deviceId ?: "原设备"} · ${if (event.status == "accepted") "已核实" else "待核实"}" })
+        status.text = "已读 ${it.size} 条。原手机观察时间未直接计作考勤。"
+      }, onError = { status.text = "读取失败：${friendly(it)}" })
+    }
+    picker.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+      override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+        shift.setText(events.getOrNull(position)?.shiftId ?: "")
+        status.text = if (events.getOrNull(position)?.reason == "SUPERVISOR_CONTEXT_RECOVERY_REVIEW_REQUIRED")
+          "原事件未记录领用编号；员工与领用关联由主管补证提出，仍须真实上一级同时核实关联和时间，尚未计入出勤。"
+          else "请核对原领取、领用与实际时间证据，批准前保持待核。"
+        actual.setText(""); reason.setText(""); evidence.setText("")
+        requestKey = java.util.UUID.randomUUID().toString()
+      }
+      override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+    }
+    val submit = button("主管提交上一级核时审批") {
+      val event = events.getOrNull(picker.selectedItemPosition)
+      if (event == null || event.status != "pending_review") { status.text = "请选择待核实的原领取事件"; return@button }
+      if (shift.text.isBlank() || actual.text.isBlank() || reason.text.isBlank() || evidence.text.isBlank()) {
+        status.text = "请填写原班次、实际时间、原因和交接核实事实"; return@button
+      }
+      val actualTime = try { java.time.OffsetDateTime.parse(actual.text.toString().trim()).toInstant().toString() }
+        catch (error: Exception) { status.text = "实际时间须包含日期、时间及时区"; return@button }
+      runBackground(action = { api.submitAttendanceReceiptReview(event.id, AttendanceReceiptReviewRequest(requestKey,
+        shift.text.toString().trim(), actualTime, reason.text.toString().trim(), evidence.text.toString().trim())) },
+        onSuccess = { result -> status.text = "已提交，等待经办主管的上一级审批。审批单：${result.reviewId}" },
+        onError = { status.text = "提交未完成：${friendly(it)}" })
+    }
+    val history = button("查看所选事件核时审批历史") {
+      val event = events.getOrNull(picker.selectedItemPosition)
+      if (event == null) { status.text = "请先查询并选择原事件"; return@button }
+      runBackground(action = { api.attendanceReceiptReviewHistory(event.id) }, onSuccess = { rows ->
+        status.text = if (rows.isEmpty()) "暂无核时申请" else rows.joinToString("\n\n") { row ->
+          "审批单 ${row.reviewId} · ${when(row.status) { "approved" -> "已批准并入考勤"; "rejected" -> "已驳回，原时间仍待核实"; else -> "待上一级审批" }}\n拟确认 ${row.actualAt}；班次 ${row.shiftId}\n核实事实：${row.handoverEvidence}"
+        }
+      }, onError = { status.text = "读取失败：${friendly(it)}" })
+    }
+    setContentView(screen(title = "领取实际时间核实", children = listOf(status, employee, load, picker,
+      shift, actual, reason, evidence, submit, history, backButton())))
+  }
+
+  private fun showWorkPhoneReturn() {
+    val status = statusText("设备接收人核对实物与当班收尾。故障换机仅夜班值班经理可办，关联原班，不产生下班。")
+    val code = editText("原工作手机设备码").apply { setText(api.deviceId ?: "") }
+    val reason = editText("交接说明／故障原因")
+    val replacement = editText("故障替换手机设备编号")
+    val completed = android.widget.CheckBox(this).apply { text = "已实际收到手机，并确认本人当班工作及收尾检查完成" }
+    val returnKey = java.util.UUID.randomUUID().toString()
+    val swapKey = java.util.UUID.randomUUID().toString()
+    val submit = button("确认本班手机实际归还") {
+      if (!completed.isChecked || code.text.isBlank() || reason.text.isBlank()) { status.text = "请核对实物、完成情况并填写交接说明"; return@button }
+      runBackground(action = {
+        api.returnDevice(DeviceReturnRequest(idempotencyKey=returnKey, deviceCode=code.text.toString().trim(),
+          hasPendingTasks=false, reason=reason.text.toString(), operatorNote=reason.text.toString()))
+      }, onSuccess = {
+        status.text = "归还成功，下班时间已记录"
+        if (it.deviceCode == api.deviceId) ChargingReceiptBridge.clearAnchor(this)
+      }, onError = { status.text = "归还未完成：${friendly(it)}" })
+    }
+    val swap = button("夜班值班经理确认故障换机") {
+      if (code.text.isBlank() || replacement.text.isBlank() || reason.text.isBlank()) { status.text = "请填原手机、替换手机和故障原因"; return@button }
+      runBackground(action = {
+        api.swapWorkPhone(WorkPhoneSwapRequest(swapKey,code.text.toString().trim(),replacement.text.toString().trim(),reason.text.toString()))
+      }, onSuccess = { status.text = "换机完成，沿用原班次与原上班记录；新机领取前重新校准本班时间" },
+        onError = { status.text = "换机未完成：${friendly(it)}" })
+    }
+    setContentView(screen(title = "工作手机实物交接", children = listOf(status,code,reason,completed,submit,replacement,swap,backButton())))
   }
 
   private fun showShiftManage() {
@@ -887,7 +1060,8 @@ class MainActivity : Activity() {
     val endAt = editText("结束(2026-07-03T18:30:00Z)")
     val points = editText("点位,逗号分隔(可空)")
     val note = editText("备注(可空)")
-    val status = statusText("排班提交上一级审批后发布；修改仅限原发起人在班次开始前申请")
+    val nightDuty = android.widget.CheckBox(this).apply { text = "承担所属项目本日夜班值班经理职责" }
+    val status = statusText("排班提交上一级审批后发布；同项目同日夜班值班经理仅一名，职责仅在已发布班次时段内生效")
     val submitButton = button("提交排班审批") {
       val u = userId.text.toString().trim()
       val d = workDate.text.toString().trim()
@@ -901,6 +1075,7 @@ class MainActivity : Activity() {
         action = {
           api.upsertStaffShift(StaffShiftUpsertRequest(
             idempotencyKey = "shift_${System.currentTimeMillis()}",
+            nightDutyManager = nightDuty.isChecked,
             userId = u, workDate = d, startAt = st, endAt = en,
             pointSpaceIds = points.text.toString().split(",").map { it.trim() }.filter { it.isNotEmpty() }
               .ifEmpty { null },
@@ -913,7 +1088,7 @@ class MainActivity : Activity() {
     }
     setContentView(screen(
       title = "主管排班",
-      children = listOf(status, userId, workDate, startAt, endAt, points, note, submitButton,
+      children = listOf(status, userId, workDate, startAt, endAt, points, nightDuty, note, submitButton,
         backButton()),
     ))
   }
@@ -971,7 +1146,7 @@ class MainActivity : Activity() {
     val list = statusText("")
     val labels = mapOf(
       "present" to "出勤", "absent" to "缺勤", "late" to "迟到", "early_leave" to "早退",
-      "missing_checkout" to "未打下班卡", "leave" to "请假", "rest" to "休",
+      "missing_checkout" to "未打下班卡", "leave" to "请假", "rest" to "休", "pending_review" to "实际时间待核实",
     )
     val queryButton = button("查询") {
       val m = month.text.toString().trim()

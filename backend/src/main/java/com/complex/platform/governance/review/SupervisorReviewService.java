@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -61,7 +61,19 @@ public class SupervisorReviewService {
     public static final String HR_LINE = "hr_review";
 
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
+            new SupervisorReviewPolicyRecord("dealer_delivery_resolution", "dealer.delivery_resolution", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "dealer.delivery_resolution.approve", List.of("finance_review")),
+            new SupervisorReviewPolicyRecord("inventory_quarantine_disposition", "inventory.quarantine_disposition", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "inventory.quarantine.approve", List.of("finance_review")),
+            new SupervisorReviewPolicyRecord("ticket_reward_rule", "ticket.reward.rule", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "ticket.reward.rule.approve"),
+            new SupervisorReviewPolicyRecord("ticket_reward_national", "ticket.reward.national", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "ticket.reward.national.approve"),
+            new SupervisorReviewPolicyRecord("ticket_reward_sales_contract", "ticket.reward.sales_contract", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "ticket.reward.sales_contract.approve",
+                    List.of("business_review", "finance_review", "legal_review")),
             new SupervisorReviewPolicyRecord("staff_shift_publish", "staff.shift.publish", 0, 1, true, List.of("reason"), "active", "one_level_up"),
+            new SupervisorReviewPolicyRecord("staff_attendance_receipt_review", "staff.attendance.receipt.review", 0, 1, true, List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("staff_penalty_cap_adjust", "staff.payroll.penalty_cap.adjust", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority", null,
                     List.of("hr_review", "finance_review", "legal_review")),
@@ -806,7 +818,8 @@ public class SupervisorReviewService {
     private static boolean isMoneyAction(String actionType) {
         String type = actionType == null ? "" : actionType;
         // U09-002：员工扣除上限是薪资安全阈值（BSM L1458、BSM-001 涉钱参数），与税费同按涉钱 1 个工作日。
-        return type.startsWith("finance.") || type.startsWith("staff.payroll.") || type.endsWith(".money")
+        return type.startsWith("finance.") || type.startsWith("staff.payroll.") || type.startsWith("ticket.reward.")
+                || type.equals("dealer.delivery_resolution") || type.equals("inventory.quarantine_disposition") || type.endsWith(".money")
                 || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
                 "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
     }

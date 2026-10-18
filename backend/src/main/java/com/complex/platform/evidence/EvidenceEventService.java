@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -50,6 +50,15 @@ public class EvidenceEventService {
     com.complex.platform.dealer.JdbcDealerOrderRepository dealerOrders;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.finance.FinanceRepository dealerFinance;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.facility.SiteEntryReportRepository siteEntries;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.dealer.JdbcDealerPortalRepository dealerPortalAccounts;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.customer.TicketRewardConfigService ticketRewardConfigs;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.inventory.InventoryQuarantineService quarantines;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -102,6 +111,18 @@ public class EvidenceEventService {
             String businessId,
             String attachmentRole
     ) {
+        try {
+            return storeAttachment(file, businessType, businessId, attachmentRole);
+        } catch (RuntimeException error) {
+            auditEventService.recordFailure("evidence.attachment_upload_failed", "evidence.attachment.create",
+                    businessType, businessId, null, null,
+                    error instanceof ApiException api ? api.code() : error.getClass().getSimpleName());
+            throw error;
+        }
+    }
+
+    private EvidenceAttachmentRecord storeAttachment(org.springframework.web.multipart.MultipartFile file,
+            String businessType, String businessId, String attachmentRole) {
         if (fileStorage == null) {
             throw ApiException.badRequest("EVIDENCE_FILE_STORAGE_UNAVAILABLE", "证据文件存储不可用");
         }
@@ -163,6 +184,7 @@ public class EvidenceEventService {
     @Transactional
     public EvidenceAttachmentRecord createAttachmentUploadIntent(EvidenceAttachmentUploadIntentRequest request) {
         EvidenceAttachmentUploadIntentRequest input = requireRequest(request);
+        requireDirectUpload(input.businessType());
         Optional<String> scope = evidenceScope(input.businessType(), input.businessId(), "dealer.manage", "evidence.attachment.create");
         return executeEvidenceWrite(
                 "createEvidenceAttachmentUploadIntent",
@@ -216,6 +238,8 @@ public class EvidenceEventService {
                 .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "附件不存在或已被删除"));
         Optional<String> scope = evidenceScope(source.businessType(), source.businessId(), "dealer.manage", "evidence.attachment.create");
         evidenceScope(input.businessType(), input.businessId(), "dealer.manage", "evidence.attachment.create");
+        requireDirectUpload(source.businessType());
+        requireDirectUpload(input.businessType());
         return executeEvidenceWrite(
                 "bindEvidenceAttachment:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -268,6 +292,7 @@ public class EvidenceEventService {
         String id = requireText(attachmentId, "attachment_id");
         EvidenceAttachmentRecord source = repository.findAttachmentById(id)
                 .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "附件不存在或已被删除"));
+        requireDirectUpload(source.businessType());
         Optional<String> scope = evidenceScope(source.businessType(), source.businessId(), "dealer.manage", "evidence.attachment.create");
         return executeEvidenceWrite(
                 "completeEvidenceAttachmentUpload:" + id,
@@ -415,6 +440,79 @@ public class EvidenceEventService {
 
     private Optional<String> evidenceScope(String businessType, String businessId, String dealerPermission, String evidencePermission) {
         String type = trimToNull(businessType);
+        boolean reading = "evidence.timeline.view".equals(evidencePermission);
+        if ("inventory_quarantine".equals(type)) {
+            quarantines.requireEvidenceScope(businessId, evidencePermission);
+            return authorizationService.currentMerchantIdQuietly();
+        }
+        if ("ticket_sales_contract".equals(type)) {
+            ticketRewardConfigs.requireEvidenceScope(businessId, reading);
+            authorizationService.requirePermission(evidencePermission);
+            String projectId = businessId.substring(0, businessId.indexOf(':'));
+            if (!authorizationService.canReachProject(authorizationService.currentActor(), projectId, evidencePermission)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "门票销售合同凭证不在附件权限的项目范围内");
+            }
+            return authorizationService.currentMerchantIdQuietly();
+        }
+        if ("facility_site_entry_report".equals(type)) {
+            var actor = authorizationService.currentActor();
+            var report = siteEntries.findById(requireText(businessId, "business_id"))
+                    .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "进场报备不存在"));
+            boolean vendor = authorizationService.isOutsourcedVendor(actor);
+            String permission = vendor
+                    ? (reading ? "facility.site_entry.view_assigned" : "facility.site_entry.upload_completion_assigned")
+                    : (authorizationService.currentActorHasPermission("facility.site_entry.accept")
+                            && authorizationService.canReachProject(actor, report.projectId(), "facility.site_entry.accept")
+                            ? "facility.site_entry.accept" : "facility.site_entry.review");
+            if (!reading && !vendor) throw ApiException.forbidden("FORBIDDEN", "完工材料须由报备供应商提交");
+            authorizationService.requirePermission(permission);
+            authorizationService.enforceOutsourcedAssigneeScope(actor, report.vendorUserId(), report.projectId());
+            if (!vendor && !authorizationService.canReachProject(actor, report.projectId(), permission)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "进场报备不在授权项目范围内");
+            }
+            if (!reading && !java.util.Set.of("in_progress", "rectifying").contains(report.status())) {
+                throw ApiException.conflict("INVALID_STATE", "当前报备不可提交完工材料");
+            }
+            return Optional.empty();
+        }
+        if ("dealer_delivery".equals(type)) {
+            var actor = authorizationService.currentActor();
+            if (dealerOrders == null || dealerRepository == null) {
+                throw ApiException.conflict("DEALER_EVIDENCE_UNAVAILABLE", "经销交付范围暂不可核验");
+            }
+            var order = dealerOrders.findOrder(requireText(businessId, "business_id"))
+                    .orElseThrow(() -> ApiException.notFound("DEALER_ORDER_NOT_FOUND", "经销订单不存在"));
+            if ("dealer".equals(actor.accountType())) {
+                authorizationService.requirePermission("dealer_portal.order.manage");
+                String terminal = null;
+                if (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
+                        instanceof org.springframework.web.context.request.ServletRequestAttributes attrs) {
+                    terminal = attrs.getRequest().getHeader("X-Terminal-Type");
+                }
+                if (!"dealer_portal".equals(com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(terminal))) {
+                    throw ApiException.forbidden("TERMINAL_NOT_ALLOWED", "经销凭证须从经销商门户访问");
+                }
+                var account = dealerPortalAccounts.findByUser(actor.id())
+                        .orElseThrow(() -> ApiException.forbidden("DEALER_PORTAL_ACCOUNT_REQUIRED", "账号没有经销商归属"));
+                var dealer = dealerRepository.findDealer(account.dealerId())
+                        .orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
+                if (!"active".equals(account.status()) || !"approved".equals(dealer.status()) || !dealer.portalEnabled()
+                        || !dealer.id().equals(order.dealerId())) {
+                    throw ApiException.forbidden("DEALER_PORTAL_NOT_ENABLED", "无权访问该订单交付凭证");
+                }
+            } else {
+                String projectId = dealerOrders.findOrderProjectId(order.id())
+                        .orElseThrow(() -> ApiException.conflict("DEALER_ORDER_PROJECT_MISSING", "合同中心仓项目缺失或冲突"));
+                String permission = reading ? "dealer.order.view"
+                        : (authorizationService.canReachProject(actor, projectId, "dealer.order.manage", evidencePermission)
+                                ? "dealer.order.manage" : "dealer.order.ship");
+                authorizationService.requirePermissions(permission, evidencePermission);
+                if (!authorizationService.canReachProject(actor, projectId, permission, evidencePermission)) {
+                    throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "交付凭证不在授权项目范围内");
+                }
+            }
+            return Optional.empty();
+        }
         if ("finance_refund".equals(type) && dealerFinance != null) {
             var refund = dealerFinance.findRefundById(requireText(businessId, "business_id"), false).orElse(null);
             if (refund != null && "dealer_order_refund".equals(refund.sourceType())) {
@@ -451,6 +549,12 @@ public class EvidenceEventService {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销资料不在授权项目范围内");
         }
         return authorizationService.currentMerchantIdQuietly();
+    }
+
+    private void requireDirectUpload(String businessType) {
+        if (java.util.Set.of("dealer_delivery", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract").contains(businessType == null ? "" : businessType.trim())) {
+            throw ApiException.badRequest("REAL_UPLOAD_REQUIRED", "该业务凭证须通过文件上传接口提交实际文件");
+        }
     }
 
     private EventBatchResponse create(EventBatchRequest request) {

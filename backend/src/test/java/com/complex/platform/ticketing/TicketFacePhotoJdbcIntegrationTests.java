@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -51,6 +51,7 @@ class TicketFacePhotoJdbcIntegrationTests {
     @Autowired private TicketFacePhotoPurgeJob purgeJob;
     @Autowired private PiiCipher piiCipher;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper json;
     @Autowired private com.complex.platform.customer.CustomerRepository customerRepository;
 
     // 一张 1x1 像素的 PNG 图字节（原图），base64 后作为购买捕获的人脸照 payload。
@@ -452,6 +453,8 @@ class TicketFacePhotoJdbcIntegrationTests {
         jdbcTemplate.update("UPDATE entitlement_templates SET merchant_id=? WHERE id IN"
                 + " (SELECT entitlement_template_id FROM ticket_type_entitlements WHERE ticket_type_id=?)",
                 merchantId, fixture.ticketTypeId);
+        com.complex.platform.support.TicketSalesContractTestFixtures.approvedPublished(
+                jdbcTemplate, json, fixture.ticketTypeId, projectId, merchantId);
     }
 
     private Fixture seed(boolean requireFacePhoto) {

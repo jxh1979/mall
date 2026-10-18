@@ -1,4 +1,6 @@
 package com.complex.platform.terminal;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -83,6 +85,14 @@ public class TerminalDeviceController {
         authorizationService.requirePermission("terminal.device.bind");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.returnDevice(request));
+    }
+
+    @PostMapping("/devices/work-phone-swap")
+    public ApiResponse<DeviceBindingResponse> swapWorkPhone(
+            @RequestBody com.complex.platform.terminal.dto.DeviceSwapRequest request) {
+        authorizationService.requirePermission("terminal.work_phone.swap");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.swapWorkPhone(request));
     }
 
     @PostMapping("/devices/{id}/unbind")

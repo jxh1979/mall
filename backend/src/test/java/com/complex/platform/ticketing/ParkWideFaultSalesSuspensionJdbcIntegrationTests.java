@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,6 +52,7 @@ class ParkWideFaultSalesSuspensionJdbcIntegrationTests {
     @Autowired private TicketOrderService orderService;
     @Autowired private AmusementParkWideFaultService faultService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper json;
 
     private String suffix;
     private String projectId;
@@ -378,6 +379,7 @@ class ParkWideFaultSalesSuspensionJdbcIntegrationTests {
             repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord("bind_" + templateId, id, templateId, 1, 1,
                     5000L, "default", 1, 5000L, now, now));
         }
+        com.complex.platform.support.TicketSalesContractTestFixtures.approvedPublished(jdbcTemplate, json, id, projectId, barId);
         return id;
     }
 

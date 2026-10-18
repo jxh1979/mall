@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -75,6 +77,36 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
                  FROM site_entry_reports
                  WHERE id = :id AND deleted_at IS NULL
                 """, new MapSqlParameterSource("id", id), this::map).stream().findFirst();
+    }
+
+    @Override
+    public Optional<SiteEntryReportRecord> findByIdForUpdate(String id) {
+        return jdbcTemplate.query("SELECT " + COLS + """
+                 FROM site_entry_reports
+                 WHERE id = :id AND deleted_at IS NULL FOR UPDATE
+                """, new MapSqlParameterSource("id", id), this::map).stream().findFirst();
+    }
+
+    @Override
+    public List<SiteEntryHistoryRecord> history(String reportId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM site_entry_report_history WHERE report_id=:id ORDER BY sequence
+                """, new MapSqlParameterSource("id", reportId), (rs, n) -> new SiteEntryHistoryRecord(
+                rs.getString("report_id"), rs.getInt("sequence"), rs.getString("action"), rs.getString("actor_id"),
+                nullableInstant(rs, "occurred_at"), readListString(rs.getString("attachment_ids")),
+                rs.getString("note"), rs.getString("result"), rs.getObject("completion_sequence", Integer.class)));
+    }
+
+    @Override
+    public void appendHistory(SiteEntryHistoryRecord r) {
+        jdbcTemplate.update("""
+                INSERT INTO site_entry_report_history
+                    (report_id, sequence, action, actor_id, occurred_at, attachment_ids, note, result, completion_sequence)
+                VALUES (:id, :sequence, :action, :actor, :time, CAST(:attachments AS jsonb), :note, :result, :completion)
+                """, new MapSqlParameterSource("id", r.reportId()).addValue("sequence", r.sequence())
+                .addValue("action", r.action()).addValue("actor", r.actorId())
+                .addValue("time", timestampWithTimeZone(r.occurredAt())).addValue("attachments", writeJson(r.attachmentIds()))
+                .addValue("note", r.note()).addValue("result", r.result()).addValue("completion", r.completionSequence()));
     }
 
     @Override

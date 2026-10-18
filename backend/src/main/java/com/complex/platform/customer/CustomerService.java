@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarOrderRecord;
@@ -52,6 +52,9 @@ import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class CustomerService {
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private PointsRecoveryService pointsRecoveries;
 
     // V368：人脸照拍摄同意在同意台账里的类型（与既有 privacy/marketing 同表不同类型）。
     private static final String FACE_PHOTO_CONSENT_TYPE = "ticket_face_photo";
@@ -551,6 +554,7 @@ public class CustomerService {
                     }
                     long totalPoints = item.pointsCost() * quantity;
                     CustomerPointsAccountRecord account = loadOrCreatePointsAccountForUpdate(customer.id());
+                    if (pointsRecoveries != null) pointsRecoveries.requireClear(customer.id());
                     // R3 P0-7 修：所有前置校验（余额充足、账户未冻结）必须在扣库存之前完成，任一不过即抛错，
                     // 绝不先动库存——避免"扣了货没扣分=库存泄漏"的顺序脆弱性（此前冻结校验误排在扣库存之后，
                     // 仅靠同事务回滚兜底）。扣库存 + 扣积分 + 存兑换记录同处 redeemPoints 的 @Transactional，
@@ -1154,6 +1158,8 @@ public class CustomerService {
     @Transactional
     public CustomerRecord deregisterAccount(String customerToken) {
         CustomerRecord customer = requireCustomer(customerToken);
+        repository.findPointsByCustomerIdForUpdate(customer.id());
+        if (pointsRecoveries != null) pointsRecoveries.cancelForDeregistration(customer.id(), Instant.now());
         return changeAccountStatus(customer.id(), "deregistered", null, "self-service deregistration",
                 "customer.account.deregistered", "customer.account.deregister_failed");
     }

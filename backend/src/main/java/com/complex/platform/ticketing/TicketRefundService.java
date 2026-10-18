@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.finance.RefundAuthorizationService;
@@ -272,6 +274,7 @@ public class TicketRefundService {
             throw ApiException.conflict("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE",
                     "只有“已通过”的退款才能确认拨付，当前状态不可确认");
         }
+        eventPublisher.publishEvent(new TicketRewardFacts.Refunded(current.id()));
         return new TicketRefundRecord(
                 current.id(), current.targetId(), current.refundAmountCent(), current.reason(), current.refundChannel(),
                 "success", current.requestedBy(), current.approvedBy(), current.approvedAt(),
@@ -310,9 +313,7 @@ public class TicketRefundService {
             repository.markTicketInstanceRefunded(instanceId, now);
         }
         // P0 清单#2：退款生效 → 按退款比例发积分冲减事件（到期自动退全未核销无已确认积分口径 → 不发）。
-        if (deductPoints) {
-            publishPointsDeductRequested(approved);
-        }
+        // 审批不冲回奖励；只有实际退款成功处理对应原人次。
         if (order != null) {
             // 限量票名额回补：退一张放一个可售名额（退成功的父票实例数），与下单即扣对称；无限量票 GREATEST(0,..) 兜底无害。
             if (!refundedInstances.isEmpty()) {
@@ -458,20 +459,6 @@ public class TicketRefundService {
                         "票 " + ti.id() + " 存在已核销或已冻结的权益，整票不可退");
             }
         }
-    }
-
-    private void publishPointsDeductRequested(TicketRefundRecord refund) {
-        TicketOrderRecord order = repository.findTicketOrderById(refund.targetId()).orElse(null);
-        if (order == null || order.amountCent() <= 0) {
-            return; // 无原单/原单金额非正：无法按比例冲减。
-        }
-        // 退款比例（basis points）= 退款额 / 原单额 × 10000，封顶 100%。
-        long ratioBp = Math.min(BASIS_POINTS_DENOMINATOR,
-                refund.refundAmountCent() * BASIS_POINTS_DENOMINATOR / order.amountCent());
-        if (ratioBp <= 0) {
-            return;
-        }
-        eventPublisher.publishEvent(new PointsDeductRequestedEvent(order.id(), refund.id(), ratioBp));
     }
 
     /**

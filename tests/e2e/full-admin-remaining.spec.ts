@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -342,6 +343,106 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
 // 平台账号（admin）菜单不出现这些项，直链进入显示业务化提示（不放请求打 403/400）。
 const merchantOnlyPages = new Set(["ADM-MER-003", "ADM-MER-004", "ADM-MER-005", "ADM-MER-006", "ADM-MER-007", "ADM-MER-008"]);
 const vendorOnlyPages = new Set(["ADM-VND-001", "ADM-VND-002", "ADM-VND-003", "ADM-VND-004"]);
+
+test.describe("batch04 admin browser acceptance", () => {
+  test("ADM-FAC-002 ADM-FAC-003 review and acceptance send real material version", async ({ page }) => {
+    await installMockApi(page);
+    const report = { id: "entry-b04", work_scope: "设备间施工", project_id: "org-1",
+      vendor_user_id: "vendor-1", status: "submitted", space_id: "设备间",
+      crew_count: 2, contact_name: "现场负责人", contact_phone: "138****8000" };
+    const history: Array<Record<string, unknown>> = [];
+    const writes: Array<{ path: string; body: Record<string, unknown> }> = [];
+    await page.route("**/api/v1/facility/site-entry-reports**", async route => {
+      const path = new URL(route.request().url()).pathname;
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON();
+        writes.push({ path, body });
+        if (path.endsWith("/review")) {
+          report.status = "in_progress";
+          history.push({ sequence: 1, action: "completion", actor_id: "vendor-1",
+            occurred_at: "2026-10-18T08:00:00Z", attachment_ids: ["file-b04"], note: "完工照片已上传" });
+        } else {
+          report.status = "rectification";
+          history.push({ sequence: 2, action: "acceptance", actor_id: "property-1",
+            occurred_at: "2026-10-18T09:00:00Z", attachment_ids: [], note: body.acceptance_comment,
+            result: body.result, completion_sequence: body.completion_sequence });
+        }
+      }
+      const data = path.endsWith("/history") ? history : route.request().method() === "POST" ? report : [report];
+      await route.fulfill({ json: { code: "OK", message: "ok", data } });
+    });
+    await adminLogin(page, "/admin/facility/site-entry-review");
+    await expect(page.getByTestId("site-entry-property-page")).toContainText("138****8000");
+    await page.getByLabel("办理意见", { exact: true }).fill("允许按报备范围施工");
+    await page.getByRole("button", { name: "批准进场", exact: true }).click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0].body).toMatchObject({ decision: "approve", review_comment: "允许按报备范围施工" });
+    await page.getByTestId("admin-nav-ADM-FAC-003").click();
+    await expect(page.getByRole("link", { name: "查看材料 1" })).toHaveAttribute("href",
+      "/api/v1/facility/site-entry-reports/entry-b04/attachments/file-b04/file");
+    await page.getByLabel("办理意见", { exact: true }).fill("请补齐防护材料");
+    await page.getByRole("button", { name: "要求整改", exact: true }).click();
+    await expect.poll(() => writes.length).toBe(2);
+    expect(writes[1].body).toMatchObject({ result: "rectify", completion_sequence: 1, acceptance_comment: "请补齐防护材料" });
+    await expect(page.getByLabel("完工材料与验收历史")).toContainText("请补齐防护材料");
+    await expect(page.getByRole("button", { name: "验收通过", exact: true })).toBeDisabled();
+  });
+
+  test("ADM-TKT-004 ADM-FIN-008 config approval and bill objection remain distinct", async ({ page }) => {
+    await installMockApi(page);
+    const submitted: Array<Record<string, unknown>> = [];
+    const configs: Array<Record<string, unknown>> = [];
+    const objections: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/platform/projects", route => route.fulfill({ json: { code: "OK", data: [{ id: "org-1", name: "本综合体" }] } }));
+    await page.route("**/api/v1/ticketing/ticket-types**", route => route.fulfill({ json: { code: "OK", data: [{ id: "ticket-b04", ticket_name: "体验票" }] } }));
+    await page.route("**/api/v1/loyalty/ticket-reward-configs**", async route => {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON();
+        submitted.push(body);
+        configs.push({ id: "config-b04", kind: body.kind, version: "V0.01", status: "pending_review",
+          values: body.values, effective_at: body.effective_at, review_id: "review-b04" });
+      }
+      await route.fulfill({ json: { code: "OK", data: route.request().method() === "POST" ? configs[0] : configs } });
+    });
+    const bill = { id: "bill-b04", billing_month: "2026-09-01", seller_entity_id: "销售方",
+      receiver_entity_id: "积分中心", amount_cent: 100, paid_amount_cent: 40, unpaid_amount_cent: 60,
+      visible_at: "2026-10-01T08:00:00Z", objection_deadline: "2026-10-16",
+      due_date: "2026-10-25", payment_status: "partial_paid", open_objections: 0 };
+    await page.route("**/api/v1/loyalty/ticket-points-billing/**", async route => {
+      const path = new URL(route.request().url()).pathname;
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON();
+        objections.push({ id: "objection-b04", reason: body.reason, status: "open" });
+      }
+      const data = path.endsWith("/bills") ? [bill] : path.endsWith("/objections") ? objections
+        : path.endsWith("/schedule-adjustments") ? [{ id: "adjustment-b04",
+          previous_objection_deadline: "2026-10-15", objection_deadline: "2026-10-16",
+          previous_due_date: "2026-10-15", due_date: "2026-10-25", unpaid_amount_cent: 60 }] : [];
+      await route.fulfill({ json: { code: "OK", data } });
+    });
+    await adminLogin(page, "/admin/ticketing/reward-configs");
+    await page.getByLabel("综合体", { exact: true }).selectOption("org-1");
+    await page.getByLabel("票种", { exact: true }).selectOption("ticket-b04");
+    await page.getByLabel("每人份／次份固定积分").fill("100");
+    await page.getByLabel("积分下限", { exact: true }).fill("0");
+    await page.getByLabel("积分上限", { exact: true }).fill("200");
+    await page.getByLabel("生效时间", { exact: true }).fill("2027-01-01T12:00");
+    await page.getByLabel("变更原因", { exact: true }).fill("按公布时间更新固定积分");
+    await page.getByLabel("最终审批人账号", { exact: true }).fill("reviewer-b04");
+    await page.getByRole("button", { name: "提交审批", exact: true }).click();
+    await expect.poll(() => submitted.length).toBe(1);
+    expect(submitted[0]).toMatchObject({ project_id: "org-1", ticket_type_id: "ticket-b04", values: { fixed_value: 100 } });
+    await expect(page.getByRole("button", { name: "发布已审批版本" })).toBeDisabled();
+    await page.getByTestId("admin-nav-ADM-FIN-008").click();
+    await expect(page.getByTestId("ticket-points-billing-page")).toContainText("1.00／0.40／0.60");
+    await page.getByRole("button", { name: "查看明细和异议" }).click();
+    await expect(page.getByText("当时未付 0.60 元。", { exact: false })).toBeVisible();
+    await page.getByLabel("异议内容／复核说明", { exact: true }).fill("核对本月发行费明细");
+    await page.getByRole("button", { name: "提交账单异议", exact: true }).click();
+    await expect.poll(() => objections.length).toBe(1);
+    await expect(page.getByTestId("ticket-points-billing-page")).toContainText("核对本月发行费明细");
+  });
+});
 
 test.describe("full admin remaining pages acceptance", () => {
   test("ADM-REM-01 exposes all non-first admin pages with route, evidence and readable content", async ({ page }) => {

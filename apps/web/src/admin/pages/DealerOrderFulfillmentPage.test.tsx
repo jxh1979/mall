@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,7 @@ describe("DealerOrderFulfillmentPage 经销订单与履约（ADM-DLR-002）", ()
         if (url.endsWith("/orders")) return [orderRow, { id: "dord_2", orderNo: "DO-2", status: "pending_refund", totalAmountCent: 6000, paidAmountCent: 1000 }];
         if (url.endsWith("/overpayments")) return [{ id: "dovp_1", orderId: "dord_3", amountCent: 2500, status: "unconfirmed", unconfirmedAmountCent: 2500, prepaymentBalanceCent: 0, appliedAmountCent: 0 }];
         if (url === "/api/v1/dealers/orders/dord_1") return orderRow;
+        if (url.endsWith("/delivery")) return { netReceivableCent: 11000, receivedCent: 0, pendingRefundCent: 0, moneyStatus: "unpaid", batches: [], receipts: [], discrepancies: [] };
         if (url.endsWith("/payments")) return [{ id: "dpay_1", method: "bank_transfer", amountCent: 3000, status: "pending_verification" }, { id: "dpay_2", method: "platform_online", amountCent: 500, status: "late" }];
         if (url.endsWith("/refunds")) return [{ id: "drf_1", paymentId: "dpay_2", amountCent: 500, status: "approved", reviewId: "review_1" }];
         return [];
@@ -148,6 +149,35 @@ describe("DealerOrderFulfillmentPage 经销订单与履约（ADM-DLR-002）", ()
     fireEvent.change(screen.getByTestId("pay-amount"), { target: { value: "50" } });
     fireEvent.click(screen.getByTestId("pay-register"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/orders/dord_1/payments", expect.objectContaining({ amountCent: 5000 })));
+  });
+
+  it("分次签收提交实际六箱及真实凭证，不把十箱整单签完", async () => {
+    const api = makeApi(); const original = api.get;
+    const shipped = { ...orderRow, status: "shipping", paidAmountCent: 11000 };
+    api.get = vi.fn(async (url: string) => {
+      if (url.endsWith("/orders")) return [shipped];
+      if (url === "/api/v1/dealers/orders/dord_1") return shipped;
+      if (url.endsWith("/delivery")) return { netReceivableCent: 11000, receivedCent: 11000, pendingRefundCent: 0, moneyStatus: "settled", batches: [{ id: "dord_1", shippedAt: "2026-10-01T00:00:00Z", lines: [{ orderLineId: "line_1", quantity: 10, recordedQuantity: 0, acceptedQuantity: 0 }] }], receipts: [], discrepancies: [] };
+      if (url.endsWith("/lines")) return [{ id: "line_1", itemId: "item_a", spec: "箱" }];
+      return original(url);
+    }) as AdminApiClient["get"];
+    api.postForm = vi.fn().mockResolvedValue({ id: "att_receipt" });
+    renderPage(api);
+    fireEvent.click(await screen.findByTestId("dealer-orders-select-dlr_1"));
+    fireEvent.click(await screen.findByTestId("order-select-dord_1"));
+    fireEvent.change(await screen.findByLabelText("item_a（箱） 合格接收"), { target: { value: "6" } });
+    fireEvent.change(screen.getByLabelText("已核验收货确认人"), { target: { value: "经销商本人" } });
+    fireEvent.change(screen.getByLabelText("实际交接凭证"), { target: { files: [new File(["image"], "本次签收.png", { type: "image/png" })] } });
+    await screen.findByText("本次签收.png（已上传）");
+    fireEvent.click(screen.getByRole("button", { name: "保存本次收货事实" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/orders/dord_1/sign", expect.objectContaining({
+      deliveryBatchId: "dord_1", buyerContact: "经销商本人", evidenceAttachmentIds: ["att_receipt"],
+      lines: [{ orderLineId: "line_1", acceptedQuantity: 6, rejectedQuantity: 0, damagedQuantity: 0, shortQuantity: 0 }],
+    })));
+    expect(screen.getByText(/交付数量尚未处理完成/)).toBeTruthy();
+    expect(screen.getByText(/交付差异款项进度：交付差异款项已结清/)).toBeTruthy();
+    expect(screen.queryByText(/货款已结清/)).toBeNull();
+    expect(screen.getByText(/交付差异原路退款待结/)).toBeTruthy();
   });
 
 });

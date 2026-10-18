@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -218,7 +218,7 @@ function buildCsv() {
     return {
       table_name: table,
       ...classification,
-      file_version: "V0.05",
+      file_version: "V0.06",
       status: "covered",
     };
   });

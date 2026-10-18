@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -54,10 +54,14 @@ public class DealerPortalService {
     private final DealerReturnService returnService;
     private final AuthorizationService authorization;
     private final AuditEventService audit;
+    private final DealerDeliveryService delivery;
+    private final com.complex.platform.evidence.EvidenceEventService attachmentService;
+    private final com.complex.platform.evidence.EvidenceEventRepository attachmentRepository;
 
     public DealerPortalService(JdbcDealerPortalRepository portalAccounts, JdbcDealerRepository dealers, JdbcDealerOrderRepository orderRepository,
             DealerService dealerService, DealerOrderService orderService, DealerReturnService returnService, AuthorizationService authorization,
-            AuditEventService audit) {
+            AuditEventService audit, DealerDeliveryService delivery,
+            com.complex.platform.evidence.EvidenceEventService attachmentService, com.complex.platform.evidence.EvidenceEventRepository attachmentRepository) {
         this.portalAccounts = portalAccounts;
         this.dealers = dealers;
         this.orderRepository = orderRepository;
@@ -66,6 +70,9 @@ public class DealerPortalService {
         this.returnService = returnService;
         this.authorization = authorization;
         this.audit = audit;
+        this.delivery = delivery;
+        this.attachmentService = attachmentService;
+        this.attachmentRepository = attachmentRepository;
     }
 
     // ── 资料 ──
@@ -164,10 +171,70 @@ public class DealerPortalService {
     }
 
     @Transactional
-    public DealerOrderRecord signOrder(String orderId, String idempotencyKey) {
-        DealerRecord dealer = currentDealer(true);
-        authorization.requirePermission(ORDER_MANAGE);
-        return orderService.signOrder(requireOwnOrder(dealer, orderId).id(), idempotencyKey, ORDER_MANAGE);
+    public DealerOrderRecord signOrder(String orderId, com.complex.platform.dealer.dto.DealerDeliveryReceiptRequest request) {
+        String ownedOrderId;
+        try {
+            DealerRecord dealer = currentDealer(true);
+            authorization.requirePermission(ORDER_MANAGE);
+            ownedOrderId = requireOwnOrder(dealer, orderId).id();
+        } catch (RuntimeException error) {
+            recordDeliveryFailure("dealer.delivery.receive_failed","dealer_order",orderId,request==null?null:request.idempotencyKey(),error);
+            throw error;
+        }
+        return delivery.receive(ownedOrderId, request, ORDER_MANAGE);
+    }
+
+    public DealerDeliveryRecord delivery(String orderId) {
+        String ownedOrderId;
+        try {
+            DealerRecord dealer = currentDealer(true);
+            authorization.requirePermission(ORDER_MANAGE);
+            ownedOrderId = requireOwnOrder(dealer, orderId).id();
+        } catch (RuntimeException error) {
+            recordDeliveryFailure("dealer.delivery.view_failed","dealer_order",orderId,null,error);
+            throw error;
+        }
+        return delivery.get(ownedOrderId, ORDER_MANAGE);
+    }
+
+    public com.complex.platform.evidence.EvidenceAttachmentRecord uploadDeliveryEvidence(String orderId, org.springframework.web.multipart.MultipartFile file) {
+        try {
+            DealerRecord dealer = currentDealer(true);
+            authorization.requirePermission(ORDER_MANAGE);
+            requireOwnOrder(dealer, orderId);
+        } catch (RuntimeException error) {
+            recordDeliveryFailure("evidence.attachment_upload_failed","dealer_delivery",orderId,null,error);
+            throw error;
+        }
+        var attachment = attachmentService.uploadAttachment(file, "dealer_delivery", orderId, "other");
+        return new com.complex.platform.evidence.EvidenceAttachmentRecord(attachment.id(), attachment.fileName(), attachment.contentType(), attachment.fileSize(),
+                attachment.businessType(), attachment.businessId(), attachment.attachmentRole(), attachment.objectKey(),
+                "/api/v1/dealer-portal/orders/" + orderId + "/delivery-evidence/" + attachment.id(), attachment.status(), attachment.checksum(),
+                attachment.createdAt(), attachment.updatedAt(), attachment.merchantId());
+    }
+
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> readDeliveryEvidence(String orderId, String attachmentId) {
+        try {
+            DealerRecord dealer = currentDealer(true);
+            authorization.requirePermission(ORDER_MANAGE);
+            requireOwnOrder(dealer, orderId);
+            var attachment = attachmentRepository.findAttachmentById(attachmentId)
+                    .filter(a -> "dealer_delivery".equals(a.businessType()) && orderId.equals(a.businessId()))
+                    .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "本订单交付凭证不存在"));
+            java.nio.file.Path path = attachmentService.resolveAttachmentFile(attachmentId);
+            var response = org.springframework.http.ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(attachment.contentType()))
+                    .body((org.springframework.core.io.Resource)new org.springframework.core.io.FileSystemResource(path));
+            audit.recordSuccess("dealer.portal.delivery_evidence_viewed", ORDER_MANAGE, "evidence_attachment", attachmentId, null, null, Map.of("order_id",orderId));
+            return response;
+        } catch (RuntimeException error) {
+            recordDeliveryFailure("dealer.portal.delivery_evidence_view_failed","evidence_attachment",attachmentId,null,error);
+            throw error;
+        }
+    }
+
+    private void recordDeliveryFailure(String event,String type,String id,String key,RuntimeException error) {
+        try { audit.recordFailure(event,ORDER_MANAGE,type,id,null,key,error instanceof ApiException api?api.code():error.getClass().getSimpleName()); }
+        catch(RuntimeException auditError) { error.addSuppressed(auditError); }
     }
 
     // ── 退货 ──

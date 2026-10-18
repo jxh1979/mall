@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -19,11 +20,14 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-CONT-001", label: "合同生命周期工作台", module: "合同", group: "governance", route: "/admin/contracts", requiredPermissions: ["contract.draft.manage"] },
   { pageId: "ADM-LEASE-001", label: "招商工作台", module: "招商租赁", group: "governance", route: "/admin/leasing/workbench", requiredPermissions: ["leasing.lead.manage", "leasing.intent.manage", "leasing.brand.manage"] },
   { pageId: "ADM-FAC-001", label: "楼宇运营工作台", module: "物业/楼宇", group: "ops", route: "/admin/facility/workbench", requiredPermissions: ["facility.equipment.manage"] },
+  { pageId: "ADM-FAC-002", label: "进场审批", module: "物业/楼宇", group: "ops", route: "/admin/facility/site-entry-review", requiredPermissions: ["facility.site_entry.review"], accountForms: ["platform"] },
+  { pageId: "ADM-FAC-003", label: "施工验收", module: "物业/楼宇", group: "ops", route: "/admin/facility/site-entry-acceptance", requiredPermissions: ["facility.site_entry.accept"], accountForms: ["platform"] },
   { pageId: "ADM-ENE-001", label: "能源工作台", module: "物业/楼宇", group: "ops", route: "/admin/energy/workbench", requiredPermissions: ["energy.reading.manage"] },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", module: "治理", group: "governance", route: "/admin/governance/admission-audits", requiredPermissions: ["merchant.profile.view", "entity.binding.view", "contract.view"] },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", module: "治理", group: "governance", route: "/admin/governance/supervisor-review", requiredPermissions: ["governance.supervisor_review.view"] },
   { pageId: "ADM-TKT-002", label: "动态定价", module: "票务", group: "ticketing", route: "/admin/ticketing/dynamic-pricing", requiredPermissions: ["ticket.dynamic_pricing.view"] },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", module: "票务", group: "ticketing", route: "/admin/ticketing/orders", requiredPermissions: ["ticket.order.read", "ticket.entitlement.view", "ticket.verify.view"] },
+  { pageId: "ADM-TKT-004", label: "门票积分配置", module: "票务", group: "ticketing", route: "/admin/ticketing/reward-configs", requiredPermissions: ["ticket.reward.config.view"] },
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", module: "酒吧", group: "bar", route: "/admin/bar/orders", requiredPermissions: ["bar.order.view"] },
   { pageId: "ADM-BAR-003", label: "存酒", module: "酒吧", group: "bar", route: "/admin/bar/stored-wine", requiredPermissions: ["bar.saved_bottle.manage"] },
   { pageId: "ADM-BAR-004", label: "销售提成", module: "酒吧", group: "bar", route: "/admin/bar/commissions", requiredPermissions: ["bar.table_commission.calculate"] },
@@ -46,6 +50,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FIN-004", label: "物业费管理", module: "财务", group: "finance", route: "/admin/finance/property-fee", requiredPermissions: ["finance.property_fee.manage"] },
   { pageId: "ADM-FIN-006", label: "商户费用台账", module: "财务", group: "finance", route: "/admin/finance/merchant-expenses", requiredPermissions: ["finance.merchant_expense.view"] },
   { pageId: "ADM-FIN-007", label: "持股分红", module: "财务", group: "finance", route: "/admin/finance/dividends", requiredPermissions: ["finance.dividend.view"] },
+  { pageId: "ADM-FIN-008", label: "门票积分月结", module: "财务", group: "finance", route: "/admin/finance/ticket-points-bills", requiredPermissions: ["ticket.points.billing.view"] },
   { pageId: "ADM-STL-001", label: "结算配置中心", module: "结算", group: "settlement", route: "/admin/settlement/config", requiredPermissions: ["settlement.config.view"] },
   { pageId: "ADM-STL-002", label: "开票清单", module: "结算", group: "settlement", route: "/admin/settlement/invoice-items", requiredPermissions: ["settlement.invoice.view"] },
   { pageId: "ADM-STL-003", label: "内部结算价目录", module: "结算", group: "settlement", route: "/admin/settlement/internal-price-catalog", requiredPermissions: ["settlement.config.view"] },

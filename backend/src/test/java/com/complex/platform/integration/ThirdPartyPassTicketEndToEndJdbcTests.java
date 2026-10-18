@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -14,7 +16,6 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -51,12 +52,16 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper json;
 
     private String suffix;
     private String provider;
     private String ticketTypeId;
     private String deviceId;
-    private final List<String> localOrderIds = new ArrayList<>();
+    private String projectId;
+    private String merchantId;
+    private String sellerEntityId;
 
     @BeforeEach
     void setUp() {
@@ -65,6 +70,10 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
         provider = "tp-e2e-" + suffix;
         ticketTypeId = "tt_tp_" + suffix;
         deviceId = "device_tp_" + suffix;
+        projectId = "project_tp_" + suffix;
+        merchantId = "merchant_tp_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','渠道票测试综合体','active',now(),now())", projectId);
+        jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at) VALUES(?,'渠道票履约商户','amusement','active',?,now(),now())", merchantId, projectId);
         // V071 种子默认关（tcs_int_ticket_chan_off）→ 本测试打开；@AfterEach 复位为关。
         jdbcTemplate.update(
                 "UPDATE terminal_capability_switches SET enabled = TRUE WHERE capability_code = 'integration.ticket_channel.sync'");
@@ -75,12 +84,14 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
                 false, "published", 2, null, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
-                    default_value_cent, status, created_at, updated_at)
-                VALUES (?, '入场', 'entry', 1, 0, 'active', now(), now())
-                """, "et_tp_" + suffix);
+                    default_value_cent, status, merchant_id, created_at, updated_at)
+                VALUES (?, '入场', 'entry', 1, 0, 'active', ?, now(), now())
+                """, "et_tp_" + suffix, merchantId);
         // S11：分项票面原价必配（componentPriceCent=8800），否则出票按业态拆分账拒绝。
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "tte_tp_" + suffix, ticketTypeId, "et_tp_" + suffix, 1, 1, 8800L, null, 1, 8800L, now, now));
+        sellerEntityId = com.complex.platform.support.TicketSalesContractTestFixtures.approvedPublished(
+                jdbcTemplate, json, ticketTypeId, projectId, merchantId);
         // 核销设备（场馆级 kiosk）。
         jdbcTemplate.update("""
                 INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope,
@@ -113,30 +124,11 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
         // 复位开关为出厂默认（关）。
         jdbcTemplate.update(
                 "UPDATE terminal_capability_switches SET enabled = FALSE WHERE capability_code = 'integration.ticket_channel.sync'");
-        for (String orderId : localOrderIds) {
-            for (IssuedEntitlementRecord entitlement : ticketingRepository.listIssuedEntitlementsByOrderId(orderId)) {
-                com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate,
-                        "DELETE FROM settlement_transactions WHERE entitlement_id = ?", entitlement.id());
-                jdbcTemplate.update("DELETE FROM ticket_verifications WHERE entitlement_id = ?", entitlement.id());
-            }
-            jdbcTemplate.update("DELETE FROM ticket_credentials WHERE order_id = ?", orderId);
-            jdbcTemplate.update("DELETE FROM issued_entitlements WHERE order_id = ?", orderId);
-            jdbcTemplate.update("DELETE FROM ticket_slot_holders WHERE parent_ticket_id IN (SELECT id FROM ticket_instances WHERE order_id = ?)", orderId);
-            jdbcTemplate.update("DELETE FROM ticket_instances WHERE order_id = ?", orderId);
-            // ticket_payment_intents 为 append-only（资金留痕），测试残留行 id 全程唯一、不清。
-            jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", orderId);
-        }
+        // 本例须真提交以验证 AFTER_COMMIT 回传。保留售票、核销、结算、合同及其来源事实；
+        // 各例以唯一 provider/项目/票种隔离，只清可变待发队列和费率配置，不禁用账本触发器。
         jdbcTemplate.update("DELETE FROM integration_retry_tasks WHERE provider_code = ?", provider);
-        jdbcTemplate.update("DELETE FROM integration_reconciliation_differences WHERE provider_code = ?", provider);
-        jdbcTemplate.update("DELETE FROM integration_reconciliation_batches WHERE provider_code = ?", provider);
-        jdbcTemplate.update("DELETE FROM integration_order_syncs WHERE provider_code = ?", provider);
-        jdbcTemplate.update("DELETE FROM integration_channel_ticket_type_map WHERE provider_code = ?", provider);
-        jdbcTemplate.update("DELETE FROM integration_provider_adapters WHERE provider_code = ?", provider);
+        jdbcTemplate.update("UPDATE integration_provider_adapters SET webhook_enabled=FALSE, polling_check_enabled=FALSE WHERE provider_code=?", provider);
         jdbcTemplate.update("DELETE FROM channel_fee_configs WHERE id = ?", "cfc_tp_" + suffix);
-        jdbcTemplate.update("DELETE FROM terminal_devices WHERE id = ?", deviceId);
-        jdbcTemplate.update("DELETE FROM ticket_type_entitlements WHERE ticket_type_id = ?", ticketTypeId);
-        jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = ?", "et_tp_" + suffix);
-        jdbcTemplate.update("DELETE FROM ticket_types WHERE id = ?", ticketTypeId);
     }
 
     private IntegrationOrderSyncRequest reflowRequest(String idempotencyKey, String externalBusinessId) {
@@ -154,7 +146,6 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
         IntegrationOrderSyncRecord sync = integrationService.createOrderSync(reflowRequest("tp-e2e-1-" + suffix, externalId));
         assertThat(sync.status()).isEqualTo("synced");
         String localOrderId = sync.providerPayload().get("local_ticket_order_id").toString();
-        localOrderIds.add(localOrderId);
 
         // 本地订单：sales_channel=meituan（S11 渠道费按此解析）、已支付（paid_at 非空）、已出票。
         Map<String, Object> order = jdbcTemplate.queryForMap("SELECT * FROM ticket_orders WHERE id = ?", localOrderId);
@@ -162,6 +153,9 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
         assertThat(order.get("pay_status")).isEqualTo("paid");
         assertThat(order.get("issue_status")).isEqualTo("issued");
         assertThat(order.get("paid_at")).isNotNull();
+        assertThat(order.get("project_id")).isEqualTo(projectId);
+        assertThat(jdbcTemplate.queryForObject("SELECT seller_entity_id FROM ticket_order_sales_contracts WHERE order_id=?",
+                String.class, localOrderId)).isEqualTo(sellerEntityId);
         assertThat(((Number) order.get("amount_cent")).longValue()).isEqualTo(8800L);
         assertThat(sync.providerPayload()).containsEntry("amount_matched", true);
 

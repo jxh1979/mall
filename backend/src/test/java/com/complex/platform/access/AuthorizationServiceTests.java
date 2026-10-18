@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -399,6 +399,48 @@ class AuthorizationServiceTests {
                     assertThat(exception.status().value()).isEqualTo(403);
                     assertThat(exception.code()).isEqualTo("MERCHANT_SCOPE_REQUIRED");
                 });
+    }
+
+    @Test
+    void scheduledRecipientCheckIncludesNonRoleGrantsWithoutSessionOrConsumption() {
+        String code = "ops.production_readiness.view";
+        for (AccessRepository.Source source : List.of(AccessRepository.Source.ROLE,
+                AccessRepository.Source.TEMPLATE_APPLICATION, AccessRepository.Source.TEMPORARY_GRANT,
+                AccessRepository.Source.USER_OVERRIDE)) {
+            String id = "recipient_" + source;
+            AccessActor recipient = new AccessActor(id, id, "staff", "org", null, "active");
+            repository.addEffect(new AccessRepository.PermissionEffect(id, code, AccessRepository.Effect.GRANT,
+                    source, id, Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600), true, false));
+            assertThat(service.hasEffectivePermission(recipient, code)).as(source.name()).isTrue();
+            assertThat(service.hasEffectivePermission(recipient, code)).isTrue();
+            repository.addEffect(new AccessRepository.PermissionEffect(id, code, AccessRepository.Effect.DENY,
+                    AccessRepository.Source.ROLE, id + "_deny", null, null, false, false));
+            assertThat(service.hasEffectivePermission(recipient, code)).isFalse();
+        }
+        assertThat(repository.consumedSourceIds).isEmpty();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    void scheduledRecipientCheckRejectsExpiredDisabledAndUnknownPermissions() {
+        AccessActor recipient = new AccessActor("recipient", "recipient", "staff", "org", null, "active");
+        repository.addEffect(new AccessRepository.PermissionEffect(recipient.id(), "ops.production_readiness.view",
+                AccessRepository.Effect.GRANT, AccessRepository.Source.TEMPORARY_GRANT, "expired",
+                Instant.now().minusSeconds(120), Instant.now().minusSeconds(60), false, false));
+        assertThat(service.hasEffectivePermission(recipient, "ops.production_readiness.view")).isFalse();
+        assertThat(service.hasEffectivePermission(recipient, "unknown.permission")).isFalse();
+        assertThat(service.hasEffectivePermission(new AccessActor("recipient", "recipient", "staff",
+                "org", null, "disabled"), "ops.production_readiness.view")).isFalse();
+    }
+
+    @Test
+    void scheduledRecipientCheckRejectsScopeChangeDuringPermissionRead() {
+        AccessRepository.PermissionEffect grant = f05RoleGrant(AF_CODE);
+        f05ArmRoundTripAroundEffectsRead("org_b", "merchant", grant);
+        AccessActor recipient = service.currentActor();
+        SecurityContextHolder.clearContext();
+        assertThat(service.hasEffectivePermission(recipient, AF_CODE)).isFalse();
+        f05AssertRoundTripHappened(grant);
     }
 
     @Test

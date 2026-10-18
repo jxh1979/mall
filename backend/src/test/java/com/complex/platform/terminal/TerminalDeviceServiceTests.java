@@ -1,5 +1,7 @@
 package com.complex.platform.terminal;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,6 +68,8 @@ class TerminalDeviceServiceTests {
                 // M723-F21：桩对返回 Optional 的范围方法默认给空＝平台管理员（全部设备都能管），既有用例语义不变
                 org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class)
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"workPhoneAttendance",
+                org.mockito.Mockito.mock(com.complex.platform.access.staff.StaffWorkPhoneAttendanceService.class));
     }
 
     @Test

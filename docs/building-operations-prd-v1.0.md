@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.05·据需求重建）
+# 楼宇运营业务域 PRD（V1.06·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -179,6 +179,14 @@
 - 迁移：`V168__energy_metering.sql`；能源费分摊合同 CHECK 来自 `V162__contract_lifecycle.sql`
 - 表：`energy_meters`、`energy_meter_readings`、`energy_anomaly_thresholds`、`ar_ap_items`、`ar_ap_item_sources`
 - 权限：`energy.meter.manage`（medium、无需审批）、`energy.reading.manage`（high、`requires_approval=true`）
+
+## 5A. 施工完工、整改与验收（HP-F04）
+
+- 供应商只可对指派给本人、处于施工中或整改中的报备上传真实文件并提交完工材料；未提供材料不能申请验收。整改重提须包含本轮新增材料，原材料与验收意见保留。
+- 每次完工提交、验收通过或要求整改，分别记录操作者、时间、材料、意见及顺序号。验收引用当前所见的完工提交序号；没有待验收提交、引用旧序号或重复处置均拒绝，重复请求返回首次结果，不重复追加历史。
+- 物业人员在“进场审批”与“施工验收”入口分别按对应权限及项目范围办理；供应商只能看本人报备。材料下载核对原报备、真实文件与操作者范围，不公开文件路径。
+- `facility_site_entry_history` 由 V467 建立，只追加不可回改。报备状态更新与历史追加在同一事务，并锁定报备以避免整改、重新提交和验收互相覆盖。
+- 端点沿用 `/api/v1/facility/site-entry-reports/{report_id}` 的提交和验收，新增 `/history`、真实文件 `/attachments` 与 `/attachments/{attachment_id}/file`；验收请求增加必填 `completion_sequence`。页面为 ADM-FAC-002、ADM-FAC-003 及供应商原进场报备页。
 
 ## 6. 待建一览（M08 现状登记）
 

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -103,12 +103,40 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("dividend_reserve_released", "分红留存已释放"), Map.entry("dealer_order", "经销订单"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
             Map.entry("platform_incentive_subsidy", "平台激励补贴(超池特批)"),
+            Map.entry("ticket_points_issuance", "门票积分发行月结"),
             Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
     @org.springframework.beans.factory.annotation.Autowired
     private com.complex.platform.dealer.JdbcDealerOrderRepository dealerRefunds;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate ticketPointsJdbc;
+
+    /** 积分中心月结桥：唯一数据源是已公布、异议期完成的月账单，不接受操作者提供金额和主体。 */
+    @Transactional
+    public String recordTicketPointsIssuanceBill(String billId) {
+        record Fact(String seller,String merchant,String receiver,String project,long amount,LocalDate due,LocalDate month) {}
+        List<Fact> facts=ticketPointsJdbc.query("""
+            SELECT b.* FROM ticket_points_monthly_bills b
+            WHERE b.id=? AND b.visible_at IS NOT NULL AND b.objection_deadline IS NOT NULL
+              AND b.objection_deadline<=?
+              AND b.due_date>=b.objection_deadline
+              AND NOT EXISTS(SELECT 1 FROM ticket_points_bill_objections o WHERE o.bill_id=b.id AND o.status='open')
+            FOR UPDATE
+            """,(rs,n)->new Fact(rs.getString("seller_entity_id"),rs.getString("seller_merchant_id"),rs.getString("receiver_entity_id"),rs.getString("project_id"),rs.getLong("amount_cent"),rs.getObject("due_date",LocalDate.class),rs.getObject("billing_month",LocalDate.class)),billId,LocalDate.now(com.complex.platform.common.LocalZone.ID));
+        if(facts.size()!=1)throw ApiException.conflict("POINTS_BILL_NOT_READY","积分账单尚未满足正式入账条件");
+        Fact f=facts.getFirst();String id="arap_"+billId;
+        if(repository.findArApItemById(id).isPresent())return id;
+        if(f.amount()<=0 || f.seller()==null || f.receiver()==null || f.project()==null)throw ApiException.conflict("POINTS_BILL_FACTS_INCOMPLETE","积分账单缺少真实金额或双方主体");
+        Instant now=Instant.now();
+        LocalDate date=LocalDate.ofInstant(now,com.complex.platform.common.LocalZone.ID);
+        if(repository.lockedDailyCloseExistsForDate(date,f.merchant()))throw ApiException.conflict("DAY_CLOSE_LOCKED","当前业务日已封账，积分账单保留待入账");
+        repository.saveArApItem(new ArApItemRecord(id,"POINTS-"+billId,"receivable",f.seller(),"ticket_points_issuance",billId,f.amount(),0,f.amount(),CURRENCY_CNY,f.due(),f.month().toString().substring(0,7),"pending_collection",now,now,f.merchant(),f.project()));
+        repository.saveArApItemSource(new ArApItemSourceRecord("src_"+billId,id,"ticket_points_issuance",billId,f.amount(),now));
+        auditEventService.recordSuccess("ticket.points.issuance.posted",null,"ar_ap_item",id,f.merchant(),billId,Map.of("seller_entity_id",f.seller(),"receiver_entity_id",f.receiver(),"project_id",f.project(),"amount_cent",f.amount(),"due_date",f.due().toString()));
+        return id;
+    }
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
@@ -1318,6 +1346,17 @@ public class FinanceService implements TerminationSettlementPort {
         checkProjectScope(current.projectId());
         // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。
         requireNotLocked(current.id());
+        if ("ticket_points_issuance".equals(current.sourceType())) {
+            // 月结异议可能在正式台账生成后、当日付款前提出；来源账单仍须保留付款拦截。
+            var bill=ticketPointsJdbc.queryForMap("SELECT id,project_id,due_date,visible_at FROM ticket_points_monthly_bills WHERE id=? FOR UPDATE",current.sourceId());
+            LocalDate due=current.dueDate();
+            LocalDate paymentDay=(paymentTime==null?Instant.now():paymentTime).atZone(com.complex.platform.common.LocalZone.ID).toLocalDate();
+            if(paymentDay.isBefore(due) || LocalDate.now(com.complex.platform.common.LocalZone.ID).isBefore(due))
+                throw ApiException.conflict("POINTS_BILL_NOT_DUE","尚未到积分账单已锁定的可付日");
+            if(ticketPointsJdbc.queryForObject("SELECT count(*) FROM ticket_points_bill_objections WHERE bill_id=? AND status='open'",Integer.class,current.sourceId())>0
+                    || ticketPointsJdbc.queryForObject("SELECT count(*) FROM ticket_points_portal_outages WHERE project_id=? AND status='pending_review' AND unavailable_to>?",Integer.class,bill.get("project_id"),bill.get("visible_at"))>0)
+                throw ApiException.conflict("POINTS_BILL_REVIEW_PENDING","积分账单有未结异议或门户不可用事实待复核，暂不可登记付款");
+        }
         // V304 硬拦截：分红发放保护线留存（待释放）应付未释放前禁止付款——「待释放」是真锁不是标签，
         // 须先经释放（re-tag 为 dividend_reserve_released）才可发放给主理人，否则绕过释放规则提前发放留存。
         if ("dividend_reserve_withheld".equals(current.sourceType())) {

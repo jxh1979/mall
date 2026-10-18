@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest;
@@ -105,12 +105,14 @@ public class StaffApprovalService {
     }
 
     StaffShiftBatchResult submitShifts(List<StaffShiftRecord> drafts, String key) {
+        repository.requireDistinctNightDutyDrafts(drafts);
         String actor = authorization.currentActor().id();
         String proposal = drafts.stream().map(draft -> {
             var before = repository.findShiftById(draft.id()).orElse(null);
             String name = repository.findProfileByUserId(draft.userId()).map(StaffProfileRecord::name).orElse(draft.userId());
             return name + "：" + (before == null ? "新增" : before.startAt() + " 至 " + before.endAt())
                     + " → " + draft.startAt() + " 至 " + draft.endAt()
+                    + "；夜班值班职责：" + (draft.nightDutyProjectId() == null ? "无" : "项目 " + draft.nightDutyProjectId())
                     + "；点位：" + String.join("、", draft.pointSpaceIds())
                     + "；缘由：" + (draft.note() == null ? "新排班" : draft.note());
         }).collect(java.util.stream.Collectors.joining("\n"));

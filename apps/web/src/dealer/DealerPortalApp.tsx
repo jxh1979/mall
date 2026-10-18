@@ -1,5 +1,6 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
+import { DealerDeliveryPanel } from "./DealerDeliveryPanel";
 import { DealerPortalApi, DealerPortalApiError } from "./dealerPortalClient";
 
 /**
@@ -11,7 +12,7 @@ type Dealer = { id: string; dealerName?: string; status?: string; portalEnabled?
 type Contract = { id: string; contractNo?: string; validFrom?: string; validTo?: string; creditTerm?: boolean };
 type Stock = { itemId: string; itemName?: string; spec?: string; unitPriceCent?: number; availability?: string; expectedRestockDate?: string | null };
 type Inquiry = { id: string; itemId?: string; spec?: string; quantity?: number; status?: string; quotedUnitPriceCent?: number | null };
-type Order = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; returnedAmountCent?: number; balanceDueAt?: string | null; creditTerm?: boolean; overdue?: boolean };
+type Order = { id: string; orderNo?: string; status?: string; totalAmountCent?: number; paidAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; balanceDueAt?: string | null; creditTerm?: boolean; overdue?: boolean };
 type Payment = { id: string; method?: string; amountCent?: number; status?: string; referenceNo?: string | null };
 type Return = { id: string; returnNo?: string; status?: string; reasonType?: string; requestedQuantity?: number; refundCent?: number; refundedCent?: number };
 
@@ -173,12 +174,6 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
     await selectOrder(order);
     return "付款已登记，等待财务核验到账";
   });
-  const signOrder = () => run(async () => {
-    if (!order) throw new Error("请先选择订单");
-    await api.post(`/api/v1/dealer-portal/orders/${encodeURIComponent(order.id)}/sign`, { idempotencyKey: key() });
-    await selectOrder(order); await loadDealer();
-    return "已签收";
-  });
   const requestReturn = () => run(async () => {
     if (!order) throw new Error("请先选择订单");
     const lines = retLines.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
@@ -275,7 +270,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td>{o.orderNo ?? o.id}</td><td data-testid={`order-status-${o.id}`}>{label(ORDER_STATUS, o.status)}</td><td>{money(o.totalAmountCent)}</td><td data-testid={`order-unpaid-${o.id}`}>{money(Math.max(0, (o.totalAmountCent ?? 0) - (o.returnedAmountCent ?? 0) - (o.paidAmountCent ?? 0)))}</td><td>{money(o.paidAmountCent)}</td>
+                    <td>{o.orderNo ?? o.id}</td><td data-testid={`order-status-${o.id}`}>{label(ORDER_STATUS, o.status)}</td><td>{money(o.totalAmountCent)}</td><td data-testid={`order-unpaid-${o.id}`}>{money(Math.max(0, (o.totalAmountCent ?? 0) - (o.returnedAmountCent ?? 0) - (o.deliveryAdjustmentCent ?? 0) - (o.paidAmountCent ?? 0)))}</td><td>{money(o.paidAmountCent)}</td>
                     <td>{money(o.firstPaymentRequiredCent)}</td><td>{cnDate(o.firstPaymentDeadlineAt)}</td><td>{o.balanceDueAt ? cnDate(o.balanceDueAt) : o.creditTerm ? "待合同约定事件确定" : "—"}</td>
                     <td><button type="button" data-testid={`order-select-${o.id}`} onClick={() => void run(() => selectOrder(o))}>查看</button></td>
                   </tr>
@@ -294,7 +289,7 @@ export default function DealerPortalApp({ api: injected }: { api?: DealerPortalA
                     <span className="admin-muted-action">禁止现金和个人账户收款；到账以财务核验为准。</span>
                   </div>
                 ) : null}
-                {order.status === "shipping" ? <button type="button" data-testid="order-sign" onClick={() => void signOrder()}>确认签收</button> : null}
+                {["shipping", "signed", "completed", "returning", "partially_returned", "returned"].includes(order.status ?? "") && <DealerDeliveryPanel key={order.id} api={api} orderId={order.id} status={order.status} portal canManage onChanged={async () => { await selectOrder(order); await loadDealer(); }} />}
                 <table className="admin-table" data-testid="payment-table">
                   <thead><tr><th>方式</th><th>金额</th><th>状态</th><th>流水号</th></tr></thead>
                   <tbody>{payments.map((p) => <tr key={p.id}><td>{label(PAYMENT_METHOD, p.method)}</td><td>{money(p.amountCent)}</td><td data-testid={`payment-status-${p.id}`}>{label(PAYMENT_STATUS, p.status)}</td><td>{p.referenceNo ?? "—"}</td></tr>)}</tbody>

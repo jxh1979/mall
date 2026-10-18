@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -70,6 +71,9 @@ const ApprovalChainPage = React.lazy(() => import("./pages/ApprovalChainPage").t
 const OrgHierarchyPage = React.lazy(() => import("./pages/OrgHierarchyPage").then((m) => ({ default: m.OrgHierarchyPage })));
 const ContractWorkbenchPage = React.lazy(() => import("./pages/ContractWorkbenchPage").then((m) => ({ default: m.ContractWorkbenchPage })));
 const LeasingWorkbenchPage = React.lazy(() => import("./pages/LeasingWorkbenchPage").then((m) => ({ default: m.LeasingWorkbenchPage })));
+const TicketRewardConfigPage = React.lazy(() => import("./pages/TicketRewardConfigPage").then((m) => ({ default: m.TicketRewardConfigPage })));
+const TicketPointsBillingPage = React.lazy(() => import("./pages/TicketPointsBillingPage").then((m) => ({ default: m.TicketPointsBillingPage })));
+const SiteEntryPropertyPage = React.lazy(() => import("./pages/SiteEntryPropertyPage").then((m) => ({ default: m.SiteEntryPropertyPage })));
 const FacilityWorkbenchPage = React.lazy(() => import("./pages/FacilityWorkbenchPage").then((m) => ({ default: m.FacilityWorkbenchPage })));
 const EnergyWorkbenchPage = React.lazy(() => import("./pages/EnergyWorkbenchPage").then((m) => ({ default: m.EnergyWorkbenchPage })));
 const GovernanceTopologyPage = React.lazy(() => import("./pages/GovernanceTopologyPage").then((m) => ({ default: m.GovernanceTopologyPage })));
@@ -221,6 +225,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <DynamicPricingPage {...props} />;
     case "ADM-TKT-003":
       return <TicketOrdersPage {...props} />;
+    case "ADM-TKT-004":
+      return <TicketRewardConfigPage {...props} />;
     case "ADM-BAR-001":
       return <BarTableSessionsPage {...props} />;
     case "ADM-BAR-002":
@@ -311,6 +317,10 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <LeasingWorkbenchPage {...props} />;
     case "ADM-FAC-001":
       return <FacilityWorkbenchPage {...props} />;
+    case "ADM-FAC-002":
+      return <SiteEntryPropertyPage {...props} stage="review" />;
+    case "ADM-FAC-003":
+      return <SiteEntryPropertyPage {...props} stage="accept" />;
     case "ADM-ENE-001":
       return <EnergyWorkbenchPage {...props} />;
     case "ADM-GOV-005":
@@ -357,6 +367,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <FinanceMerchantExpensePage {...props} />;
     case "ADM-FIN-007":
       return <FinanceDividendsPage {...props} />;
+    case "ADM-FIN-008":
+      return <TicketPointsBillingPage {...props} />;
     case "ADM-STL-001":
       return <SettlementConfigPage {...props} />;
     case "ADM-STL-002":

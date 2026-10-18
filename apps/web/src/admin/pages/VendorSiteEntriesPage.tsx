@@ -1,4 +1,6 @@
+// 文件版本：V0.01
 import React from "react";
+import { SiteEntryHistory, type SiteEntryHistoryRow } from "./SiteEntryHistory";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -42,10 +44,6 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
-function splitAttachmentIds(value: string) {
-  return value.split(/[\n,，;；]+/).map((item) => item.trim()).filter(Boolean);
-}
-
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染报备表。
 // URL 约定：?kpi=site-entries[&subset=enterable]。
 type KpiFocus = { subset: "all" | "enterable" };
@@ -74,7 +72,10 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
   const [createOpen, setCreateOpen] = React.useState(false);
   const [submitNote, setSubmitNote] = React.useState("进场施工");
   const [completionNote, setCompletionNote] = React.useState("施工已完工，材料已上传");
-  const [completionAttachments, setCompletionAttachments] = React.useState("att-site-completion");
+  const [completionFiles, setCompletionFiles] = React.useState<File[]>([]);
+  const [history, setHistory] = React.useState<SiteEntryHistoryRow[]>([]);
+  const [historyError, setHistoryError] = React.useState("");
+  const [historyEpoch, setHistoryEpoch] = React.useState(0);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该进场报备完整字段（枚举中文·计划日期中文·完工材料展开）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -106,7 +107,18 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
   }
 
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null;
-  const canUploadCompletion = selected?.status === "in_progress" && (user.accountType !== "outsourced_vendor" || selected.vendorUserId === user.id);
+  const canUploadCompletion = !!selected && ["in_progress", "rectifying"].includes(selected.status ?? "")
+    && user.accountType === "outsourced_vendor" && selected.vendorUserId === user.id;
+
+  React.useEffect(() => { setCompletionFiles([]); }, [selected?.id]);
+  React.useEffect(() => {
+    let active = true;
+    setHistory([]); setHistoryError("");
+    if (selected?.id) api.get<SiteEntryHistoryRow[]>(`/api/v1/facility/site-entry-reports/${encodeURIComponent(selected.id)}/history`)
+      .then(items => { if (active) setHistory(items); })
+      .catch(() => { if (active) setHistoryError("验收历史读取失败，请重试"); });
+    return () => { active = false; };
+  }, [api, selected?.id, historyEpoch]);
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -164,20 +176,29 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
       return;
     }
     if (!canUploadCompletion) {
-      setFormError("仅施工中且归属当前外包账号的报备可上传完工材料");
+      setFormError("仅施工中或整改中的本人报备可提交完工材料");
       return;
     }
-    const attachmentIds = splitAttachmentIds(completionAttachments);
-    if (!completionNote.trim() || attachmentIds.length === 0) {
-      setFormError("完工说明和附件引用不能为空");
+    if (!completionNote.trim() || completionFiles.length === 0) {
+      setFormError("请填写完工说明并选择实际文件");
       return;
     }
+    const reportId = selected.id;
     const request = {
       idempotencyKey: nextKey("vendor-site-entry-completion"),
       note: completionNote.trim(),
-      attachmentIds,
+      attachmentIds: [] as string[],
     };
-    await runAction("vendor_site_entry_completion_uploaded", request, () => api.post(`/api/v1/facility/site-entry-reports/${encodeURIComponent(selected.id)}/completion`, request));
+    const ok = await runAction("vendor_site_entry_completion_uploaded", request, async () => {
+      if (!api.postForm) throw new Error("当前客户端不支持文件上传");
+      for (const file of completionFiles) {
+        const form = new FormData(); form.append("file", file);
+        const saved = await api.postForm<{ id: string }>(`/api/v1/facility/site-entry-reports/${encodeURIComponent(reportId)}/attachments`, form);
+        request.attachmentIds.push(saved.id);
+      }
+      return api.post(`/api/v1/facility/site-entry-reports/${encodeURIComponent(reportId)}/completion`, request);
+    });
+    if (ok) { setCompletionFiles([]); setHistoryEpoch(value => value + 1); }
   }
 
   const enterableRows = rows.filter((row) => ENTERABLE_STATUSES.includes(row.status ?? ""));
@@ -215,7 +236,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`vendor-site-entry-row-${row.id}`}
               onClick={() => openEntryDetail(row)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEntryDetail(row); } }}>
-              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此进场报备 ${row.id}`} data-testid={`vendor-site-entry-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+              <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此进场报备 ${row.id}`} data-testid={`vendor-site-entry-select-${row.id}`} checked={(selected?.id ?? "") === row.id} disabled={busyAction !== ""} onChange={() => setSelectedId(row.id)} /></td>
               <td>{row.workScope ?? row.id}</td>
               <td>{row.projectId ?? "-"} / {row.spaceId ?? "-"}</td>
               <td>{cnDate(row.plannedStartDate)} ~ {cnDate(row.plannedEndDate)}</td>
@@ -262,7 +283,9 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
             <div className="admin-form-grid" data-testid="vendor-site-entry-followup-form">
               <label>提交备注<input data-testid="vendor-site-entry-submit-note" value={submitNote} onChange={(event) => setSubmitNote(event.target.value)} /></label>
               <label>完工说明<input data-testid="vendor-site-entry-completion-note" value={completionNote} onChange={(event) => setCompletionNote(event.target.value)} /></label>
-              <label>完工附件引用<input data-testid="vendor-site-entry-completion-attachments" value={completionAttachments} onChange={(event) => setCompletionAttachments(event.target.value)} /></label>
+              <label>完工材料文件<input key={selected?.id + "-" + historyEpoch} type="file" multiple
+                data-testid="vendor-site-entry-completion-attachments" disabled={busyAction !== "" || !canUploadCompletion}
+                onChange={(event) => setCompletionFiles(Array.from(event.target.files ?? []))} /></label>
             </div>
             <div className="admin-form-row" data-testid="vendor-site-entry-actions">
               <PermissionButton permissionsState={effectivePermissions} permissions={SUBMIT} data-testid="vendor-site-entry-submit" disabled={busyAction !== ""} onClick={() => void submitEntry()}>提交</PermissionButton>
@@ -273,6 +296,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
             {entriesTable}
           </>
         )}
+        {historyError ? <p role="alert">{historyError}<button onClick={() => setHistoryEpoch(v => v + 1)}>重试</button></p> : selected ? <SiteEntryHistory reportId={selected.id} items={history} /> : null}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
       <GuidedFlowModal

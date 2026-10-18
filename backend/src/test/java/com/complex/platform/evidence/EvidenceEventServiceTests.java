@@ -1,5 +1,7 @@
 package com.complex.platform.evidence;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,6 +65,49 @@ class EvidenceEventServiceTests {
     @AfterEach
     void tearDown() {
         TestSecurityActors.clear();
+    }
+
+    @Test
+    void protectedBusinessAttachmentsRequireRealMultipartUpload() {
+        for (String type : List.of("dealer_delivery", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract",
+                " dealer_delivery ", " facility_site_entry_report ", " inventory_quarantine ", " ticket_sales_contract ")) {
+            assertThatThrownBy(() -> service.createAttachmentUploadIntent(
+                    new EvidenceAttachmentUploadIntentRequest("intent-" + type, "photo.png", "image/png", 1L, type, "record")))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("REAL_UPLOAD_REQUIRED"));
+        }
+    }
+
+    @Test
+    void ticketContractUploadRetainsMerchantOwnershipAndChecksBusinessBeforeStoring() {
+        service.ticketRewardConfigs = mock(com.complex.platform.customer.TicketRewardConfigService.class);
+        service.fileStorage = mock(EvidenceFileStorage.class);
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("merchant-a"));
+        when(authorizationService.canReachProject(any(), org.mockito.ArgumentMatchers.eq("project"), org.mockito.ArgumentMatchers.eq("evidence.attachment.create"))).thenReturn(true);
+        var file = new org.springframework.mock.web.MockMultipartFile("file", "contract.png", "image/png", new byte[]{1});
+        when(service.fileStorage.store(file)).thenReturn(new EvidenceFileStorage.StoredFile("evidence-files/contract.png", "image/png", 1L));
+        var saved = service.uploadAttachment(file, "ticket_sales_contract", "project:ticket-a", "contract");
+        assertThat(saved.merchantId()).isEqualTo("merchant-a");
+        org.mockito.Mockito.verify(service.ticketRewardConfigs).requireEvidenceScope("project:ticket-a", false);
+
+        org.mockito.Mockito.doThrow(ApiException.forbidden("FORBIDDEN", "其他商户合同"))
+                .when(service.ticketRewardConfigs).requireEvidenceScope("project:ticket-b", false);
+        assertThatThrownBy(() -> service.uploadAttachment(file, "ticket_sales_contract", "project:ticket-b", "contract"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        org.mockito.Mockito.verify(service.fileStorage, org.mockito.Mockito.times(1)).store(file);
+        var failed = auditEventRepository.events.getLast();
+        assertThat(failed.eventName()).isEqualTo("evidence.attachment_upload_failed");
+        assertThat(failed.businessId()).isEqualTo("project:ticket-b");
+        assertThat(failed.metadata()).containsEntry("error_code", "FORBIDDEN");
+    }
+
+    @Test
+    void ticketContractEvidenceMustBeAllowedInSameProjectAsBusinessPermission() {
+        service.ticketRewardConfigs = mock(com.complex.platform.customer.TicketRewardConfigService.class);
+        service.fileStorage = mock(EvidenceFileStorage.class);
+        var file = new org.springframework.mock.web.MockMultipartFile("file", "contract.png", "image/png", new byte[]{1});
+        assertThatThrownBy(() -> service.uploadAttachment(file, "ticket_sales_contract", "project-b:ticket", "contract"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
+        org.mockito.Mockito.verifyNoInteractions(service.fileStorage);
     }
 
     // ─── P0-1: audit actorId must be recorded from security context ───────────

@@ -1,10 +1,10 @@
-# 正式安全基线 V1.03
+# 正式安全基线 V1.04
 
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 840
-- OpenAPI SHA-256: `5f758044d63a9c57bbf29bf75899ae97b208d4fdf1624b6bcc88b0844afbbeda`
+- OpenAPI operation count: 882
+- OpenAPI SHA-256: `55f947ad3c619a85e4a3ced64c0d48d79cc925acdcd9fb634928d275672c6c99`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
@@ -38,11 +38,11 @@
 
 | auth_context | operation_count |
 |---|---:|
-| `customer-token` | 39 |
+| `customer-token` | 40 |
 | `device-credential` | 4 |
 | `open-app-credential` | 1 |
-| `public` | 7 |
-| `staff-token` | 785 |
+| `public` | 8 |
+| `staff-token` | 825 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,26 +57,26 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 840 |
-| 写 operation | 504 |
-| public operation | 7 |
+| 全部 operation | 882 |
+| 写 operation | 524 |
+| public operation | 8 |
 | open-app/webhook operation | 5 |
 
 | terminal_or_channel | operation_count |
 |---|---:|
-| `app` | 50 |
-| `dealer_portal` | 16 |
-| `kiosk` | 44 |
+| `app` | 52 |
+| `dealer_portal` | 19 |
+| `kiosk` | 45 |
 | `merchant_app` | 2 |
 | `merchant_portal` | 22 |
-| `miniapp` | 50 |
+| `miniapp` | 52 |
 | `mobile_admin` | 65 |
 | `provider-webhook` | 3 |
 | `server-to-server` | 2 |
-| `staff_private_phone` | 43 |
-| `staff_work_phone` | 88 |
-| `tablet` | 102 |
-| `web` | 787 |
+| `staff_private_phone` | 46 |
+| `staff_work_phone` | 98 |
+| `tablet` | 103 |
+| `web` | 821 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 
@@ -157,7 +157,7 @@
 
 | Gate | 目的 | 命令 |
 |---|---|---|
-| 安全基线生成 | 生成 V1.03 报告和 findings register | `npm run docs:security-baseline` |
+| 安全基线生成 | 生成 V1.04 报告和 findings register | `npm run docs:security-baseline` |
 | 安全基线验证 | 检查章节、计数、发现状态、密钥泄漏 | `npm run verify:security-baseline` |
 | P0 契约验证 | 检查 OpenAPI、追溯附录、客户端契约 | `npm run verify:p0-contract` |
 | P0 全量验证 | 检查后端、Web、Android、APK | `/opt/complex/scripts/complex-verify-p0.sh` |

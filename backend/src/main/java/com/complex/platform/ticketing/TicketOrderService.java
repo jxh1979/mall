@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -182,6 +182,7 @@ public class TicketOrderService {
                 orderBarId,
                 projectId
         ));
+        eventPublisher.publishEvent(new TicketRewardFacts.OrderCreated(saved.id()));
         // V359：客人端 H5 下单时拍的人脸照按订单加密暂存(每张票一张)，后台出票时转绑到已发权益。
         //   客人永远调不到出票端点(ticket.ticket.issue)，这一格是「客人自己拍的脸」进系统的唯一路径。
         //   facePhotoService 为 null(旧构造/无 PiiCipher 的单测)时不暂存；空表=该票种不要照，零影响。
@@ -425,7 +426,7 @@ public class TicketOrderService {
         }
         // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
         // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额按后台可配的积分累计率折算（出厂默认每元 1 分，V340）。
-        publishPointsEarnRequested(order);
+        // 出票不产生奖励；实际使用事实由核销链提交。
         return issued;
     }
 
@@ -456,32 +457,6 @@ public class TicketOrderService {
         }
         // 暂存照沿用暂存位的同意 id。
         return facePhotoService == null ? List.of() : facePhotoService.stagedForOrder(orderId);
-    }
-
-    /**
-     * P0-D/CFG-01（V340）：基础分 = 实付金额 ÷「每积 1 分所需消费金额」，累计率由
-     * 「结算配置中心 → 积分累计率」按 项目公司 × 商户 下发，不再写死每元 1 分。
-     * 出厂种子 = 100 分（原 POINTS_PER_YUAN_CENT），且表达式与改造前同为整数除 → 本次改造零行为改变。
-     *
-     * <p>fail-closed（对齐结算配置中心 requireConfigured 口径）：配置端口缺失/配置行缺失一律响亮抛错，
-     * 不静默回落硬编码常量、也不静默跳过发分（静默跳过 = 会员该拿的积分凭空消失，比报错更坏）。
-     */
-    private void publishPointsEarnRequested(TicketOrderRecord order) {
-        if (pointsAccrualRateConfigPort == null) {
-            throw ApiException.badRequest("POINTS_ACCRUAL_CONFIG_UNAVAILABLE",
-                    "积分累计率配置不可用，无法计算积分；请先在结算配置中心配置积分累计率并复核转正");
-        }
-        long amountCentPerPoint = pointsAccrualRateConfigPort.findAmountCentPerPoint(
-                authorizationService.currentProjectScopeQuietly().orElse(null), order.merchantId());
-        long basePoints = order.amountCent() / amountCentPerPoint;
-        if (basePoints <= 0) {
-            return; // 实付不足一个累计单位（默认 1 元）：不产生基础分。
-        }
-        eventPublisher.publishEvent(new PointsEarnRequestedEvent(
-                order.id(),
-                order.customerId(),
-                basePoints,
-                null));
     }
 
     IssuedTicketResponse issueEntitlements(String ticketTypeId, TicketIssueRequest request) {

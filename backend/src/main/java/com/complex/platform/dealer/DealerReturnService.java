@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -64,6 +64,7 @@ public class DealerReturnService {
 
     private final JdbcDealerReturnRepository returns;
     private final JdbcDealerOrderRepository orders;
+    private final JdbcDealerDeliveryRepository delivery;
     private final JdbcDealerRepository dealers;
     private final AuthorizationService authorization;
     private final IdempotencyService idempotency;
@@ -71,9 +72,10 @@ public class DealerReturnService {
     private final SupervisorReviewService reviews;
 
     public DealerReturnService(JdbcDealerReturnRepository returns, JdbcDealerOrderRepository orders, JdbcDealerRepository dealers,
-            AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit, SupervisorReviewService reviews) {
+            AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit, SupervisorReviewService reviews, JdbcDealerDeliveryRepository delivery) {
         this.returns = returns;
         this.orders = orders;
+        this.delivery = delivery;
         this.dealers = dealers;
         this.authorization = authorization;
         this.idempotency = idempotency;
@@ -150,9 +152,9 @@ public class DealerReturnService {
                 String spec = line.spec() == null ? "" : line.spec().trim();
                 DealerOrderLineRecord orderLine = orderLines.stream().filter(l -> l.itemId().equals(line.itemId().trim()) && l.spec().equals(spec)).findFirst()
                         .orElseThrow(() -> ApiException.badRequest("RETURN_LINE_NOT_IN_ORDER", "退货商品不在原订单内：" + line.itemId()));
-                int returnable = orderLine.quantity() - orderLine.returnedQuantity() - returns.pendingReturnQuantity(orderLine.id());
+                int returnable = delivery.acceptedQuantity(orderId, orderLine.id()) - orderLine.returnedQuantity() - returns.pendingReturnQuantity(orderLine.id());
                 if (line.quantity() > returnable) {
-                    throw ApiException.conflict("RETURN_QUANTITY_EXCEEDS", "退货数量超过已出库未退数量：" + line.itemId());
+                    throw ApiException.conflict("RETURN_QUANTITY_EXCEEDS", "退货数量超过实际合格接收且尚未退回的数量：" + line.itemId());
                 }
                 requested += line.quantity();
                 lines.add(new DealerReturnLineRecord("drl_" + UUID.randomUUID(), returnId, orderLine.id(), orderLine.itemId(), spec, line.quantity(), 0, 0, 0,
@@ -236,12 +238,16 @@ public class DealerReturnService {
     public DealerReturnRecord inspectReturn(String returnId, DealerReturnInspectionRequest request) {
         authorization.requirePermission(INSPECT);
         try {
-            DealerReturnRecord ret = requireReturn(returnId);
-            requireStatus(ret, "inspecting");
+            DealerReturnRecord initial = requireReturn(returnId);
+            requireStatus(initial, "inspecting");
             if (request == null || request.lines() == null || request.lines().isEmpty()) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "验收至少一条明细");
             }
-            DealerOrderRecord order = orders.lockOrder(ret.orderId()).orElseThrow();
+            DealerOrderRecord candidate = requireOrder(initial.orderId());
+            dealers.lockDealerCredit(candidate.dealerId()).orElseThrow();
+            DealerOrderRecord order = orders.lockOrder(initial.orderId()).orElseThrow();
+            DealerReturnRecord ret = requireReturn(returnId);
+            requireStatus(ret, "inspecting");
             List<DealerReturnLineRecord> lines = returns.listLines(returnId);
             List<DealerReturnLineRecord> inspected = new ArrayList<>();
             for (DealerReturnInspectionLineRequest in : request.lines()) {
@@ -276,7 +282,10 @@ public class DealerReturnService {
                         orders.addReturnedQuantity(line.orderLineId(), line.acceptedQuantity());
                     }
                 }
-                long unpaid = Math.max(0, order.totalAmountCent() - order.returnedAmountCent() - order.paidAmountCent());
+                if (acceptedAmount > order.netReceivableCent()) {
+                    throw ApiException.conflict("DEALER_RETURN_AMOUNT_EXCEEDS_NET", "退货金额超过差异调整后的原单净额，须核实已批准价格依据");
+                }
+                long unpaid = Math.max(0, order.netReceivableCent() - order.paidAmountCent());
                 long offset = Math.min(acceptedAmount, unpaid);
                 long refund = acceptedAmount - offset;
                 if (offset > 0 && order.arApItemId() != null) {
@@ -332,7 +341,7 @@ public class DealerReturnService {
                 returns.saveInvoice(new DealerInvoiceRecord(original.id(), original.orderId(), original.dealerId(), original.salesEntityId(), original.amountCent(),
                         original.taxRateBps(), "reversed", original.invoiceNo(), returnId, original.reissuedFromInvoiceId(), original.requestedBy(), original.requestedAt(),
                         original.issuedBy(), original.issuedAt(), now, original.note()));
-                long remaining = order.totalAmountCent() - order.returnedAmountCent();
+                long remaining = order.netReceivableCent();
                 boolean allReturned = orders.listLines(order.id()).stream().allMatch(l -> l.returnedQuantity() >= l.quantity());
                 String reissuedId = null;
                 // 全部退货红冲后不重开（BSM:1242）；部分退货按最新未退金额（含已含在发票内的运费）重开
@@ -477,7 +486,7 @@ public class DealerReturnService {
             if (returns.findActiveInvoice(orderId).isPresent()) {
                 throw ApiException.conflict("DEALER_INVOICE_EXISTS", "该订单已有有效发票，退货须先红冲");
             }
-            long amount = order.totalAmountCent() - order.returnedAmountCent();
+            long amount = order.netReceivableCent();
             if (amount <= 0) {
                 throw ApiException.conflict("DEALER_INVOICE_AMOUNT_ZERO", "最终未退金额为零，无可开票金额");
             }

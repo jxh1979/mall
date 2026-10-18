@@ -1,4 +1,4 @@
-# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.07
+# 多租户 / 商户数据隔离与越权防护 安全设计与验收规格 V0.08
 
 > 创建日期：2026-06-18
 > 状态：权威安全规格（补齐此前缺口——隔离模型此前仅存在于各迁移 .sql 注释中，无单一权威文档）。
@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V466**，发现 **185** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V475**，发现 **191** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -159,6 +159,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `inventory_item_cost_state` | `merchant_id` | direct | V296 | `V296__inventory_cost_ledger.sql` |
 | `inventory_items` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_purchase_requests` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
+| `inventory_quarantine_lots` | `project_id` | direct | V470 | `V470__dealer_delivery_discrepancies_and_quarantine.sql` |
 | `inventory_risk_alerts` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_stock_adjustments` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `inventory_stock_balances` | `merchant_id` + `project_id` | direct | V046, V237 | `V046__inventory_security_fixes.sql`<br>`V237__inventory_isolation_fixes.sql` |
@@ -220,6 +221,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `staff_payroll_statements` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_profiles` | `merchant_id` + `project_id` | direct | V086 | `V086__staff_tables.sql` |
 | `staff_shift_schedules` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
+| `staff_work_phone_events` | `space_id` | direct | V468 | `V468__staff_cover_and_work_phone_attendance.sql` |
 | `stocktake` | `merchant_id` | direct | V108 | `V108__inventory_variance_to_ap.sql` |
 | `stored_value_bonus_policies` | `project_id` | direct | V444 | `V444__stored_value_principal_bonus_split.sql` |
 | `stored_value_merchant_refund_rules` | `merchant_id` | direct | V176 | `V176__stored_value_merchant_refund_rules.sql` |
@@ -232,8 +234,12 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `ticket_distribution_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `ticket_distribution_merchant_rates` | `merchant_id` + `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `ticket_distribution_rank_tiers` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `ticket_order_sales_contracts` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_orders` | `merchant_id` + `project_id` | direct | V135, V463 | `V135__ticket_orders_merchant_id.sql`<br>`V463__ticket_order_project_snapshot.sql` |
+| `ticket_points_issuance_fees` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_refunds` | `merchant_id` | direct | V220 | `V220__ticket_refunds_merchant_id.sql` |
+| `ticket_reward_config_versions` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
+| `ticket_use_rewards` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |
 | `turnover_rent_rules` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
 | `user_position_assignments` | `merchant_id` + `organization_id` | direct | V169 | `V169__access_role_assignment_closure.sql` |

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -27,11 +27,14 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
         if (url === "/api/v1/dealer-portal/contracts/dct_1/external-stock") return [{ itemId: "item_a", itemName: "威士忌", spec: "箱", unitPriceCent: 1000, availability: "low" }, { itemId: "item_c", itemName: "红酒", spec: "瓶", unitPriceCent: 500, availability: "expected_restock", expectedRestockDate: "2026-11-01" }];
         if (url === "/api/v1/dealer-portal/orders/dord_1" && overrides.order) return overrides.order;
         if (url === "/api/v1/dealer-portal/orders/dord_1") return { id: "dord_1", orderNo: "DO-1", status: "shipping", totalAmountCent: 5000, paidAmountCent: 5000 };
+        if (url.endsWith("/delivery")) return { netReceivableCent: 5000, receivedCent: 5000, pendingRefundCent: 0, moneyStatus: "settled", batches: [{ id: "dord_1", shippedAt: "2026-10-01T00:00:00Z", lines: [{ orderLineId: "line_1", quantity: 5, recordedQuantity: 0, acceptedQuantity: 0 }] }], receipts: [], discrepancies: [] };
+        if (url.endsWith("/lines")) return [{ id: "line_1", itemId: "item_a", spec: "箱" }];
         if (url.endsWith("/payments")) return [{ id: "dpay_1", method: "bank_transfer", amountCent: 5000, status: "verified", referenceNo: "TX-1" }];
         if (url.endsWith("/returns")) return [];
         return [];
       }),
       post: vi.fn(async () => ({ id: "dord_new", orderNo: "DO-NEW" })),
+      postForm: vi.fn().mockResolvedValue({ id: "portal_actual_proof" }),
     };
     return api as unknown as DealerPortalApi & { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; login: ReturnType<typeof vi.fn> };
   }
@@ -83,8 +86,13 @@ describe("DealerPortalApp 独立经销商 Web 门户", () => {
     fireEvent.change(screen.getByTestId("pay-ref"), { target: { value: "TX-9" } });
     fireEvent.click(screen.getByTestId("pay-submit"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/payments", expect.objectContaining({ method: "bank_transfer", amountCent: 1250, referenceNo: "TX-9" })));
-    fireEvent.click(screen.getByTestId("order-sign"));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/sign", expect.anything()));
+    fireEvent.change(await screen.findByLabelText("item_a（箱） 合格接收"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("已核验收货确认人"), { target: { value: "企业收货人" } });
+    fireEvent.change(screen.getByLabelText("实际交接凭证"), { target: { files: [new File(["image"], "收货.png", { type: "image/png" })] } });
+    await screen.findByText("收货.png（已上传）");
+    expect(api.postForm).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/delivery-evidence", expect.any(FormData));
+    fireEvent.click(screen.getByRole("button", { name: "保存本次收货事实" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealer-portal/orders/dord_1/sign", expect.objectContaining({ buyerContact: "企业收货人", evidenceAttachmentIds: ["portal_actual_proof"], lines: [{ orderLineId: "line_1", acceptedQuantity: 3, rejectedQuantity: 0, damagedQuantity: 0, shortQuantity: 0 }] })));
   });
 
   it("四类资料审核前不能进入门户，也不开放自助提交入口", async () => {
