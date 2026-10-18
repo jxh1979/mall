@@ -51,6 +51,13 @@ public class PurchaseRequestService {
     private final SupplierQualificationService supplierQualificationService;
     private final InventoryStockMovementService stockMovementService;
 
+    /**
+     * CG-10（BSM「管理采购周期，从采购申请、审批、下单、预计到货」：「入库确认后按供应合同的价格口径与账期形成对供应商的应付，进入应收应付台账」）：
+     * 应收应付台账写入端口。字段注入免改构造点；生产恒注入，无 Spring 容器的单测为 null 则不挂账。
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.finance.FinanceRepository financeRepository;
+
     public PurchaseRequestService(
             InventoryRepository repository,
             IdempotencyService idempotencyService,
@@ -154,13 +161,17 @@ public class PurchaseRequestService {
                     PurchaseRequestReceiveRequest actual = requireRequest(request);
                     String locationId = requireText(actual.locationId(), "location_id");
                     String warehouseId = trimToNull(actual.warehouseId());
+                    // CG-10：入库确认须录入合同单价——没有价格就形不成「对供应商的应付」（BSM「管理采购周期，从采购申请、审批、下单、预计到货」）。
+                    if (actual.unitCostCent() == null) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "入库确认须录入合同单价（unit_cost_cent）");
+                    }
                     PurchaseRequestRecord current = requireForUpdate(id);
                     requireSourceStatus(current, Set.of("arrived"));
                     String operator = authorizationService.currentActor().id();
                     Instant now = Instant.now();
                     // received 生成入库流水（inbound）：落 location + 可空 warehouse_id + 采购数量，关联采购单。
-                    // V296：unit_cost_cent（进货单价，可空）随入库确认录入，滚动移动加权均价。
-                    stockMovementService.createPurchaseInbound(
+                    // V296：unit_cost_cent（进货单价）随入库确认录入，滚动移动加权均价。
+                    StockMovementRecord inbound = stockMovementService.createPurchaseInbound(
                             actual.idempotencyKey(),
                             current.id(),
                             current.itemId(),
@@ -169,11 +180,66 @@ public class PurchaseRequestService {
                             current.quantity(),
                             actual.unitCostCent(),
                             actual.evidenceAttachmentIds());
+                    // CG-10：同事务形成对供应商的应付，进入应收应付台账。
+                    recordSupplierPayable(current, inbound, actual.unitCostCent(), now);
                     PurchaseRequestRecord updated = withReceived(current, operator, now);
                     recordEvent(current.id(), current.status(), "received", operator, trimToNull(actual.note()), now);
                     return repository.savePurchaseRequest(updated);
                 }
         );
+    }
+
+    /**
+     * CG-10（BSM「管理采购周期，从采购申请、审批、下单、预计到货」：「入库确认后按供应合同的价格口径与账期形成对供应商的应付，进入应收应付台账」；
+     * BSM「应收应付台账」：「来源（含采购入库形成的供应商应付）」）。
+     *
+     * <p>金额 = 入库数量 × 入库确认录入的合同单价（现采购单无合格/拒收拆分，入库数量即采购数量）。
+     * 到期日 = 入库日按账期推算：账期天数优先取采购单所挂供应合同的 {@code paymentTermDays}，其次取供应商生效默认结算档
+     * （{@code supplier_settlement_methods}）的 {@code paymentTermDays}；结算方式 monthly（月结）以入库日所在月最后一天为基准再加账期，
+     * 其余（cash_on_delivery / credit_term / prepaid / consignment）以入库日为基准加账期；账期为空按 0 天。
+     * 台账项 id 按采购单确定性派生（{@code arap_pin_<采购单id>}），纯追加写入 + 唯一索引（direction, source_type, source_id）双重防重；
+     * 幂等重放经 {@code IdempotencyService} 不再进入本方法。采购单无供应商或金额为 0 时不挂账（见 PR 待裁决）。
+     */
+    private void recordSupplierPayable(PurchaseRequestRecord purchase, StockMovementRecord inbound,
+            long unitCostCent, Instant now) {
+        if (financeRepository == null || purchase.supplierId() == null) {
+            return;
+        }
+        long amountCent = Math.multiplyExact((long) purchase.quantity(), unitCostCent);
+        if (amountCent <= 0L) {
+            return;
+        }
+        LocalDate receivedOn = LocalDate.now(LocalZone.ID);
+        LocalDate dueDate = supplierPayableDueDate(purchase, receivedOn);
+        String itemId = "arap_pin_" + purchase.id();
+        financeRepository.appendArApItem(new com.complex.platform.finance.ArApItemRecord(
+                itemId, "ARAP-PIN-" + purchase.id(), "payable",
+                purchase.supplierId(), "purchase_inbound", purchase.id(),
+                amountCent, 0L, amountCent, "CNY",
+                dueDate, null, "pending_payment",
+                now, now, purchase.merchantId()));
+        financeRepository.saveArApItemSource(new com.complex.platform.finance.ArApItemSourceRecord(
+                "arap_src_pin_" + purchase.id(), itemId, "purchase_inbound", inbound.id(), amountCent, now));
+    }
+
+    /** 账期推算：合同账期 > 供应商默认结算档账期 > 0 天；月结以当月最后一天为基准。 */
+    private LocalDate supplierPayableDueDate(PurchaseRequestRecord purchase, LocalDate receivedOn) {
+        Integer contractTermDays = purchase.supplyContractId() == null ? null
+                : repository.findSupplyContractByIdForUpdate(purchase.supplyContractId())
+                        .map(SupplyContractRecord::paymentTermDays).orElse(null);
+        Optional<SupplierSettlementMethodRecord> method = repository
+                .listSupplierSettlementMethodsBySupplier(purchase.supplierId()).stream()
+                .filter(m -> "active".equals(m.status()))
+                .sorted((a, b) -> Boolean.compare(b.isDefault(), a.isDefault()))
+                .findFirst();
+        int termDays = contractTermDays != null ? contractTermDays
+                : method.map(SupplierSettlementMethodRecord::paymentTermDays).orElse(null) != null
+                        ? method.get().paymentTermDays() : 0;
+        LocalDate base = method.map(SupplierSettlementMethodRecord::settlementMethod)
+                .filter("monthly"::equals)
+                .map(m -> receivedOn.withDayOfMonth(receivedOn.lengthOfMonth()))
+                .orElse(receivedOn);
+        return base.plusDays(Math.max(termDays, 0));
     }
 
     private PurchaseRequestRecord transition(

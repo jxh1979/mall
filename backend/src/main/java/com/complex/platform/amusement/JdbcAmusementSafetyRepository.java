@@ -215,9 +215,11 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
 
     @Override
     public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
+        // CG-02：经本通用 CAS 改动营业态（人工/巡检/检修路径）即不再是系统自动停运，一并清空 auto_paused_reason。
         int updated = jdbcTemplate.update("""
                 UPDATE amusement_projects
                    SET open_status = :new_status,
+                       auto_paused_reason = NULL,
                        updated_at = NOW()
                  WHERE id = :id
                    AND open_status = :expected_status
@@ -225,6 +227,36 @@ class JdbcAmusementSafetyRepository implements AmusementSafetyRepository {
                 .addValue("id", projectId)
                 .addValue("expected_status", expectedCurrentStatus)
                 .addValue("new_status", newStatus));
+        return updated == 1;
+    }
+
+    /** CG-02：系统自动停运 open→paused 并记原因（V443 auto_paused_reason）。 */
+    @Override
+    public boolean autoPauseProject(String projectId, String reason) {
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_projects
+                   SET open_status = 'paused',
+                       auto_paused_reason = :reason,
+                       updated_at = NOW()
+                 WHERE id = :id
+                   AND open_status = 'open'
+                """, new MapSqlParameterSource()
+                .addValue("id", projectId)
+                .addValue("reason", reason));
+        return updated == 1;
+    }
+
+    /** CG-02：硬超容停运期间发生高危事故 → 原因升级为 safety_incident（出场回落不再自动恢复）。 */
+    @Override
+    public boolean escalateAutoPausedReasonToSafetyIncident(String projectId) {
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_projects
+                   SET auto_paused_reason = 'safety_incident',
+                       updated_at = NOW()
+                 WHERE id = :id
+                   AND open_status = 'paused'
+                   AND auto_paused_reason = 'hard_capacity'
+                """, new MapSqlParameterSource().addValue("id", projectId));
         return updated == 1;
     }
 

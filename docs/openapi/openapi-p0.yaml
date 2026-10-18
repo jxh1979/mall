@@ -1312,7 +1312,7 @@ paths:
       description: 现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople
         整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决
         D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04
-        / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。
+        / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。达硬上限（安全容量）阻断并由系统自动停运（项目 paused，记 auto_paused_reason=hard_capacity，停运与 over_capacity 异常在独立事务落库，不随被拒核销回滚）；出场释放使项目实时在玩人数回落到硬上限以下后，由系统自动恢复开放（paused→open，留痕 amusement.project.auto_reopened，triggered_by=system）；高危事故停运与人工状态不自动恢复——BSM「容量分两道」条。
       x-permission: amusement.verification.execute
       x-failure-codes:
         - TICKET_NOT_FOUND
@@ -5004,6 +5004,7 @@ paths:
         - inventory
       operationId: receivePurchaseRequest
       summary: 采购单入库确认(arrived→received,生成入库流水)
+      description: 入库确认后按供应合同的价格口径与账期形成对供应商的应付（direction=payable、source_type=purchase_inbound、source_id=采购单 id、金额=入库数量×unit_cost_cent、到期日按合同账期或供应商默认结算档推算），同事务进入应收应付台账；重放同一幂等键不重复挂账。
       x-permission: inventory.purchase.approve
       x-data-scope: project-warehouse-bar
       x-terminal-allowed:
@@ -5031,6 +5032,7 @@ paths:
               required:
                 - idempotency_key
                 - location_id
+                - unit_cost_cent
               properties:
                 idempotency_key:
                   type: string
@@ -5044,6 +5046,11 @@ paths:
                   type: string
                   description: 结构化库房 id(可空,挂在余额上)
                   maxLength: 64
+                unit_cost_cent:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: 入库确认录入的合同单价（分，非负）；据此形成对供应商的应付（金额=入库数量×单价），缺省即 400 VALIDATION_FAILED
                 evidence_attachment_ids:
                   type: array
                   description: 入库凭证附件 id 列表
@@ -16646,6 +16653,7 @@ paths:
       x-audit-event-success: leasing.lead.status_changed
       x-audit-event-failure: leasing.lead.status_change_failed
       x-auth-context: staff-token
+      description: 已签约线索改任何其他状态一律 409 LEASING_LEAD_ALREADY_SIGNED（PGM「招商运营细则」：已签约后不得回退至未签约状态）；lost/on_hold 须填 reason。
       parameters:
         - name: lead_id
           in: path
@@ -16805,7 +16813,7 @@ paths:
       x-audit-event-success: leasing.intent.signed
       x-audit-event-failure: leasing.intent.sign_failed
       x-auth-context: staff-token
-      description: 仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。
+      description: 仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。
       parameters:
         - name: intent_id
           in: path
@@ -17150,7 +17158,7 @@ paths:
       x-audit-event-success: contract.activated
       x-audit-event-failure: contract.activate_failed
       x-auth-context: staff-token
-      description: 须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。
+      description: 须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。
       parameters:
         - name: contract_id
           in: path
@@ -17614,6 +17622,7 @@ paths:
         - contract
       operationId: listSpaceRentalStatus
       summary: 铺位平面图着色数据源(可租/已租/即将到期)
+      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在未结清的退租结算单——结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已结清结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已结清或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。
       x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -20804,7 +20813,7 @@ paths:
         - analytics
       operationId: listVacantSpaces
       summary: 空置铺位明细(出租率钻取)
-      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。 M737：按
+      description: BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(已退租/洽谈中/空置,按此优先级)。CG-09：与铺位看板 listSpaceRentalStatus 共用同一推导——最近一份合同存在未结清退租结算单(结算单开立起、含合同仍 effective)或租期已结束而未结清即「已退租」且不计入已租面积,结算完成(settled)即转空置;只有已签约未生效合同的铺位不算已退租。 M737：按
         contract.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出铺位项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号
         403（PLATFORM_SCOPE_REQUIRED）。
       x-permission: contract.view
@@ -25399,7 +25408,7 @@ paths:
       operationId: settlementConfigUpsertHighValueThreshold
       summary: 维护高价值判定阈值(草案)
       description: 结算配置中心 V350：按 项目公司 × 商户
-        配置全平台唯一的「高价值判定阈值(分)」——物品进货价高于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。
+        配置全平台唯一的「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
