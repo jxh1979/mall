@@ -20104,6 +20104,7 @@ paths:
         - customer
       operationId: blacklistCustomerAccount
       summary: 拉黑客人账号（永久禁止使用服务，无到期）
+      description: CG-06b（BSM「核销单位」「储值预付卡 / 余额」：账户关闭的，储值本金退还本人）：拉黑即关闭账户，同事务内把该客人名下综合体通用卡的未消费本金全额退还本人（退款打款登记 finance_refunds，退款执行主体＝长沙项目公司）、未使用赠送金作废（adjust 流水）、卡置 closed；商户级卡不动，由发卡商户按自设规则到店办理；重复拉黑不重复退。
       x-permission: customer.account.manage
       x-data-scope: platform
       x-terminal-allowed:
