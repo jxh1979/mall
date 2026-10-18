@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.08
+# 游乐设施运营系统开发设计文档 V0.11
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.05 ｜ 最后更新：2026-09-01 ｜ 覆盖迁移基线：当前 main 最大 V385 ｜ 状态：现行
+> 版本：V0.11 ｜ 最后更新：2026-10-17 ｜ 迁移证据：保留原 V385 基线及正文后续迁移记录 ｜ 状态：现行；本轮仅同步文档，未改代码
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -187,6 +187,7 @@ stateDiagram-v2
 
 - 场次只用于运营安排和状态展示，不承载独立容量；“已满员”只由所属项目实时在玩人数达到项目容量时自动推算，不使用持久化 `full` code。
 - 场次取消后，系统标记受影响的未核销权益，按票种、合同或活动规则支持延期、退款或人工审批处理；不生成预约释放或改期流程。
+- 获授权现场负责人可在实际清场完成后提前结束该游乐项目场次，结束事件触发系统清零；仍有人在场不得提前清零。已售未履行权益按既有取消、补偿规则办理，整张综合体通票及正常酒吧权益不因单个项目提前结束而终结。
 - 场次异常时禁止新增核销；任何岗位、任何权限都不得人工放行，也不得人工扩大安全容量。
 
 ### 5.3 电子预约（已废止）
@@ -205,10 +206,9 @@ stateDiagram-v2
 | rejected | 拒绝（规则不允许） |
 | failed | 失败（设备或网络原因） |
 | reversed | 已冲正 |
-| pending_review | 待复核；超时按已批准分级时限升级，不得自动通过或作废 |
-| abnormal | 异常 |
+| anomaly | 异常：平台已记成功并扣次，但现场未放行或实际交付有争议，需主管核实；保留原成功与扣次事实 |
 
-> 对外只允许上述 HTML 六态，不设“预检通过”。旧实现的 `pending_sync`、`conflict` 和 `manual_override` 均已废止待下线，不得新增写入。
+> 对外只允许上述 HTML 五态，不设「预检通过」或独立「待复核」态。普通规则拒绝用 rejected，明确设备/网络失败用 failed；履约争议进入 anomaly 后由主管按既有冲正、恢复次数或补偿规则处理，不自动退款。复核沿 ENUM「异常状态的统一出口」办理，不以进入异常撤销原成功记录。旧实现的 `pending_sync`、`conflict` 和 `manual_override` 均已废止待下线，不得新增写入。
 
 核销失败原因：
 
@@ -294,12 +294,12 @@ stateDiagram-v2
 1. 项目出口的闸机或摄像头感应到人员通过。
 2. 系统匹配该人在本项目的有效入场记录；匹配成功时自动把项目实时在玩人数减一。
 3. 同一次入场只允许扣减一次；重复经过不重复扣减，没有入场记录的经过不扣减。
-4. 按场清场的场次型项目，场次结束时由系统自动清空该场尚未释放的在玩人数。
+4. 按场清场的场次型项目由场次结束事件触发系统清空；包括获授权现场负责人确认实际清场完成后提前结束的场次，不提供直接修改人数的动作。
 5. 任何岗位（含主管与最高权限）都不得手工修改、清零或修正在玩人数。当前 `/verifications/exit` 依赖扫码、`manual-overrides` 允许人工修正，均为须下线代码缺口，不是目标流程。
 
 #### 6.4.2 营业日与项目时区
 
-- 游乐规则中的“当天”“每天”一律按营业日计算：默认当日 10:00 至次日 10:00，起止时点是按项目配置的安全阈值，调整须最高权限审批、留痕并配置上下限。
+- 游乐规则中的“当天”“每天”一律按营业日计算，默认当日 10:00 至次日 10:00；每个综合体的游乐业务统一一套营业日，不同综合体分别配置，不按单项游乐设备配置，也不是全平台共用一个 amusement 域取值。起止时点仍为安全阈值，调整须最高权限审批、留痕并配置上下限。
 - 日期、场次归属与巡检有效期必须使用项目所在地时区，禁止使用服务器默认时区；配置变更只影响未来记录，不回改历史。
 - 当前 `TicketVerificationService` 仍以 `ZoneId.systemDefault()` 计算自然日，这是待修代码缺口，不得作为业务口径。
 
@@ -327,7 +327,7 @@ stateDiagram-v2
 > **✅ 已实现修复（F-OPS-03，2026-06-22，已在 .160 编译通过）**：上条"处置模式后台可切换为仅告警留痕"的可切换语义**严格限定在软上限（运营容量）一侧**，硬上限（安全容量）不受处置模式影响——收口口径如下：
 > 1. **硬安全容量禁 `warn_only` 旁路**：处置模式 `warn_only` 仅作用于**软上限（运营容量）**告警放行；**硬上限（`amusement_projects.capacity` 传入的项目安全容量）任何处置模式都阻断核销**（当前失败码仍为 `session_full`/`SESSION_CAPACITY_EXHAUSTED`，命名待收口），不存在“切到 warn_only 即可超过安全容量放行”的旁路。
 > 2. **over_capacity 事件 severity 恒 `high` 触发自动停运**：硬上限维超容落 `amusement.incident.over_capacity` 事件时 `severity` **恒为 `high`**，并据此自动把项目 `open → paused`（停运），不依赖人工处置。软上限告警放行落的 over_capacity 事件按告警口径，不强制停运。
-> 3. 与 §5.1 状态机一致：自动停运走 `open → paused`（§5.1 已有 `open --> paused` 流转），恢复仍按既有 paused→open 路径。
+> 3. 与 §5.1 状态机一致：自动停运走 `open → paused`（§5.1 已有 `open --> paused` 流转）。因达到单个项目硬安全容量而自动停运的项目，仅在该项目实时在玩人数回落到硬上限以下，且系统校验现有开放前安全巡检合格、无阻断项后，才自动恢复为 `open`；沿用现有合格巡检，不要求每次超容恢复都重新巡检，不新增主管确认前置。上述恢复条件为本轮批准的目标，本文同步不代表代码已完成。
 
 > **离线核销下线口径（M07）**：Android 端已有本地权益摘要、待同步流水和恢复联网同步实现，但 HTML 明确游乐权益必须在线核验、不做离线核销。该实现登记为须下线，禁止新增离线核销、待同步或冲突流水。
 
@@ -393,9 +393,9 @@ stateDiagram-v2
 ### 6.8 全园故障与补偿通票
 
 - 单台设备或单个项目故障不直接触发补偿通票；只有整个游乐园故障并影响整体履约时，才可向受影响客人发放补偿通票。
-- 补偿对象包括故障发生时已完成入场核销的客人，以及尚未核销但门票或权益仍在有效期内的持票客人；补偿只延长原票某次核销权，不增加原票人数或核销次数。
-- 补偿通票须关联原票、全园故障事件和发放原因并防重复；有效期为按项目配置的业务参数，须有上下限，出厂默认一年。批量发放前须由游乐公司负责人和工程或安全岗位共同确认。
-- 全园故障生效后，立即停止所有纯游乐门票和含游乐权益通票的新销售；局部设备或单项目故障，仅可在客人付款前明确提示后继续销售。
+- 补偿仍在原票下按受影响人份或次份办理。故障时已原入场且履约受影响者另补一次完整权益（酒水、礼品重新提供），原核销与结算不回改、不重复积分和成长值；仍符合资格的未核销份额仅延期、不加原次数。故障解除后才完成本次原入场者取消该事件下补偿资格，故障时持有效未核票不保留延期；故障时已原入场受影响、解除后使用获发补偿者不受此排除。未核延期及其首次使用正常计分仅适用于仍符合资格者。
+- 补偿记录关联原票、对应人份/次份、原场次、故障事件和原因，同一故障同一原份额只补一次；有效期按项目配置，范围 1～3650 天、默认一年、自发放日起算。批量发放前由游乐公司负责人和工程或安全岗位共同确认。“我的票”逐份显示补偿标注及实际有效期，不新增专用通知渠道。新增完整补偿的承担主体、实际履约时内部价及规则版本继续按已批准 HTML 执行。
+- 全园故障生效后，停止纯游乐票及含游乐权益通票新销售，同时仅停止游乐相关核销，联合票正常酒吧权益仍可用。上述票种待支付单停止付款；停售期间尚未受理的渠道晚回流即使故障前已付也拒绝，核实已收款后原路退款，保留收退款凭证并跟踪实际成功、不得重复退款。此前已成功受理订单的重复回调仍幂等返回原结果。局部故障仍按付款前提示规则处理。本节不将新资格排除扩至大楼系统故障兜底或多次通票安全事件，也不自动作废正常原票或追收已使用历史补偿。
 
 ## 7. 数据库表结构
 
@@ -1111,7 +1111,7 @@ stateDiagram-v2
 | 检修未确认即尝试恢复 | 拒绝状态流转，保持 maintenance，写风险事件（5.1.1） |
 | 检修中产生核销 | 拒绝核销（project_not_allowed），记高风险信号 |
 | 超容触发 | 安全容量硬上限恒拒绝（session_full）、自动停运并落 `amusement.incident.over_capacity`；运营容量软上限告警放行，按配置记录事件或仅提示 |
-| 全园故障 | 停止所有纯游乐票及含游乐权益通票的新销售；共同确认后按原票人数/次数发补偿通票 |
+| 全园故障 | 依 §6.8 停新销售和待付款，仅停游乐相关核销；拒绝尚未受理的晚回流并核实原路退款；按原入场事实核定补偿，不把原快照当不可撤销资格 |
 | 游客争议/投诉 | 以 incident_type=complaint 上报并走事故状态机复核闭环（P0 记录+可复核，修正(2026-06-19 R5业务HTML缺口审计 F11/F12)） |
 | 事故上报 | 进入事故处理流程 |
 
@@ -1182,11 +1182,13 @@ com.complex.amusement
 
 ## 15C. 在玩人数系统自动清零（CG-03，迁移 V448，依据 BSM「出场自动扣减」「在玩人数不允许人工调整」）
 
+以下表、作业及调用顺序为既有实现记录；本轮批准的综合体配置范围、提前结束与展示要求列在后文，尚须实施验证。
+
 - **留痕表** `amusement_concurrent_reset_log`（project_id、scope business_day_end|session_end、business_date、session_id、cleared_rows、cleared_people、boundary_at、reset_at）；部分唯一索引 `(project_id, business_date) WHERE scope='business_day_end'`、`(session_id) WHERE scope='session_end'`。
 - **作业** `AmusementConcurrentCountResetJob`（`@Scheduled` 薄包装，`amusement.concurrent-reset.scheduled.enabled` 默认 false，`fixed-delay-ms` 默认 60000）→ `AmusementService.closeEndedSessionsAndClearCounts(now)` + `resetConcurrentCountsAtBusinessDayEnd(now)`。
 - **场次结束**：`listEndedUnclosedSessions`（status IN scheduled/open AND end_time ≤ now）→ `closeSessionIfEnded`（置 closed）→ `zeroSessionConcurrentSnapshots`（该场次维 + 该项目 project/point_device 维 occupied_count=0）→ 留痕（session_end）+ 审计 `amusement.concurrent_count.session_end_cleared`。
-- **营业日结束**：`BusinessDayResolver`（amusement 域日切）算上一营业日结束时刻 dayEnd → `zeroStaleConcurrentSnapshots(project, dayEnd)`（只清 updated_at < dayEnd 且 occupied_count>0 的 project/point_device 维行，新营业日的计数不动）→ 留痕（business_day_end，含清零行数与人数）+ 审计 `amusement.concurrent_count.business_day_reset`；留痕先插（ON CONFLICT DO NOTHING）再清，重复调度不重复清、不重复记。
-- **无人工入口**：不新增端点；计数只由入场核销、出场自动扣减与本作业产生。
+- **营业日结束**：`BusinessDayResolver`（amusement 域日切）算上一营业日结束时刻 dayEnd → `zeroStaleConcurrentSnapshots(project, dayEnd)`（只清 updated_at < dayEnd 且 occupied_count>0 的 project/point_device 维行，新营业日的计数不动）→ 留痕（business_day_end，含清零行数与人数）+ 审计 `amusement.concurrent_count.business_day_reset`；留痕先插（ON CONFLICT DO NOTHING）再清，重复调度不重复清、不重复记。 该旧 amusement 域日切必须按 §6.4.2 承接每综合体一套配置，不得用全平台单键代替综合体关联。
+- **批准的提前结束与展示要求**：既有作业未提供人工提前结束入口；后续承接 §5.2/§6.4.1 的「授权现场负责人确认实际清场完成后结束项目场次」，由结束事件触发清零，不提供人工改人数。游乐核销记录页单列系统清零留痕区块，显示来源场次或营业日、系统执行结果并保留原核销记录；本轮未新增接口或修改代码。
 - **未含**：场次型 / 非场次型显式字段（待裁决）；`amusement_sessions.used_capacity`（历史场次席位维）不在本作业清零范围。
 ## 15A. 全园故障状态（CG-08a，迁移 V446，依据 ENUM「全园故障与补偿通票」）
 
@@ -1195,17 +1197,17 @@ com.complex.amusement
 - **服务** `AmusementParkWideFaultService`：`initiate`（任一岗位发起 → pending_activation；同综合体已有未解除记录 409 `PARK_WIDE_FAULT_ALREADY_OPEN`）、`confirmActivation`（第二人且另一岗位 → active；同一人 403 `PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN`，同岗位 409 `PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED`，非待确认 409 `PARK_WIDE_FAULT_NOT_PENDING_ACTIVATION`）、`initiateLift`（仅 active → pending_lift，否则 409 `PARK_WIDE_FAULT_NOT_ACTIVE`）、`confirmLift`（同上双人双岗 → lifted，非待确认解除 409 `PARK_WIDE_FAULT_NOT_PENDING_LIFT`）、`list`、`listActions`。所有写操作幂等键必填、审计事件 `amusement.park_fault.initiated/activated/lift_initiated/lifted` 与 `*_failed`。
 - **售票闸**：`ticketing.ParkWideFaultSalesGate`（amusement 域实现 `AmusementParkWideFaultSalesGate`，只读）。`TicketOrderService.createOrder` 在库存扣减前：票种含任一游乐类权益（`entitlement_type` 以 amusement 开头）且所属综合体处于 active 或 pending_lift → 409 `PARK_WIDE_FAULT_SALES_SUSPENDED`。综合体定位：当前项目范围 → 单店票归属酒吧的 `merchants.project_id` → 都定位不到则任一综合体生效即停售（fail-closed）。
 - **后台页** ADM-AMU-006「全园故障状态」（`/admin/amusement/park-wide-faults`）：当前状态卡、发起 / 第二岗位确认生效 / 发起解除 / 第二岗位确认解除、留痕表、历史表。
-- **未含**：核销侧停止、补偿通票发放（CG-08b 另批）；局部设备/单个项目故障的付款前提示沿用既有项目/设备状态口径。
+- **本轮待实施验证**：按 §6.8 补待付停付、尚未受理的晚回流拒绝与核实退款、既有受理单幂等，以及只停游乐核销而保留正常酒吧权益。CG-08b 已有补偿实现记录见 §15B，不再把补偿业务方向写为待批准；局部故障付款前提示规则保持。
 
 ## 15B. 全园故障补偿通票（CG-08b，迁移 V447，依据 ENUM「全园故障与补偿通票」）
 
-- **表**：`amusement_compensation_policies`（project_id PK、validity_days、min_days、max_days；出厂行 `__global__` 365 天；CHECK 1 ≤ min ≤ value ≤ max）；`amusement_fault_compensation_batches`（fault_id、status pending_confirmation|issued、reason、bearer_company_id＝决定发放补偿的域主管公司法律主体、validity_days、window_from/to＝故障生效→解除（未解除取发起时点）、valid_until、发起/确认的人与岗位、计数；部分唯一索引同故障只一个待确认批次）；`amusement_fault_compensation_items`（entitlement_id＝原票受影响游乐权益行即一个人份、order/ticket_type/parent_ticket/slot/customer、kind extend|full_reissue、share_count、original_session_id、original_entry_verification_id、original_valid_to、status pending|issued|used、new_valid_to、compensation_entitlement_ids、fulfilled_verification_id/at/settlement_price_cent；唯一键 (fault_id, entitlement_id)）；`issued_entitlements.compensation_item_id`。
-- **快照（发起时）**：① 已入场核销受影响：`amusement_verifications`（entry、success）所在场次与故障时间窗相交、故障前未出场，取游乐类权益行 → full_reissue；② 未核销有效期内：游乐类权益 active、剩余次数>0、故障生效时点在 [valid_from, valid_to] → extend。两者均排除补偿补发行与同故障已补偿人份；综合体口径：场次所属游乐项目/票种归属商户的 `merchants.project_id` 为空或等于故障项目。
-- **发放（确认时）**：extend → `valid_to = GREATEST(valid_to, 发放日 + validity_days)`，次数不变；full_reissue → 按票种绑定逐模板补发权益行（各 1 次、allocated_revenue 0、同订单/父票/座次、`compensation_item_id`）。
-- **核销挂钩**（`TicketVerificationService`）：补偿行成功核销 → 不发 `PointsConfirmRequestedEvent`、`sumOrderUnits` 排除补偿行；经 `ticketing.CompensationFulfillmentPort`（amusement 实现 `AmusementCompensationFulfillmentAdapter`）把核销记录、时点、结算价锁定到补偿记录（issued → used，一次）。
+- **表**：`amusement_compensation_policies`（project_id PK、validity_days、min_days、max_days；出厂行 `__global__` 365 天；CHECK 1 ≤ min ≤ value ≤ max）；`amusement_fault_compensation_batches`（fault_id、status pending_confirmation|issued、reason、bearer_company_id＝决定发放补偿的域主管公司法律主体、validity_days、window_from/to＝故障生效→解除（未解除取发起时点）、valid_until、发起/确认的人与岗位、计数；部分唯一索引同故障只一个待确认批次）；`amusement_fault_compensation_items`（entitlement_id＝原票受影响游乐权益行即一个人份、order/ticket_type/parent_ticket/slot/customer、kind extend|full_reissue、share_count、original_session_id、original_entry_verification_id、original_valid_to、status pending|issued|used、new_valid_to、compensation_entitlement_ids、fulfilled_verification_id/at/settlement_price_cent；唯一键 (fault_id, entitlement_id)）；`issued_entitlements.compensation_item_id`。 **业务约束**：有效期允许范围为 1～3650 天、默认一年；原 CHECK 的相对大小校验不代替已批准范围，运行配置仍须验证。
+- **既有候选快照实现（发起时）**：① 已入场核销受影响：`amusement_verifications`（entry、success）所在场次与故障时间窗相交、故障前未出场，取游乐类权益行 → full_reissue；② 未核销有效期内：游乐类权益 active、剩余次数>0、故障生效时点在 [valid_from, valid_to] → extend。两者均排除补偿补发行与同故障已补偿人份；综合体口径：场次所属游乐项目/票种归属商户的 `merchants.project_id` 为空或等于故障项目。 **最新资格承接**：候选快照不是最终资格。按本次受影响原人份/次份的原入场事实，故障解除后才原入场者取消该事件下资格及未核延期；不能仅凭故障时有效未核记录维持资格。已原入场受影响者解除后使用补偿不在取消范围。发放与使用链须承接该判断，不能用补偿本身的使用时点误判原入场。
+- **既有发放实现（确认时，须先承接最新资格）**：extend → `valid_to = GREATEST(valid_to, 发放日 + validity_days)`，次数不变；full_reissue → 按票种绑定逐模板补发权益行（各 1 次、allocated_revenue 0、同订单/父票/座次、`compensation_item_id`）。 只对仍符合 §6.8 资格的原份额执行，不通过改写原成功核销或原结算消除资格差异。
+- **核销挂钩**（`TicketVerificationService`）：补偿行成功核销 → 不发 `PointsConfirmRequestedEvent`、`sumOrderUnits` 排除补偿行；经 `ticketing.CompensationFulfillmentPort`（amusement 实现 `AmusementCompensationFulfillmentAdapter`）把核销记录、时点、结算价锁定到补偿记录（issued → used，一次）。 本段不重复计分只适用于完整补发机会；仍符合资格、仅延长原核销权的未核票首次使用，继续按原票务积分及成长值规则处理。
 - **双岗位**：发起/确认沿用 V446 两个岗位权限码与 `requireSecondPerson`（同一人 403、同岗位 409）。
 - **端点**：`GET/POST /api/v1/amusement/compensation-policies/{project_id}`、`GET/POST /api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches`、`POST /api/v1/amusement/compensation-batches/{batch_id}/confirm`、`GET /api/v1/amusement/compensation-batches/{batch_id}/items`。后台页 ADM-AMU-007。
-- **未含**：补偿履约的结算承担（bearer_company_id 已记录，结算域按承担主体出账另批）；客人端展示补偿行（沿用「我的票」按订单列出）。
+- **展示及费用承接**：客人端“我的票”须逐受影响人份或次份展示补偿标注及其实际有效期，不只展示原票首项有效期、不新增短信或专用通知渠道。完整补偿新增履约费用由决定补偿的具体域主管公司承担，按补偿实际履约时生效的内部价及规则版本锁定，原履约与结算不回改；现有 bearer_company_id 及履约记录仅为承接基础，结算与展示是否完成仍须实施验证。
 
 ## 16. 验收标准
 
@@ -1227,8 +1229,10 @@ P0 完成时必须满足：
 - 设备按关键/辅助和依赖关系决定停运范围，分类变更有工程/安全审批留痕。
 - 定期检修可记录检修单位（复用供应商）、工程师、检修时间、结果、异常说明、来源终端、点位。
 - 主管确认前项目/设备不能从检修中恢复营业；确认后写 resume_business_at 并产生 amusement.project.resumed 事件。
-- 游乐“当天/每天”按项目营业日和项目所在地时区计算，不使用服务器默认时区。
-- 全园故障停止新增销售并按已批准规则发补偿通票；局部故障不得直接发补偿通票。
+- 游乐“当天/每天”按每个综合体统一的游乐营业日及所在地时区计算；不同综合体分别配置，不用全平台单键、单项设备配置或服务器默认时区替代。
+- 全园故障按 §6.8 停新销售、停待付、拒绝尚未受理晚回流并核实退款，已受理单重复回调不另退；仅停游乐核销，正常酒吧权益保留。故障解除后才原入场者取消补偿，已原入场受影响者解除后使用补偿仍可；补偿有效期 1～3650 天、默认一年、逐份展示，局部故障不得直接发补偿通票。
+- 实际清场后才可提前结束单个游乐项目场次并由事件清零；未清场不能借此清零，不终结整张通票或正常酒吧权益，清零来源与执行结果在记录页可查。
+- 平台成功扣次后的现场未放行或交付争议进入异常复核并保留原成功事实；普通规则拒绝和明确设备/网络失败保持原状态，不自动退款。
 - 游乐商户只能访问授权数据，结算输出含实际服务商户与已批准规则版本。
 
 ## 17. 已确认排期与后续供应商/法务资料事项
@@ -1250,6 +1254,8 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 改 | §16 | V0.10：验收清单明确为故障解除后才原入场者取消补偿，与 §6.8 及 C09 一致，不扩大至故障期间已经原入场并受影响者 | C09 最终裁决及本轮逐句核验 |
+| 2026-10-17 | 改/增 | §5.2/5.5、§6.4/6.8、§15A—C、§16 | V0.09：同步核销五态、履约争议复核、每综合体营业日、清场后提前结束及展示、停售晚回流处理、权益级停核销、补偿资格/范围/展示；既有实现与批准目标分别说明 | 本轮已批准 BSM/ENUM 对应条目，C03/C08/C09及附件32/34/35/40/43/45 |
 | 2026-10-17 | 增 | 抬头、§15C | V0.08：CG-03 在玩人数系统自动清零作业、留痕表、两条清零规则与审计事件 | BSM「出场自动扣减」「在玩人数不允许人工调整」条；迁移 V448 |
 | 2026-10-17 | 增 | 抬头、§15B | V0.07：CG-08b 补偿通票数据模型、快照与发放规则、核销挂钩、端点与后台页 | ENUM「全园故障与补偿通票」条；迁移 V447 |
 | 2026-10-17 | 增 | 抬头、§15A | V0.06：CG-08a 全园故障状态表、岗位→权限码、服务与错误码、票务售票闸、后台页 | ENUM「全园故障与补偿通票」条；迁移 V446 |

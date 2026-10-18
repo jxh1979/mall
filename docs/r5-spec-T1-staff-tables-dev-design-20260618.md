@@ -1,4 +1,4 @@
-# T1 员工三表 可编码开发规格 V0.14（2026-06-18）
+# T1 员工三表 可编码开发规格 V0.15（2026-06-18）
 
 > **任务**：R5 backlog **T1（员工档案/设备凭证/通知三表）**，W0 底座，**解锁 T9（Android 设备凭证）**。
 > **裁决依据**：R5 裁决⑨——员工三表 + Android 端凭证本期 P0；MDM 自有侧字段暂缓。
@@ -130,9 +130,9 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | POST | /api/v1/staff/registrations | staff.profile.submit | 商户代员工提交注册（merchant_id 必填，由商户经营主体公司审批） |
 | GET | /api/v1/staff/registration-companies | public | 公司员工自助注册可选公司列表 |
 | POST | /api/v1/staff/self-registrations | public（私人手机通道，须带设备公钥/指纹，频控） | 公司员工本人提交注册，只返回申请编号与待审状态 |
-| POST | /api/v1/staff/profiles/{id}/employment-status | staff.profile.review | 任职五态变更——CG-12 起只发起「HR 会签＋直属领导向上三级」复核（`hr_approver_id` 必填，须持 staff.hr.review），全部通过后写入；返回复核单（幂等键必填） |
+| POST | /api/v1/staff/profiles/{id}/employment-status | staff.profile.review | 独立任职五态变更仅由该员工直属领导在有效权限及管理范围内发起；主线直属为第一级、共三个组织层级，HR 平行会签由系统按员工所属部门及组织/授权配置解析，不要求发起人随单指定 `hr_approver_id`；全部通过后写入，返回复核单（幂等键必填）；注册审批形成初始状态、本人请假及申诉不受本项发起限制 |
 | POST | /api/v1/staff/payroll/adjustments | staff.payroll.manage | 奖惩（bonus/penalty）——CG-12 起只发起同档复核，通过后入账；返回复核单（object_id＝入账记录 id） |
-| POST | /api/v1/staff/payroll/adjustments/{id}/appeals | staff.payroll.view_mine | 员工本人对已生效扣罚提出申诉（同链裁定：通过＝撤销冲回、驳回＝维持） |
+| POST | /api/v1/staff/payroll/adjustments/{id}/appeals | staff.payroll.view_mine | 员工本人对已生效扣罚提出申诉，同链裁定，HR 会签人由系统按部门及合法组织/授权配置解析，不由员工指定；通过＝撤销冲回、驳回＝维持；已发工资的真实补差按本节专条进入下一次应发工资 |
 | GET | /api/v1/staff/payroll/adjustments/appeals | staff.payroll.view_mine（按员工查看须 staff.payroll.manage） | 申诉清单（pending / upheld / revoked） |
 | GET | /api/v1/staff/settings/shift-visible-days | staff.shift.manage | 读经营主体可见天数（缺行回落全局出厂行 7/1..31） |
 | POST | /api/v1/staff/settings/shift-visible-days | staff.shift.manage | 设可见天数（值与上下限同填，幂等键必填） |
@@ -149,11 +149,13 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | POST | /api/v1/staff/notices/{id}/acknowledge | staff.notice.view | 确认/同意 |
 | POST | /api/v1/staff/shifts | staff.shift.manage | 主管排班（单个班次，同员工同开始时刻幂等覆盖）|
 | POST | /api/v1/staff/shifts/batch | staff.shift.manage | 按周批量排班（一批员工 × 勾中的星期几 × 每日同一时段，一次排完整周）|
-| POST | /api/v1/staff/dispatches | staff.profile.review | CG-07 登记派驻记录（员工 → 派驻酒吧，所属主体取自档案所属公司；同员工同酒吧只允许一条进行中，幂等键必填）|
+| POST | /api/v1/staff/dispatches | staff.profile.review | 仅平台侧获授权人员登记派驻，校验员工、目标商户及项目组织范围，不允许商户账号自行登记；员工 → 派驻酒吧，所属主体取自档案所属公司；同员工同酒吧只允许一条进行中，幂等键必填；不因平台管理员称谓自动获得授权、不限定顶层公司独占 |
 | POST | /api/v1/staff/dispatches/{dispatch_id}/end | staff.profile.review | CG-07 结束派驻（结束日期缺省当日，事由必填，幂等键必填）|
 | GET | /api/v1/staff/dispatches | staff.profile.view | CG-07 派驻记录列表（商户角色只见本商户）|
 | POST | /api/v1/staff/commission-settlements/close | staff.payroll.manage | CG-07 提成月结拨付：按（酒吧 → 所属主体 → 月）汇总派驻人员提成，生成 `dispatch_commission_transfer` 应付；同组不重复挂账 |
 | GET | /api/v1/staff/commission-settlements | staff.payroll.manage | CG-07 该月拨付记录（金额、笔数、人数、到期付账日、应付台账项）|
+
+> **本轮批准口径及待实现边界（2026-10-17，PGM V0.41「员工和手机」「提成发放和人员服务治理」）**：人力操作及申诉的主线是员工直属领导起的三个组织层级（如领班、主管、部门经理），HR 另走平行线。不可自审、权限及组织范围校验不得改成剔除人员后向更高层另凑三人；配置缺失或不合法时保持待处理，按既有审批规则补齐。HR 持有 `staff.hr.review` 只是资格之一，须同时匹配员工所属部门和合法组织范围。已发工资月份的扣罚获准撤销后，按原月锁定计薪规则及原扣罚上限复算真实少发额，保留原工资单与付款，另记关联补差，在下一次应发工资单列补发，不机械补名义处罚全额，不延误法定支付时限及离职结清。以上为目标要求；旧实现的随单 HR 指定、派驻/状态发起校验和仅冲回原调整不能视为已经满足，须另行实现与验证。本次文档同步不修改代码或迁移。
 
 > **排班口径（2026-08-02 用户拍板）：一次排一周，跨零点班只填时段。**
 > 排班员的实际做法是一次性排出一周的班，而不是一人一天点一次，所以批量排班是主入口、单班保留作零星补改：
@@ -167,7 +169,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 > **跨月／跨周／跨年班次的归属口径（2026-08-06，矛盾12 ＋ 矛盾11 联动；依据 BSM「请假扣薪」条、业务系统地图日结批次条、ENUM「运营营业日」条）**
 > 班次起止跨越**月份、周或年度**边界的（如 1 月 31 日 22:00 至 2 月 1 日 06:00 的夜班、12 月 31 日 22:00 至次年 1 月 1 日 06:00 的夜班），
 > 该班次的**工时、考勤、请假以及年假额度、全勤等年度指标，一律归属班次结束时点所在的月份与年度**；
-> 该班次**是否属于法定节假日加班，同样按班次结束时点所在的自然日判定，整班按同一口径认定，不按跨零点前后拆分半程**。
+> 法定节假日加班按**实际工作日期分段识别对应工时**，不得按下班日将整班统一认定；班次工时、考勤及薪资的月份/年度归属仍按上述班次结束时点规则办理，既有依法生效的更优约定继续遵守。此处同步已批准 HTML，计算实现仍须按分段要求验证。
 > **这是营业日归口清单的唯一例外**：ENUM「运营营业日」条与 业务系统地图日结批次条的归口清单里，「考勤日期」一项**不按开台/下单时点所属营业日判定，而按班次结束时点判定**；
 > 清单其余各项（日结批次、最低消费时段、票价日期类型、场次归属、巡检有效期、销售提成月份）一律**仍按营业日**，本例外不外溢。
 > `work_date` 记班次**开始那天**只是排班表的排列键，**不构成考勤与薪资的归属月份**——归属月份一律由 `end_at` 推导；请假扣薪的分母取**归属月份**的当期总工时。
@@ -179,7 +181,7 @@ CG-12：`staff.profile.employment_status_change_requested`（发起）→ `staff
 `staff.registered`、`staff.approved`、`staff.rejected`、`staff.suspended`；`staff_device.bound`、`staff_device.rebind_requested`、`staff_device.rebound`、`staff_device.revoked`、`staff_device.integrity_failed`；`staff.notice_created`、`staff.notice_acknowledged`。
 
 ## 6. 权限点（D3，dot 风格，纳入 T13 全业务域最小颗粒度预置）
-`staff.profile.submit/review/view`、`staff.device.bind/review/revoke`、`staff.notice.view`；CG-12 新增 `staff.hr.review`（人力会签复核：HR 岗位经角色持有，作为 `hr_review` 平行线会签人的资格码；出厂授 `role_platform_admin`）。
+`staff.profile.submit/review/view`、`staff.device.bind/review/revoke`、`staff.notice.view`；CG-12 新增 `staff.hr.review`（人力会签复核：HR 岗位经角色持有，作为 `hr_review` 平行线会签人的资格码）。CG-12 出厂曾授 `role_platform_admin` 属实现记录，不表示任意平台管理员均可成为本单 HR 会签人；本轮须按第 4 节的部门、组织、授权及回避条件自动解析，配置缺失不得绕过会签。
 
 > **员工自助角色（V322，2026-07-19 补链）**：审批通过除建 `access_users` 外，为新员工分配角色 `role_staff_self`（data_scope=self），授予 `staff.payroll.view_mine / staff.shift.view / staff.attendance.punch / staff.leave.submit / staff.notice.view / staff.profile.self`。此前缺此分配 → 真实员工（userType=staff）无 `user_roles` 行 → BYOD 自助端点（我的薪资/班次/考勤/请假/通知/打卡）对真实员工一律 403，仅 platform_admin 可用。自助端点按 `actor.id()` 自锁本人，商户/项目隔离由 `access_users.merchant_id/organization_id` 驱动（AuthorizationService 不读 role.data_scope）。
 
