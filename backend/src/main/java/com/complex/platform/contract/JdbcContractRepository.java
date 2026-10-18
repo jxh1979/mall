@@ -441,35 +441,34 @@ class JdbcContractRepository implements ContractRepository {
 
     @Override
     public List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf) {
-        return jdbcTemplate.query("""
+        // CG-09：推导片段与经营看板出租率/空置明细共用（SpaceRentalDerivationSql），退租结算完成即转空置。
+        String sql = """
                 SELECT s.id AS space_id, s.space_name, COALESCE(s.status, '') AS space_status,
-                       e.contract_id, e.days_to_expiry,
-                       EXISTS(SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) AS in_negotiation,
-                       EXISTS(SELECT 1 FROM contract_spaces cs2 WHERE cs2.space_id = s.id) AS ever_bound
+                       (l.expiry_date - :as_of) AS days_to_expiry,
+                       COALESCE(__IS_LET__, false) AS is_let,
+                       COALESCE(__IS_MOVED_OUT__, false) AS is_moved_out,
+                       EXISTS(SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) AS in_negotiation
                   FROM spaces s
-                  LEFT JOIN LATERAL (
-                      SELECT c.id AS contract_id, (c.expiry_date - :as_of) AS days_to_expiry
-                        FROM contract_spaces cs JOIN contracts c ON c.id = cs.contract_id
-                       WHERE cs.space_id = s.id AND c.lifecycle_status = 'effective'
-                         AND c.effective_date <= :as_of AND c.expiry_date >= :as_of
-                       ORDER BY c.expiry_date LIMIT 1) e ON true
+                  LEFT JOIN LATERAL (__LATEST__) l ON true
                  WHERE (CAST(:pid AS text) IS NULL OR s.project_id = :pid)
                  ORDER BY s.id LIMIT 1000
-                """, new MapSqlParameterSource().addValue("pid", projectId).addValue("as_of", asOf), (rs, n) -> {
-            // 6 态（对齐 HTML §十 铺位租赁状态）：不可租(人工 status=unavailable) > 已租(生效合同；service 再判即将到期)
-            //   > 洽谈中(招商意向占用) > 已退租(曾绑约、现无生效) > 空置
-            String contractId = rs.getString("contract_id");
+                """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
+                .replace("__IS_LET__", SpaceRentalDerivationSql.IS_LET)
+                .replace("__IS_MOVED_OUT__", SpaceRentalDerivationSql.IS_MOVED_OUT);
+        return jdbcTemplate.query(sql, new MapSqlParameterSource().addValue("pid", projectId).addValue("as_of", asOf), (rs, n) -> {
+            // 6 态（PGM「合同运营细则」/ ENUM「铺位租赁状态」）：不可租(人工 status=unavailable) > 已退租(最近一份合同结算未完)
+            //   > 已租(生效合同在租期内且无开立中结算单；service 再判即将到期) > 洽谈中(招商意向占用) > 空置(结算 settled 或从未绑约)
             String status;
             Integer days = null;
             if ("unavailable".equals(rs.getString("space_status"))) {
                 status = "unavailable";
-            } else if (contractId != null) {
+            } else if (rs.getBoolean("is_moved_out")) {
+                status = "moved_out";
+            } else if (rs.getBoolean("is_let")) {
                 status = "let";
                 days = rs.getObject("days_to_expiry", Integer.class);
             } else if (rs.getBoolean("in_negotiation")) {
                 status = "negotiating";
-            } else if (rs.getBoolean("ever_bound")) {
-                status = "moved_out";
             } else {
                 status = "vacant";
             }

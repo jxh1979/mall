@@ -1,4 +1,4 @@
-# 招商获客业务域 PRD（V1.04·据需求重建）
+# 招商获客业务域 PRD（V1.05·据需求重建）
 
 > 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径；最终业务解释仍以三份业务 HTML 为准。
 >
@@ -22,7 +22,7 @@
 - **来源（4 类，录入即打来源标签）**：主动拓展（招商员外出）/ 官网·小程序在线留资 / 老商户·合作方转介绍 / 展会·行业活动。
 - **分配**：招商主管手动指派给招商员（不自动分、不抢单、不共享池）。线索带 `owner_user_id`（负责人）。
 - **状态流转**：待跟进→跟进中→已转意向→洽谈中→已签约；旁支 已流失 / 已搁置（可从多数态进入，留原因）。招商线索在已签约前，可从待跟进、跟进中、已转意向或洽谈中转为已流失或已搁置；转换时必须填写原因，已签约后不得回退至未签约状态。
-- **实现缺口（M08 仅登记）**：当前 `LeasingService.updateLeadStatus` 只校验目标属于七值、`lost`/`on_hold` 须填原因，无来源态白名单、无 `signed` 终态保护；`createIntent` 同样可把 `signed` 写成 `converted_to_intent`，属待实现；M08 不改代码。
+- **实现现状（2026-10-17 CG-01 后）**：`LeasingService.updateLeadStatus` 已加 `signed` 终态保护——已签约线索改任何其他状态一律 409 `LEASING_LEAD_ALREADY_SIGNED`，状态不变；仍无来源态白名单；`createIntent` 仍可把 `signed` 写成 `converted_to_intent`，属待实现缺口（登记，未改）。
 - 「已转意向」时生成 `leasing_intent`（进入 §3）。品牌已拉黑的，既有线索也不得新建意向；确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。**当前 `LeasingService.createIntent` 未执行该黑名单守卫或例外放行流程，属待实现；M08 不改代码。**
 
 ## 3. 意向管理（5 阶段独立流转 + 关键阶段卡控）
@@ -52,8 +52,8 @@
   - **当前绑定载体 = `business_entity_bindings`（`binding_type=four_party`）**，每商户至多一条 `active` 绑定（`uq_business_entity_bindings_active_merchant`；重复激活报 `409 ACTIVE_BINDING_EXISTS`）。转商户初期三主体可都指向同一 `business_entity`。
   - **可拆边界**：「后续可拆」= 新建一条 active 绑定替换旧绑定，指向不同 运营/合同/结算 主体；**不是**在 `merchants` 的 `*_entity_id` 快照列上改写。`merchants.business_entity_id/contract_entity_id/settlement_entity_id` 仅为档案快照。
   - 合同签署时另在 `contracts.contract_subject_id/operation_subject_id/settlement_subject_id` 固化该合同主体快照，与商户当前 active 绑定**可不一致**（无外键强绑），勿假定二者恒等。
-- 转换后线索状态→已签约，生成正式 merchant 档案，喂入合同环（合同 draft 引用该商户 + 报价条款）。
-- **实现保证（AUD-002/003 修复，2026-07-21）**：签约转换 = 一次原子业务事务——`signIntent` 公有入口 `@Transactional`，自动建商户 → 即建 `business_entity_bindings`（`binding_type` 四主体、`active`，稳定幂等键按意向派生）→ 合同 draft → 线索置已签约 → 审计留痕；**任一步失败整体回滚，无孤儿商户/绑定/合同**，线索不误置已签约。幂等重签命中同一商户与同一 active 绑定、不重复建。绑定创建仅在「无既有 `merchant_id`、签约自动建档」路径触发（带既有商户签约，其主体绑定由治理域主体绑定页管理，不在此重建）。
+- 转换时生成正式 merchant 档案，喂入合同环（合同 draft 引用该商户 + 报价条款），并把合同绑到来源意向（`leasing_intents.contract_id`，V442）；**线索不在签约时置已签约——合同审批全部通过、生效后（`ContractService.activate` 经 `ContractEffectiveLeadPort` 回调 `LeasingService.markSourceLeadSigned`）才转为已签约并留痕 `leasing.lead.signed`**（PGM「招商运营细则」，2026-10-17 CG-01 对齐）。审批驳回退回起草的，线索保持原状态。
+- **实现保证（AUD-002/003 修复，2026-07-21）**：签约转换 = 一次原子业务事务——`signIntent` 公有入口 `@Transactional`，自动建商户 → 即建 `business_entity_bindings`（`binding_type` 四主体、`active`，稳定幂等键按意向派生）→ 合同 draft → 合同绑到来源意向 → 审计留痕（`leasing.intent.signed`，语义=合同草稿已起草，不表示线索已签约）；**任一步失败整体回滚，无孤儿商户/绑定/合同**。幂等重签命中同一商户与同一 active 绑定、不重复建。绑定创建仅在「无既有 `merchant_id`、签约自动建档」路径触发（带既有商户签约，其主体绑定由治理域主体绑定页管理，不在此重建）。
 - **合同起草原子性（AUD-002）**：`ContractService.createDraft` 亦已 `@Transactional`——字段/空间校验前置于落库（校验失败零脏写）、空间存在性+租期重叠早检在保存前完成、幂等命中(重放)也必过业务校验后才返回既有草稿；失败草稿整体回滚，重试走完整校验、无半成品可复用。
 
 
@@ -61,7 +61,7 @@
 
 > 闭合 BSM-0267 `expiry_exit`。招商 PRD 负责「收到签约」；租约履约/退租细节以 real-estate / 合同履约 PRD 为准，本节定义**必须闭环的交接**。
 
-1. **意向/线索不会自动变成无限期占位**：签约转换成功后，关联线索状态为「已签约」；意向仍保持既有五阶段，不新增「已签约」意向终态，签约结果由关联线索与合同记录表达。
+1. **意向/线索不会自动变成无限期占位**：合同生效后，关联线索状态为「已签约」（签约起草时不置，PGM「合同审批全部通过、生效后转为已签约」）；意向仍保持既有五阶段，不新增「已签约」意向终态，签约结果由关联线索与合同记录表达。
 2. **合同到期前**：系统须能按可配提前期产生跟进/预警任务（到期提醒），避免静默过期。  
 3. **到期路径（三选一，须留痕）**：  
    - **续约/变更**：走合同变更或新签流程，保留原合同与商户档案关联；  
@@ -114,6 +114,7 @@
 
 | 日期 | 类型 | 章节 | 内容 |
 |---|---|---|---|
+| 2026-10-17 | 改 | §2、§3、§6A | 版本升至 V1.05：CG-01 招商线索「已签约」改到合同生效时（PGM「招商运营细则」）——签约只起草合同并绑定来源意向（V442 `leasing_intents.contract_id`），合同生效后置已签约并留痕 `leasing.lead.signed`；审批驳回不置；已签约线索改其他状态 409 `LEASING_LEAD_ALREADY_SIGNED`。登记 `createIntent` 仍可回写线索的残余缺口。 |
 | 2026-07-28 | 增 | §6A | 到期/变更/退出衔接（P2 BSM-0267） |
 | 2026-08-04 | 增 | §6A | 退租结算处补押金治理与退租结算细则的交叉引用，指向 real-estate PRD §2，避免两处重复正文（CL-24） |
 | 2026-08-07 | 改 | §6A | 交叉引用要点补清退两条件并发前提（以存在到期未缴款项为前提、零欠费与未出账不启动、仅有罚款欠缴不启动），正文仍以 real-estate PRD §2 为准（DEC-R8-75，对齐 BSM「签约与合同」条） |

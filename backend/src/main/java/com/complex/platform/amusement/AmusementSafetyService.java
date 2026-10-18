@@ -294,9 +294,14 @@ public class AmusementSafetyService {
         // 事故停运联动：high/critical 安全事故自动停运停售（项目 open→paused，CAS 幂等：仅当前为 open 才流转，
         // 已 paused/maintenance/closed 不重复动作、不报错）。消除"出事故仍照常售票/核销"的安全敞口；
         // 恢复营业须走巡检/检修复核流程（reopen），不在此自动恢复。
+        // CG-02：记原因 safety_incident（V443）——与硬超容自动停运区分开，出场人数回落的自动恢复只认 hard_capacity；
+        // 项目正处硬超容自动停运时发生高危事故，原因升级为 safety_incident，回落后同样不自动恢复。
         boolean autoPaused = false;
         if ("high".equals(record.severity()) || "critical".equals(record.severity())) {
-            autoPaused = repository.updateProjectOpenStatus(record.projectId(), "open", "paused");
+            autoPaused = repository.autoPauseProject(record.projectId(), "safety_incident");
+            if (!autoPaused) {
+                repository.escalateAutoPausedReasonToSafetyIncident(record.projectId());
+            }
         }
         auditEventService.recordSuccess(
                 "amusement.incident.created",

@@ -927,13 +927,13 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `item_type` | varchar | `alcohol/food/material/consumable/tool` |
 | `unit` | varchar | 基础单位 |
 | `cost_price` | bigint | 成本价，单位分 |
-| `last_actual_arrival_price` | bigint | 最近一次实际到货价；高价值自动判定只用该值，不用滚动平均进货价 |
+| `last_actual_arrival_price` | bigint | 最近一次实际到货价；高价值自动判定只用该值，不用滚动平均进货价。实现（2026-10-17 CG-04）不另存此列，由该物品最近一次采购入库流水 `inventory_stock_movements.unit_cost_cent`（`movement_type=inbound` 且 `business_type=purchase_request`）派生 |
 | `safety_stock` | numeric | 安全库存 |
 | `manual_high_value` | boolean | 物品档案**手工标记**为高价值；标了就恒为高价值（不看进货价），触发报损/盘点差异/作废/退酒的"照片+视频双证据+主管复核" |
-| ~~`high_value_threshold`~~ | ~~bigint~~ | **V350 已删**：按物料各设阈值与全平台唯一阈值冲突；阈值统一落 `high_value_thresholds`。当前若仍用 `inventory_item_cost_state.avg_unit_cost_cent` 判定，属于待改差距 |
+| ~~`high_value_threshold`~~ | ~~bigint~~ | **V350 已删**：按物料各设阈值与全平台唯一阈值冲突；阈值统一落 `high_value_thresholds`。判定已于 2026-10-17（CG-04）改为取最近一次采购入库流水的 `unit_cost_cent`，不再用 `inventory_item_cost_state.avg_unit_cost_cent` |
 | `status` | varchar | 状态 |
 
-> 高价值采用全平台唯一安全阈值与最近一次实际到货价比较，出厂默认 5000 元，须同时配置上下限，调整须最高权限审批并留痕；阈值未配置时一律按高价值拦下。库房主管及以上可手工标记或取消标记，均须填理由并留痕。当前实现若仍取滚动平均进货价，属于待改差距。
+> 高价值采用全平台唯一安全阈值与最近一次实际到货价比较，出厂默认 5000 元，须同时配置上下限，调整须最高权限审批并留痕；阈值未配置时一律按高价值拦下。库房主管及以上可手工标记或取消标记，均须填理由并留痕。实现已于 2026-10-17（CG-04）对齐：取最近一次采购入库流水的实际到货单价，大于或等于阈值即高价值；手工标记的岗位限制与理由留痕仍待改。
 
 ### 6.14 bar_inventory_locations 库存位置表
 
@@ -1674,4 +1674,5 @@ P0 完成时必须能演示：
 | 2026-09-01 | 改 | §16 出品后异常/沽清/pour cost/卡座责任链接线 | 沽清改为临时/长期两档、置灰不隐藏且库存归零不自动触发；pour cost 取消 strict/fallback 业务开关，按物理设备二分且无设备不得记零损耗；责任链事件统一为 `table.service_changed` | 三份业务 HTML；M06 审计 |
 | 2026-06-19 R5业务HTML缺口审计 F4 | 增/改 | §4.5 / §5.3.1 / §5.3.2 / §5.3.3 / §5.3.3a | §4.5 状态表补 `disputed` 争议态；§5.3.1 补散客 `customer_id` 可空+`customer_phone` 核身；§5.3.2 取酒核身强表述"瓶底标签数值+姓名/昵称必须比对通过，不止手机号+验证码"；§5.3.3 补 `transferSavedBottle` 方法名；新增 §5.3.3a 争议处置入口；口径以 ticketing §10.4.1 为权威 | F4 存酒核身契约对齐，与文件1口径一致 |
 | 2026-06-23 F-TXN-05 赠菜扣提成 | 增/改 | §6.8 bar_order_items / §6.9A.2 提成计算 | `bar_order_items` 增 `is_gift`（V153，§6.8 既有逻辑列之物理落地）承载随单赠送标记：下单/加菜 `is_gift=true` 明细对客 `amount_cent=0`（不计 `subtotal`）、单价保留售价，出品/撤单/回滚等明细重建均透传；`calculateCommission` 在 `subtotal − discount − 免退净额` 基础上再按赠送项商品内部结算价（V152 `internal_settlement_price_cent`）× 数量扣除 `giftDeduction`，赠送项成本不计提成；未录内部价不扣（向后兼容）。解除 §6.9A.2 旧 BLOCKED 标注 | F-TXN-05（赠品按内部价从提成扣除；业主 2026-06-22 确认口径）；V152 内部结算价基 + V153 赠送标记 |
+| 2026-10-17 CG-04 | 改 | §6 inventory_items 字段表 / 高价值判定说明 | 高价值判定实现对齐 BSM「高价值物品」现句：基准 = 最近一次采购入库流水的实际到货单价（`inventory_stock_movements.unit_cost_cent`，限 `business_type=purchase_request`），比较符 ≥；不新增列、不新增迁移 | BSM「高价值物品」L1195；实现 `HighValueDecisionService` / `JdbcInventoryRepository.findLatestPurchaseArrivalUnitCostCent` |
 | 2026-06-23 订卡邀请函 | 增 | §6.3a 订卡邀请函 / §6.3 bar_reservations / 新子表 bar_reservation_invitation_members | 扩展卡座预订（不另起独立实体）：`bar_reservations` 增 invitation_token/signature/capacity/status/issued_at（V155），新子表承载持函人 + 确认朋友成员（confirmed→entered，UNIQUE(reservation,identifier)）；两步=朋友客人端确认占名额（`POST /customer/bar-invitations/confirm`，token 鉴权）→门口扫码入场（`POST /bar/reservations/{id}/invitation/entry-verify`，复用 bar.table.guest_checkin），已确认+已入场≤卡座 capacity；签发 staff `bar.reservation.invitation.manage`；持函免通票仅进定卡吧；订卡消费正常计提成 | 业主 2026-06-22 口述 + 2026-06-23 拍板（两步确认 + 连客人端全链）；V155 |
