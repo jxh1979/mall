@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -61,6 +61,20 @@ public class SupervisorReviewService {
     public static final String HR_LINE = "hr_review";
 
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
+            new SupervisorReviewPolicyRecord("staff_payroll_scheme", "staff.payroll.scheme.change", 0, 3, true,
+                    List.of("reason"), "active", ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE, "finance_review")),
+            new SupervisorReviewPolicyRecord("staff_payroll_period", "staff.payroll.period.confirm", 0, 3, true,
+                    List.of("reason"), "active", ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE, "finance_review")),
+            new SupervisorReviewPolicyRecord("staff_performance_deduct", "staff.performance.points.deduct", 0, 3, true,
+                    List.of("reason"), "active", ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE)),
+            new SupervisorReviewPolicyRecord("staff_performance_appeal", "staff.performance.points.appeal", 0, 3, true,
+                    List.of("reason"), "active", ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE)),
+            new SupervisorReviewPolicyRecord("staff_payroll_calendar", "staff.payroll.calendar.publish", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up", null, List.of("finance_review")),
+            new SupervisorReviewPolicyRecord("staff_performance_rule", "staff.performance.rule.publish", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "staff.performance.rule.approve"),
+            new SupervisorReviewPolicyRecord("bar_payroll_rule", "bar.payroll_rule.adjust", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "bar.payroll.approve"),
             new SupervisorReviewPolicyRecord("amusement_business_day", "amusement.business_day.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("inventory_purchase_request", "inventory.purchase_request", 0, 1, true,
@@ -235,8 +249,8 @@ public class SupervisorReviewService {
 
     /** 策略固定要求的平行线（如税费三审）必须由起草人逐线指定最终审批人，否则拒绝发起（fail-closed）。 */
     private static void requireDefaultLines(SupervisorReviewPolicyRecord policy, List<ApprovalChainService.ParallelLine> lines) {
-        if (ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(policy.approvalLevel())) return;
         for (String code : policy.parallelLineCodes()) {
+            if (HR_LINE.equals(code) && ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(policy.approvalLevel())) continue;
             boolean given = lines.stream().anyMatch(line -> code.equals(line.lineCode()) && line.finalApproverId() != null
                     && !line.finalApproverId().isBlank());
             if (!given) {
@@ -647,8 +661,8 @@ public class SupervisorReviewService {
             return existing;
         }
         SupervisorReviewPolicyRecord policy = findPolicyByCode(pending.policyCode());
-        if (policy != null && !policy.parallelLineCodes().isEmpty()
-                && !ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(policy.approvalLevel())) {
+        if (policy != null && policy.parallelLineCodes().stream().anyMatch(code ->
+                !HR_LINE.equals(code) || !ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(policy.approvalLevel()))) {
             throw ApiException.conflict("APPROVAL_LINE_FINAL_APPROVER_REQUIRED",
                     "本事项含平行审批线，组织层级补齐后须重新发起并指定各线最终审批人");
         }
@@ -679,8 +693,11 @@ public class SupervisorReviewService {
             nodes = List.of();
             if (hr.isPresent()) {
                 try {
+                    List<ApprovalChainService.ParallelLine> resolvedLines = new ArrayList<>();
+                    resolvedLines.add(new ApprovalChainService.ParallelLine(HR_LINE, hr.get()));
+                    lines.stream().filter(line -> !HR_LINE.equals(line.lineCode())).forEach(resolvedLines::add);
                     nodes = chainService.generate(reviewId, initiatedBy, beneficiaryId, level, null,
-                            List.of(new ApprovalChainService.ParallelLine(HR_LINE, hr.get())), requiredLevel);
+                            resolvedLines, requiredLevel);
                     if (nodes.stream().anyMatch(n -> HR_LINE.equals(n.lineCode())
                             ? !staffHrRouting.eligible(n.approverId(), beneficiaryId, initiatedBy)
                             : !staffHrRouting.canReviewEmployee(n.approverId(), beneficiaryId, APPROVE_PERMISSION))) {
@@ -772,7 +789,9 @@ public class SupervisorReviewService {
     private boolean requiresBeneficiary(String actionType) {
         String type = actionType == null ? "" : actionType;
         return type.contains("grant") || type.contains("authorization")
-                || type.equals("access.grant_request.money") || type.equals("access.scope_change.money");
+                || type.equals("access.grant_request.money") || type.equals("access.scope_change.money")
+                || policies.stream().anyMatch(policy -> type.equals(policy.actionType())
+                        && ApprovalLevel.HR_THREE_LEVELS_UP.code().equals(policy.approvalLevel()));
     }
 
     private boolean isOriginalApplicant(SupervisorReviewDecisionRecord review, String userId) {

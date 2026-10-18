@@ -1,17 +1,20 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
+import { StaffPayrollCalculationView } from "./StaffPayrollCalculationView";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
+import type { PayrollCalculation } from "./staffPayrollTypes";
+import { payrollCents } from "./StaffPayrollSchemeForm";
 import type { AdminPageProps } from "../types";
 
 type Bracket = { seq: number; incomeFloorCent: number; incomeCeilingCent: number | null; incomeBaseBps: number; flatDeductionCent: number; rateBps: number; quickDeductionCent: number };
 type Proposal = { id: string; category: string; reason: string; status: string; reviewId: string | null; evidenceAttachmentIds: string[] };
 type Version = Proposal & { version: string; effectiveFrom: string; applicabilityBasis: string; calculationBasis: string; roundingRule: string; brackets: Bracket[] };
-type Assessment = Proposal & { userId: string; month: string; taxDate: string; identityBasis: string; transactionBasis: string; professionalBasis: string; payerCompanyId: string; incomeCent: number; taxCent: number; taxVersionId: string; sourceLines: { id: string; sourceId: string; amountCent: number }[] };
+type Assessment = Proposal & { payrollCalculationId?: string | null; professionalCalculationReference?: string | null; userId: string; month: string; taxDate: string; identityBasis: string; transactionBasis: string; professionalBasis: string; payerCompanyId: string; incomeCent: number; taxCent: number; taxVersionId: string; sourceLines: { id: string; sourceId: string; amountCent: number }[] };
 type BracketForm = { floor: string; ceiling: string; base: string; flat: string; rate: string; quick: string };
 const blankBracket = (): BracketForm => ({ floor: "", ceiling: "", base: "", flat: "", rate: "", quick: "" });
 const MANAGE = ["staff.tax_bracket.manage"];
@@ -23,6 +26,8 @@ const yuan = (value: number) => (value / 100).toFixed(2);
 export function PayrollTaxBracketsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [versions, setVersions] = React.useState<Version[]>([]);
   const [assessments, setAssessments] = React.useState<Assessment[]>([]);
+  const [calculations, setCalculations] = React.useState<PayrollCalculation[]>([]);
+  const [payrollTax, setPayrollTax] = React.useState({ calculationId: "", amount: "", reference: "" });
   const [busy, setBusy] = React.useState(false);
   const [formError, setFormError] = React.useState("");
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -68,17 +73,26 @@ export function PayrollTaxBracketsPage({ api, setActionResult, setGlobalError, e
   async function loadAssessments() {
     await run(async () => {
       if (!employee.trim() || !month) throw new Error("请先填写员工账号和工资月份");
-      setAssessments(await api.get<Assessment[]>(`${ROOT}/tax-assessments?user_id=${encodeURIComponent(employee.trim())}&month=${encodeURIComponent(month)}`));
+      const query = `?user_id=${encodeURIComponent(employee.trim())}&month=${encodeURIComponent(month)}`;
+      const [rows, drafts] = await Promise.all([api.get<Assessment[]>(`${ROOT}/tax-assessments${query}`), api.get<PayrollCalculation[]>(`${ROOT}/calculations${query}`)]);
+      setAssessments(rows); setCalculations(drafts);
       return { action: "payroll_tax_assessments_loaded" };
     });
   }
   function assessmentError() {
-    return !employee.trim() || !month || Object.values(assessment).some(value => !value.trim()) ? "请填写员工、月份、税目、适用日期及完整专业认定依据" : null;
+    if (!employee.trim() || !month || Object.values(assessment).some(value => !value.trim())) return "请填写员工、月份、税目、适用日期及完整专业认定依据";
+    if (payrollTax.calculationId) {
+      const calculation = calculations.find(row => row.id === payrollTax.calculationId);
+      if (!calculation || !payrollTax.reference.trim()) return "请选择真实核算原件并填写专业核税计算说明";
+      try { if (payrollCents(payrollTax.amount, "专业确认个税") > calculation.beforeTaxCent) return "专业核定个税不能超过本次税前金额"; }
+      catch (e) { return (e as Error).message; }
+    }
+    return null;
   }
   async function createAssessment() {
     if (await run(async () => {
       const message = assessmentError(); if (message) throw new Error(message);
-      const row = await api.post<Assessment>(`${ROOT}/tax-assessments`, { ...assessment, userId: employee.trim(), month, idempotencyKey: crypto.randomUUID() });
+      const row = await api.post<Assessment>(`${ROOT}/tax-assessments`, { ...assessment, userId: employee.trim(), month, idempotencyKey: crypto.randomUUID(), ...(payrollTax.calculationId ? { payrollCalculationId: payrollTax.calculationId, professionalTaxCent: payrollCents(payrollTax.amount, "专业确认个税"), professionalCalculationReference: payrollTax.reference.trim() } : {}) });
       setAssessments(old => [row, ...old]); return { action: "payroll_tax_assessment_drafted", id: row.id, status: row.status };
     })) setAssessmentOpen(false);
   }
@@ -124,12 +138,12 @@ export function PayrollTaxBracketsPage({ api, setActionResult, setGlobalError, e
       <table className="admin-table" data-testid="payroll-tax-brackets-table"><thead><tr><th>税目及版本</th><th>适用日期</th><th>状态</th><th>内容与操作</th></tr></thead><tbody>
         {versions.map(row => <tr key={row.id}><td>{row.category} · {row.version}</td><td>{row.effectiveFrom} 起适用</td><td>{statusLabels[row.status] ?? row.status}</td><td><details><summary>完整税表与依据</summary><p>适用对象：{row.applicabilityBasis}</p><p>计算及舍入依据：{row.calculationBasis}</p><p>事由：{row.reason}</p><table><thead><tr><th>档</th><th>收入范围（元）</th><th>基数比例</th><th>定额减除</th><th>税率</th><th>速算扣除</th></tr></thead><tbody>{row.brackets.map(b => <tr key={b.seq}><td>{b.seq}</td><td>{yuan(b.incomeFloorCent)} 至 {b.incomeCeilingCent == null ? "无上限" : yuan(b.incomeCeilingCent)}</td><td>{b.incomeBaseBps / 100}%</td><td>{yuan(b.flatDeductionCent)}</td><td>{b.rateBps / 100}%</td><td>{yuan(b.quickDeductionCent)}</td></tr>)}</tbody></table>{evidenceLinks(row)}</details>{operations("version", row)}</td></tr>)}
       </tbody></table>
-      <h3>既有服务收入的专业税务认定</h3><p>金额取员工本月真实服务收入台账；税目及适用日期须依据专业结论填写，不按服务名称推定。批准后才能进入本次工资计算，已定格工资的认定不可替换。</p>
-      <label>员工账号<input aria-label="员工账号" value={employee} onChange={e => { setEmployee(e.target.value); setAssessments([]); }} /></label>
-      <label>工资月份<input aria-label="工资月份" type="month" value={month} onChange={e => { setMonth(e.target.value); setAssessments([]); }} /></label>
+      <h3>工资及服务收入的专业税务认定</h3><p>完整工资必须选择税前核算原件，再登记有专业依据的本次个税，不能默认免税。旧服务收入认定保留原核算流程；不能用来替代全薪认定。税目及适用日期由专业结论确定，已定格工资的认定不可替换。</p>
+      <label>员工账号<input aria-label="员工账号" disabled={busy} value={employee} onChange={e => { setEmployee(e.target.value); setAssessments([]); setCalculations([]); setPayrollTax({ calculationId: "", amount: "", reference: "" }); }} /></label>
+      <label>工资月份<input aria-label="工资月份" type="month" disabled={busy} value={month} onChange={e => { setMonth(e.target.value); setAssessments([]); setCalculations([]); setPayrollTax({ calculationId: "", amount: "", reference: "" }); }} /></label>
       <button type="button" disabled={busy} onClick={() => void loadAssessments()}>查询认定历史</button>
       <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} disabled={!employee.trim() || !month} onClick={() => { setFormError(""); setAssessmentOpen(true); }}>＋ 新建税务认定</PermissionButton>
-      <table className="admin-table"><thead><tr><th>员工及月份</th><th>来源收入／税额（元）</th><th>税目及适用日期</th><th>状态</th><th>依据与操作</th></tr></thead><tbody>{assessments.map(row => <tr key={row.id}><td>{row.userId} · {row.month}</td><td>{yuan(row.incomeCent)} ／ {yuan(row.taxCent)}</td><td>{row.category} · {row.taxDate}</td><td>{statusLabels[row.status] ?? row.status}</td><td><details><summary>认定及原始收入</summary><p>身份依据：{row.identityBasis}</p><p>交易依据：{row.transactionBasis}</p><p>专业认定：{row.professionalBasis}</p><p>发放主体：{row.payerCompanyId}；税表：{row.taxVersionId}</p>{row.sourceLines.map(line => <p key={line.id}>来源 {line.sourceId}：{yuan(line.amountCent)} 元</p>)}{evidenceLinks(row)}</details>{operations("assessment", row)}</td></tr>)}</tbody></table>
+      <table className="admin-table"><thead><tr><th>员工及月份</th><th>来源收入／税额（元）</th><th>税目及适用日期</th><th>状态</th><th>依据与操作</th></tr></thead><tbody>{assessments.map(row => <tr key={row.id}><td>{row.userId} · {row.month}</td><td>{yuan(row.incomeCent)} ／ {yuan(row.taxCent)}</td><td>{row.category} · {row.taxDate}</td><td>{statusLabels[row.status] ?? row.status}</td><td><details><summary>认定及原始收入</summary>{row.payrollCalculationId ? <p>完整工资核算原件：{row.payrollCalculationId}；专业核税计算说明：{row.professionalCalculationReference}</p> : <p>既有服务收入认定</p>}<p>身份依据：{row.identityBasis}</p><p>交易依据：{row.transactionBasis}</p><p>专业认定：{row.professionalBasis}</p><p>发放主体：{row.payerCompanyId}；税表：{row.taxVersionId}</p>{row.sourceLines.map(line => <p key={line.id}>来源 {line.sourceId}：{yuan(line.amountCent)} 元</p>)}{evidenceLinks(row)}</details>{operations("assessment", row)}</td></tr>)}</tbody></table>
     </AdminDataState>
 
     <GuidedFlowModal open={createOpen} title="新建完整税表版本" testId="payroll-tax-brackets-guided" submitTestId="payroll-tax-brackets-save" submitLabel="保存完整草案" submitting={busy} error={formError || undefined} onClose={() => setCreateOpen(false)} onSubmit={() => void createVersion()}
@@ -137,8 +151,10 @@ export function PayrollTaxBracketsPage({ api, setActionResult, setGlobalError, e
         { title: "完整税表", validate: versionError, content: <>{brackets.map((b, index) => <fieldset key={index}><legend>第 {index + 1} 档</legend>{([['floor', '收入下界（分）'], ['ceiling', '收入上界（分，末档留空）'], ['base', '基数万分比'], ['flat', '定额减除（分）'], ['rate', '税率万分比'], ['quick', '速算扣除（分）']] as const).map(([key, label]) => <label key={key}>{label}<input aria-label={`第${index + 1}档${label}`} type="number" value={b[key]} onChange={e => setBrackets(old => old.map((row, i) => i === index ? { ...row, [key]: e.target.value } : row))} /></label>)}{brackets.length > 1 ? <button type="button" onClick={() => setBrackets(old => old.filter((_, i) => i !== index))}>移除第{index + 1}档</button> : null}</fieldset>)}<button type="button" onClick={() => setBrackets(old => [...old, blankBracket()])}>增加档位</button></> }]}
       summary={[{ label: "税目", value: form.category }, { label: "生效日期", value: form.effectiveFrom }, { label: "档位", value: `${brackets.length} 档，从0分连续到无上限` }, { label: "后续", value: "保存原件后上传依据，再提交财税法及最高确认；保存不生效" }]} />
     <GuidedFlowModal open={assessmentOpen} title="新建税务认定" testId="payroll-tax-assessment-guided" submitTestId="payroll-tax-assessment-save" submitLabel="保存认定草案" submitting={busy} error={formError || undefined} onClose={() => setAssessmentOpen(false)} onSubmit={() => void createAssessment()}
-      steps={[{ title: "专业认定", validate: assessmentError, content: <>{assessmentField("category", "认定税目编码")}{assessmentField("taxDate", "税务适用日期", "date")}{assessmentField("identityBasis", "人员身份依据")}{assessmentField("transactionBasis", "交易实质依据")}{assessmentField("professionalBasis", "专业财税结论及日期依据")}{assessmentField("reason", "认定事由")}</> }]}
-      summary={[{ label: "员工及月份", value: `${employee} · ${month}` }, { label: "税目及日期", value: `${assessment.category} · ${assessment.taxDate}` }, { label: "收入", value: "由真实服务收入台账计算并锁定，不能手填税后额" }]} />
+      steps={[{ title: "专业认定", validate: assessmentError, content: <><label>认定收入来源<select aria-label="认定收入来源" value={payrollTax.calculationId} onChange={e => setPayrollTax({ calculationId: e.target.value, amount: "", reference: "" })}><option value="">既有服务收入台账</option>{calculations.map(row => <option key={row.id} value={row.id}>完整工资 {row.id} · 税前 {yuan(row.beforeTaxCent)} 元</option>)}</select></label>
+          {payrollTax.calculationId ? <>{calculations.filter(row => row.id === payrollTax.calculationId).map(row => <StaffPayrollCalculationView key={row.id} row={row} />)}<label>专业确认个税（元）<input aria-label="专业确认个税（元）" value={payrollTax.amount} onChange={e => setPayrollTax(old => ({ ...old, amount: e.target.value }))} /></label><label>专业核税计算说明<input aria-label="专业核税计算说明" value={payrollTax.reference} onChange={e => setPayrollTax(old => ({ ...old, reference: e.target.value }))} /></label><p>含适用税期、累计基数、已缴税额、扣除项和本次税额的专业核算依据，提交前须上传真实原件。</p></> : null}
+          {assessmentField("category", "认定税目编码")}{assessmentField("taxDate", "税务适用日期", "date")}{assessmentField("identityBasis", "人员身份依据")}{assessmentField("transactionBasis", "交易实质依据")}{assessmentField("professionalBasis", "专业财税结论及日期依据")}{assessmentField("reason", "认定事由")}</> }]}
+      summary={[{ label: "员工及月份", value: `${employee} · ${month}` }, { label: "税目及日期", value: `${assessment.category} · ${assessment.taxDate}` }, { label: "收入", value: payrollTax.calculationId ? `锁定核算原件 ${payrollTax.calculationId}；本次专业确认个税 ${payrollTax.amount} 元` : "由真实服务收入台账计算并锁定，不能手填税后额" }]} />
     <GuidedFlowModal open={target !== null} title="提交税务审批" testId="payroll-tax-submit-guided" submitTestId="payroll-tax-submit" submitLabel="提交财税法及最高确认" submitting={busy} error={formError || undefined} onClose={() => setTarget(null)} onSubmit={() => void submit()}
       steps={[{ title: "凭证与真实部门审批线", validate: () => !files.length || Object.values(reviewers).some(value => !value.trim()) ? "请上传专业依据，并填写三条线最终审批人" : null, content: <><p>各线须已有真实部门起点，最终人须在相应上级链上。最高确认由现审批模型确定。</p><label>专业依据原件<input aria-label="专业依据原件" type="file" accept="image/*,video/*" multiple disabled={busy} onChange={e => void upload(e.target.files)} /></label><p>当前证据入口支持照片或视频，请上传专业依据的清晰影像。</p><p>已关联 {files.length} 份专业凭证</p>{files.map((id, i) => <a key={id} href={withBase(`/api/v1/evidence/attachments/${encodeURIComponent(id)}/file`)} target="_blank" rel="noreferrer">查看凭证 {i + 1} </a>)}{(Object.entries(lineLabels) as [keyof typeof reviewers, string][]).map(([key, label]) => <label key={key}>{label}<input aria-label={label} value={reviewers[key]} placeholder="员工账号编号" onChange={e => setReviewers(old => ({ ...old, [key]: e.target.value }))} /></label>)}</> }]}
       summary={[{ label: "原件", value: target?.row.id ?? "" }, { label: "凭证", value: `${files.length} 份` }, { label: "生效条件", value: "财务、税务、法务全部通过后，由最高权限最后确认" }]} />

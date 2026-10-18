@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -729,6 +729,15 @@ data class LeaveRow(
   val reason: String? = null,
   val status: String? = null,
   val reviewNote: String? = null,
+  /** 2026-10-18 裁决：员工本人申请销假的理由（待销假审批/已销假时有值）。 */
+  val revokeRequestReason: String? = null,
+)
+
+/** 员工本人申请销假（只对自己已批准的假；理由必填；主管批准后才生效）。 */
+@Serializable
+data class LeaveRevokeRequest(
+  val idempotencyKey: String,
+  val reason: String,
 )
 
 @Serializable

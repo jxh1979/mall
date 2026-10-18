@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.04
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -205,6 +205,13 @@ public class AnalyticsService {
     // V216 经营复盘锁定：项目 scope 与操作人由 token 派生（AC-ISO-2，不取请求体）。
     // setter 注入保持既有 4 个构造器族不变（现有单测用旧构造器，authorizationService=null 时按平台全量兜底）。
     private com.complex.platform.access.AuthorizationService authorizationService;
+
+    // 第六批：两者在控制器切片测试（AnalyticsControllerTests，AnalyticsService 为 Mockito 桩）里无 bean，
+    // 与上方 authorizationService 同用 required=false，调用点已按 null 兜底。
+    @Autowired(required = false)
+    private com.complex.platform.finance.FinancePayrollService financePayroll;
+    @Autowired(required = false)
+    private com.complex.platform.access.staff.StaffPayrollService staffPayroll;
 
     // M737：平台管理员的可触及范围（一切）。各「平台全量便捷重载」与未注入判定服务时的兜底共用。
     private static final com.complex.platform.access.AuthorizationService.ProjectReach PLATFORM_ADMIN_REACH =
@@ -413,9 +420,9 @@ public class AnalyticsService {
     }
 
     private static final List<MonthlyMetricEntry> MONTHLY_COMPARISON_CATALOG = List.of(
-            new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_NET, "净收入", "finance", "cent"),
+            new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_NET, "净收入（含酒吧已确认部分）", "finance", "cent"),
             new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_TICKET, "售票收入", "ticketing", "cent"),
-            new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_BAR, "酒吧收入", "bar", "cent"),
+            new MonthlyMetricEntry(DashboardAggregationJob.REVENUE_BAR, "酒吧收入（已确认部分）", "bar", "cent"),
             new MonthlyMetricEntry("revenue.contract_rent", "合同租金挂账", "finance", "cent"),
             new MonthlyMetricEntry("member.new", "新增会员", "customer", "count"),
             new MonthlyMetricEntry("verify.done", "核销次数", "ticketing", "count"),
@@ -783,6 +790,15 @@ public class AnalyticsService {
         return new HourlyTrafficResponse(businessDate, List.copyOf(buckets));
     }
 
+    private static final String BAR_CONFIRMED_REVENUE_NOTE =
+            "酒吧部分仅含已确认商品收入与月结扣留；待收、待月结及待核退款未计入，不作为最终结算依据。";
+
+    private static MetricValue confirmedRevenueMetric(String key, BigDecimal value, String unit, Map<String, Object> dimension) {
+        String note = Set.of("revenue.bar", "revenue.bar_refund", "revenue.net", "revenue.per_sqm").contains(key)
+                ? BAR_CONFIRMED_REVENUE_NOTE : null;
+        return new MetricValue(value, unit, note, dimension);
+    }
+
     private OverviewResponse buildOverview(Optional<String> scope, String domainFilter, LocalDate requestedDate) {
         String scopeValue = scope.orElse(null);
         Instant now = Instant.now(clock);
@@ -808,7 +824,7 @@ public class AnalyticsService {
                 metrics.put(entry.metricCode(), MetricValue.unavailable(
                         scopeValue == null ? "no snapshot for business date" : entry.scopeNote()));
             } else {
-                metrics.put(entry.metricCode(), MetricValue.of(value, entry.unit()));
+                metrics.put(entry.metricCode(), confirmedRevenueMetric(entry.metricCode(), value, entry.unit(), null));
             }
         }
         return new OverviewResponse(now, scopeValue, businessDate, metrics);
@@ -933,8 +949,8 @@ public class AnalyticsService {
                                 : "no etl snapshot available yet"));
             } else {
                 metrics.put(entry.metricCode(), belowBenchmarkMetrics.contains(entry.metricCode())
-                        ? MetricValue.of(value, entry.unit(), Map.of("below_benchmark", true))
-                        : MetricValue.of(value, entry.unit()));
+                        ? confirmedRevenueMetric(entry.metricCode(), value, entry.unit(), Map.of("below_benchmark", true))
+                        : confirmedRevenueMetric(entry.metricCode(), value, entry.unit(), null));
             }
         }
         return metrics;
@@ -975,7 +991,7 @@ public class AnalyticsService {
         for (GroupMetricEntry entry : GROUP_METRIC_CATALOG) {
             BigDecimal average = averages.get(entry.metricCode());
             if (average != null) {
-                metrics.put(entry.metricCode(), MetricValue.of(average, entry.unit()));
+                metrics.put(entry.metricCode(), confirmedRevenueMetric(entry.metricCode(), average, entry.unit(), null));
             }
         }
         return metrics;
@@ -1805,7 +1821,8 @@ public class AnalyticsService {
             AnalyticsRecords.MetricDetailRows detail = switch (definition.metricKey()) {
                 case "finance.ar_balance" -> repository.arOpenReceivableDetail(asOf, safeSize, offset, scope);
                 // 第四批（财务域）余额类：应付余额=应收镜像；坏账预警区=应收逾期90天以上（同 as-of 口径）。
-                case "finance.ap_balance" -> repository.apOpenPayableDetail(asOf, safeSize, offset, scope);
+                case "finance.ap_balance" -> repository.apOpenPayableDetail(asOf, safeSize, offset, scope,
+                        financePayroll == null ? Set.of() : financePayroll.visiblePayableIds(com.complex.platform.finance.FinancePayrollService.VIEW));
                 case "finance.ar_balance_aging90p" -> repository.arOverdueAging90pDetail(asOf, safeSize, offset, scope);
                 // 第二批（酒吧域）余额类：状态/剩余数量按台账当前值，截至日仅限制下单/存入时间早于该经营日窗末。
                 case "bar.open_order_count" -> repository.barOpenOrderDetail(
@@ -1884,8 +1901,10 @@ public class AnalyticsService {
             case "staff.shift_count" -> repository.staffShiftDetail(effectiveFrom, effectiveTo, safeSize, offset, scope);
             case "staff.attendance_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, false, safeSize, offset, scope);
             case "staff.attendance_late_count" -> repository.staffAttendanceDetail(effectiveFrom, effectiveTo, true, safeSize, offset, scope);
-            case "staff.payroll_net_total" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, true, safeSize, offset, scope);
-            case "staff.payroll_statement_count" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, false, safeSize, offset, scope);
+            case "staff.payroll_net_total" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, true, safeSize, offset, scope,
+                    staffPayroll == null ? List.of() : staffPayroll.visibleStatementIds());
+            case "staff.payroll_statement_count" -> repository.staffPayrollDetail(effectiveFrom, effectiveTo, false, safeSize, offset, scope,
+                    staffPayroll == null ? List.of() : staffPayroll.visibleStatementIds());
             // 第六批（总控驾驶舱）可加类：谓词逐字抄总览 ETL 聚合（DashboardAggregationJob），单日 as-of 时窗口与 ETL dayRange 同。
             case "traffic.amusement" -> repository.amusementVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
             case "verify.done" -> repository.ticketVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
@@ -1894,7 +1913,8 @@ public class AnalyticsService {
                     "指标已登记但明细查询未接线：" + definition.metricKey());
         };
         return assembleMetricDetail(definition, null, effectiveFrom, effectiveTo, now, detail.summaryValue(),
-                null, null, appendProjectScopeNote(null, scope), definition.columns(), detail, safePage, safeSize, true);
+                null, null, appendProjectScopeNote("revenue.bar".equals(definition.metricKey()) ? BAR_CONFIRMED_REVENUE_NOTE : null, scope),
+                definition.columns(), detail, safePage, safeSize, true);
     }
 
     /** 项目级作用域口径说明（全中文）：非 null scope 时在明细页顶部标注数字已限定为调用方可查看的项目。 */

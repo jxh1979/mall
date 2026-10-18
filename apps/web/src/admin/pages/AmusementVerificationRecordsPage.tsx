@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
@@ -370,11 +370,13 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
           <div className="admin-kpi-card"><span>超容点位</span><strong className="admin-kpi-value" data-testid="amu-verif-kpi-over">{overCapacityCount}</strong><small>在场超上限</small></div>
         </div>
 
-        {tab === "releases" ? (
+        {tab === "releases" ? (<>
           <table className="admin-table" data-testid="amu-count-releases"><thead><tr><th>来源</th><th>项目／场次</th><th>营业日</th><th>边界时间</th><th>系统执行时间</th><th>释放人数</th><th>原件／版本</th></tr></thead><tbody>
             {releases.length === 0 ? <tr><td colSpan={7}>暂无可核实归属的系统释放记录</td></tr> : releases.map(row => <tr key={row.id}><td>{row.scope === "session_end" ? "场次结束" : "营业日结束"}</td><td>{projectNameById.get(row.projectId) ?? row.projectId}／{row.sessionId ?? "—"}</td><td>{row.businessDate}</td><td>{cnDate(row.boundaryAt)}</td><td>{cnDate(row.resetAt)}</td><td>{row.clearedPeople}</td><td>{row.sourceId}／{row.configVersionId}</td></tr>)}
           </tbody></table>
-        ) : tab === "capacity" ? (
+          {/* TK-18（2026-10-18 操作员裁决）：场次提前结束释放的已入场客人比照 ENUM L148 全园故障补偿规则；未入场的票不补偿、可再次使用。 */}
+          <p data-testid="amu-count-releases-note">场次提前结束释放的已入场客人，按全园故障补偿规则在原票下补偿本次 1 次（发放前须游乐公司负责人与工程或安全岗位共同确认，补偿批次见「全园故障补偿」页）；未入场的票不补偿、可再次使用。</p>
+        </>) : tab === "capacity" ? (
           capacityTable
         ) : (
           <>

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -2602,7 +2602,8 @@ class BarServiceTests {
                         targetTable.id(),
                         "guest wants larger card seat",
                         "supervisor_1",
-                        session.sessionVersion()
+                        session.sessionVersion(),
+                        "target_service_staff"
                 )
         );
 
@@ -2618,6 +2619,8 @@ class BarServiceTests {
                 .get()
                 .extracting(BarTableSessionRecord::tableId, BarTableSessionRecord::sessionVersion, BarTableSessionRecord::status)
                 .containsExactly(targetTable.id(), 2L, "open");
+        assertThat(barRepository.findTableSessionById(session.id())).get()
+                .extracting(BarTableSessionRecord::serviceStaffId).isEqualTo("target_service_staff");
         assertThat(barRepository.findTableById(sourceTable.id())).get().extracting(BarTableRecord::status).isEqualTo("pending_clear");
         assertThat(barRepository.findTableById(targetTable.id())).get().extracting(BarTableRecord::status).isEqualTo("opened");
         assertThat(auditEventRepository.events)
@@ -3568,9 +3571,13 @@ class BarServiceTests {
                 "tip-flow-1", "tip", List.of(), 5000L, null));
         assertThat(tipped.tipAmountCent()).isEqualTo(5000L);
 
-        // settling for less than payable+tip is partial; full amount settles
+        // 同单组合支付未足额不完成，渠道只记录本次实收，无须手工分商品和小费。
+        BarBillRecord first = service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-tip-first", "settle", List.of(), "pay_tip_first", payable, "pos"));
+        assertThat(first.settlementStatus()).isEqualTo("partial_settled");
+        assertThat(first.paymentStatus()).isEqualTo("partial_paid");
         BarBillRecord settled = service.settleBill(bill.id(), new BarBillSettleRequest(
-                "settle-tip-flow", "settle", List.of(), "pay_tip_flow", payable + 5000L, "cash"));
+                "settle-tip-flow", "settle", List.of(), "pay_tip_flow", 5000L, "aggregate_pay"));
         assertThat(settled.settlementStatus()).isEqualTo("settled");
         assertThat(settled.paidAmountCent()).isEqualTo(payable + 5000L);
     }
@@ -3636,25 +3643,25 @@ class BarServiceTests {
                 "s-online", null, List.of(), "pay_online", onlineBill.payableAmountCent(),
                 "aggregate_pay", "cashier_1", null));
 
-        // 小费账单：加 1000 分小费后用现金结算（结算含小费），系统现金应收含 tip，tip 另行单列。
+        // 非现金小费由公司代收并单列；现金小费直接交给员工，不进钱箱。
         BarBillRecord tipBill = billForOrder("agg-tip", "staff_sales");
         service.addBillTip(tipBill.id(), new BarBillTipRequest("tip-1", null, List.of(), 1_000L, null));
         BarBillRecord tippedReloaded = barRepository.findBillById(tipBill.id()).orElseThrow();
         service.settleBill(tipBill.id(), new BarBillSettleRequest(
                 "s-tip", null, List.of(), "pay_tip",
                 tippedReloaded.payableAmountCent() + tippedReloaded.tipAmountCent(),
-                "cash", "cashier_1", null));
+                "aggregate_pay", "cashier_1", null));
 
         BarShiftRecord closed = service.closeShift(shift.id(), new BarShiftCloseRequest(
-                "close-1", 50_000L + cashBill.payableAmountCent()
-                        + tippedReloaded.payableAmountCent() + tippedReloaded.tipAmountCent(),
+                "close-1", 50_000L + cashBill.payableAmountCent(),
                 "cashier_2", "end of night"));
 
         assertThat(closed.status()).isEqualTo("closed");
         assertThat(closed.systemCashCent())
-                .isEqualTo(cashBill.payableAmountCent() + tippedReloaded.payableAmountCent() + 1_000L);
+                .isEqualTo(cashBill.payableAmountCent());
         assertThat(closed.systemPosCent()).isEqualTo(posBill.payableAmountCent());
-        assertThat(closed.systemOnlineCent()).isEqualTo(onlineBill.payableAmountCent());
+        assertThat(closed.systemOnlineCent()).isEqualTo(onlineBill.payableAmountCent()
+                + tippedReloaded.payableAmountCent() + tippedReloaded.tipAmountCent());
         assertThat(closed.systemTipCent()).isEqualTo(1_000L);
         assertThat(closed.systemRefundCent()).isZero();
         assertThat(closed.handoverToUserId()).isEqualTo("cashier_2");

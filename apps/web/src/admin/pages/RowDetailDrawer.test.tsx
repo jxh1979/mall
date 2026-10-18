@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -5,6 +6,7 @@ import { StaffPayrollLeavePage } from "./StaffPayrollLeavePage";
 import { FinanceArApLedgerPage } from "./FinanceArApLedgerPage";
 import { ServiceOrdersPage } from "./ServiceOrdersPage";
 import { cnDate } from "../components/RowDetailDrawer";
+import type { PayrollStatementDetail } from "./staffPayrollTypes";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, FinanceLedgerRow } from "../types";
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -32,12 +34,24 @@ describe("cnDate 中文日期格式化（禁 ISO/mm-dd 直出）", () => {
 });
 
 describe("薪酬页 整行可点 → 行明细抽屉", () => {
-  const PAYROLL = [{ id: "pr-1", userId: "staff-7", month: "2026-07", baseCent: 800000, commissionCent: 120000, bonusCent: 50000, penaltyCent: 0, taxCent: 30000, totalCent: 940000 }];
+  const PAYROLL: [PayrollStatementDetail["statement"]] = [{ id: "pr-1", userId: "staff-7", month: "2026-07", baseCent: 800000, commissionCent: 120000, bonusCent: 50000, penaltyCent: 0, taxCent: 30000, totalCent: 940000 }];
+  const DETAIL: PayrollStatementDetail = {
+    statement: PAYROLL[0], status: "closed", statementKind: "monthly",
+    schemeVersionId: "scheme-1", factsId: "facts-1", paymentDueDate: "2026-08-05",
+    paymentDueBasis: {}, arApItemId: "ap-1", paidAmountCent: 0,
+    lines: [], worktime: null, corrections: [], payments: [], pendingItems: [],
+  };
   const LEAVES = [{ id: "lv-1", userId: "staff-7", leaveType: "sick", startDate: "2026-07-03", endDate: "2026-07-05", reason: "感冒", status: "pending" }];
 
   function makeApi(): AdminApiClient {
     return {
-      get: vi.fn(async (url: string) => (url.includes("/leaves") ? LEAVES : PAYROLL)),
+      get: vi.fn(async (url: string) => {
+        if (url === "/api/v1/staff/payroll/statements/pr-1") return DETAIL;
+        // 页面分两次拉 ?status=pending 与 ?status=revoke_requested（2026-10-18 销假裁决），只给待审那次返回 lv-1，避免同 testid 重复
+        if (url === "/api/v1/staff/leaves?status=pending") return LEAVES;
+        if (/\/staff\/payroll\?/.test(url)) return PAYROLL;
+        return [];
+      }),
       getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
       post: vi.fn().mockResolvedValue({}),
       put: vi.fn().mockResolvedValue({}),
@@ -47,21 +61,27 @@ describe("薪酬页 整行可点 → 行明细抽屉", () => {
   }
 
   it("点薪资单行 → 抽屉打开且显示该行金额（带 ¥）", async () => {
-    render(<StaffPayrollLeavePage {...baseProps(makeApi())} />);
+    const api = makeApi();
+    render(<StaffPayrollLeavePage {...baseProps(api)} />);
     await waitFor(() => expect(screen.getByTestId("payroll-row-pr-1")).toBeTruthy());
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
     fireEvent.click(screen.getByTestId("payroll-row-pr-1"));
-    const drawer = screen.getByTestId("row-detail-drawer");
+    const drawer = await screen.findByTestId("row-detail-drawer");
+    expect(api.get).toHaveBeenCalledWith("/api/v1/staff/payroll/statements/pr-1");
     expect(drawer).toBeTruthy();
-    expect(drawer.textContent).toContain("¥9,400"); // 实发合计 940000 分
-    expect(drawer.textContent).toContain("2026年7月"); // 所属月份中文
+    expect(drawer.textContent).toContain("应发净额");
+    expect(drawer.textContent).toContain("¥9,400.00"); // 应发净额 940000 分，未实际付款
+    expect(drawer.textContent).toContain("实际已付");
+    expect(drawer.textContent).toContain("¥0.00");
+    expect(drawer.textContent).toContain("已定格待付");
+    expect(drawer.textContent).toMatch(/2026年0?7月/); // 所属月份中文
   });
 
   it("Esc 关闭抽屉", async () => {
     render(<StaffPayrollLeavePage {...baseProps(makeApi())} />);
     await waitFor(() => expect(screen.getByTestId("payroll-row-pr-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("payroll-row-pr-1"));
-    expect(screen.getByTestId("row-detail-drawer")).toBeTruthy();
+    expect(await screen.findByTestId("row-detail-drawer")).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
@@ -70,7 +90,7 @@ describe("薪酬页 整行可点 → 行明细抽屉", () => {
     render(<StaffPayrollLeavePage {...baseProps(makeApi())} />);
     await waitFor(() => expect(screen.getByTestId("payroll-row-pr-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("payroll-row-pr-1"));
-    fireEvent.click(screen.getByTestId("row-detail-overlay"));
+    fireEvent.click(await screen.findByTestId("row-detail-overlay"));
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 

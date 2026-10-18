@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +26,8 @@ describe("StaffPayrollLeavePage 提成月结拨付（CG-07，BSM「营销人员�
       const url = String(input);
       if (url.includes("/staff/commission-settlements/close")) return Promise.resolve(dataEnvelope({ month: "2026-09", settlements: 1 }));
       if (url.includes("/staff/commission-settlements")) return Promise.resolve(listEnvelope(SETTLEMENTS));
-      if (url.includes("/staff/payroll")) return Promise.resolve(listEnvelope(PAYROLL));
+      if (url.includes("/staff/payroll/statements/pay_1")) return Promise.resolve(dataEnvelope({ statement: PAYROLL[0], status: "closed", statement_kind: "monthly", paid_amount_cent: 0, lines: [], worktime: null, corrections: [], payments: [], pending_items: [] }));
+      if (url.includes("/staff/payroll?")) return Promise.resolve(listEnvelope(PAYROLL));
       return Promise.resolve(listEnvelope([]));
     });
     vi.stubGlobal("fetch", fetchMock);

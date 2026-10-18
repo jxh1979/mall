@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -25,6 +25,10 @@ import org.springframework.stereotype.Service;
 public class BarBillingService {
 
     private static final String CURRENCY_CNY = "CNY";
+    @org.springframework.beans.factory.annotation.Autowired
+    BarPayrollSourceService payrollSources;
+    @org.springframework.beans.factory.annotation.Autowired
+    BarPayrollRefundService payrollRefunds;
     private final BarRepository repository;
     private final BarReceivableLedgerService receivableLedgerService;
     private final AuthorizationService authorizationService;
@@ -101,7 +105,7 @@ public class BarBillingService {
         // 快照而非计提时现查：账单上写的角色档、提成台账里的角色档、对账页上看到的角色档必须是同一个值；
         // 人事此后改岗位只影响之后新开的单，不悄悄改写已开账单的历史提成。
         String salesRoleType = resolveSalesRoleType(order.salesStaffId());
-        return repository.saveBill(new BarBillRecord(
+        BarBillRecord created = repository.saveBill(new BarBillRecord(
                 "bill_" + billSlug(order.id() + ":" + now.toEpochMilli()),
                 "BILL" + now.toEpochMilli(),
                 order.id(),
@@ -122,6 +126,16 @@ public class BarBillingService {
                 now,
                 now
         ));
+        if (payrollSources != null) {
+            long serviceFee = payrollSources.requiredCharge(created);
+            if (serviceFee > 0) {
+                applyBillAdjustment(created.id(), new BarBillAdjustmentRequest(request.idempotencyKey()+":service-fee",
+                    request.operatorNote(), request.evidenceAttachmentIds(), "service_fee", serviceFee,
+                    "按本营业日已批准收费规则计算", authorizationService.currentActor().id()));
+                return repository.findBillById(created.id()).orElseThrow();
+            }
+        }
+        return created;
     }
 
     PaymentIntentRecord createBillPayIntent(String billId, PaymentIntentRequest request) {
@@ -135,7 +149,7 @@ public class BarBillingService {
             throw ApiException.badRequest("VALIDATION_FAILED", "支付意向的业务订单必须与账单一致");
         }
         long amountCent = positive(actual.amountCent(), "amount_cent");
-        if (amountCent != bill.payableAmountCent()) {
+        if (amountCent != bill.payableAmountCent() + bill.tipAmountCent() - bill.paidAmountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "支付意向金额必须与账单应付金额一致");
         }
         Instant now = Instant.now();
@@ -237,6 +251,10 @@ public class BarBillingService {
         Instant now = Instant.now();
         // A2/A3：结算渠道（统一词表，与 finance 对账归并）+ 现金/POS 收款留痕 + D4 权威事件。
         String channel = PaymentChannelPolicy.requireSettlementChannel(actual.paymentChannel(), "aggregate_pay");
+        if ("cash".equals(channel) && bill.tipAmountCent() > 0) {
+            if (payrollSources == null) throw ApiException.conflict("BAR_CASH_TIP_DIRECT_TO_STAFF", "现金小费直接交给服务人员，不进入公司代收");
+            payrollSources.validateCashCollection(bill, settlementAmount);
+        }
         // AUD-061 储值支付：扣该客人在本发卡商户的储值卡余额（复用 StoredValueService.consumeInternal；
         // platform_collect 卡消费即逐笔挂应付商户，merchant_prepaid 卡无跨主体分录）。余额不足则整单结账失败（同事务回滚）。
         if ("stored_value".equals(channel)) {
@@ -307,7 +325,7 @@ public class BarBillingService {
 
     BarBillAdjustmentRecord applyBillAdjustment(String billId, BarBillAdjustmentRequest request) {
         BarBillAdjustmentRequest actual = requireRequest(request);
-        BarBillRecord bill = repository.findBillById(billId)
+        BarBillRecord bill = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         String type = requireText(actual.adjustmentType(), "adjustment_type");
@@ -329,8 +347,17 @@ public class BarBillingService {
         String paymentStatus = bill.paymentStatus();
         String settlementStatus = bill.settlementStatus();
         Instant refundedAt = null;
+        long afterTip = bill.tipAmountCent();
+        java.util.List<BarBillAdjustmentRequest.RefundLine> refundLines = java.util.List.of();
         if ("service_fee".equals(type) || "min_spend_top_up".equals(type)) {
+            if ("service_fee".equals(type)) {
+                var table = repository.findTableById(bill.tableId()).orElse(null);
+                if (table == null || !java.util.Set.of("card_seat", "vip").contains(table.tableType())) {
+                    throw ApiException.conflict("BAR_SERVICE_FEE_TABLE_NOT_ELIGIBLE", "服务费只向卡座类台位收取，散台和吧台不收取");
+                }
+            }
             amount = positive(actual.amountCent(), "amount_cent");
+            if ("service_fee".equals(type) && payrollSources != null) payrollSources.recordComponent(bill, type, amount, "charge:" + actual.idempotencyKey());
             afterPayable = beforePayable + amount;
         } else if ("waiver".equals(type)) {
             // 免单/减免：结账前减应付。后续结算金额本就更低 → 不作为独立 net 冲减（已体现在更低实收）。
@@ -344,14 +371,17 @@ public class BarBillingService {
             authorizationService.requirePermission("bar.bill.refund");
             // 记退款时点，聚合按 refunded_at 落经营日窗口冲减当日 net。
             amount = positive(actual.amountCent(), "amount_cent");
-            if (amount > beforePayable) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "退款金额不能超过应付金额");
+            if (amount > beforePayable + bill.tipAmountCent()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "退款金额不能超过尚可退的商品、服务费及小费总额");
             }
+            if (payrollRefunds != null) refundLines = payrollRefunds.validate(bill, actual.refundLines(), amount);
+            long tipRefund = refundLines.stream().filter(l -> "tip".equals(l.componentType())).mapToLong(BarBillAdjustmentRequest.RefundLine::amountCent).sum();
+            afterTip = Math.subtractExact(bill.tipAmountCent(), tipRefund);
             // AUD-007 分级授权 fail-closed 常在：超额度退款须复核——单步退款无独立复核状态机，超额/无额度直接拒，由额度内授权人办理。
             // AUD-008 权威综合体：酒吧账单不自带 project，取操作者授权 scope（非请求体）；平台/无组织 → null=仅全局配置。
             requireRefundTierAuthorized("bar", amount,
                     authorizationService.currentProjectScopeQuietly().orElse(null));
-            afterPayable = beforePayable - amount;
+            afterPayable = beforePayable - amount + tipRefund;
             refundedAt = Instant.now();
             // RC1①：退款过账到 finance ar_ap 台账（direction=payable, source_type=refund），表示"应退/已退"。
             // 同事务执行：过账失败抛出 → 回滚整个退款（账单减项 + 调整记录），保证财务台账强一致。
@@ -392,7 +422,7 @@ public class BarBillingService {
         }
         Instant now = Instant.now();
         repository.saveBill(billWithAmounts(
-                bill,
+                billWithTip(bill, afterTip),
                 bill.subtotalAmountCent(),
                 bill.discountAmountCent(),
                 bill.depositDeductAmountCent(),
@@ -402,7 +432,7 @@ public class BarBillingService {
                 settlementStatus,
                 now
         ));
-        return repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+        BarBillAdjustmentRecord savedAdjustment = repository.saveBillAdjustment(new BarBillAdjustmentRecord(
                 "bill_adjustment_" + billSlug(bill.id() + ":" + type + ":" + actual.idempotencyKey()),
                 bill.id(),
                 type,
@@ -420,6 +450,8 @@ public class BarBillingService {
                 now,
                 refundedAt
         ));
+        if ("refund".equals(type) && payrollRefunds != null) payrollRefunds.record(savedAdjustment, refundLines);
+        return savedAdjustment;
     }
 
     BarBillOperationRecord splitBill(String billId, BarBillSplitRequest request) {
@@ -429,6 +461,7 @@ public class BarBillingService {
         checkMerchantOwnership(source.merchantId());
         requireBillMovable(source, "BAR_BILL_NOT_SPLITTABLE");
         long amount = positive(actual.splitAmountCent(), "split_amount_cent");
+        if (payrollSources != null) payrollSources.validateSplit(source, amount);
         if (amount >= source.payableAmountCent()) {
             throw ApiException.conflict("BAR_BILL_SPLIT_AMOUNT_INVALID", "拆单金额必须小于应付金额");
         }
@@ -471,6 +504,7 @@ public class BarBillingService {
         );
         repository.saveBill(updatedSource);
         repository.saveBill(generated);
+        if (payrollSources != null) payrollSources.recordSplit(source.id(), generated.id());
         return repository.saveBillOperation(new BarBillOperationRecord(
                 "bill_operation_" + billSlug(source.id() + ":split:" + key),
                 "split",
@@ -521,7 +555,9 @@ public class BarBillingService {
                 primary.settlementStatus(),
                 now
         );
-        BarBillRecord mergedSecondary = billWithAmounts(secondary, 0L, 0L, 0L, 0L, 0L, "merged", "merged", now);
+        updatedPrimary = billWithTip(updatedPrimary, Math.addExact(primary.tipAmountCent(), secondary.tipAmountCent()));
+        BarBillRecord mergedSecondary = billWithTip(billWithAmounts(secondary, 0L, 0L, 0L, 0L, 0L, "merged", "merged", now), 0L);
+        if (payrollSources != null) payrollSources.recordMerge(primary.id(), secondary.id());
         repository.saveBill(updatedPrimary);
         repository.saveBill(mergedSecondary);
         return repository.saveBillOperation(new BarBillOperationRecord(
@@ -739,7 +775,8 @@ public class BarBillingService {
             throw ApiException.badRequest("VALIDATION_FAILED", "小费金额或小费比例必须至少填写一项");
         }
         Instant now = Instant.now();
-        long newTip = bill.tipAmountCent() + tip;
+        long newTip = Math.addExact(bill.tipAmountCent(), tip);
+        if (payrollSources != null) payrollSources.recordTip(bill, actual.sourceBillId(), tip, "tip:" + actual.idempotencyKey(), repository);
         BarBillRecord updated = new BarBillRecord(
                 bill.id(), bill.billNo(), bill.orderId(), bill.barId(), bill.merchantId(),
                 bill.tableId(), bill.reservationId(), bill.subtotalAmountCent(), bill.discountAmountCent(),

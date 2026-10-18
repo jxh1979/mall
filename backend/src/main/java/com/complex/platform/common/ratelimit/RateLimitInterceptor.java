@@ -1,5 +1,7 @@
 package com.complex.platform.common.ratelimit;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -37,6 +39,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             new Rule("/api/v1/finance/payment-intents", Category.PAYMENT),
             new Rule("/api/v1/finance/payments/*/confirm-offline", Category.PAYMENT),
             new Rule("/api/v1/finance/ar-ap-items/*/payments", Category.PAYMENT),
+            new Rule("/api/v1/finance/payroll/*/payment-attempts", Category.PAYMENT),
+            new Rule("/api/v1/finance/payroll/payment-attempts/*/submit", Category.PAYMENT),
+            new Rule("/api/v1/finance/payroll/payment-attempts/*/result", Category.PAYMENT),
             new Rule("/api/v1/customer/stored-value/topup", Category.PAYMENT),
             new Rule("/api/v1/services/orders/*/mark-paid", Category.PAYMENT),
             new Rule("/api/v1/services/payment-code", Category.PAYMENT),

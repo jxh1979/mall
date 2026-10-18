@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
@@ -16,6 +18,9 @@ import org.springframework.stereotype.Service;
 public class BarTableSessionService {
 
     private static final String CURRENCY_CNY = "CNY";
+
+    @org.springframework.beans.factory.annotation.Autowired
+    BarServiceResponsibilityService serviceResponsibilities;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -101,7 +106,7 @@ public class BarTableSessionService {
         }
         Instant now = Instant.now();
         repository.saveTable(tableWithStatus(table, "opened", now));
-        return repository.saveTableSession(new BarTableSessionRecord(
+        BarTableSessionRecord created = repository.saveTableSession(new BarTableSessionRecord(
                 "session_" + slug(actual.idempotencyKey()),
                 barId,
                 merchantId,
@@ -122,6 +127,8 @@ public class BarTableSessionService {
                 now,
                 now
         ));
+        if (serviceResponsibilities != null) serviceResponsibilities.recordOpened(created);
+        return created;
     }
 
     BarTableSpaceAssignmentRecord assignTableSpace(String tableId, BarTableSpaceAssignmentRequest request) {
@@ -169,13 +176,16 @@ public class BarTableSessionService {
             throw ApiException.conflict("BAR_TABLE_NOT_TRANSFERABLE", "转入台位未启用");
         }
         Instant now = Instant.now();
+        String targetStaff = requireText(actual.targetServiceStaffId(), "target_service_staff_id");
+        if (serviceResponsibilities != null) serviceResponsibilities.requireTransferStaff(targetTable.id(), targetStaff, now);
         repository.saveTable(tableWithStatus(sourceTable, "pending_clear", now));
         repository.saveTable(tableWithStatus(targetTable, "opened", now));
         // 2c-5：DB 级乐观锁 CAS（替代仅内存比对的 requireSessionVersion），防并发转台双重占用。
-        BarTableSessionRecord updated = sessionMovedToTable(session, targetTable, now);
+        BarTableSessionRecord updated = sessionMovedToTable(session, targetTable, targetStaff, now);
         if (!repository.updateTableSessionIfVersionMatches(updated, session.sessionVersion())) {
             throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
         }
+        if (serviceResponsibilities != null) serviceResponsibilities.recordTransfer(session, updated, now, "transfer:" + actual.idempotencyKey());
         return repository.saveTableSessionAdjustment(newAdjustment(
                 "transfer",
                 updated,
@@ -225,6 +235,7 @@ public class BarTableSessionService {
         if (!repository.updateTableSessionIfVersionMatches(sessionMergedInto(merged, primary.id(), now), merged.sessionVersion())) {
             throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
         }
+        if (serviceResponsibilities != null) serviceResponsibilities.recordMerge(updatedPrimary, merged, now, "merge:" + actual.idempotencyKey());
         repository.saveTable(tableWithStatus(mergedTable, "pending_clear", now));
         return repository.saveTableSessionAdjustment(newAdjustment(
                 "merge",
@@ -329,7 +340,7 @@ public class BarTableSessionService {
         );
     }
 
-    private BarTableSessionRecord sessionMovedToTable(BarTableSessionRecord session, BarTableRecord table, Instant now) {
+    private BarTableSessionRecord sessionMovedToTable(BarTableSessionRecord session, BarTableRecord table, String targetStaff, Instant now) {
         return new BarTableSessionRecord(
                 session.id(),
                 session.barId(),
@@ -342,7 +353,7 @@ public class BarTableSessionService {
                 table.minConsumptionCent(),
                 table.allowedPassFreeGuestCount(),
                 session.salesStaffId(),
-                session.serviceStaffId(),
+                targetStaff,
                 session.status(),
                 session.openedAt(),
                 session.closedAt(),

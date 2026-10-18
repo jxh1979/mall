@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.03
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -48,6 +48,11 @@ function entitlementStatusLabel(row: AmusementProjectEntitlementRow): string {
   return "生效中";
 }
 
+/** TK18-R2：场次状态（ENUM L142 / BSM L1293）closed 读作「已结束」；共享码表的「已关闭」留给项目开放状态（BSM L1292）。 */
+function sessionStatusLabel(status: string | null | undefined): string {
+  return status === "closed" ? "已结束" : formatBusinessStatus(status);
+}
+
 function display(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number" || typeof value === "string") return String(value);
@@ -69,6 +74,11 @@ function readKpiFocusFromUrl(): KpiTarget | null {
 const followupSourceLabels: Record<string, string> = { entry: "入场权益", reservation: "个人预约", group_booking: "团体预约" };
 type SessionEnding = { id: string; mode: string; actualEndAt: string; plannedEndAt: string; clearedPeople: number; confirmedBy?: string; reason: string; businessDate: string; configVersionId: string };
 type SessionFollowup = { id: string; sourceType: string; sourceId: string; status: string; orderId?: string; entitlementId?: string; resolutionType?: string; resolutionId?: string };
+/** TK-18（2026-10-18 操作员裁决）：已入场待办比照 ENUM L148 全园故障补偿规则——发放前须游乐公司负责人与工程或安全岗位共同确认，发放后原票下恢复本次 1 次；预约待办仍按既有取消规则。 */
+function followupStatusLabel(row: SessionFollowup): string {
+  if (row.status === "completed") return row.resolutionType === "compensation_issued" ? "已按全园故障补偿规则发放补偿（原票下恢复本次 1 次）" : "已完成";
+  return row.sourceType === "entry" ? "已入场，补偿待发放（须游乐公司负责人与工程或安全岗位共同确认）" : "待按原规则处理";
+}
 function SessionEndingHistory({ api, sessionId }: { api: AdminPageProps["api"]; sessionId: string }) {
   const [records, setRecords] = React.useState<SessionEnding[]>([]);
   const [tasks, setTasks] = React.useState<SessionFollowup[]>([]);
@@ -92,7 +102,7 @@ function SessionEndingHistory({ api, sessionId }: { api: AdminPageProps["api"]; 
     </div>)}
     {tasks.length > 0 && <table><thead><tr><th>待办来源</th><th>原记录</th><th>订单／权益</th><th>处理状态</th><th>实际结果</th></tr></thead><tbody>
       {tasks.map(row => <tr key={row.id}><td>{followupSourceLabels[row.sourceType] ?? row.sourceType}</td>
-        <td>{row.sourceId}</td><td>{row.orderId ?? "—"}／{row.entitlementId ?? "—"}</td><td>{row.status === "completed" ? "已完成" : "待按原规则处理"}</td>
+        <td>{row.sourceId}</td><td>{row.orderId ?? "—"}／{row.entitlementId ?? "—"}</td><td>{followupStatusLabel(row)}</td>
         <td>{row.resolutionId ?? "尚无实际结果"}</td></tr>)}
     </tbody></table>}
   </div>;
@@ -379,7 +389,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
         { label: "开始", value: cnDate(row.startTime ?? row.startsAt) },
         { label: "结束", value: cnDate(row.endTime ?? row.endsAt) },
 
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: sessionStatusLabel(row.status) },
         { label: "场次编号", value: row.id },
         { label: "清场及后续处理", value: <SessionEndingHistory api={api} sessionId={row.id} /> },
       ],
@@ -474,7 +484,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const sessionsSection = (
     <>
       <div className="admin-section-title">场次</div>
-      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>状态</th><th>详情</th></tr></thead><tbody>{pagedSessions.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-session-row-${row.id}`} onClick={() => openSessionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSessionDetail(row); } }}><td>{display(row.sessionName)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{cnDate(row.startTime ?? row.startsAt)}</td><td>{cnDate(row.endTime ?? row.endsAt)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell" onClick={event => event.stopPropagation()}><button type="button" className="admin-row-detail-btn" aria-label="查看场次详情" onClick={() => openSessionDetail(row)}>查看详情</button>{row.status === "open" && <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.session.end"]} data-testid={`amusement-session-end-${row.id}`} onClick={() => { setEnding(row); setClearanceConfirmed(false); setClearedAt(""); setEndReason(""); setEndEvidence([]); setEndKey(crypto.randomUUID()); setFormError(""); }}>确认清场并提前结束</PermissionButton>}</td></tr>)}</tbody></table><TablePager testid="amusement-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} /></div>
+      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-sessions-table"><thead><tr><th>场次</th><th>项目</th><th>开始</th><th>结束</th><th>状态</th><th>详情</th></tr></thead><tbody>{pagedSessions.pageRows.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-session-row-${row.id}`} onClick={() => openSessionDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openSessionDetail(row); } }}><td>{display(row.sessionName)}</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-001" objectId={row.projectId}>{display(row.projectId)}</TraceLink></td><td>{cnDate(row.startTime ?? row.startsAt)}</td><td>{cnDate(row.endTime ?? row.endsAt)}</td><td>{sessionStatusLabel(row.status)}</td><td className="admin-row-detail-cell" onClick={event => event.stopPropagation()}><button type="button" className="admin-row-detail-btn" aria-label="查看场次详情" onClick={() => openSessionDetail(row)}>查看详情</button>{row.status === "open" && <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.session.end"]} data-testid={`amusement-session-end-${row.id}`} onClick={() => { setEnding(row); setClearanceConfirmed(false); setClearedAt(""); setEndReason(""); setEndEvidence([]); setEndKey(crypto.randomUUID()); setFormError(""); }}>确认清场并提前结束</PermissionButton>}</td></tr>)}</tbody></table><TablePager testid="amusement-sessions-pager" page={pagedSessions.page} pageCount={pagedSessions.pageCount} total={pagedSessions.total} onPrev={pagedSessions.prev} onNext={pagedSessions.next} /></div>
     </>
   );
 

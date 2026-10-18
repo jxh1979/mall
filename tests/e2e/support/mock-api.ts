@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -248,7 +248,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/bar/products": [{ id: "drink-1", barId: "bar-main", productName: "Mock Drink", productType: "spirit", priceCent: 3000, internalSettlementPriceCent: 1200, status: "active", soldOut: false }],
     "/api/v1/bar/production-tickets": empty,
     "/api/v1/bar/reservations": [{ id: "reservation-1", reservationNo: "RSV-1", customerName: "Guest A", partySize: 2, depositAmount: 2000, status: "reserved", reservedAt: now }],
-    "/api/v1/bar/orders": [{ id: "order-1", tableId: "table-1", salesStaffId: "staff_sales_1", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open" }] }],
+    "/api/v1/bar/orders": [{ id: "order-1", tableId: "table-1", salesStaffId: "staff_sales_1", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open", salesRoleType: "sales", commissionRateBp: 1500 }] }],
     "/api/v1/bar/table-sessions": state.barTableSessions,
     "/api/v1/inventory/stock-movements": empty,
     "/api/v1/inventory/items": [{ id: "item-1", itemCode: "WINE", itemName: "Wine", category: "drink", unit: "bottle", status: "active", minQuantity: 2 }],
@@ -286,6 +286,9 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/integration/devices": empty,
     "/api/v1/integration/devices/events": empty,
     "/api/v1/integration/devices/offline-sync-batches": empty,
+    "/api/v1/terminals/devices": [
+      { id: "device-navigation-1", device_code: "WORK-001", terminal_type: "staff_work_phone", merchant_id: "merchant-1", location_point_id: "point-1", staff_id: null, status: "returned", bound_at: null, updated_at: now },
+    ],
     "/api/v1/terminals/capability-switches": [
       { id: "tcs_term_web", terminalType: "web", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global", enabled: true, reason: "Web 前端总开关" },
       { id: "tcs_term_kiosk", terminalType: "kiosk", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global", enabled: true, reason: "一体机总开关" },
@@ -350,6 +353,9 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
       { id: "svo-e2e-1", item_name: "点舞", price_cent: 30000, table_id: "tbl-1", performer_user_id: "usr_dancer_1",
         status: "created", mgmt_fee_cent: 3000, dancer_share_cent: 27000, created_at: "2026-07-02T20:00:00Z" },
     ],
+    "/api/v1/staff/profiles": [
+      { id: "profile-navigation-1", user_id: "usr_staff_1", name: "示例员工", merchant_id: null, registration_status: "approved", employment_status: "employed", status: "active", sales_position: true, archived_at: null, delete_status: "none" },
+    ],
     "/api/v1/staff/payroll": [
       { id: "pay-e2e-1", user_id: "usr_staff_1", month: "2026-07", base_cent: 800000, commission_cent: 120000,
         bonus_cent: 50000, penalty_cent: 20000, tax_cent: 0, total_cent: 950000 },
@@ -399,6 +405,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     ],
     "/api/v1/analytics/dashboards/leasing": { businessDate: "2026-07-01", metrics: {
       "occupancy.rate": { value: 0.8, unit: "rate" },
+      "occupancy.total_area": { value: 1000, unit: "sqm" },
       "occupancy.rentable_area": { value: 1000, unit: "sqm" },
       "occupancy.leased_area": { value: 800, unit: "sqm" },
       "occupancy.signed_pending_area": { value: 120, unit: "sqm" },
@@ -475,7 +482,7 @@ function bodyValue(body: Record<string, unknown>, camelKey: string, snakeKey = c
 function effectivePermissionsFor(options: MockOptions) {
   const accountType = options.user?.accountType ?? "platform_admin";
   if (accountType === "platform_admin") {
-    return { grants: [], denies: [], wildcard: true, computedAt: now };
+    return { grants: ["bar.payroll.view", "bar.payroll.manage"], denies: [], wildcard: true, computedAt: now };
   }
   if (accountType === "merchant_operator") {
     // 对齐页面-权限矩阵 ADM-MER-002（MERCHANT_OPERATOR 可用商户授权工作台，需工单+账单两项读权限），

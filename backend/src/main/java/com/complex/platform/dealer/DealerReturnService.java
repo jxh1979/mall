@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.04
+// 文件版本：V0.06
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -112,6 +112,11 @@ public class DealerReturnService {
 
     public PageResponse<DealerInvoiceRecord> listInvoices(String orderId) {
         authorization.requirePermission(VIEW);
+        return listInvoices(orderId, VIEW);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
+    PageResponse<DealerInvoiceRecord> listInvoices(String orderId, String permission) {
         requireOrder(orderId);
         return page(returns.listInvoices(orderId));
     }
@@ -249,7 +254,8 @@ public class DealerReturnService {
     }
 
     /**
-     * 验收：按实际验收数量 × 原成交价确认退货金额；可复售回可用库存、质量问题隔离禁售；先冲减未收货款、超出部分待退款；
+     * 验收：按实际验收数量 × 原成交价确认退货金额（原签收行含已完成减价留用的，按该行净额÷实收件数分摊到每件、尾差落最后一件，减价不重复退——2026-10-18 经销 D03 裁决）；
+     * 可复售回可用库存、质量问题隔离禁售；先冲减未收货款、超出部分待退款；
      * 已开票 → 待红冲；未开票 → 退款 > 0 待退款（开既有退款审批），否则直接结清。
      */
     @Transactional
@@ -282,12 +288,17 @@ public class DealerReturnService {
                 if (accepted < 0 || resalable < 0 || quarantined < 0 || accepted > line.requestedQuantity() || resalable + quarantined != accepted) {
                     throw ApiException.badRequest("VALIDATION_FAILED", "验收数量须不超过申请数量，且可复售 + 隔离 = 验收数量");
                 }
-                if (accepted > 0 && returns.hasDiscountedRetainedGoods(line.sourceReceiptLineId())) {
-                    throw ApiException.conflict("DEALER_RETURN_PRICE_BASIS_PENDING",
-                            "原签收来源含已减价留用商品，退货计价口径尚未确认，暂不能办理货款结算");
+                long unit = line.unitPriceCent(), amount = unit * accepted;
+                if (accepted > 0 && line.sourceReceiptLineId() != null) {
+                    // 经销 D03：签收行净额＝实收件数×原成交价－已完成减价留用的减价；÷实收件数分摊到每件，尾差落该行最后一件退回时
+                    var net = returns.receiptLineNet(line.sourceReceiptLineId(), returnId);
+                    long netCent = net.receivedQuantity() * unit - net.discountCent();
+                    unit = netCent / net.receivedQuantity();
+                    int end = net.returnedQuantity() + accepted;
+                    amount = (end == net.receivedQuantity() ? netCent : unit * end) - unit * net.returnedQuantity();
                 }
                 inspected.add(new DealerReturnLineRecord(line.id(), returnId, line.orderLineId(), line.itemId(), line.spec(), line.requestedQuantity(), accepted,
-                        resalable, quarantined, line.unitPriceCent(), line.unitPriceCent() * accepted, trim(in.note()),line.sourceReceiptLineId()));
+                        resalable, quarantined, unit, amount, trim(in.note()),line.sourceReceiptLineId()));
             }
             if(seen.size()!=lines.size()) throw ApiException.badRequest("VALIDATION_FAILED","须逐条记录所有退货明细的实际验收结果，未接收明确填零");
             return idempotency.execute("dealerReturnInspect:" + returnId, request.idempotencyKey(), request, () -> {

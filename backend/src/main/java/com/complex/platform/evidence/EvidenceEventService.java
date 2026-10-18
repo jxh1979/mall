@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -65,6 +65,12 @@ public class EvidenceEventService {
     com.complex.platform.energy.EnergyService energy;
     @org.springframework.beans.factory.annotation.Autowired
     com.complex.platform.access.staff.PayrollTaxService payrollTaxes;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.access.staff.StaffPayrollService> staffPayroll;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.bar.BarPayrollRuleService> barPayrollRules;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.finance.FinancePayrollService> payrollFinance;
     @org.springframework.beans.factory.annotation.Autowired
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.amusement.AmusementBusinessDayService> amusementBusinessDays;
     @org.springframework.beans.factory.annotation.Autowired
@@ -463,6 +469,15 @@ public class EvidenceEventService {
             amusementBusinessDays.getObject().requireEvidenceScope(businessId, evidencePermission);
             return Optional.empty();
         }
+        if (java.util.Set.of("staff_payroll_scheme", "staff_payroll_calendar", "staff_payroll_period", "staff_performance_rule").contains(type == null ? "" : type)) {
+            return Optional.ofNullable(staffPayroll.getObject().requireEvidenceScope(type, businessId, evidencePermission));
+        }
+        if ("bar_payroll_rule".equals(type)) {
+            return Optional.ofNullable(barPayrollRules.getObject().requireEvidenceScope(type, businessId, evidencePermission));
+        }
+        if ("staff_payroll_payment".equals(type)) {
+            return Optional.ofNullable(payrollFinance.getObject().requireEvidenceScope(businessId, evidencePermission));
+        }
         if ("payroll_tax_version".equals(type) || "payroll_tax_assessment".equals(type)) {
             return Optional.ofNullable(payrollTaxes.requireEvidenceScope(type, businessId, evidencePermission));
         }
@@ -589,7 +604,7 @@ public class EvidenceEventService {
     }
 
     private void requireDirectUpload(String businessType) {
-        if (java.util.Set.of("supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution", "amusement_session", "amusement_business_day_config", "dealer_delivery", "dealer_return", "dealer_invoice", "energy_meter", "payroll_tax_version", "payroll_tax_assessment", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract").contains(businessType == null ? "" : businessType.trim())) {
+        if (java.util.Set.of("supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution", "amusement_session", "amusement_business_day_config", "dealer_delivery", "dealer_return", "dealer_invoice", "energy_meter", "payroll_tax_version", "payroll_tax_assessment", "staff_payroll_scheme", "staff_payroll_calendar", "staff_payroll_period", "staff_performance_rule", "bar_payroll_rule", "staff_payroll_payment", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract").contains(businessType == null ? "" : businessType.trim())) {
             throw ApiException.badRequest("REAL_UPLOAD_REQUIRED", "该业务凭证须通过文件上传接口提交实际文件");
         }
     }

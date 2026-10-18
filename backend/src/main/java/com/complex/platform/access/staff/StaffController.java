@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.09
+// 文件版本：V0.11
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -390,6 +390,24 @@ public class StaffController {
             @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffLeaveReviewRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewLeave(id, request));
+    }
+
+    /** 2026-10-18 操作员裁决：员工本人对已批准的请假申请销假（理由必填）→ 待销假审批；有排班管理权的主管批准后才生效。 */
+    @PostMapping("/leaves/{id}/revoke-request")
+    public ApiResponse<StaffLeaveRequestRecord> requestLeaveRevoke(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestLeaveRevoke(id, request));
+    }
+
+    /** 销假审批（排班主管）：批准 → 已销假（BSM L1481：已定格月份不回改，由工资补差在当期薪资单冲正并注明来源）；驳回 → 假仍有效。 */
+    @PostMapping("/leaves/{id}/revoke")
+    public ApiResponse<StaffLeaveRequestRecord> revokeLeave(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffLeaveReviewRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.revokeLeave(id, request));
     }
 
     @GetMapping("/leaves")

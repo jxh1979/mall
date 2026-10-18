@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -167,6 +167,15 @@ class MetricDetailConsistencyJdbcIntegrationTests {
         insertBarTable("bt_mdc_r");
         insertBarOrder("bor_mdc_r", "bt_mdc_r", 10000, "paid");
         insertBarBill("bb_mdc_r", "bor_mdc_r", "bt_mdc_r", 10000);
+        insertSpace("space_mdc_bar", "shop", "20", "active");
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (:id,'complex','收入测试综合体','active',now(),now())",
+                new MapSqlParameterSource().addValue("id",sid("project_mdc_bar")));
+        jdbcTemplate.update("UPDATE spaces SET project_id=:project WHERE id=:id",
+                new MapSqlParameterSource().addValue("project",sid("project_mdc_bar")).addValue("id",sid("space_mdc_bar")));
+        jdbcTemplate.update("UPDATE bar_tables SET space_id=:space WHERE id=:id",
+                new MapSqlParameterSource().addValue("space",sid("space_mdc_bar")).addValue("id",sid("bt_mdc_r")));
+        jdbcTemplate.update("UPDATE bar_bills SET merchant_id='mch_mdc_bar' WHERE id=:id",
+                new MapSqlParameterSource().addValue("id",sid("bb_mdc_r")));
         insertBarSettlement("bbs_mdc_1", "bb_mdc_r", 8800, false);
         insertBarSettlement("bbs_mdc_2", "bb_mdc_r", 1200, false);
         insertBarSettlement("bbs_mdc_rev", "bb_mdc_r", 999, true); // 已冲正 → 不进口径
@@ -400,7 +409,8 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     }
 
     private static BigDecimal sumLong(List<Map<String, Object>> rows, String key) {
-        return BigDecimal.valueOf(rows.stream().mapToLong(row -> ((Number) row.get(key)).longValue()).sum());
+        return BigDecimal.valueOf(rows.stream().map(row -> (Number) row.get(key))
+                .filter(java.util.Objects::nonNull).mapToLong(Number::longValue).sum());
     }
 
     private static BigDecimal sumDecimal(List<Map<String, Object>> rows, String key) {

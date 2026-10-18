@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -40,6 +40,10 @@ class PayrollSafetyJdbcIntegrationTests {
 
     @Autowired
     private StaffService service;
+    @Autowired private StaffPayrollService payroll;
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper json;
+    @Autowired private com.complex.platform.finance.FinancePayrollService bankPayroll;
+    @Autowired private com.complex.platform.evidence.EvidenceEventService evidence;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -68,17 +72,18 @@ class PayrollSafetyJdbcIntegrationTests {
                 + "VALUES (?, 2000000, now(), 'project_main')", user);
 
         // 首次关账 → total 2,000,000。
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,json,user,month,2000000);
+        var original=PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,json,payroll,user,month,"monthly");
         assertThat(statementTotal(month, user)).isEqualTo(2000000L);
 
         // 发放:落 staff_payroll_payouts + 状态置 paid。
-        service.markPayrollPaid(new com.complex.platform.access.staff.dto.StaffPayrollPayRequest(
-                key(), month, user, "bank_transfer", "TXN-001"));
+        assertThatThrownBy(()->service.markPayrollPaid(new com.complex.platform.access.staff.dto.StaffPayrollPayRequest(key(),month,user,"bank_transfer","TXN-001"))).isInstanceOf(ApiException.class);
+        payActually(original.statement().id(),user);
         assertThat(statementStatus(month, user)).isEqualTo("paid");
 
         // 事后补一笔 5,000 元罚款再重结:已发放的这行金额必须原封不动(套现被拒/跳过覆盖)。
         bookAdjustment(user, month, "penalty", 500000L, "事后补罚"); // CG-12：奖惩入账改走复核链，此处直接落已生效记录
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        assertThatThrownBy(()->PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,json,payroll,user,month,"monthly")).isInstanceOf(ApiException.class);
 
         assertThat(statementTotal(month, user)).isEqualTo(2000000L);   // 未被静默改写
         assertThat(statementStatus(month, user)).isEqualTo("paid");
@@ -88,20 +93,23 @@ class PayrollSafetyJdbcIntegrationTests {
     }
 
     @Test
-    void closingUnpaidMonthStillRecomputesNormally() {
-        // 未发放月份仍可重结覆盖(补录奖惩后重算),状态保持 closed。
+    void closingUnpaidMonthKeepsOriginalAndCreatesSupplement() {
+        // 已定格原件不因未付款就覆盖，后到奖金单列补发。
         String month = "2099-12";
         String user = "usr_unpaid_" + key();
         seedProfile("project_main", user);
         jdbcTemplate.update("INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_at, project_id) "
                 + "VALUES (?, 1000000, now(), 'project_main')", user);
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,json,user,month,1000000);
+        var original=PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,json,payroll,user,month,"monthly");
         assertThat(statementTotal(month, user)).isEqualTo(1000000L);
         assertThat(statementStatus(month, user)).isEqualTo("closed");
 
         bookAdjustment(user, month, "bonus", 300000L, "补录奖金");
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
-        assertThat(statementTotal(month, user)).isEqualTo(1300000L);   // 未发放照常重算
+        var supplement=PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,json,payroll,user,month,"supplemental");
+        assertThat(statementTotal(month, user)).isEqualTo(1300000L);
+        assertThat(supplement.statement().totalCent()).isEqualTo(300000);
+        assertThat(jdbcTemplate.queryForObject("SELECT total_cent FROM staff_payroll_statements WHERE id=?",Long.class,original.statement().id())).isEqualTo(1000000);
     }
 
     // ── 2【P0】手工提成/奖惩无去重 ───────────────────────────────────────────
@@ -170,6 +178,16 @@ class PayrollSafetyJdbcIntegrationTests {
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
+    private void payActually(String statement,String employee) {
+        jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) SELECT 'role_m010_fixture',permission_code FROM permissions WHERE permission_code LIKE 'finance.payroll.%' OR permission_code='evidence.attachment.create' ON CONFLICT DO NOTHING");
+        long total=jdbcTemplate.queryForObject("SELECT total_cent FROM staff_payroll_statements WHERE id=?",Long.class,statement);
+        String id=(String)bankPayroll.prepare(statement,new com.complex.platform.finance.FinancePayrollService.PrepareRequest(key(),total)).get("id");
+        String proof=evidence.uploadAttachment(new org.springframework.mock.web.MockMultipartFile("file","bank.png","image/png",java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jCYQAAAAASUVORK5CYII=")),"staff_payroll_payment",id,"bank_proof").id();
+        var at=Instant.now().minusSeconds(60);
+        bankPayroll.submit(id,new com.complex.platform.finance.FinancePayrollService.SubmitRequest(key(),"request_"+id,at,employee,List.of(proof)));
+        bankPayroll.result(id,new com.complex.platform.finance.FinancePayrollService.ResultRequest(key(),"succeeded",at.plusSeconds(1),"flow_"+id,"测试实际银行成功原件",List.of(proof)));
+    }
+
     private void bookAdjustment(String userId, String month, String adjType, long amountCent, String reason) {
         jdbcTemplate.update("""
                 INSERT INTO staff_payroll_adjustments (id, user_id, month, adj_type, amount_cent, reason, created_by, created_at, project_id)
@@ -189,7 +207,7 @@ class PayrollSafetyJdbcIntegrationTests {
 
     private Long statementTotal(String month, String userId) {
         return jdbcTemplate.queryForObject(
-                "SELECT total_cent FROM staff_payroll_statements WHERE month = ? AND user_id = ?",
+                "SELECT sum(total_cent) FROM staff_payroll_statements WHERE month = ? AND user_id = ?",
                 Long.class, month, userId);
     }
 

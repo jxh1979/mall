@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -215,7 +215,8 @@ class MetricDetailServiceTests {
         long rowSum = response.rows().stream().mapToLong(item -> ((Number) item.get("settlementAmountCent")).longValue()).sum();
         assertThat(response.summaryValue()).isEqualByComparingTo(BigDecimal.valueOf(rowSum));
         assertThat(response.unit()).isEqualTo("分");
-        assertThat(response.caliber()).contains("冲正");
+        assertThat(response.caliber()).contains("冲正", "整单全渠道付清", "月结");
+        assertThat(response.summaryNote()).contains("待收、待月结及待核退款未计入", "不作为最终结算依据");
         assertThat(response.traceLinkPageId()).isEqualTo("ADM-BAR-002");
         assertThat(response.traceLinkColumnKey()).isEqualTo("billId");
         // 酒吧经营日窗（单测无域配置回落全局 04:00）：北京 [07-18 04:00, 07-19 04:00) = [07-17T20:00Z, 07-18T20:00Z)。
@@ -416,14 +417,14 @@ class MetricDetailServiceTests {
     @Test
     void financeFourthBatchDispatchByMetricKey() {
         // 应付余额（as-of=当前财务经营日；财务缺省日切回落全局日切）
-        when(repository.apOpenPayableDetail(any(), anyInt(), anyInt(), any()))
+        when(repository.apOpenPayableDetail(any(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "ap1", "unpaidAmountCent", 30000L)), 1, new BigDecimal("30000")));
         MetricDetailResponse ap = service.metricDetail("finance.ap_balance", null, null, null, 1, 20);
         assertThat(ap.valueType()).isEqualTo("balance");
         assertThat(ap.unit()).isEqualTo("分");
         assertThat(ap.to()).isEqualTo(CURRENT_BUSINESS_DAY);
         assertThat(ap.summaryValue()).isEqualByComparingTo("30000");
-        verify(repository).apOpenPayableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull());
+        verify(repository).apOpenPayableDetail(eq(CURRENT_BUSINESS_DAY), eq(20), eq(0), isNull(), eq(java.util.Set.of()));
 
         // 坏账预警区（应收逾期90+，as-of 口径）
         when(repository.arOverdueAging90pDetail(any(), anyInt(), anyInt(), any()))
@@ -469,14 +470,14 @@ class MetricDetailServiceTests {
         verify(repository).staffAttendanceDetail(eq(LocalDate.parse("2026-07-15")), eq(LocalDate.parse("2026-07-15")), eq(true), eq(20), eq(0), isNull());
 
         // 实发合计 / 薪资单数：同一 staffPayrollDetail 按 sumTotal 分派。
-        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt(), any()))
+        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "pay1", "totalCent", 120000L)), 1, new BigDecimal("120000")));
         MetricDetailResponse total = service.metricDetail("staff.payroll_net_total", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20);
         assertThat(total.unit()).isEqualTo("分");
         assertThat(total.summaryValue()).isEqualByComparingTo("120000");
-        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(true), eq(20), eq(0), isNull());
+        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(true), eq(20), eq(0), isNull(), eq(java.util.List.of()));
         service.metricDetail("staff.payroll_statement_count", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20);
-        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(false), eq(20), eq(0), isNull());
+        verify(repository).staffPayrollDetail(eq(LocalDate.parse("2026-06-01")), eq(LocalDate.parse("2026-06-01")), eq(false), eq(20), eq(0), isNull(), eq(java.util.List.of()));
 
         // 余额类（人事域）：待审请假 / 在职员工数 as-of=to（缺省=当前经营日），from 不参与。
         when(repository.staffPendingLeaveDetail(any(), anyInt(), anyInt(), any()))
@@ -565,15 +566,15 @@ class MetricDetailServiceTests {
     }
 
     @Test
-    void platformAdminNullScopeSeesFullPlatformForProjectScopedMetric() {
-        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt(), any()))
+    void nullProjectScopeStillPassesExplicitPayrollVisibilityFilter() {
+        when(repository.staffPayrollDetail(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), anyInt(), anyInt(), any(), any()))
                 .thenReturn(new MetricDetailRows(List.of(row("id", "p1", "totalCent", 9L)), 1, new BigDecimal("9")));
 
         MetricDetailResponse response = service.metricDetail(
                 "staff.payroll_net_total", null, LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-01"), 1, 20, null);
 
-        // 平台管理员=null scope → 仓储收到 null（看全量），不加项目口径说明。
-        verify(repository).staffPayrollDetail(any(), any(), eq(true), eq(20), eq(0), isNull());
+        // 项目未收窄也不跳过工资权限过滤；未注入工资授权服务时传空集合。
+        verify(repository).staffPayrollDetail(any(), any(), eq(true), eq(20), eq(0), isNull(), eq(java.util.List.of()));
         assertThat(response.summaryNote()).isNull();
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +48,8 @@ class DispatchCommissionSettlementJdbcIntegrationTests {
     private static final String MONTH = "2026-09";
 
     @Autowired private StaffService staffService;
+    @Autowired private StaffPayrollService payroll;
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper json;
     @Autowired private JdbcStaffRepository staffRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
 
@@ -145,10 +147,36 @@ class DispatchCommissionSettlementJdbcIntegrationTests {
                 + " AND merchant_id = ?", Integer.class, barMerchantId)).isEqualTo(1);
     }
 
+    @Test
+    void partialCollectionDoesNotTransferAndSecondChannelCompletionTransfersOnce() {
+        staffService.createDispatch(new StaffDispatchCreateRequest("cg07-partial-dispatch-"+suffix,dispatchedUserId,barMerchantId,
+                "2026-09-01","真实派驻登记"));
+        String bill="bill_cg07_a1_"+suffix;
+        jdbcTemplate.update("UPDATE bar_commission_calculations SET status='cancelled' WHERE id=?","cm_cg07_a2_"+suffix);
+        // 此处构造渠道已入账原件，验证月结消费者；付款确认入口由 Bar 收款集成用例覆盖。
+        jdbcTemplate.update("INSERT INTO bar_bill_settlements(id,bill_id,settle_channel,settlement_amount_cent,merchant_id,settled_at) VALUES(?,?,'cash',60000,?,'2026-09-10T12:00:00Z')",
+                "collect_first_"+suffix,bill,barMerchantId);
+        jdbcTemplate.update("UPDATE bar_bills SET paid_amount_cent=60000,settlement_status='unsettled',payment_status='unpaid' WHERE id=?",bill);
+        var first=staffService.closeCommissionSettlement(new StaffCommissionSettlementCloseRequest("cg07-partial-close-"+suffix,MONTH));
+        assertThat(first.get("settlements")).isEqualTo(0);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type='dispatch_commission_transfer' AND merchant_id=?",Integer.class,barMerchantId)).isZero();
+        jdbcTemplate.update("INSERT INTO bar_bill_settlements(id,bill_id,settle_channel,settlement_amount_cent,merchant_id,settled_at) VALUES(?,?,'pos',40000,?,'2026-09-10T12:01:00Z')",
+                "collect_second_"+suffix,bill,barMerchantId);
+        jdbcTemplate.update("UPDATE bar_bills SET paid_amount_cent=100000,settlement_status='settled',payment_status='paid' WHERE id=?",bill);
+        var completed=staffService.closeCommissionSettlement(new StaffCommissionSettlementCloseRequest("cg07-complete-close-"+suffix,MONTH));
+        assertThat(completed.get("settlements")).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT amount_cent FROM bar_commission_settlements WHERE month=? AND merchant_id=?",Long.class,MONTH,barMerchantId)).isEqualTo(3000);
+        assertThat(staffService.closeCommissionSettlement(new StaffCommissionSettlementCloseRequest("cg07-complete-repeat-"+suffix,MONTH)).get("settlements")).isEqualTo(0);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type='dispatch_commission_transfer' AND merchant_id=?",Integer.class,barMerchantId)).isEqualTo(1);
+    }
+
     /** 工资单：提成栏仍汇总该月酒吧提成（不变）；发放主体＝人员所属主体。 */
     @Test
     void payrollStatementCarriesPayerCompanyAndKeepsCommissionColumn() {
-        staffService.closePayroll(new StaffPayrollCloseRequest("cg07-payroll-" + suffix, MONTH));
+        for(String user:List.of(dispatchedUserId,ownStaffUserId)) {
+            PayrollApprovedCloseFixture.prepare(jdbcTemplate,json,user,MONTH,0);
+            PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,json,payroll,user,MONTH,"monthly");
+        }
 
         Map<String, Object> dispatched = jdbcTemplate.queryForMap(
                 "SELECT commission_cent, payer_company_id FROM staff_payroll_statements WHERE user_id = ? AND month = ?",

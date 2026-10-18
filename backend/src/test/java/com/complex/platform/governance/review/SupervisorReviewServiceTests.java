@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -57,7 +57,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(29); // 包括游乐营业日、采购及原有业务审批。
+        assertThat(page.total()).isEqualTo(36); // 包括工资、绩效及酒吧分配审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
@@ -81,7 +81,8 @@ class SupervisorReviewServiceTests {
     @Test
     void deliveryAndSalesContractCannotSkipRequiredParallelReviewsEvenForZeroAmount() {
         for (String action : List.of("dealer.delivery_resolution", "inventory.quarantine_disposition", "ticket.reward.sales_contract",
-                "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution")) {
+                "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution",
+                "staff.payroll.scheme.change", "staff.payroll.period.confirm", "staff.payroll.calendar.publish")) {
             assertThatThrownBy(() -> service.evaluate(evaluate("required-lines-" + action, "业务申请", List.of(),
                     action, "business", "source-1", 0L, null)))
                     .isInstanceOfSatisfying(ApiException.class,

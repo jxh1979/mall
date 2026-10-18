@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.43
+// 文件版本：V0.45
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -49,6 +49,14 @@ import static com.complex.platform.common.Strings.requireText;
 
 @Service
 public class AccessService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<com.complex.platform.access.staff.StaffPayrollConfigurationService> payrollConfigurations;
+
+    /** 定岗薪资只认已批准方案；手工构造的单测（AccessServiceTests、M006）无容器注入时沿用申请金额（与 AnalyticsService 未注入时的兜底同范式）。 */
+    private Long approvedPositionSalary(String userId, String positionCode, Long requested) {
+        return payrollConfigurations == null ? requested
+                : payrollConfigurations.getObject().approvedPositionSalary(userId, positionCode, requested);
+    }
 
     private static final int DEFAULT_PAGE = 1;
     private static final Set<String> ALLOWED_ACCOUNT_TYPES = Set.of(
@@ -1965,7 +1973,7 @@ public class AccessService {
                             saved = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
                                     userId,
                                     request.staffLevelId(),
-                                    request.baseSalaryAmountCent(),
+                                    approvedPositionSalary(userId,position==null?null:position.positionCode(),request.baseSalaryAmountCent()),
                                     currency,
                                     request.salaryDetail(),
                                     targetUser.organizationId(),
@@ -2246,7 +2254,7 @@ public class AccessService {
         StaffLevelAssignment staffLevelAssignment = repository.saveStaffLevelAssignment(new StaffLevelAssignment(
                 context.targetUser().id(),
                 context.staffLevelId(),
-                request.baseSalaryAmountCent(),
+                approvedPositionSalary(context.targetUser().id(),context.positionCode(),request.baseSalaryAmountCent()),
                 context.salaryCurrency(),
                 request.salaryDetail(),
                 context.targetUser().organizationId(),

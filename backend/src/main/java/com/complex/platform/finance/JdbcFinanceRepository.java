@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -161,6 +161,13 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsForProjects(
             String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size) {
+        return listArApItemsForProjects(merchantId,projectIds,keyword,page,size,null);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsForProjects(
+            String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size,
+            java.util.Set<String> payrollItemIds) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 20 : Math.min(size, 200);
         String trimmed = keyword == null ? "" : keyword.trim();
@@ -175,6 +182,13 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
                    AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw OR source_type ILIKE :kw)
                 """ + (projectIds == null ? "" : " AND project_id IN (:project_ids)");
+        if (payrollItemIds != null) {
+            if (payrollItemIds.isEmpty()) where += " AND source_type <> 'staff_payroll'";
+            else {
+                params.addValue("payroll_ids", payrollItemIds);
+                where += " AND (source_type <> 'staff_payroll' OR id IN (:payroll_ids))";
+            }
+        }
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ar_ap_items" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);

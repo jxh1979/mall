@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.08
+// 文件版本：V0.11
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,6 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
 })
 @Transactional
 class StaffJdbcIntegrationTests {
+    @Autowired StaffPayrollService payroll;
+    @Autowired com.fasterxml.jackson.databind.ObjectMapper payrollJson;
 
     @Autowired
     private StaffService service;
@@ -404,14 +406,174 @@ class StaffJdbcIntegrationTests {
     }
 
     @org.junit.jupiter.api.Test
+    void leaveRevokeRequiresEmployeeRequestThenSupervisorApprovalAndKeepsOriginalRecord() {
+        // 2026-10-18 操作员裁决：销假改为「本人申请＋主管批准」。只有已批准的请假可申请销假、理由必填、只能对本人的假申请；
+        // 申请后（待销假审批）假仍有效；有排班管理权的主管批准后原请假单转「已销假」，审批人与审批意见不变，
+        // 撤销后同日期不再计请假、可再次请假；没有定格工资单时不生成补差（BSM L1481）。
+        authenticateAsPlatformAdmin();
+        com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-09-10"),
+                        java.time.LocalDate.parse("2099-09-11"), "事假"));
+        assertThatThrownBy(() -> service.requestLeaveRevoke(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), "未批准不能申请销假")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        service.reviewLeave(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(
+                key(), "approve", "准"));
+        // 他人（持 staff.leave.submit 的真实员工）不能替本人申请销假。
+        String other = "usr_leave_other_" + key();
+        StaffTestActors.grant(jdbcTemplate, accessRepository, other, "project_main");
+        StaffTestActors.actor(other, "staff", "project_main", null);
+        StaffTestActors.alignRowToSession(jdbcTemplate);
+        assertThatThrownBy(() -> service.requestLeaveRevoke(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), "替别人销假")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+        assertThat(repository.findLeaveById(leave.id()).orElseThrow().status()).isEqualTo("approved");
+        // 本人申请：理由必填。
+        authenticateAsPlatformAdmin();
+        assertThatThrownBy(() -> service.requestLeaveRevoke(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), " ")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        com.complex.platform.access.staff.StaffLeaveRequestRecord requested = service.requestLeaveRevoke(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), "计划取消，已到岗"));
+        assertThat(requested.status()).isEqualTo("revoke_requested");
+        assertThat(requested.revokeRequestedBy()).isEqualTo("usr_admin");
+        assertThat(requested.revokeRequestReason()).isEqualTo("计划取消，已到岗");
+        assertThat(requested.revokeRequestedAt()).isNotNull();
+        assertThat(requested.revokedBy()).isNull();
+        // 主管批准前假仍有效：考勤仍记请假、同日期仍算重叠。
+        assertThat(repository.approvedLeaveDates("usr_admin", java.time.LocalDate.parse("2099-09-01"),
+                java.time.LocalDate.parse("2099-09-30")))
+                .containsExactly(java.time.LocalDate.parse("2099-09-10"), java.time.LocalDate.parse("2099-09-11"));
+        assertThat(repository.hasActiveLeaveOverlap("usr_admin", java.time.LocalDate.parse("2099-09-10"),
+                java.time.LocalDate.parse("2099-09-11"))).isTrue();
+        // 无排班主管权限的真实 staff → 不能批准。
+        authenticateAsStaff("usr_norole_leave_" + key(), "mrc_self");
+        assertThatThrownBy(() -> service.revokeLeave(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "无权批准")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+        authenticateAsPlatformAdmin();
+        assertThatThrownBy(() -> service.revokeLeave(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "cancel", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        // 由另一名排班主管批准：原「主管批准」的审批人与审批意见必须留在单上，申请人/申请理由与批准人/批准说明另记。
+        String supervisor = "usr_leave_sup_" + key();
+        StaffTestActors.grant(jdbcTemplate, accessRepository, supervisor, "project_main");
+        StaffTestActors.actor(supervisor, "platform_admin", "seed-org", null);
+        StaffTestActors.alignRowToSession(jdbcTemplate);
+        com.complex.platform.access.staff.StaffLeaveRequestRecord revoked = service.revokeLeave(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "已到岗属实"));
+        assertThat(revoked.status()).isEqualTo("revoked");
+        assertThat(revoked.reviewedBy()).as("销假不得覆盖原审批人").isEqualTo("usr_admin");
+        assertThat(revoked.reviewNote()).as("销假不得覆盖原审批意见").isEqualTo("准");
+        assertThat(jdbcTemplate.queryForMap("SELECT reviewed_by, review_note FROM staff_leave_requests WHERE id = ?", leave.id()))
+                .containsEntry("reviewed_by", "usr_admin").containsEntry("review_note", "准");
+        assertThat(revoked.revokeRequestedBy()).isEqualTo("usr_admin");
+        assertThat(revoked.revokeRequestReason()).isEqualTo("计划取消，已到岗");
+        assertThat(revoked.revokedBy()).isEqualTo(supervisor);
+        assertThat(revoked.revokeReason()).isEqualTo("已到岗属实");
+        assertThat(revoked.revokedAt()).isNotNull();
+        assertThat(repository.findLeaveById(leave.id()).orElseThrow().revokedBy()).isEqualTo(supervisor);
+        assertThat(revoked.leaveType()).isEqualTo("personal");
+        assertThat(revoked.startDate()).isEqualTo(java.time.LocalDate.parse("2099-09-10"));
+        assertThat(revoked.endDate()).isEqualTo(java.time.LocalDate.parse("2099-09-11"));
+        assertThat(revoked.reason()).isEqualTo("事假");
+        assertThat(repository.findLeaveById(leave.id()).orElseThrow().status()).isEqualTo("revoked");
+        assertThatThrownBy(() -> service.revokeLeave(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "重复销假")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        authenticateAsPlatformAdmin();
+        assertThatThrownBy(() -> service.requestLeaveRevoke(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), "已销假不能再申请")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(repository.approvedLeaveDates("usr_admin", java.time.LocalDate.parse("2099-09-01"),
+                java.time.LocalDate.parse("2099-09-30"))).isEmpty();
+        assertThat(repository.hasActiveLeaveOverlap("usr_admin", java.time.LocalDate.parse("2099-09-10"),
+                java.time.LocalDate.parse("2099-09-11"))).isFalse();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM staff_payroll_corrections WHERE source_adjustment_id = ?",
+                Integer.class, leave.id())).isZero();
+    }
+
+    @org.junit.jupiter.api.Test
+    void leaveRevokeRequestRejectedKeepsLeaveEffectiveAndCanBeRequestedAgain() {
+        // 2026-10-18 操作员裁决：主管驳回销假申请 → 假仍有效（回到已批准，考勤仍记请假），申请留痕保留，本人可再次申请。
+        authenticateAsPlatformAdmin();
+        com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-12-10"),
+                        java.time.LocalDate.parse("2099-12-11"), "事假"));
+        service.reviewLeave(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "准"));
+        service.requestLeaveRevoke(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), "计划有变"));
+        com.complex.platform.access.staff.StaffLeaveRequestRecord rejected = service.revokeLeave(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "reject", "当日仍需休假"));
+        assertThat(rejected.status()).isEqualTo("approved");
+        assertThat(rejected.revokedBy()).isNull();
+        assertThat(rejected.revokedAt()).isNull();
+        assertThat(rejected.revokeRequestedBy()).as("驳回后申请留痕保留").isEqualTo("usr_admin");
+        assertThat(rejected.revokeRequestReason()).isEqualTo("计划有变");
+        assertThat(rejected.reviewedBy()).isEqualTo("usr_admin");
+        assertThat(rejected.reviewNote()).isEqualTo("准");
+        assertThat(repository.approvedLeaveDates("usr_admin", java.time.LocalDate.parse("2099-12-01"),
+                java.time.LocalDate.parse("2099-12-31")))
+                .containsExactly(java.time.LocalDate.parse("2099-12-10"), java.time.LocalDate.parse("2099-12-11"));
+        assertThat(repository.hasActiveLeaveOverlap("usr_admin", java.time.LocalDate.parse("2099-12-10"),
+                java.time.LocalDate.parse("2099-12-11"))).isTrue();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM staff_payroll_corrections WHERE source_adjustment_id = ?",
+                Integer.class, leave.id())).isZero();
+        // 驳回后的假不是待销假审批，主管不能直接销；本人可再次申请。
+        assertThatThrownBy(() -> service.revokeLeave(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(service.requestLeaveRevoke(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), "再次申请")).status())
+                .isEqualTo("revoke_requested");
+    }
+
+    @org.junit.jupiter.api.Test
+    void leaveRevokeHoldsPayrollEmployeeLockBeforeCheckingLockedMonths() {
+        // BSM L1481：销假判「已定格月份」与工资定格（持 staff-payroll:<user> 事务级咨询锁）并发时，销假必须先取同一把锁再查定格月份，
+        // 否则 READ COMMITTED 下会出现事假已销、工资照扣且永不补差。@Transactional 用例内事务未提交，锁仍在 pg_locks 可见。
+        authenticateAsPlatformAdmin();
+        com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-10-10"),
+                        java.time.LocalDate.parse("2099-10-11"), "事假"));
+        service.reviewLeave(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "准"));
+        service.requestLeaveRevoke(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest(key(), "计划取消"));
+        service.revokeLeave(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "准予销假"));
+        Integer held = jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM pg_locks
+                 WHERE locktype = 'advisory' AND granted AND pid = pg_backend_pid() AND objsubid = 1
+                   AND classid::bigint = ((hashtextextended('staff-payroll:usr_admin', 0) >> 32) & 4294967295)
+                   AND objid::bigint = (hashtextextended('staff-payroll:usr_admin', 0) & 4294967295)
+                """, Integer.class);
+        assertThat(held).as("销假事务须持有 staff-payroll:usr_admin 咨询锁").isEqualTo(1);
+    }
+
+    @org.junit.jupiter.api.Test
+    void leaveRevokeNeedsEmployeeRequestBeforeSupervisorApproval() {
+        // 2026-10-18 操作员裁决：销假改为「本人申请＋主管批准」——未经员工本人申请销假的已批准请假，主管不得直接销假。
+        authenticateAsPlatformAdmin();
+        com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
+                new com.complex.platform.access.staff.dto.StaffLeaveRequest(
+                        key(), "personal", java.time.LocalDate.parse("2099-11-10"),
+                        java.time.LocalDate.parse("2099-11-11"), "事假"));
+        service.reviewLeave(leave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "准"));
+        assertThatThrownBy(() -> service.revokeLeave(leave.id(),
+                new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(key(), "approve", "未经本人申请直接销假")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(repository.findLeaveById(leave.id()).orElseThrow().status()).as("未申请销假的假仍为已批准").isEqualTo("approved");
+    }
+
+    @org.junit.jupiter.api.Test
     void v211PayrollLeaveMonthView() {
-        // F批(2026-07-02 拍板):月结定格(total=base+提成+奖-罚,可重结覆盖);员工只见已定格月;
+        // 月结后原件不覆盖；后到奖金形成独立补发。员工只见已定格工资。
         // 请假主管审,通过区间月视图记 leave;月视图六态口径。
         authenticateAsPlatformAdmin();
         String month = "2099-08";
 
-        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(
-                key(), "usr_admin", 800000L));
+        jdbcTemplate.update("INSERT INTO staff_profiles(id,project_id,user_id,name,company_id,registration_status,status,employment_status,created_at,updated_at) SELECT ?,'project_main','usr_admin','工资算法测试员工','project_main','approved','active','employed',now(),now() WHERE NOT EXISTS(SELECT 1 FROM staff_profiles WHERE user_id='usr_admin')","test_pay_"+key());
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,payrollJson,"usr_admin",month,800000);
         service.addCommission(new com.complex.platform.access.staff.dto.StaffCommissionRequest(
                 key(), "usr_admin", month, "manual", null, 120000L, "订位提成"));
         // CG-12：奖惩入账改走 HR 会签＋三级复核链（HrApprovalChainJdbcIntegrationTests），薪资算法用例直接落已生效记录。
@@ -426,7 +588,7 @@ class StaffJdbcIntegrationTests {
         // 月结前员工不可见(拍板:月结后才可见)。
         assertThat(service.listMyPayroll(month).items()).isEmpty();
 
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,"usr_admin",month,"monthly");
         com.complex.platform.access.staff.StaffPayrollStatementRecord statement =
                 service.listMyPayroll(month).items().stream()
                         .filter(row -> row.userId().equals("usr_admin")).findFirst().orElseThrow();
@@ -434,17 +596,18 @@ class StaffJdbcIntegrationTests {
         assertThat(statement.commissionCent()).isEqualTo(120000L);
         assertThat(statement.bonusCent()).isEqualTo(50000L);
         assertThat(statement.penaltyCent()).isEqualTo(20000L);
-        assertThat(statement.taxCent()).isEqualTo(0L);   // 无 service_order 劳务 → 无个税
+        assertThat(statement.taxCent()).isEqualTo(0L);   // 此算法用例使用已批准0分税额原件；实际核税链另测
         assertThat(statement.totalCent()).isEqualTo(800000L + 120000L + 50000L - 20000L);
 
-        // 补录奖金后重结=覆盖,仍单行。
+        // 补录奖金形成独立补发，原单保持。
         repository.insertPayrollAdjustment("adj_" + key(), "usr_admin", month, "bonus", 10000L, "补录", "usr_admin", java.time.Instant.now());
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,"usr_admin",month,"supplemental");
         java.util.List<com.complex.platform.access.staff.StaffPayrollStatementRecord> after =
                 service.listMyPayroll(month).items().stream()
                         .filter(row -> row.userId().equals("usr_admin")).toList();
-        assertThat(after).hasSize(1);
-        assertThat(after.get(0).totalCent()).isEqualTo(800000L + 120000L + 60000L - 20000L);
+        assertThat(after).hasSize(2);
+        assertThat(after.stream().mapToLong(StaffPayrollStatementRecord::totalCent).sum()).isEqualTo(800000L+120000L+60000L-20000L);
+        assertThat(after.stream().filter(row->row.id().equals(statement.id())).findFirst().orElseThrow()).isEqualTo(statement);
 
         // 请假:提交→主管通过→月视图该日=leave。
         com.complex.platform.access.staff.StaffLeaveRequestRecord leave = service.submitLeave(
@@ -487,9 +650,8 @@ class StaffJdbcIntegrationTests {
         service.reviewLeave(sickLeave.id(), new com.complex.platform.access.staff.dto.StaffLeaveReviewRequest(
                 key(), "approve", "准"));
 
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
         com.complex.platform.access.staff.StaffPayrollStatementRecord withLeave = service.listMyPayroll(month).items().stream()
-                .filter(row -> row.userId().equals("usr_admin")).findFirst().orElseThrow();
+                .filter(row -> row.id().equals(statement.id())).findFirst().orElseThrow();
         assertThat(withLeave.leaveDeductionCent()).isZero(); // 事假日期没有排班工时，不按固定月天数扣款；按工时扣款另有回归覆盖。
         assertThat(withLeave.totalCent()).isEqualTo(withLeave.baseCent() + withLeave.commissionCent()
                 + withLeave.bonusCent() - withLeave.penaltyCent() - withLeave.leaveDeductionCent()
@@ -499,8 +661,8 @@ class StaffJdbcIntegrationTests {
         jdbcTemplate.update("INSERT INTO staff_commission_ledger (id,user_id,month,source_type,source_id,amount_cent,created_at) VALUES (?,'usr_admin',?,'service_order','svo_tax',3000000,now())",
                 "cml_tax_"+key(),month);
         assertThatThrownBy(()->service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(),month)))
-                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_TAX_ASSESSMENT_REQUIRED"));
-        assertThat(service.listMyPayroll(month).items().stream().filter(row->row.userId().equals("usr_admin")).findFirst().orElseThrow()).isEqualTo(withLeave);
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_CONFIRMED_FACTS_REQUIRED"));
+        assertThat(service.listMyPayroll(month).items().stream().filter(row->row.id().equals(statement.id())).findFirst().orElseThrow()).isEqualTo(withLeave);
     }
 
     @org.junit.jupiter.api.Test
@@ -541,9 +703,8 @@ class StaffJdbcIntegrationTests {
                 .extracting(StaffLeaveRequestRecord::id).doesNotContain(leave.id());
 
         // 薪资单:月结按档案推导 project;scoped 只见本项目员工。
-        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(
-                key(), userId, 500000L));
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), "2099-07"));
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,payrollJson,userId,"2099-07",500000);
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,userId,"2099-07","monthly");
         assertThat(repository.listPayrollStatements("2099-07", null, "project_main"))
                 .extracting(StaffPayrollStatementRecord::userId).contains(userId);
         assertThat(repository.listPayrollStatements("2099-07", null, "prj_other"))
@@ -722,37 +883,35 @@ class StaffJdbcIntegrationTests {
     }
     @org.junit.jupiter.api.Test
     void closePayrollScopedRunOnlyTouchesCallerProjectNeverOtherProjects() {
-        // P0 项目级月结(V214 收口):项目 HR(scope=project_main)月结只重算/覆盖本综合体员工,
-        // 绝不 INSERT/覆盖其他项目(prj_other)的薪资单;平台口径(scope=null)仍全量。
         authenticateAsPlatformAdmin();
-        String month = "2099-09";
-        String userMain = "usr_scope_main_" + key();
-        String userOther = "usr_scope_other_" + key();
-        seedProfile("project_main", userMain);
-        seedProfile("prj_other", userOther);
-        // 两员工都有薪资要素(固定工资)→ 无 scope 时都会出单。
-        jdbcTemplate.update("INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_at, project_id) "
-                + "VALUES (?, 300000, now(), 'project_main')", userMain);
-        jdbcTemplate.update("INSERT INTO staff_base_salaries (user_id, monthly_salary_cent, updated_at, project_id) "
-                + "VALUES (?, 700000, now(), 'prj_other')", userOther);
-
-        // (1) project_main 口径月结:只生成本项目员工薪资单。
-        int mainCount = repository.closePayrollMonth(month, "usr_admin", Instant.now(), "project_main");
-        assertThat(statementTotal(month, userMain)).isEqualTo(300000L);
-        assertThat(statementExists(month, userOther)).isFalse();
-        assertThat(mainCount).isEqualTo(1);
-
-        // (2) prj_other 已有薪资单(平台口径生成),再跑 project_main 口径不得覆盖它。
-        repository.closePayrollMonth(month, "usr_admin", Instant.now(), "prj_other");
-        assertThat(statementTotal(month, userOther)).isEqualTo(700000L);
-        // 篡改 prj_other 底薪后,只跑 project_main 口径月结 → prj_other 薪资单必须原封不动。
-        jdbcTemplate.update("UPDATE staff_base_salaries SET monthly_salary_cent = 999999 WHERE user_id = ?", userOther);
-        repository.closePayrollMonth(month, "usr_admin", Instant.now(), "project_main");
-        assertThat(statementTotal(month, userOther)).isEqualTo(700000L);   // 未被越权重算/覆盖
-
-        // (3) 平台口径(null)仍能全量重算(覆盖 prj_other 到最新)。
-        repository.closePayrollMonth(month, "usr_admin", Instant.now(), null);
-        assertThat(statementTotal(month, userOther)).isEqualTo(999999L);
+        String month="2099-09",userMain="usr_scope_main_"+key(),userOther="usr_scope_other_"+key();
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES('prj_other','complex','其他综合体','active',now(),now()) ON CONFLICT(id) DO NOTHING");
+        seedProfile("project_main",userMain);seedProfile("prj_other",userOther);
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,payrollJson,userMain,month,300000);
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,payrollJson,userOther,month,700000);
+        String hr="scope_hr_"+key(),role="scope_hr_role_"+key();
+        accessRepository.createUser(new com.complex.platform.access.AccessUser(hr,hr,"staff","project_main",null,"active",Instant.now()));
+        jdbcTemplate.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'工资范围回归','project','active',now())",role,role);
+        jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'staff.payroll.manage')",role);
+        accessRepository.assignUserRole(hr,role);
+        authenticateAsStaff(hr,null);
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,userMain,month,"monthly");
+        assertThat(statementTotal(month,userMain)).isEqualTo(300000L);
+        assertThat(statementExists(month,userOther)).isFalse();
+        assertThatThrownBy(()->PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,userOther,month,"monthly"))
+            .isInstanceOf(ApiException.class);
+        // 平台有范围的经办可办理另一原件；任何范围都不能覆盖已定格工资。
+        authenticateAsPlatformAdmin();
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,userOther,month,"monthly");
+        assertThat(statementTotal(month,userOther)).isEqualTo(700000L);
+        assertThatThrownBy(()->PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,userOther,month,"monthly"))
+            .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PAYROLL_ALREADY_LOCKED"));
+        authenticateAsStaff(hr,null);
+        var visible=service.listPayroll(month,1,1);
+        assertThat(visible.total()).isEqualTo(1);
+        assertThat(visible.items()).extracting(StaffPayrollStatementRecord::userId).containsExactly(userMain);
+        assertThat(service.listPayroll(month,2,1).items()).isEmpty();
+        assertThat(statementTotal(month,userOther)).isEqualTo(700000L);
     }
 
     private void seedProfile(String projectId, String userId) {
@@ -855,9 +1014,9 @@ class StaffJdbcIntegrationTests {
 
         // 为 A/B 各定格一张薪资单 + 各排今天一个班次(走服务方法,避免硬钉表列)。
         String month = "2099-11";
-        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(key(), userA, 111000L));
-        service.setBaseSalary(new com.complex.platform.access.staff.dto.StaffPayrollBaseRequest(key(), userB, 222000L));
-        service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,payrollJson,userA,month,111000);
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate,payrollJson,userB,month,222000);
+        for(String employee:List.of(userA,userB))PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate,payrollJson,payroll,employee,month,"monthly");
         Instant now = Instant.now();
         java.time.LocalDate today = java.time.LocalDate.ofInstant(now, com.complex.platform.common.LocalZone.ID);
         seedPublishedShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -93,7 +93,7 @@ public class AmusementService {
         this.entitlementGateway = entitlementGateway;
         this.safetyRepository = safetyRepository;
         this.riskAlertService = riskAlertService;
-        this.bookingService = new AmusementBookingService(repository, idempotencyService, auditEventService, authorizationService);
+        this.bookingService = new AmusementBookingService(repository, idempotencyService, auditEventService, authorizationService, () -> sessionLifecycle);
         this.inspectionService = new AmusementInspectionService(repository, idempotencyService, auditEventService, authorizationService);
         this.maintenanceService = new AmusementMaintenanceService(repository, idempotencyService, auditEventService, authorizationService);
     }

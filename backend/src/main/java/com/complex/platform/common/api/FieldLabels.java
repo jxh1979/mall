@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -557,6 +557,27 @@ public final class FieldLabels {
         p("error_code", "错误码");
         p("error_message", "错误信息");
         p("account_id", "账户编号");
+        // ── 第六批：工资完整模型 / 酒吧服务收入 / 个税 ───────────────────
+        p("month", "月份");
+        p("scheme_version_id", "薪资方案版本");
+        p("calendar_version_id", "工资日历版本");
+        p("facts_id", "计薪依据");
+        p("calculation_id", "工资计算单");
+        p("tax_assessment_id", "个税核定");
+        p("origin_event_id", "原始事件");
+        p("component_code", "薪资项目编码");
+        p("payment_basis", "发放依据");
+        p("source_basis", "来源依据");
+        p("evidence_basis", "凭证依据");
+        p("approval_basis", "审批依据");
+        p("a_condition", "A档条件");
+        p("deduction_rule_review_id", "扣分规则审批单");
+        p("professional_calculation_reference", "专业计算参考");
+        p("owner_company_id", "经营主体");
+        p("payer_company_id", "发薪主体");
+        p("platform_company_id", "平台公司");
+        p("next_user_id", "接手人员");
+        p("target_service_staff_id", "目标服务人员");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

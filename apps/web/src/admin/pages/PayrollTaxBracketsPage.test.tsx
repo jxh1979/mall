@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PayrollTaxBracketsPage } from "./PayrollTaxBracketsPage";
@@ -25,12 +25,12 @@ describe("完整税表和真实认定后台", () => {
     expect(screen.queryByTestId("payroll-tax-brackets-guided")).toBeNull();
   });
   it("缺维护授权时不能新建税表或认定", async () => {
-    setup([], false); await screen.findByText("既有服务收入的专业税务认定");
+    setup([], false); await screen.findByText("工资及服务收入的专业税务认定");
     const button = screen.queryByTestId("payroll-tax-brackets-create-open");
     expect(button === null || (button as HTMLButtonElement).disabled).toBe(true);
   });
   it("查询认定按员工和月份，并以专业事实创建，不接收手填税额", async () => {
-    const { get, post } = setup(); await screen.findByText("既有服务收入的专业税务认定");
+    const { get, post } = setup(); await screen.findByText("工资及服务收入的专业税务认定");
     fill("员工账号", "employee"); fill("工资月份", "2099-07");
     fireEvent.click(screen.getByRole("button", { name: "查询认定历史" }));
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/staff/payroll/tax-assessments?user_id=employee&month=2099-07"));

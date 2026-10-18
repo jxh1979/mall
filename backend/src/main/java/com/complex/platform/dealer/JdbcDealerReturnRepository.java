@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -95,7 +95,7 @@ public class JdbcDealerReturnRepository {
                     quarantined_quantity, unit_price_cent, accepted_amount_cent, inspection_note, source_receipt_line_id)
                 VALUES (:id, :ret, :order_line, :item, :spec, :req, :acc, :resalable, :quarantined, :price, :amount, :note, :receipt)
                 ON CONFLICT (id) DO UPDATE SET accepted_quantity = EXCLUDED.accepted_quantity, resalable_quantity = EXCLUDED.resalable_quantity,
-                    quarantined_quantity = EXCLUDED.quarantined_quantity, accepted_amount_cent = EXCLUDED.accepted_amount_cent, inspection_note = EXCLUDED.inspection_note
+                    quarantined_quantity = EXCLUDED.quarantined_quantity, unit_price_cent = EXCLUDED.unit_price_cent, accepted_amount_cent = EXCLUDED.accepted_amount_cent, inspection_note = EXCLUDED.inspection_note
                 """, new MapSqlParameterSource().addValue("id", l.id()).addValue("ret", l.returnId()).addValue("order_line", l.orderLineId()).addValue("item", l.itemId())
                 .addValue("spec", l.spec()).addValue("req", l.requestedQuantity()).addValue("acc", l.acceptedQuantity()).addValue("resalable", l.resalableQuantity())
                 .addValue("quarantined", l.quarantinedQuantity()).addValue("price", l.unitPriceCent()).addValue("amount", l.acceptedAmountCent()).addValue("note", l.inspectionNote()).addValue("receipt",l.sourceReceiptLineId()));
@@ -136,15 +136,20 @@ public class JdbcDealerReturnRepository {
                 """,Map.of("order",orderId),(r,n)->new ReturnSource(r.getString(1),r.getString(2),r.getString(3),r.getInt(4)));
     }
 
-    public boolean hasDiscountedRetainedGoods(String receiptLineId) {
-        return Boolean.TRUE.equals(jdbc.queryForObject("""
-                SELECT EXISTS (
-                 SELECT 1 FROM dealer_delivery_resolutions s
-                 JOIN dealer_delivery_discrepancies d ON d.id=s.discrepancy_id
-                 WHERE d.receipt_line_id=:receipt AND s.status='completed'
-                  AND s.resolution_type='price_adjustment' AND s.physical_route='accepted_as_is'
-                  AND s.adjustment_cent>0)
-                """,new MapSqlParameterSource("receipt",receiptLineId),Boolean.class));
+    /** 2026-10-18 裁决补充第 5 条（经销 D03）：签收行净额事实——实收件数（合格签收＋已完成减价留用）、留用减价合计、其他退货单已验收退回件数。 */
+    public record ReceiptLineNet(int receivedQuantity,long discountCent,int returnedQuantity) {}
+    public ReceiptLineNet receiptLineNet(String receiptLineId,String excludeReturnId) {
+        return jdbc.queryForObject("""
+                SELECT rl.accepted_quantity+COALESCE(a.qty,0),COALESCE(a.discount,0),COALESCE((
+                  SELECT SUM(l.accepted_quantity) FROM dealer_return_lines l JOIN dealer_returns dr ON dr.id=l.return_id
+                  WHERE l.source_receipt_line_id=rl.id AND l.return_id<>:exclude AND dr.status<>'rejected'),0)
+                FROM dealer_delivery_receipt_lines rl LEFT JOIN (
+                  SELECT d.receipt_line_id,SUM(s.quantity) qty,SUM(s.adjustment_cent) discount FROM dealer_delivery_resolutions s
+                  JOIN dealer_delivery_discrepancies d ON d.id=s.discrepancy_id
+                  WHERE s.status='completed' AND s.resolution_type='price_adjustment' AND s.physical_route='accepted_as_is' GROUP BY d.receipt_line_id
+                ) a ON a.receipt_line_id=rl.id WHERE rl.id=:receipt
+                """,new MapSqlParameterSource("receipt",receiptLineId).addValue("exclude",excludeReturnId),
+                (r,n)->new ReceiptLineNet(r.getInt(1),r.getLong(2),r.getInt(3)));
     }
 
     // ── 发票 ──

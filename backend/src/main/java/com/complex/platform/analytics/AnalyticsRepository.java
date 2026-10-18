@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -354,13 +354,12 @@ public interface AnalyticsRepository {
      */
     BigDecimal sumTicketRefundCents(LocalDate businessDate, String windowDomain);
 
-    /** Σ bar_bill_settlements.settlement_amount_cent——酒吧收入；返回 merchantId(可 null) -> 金额。 */
+    /** 酒吧已确认商品收入 + 原经营日最新服务费扣留；代收小费、员工应发及待确认金额不计。 */
     Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain);
 
     /**
-     * 待确认#2：Σ bar_bill_adjustments.amount_cent（adjustment_type='refund'）——酒吧结账后退款；
-     * 按 refunded_at 落经营日窗口，返回 merchantId(可 null) -> 退款金额。退款冲减 net（revenue.bar 不被改写，
-     * 单列 revenue.bar_refund 展示并由净收入派生时扣减）；免单 waiver 不计入（已体现在更低结算实收）。
+     * 酒吧实际退成的商品分项，按应付实际足额付款时点落窗；未核实分项不当成全部商品。
+     * 服务费退款影响原经营日的月结扣留，不再把服务费或小费现金退款重复冲减商品收入。
      */
     Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain);
 
@@ -368,7 +367,7 @@ public interface AnalyticsRepository {
      * 待确认项#1：通票售票收入的"业态拆分展示口径"——按 issued_entitlements.allocated_revenue_cent
      * 汇总当日发放的、业态映射到酒吧的权益分配收入；返回 merchantId(可 null) -> 金额。
      * 仅作展示（revenue.ticket_bar_share），不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，
-     * revenue.bar 仍仅取 bar_bill_settlements 现场消费实收，二者口径区分，避免重复计净收入。
+     * revenue.bar 仅取已确认商品收入及服务费扣留，不含通票售票分摊。
      */
     Map<String, BigDecimal> sumTicketBarShareCentsByMerchant(LocalDate businessDate, String windowDomain);
 
@@ -508,7 +507,7 @@ public interface AnalyticsRepository {
 
     // ==== KPI 统一明细·第二批（酒吧域）====
 
-    /** revenue.bar 明细：已结算账单实收（经营日窗、剔除冲正），合计=Σsettlement_amount_cent（与 sumBarRevenueCentsByMerchant 同谓词）。 */
+    /** revenue.bar 明细：整单商品收入与原经营日服务费扣留；待确认行金额为空，合计只含已确认金额。 */
     default AnalyticsRecords.MetricDetailRows barSettlementRevenueDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
@@ -590,6 +589,12 @@ public interface AnalyticsRepository {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 
+    /** 工资明细与汇总必须按附加工资查看权限在分页前过滤；null 仅表示已有授权的全量。 */
+    default AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset,
+            java.util.Collection<String> projectScope, java.util.Set<String> payrollItemIds) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
     /** finance.ar_balance_aging90p 明细：应收逾期90天以上余额（as-of），应收谓词 + 逾期天数>90。 */
     /** finance.ar_balance_aging90p 明细（平台口径便捷重载=空项目作用域）。 */
     default AnalyticsRecords.MetricDetailRows arOverdueAging90pDetail(LocalDate asOf, int limit, int offset) {
@@ -634,6 +639,12 @@ public interface AnalyticsRepository {
         return staffPayrollDetail(from, to, sumTotal, limit, offset, null);
     }
     default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset, java.util.Collection<String> projectScope) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** 工资指标按已核项目、发薪主体及商户范围过滤后分页和汇总。 */
+    default AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit,
+            int offset, java.util.Collection<String> projectScope, java.util.Collection<String> statementIds) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 

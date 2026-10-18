@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.21
+// 文件版本：V0.26
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -43,6 +43,8 @@ import static com.complex.platform.common.Strings.requireText;
  */
 @Service
 public class StaffService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<StaffPayrollService> completePayroll;
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -77,6 +79,8 @@ public class StaffService {
     private StaffRegistrationService registrations;
     @org.springframework.beans.factory.annotation.Autowired
     private com.complex.platform.governance.PlatformRepository platformRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.context.ApplicationEventPublisher events;
 
     @org.springframework.beans.factory.annotation.Autowired
     public StaffService(
@@ -1432,7 +1436,7 @@ public class StaffService {
             throw ApiException.conflict("FINANCE_LEDGER_UNAVAILABLE", "应收应付台账未接入，不得月结");
         }
         java.time.YearMonth yearMonth = java.time.YearMonth.parse(month);
-        java.time.LocalDate dueDate = nextInternalPayDayAfter(yearMonth.atEndOfMonth());
+        java.time.LocalDate dueDate = nextInternalPayDayAfter(repository.internalSettlementPayDays(), yearMonth.atEndOfMonth());
         String actor = actorIdOrSystem(authorizationService.currentActor());
         java.time.Instant now = java.time.Instant.now();
         int created = 0;
@@ -1467,9 +1471,8 @@ public class StaffService {
         return created;
     }
 
-    /** 指定日期之后的第一个付账日（三个付账日取现有结算配置；某付账日大于当月天数时以该月月末为准）。 */
-    java.time.LocalDate nextInternalPayDayAfter(java.time.LocalDate date) {
-        int[] days = repository.internalSettlementPayDays();
+    /** 指定日期之后的第一个付账日（days 为三个付账日配置；某付账日大于当月天数时以该月月末为准）。酒吧报酬月结拨付同用。 */
+    public static java.time.LocalDate nextInternalPayDayAfter(int[] days, java.time.LocalDate date) {
         java.time.LocalDate cursor = date.plusDays(1);
         for (int i = 0; i < 70; i++, cursor = cursor.plusDays(1)) {
             int dayOfMonth = cursor.getDayOfMonth();
@@ -1552,12 +1555,7 @@ public class StaffService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写用户与非负的月薪金额");
             }
             requireUserInScope(request.userId().trim());
-            var actor = authorizationService.currentActor();
-            repository.upsertBaseSalary(request.userId().trim(), request.monthlySalaryCent(),
-                    actor == null ? null : actor.id(), Instant.now());
-            auditEventService.recordSuccess("staff.payroll.base_saved", "staff.payroll.manage",
-                    "staff_base_salary", request.userId().trim(), null, request.idempotencyKey(),
-                    java.util.Map.of("monthly_salary_cent", request.monthlySalaryCent()));
+            throw ApiException.conflict("PAYROLL_SCHEME_REQUIRED","基础工资须通过完整薪资方案及原人事、财务审批后生效");
         } catch (RuntimeException exception) {
             // openapi-p0 契约:失败路径落 x-audit-event-failure 事件后再抛(审计闭合)。
             auditEventService.recordFailure("staff.payroll.base_save_failed", "staff.payroll.manage",
@@ -1704,7 +1702,7 @@ public class StaffService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
             }
             var actor = authorizationService.currentActor();
-            payrollTaxes.prepareMonth(request.month(), projectScope(), staffMerchantScope(), staffCompanyScope());
+            // 旧批量入口保留失败审计；repository 禁止缺少完整原件的裸结薪。
             int count = repository.closePayrollMonth(request.month(), actor == null ? null : actor.id(), Instant.now(), projectScope(), staffMerchantScope(), staffCompanyScope());
             auditEventService.recordSuccess("staff.payroll.month_closed", "staff.payroll.manage",
                     "staff_payroll_statement", request.month(), null, request.idempotencyKey(),
@@ -1739,32 +1737,13 @@ public class StaffService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份（YYYY-MM）与用户");
             }
             requireUserInScope(request.userId().trim());
-            return idempotencyService.execute("markStaffPayrollPaid",
-                    request.idempotencyKey(), request,
-                    () -> doMarkPayrollPaid(request), java.util.Map.class);
+            throw ApiException.conflict("PAYROLL_FINANCE_RESULT_REQUIRED","请从财务工资支付入口登记并核实实际银行成功结果");
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("staff.payroll.pay_failed", "staff.payroll.manage",
                     "staff_payroll_payout", request == null ? null : request.userId(), null,
                     request == null ? null : request.idempotencyKey(), codeOf(exception));
             throw exception;
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private java.util.Map<String, Object> doMarkPayrollPaid(
-            com.complex.platform.access.staff.dto.StaffPayrollPayRequest request) {
-        var actor = authorizationService.currentActor();
-        int paid = repository.markPayrollPaid("payout_" + UUID.randomUUID(), request.userId().trim(),
-                request.month(), trimToNull(request.payMethod()), trimToNull(request.payRef()),
-                actor == null ? null : actor.id(), Instant.now());
-        if (paid == 0) {
-            throw ApiException.conflict("PAYROLL_NOT_PAYABLE",
-                    "该用户该月没有可发放的已结账薪资单（已发放或尚未结账）");
-        }
-        auditEventService.recordSuccess("staff.payroll.paid", "staff.payroll.manage",
-                "staff_payroll_payout", request.userId().trim(), null, request.idempotencyKey(),
-                java.util.Map.of("user_id", request.userId().trim(), "month", request.month()));
-        return java.util.Map.of("user_id", request.userId().trim(), "month", request.month(), "paid", paid);
     }
 
     /** 原单档税表仅作历史只读，当前计算改用已批准的完整版本与认定。 */
@@ -1804,7 +1783,7 @@ public class StaffService {
 
     public PageResponse<StaffPayrollStatementRecord> listPayroll(String month, int page, int size) {
         authorizationService.requirePermission("staff.payroll.manage");
-        return repository.listPayrollStatementsPaged(month, null, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
+        return repository.listPayrollStatementsVisible(month,null,completePayroll.getObject().visibleStatementIds(),page,size);
     }
 
     /** F批(拍板:月结后才可见):员工查自己薪资——只返回已定格薪资单,未结月自然为空。 */
@@ -1889,6 +1868,93 @@ public class StaffService {
             return saved;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("staff.leave.review_failed", "staff.shift.manage",
+                    "staff_leave_request", id, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /** 2026-10-18 操作员裁决：销假改为「本人申请＋主管批准」。员工本人对自己已批准的请假发起销假申请（理由必填）→「待销假审批」；
+     * 主管批准前假仍有效（考勤仍记请假、事假仍参与扣薪）。只能对本人的假申请；重复提交按幂等键重放首次结果。 */
+    public StaffLeaveRequestRecord requestLeaveRevoke(String id,
+            com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest request) {
+        try {
+            authorizationService.requirePermission("staff.leave.submit");
+            return idempotencyService.execute("requestStaffLeaveRevoke:" + id,
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doRequestLeaveRevoke(id, request), StaffLeaveRequestRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.leave.revoke_request_failed", "staff.leave.submit",
+                    "staff_leave_request", id, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private StaffLeaveRequestRecord doRequestLeaveRevoke(String id,
+            com.complex.platform.access.staff.dto.StaffLeaveRevokeRequest request) {
+        if (request == null || request.reason() == null || request.reason().isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "申请销假必须填写理由");
+        }
+        StaffLeaveRequestRecord current = repository.findLeaveById(id)
+                .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
+        var actor = authorizationService.currentActor();
+        if (actor == null || !actor.id().equals(current.userId())) {
+            throw ApiException.forbidden("PERMISSION_DENIED", "只能对本人的请假申请销假");
+        }
+        if (!"approved".equals(current.status())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "只有已批准的请假才能申请销假");
+        }
+        StaffLeaveRequestRecord saved = repository.markLeaveRevokeRequested(current.id(), actor.id(),
+                request.reason().trim(), Instant.now());
+        auditEventService.recordSuccess("staff.leave.revoke_requested", "staff.leave.submit",
+                "staff_leave_request", saved.id(), null, request.idempotencyKey(),
+                java.util.Map.of("user_id", saved.userId(), "leave_type", saved.leaveType()));
+        return saved;
+    }
+
+    /** 2026-10-18 操作员裁决：销假审批——有排班管理权的主管对员工本人的销假申请（待销假审批）批准或驳回；未经本人申请的假不得直接销。
+     * 批准即生效（BSM L1481）：原请假单转「已销假」，审批人与审批意见不变，另记批准人/时间/说明（revoked_by / revoked_at / revoke_reason）；
+     * 已月结定格的月份不回改，由工资补差在当期薪资单冲正并注明来源。驳回则回到「已批准」、假仍有效。 */
+    @org.springframework.transaction.annotation.Transactional
+    public StaffLeaveRequestRecord revokeLeave(String id,
+            com.complex.platform.access.staff.dto.StaffLeaveReviewRequest request) {
+        try {
+            authorizationService.requirePermission("staff.shift.manage");
+            if (request == null || request.decision() == null
+                    || !java.util.Set.of("approve", "reject").contains(request.decision())) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "销假审批结论必须为批准或驳回");
+            }
+            StaffLeaveRequestRecord current = repository.findLeaveById(id)
+                    .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
+            requireUserInScope(current.userId());
+            if (!"revoke_requested".equals(current.status())) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "只有员工本人已申请销假（待销假审批）的请假才能办理");
+            }
+            var actor = authorizationService.currentActor();
+            StaffLeaveRequestRecord saved;
+            if ("approve".equals(request.decision())) {
+                // 与工资定格/补差同一把员工锁（staff-payroll:<user>）：先取锁再改单、再查已定格月份，
+                // 并发定格不会漏看销假、销假也不会漏看定格（否则事假已销而工资照扣且永不补差）。
+                repository.lockPayrollEmployee(current.userId());
+                saved = repository.markLeaveRevoked(current.id(),
+                        actor == null ? null : actor.id(), request.reviewNote(), Instant.now());
+                // 事假已计入定格工资的月份：发补差事件，按锁定快照在当期薪资单冲正并注明来源，不回改原单。
+                if ("personal".equals(saved.leaveType())) {
+                    for (String month : repository.lockedPayrollMonthsUsingLeave(saved.userId(), saved.id())) {
+                        events.publishEvent(new StaffPayrollService.CorrectionRequested(
+                                saved.userId(), month, saved.id() + ":" + month, saved.id(), "leave_revoked"));
+                    }
+                }
+            } else {
+                saved = repository.markLeaveRevokeRejected(current.id(), Instant.now());
+            }
+            auditEventService.recordSuccess("staff.leave.revoke_reviewed", "staff.shift.manage",
+                    "staff_leave_request", saved.id(), null, request.idempotencyKey(),
+                    java.util.Map.of("decision", request.decision(), "user_id", saved.userId(), "leave_type", saved.leaveType()));
+            return saved;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.leave.revoke_review_failed", "staff.shift.manage",
                     "staff_leave_request", id, null,
                     request == null ? null : request.idempotencyKey(), codeOf(exception));
             throw exception;

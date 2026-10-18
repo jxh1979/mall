@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -569,30 +569,50 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return value == null ? BigDecimal.ZERO : value;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.bar.BarRevenueSourceService barRevenueSources;
+
+    private List<String> barRevenueMerchants() {
+        return jdbcTemplate.queryForList("SELECT DISTINCT merchant_id FROM bar_bills WHERE merchant_id IS NOT NULL ORDER BY merchant_id",
+                new MapSqlParameterSource(), String.class);
+    }
+
     @Override
     public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
-        return keyTotals("""
-                SELECT merchant_id, COALESCE(SUM(settlement_amount_cent), 0) AS total
-                  FROM bar_bill_settlements
-                 WHERE settled_at >= :start
-                   AND settled_at < :end
-                   AND reversed = FALSE
-                 GROUP BY merchant_id
-                """, dayRange(windowDomain, businessDate));
+        Instant from = businessDayResolver.startInstant(windowDomain, businessDate);
+        Instant to = businessDayResolver.endInstant(windowDomain, businessDate);
+        Map<String, BigDecimal> totals = new LinkedHashMap<>();
+        for (String merchant : barRevenueMerchants()) {
+            long amount = 0L;
+            var collections = barRevenueSources.completedCollections(merchant, from, to);
+            var withheld = barRevenueSources.withheldServiceFees(merchant, businessDate, businessDate.plusDays(1));
+            if (collections.isEmpty() && withheld.isEmpty()) continue;
+            for (var row : collections) {
+                if (row.goodsRevenueCent() != null) amount = Math.addExact(amount, row.goodsRevenueCent());
+            }
+            for (var row : withheld) {
+                if (row.amountCent() != null) amount = Math.addExact(amount, row.amountCent());
+            }
+            totals.put(merchant, BigDecimal.valueOf(amount));
+        }
+        return totals;
     }
 
     @Override
     public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain) {
-        // 待确认#2：酒吧结账后退款（adjustment_type='refund'）按 refunded_at 落经营日窗口，经 bar_bills 取 merchant_id。
-        return keyTotals("""
-                SELECT b.merchant_id AS merchant_id, COALESCE(SUM(a.amount_cent), 0) AS total
-                  FROM bar_bill_adjustments a
-                  JOIN bar_bills b ON b.id = a.bill_id
-                 WHERE a.adjustment_type = 'refund'
-                   AND a.refunded_at >= :start
-                   AND a.refunded_at < :end
-                 GROUP BY b.merchant_id
-                """, dayRange(windowDomain, businessDate));
+        Instant from = businessDayResolver.startInstant(windowDomain, businessDate);
+        Instant to = businessDayResolver.endInstant(windowDomain, businessDate);
+        Map<String, BigDecimal> totals = new LinkedHashMap<>();
+        for (String merchant : barRevenueMerchants()) {
+            long amount = 0L;
+            var refunds = barRevenueSources.completedGoodsRefunds(merchant, from, to);
+            if (refunds.isEmpty()) continue;
+            for (var row : refunds) {
+                if (row.amountCent() != null) amount = Math.addExact(amount, row.amountCent());
+            }
+            totals.put(merchant, BigDecimal.valueOf(amount));
+        }
+        return totals;
     }
 
     @Override
@@ -2282,33 +2302,41 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public AnalyticsRecords.MetricDetailRows barSettlementRevenueDetail(Instant start, Instant end, int limit, int offset) {
-        // 与看板 ETL revenue.bar（sumBarRevenueCentsByMerchant）同谓词：结算时间落窗、剔除已冲正。
-        MapSqlParameterSource params = pagedRangeParams(start, end, limit, offset);
-        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
-                SELECT id, bill_id, merchant_id, settle_channel, settlement_amount_cent, settled_at
-                  FROM bar_bill_settlements
-                 WHERE reversed = FALSE
-                   AND settled_at >= :start
-                   AND settled_at < :end
-                 ORDER BY settled_at DESC, id
-                 LIMIT :limit OFFSET :offset
-                """, params, (rs, n) -> {
-            java.util.Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", rs.getString("id"));
-            row.put("billId", rs.getString("bill_id"));
-            row.put("merchantId", rs.getString("merchant_id"));
-            row.put("settleChannel", rs.getString("settle_channel"));
-            row.put("settlementAmountCent", rs.getLong("settlement_amount_cent"));
-            row.put("settledAt", instant(rs, "settled_at"));
-            return row;
-        });
-        return metricDetailRows(rows, jdbcTemplate.queryForMap("""
-                SELECT COUNT(*) AS total_rows, COALESCE(SUM(settlement_amount_cent), 0) AS summary
-                  FROM bar_bill_settlements
-                 WHERE reversed = FALSE
-                   AND settled_at >= :start
-                   AND settled_at < :end
-                """, params));
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        LocalDate fromDate = businessDayResolver.businessDate("bar", start);
+        LocalDate toDate = businessDayResolver.businessDate("bar", end.minusNanos(1)).plusDays(1);
+        for (String merchant : barRevenueMerchants()) {
+            for (var source : barRevenueSources.completedCollections(merchant, start, end)) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", source.billId());
+                row.put("billId", source.billId());
+                row.put("merchantId", merchant);
+                row.put("sourceType", "整单商品收入");
+                row.put("settlementAmountCent", source.goodsRevenueCent());
+                row.put("collectedAmountCent", source.collectedCent());
+                row.put("serviceFeeCent", source.serviceFeeCent());
+                row.put("tipCent", source.tipCent());
+                row.put("statusLabel", "confirmed".equals(source.status()) ? "已确认" : "待确认");
+                row.put("unresolvedSources", String.join("；", source.unresolvedSources()));
+                row.put("settledAt", source.completedAt());
+                rows.add(row);
+            }
+            for (var source : barRevenueSources.withheldServiceFees(merchant, fromDate, toDate)) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", source.runId() == null ? "待结:" + source.sourceBillId() : source.runId());
+                row.put("billId", source.sourceBillId());
+                row.put("merchantId", merchant);
+                row.put("sourceType", "月结服务费扣留");
+                row.put("settlementAmountCent", source.amountCent());
+                row.put("businessDate", source.businessDate());
+                row.put("statusLabel", "confirmed".equals(source.status()) ? "已确认" : "待月结");
+                row.put("unresolvedSources", String.join("；", source.unresolvedSources()));
+                rows.add(row);
+            }
+        }
+        BigDecimal summary = rows.stream().map(row -> (Long) row.get("settlementAmountCent"))
+                .filter(java.util.Objects::nonNull).map(BigDecimal::valueOf).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new AnalyticsRecords.MetricDetailRows(rows.stream().skip(offset).limit(limit).toList(), rows.size(), summary);
     }
 
     @Override
@@ -2563,11 +2591,19 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset, java.util.Collection<String> projectScope) {
+        return apOpenPayableDetail(asOf, limit, offset, projectScope, null);
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows apOpenPayableDetail(LocalDate asOf, int limit, int offset,
+            java.util.Collection<String> projectScope, java.util.Set<String> payrollItemIds) {
         if (projectScope != null && projectScope.isEmpty()) {
             return new AnalyticsRecords.MetricDetailRows(List.of(), 0, BigDecimal.ZERO);
         }
         // 应付镜像：与 arOpenReceivableDetail 同结构，方向取 payable（as-of=to，起始日不参与）。scope 非 null 按 project_id 落在集合内过滤。
-        MapSqlParameterSource params = withProjects(pagedParams(limit, offset).addValue("as_of", asOf), projectScope);
+        MapSqlParameterSource params = withProjects(pagedParams(limit, offset).addValue("as_of", asOf), projectScope)
+                .addValue("all_payroll", payrollItemIds == null)
+                .addValue("payroll_ids", payrollItemIds == null || payrollItemIds.isEmpty() ? java.util.Set.of("__none__") : payrollItemIds);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, COALESCE(merchant_id, counterparty_id) AS merchant_key, source_type,
                        due_date, unpaid_amount_cent, status
@@ -2577,6 +2613,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
                    AND (:all_projects OR project_id IN (:project_ids))
+                   AND (source_type <> 'staff_payroll' OR :all_payroll OR id IN (:payroll_ids))
                  ORDER BY due_date, id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> arApBalanceRow(rs));
@@ -2588,6 +2625,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND unpaid_amount_cent > 0
                    AND due_date < :as_of
                    AND (:all_projects OR project_id IN (:project_ids))
+                   AND (source_type <> 'staff_payroll' OR :all_payroll OR id IN (:payroll_ids))
                 """, params));
     }
 
@@ -2883,6 +2921,12 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit, int offset, java.util.Collection<String> projectScope) {
+        return staffPayrollDetail(from, to, sumTotal, limit, offset, projectScope, null);
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows staffPayrollDetail(LocalDate from, LocalDate to, boolean sumTotal, int limit,
+            int offset, java.util.Collection<String> projectScope, java.util.Collection<String> statementIds) {
         if (projectScope != null && projectScope.isEmpty()) {
             return new AnalyticsRecords.MetricDetailRows(List.of(), 0, BigDecimal.ZERO);
         }
@@ -2894,12 +2938,15 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         MapSqlParameterSource params = withProjects(pagedParams(limit, offset)
                 .addValue("from_month", from.format(ym))
                 .addValue("to_month", to.format(ym)),
-                projectScope);
+                projectScope)
+                .addValue("all_statements", statementIds == null)
+                .addValue("statement_ids", statementIds == null || statementIds.isEmpty() ? java.util.List.of("__none__") : statementIds);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, user_id, month, base_cent, commission_cent, bonus_cent, penalty_cent, total_cent
                   FROM staff_payroll_statements
                  WHERE month >= :from_month AND month <= :to_month
                    AND (:all_projects OR project_id IN (:project_ids))
+                   AND (:all_statements OR id IN (:statement_ids))
                  ORDER BY month DESC, user_id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> staffPayrollRow(rs));
@@ -2909,6 +2956,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM staff_payroll_statements
                  WHERE month >= :from_month AND month <= :to_month
                    AND (:all_projects OR project_id IN (:project_ids))
+                   AND (:all_statements OR id IN (:statement_ids))
                 """.formatted(summaryExpr), params));
     }
 

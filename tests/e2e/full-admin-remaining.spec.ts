@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -53,6 +53,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-BAR-004", label: "销售提成", route: "/admin/bar/commissions" },
   { pageId: "ADM-BAR-005", label: "商品管理", route: "/admin/bar/products" },
   { pageId: "ADM-BAR-006", label: "套餐管理", route: "/admin/bar/combos" },
+  { pageId: "ADM-BAR-007", label: "酒吧小费与服务费", route: "/admin/bar/service-payroll" },
   { pageId: "ADM-AMU-001", label: "项目与场次", route: "/admin/amusement/sessions" },
   { pageId: "ADM-AMU-002", label: "团体/包场", route: "/admin/amusement/group-bookings" },
   { pageId: "ADM-AMU-003", label: "安全巡检/事故", route: "/admin/amusement/safety-incidents" },
@@ -142,6 +143,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("bar-products-page")).toBeVisible();
   } else if (spec.pageId === "ADM-BAR-006") {
     await expect(page.getByTestId("bar-combos-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-BAR-007") {
+    await expect(page.getByTestId("bar-payroll-page")).toBeVisible();
   } else if (spec.pageId === "ADM-INV-001") {
     await expect(page.getByTestId("inventory-ledger-page")).toBeVisible();
   } else if (spec.pageId === "ADM-INV-002") {
@@ -752,8 +755,8 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-BAR-004") {
         await expect(page.getByTestId("bar-commissions-evidence")).toContainText("/api/v1/bar/bills/{bill_id}/commissions/calculate");
-        await expect(page.getByTestId("bar-commissions-summary")).toContainText("15%");
-        await expect(page.getByTestId("bar-commissions-summary")).toContainText("10%");
+        await expect(page.getByTestId("bar-commissions-summary")).toContainText("按销售人员费率");
+        await expect(page.getByTestId("bar-commissions-summary")).toContainText("按非销售人员费率");
         await expect(page.getByTestId("bar-commissions-boundary")).toContainText("不含通票");
         const commissionsTable = page.getByTestId("bar-commissions-table");
         await expect(commissionsTable).toBeVisible();
@@ -775,7 +778,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("amusement-group-bookings-summary")).toContainText("团体");
         await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("Team A");
         await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("已通过");
-        await expect(page.getByTestId("amusement-group-bookings-boundary")).toContainText("容量占用");
+        await expect(page.getByTestId("amusement-group-bookings-boundary")).toContainText("预约人数不计入实际在场人数");
         continue;
       }
       if (spec.pageId === "ADM-INV-001") {
@@ -798,10 +801,17 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("terminal-capability-group-tablet")).toContainText("camera.scan");
         continue;
       }
+      if (spec.pageId === "ADM-BAR-007") {
+        await expect(page.getByTestId("bar-payroll-page")).toBeVisible();
+        await expect(page.getByRole("heading", { name: "酒吧小费与服务费" })).toBeVisible();
+        await expect(page.getByText("未结事项需继续处理，已核实的普通工资仍按期支付；本页确认分配不代表工资已到账。")).toBeVisible();
+        continue;
+      }
       if (spec.pageId === "ADM-TER-002") {
         // K16 设备商户归属工作台：台账表可见，含「所属商户」列与改绑入口。
         await expect(page.getByTestId("terminal-devices-table")).toBeVisible();
         await expect(page.getByTestId("terminal-devices-table")).toContainText("所属商户");
+        await expect(page.getByTestId("terminal-devices-table")).toContainText("WORK-001");
         await expect(page.getByTestId("terminal-devices-table")).toContainText("改绑商户");
         continue;
       }
@@ -919,11 +929,10 @@ test.describe("full admin remaining pages acceptance", () => {
       if (spec.pageId === "ADM-MER-002") {
         await expect(page.getByTestId("merchant-scope-evidence")).toContainText("/api/v1/merchant-service/work-orders");
         await expect(page.getByTestId("merchant-scope-evidence")).toContainText("/api/v1/merchant-billing/bills");
-        await expect(page.getByTestId("merchant-scope-summary")).toContainText("授权范围");
-        await expect(page.getByTestId("merchant-scope-work-orders-table")).toContainText("merchant-1:work-orders");
-        await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
-        await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("audit://merchant-scope/bill-1");
-        await expect(page.getByTestId("merchant-scope-boundary")).toContainText("不得访问平台治理");
+        // 平台测试账号无merchantId，当前页面必须明确拒绝商户数据读取。
+        await expect(page.getByTestId("global-error")).toContainText("当前账号缺少商户授权范围，无法展示任何商户数据，请联系管理员配置。");
+        await expect(page.getByTestId("merchant-scope-work-orders-table")).toHaveCount(0);
+        await expect(page.getByTestId("merchant-scope-bills-table")).toHaveCount(0);
         continue;
       }
       if (spec.pageId === "ADM-EVD-001") {

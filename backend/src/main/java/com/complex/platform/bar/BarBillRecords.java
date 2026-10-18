@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.bar.BarValidation.jsonText;
 import static com.complex.platform.bar.BarValidation.trimToDefault;
 
@@ -92,6 +94,13 @@ final class BarBillRecords {
                 bill.reopenCount() + 1,
                 bill.tipAmountCent()
         );
+    }
+
+    static BarBillRecord billWithTip(BarBillRecord b,long tip) {
+        return new BarBillRecord(b.id(),b.billNo(),b.orderId(),b.barId(),b.merchantId(),b.tableId(),b.reservationId(),
+            b.subtotalAmountCent(),b.discountAmountCent(),b.depositDeductAmountCent(),b.payableAmountCent(),b.paidAmountCent(),
+            b.currency(),b.paymentStatus(),b.settlementStatus(),b.salesStaffId(),b.salesRoleType(),b.createdAt(),b.updatedAt(),
+            b.reopened(),b.reopenedByUserId(),b.reopenedAt(),b.reopenReason(),b.reopenCount(),tip,b.paidAt());
     }
 
     static void requireBillMovable(BarBillRecord bill, String code) {

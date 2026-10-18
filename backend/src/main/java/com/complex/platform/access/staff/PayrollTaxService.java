@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AccessRepository;
@@ -114,8 +114,19 @@ public class PayrollTaxService {
 
     public List<PayrollTaxAssessment> assessments(String userId,String month) {
         try {
-            requireRead();requireMonth(month);var permissions=employeeReadPermissions(userId);
-            var rows=jdbc.query("SELECT * FROM payroll_tax_assessments WHERE user_id=? AND month=? ORDER BY created_at DESC,id DESC",this::assessmentRow,userId,month).stream().filter(row->permissions.stream().anyMatch(permission->recordInScope(row,permission))).toList();
+            requireRead();requireMonth(month);requireText(userId,"user_id");
+            var originals=jdbc.query("SELECT * FROM payroll_tax_assessments WHERE user_id=? AND month=? ORDER BY created_at DESC,id DESC",this::assessmentRow,userId,month);
+            var completePermissions=List.of(VIEW,MANAGE).stream().filter(auth::currentActorHasPermission).toList();
+            List<String> legacyPermissions=List.of();
+            if(originals.isEmpty()||originals.stream().anyMatch(row->row.payrollCalculationId()==null)) {
+                try {legacyPermissions=employeeReadPermissions(userId);}
+                catch(ApiException error) {
+                    if(originals.stream().noneMatch(row->row.payrollCalculationId()!=null)||!"STAFF_SCOPE_MISMATCH".equals(error.code()))throw error;
+                }
+            }
+            var currentEmployeePermissions=legacyPermissions;
+            var rows=originals.stream().filter(row->(row.payrollCalculationId()==null?currentEmployeePermissions:completePermissions)
+                .stream().anyMatch(permission->recordInScope(row,permission))).toList();
             success("assessments_viewed",ASSESSMENT,userId,null,Map.of("month",month,"count",rows.size()));return rows;
         }catch(RuntimeException e){failure("assessments_view_failed",ASSESSMENT,userId,e);throw e;}
     }
@@ -125,7 +136,9 @@ public class PayrollTaxService {
         try {
             auth.requirePermission(MANAGE);
             if(r==null || r.taxDate()==null)throw invalid("须填写专业认定的税务适用日期");
-            requireMonth(r.month());var profile=employee(requireText(r.userId(),"user_id"),MANAGE);
+            requireMonth(r.month());
+            if(r.payrollCalculationId()!=null)return draftCompletePayrollAssessment(r);
+            var profile=employee(requireText(r.userId(),"user_id"),MANAGE);
             requireText(r.category(),"category");requireText(r.identityBasis(),"identity_basis");
             requireText(r.transactionBasis(),"transaction_basis");requireText(r.professionalBasis(),"professional_basis");requireText(r.reason(),"reason");
             return idempotency.execute("payrollTaxAssessmentDraft",requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
@@ -144,10 +157,54 @@ public class PayrollTaxService {
         }catch(RuntimeException e){failure("assessment_draft_failed",ASSESSMENT,null,e);throw e;}
     }
 
+    private PayrollTaxAssessment draftCompletePayrollAssessment(PayrollTaxAssessment.DraftRequest r) {
+        var original=payrollCalculation(r.payrollCalculationId());
+        var actor=auth.currentActor();var reach=auth.projectReach(actor,MANAGE);
+        if(!reach.covers(original.projectId())||!reach.covers(original.payerCompanyId())
+                ||actor.merchantId()!=null&&!Objects.equals(actor.merchantId(),original.merchantId()))
+            throw ApiException.forbidden("STAFF_SCOPE_MISMATCH","无权认定该完整工资原件");
+        if(!original.userId().equals(r.userId())||!original.month().equals(r.month())||r.professionalTaxCent()==null
+                ||r.professionalTaxCent()<0||r.professionalTaxCent()>original.beforeTaxCent())
+            throw invalid("专业税额须对应本员工本期完整原件，且不得超过税前可发金额");
+        requireText(r.category(),"category");requireText(r.identityBasis(),"identity_basis");
+        requireText(r.transactionBasis(),"transaction_basis");requireText(r.professionalBasis(),"professional_basis");
+        requireText(r.reason(),"reason");requireText(r.professionalCalculationReference(),"professional_calculation_reference");
+        return idempotency.execute("payrollCompleteTaxDraft",requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
+            lockEmployee(original.userId(),original.month());var c=payrollCalculation(original.id());
+            if(!"calculated".equals(c.status()))throw invalid("工资已定格，不得改写原税额");
+            var v=effective(r.category(),r.taxDate());String id=id("pta");
+            var lines=List.of(new PayrollTaxAssessment.SourceLine(c.id(),c.id(),c.beforeTaxCent()));
+            var calculation=new PayrollTaxAssessment.Calculation(v.id(),v.version(),v.category(),v.effectiveFrom(),
+                "professional_confirmed",r.professionalCalculationReference(),null,c.beforeTaxCent(),null,
+                null,null,r.professionalTaxCent());
+            jdbc.update("INSERT INTO payroll_tax_assessments(id,user_id,month,project_id,merchant_id,payer_company_id,category,tax_date,identity_basis,transaction_basis,professional_basis,income_cent,source_lines,source_fingerprint,tax_version_id,tax_cent,calculation_snapshot,reason,status,created_by,created_at,payroll_calculation_id,professional_calculation_reference) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?::jsonb,?,?,?,?::jsonb,?,'draft',?,clock_timestamp(),?,?)",
+                id,c.userId(),c.month(),c.projectId(),c.merchantId(),c.payerCompanyId(),v.category(),r.taxDate(),
+                r.identityBasis(),r.transactionBasis(),r.professionalBasis(),c.beforeTaxCent(),encode(lines),
+                c.sourceFingerprint(),v.id(),r.professionalTaxCent(),encode(calculation),r.reason(),actor.id(),c.id(),r.professionalCalculationReference());
+            success("assessment_drafted",ASSESSMENT,id,r.idempotencyKey(),Map.of("payroll_calculation_id",c.id()));
+            return assessment(id,false);
+        },PayrollTaxAssessment.class);
+    }
+    private StaffPayrollModels.CalculationDraft payrollCalculation(String id) {
+        return jdbc.query("SELECT * FROM staff_payroll_calculation_drafts WHERE id=?",(r,n)->
+            new StaffPayrollModels.CalculationDraft(r.getString("id"),r.getString("user_id"),r.getString("month"),r.getString("statement_kind"),
+                r.getString("origin_event_id"),r.getString("scheme_version_id"),r.getString("facts_id"),r.getString("project_id"),
+                r.getString("merchant_id"),r.getString("payer_company_id"),r.getLong("before_tax_cent"),r.getString("source_fingerprint"),
+                decode(r.getString("calculation_snapshot"),Map.class),r.getString("status"),r.getTimestamp("created_at").toInstant()),id)
+            .stream().findFirst().orElseThrow(()->invalid("完整工资税前原件不存在"));
+    }
+
     @Transactional
     public PayrollTaxAssessment submitAssessment(String id,PayrollTaxVersion.SubmitRequest r) {
         try {
-            auth.requirePermission(MANAGE);requireSubmit(r);var original=assessment(id,false);employee(original.userId(),MANAGE);
+            auth.requirePermission(MANAGE);requireSubmit(r);var original=assessment(id,false);
+            if(original.payrollCalculationId()==null)employee(original.userId(),MANAGE);
+            else {
+                var actor=auth.currentActor();var reach=auth.projectReach(actor,MANAGE);
+                if(!reach.covers(original.projectId())||!reach.covers(original.payerCompanyId())
+                    ||actor.merchantId()!=null&&!Objects.equals(actor.merchantId(),original.merchantId()))
+                    throw ApiException.forbidden("STAFF_SCOPE_MISMATCH","无权处理原完整工资的税务认定");
+            }
             return idempotency.execute("payrollTaxAssessmentSubmit:"+id,r.idempotencyKey(),r,()->{
                 lockEmployee(original.userId(),original.month());var row=assessment(id,true);requireDraft(row.status());validateCurrent(row);
                 verifyEvidence(ASSESSMENT,id,r.evidenceAttachmentIds());
@@ -219,12 +276,18 @@ public class PayrollTaxService {
         var row=assessment(id,false);
         if(reading) {
             if(!currentReviewer(row.reviewId(),ASSESSMENT,id)) {
-                var permissions=employeeReadPermissions(row.userId());
+                var permissions=row.payrollCalculationId()==null?employeeReadPermissions(row.userId()):
+                    List.of(VIEW,MANAGE).stream().filter(auth::currentActorHasPermission).toList();
                 if(permissions.stream().noneMatch(permission->recordInScope(row,permission)))
                     throw ApiException.forbidden("STAFF_SCOPE_MISMATCH","无权处理原认定所属项目和商户的税务事实");
             }
-        } else {auth.requirePermission(MANAGE);requireDraft(row.status());employee(row.userId(),MANAGE);requireRecordScope(row,MANAGE);}
+        } else {
+            auth.requirePermission(MANAGE);requireDraft(row.status());
+            if(row.payrollCalculationId()==null)employee(row.userId(),MANAGE);
+            requireRecordScope(row,MANAGE);
+        }
         if(!auth.canReachProject(actor,row.projectId(),evidencePermission)
+                || (row.payrollCalculationId()!=null&&!auth.canReachProject(actor,row.payerCompanyId(),evidencePermission))
                 || (actor.merchantId()!=null && !Objects.equals(actor.merchantId(),row.merchantId())))
             throw ApiException.forbidden("TAX_EVIDENCE_SCOPE_MISMATCH","税务认定不在证据权限的实际项目和商户范围内");
         return row.merchantId();
@@ -233,6 +296,7 @@ public class PayrollTaxService {
     private boolean recordInScope(PayrollTaxAssessment row,String permission) {
         var actor=auth.currentActor();
         return auth.canReachProject(actor,row.projectId(),permission)
+                && (row.payrollCalculationId()==null || auth.canReachProject(actor,row.payerCompanyId(),permission))
                 && (actor.merchantId()==null || Objects.equals(actor.merchantId(),row.merchantId()));
     }
     private void requireRecordScope(PayrollTaxAssessment row,String permission) {
@@ -266,6 +330,16 @@ public class PayrollTaxService {
         return review;
     }
     private void validateCurrent(PayrollTaxAssessment a) {
+        if(a.payrollCalculationId()!=null) {
+            var c=payrollCalculation(a.payrollCalculationId());
+            if(!"calculated".equals(c.status())||!c.userId().equals(a.userId())||!c.sourceFingerprint().equals(a.sourceFingerprint())
+                    ||!Objects.equals(c.payerCompanyId(),a.payerCompanyId())||!Objects.equals(c.projectId(),a.projectId())
+                    ||!Objects.equals(c.merchantId(),a.merchantId())||c.beforeTaxCent()!=a.incomeCent())
+                throw ApiException.conflict("PAYROLL_TAX_SOURCE_CHANGED","完整工资税前原件已定格或与税务认定不一致");
+            if(!effective(a.category(),a.taxDate()).id().equals(a.taxVersionId()))
+                throw ApiException.conflict("TAX_VERSION_CHANGED","税目适用版本变化，请重新提交专业认定");
+            return;
+        }
         requireUnpaid(a.userId(),a.month());
         String locked=lockedAssessment(a.userId(),a.month());
         if(locked!=null && !locked.equals(a.id()))throw ApiException.conflict("PAYROLL_TAX_ASSESSMENT_LOCKED","工资已锁定另一税务认定，不能覆盖原单");
@@ -344,7 +418,7 @@ public class PayrollTaxService {
     private long total(List<PayrollTaxAssessment.SourceLine> lines){long sum=0;for(var l:lines)sum=Math.addExact(sum,l.amountCent());if(sum<0)throw invalid("收入不能为负数");return sum;}
     private String fingerprint(Object value){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(encode(value).getBytes(StandardCharsets.UTF_8)));}catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
     private void lock(String key){jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))",rs->{},"payroll-tax:"+key);}
-    void lockEmployee(String user,String month){lock(user+":"+month);}
+    void lockEmployee(String user,String month){jdbc.queryForList("SELECT pg_advisory_xact_lock(hashtextextended(?,0))","staff-payroll:"+user);lock(user+":"+month);}
 
     static List<PayrollTaxVersion.Bracket> validateBrackets(List<PayrollTaxVersion.Bracket> input) {
         if(input==null || input.isEmpty() || input.stream().anyMatch(Objects::isNull))throw invalid("须提供完整税表档位");
@@ -371,7 +445,7 @@ public class PayrollTaxService {
     PayrollTaxVersion version(String id,boolean lock){return jdbc.query("SELECT * FROM payroll_tax_versions WHERE id=?"+(lock?" FOR UPDATE":""),this::versionRow,id).stream().findFirst().orElseThrow(()->ApiException.notFound("TAX_VERSION_NOT_FOUND","税表版本不存在"));}
     PayrollTaxAssessment assessment(String id,boolean lock){return jdbc.query("SELECT * FROM payroll_tax_assessments WHERE id=?"+(lock?" FOR UPDATE":""),this::assessmentRow,id).stream().findFirst().orElseThrow(()->ApiException.notFound("TAX_ASSESSMENT_NOT_FOUND","税务认定不存在"));}
     private PayrollTaxVersion versionRow(ResultSet r,int n)throws SQLException{return new PayrollTaxVersion(r.getString("id"),r.getString("category"),r.getString("version"),r.getDate("effective_from").toLocalDate(),r.getString("applicability_basis"),r.getString("calculation_basis"),r.getString("rounding_rule"),list(r.getString("brackets"),PayrollTaxVersion.Bracket.class),r.getString("reason"),r.getString("status"),r.getString("review_id"),list(r.getString("evidence_attachment_ids"),String.class),r.getString("created_by"),instant(r,"created_at"),instant(r,"decided_at"));}
-    private PayrollTaxAssessment assessmentRow(ResultSet r,int n)throws SQLException{return new PayrollTaxAssessment(r.getString("id"),r.getString("user_id"),r.getString("month"),r.getString("project_id"),r.getString("merchant_id"),r.getString("payer_company_id"),r.getString("category"),r.getDate("tax_date").toLocalDate(),r.getString("identity_basis"),r.getString("transaction_basis"),r.getString("professional_basis"),r.getLong("income_cent"),list(r.getString("source_lines"),PayrollTaxAssessment.SourceLine.class),r.getString("source_fingerprint"),r.getString("tax_version_id"),r.getLong("tax_cent"),decode(r.getString("calculation_snapshot"),PayrollTaxAssessment.Calculation.class),r.getString("reason"),r.getString("status"),r.getString("review_id"),list(r.getString("evidence_attachment_ids"),String.class),r.getString("created_by"),instant(r,"created_at"),instant(r,"decided_at"));}
+    private PayrollTaxAssessment assessmentRow(ResultSet r,int n)throws SQLException{return new PayrollTaxAssessment(r.getString("id"),r.getString("user_id"),r.getString("month"),r.getString("project_id"),r.getString("merchant_id"),r.getString("payer_company_id"),r.getString("category"),r.getDate("tax_date").toLocalDate(),r.getString("identity_basis"),r.getString("transaction_basis"),r.getString("professional_basis"),r.getLong("income_cent"),list(r.getString("source_lines"),PayrollTaxAssessment.SourceLine.class),r.getString("source_fingerprint"),r.getString("tax_version_id"),r.getLong("tax_cent"),decode(r.getString("calculation_snapshot"),PayrollTaxAssessment.Calculation.class),r.getString("reason"),r.getString("status"),r.getString("review_id"),list(r.getString("evidence_attachment_ids"),String.class),r.getString("created_by"),instant(r,"created_at"),instant(r,"decided_at"),r.getString("payroll_calculation_id"),r.getString("professional_calculation_reference"));}
     private <T> List<T> list(String text,Class<T> type){try{return json.readValue(text,json.getTypeFactory().constructCollectionType(List.class,type));}catch(Exception e){throw new IllegalStateException("税务原件无法解析",e);}}
     private <T> T decode(String text,Class<T> type){try{return json.readValue(text,type);}catch(Exception e){throw new IllegalStateException("税务快照无法解析",e);}}
     private String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalStateException("税务原件无法保存",e);}}

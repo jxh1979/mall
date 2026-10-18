@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.06
+// 文件版本：V0.09
 
 import android.app.Activity
 import android.content.Intent
@@ -1096,31 +1096,23 @@ class MainActivity : Activity() {
   // ── F批(2026-07-02 拍板):我的薪资 / 考勤月视图 / 请假 ──
   private fun showMyPayroll() {
     val month = editText("月份(2026-06)")
-    val status = statusText("薪资单在人事「月结」后可见;固定工资+提成+激励-处罚-无薪假-个税=实发。")
+    val status = statusText("已定格工资可查看逐项计薪、工时和补差；应发净额与实际付款分别列示。")
     val detail = statusText("")
     val commissionDetail = statusText("")
     val queryButton = button("查询") {
       val m = month.text.toString().trim()
       if (!Regex("\\d{4}-\\d{2}").matches(m)) { status.text = "请输入月份如 2026-06"; return@button }
+      detail.text = ""; commissionDetail.text = ""; status.text = "读取已定格工资原件…"
       runBackground(
-        action = { api.listMyPayroll(m) },
+        action = { api.listMyPayroll(m).map { row -> api.myPayrollDetail(requireNotNull(row.id) { "工资单号缺失" }) } },
         onSuccess = { rows ->
           if (rows.isEmpty()) {
             status.text = "$m 尚未月结(人事月结后可见)或无记录"
             detail.text = ""
             commissionDetail.text = ""
           } else {
-            val r = rows.first()
-            status.text = "$m 薪资单(已定格)"
-            detail.text = buildString {
-              append("固定工资: ¥").append(yuan(r.baseCent)).append('\n')
-              append("提成合计: ¥").append(yuan(r.commissionCent)).append('\n')
-              append("激励奖金: ¥").append(yuan(r.bonusCent)).append('\n')
-              append("处罚扣款: -¥").append(yuan(r.penaltyCent)).append('\n')
-              append("无薪假(事假)扣款: -¥").append(yuan(r.leaveDeductionCent)).append('\n')
-              append("代扣个税: -¥").append(yuan(r.taxCent)).append('\n')
-              append("实发合计: ¥").append(yuan(r.totalCent))
-            }
+            status.text = "$m 共 ${rows.size} 张薪资单（已定格）"
+            detail.text = rows.joinToString("\n\n") { payrollDetailText(it) }
             commissionDetail.text = "提成明细加载中…"
             runBackground(
               action = { api.listMyPayrollCommissions(m) },
@@ -1135,9 +1127,49 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "我的薪资",
       children = listOf(status, month, queryButton, detail, commissionDetail,
-        backButton()),
+        button("我的绩效扣分与申诉") { showMyPerformanceAdjustments() }, backButton()),
       secure = true,
     ))
+  }
+
+  private fun showMyPerformanceAdjustments() {
+    val month = editText("月份(2026-10)")
+    val status = statusText("查看本人绩效扣分原件；对已批准且未冲回的扣分提出申诉。")
+    val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    fun load() {
+      val value = month.text.toString().trim()
+      if (!Regex("\\d{4}-\\d{2}").matches(value)) { status.text = "请填写有效工资月份"; return }
+      list.removeAllViews(); status.text = "读取本人绩效记录…"
+      runBackground(
+        action = { api.myPerformanceAdjustments(value) },
+        onSuccess = { rows ->
+          status.text = "共 ${rows.size} 条本人记录"
+          rows.forEach { row ->
+            list.addView(statusText("${row.id}\n规则：${row.ruleCode}；分值：${row.points}\n事由：${row.reason}\n状态：${payrollStatusLabel(row.status)}" + (row.reversalOf?.let { "\n申诉冲回原记录：$it" } ?: "")))
+            if (row.status == "approved" && row.reversalOf == null && rows.none { it.reversalOf == row.id }) {
+              val reason = editText("申诉事由")
+              val appealKey = java.util.UUID.randomUUID().toString()
+              var submitting = false
+              val appealButton = button("申诉 ${row.id}") {
+                val text = reason.text.toString().trim()
+                if (text.isBlank()) { status.text = "请填写申诉事由"; return@button }
+                if (submitting) return@button
+                submitting = true
+                reason.isEnabled = false
+                runBackground(
+                  action = { api.appealPerformance(row.id, text, appealKey) },
+                  onSuccess = { status.text = "已发起申诉，按直属共三级和人力审批"; load() },
+                  onError = { submitting = false; status.text = "申诉提交失败：${friendly(it)}；可重试原申请" },
+                )
+              }
+              list.addView(reason); list.addView(appealButton)
+            }
+          }
+        },
+        onError = { status.text = "查询失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(title = "我的绩效扣分与申诉", children = listOf(status, month, button("读取本人记录") { load() }, list, backButton()), secure = true))
   }
 
   private fun showAttendanceMonth() {
@@ -1178,18 +1210,34 @@ class MainActivity : Activity() {
     val start = editText("开始日期(2026-07-05)")
     val end = editText("结束日期(2026-07-06)")
     val reason = editText("事由")
-    val status = statusText("提交后由排班主管审批;通过的日子考勤记「请假」不算缺勤。")
-    val list = statusText("")
+    val status = statusText("提交后由排班主管审批;通过的日子考勤记「请假」不算缺勤。已通过的假可申请销假,主管批准后才生效。")
+    val list = rowsContainer()
+    // 2026-10-18 裁决:销假=本人申请＋主管批准。点选已通过的记录自动回填,填写理由后申请销假。
+    val revokeTarget = editText("要申请销假的请假(点上方已通过的记录自动回填)")
+    val revokeReason = editText("销假理由(必填)")
     val refresh = {
       runBackground(
         action = { api.listMyLeaves() },
         onSuccess = { rows ->
-          list.text = if (rows.isEmpty()) "暂无请假记录" else rows.joinToString("\n") { r ->
-            val st = when (r.status) { "pending" -> "待审"; "approved" -> "已通过"; "rejected" -> "已驳回"; else -> r.status ?: "-" }
-            "${r.startDate}~${r.endDate} ${r.leaveType?.let { typeLabel[it] ?: it } ?: "-"} [$st]" + (r.reviewNote?.let { " 批注:$it" } ?: "")
-          }
+          fillSelectableRows(
+            list,
+            rows.map { r ->
+              val st = leaveStatusLabel(r.status)
+              val text = "${r.startDate}~${r.endDate} ${r.leaveType?.let { typeLabel[it] ?: it } ?: "-"} [$st]" +
+                (r.reviewNote?.let { " 批注:$it" } ?: "") + (r.revokeRequestReason?.let { " 销假理由:$it" } ?: "")
+              text to {
+                if (r.status == "approved") {
+                  revokeTarget.setText(r.id ?: "")
+                  status.text = "已选请假:${r.startDate}~${r.endDate},填写理由后可申请销假"
+                } else {
+                  status.text = "只有已通过的请假才能申请销假(当前:$st)"
+                }
+              }
+            },
+            emptyText = "暂无请假记录",
+          )
         },
-        onError = { list.text = "请假记录拉取失败：${friendly(it)}" },
+        onError = { status.text = "请假记录拉取失败：${friendly(it)}" },
       )
     }
     val submitButton = button("提交请假") {
@@ -1211,11 +1259,24 @@ class MainActivity : Activity() {
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
     }
+    val revokeButton = button("申请销假") {
+      val id = revokeTarget.text.toString().trim()
+      val why = revokeReason.text.toString().trim()
+      if (id.isEmpty() || why.isEmpty()) {
+        status.text = "请先点选已通过的请假并填写销假理由"
+        return@button
+      }
+      runBackground(
+        action = { api.requestLeaveRevoke(id, why, "leave_revoke_${System.currentTimeMillis()}") },
+        onSuccess = { status.text = "已申请销假,等待主管批准"; refresh() },
+        onError = { status.text = "申请销假失败：${friendly(it)}" },
+      )
+    }
     refresh()
     setContentView(screen(
       title = "请假",
       children = listOf(status, fieldLabel("请假类型"), type, start, end, reason, submitButton, list,
-        backButton()),
+        revokeTarget, revokeReason, revokeButton, backButton()),
     ))
   }
 

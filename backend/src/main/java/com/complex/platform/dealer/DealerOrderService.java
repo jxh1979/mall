@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -608,9 +608,16 @@ public class DealerOrderService {
     @Transactional
     public DealerOrderRecord requestCancel(String orderId, DealerCancelRequest request) {
         authorization.requirePermission(MANAGE);
+        return requestCancel(orderId, request, MANAGE);
+    }
+
+    /** 门户 / 内部共用实现：调用方已完成权限与归属核验，permission 只用于审计留痕；内部另按锁定订单项目过滤。 */
+    DealerOrderRecord requestCancel(String orderId, DealerCancelRequest request, String permission) {
         try {
             requireOrder(orderId);
-            requireOrderProject(orderId, MANAGE);
+            if (MANAGE.equals(permission)) {
+                requireOrderProject(orderId, MANAGE);
+            }
             String reason = requireText(request == null ? null : request.reason(), "reason");
             return idempotency.execute("dealerOrderCancelRequest:" + orderId, request.idempotencyKey(), request, () -> {
                 DealerOrderRecord order = orders.lockOrder(orderId).orElseThrow();
@@ -626,11 +633,11 @@ public class DealerOrderService {
                         order.shippedBy(), order.shippedAt(), order.signedAt(), order.completedAt(), actorId(), reason.trim(), null, order.note(), order.createdBy(),
                         order.createdAt(), now);
                 orders.saveOrder(saved);
-                audit.recordSuccess("dealer.order.cancel_requested", MANAGE, "dealer_order", orderId, null, request.idempotencyKey(), meta("reason", reason.trim()));
+                audit.recordSuccess("dealer.order.cancel_requested", permission, "dealer_order", orderId, null, request.idempotencyKey(), meta("reason", reason.trim()));
                 return saved;
             }, DealerOrderRecord.class);
         } catch (RuntimeException e) {
-            audit.recordFailure("dealer.order.cancel_request_failed", MANAGE, "dealer_order", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            audit.recordFailure("dealer.order.cancel_request_failed", permission, "dealer_order", orderId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }

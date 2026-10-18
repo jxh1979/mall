@@ -69,13 +69,21 @@ bar_deposit_rules,direct,merchant_id,merchant_id column on bar_deposit_rules,rea
 bar_gift_redemptions,direct,merchant_id,merchant_id column on bar_gift_redemptions,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_order_item_voids,direct,merchant_id,merchant_id column on bar_order_item_voids,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_order_items,inherited,order_id,order_id -> bar_orders -> table_id/bar_id -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
+bar_order_service_sources,direct,project_id,project_id column on bar_order_service_sources,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_orders,direct,merchant_id,merchant_id column on bar_orders,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_payroll_allocations,direct,project_id,project_id column on bar_payroll_allocations,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_payroll_bill_components,direct,project_id,project_id column on bar_payroll_bill_components,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_payroll_collection_links,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+bar_payroll_refund_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+bar_payroll_rules,direct,project_id,project_id column on bar_payroll_rules,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_payroll_runs,direct,project_id,project_id column on bar_payroll_runs,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_product_categories,direct,merchant_id,merchant_id column on bar_product_categories,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_production_ticket_events,inherited,order_id,order_id -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_production_tickets,direct,merchant_id,merchant_id column on bar_production_tickets,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_products,direct,merchant_id,merchant_id column on bar_products,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_reservation_invitation_members,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 bar_reservations,direct,merchant_id,merchant_id column on bar_reservations,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_service_responsibilities,direct,project_id,project_id column on bar_service_responsibilities,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_shifts,direct,project_id,project_id column on bar_shifts,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_table_guest_checkins,inherited,reservation/table linkage,reservation_id/table_id -> bar_reservations/bar_tables -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_table_session_adjustments,direct,merchant_id,merchant_id column on bar_table_session_adjustments,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -184,6 +192,8 @@ finance_daily_close_summaries,single_complex_default,P0_SINGLE_COMPLEX,single-co
 finance_daily_closes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_offline_payment_confirmations,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_payment_intents,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+finance_payroll_payment_attempts,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+finance_payroll_payment_events,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_reconciliation_batches,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_reconciliation_differences,inherited,batch_id,batch_id -> finance_reconciliation_batches -> project/entity scope,must join through scope path before multi-complex rollout,V0.07,covered
 finance_refund_attempts,inherited,refund_id,refund_id -> finance_refunds -> project_id/merchant_id; every read and write inherits the parent refund scope,must join through scope path before multi-complex rollout,V0.07,covered
@@ -341,9 +351,19 @@ staff_payment_codes,single_complex_default,P0_SINGLE_COMPLEX,single-complex defa
 staff_payroll_adjustment_appeals,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 staff_payroll_adjustment_requests,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 staff_payroll_adjustments,direct,project_id,project_id column on staff_payroll_adjustments,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_calculation_drafts,direct,project_id,project_id column on staff_payroll_calculation_drafts,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_calendar_versions,direct,project_id,project_id column on staff_payroll_calendar_versions,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_corrections,direct,project_id,project_id column on staff_payroll_corrections,ready for project/merchant scoped query enforcement,V0.07,covered
 staff_payroll_payouts,direct,project_id,project_id column on staff_payroll_payouts,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_pending_sources,direct,project_id,project_id column on staff_payroll_pending_sources,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_period_facts,direct,project_id,project_id column on staff_payroll_period_facts,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_scheme_versions,direct,project_id,project_id column on staff_payroll_scheme_versions,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_statement_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 staff_payroll_statements,direct,project_id,project_id column on staff_payroll_statements,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_payroll_worktime_runs,direct,project_id,project_id column on staff_payroll_worktime_runs,ready for project/merchant scoped query enforcement,V0.07,covered
 staff_penalty_cap_revisions,global_reference,global_reference,global reference/configuration table,safe as global reference; tenant-specific overrides require separate scoped table,V0.07,covered
+staff_performance_rule_versions,direct,project_id,project_id column on staff_performance_rule_versions,ready for project/merchant scoped query enforcement,V0.07,covered
+staff_performance_score_adjustments,direct,project_id,project_id column on staff_performance_score_adjustments,ready for project/merchant scoped query enforcement,V0.07,covered
 staff_policy_settings,direct,scope_id,shift_visible_days: scope_id = employer business entity; payroll_penalty_cap_bps: scope_id = global,"employer visibility settings scoped at source; global cap changes require HR, finance, legal and top authority approval",V0.07,covered
 staff_profiles,direct,project_id,project_id column on staff_profiles,ready for project/merchant scoped query enforcement,V0.07,covered
 staff_shift_covers,inherited,shift_id,shift_id -> staff_shifts -> staff_profiles company/merchant scope; cover_user_id must be in the same scope (U06-004),must join through scope path before multi-complex rollout,V0.07,covered

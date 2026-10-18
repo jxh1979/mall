@@ -1,4 +1,4 @@
-# T1 员工三表 可编码开发规格 V0.16（2026-06-18）
+# T1 员工三表 可编码开发规格 V0.17（2026-06-18）
 
 > **任务**：R5 backlog **T1（员工档案/设备凭证/通知三表）**，W0 底座，**解锁 T9（Android 设备凭证）**。
 > **裁决依据**：R5 裁决⑨——员工三表 + Android 端凭证本期 P0；MDM 自有侧字段暂缓。
@@ -226,3 +226,5 @@ CG-12：`staff.profile.employment_status_change_requested`（发起）→ `staff
 | 2026-08-02 | 新增按周批量排班 `POST /api/v1/staff/shifts/batch`（一批员工 × 勾中的星期几 × 每日同一时段，一次排完整周），跨零点班只填时段、班次结束自动顺延次日；单班 `POST /shifts` 与后台单班表单原样保留。§4 补两行接口与排班口径小节 | 2026-08-02 用户拍板「排班一般一次性排出一周的班，写清楚几月几日几点到几月几日几点」；feature 分支 feat/weekly-shift-batch-20260802 |
 | 2026-10-17 | 版本升 V0.14；CG-12：员工状态任一变更与奖惩改为发起 `hr_three_levels_up` 档复核（主线＝该员工直属上级链前三级，平行线 hr_review＝HR 会签人）全部通过后写入/入账；新增员工扣罚申诉两端点、`staff.hr.review` 权限、`penalty_reversal` 冲回类型（迁移 V450，表 staff_employment_status_revisions / staff_payroll_adjustment_requests / staff_payroll_adjustment_appeals） | BSM:1478、BSM:1487、ENUM:283、PGM:658、PGM-1.7.1 |
 | 2026-08-06 | 增 §4 跨月／跨周／跨年班次归属口径：工时、考勤、请假与年假额度/全勤等年度指标一律归**班次结束时点**所在月份与年度；法定节假日加班同按班次结束时点所在自然日整班认定、不拆半程；明确这是营业日归口清单里「考勤日期」一项的唯一例外，`work_date` 不构成归属月份 | 第四批草案 §F 落点 9/25/27（矛盾12 ＋ 矛盾11 联动）；用户 2026-08-06 裁决 |
+| 2026-10-18 | 第六批复核修复：V492 `staff_leave_requests` 增 status=revoked（已销假）与 `revoked_by`/`revoked_at`/`revoke_reason`（销假留痕；`reviewed_by`/`review_note` 保留原审批），销假前取 staff-payroll:<user> 员工锁再判已定格月份 | BSM L1481「销假或撤销发生在已月结定格月份之后的，在当期薪资单冲正并注明来源，不回改已定格月份。只有主管批准的请假才参与扣薪」 |
+| 2026-10-18 | 版本升 V0.17；第六批第二轮（取代上一行「主管直接销」）：V492 就地改为 V0.03——`staff_leave_requests` status 集增 `revoke_requested`（待销假审批）/`revoked`（已销假）；申请留痕三列 `revoke_requested_by`/`revoke_requested_at`/`revoke_request_reason`（员工本人；驳回后保留为最近一次申请痕迹，再次申请时覆盖），批准留痕 `revoked_by`/`revoked_at`/`revoke_reason`；`reviewed_by`/`review_note` 原审批留痕不覆盖。入口：`POST /api/v1/staff/leaves/{id}/revoke-request`（员工本人对自己已批准的假申请销假，理由必填，`staff.leave.submit`）与 `POST /api/v1/staff/leaves/{id}/revoke`（排班主管 decision=approve/reject，`staff.shift.manage`，仅对 revoke_requested 办理）；批准即生效：取 staff-payroll:<user> 员工锁后转 revoked，事假已计入定格月份的发 `leave_revoked` 补差在当期薪资单冲正并注明来源；驳回回到 approved、假仍有效 | 2026-10-18 操作员裁决补充第 1 条「销假：本人申请＋主管批准……原审批留痕不覆盖」；BSM L1481「只有主管批准的请假才参与扣薪」 |

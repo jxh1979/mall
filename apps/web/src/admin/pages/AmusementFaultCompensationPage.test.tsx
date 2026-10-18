@@ -1,5 +1,5 @@
-// 文件版本：V0.02
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.03
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AmusementFaultCompensationPage } from "./AmusementFaultCompensationPage";
@@ -9,6 +9,9 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 const FAULTS = [{ id: "f-1", project_id: "prj-1", status: "lifted", reason: "供电故障", activated_at: "2026-10-17T10:00:00Z", lifted_at: "2026-10-17T12:00:00Z" }];
 const POLICY = { project_id: "__global__", validity_days: 365, min_days: 1, max_days: 3650 };
 const PENDING = [{ id: "b-1", fault_id: "f-1", project_id: "prj-1", status: "pending_confirmation", reason: "供电故障补偿", bearer_company_id: "ent-amu", validity_days: 365, window_from: "2026-10-17T10:00:00Z", window_to: "2026-10-17T12:00:00Z", initiated_by: "u-head", initiated_role: "amusement_head", initiated_at: "2026-10-17T13:00:00Z", item_count: 2, extend_count: 1, reissue_count: 1 }];
+// TK18-R2-COMP（2026-10-18 操作员裁决补充第 3 条）：场次提前结束时已入场客人的补偿批次由系统生成（无发起岗位），
+// 发放前须游乐公司负责人与工程或安全岗位共同确认，沿用同一确认入口。
+const SESSION_BATCHES = [{ id: "sb-1", event_type: "session_early_end", ending_id: "end-1", session_id: "ses-9", project_id: "prj-1", status: "pending_confirmation", reason: "场次提前结束：设备临时停机", bearer_company_id: "be_amusement", validity_days: 365, window_from: "2026-10-17T20:00:00Z", window_to: "2026-10-17T22:00:00Z", item_count: 1, extend_count: 0, reissue_count: 1 }];
 const ITEMS = [
   { id: "i-1", entitlement_id: "ent-a", parent_ticket_id: "tkt-1", slot_index: 1, customer_id: "cus-1", kind: "full_reissue", share_count: 1, original_session_id: "ses-1", status: "pending", compensation_entitlement_ids: [] },
   { id: "i-2", entitlement_id: "ent-b", parent_ticket_id: "tkt-1", slot_index: 2, customer_id: "cus-1", kind: "extend", share_count: 1, status: "pending", compensation_entitlement_ids: [] },
@@ -22,7 +25,7 @@ function listEnvelope(items: unknown[]): Response {
 }
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function stubFetch(batches: unknown[]) {
+function stubFetch(batches: unknown[], sessionBatches: unknown[] = []) {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/compensation-policies/") && init?.method === "POST") return Promise.resolve(dataEnvelope({ project_id: "prj-1", validity_days: 400, min_days: 30, max_days: 730 }));
@@ -30,6 +33,7 @@ function stubFetch(batches: unknown[]) {
     if (url.includes("/compensation-batches/") && url.endsWith("/confirm")) return Promise.resolve(dataEnvelope({ id: "b-1", status: "issued" }));
     if (url.includes("/compensation-batches/") && url.endsWith("/items")) return Promise.resolve(listEnvelope(ITEMS));
     if (url.includes("/compensation-batches") && init?.method === "POST") return Promise.resolve(dataEnvelope({ id: "b-2", status: "pending_confirmation" }));
+    if (url.includes("/compensation-batches?event_type=session_early_end")) return Promise.resolve(listEnvelope(sessionBatches));
     if (url.includes("/compensation-batches")) return Promise.resolve(listEnvelope(batches));
     if (url.includes("/park-wide-faults")) return Promise.resolve(listEnvelope(FAULTS));
     return Promise.resolve(listEnvelope([]));
@@ -118,5 +122,19 @@ describe("AmusementFaultCompensationPage 全园故障补偿（CG-08b，ENUM「�
     const raw = String((fetchMock.mock.calls.find((c) => String(c[0]).includes("/compensation-policies/prj-1") && (c[1] as RequestInit | undefined)?.method === "POST")?.[1] as RequestInit | undefined)?.body ?? "");
     expect(raw).toContain("400");
     expect(raw).toContain("730");
+  });
+
+  it("场次提前结束补偿批次：按事件选择后显示待两岗位共同确认，确认走同一发放入口", async () => {
+    const fetchMock = stubFetch([], SESSION_BATCHES);
+    renderPage();
+    const select = await screen.findByTestId("compensation-fault");
+    await waitFor(() => expect(within(select).getAllByRole("option").some((o) => (o.textContent ?? "").includes("场次提前结束"))).toBe(true));
+    fireEvent.change(select, { target: { value: "session:sb-1" } });
+    await waitFor(() => expect(screen.getByTestId("compensation-batch-status-sb-1").textContent).toBe("待游乐公司负责人与工程或安全岗位共同确认"));
+    expect(screen.queryByTestId("compensation-initiate")).toBeNull();
+    fireEvent.change(screen.getByTestId("compensation-role"), { target: { value: "amusement_head" } });
+    fireEvent.click(screen.getByTestId("compensation-confirm"));
+    await waitFor(() => expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/v1/amusement/compensation-batches/sb-1/confirm"))).toBe(true));
+    expect(bodyOf(fetchMock, (url) => url.includes("/compensation-batches/sb-1/confirm")).role).toBe("amusement_head");
   });
 });

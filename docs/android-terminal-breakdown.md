@@ -1,5 +1,7 @@
 # 安卓端专项拆分：员工工作手机、酒吧点酒平板、触摸屏一体机
 
+文件版本：V0.01
+
 > 2026-07-04 逻辑一致性修订：现场核销统一二维码扫码——作废"读取外部客人腕带/卡片/标签的 NFC 核销"。改动处：§1 定位（适合扫码/可接设备）、§设备领用（领用确认）、§3.1 二维码核销表 NFC核销行、§设备领用流程、§能力矩阵 NFC读取、§任务清单 NFC预留接口、§技术栈 NFC。硬件"NFC 读卡器"标不再采购。（注：私人手机身份绑定 §2.1.1 早已改 Keystore 设备公钥/指纹凭证，属另一类 NFC，与本次无关，保持不动）
 
 ## 1. 安卓端定位
@@ -155,7 +157,8 @@ PIPL 合规要求（私人手机 App 个人信息处理，回填合规文档 C4�
 
 | 能力 | 说明 | 端点（R=已有复用 / N=Wave1 新增） |
 |---|---|---|
-| 工资条自查 | 仅人事「月结」定格月可见；逐行=固定工资+提成合计+激励-处罚-无薪假(事假)扣款-代扣个税=实发；提成明细按来源归类（酒水/卡座提成、服务点单份额…）与提成合计对账 | R `GET /api/v1/staff/payroll/mine?month=`；N `GET /api/v1/staff/payroll/mine/commissions?month=`（权限复用 `staff.payroll.view_mine`） |
+| 工资条自查 | 仅本人已定格单可见，同月普通月结、离职结清、补发单全部列出。按原件显示逐项计薪、公式内已扣事假与另扣事假、实际日期工时及加班、专业核定个税、原单补差和待处理项。应发净额与实际已付分开，补差金额待核实不显示0元；工时周期或酒吧分配未结继续显示原因。提成明细仍按原来源归类 | `GET /api/v1/staff/payroll/mine?month=`；`GET /api/v1/staff/payroll/mine/statements/{id}`；`GET /api/v1/staff/payroll/mine/commissions?month=`，仅 `staff.payroll.view_mine` 的当前本人 |
+| 本人绩效扣分与申诉 | 显示本人的扣分规则、分值、事由及审批状态；已批准且未冲回记录可提申诉，沿直属共三级与自动人力线复核。申诉冲回保留原记录，已发工资另按原单实际影响生成补差，不伪改原付款 | `GET /api/v1/staff/payroll/mine/performance-adjustments?month=`；`POST /api/v1/staff/payroll/performance-adjustments/{id}/appeals`，客户端只提交事由，不传员工身份或扣分金额 |
 | 我的资料（个人信息） | 只读身份（账号/工号）+ 有限字段（姓名）自助编辑；手机/证件仅存不可逆哈希，不回显、不在自助编辑范围 | N `GET /api/v1/staff/profiles/mine`、`POST /api/v1/staff/profiles/mine`（权限 `staff.profile.self`，V321） |
 | 考勤/排班自查 | 本人考勤月视图（六态逐日）、最近打卡、未来 7 天排班 | R `GET /api/v1/staff/attendance/month-view`、`/attendance/mine`、`/shifts/mine` |
 | 请假/调休申请 | 事假/病假/调休/年假，走既有主管审批链 | R `POST /api/v1/staff/leaves`、`GET /api/v1/staff/leaves/mine` |

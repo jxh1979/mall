@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -9,6 +9,8 @@ import { useCan } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
 // CG-08b 全园故障补偿通票（ENUM「全园故障与补偿通票」）：发起＝快照受影响人份/次份；另一岗位确认＝实际发放。
+// TK-18（2026-10-18 操作员裁决补充第 3 条）：场次提前结束时已入场客人的补偿批次由系统生成（event_type=session_early_end，无发起岗位），
+// 在本页按事件选择后沿用同一确认入口：第一次岗位确认后仍待另一岗位确认，第二次确认即发放。
 type FaultRow = { id: string; projectId?: string; status?: string; reason?: string | null; activatedAt?: string | null; liftedAt?: string | null };
 type BatchRow = {
   id: string; faultId?: string; projectId?: string; status?: string; reason?: string | null; bearerCompanyId?: string | null;
@@ -16,6 +18,7 @@ type BatchRow = {
   initiatedBy?: string | null; initiatedRole?: string | null; initiatedAt?: string | null;
   confirmedBy?: string | null; confirmedRole?: string | null; confirmedAt?: string | null;
   itemCount?: number; extendCount?: number; reissueCount?: number;
+  eventType?: string; endingId?: string | null; sessionId?: string | null;
 };
 type ItemRow = {
   id: string; entitlementId?: string; parentTicketId?: string | null; slotIndex?: number | null; customerId?: string | null;
@@ -39,6 +42,11 @@ const PERM_POLICY = "amusement.compensation_policy.manage";
 const roleLabel = (v?: string | null) => (v ? (ROLE_LABELS[v] ?? v) : "—");
 const money = (cent?: number | null) => (cent === null || cent === undefined ? "—" : `¥${(cent / 100).toFixed(2)}`);
 const person = (who?: string | null, role?: string | null, at?: string | null) => (who ? `${who}（${roleLabel(role)}）· ${cnDate(at)}` : "—");
+/** 场次提前结束批次无发起岗位：第一次岗位确认前显示待两岗位共同确认。 */
+const batchStatusLabel = (b: BatchRow) => (b.status === "pending_confirmation"
+  ? (b.initiatedRole ? "待第二岗位确认" : "待游乐公司负责人与工程或安全岗位共同确认")
+  : (BATCH_STATUS[b.status ?? ""] ?? b.status ?? "—"));
+const eventLabel = (b: BatchRow) => (b.eventType === "session_early_end" ? `场次提前结束（${b.sessionId ?? "—"}）` : "全园故障");
 
 /**
  * 全园故障补偿页（ADM-AMU-007）：选择已生效/已解除的全园故障事件 → 发起补偿批次（快照受影响人份）→ 另一岗位确认发放；
@@ -50,6 +58,7 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
   const canPolicy = useCan(effectivePermissions, [PERM_POLICY]);
   const canAct = canHead || canEngineering;
   const [faults, setFaults] = React.useState<FaultRow[]>([]);
+  const [sessionBatches, setSessionBatches] = React.useState<BatchRow[]>([]);
   const [faultId, setFaultId] = React.useState("");
   const faultIdRef = React.useRef("");
   const [batches, setBatches] = React.useState<BatchRow[]>([]);
@@ -67,20 +76,29 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
   const [submitting, setSubmitting] = React.useState(false);
 
   const currentFault = faults.find((f) => f.id === faultId) ?? null;
+  const currentSessionBatch = sessionBatches.find((b) => `session:${b.id}` === faultId) ?? null;
+  const currentProjectId = currentFault?.projectId ?? currentSessionBatch?.projectId;
   const pendingBatch = batches.find((b) => b.status === "pending_confirmation") ?? null;
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const faultList = await api.get<FaultRow[]>("/api/v1/amusement/park-wide-faults");
+      const [faultList, sessionList] = await Promise.all([
+        api.get<FaultRow[]>("/api/v1/amusement/park-wide-faults"),
+        api.get<BatchRow[]>("/api/v1/amusement/compensation-batches?event_type=session_early_end"),
+      ]);
       const list = (Array.isArray(faultList) ? faultList : []).filter((f) => f.status !== "pending_activation");
+      const sessions = Array.isArray(sessionList) ? sessionList : [];
       setFaults(list);
-      const chosen = faultIdRef.current || (list[0]?.id ?? "");
+      setSessionBatches(sessions);
+      const chosen = faultIdRef.current || (list[0]?.id ?? (sessions[0] ? `session:${sessions[0].id}` : ""));
       if (chosen !== faultIdRef.current) { faultIdRef.current = chosen; setFaultId(chosen); }
       if (!chosen) { setBatches([]); setItems([]); setPolicy(null); return; }
+      const sessionBatch = sessions.find((b) => `session:${b.id}` === chosen);
       const fault = list.find((f) => f.id === chosen);
+      const projectId = fault?.projectId ?? sessionBatch?.projectId;
       const [batchList, policyRow] = await Promise.all([
-        api.get<BatchRow[]>(`/api/v1/amusement/park-wide-faults/${encodeURIComponent(chosen)}/compensation-batches`),
-        fault?.projectId ? api.get<PolicyRow>(`/api/v1/amusement/compensation-policies/${encodeURIComponent(fault.projectId)}`).catch(() => null) : Promise.resolve(null),
+        sessionBatch ? Promise.resolve([sessionBatch]) : api.get<BatchRow[]>(`/api/v1/amusement/park-wide-faults/${encodeURIComponent(chosen)}/compensation-batches`),
+        projectId ? api.get<PolicyRow>(`/api/v1/amusement/compensation-policies/${encodeURIComponent(projectId)}`).catch(() => null) : Promise.resolve(null),
       ]);
       const bl = Array.isArray(batchList) ? batchList : [];
       setBatches(bl);
@@ -123,15 +141,15 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
   }
 
   function savePolicy() {
-    if (!currentFault?.projectId) { setFormError("请先选择全园故障事件以确定综合体项目。"); return; }
+    if (!currentProjectId) { setFormError("请先选择事件以确定综合体项目。"); return; }
     if (!policyDays.trim() || !policyMin.trim() || !policyMax.trim()) { setFormError("补偿有效期须同时填写天数、下限与上限。"); return; }
     const days = Number(policyDays), min = Number(policyMin), max = Number(policyMax);
     if (![days, min, max].every(Number.isInteger) || min < 1 || min > days || days > max || max > 3650) {
       setFormError("补偿有效期须为整数，且满足：1 ≤ 下限 ≤ 天数 ≤ 上限 ≤ 3650。"); return;
     }
     void run("补偿有效期参数已保存",
-      () => api.post(`/api/v1/amusement/compensation-policies/${encodeURIComponent(currentFault.projectId ?? "")}`, { validityDays: Number(policyDays), minDays: Number(policyMin), maxDays: Number(policyMax) }),
-      { 综合体项目: currentFault.projectId ?? "", 有效期天数: policyDays });
+      () => api.post(`/api/v1/amusement/compensation-policies/${encodeURIComponent(currentProjectId)}`, { validityDays: Number(policyDays), minDays: Number(policyMin), maxDays: Number(policyMax) }),
+      { 综合体项目: currentProjectId, 有效期天数: policyDays });
   }
 
   async function selectBatch(id: string) {
@@ -150,11 +168,12 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
       />
       <AuditTrailHint event="amusement.fault_compensation.batch_initiated / amusement.fault_compensation.batch_issued / amusement.fault_compensation.policy_configured" />
       <div className="admin-form-row" data-testid="compensation-fault-row">
-        <label>全园故障事件
-          <select aria-label="全园故障事件" data-testid="compensation-fault" value={faultId}
+        <label>补偿事件（全园故障 / 场次提前结束）
+          <select aria-label="补偿事件" data-testid="compensation-fault" value={faultId}
             onChange={(event) => { faultIdRef.current = event.target.value; setFaultId(event.target.value); setSelectedBatch(""); void reload(); }}>
-            {faults.length === 0 ? <option value="">（暂无已生效的全园故障事件）</option> : null}
-            {faults.map((f) => <option key={f.id} value={f.id}>{`${f.projectId ?? "—"} · ${FAULT_STATUS[f.status ?? ""] ?? f.status ?? "—"} · ${cnDate(f.activatedAt)} · ${f.reason ?? ""}`}</option>)}
+            {faults.length === 0 && sessionBatches.length === 0 ? <option value="">（暂无已生效的全园故障事件或场次提前结束补偿）</option> : null}
+            {faults.map((f) => <option key={f.id} value={f.id}>{`全园故障 · ${f.projectId ?? "—"} · ${FAULT_STATUS[f.status ?? ""] ?? f.status ?? "—"} · ${cnDate(f.activatedAt)} · ${f.reason ?? ""}`}</option>)}
+            {sessionBatches.map((b) => <option key={b.id} value={`session:${b.id}`}>{`场次提前结束 · ${b.sessionId ?? "—"} · ${cnDate(b.windowFrom)} · ${batchStatusLabel(b)} · ${b.reason ?? ""}`}</option>)}
           </select>
         </label>
         <label>本次操作岗位
@@ -168,12 +187,12 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
         <label>发放原因<input aria-label="发放原因" data-testid="compensation-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
         <label>承担主体（域主管公司法律主体）<input aria-label="承担主体" data-testid="compensation-bearer" value={bearer} onChange={(event) => setBearer(event.target.value)} /></label>
         <label>确认说明<input aria-label="确认说明" data-testid="compensation-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
-        {!pendingBatch ? (
+        {pendingBatch ? (
+          <button type="button" data-testid="compensation-confirm" disabled={submitting || !canAct} onClick={() => confirm(pendingBatch)}>{pendingBatch.initiatedRole ? "第二岗位确认并发放" : "岗位确认（两岗位先后确认后发放）"}</button>
+        ) : currentSessionBatch ? null : (
           <button type="button" data-testid="compensation-initiate" disabled={submitting || !canAct || !currentFault} onClick={initiate}>发起补偿批次（快照受影响人份）</button>
-        ) : (
-          <button type="button" data-testid="compensation-confirm" disabled={submitting || !canAct} onClick={() => confirm(pendingBatch)}>第二岗位确认并发放</button>
         )}
-        <span className="admin-muted-action">确认人须与发起人不同，且分别为游乐公司负责人与工程或安全岗位。</span>
+        <span className="admin-muted-action">确认人须与发起人不同，且分别为游乐公司负责人与工程或安全岗位；场次提前结束批次由系统生成，第一次岗位确认后仍待另一岗位确认。</span>
       </div>
       {formError ? <div data-testid="compensation-error" className="admin-inline-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
@@ -192,11 +211,12 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
         <h3>补偿批次</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="compensation-batch-table">
-            <thead><tr><th>状态</th><th>发放原因</th><th>承担主体</th><th>影响时间范围</th><th>有效期（天）</th><th>有效期截止</th><th>延长 / 补发</th><th>发起</th><th>确认发放</th><th>操作</th></tr></thead>
+            <thead><tr><th>事件</th><th>状态</th><th>发放原因</th><th>承担主体</th><th>影响时间范围</th><th>有效期（天）</th><th>有效期截止</th><th>延长 / 补发</th><th>发起／首次岗位确认</th><th>确认发放</th><th>操作</th></tr></thead>
             <tbody>
-              {batches.length === 0 ? <tr><td colSpan={10}>该故障事件尚无补偿批次</td></tr> : batches.map((b) => (
+              {batches.length === 0 ? <tr><td colSpan={11}>该事件尚无补偿批次</td></tr> : batches.map((b) => (
                 <tr key={b.id} data-testid={`compensation-batch-row-${b.id}`}>
-                  <td data-testid={`compensation-batch-status-${b.id}`}>{BATCH_STATUS[b.status ?? ""] ?? b.status ?? "—"}</td>
+                  <td>{eventLabel(b)}</td>
+                  <td data-testid={`compensation-batch-status-${b.id}`}>{batchStatusLabel(b)}</td>
                   <td>{b.reason ?? "—"}</td>
                   <td>{b.bearerCompanyId ?? "—"}</td>
                   <td>{cnDate(b.windowFrom)} 至 {cnDate(b.windowTo)}</td>
