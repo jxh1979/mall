@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.19
+  version: V0.20
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -29733,7 +29733,7 @@ paths:
         - settlement
       operationId: settlementConfigActivateDraft
       summary: 复核转正:单行/归属/归因规则草案转正
-      description: 差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。
+      description: 差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform

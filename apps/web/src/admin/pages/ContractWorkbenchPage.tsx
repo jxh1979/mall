@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -678,7 +679,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         <h3>提成租金规则（阶梯超额累进，挂合同）</h3>
         <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>按月销售额分档，每档只对落在本档区间的销售额用本档费率（像个税）；保底=提成下限（可空），无封顶。合同「收租方式」选纯提成/取高/叠加时按此规则出账。</p>
         <p style={{ color: "var(--adm-text-3)", fontSize: 13 }} data-testid="turnover-rule-draft-notice">
-          提交后<strong>先存为草案，不会马上影响结算</strong>：须由另一位有结算配置管理权限的同事在「结算配置中心 → 待复核草案」里复核转正，转正后才对后续结算生效（同合同同商户的旧规则在转正时自动下线留档）。起草人不能自己转正。
+          提交后<strong>先存为草案，不会马上影响结算</strong>：须由另一位有结算配置管理权限的同事在「结算配置中心 → 待复核草案」里复核转正。初始规则按填写日期生效；已有规则变更统一按实际批准次月1日生效，批准当月仍按旧规则，手填起日不决定变更生效。起草人不能自己转正。
         </p>
         <div className="admin-inline-form">
           <input aria-label="提成-合同id" placeholder="合同 id" value={turnoverForm.contractId} onChange={(e) => setTurnoverForm({ ...turnoverForm, contractId: e.target.value })} />

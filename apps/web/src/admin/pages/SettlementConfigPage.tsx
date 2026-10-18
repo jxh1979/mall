@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -436,7 +437,14 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
               {drafts.map((d) => (
                 <tr key={d.id} data-testid={`settlement-config-draft-${d.id}`}>
                   <td>{GROUP_LABELS[d.configGroup] ?? d.configGroup}</td>
-                  <td>{d.summary}</td>
+                  <td>
+                    {d.summary}
+                    {d.configGroup === "turnover_rent_rule" ? (
+                      <div className="admin-muted-action">
+                        初始规则按填写日期生效；已有规则变更统一按实际批准次月1日生效，批准当月仍按旧规则，手填起日不决定变更生效。
+                      </div>
+                    ) : null}
+                  </td>
                   <td style={{ display: "flex", gap: 8 }}>
                     <PermissionButton
                       permissionsState={effectivePermissions}

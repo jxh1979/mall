@@ -1,8 +1,10 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.LocalZone;
+import java.time.LocalDate;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -19,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
  * upsert 一律 RETURNING id 返回<b>真实落地行 id</b>(ON CONFLICT 命中时保留首行 id),供审计 business_id 用(§7)。
  * <p><b>Path 2 转正</b>(activateSingleRowDraft)= @Transactional 换行:旧生效行<b>软替换</b>(status→inactive,留库不物理删)
  * → 翻草案为生效;非草案/不存在 → 0 行。<p>表名 + scope 列均取自内部白名单枚举(非用户输入),无注入面。
- * <p>不写 effective_from/effective_to(见 {@link SettlementConfigWriteRequests} TODO:生效日期调度独立功能)。
+ * <p>抽成规则变更按批准所在地月份的次月首日生效；初始规则保留合同起始日期，其他配置日期行为不变。
  */
 // ponytail: 单写入面仓储,无接口(one impl);6 张单行表用显式 upsert(payload 各异),转正走 scope 列驱动的通用换行。
 @Repository
@@ -492,17 +494,36 @@ public class JdbcSettlementConfigWriteRepository {
                         'turnover_rent_rule:' || jsonb_build_array(contract_id, merchant_id)::text, 0))
                       FROM turnover_rent_rules WHERE id = :id
                     """, params, rs -> { });
-            List<String> draftIds = jdbcTemplate.queryForList("""
-                    SELECT id FROM turnover_rent_rules
+            List<LocalDate> draftEndDates = jdbcTemplate.query("""
+                    SELECT effective_to FROM turnover_rent_rules
                      WHERE id = :id AND is_draft = TRUE AND status = 'active'
                      FOR UPDATE
-                    """, params, String.class);
-            if (draftIds.isEmpty()) {
+                    """, params, (rs, rowNum) -> rs.getObject("effective_to", LocalDate.class));
+            if (draftEndDates.isEmpty()) {
                 return 0;
+            }
+            boolean replacement = Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM turnover_rent_rules approved
+                        JOIN turnover_rent_rules draft ON draft.id = :id
+                         WHERE approved.contract_id IS NOT DISTINCT FROM draft.contract_id
+                           AND approved.merchant_id IS NOT DISTINCT FROM draft.merchant_id
+                           AND approved.is_draft = FALSE AND approved.id <> draft.id)
+                    """, params, Boolean.class));
+            if (replacement) {
+                LocalDate effectiveFrom = now.atZone(LocalZone.ID).toLocalDate()
+                        .withDayOfMonth(1).plusMonths(1);
+                LocalDate effectiveTo = draftEndDates.get(0);
+                if (effectiveTo != null && effectiveTo.isBefore(effectiveFrom)) {
+                    throw ApiException.badRequest("VALIDATION_FAILED",
+                            "变更规则按批准次月1日（" + effectiveFrom + "）生效，结束日期不能早于该日期");
+                }
+                params.addValue("effective_from", effectiveFrom);
+                activationSequenceUpdate = ", effective_from = :effective_from";
             }
             params.addValue("activation_sequence", jdbcTemplate.queryForObject(
                     "SELECT nextval('turnover_rent_rule_activation_seq')", params, Long.class));
-            activationSequenceUpdate = ", activation_sequence = :activation_sequence";
+            activationSequenceUpdate += ", activation_sequence = :activation_sequence";
         }
         StringBuilder scopeEq = new StringBuilder();
         for (String col : cfg.scopeColumns) {
