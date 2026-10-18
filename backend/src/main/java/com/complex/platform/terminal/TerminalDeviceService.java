@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -66,6 +66,10 @@ public class TerminalDeviceService {
     private final TerminalMerchantDirectory merchantDirectory;
     // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：操作人的商户、项目范围取自登录主体（平台管理员全量）。
     private final AuthorizationService authorizationService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.access.staff.StaffWorkPhoneAttendanceService workPhoneAttendance;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.access.AccessRepository accessRepository;
 
     public TerminalDeviceService(
             TerminalDeviceRepository repository,
@@ -171,6 +175,68 @@ public class TerminalDeviceService {
                 () -> requireReturnInScope(request),
                 () -> returnBoundDevice(request)
         );
+    }
+
+    /** BSM:1478：夜班值班经理交付故障替换机，旧机归还、新机领用与原班次在同一事务。 */
+    @Transactional
+    public DeviceBindingResponse swapWorkPhone(com.complex.platform.terminal.dto.DeviceSwapRequest request) {
+        final String permission="terminal.work_phone.swap";
+        try {
+            authorizationService.requirePermission(permission);
+            var actor=authorizationService.currentActor();
+            accessRepository.lockAccessUsers(List.of(actor.id()));
+            var assignment=accessRepository.findUserPositionAssignment(actor.id())
+                    .filter(p -> "night_duty_manager".equals(p.positionCode()) && !p.assignedAt().isAfter(Instant.now())
+                            && java.util.Objects.equals(p.organizationId(),actor.organizationId())
+                            && java.util.Objects.equals(p.merchantId(),actor.merchantId()))
+                    .orElseThrow(() -> ApiException.forbidden("NIGHT_DUTY_MANAGER_REQUIRED","须由当前实际夜班值班经理办理"));
+            var mapping=accessRepository.findAssignedPositionTemplateId(actor.id())
+                    .flatMap(accessRepository::findPositionRoleTemplateById)
+                    .filter(p -> "active".equals(p.status()) && p.archivedAt()==null && p.deletedAt()==null
+                            && p.positionCode().equals(assignment.positionCode()) && p.staffLevelId().equals(assignment.staffLevelId()))
+                    .orElseThrow(() -> ApiException.forbidden("NIGHT_DUTY_MANAGER_REQUIRED","夜班值班经理岗位映射须有效"));
+            var actual=requireRequest(request);
+            String oldCode=requireText(actual.oldDeviceCode(),"old_device_code");
+            String replacementId=requireText(actual.replacementDeviceId(),"replacement_device_id");
+            String reason=requireText(actual.reason(),"reason");
+            var old=repository.findByDeviceCode(oldCode).orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND","原手机不存在"));
+            var replacement=repository.findByDeviceId(replacementId).orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND","替换手机尚未登记"));
+            if (old.deviceId().equals(replacementId)) throw ApiException.badRequest("VALIDATION_FAILED","替换手机不能是原手机");
+            java.util.stream.Stream.of(old.id(),replacement.id()).sorted().forEach(repository::lockDevice);
+            old=requireDeviceInScope(repository.findById(old.id()).orElseThrow());
+            replacement=requireDeviceInScope(repository.findById(replacement.id()).orElseThrow());
+            requireNewHolderInScope(old.staffId(),replacement.staffId());
+            var original=old; var next=replacement;
+            return idempotencyService.execute("swapWorkPhone",actual.idempotencyKey(),actual,() -> {
+            if (!"staff_work_phone".equals(original.terminalType()) || !"bound".equals(original.status())
+                    || !"staff_work_phone".equals(next.terminalType())
+                    || !Set.of("returned","unbound").contains(next.status()))
+                throw ApiException.conflict("WORK_PHONE_SWAP_STATE","原手机须在领用中，替换手机须为可领用的已归还或未绑定工作手机");
+            if (!java.util.Objects.equals(original.merchantId(),next.merchantId()))
+                throw ApiException.forbidden("WORK_PHONE_SWAP_SCOPE","替换手机须与原手机属于同一商户范围");
+                String project=deviceProjectId(original.merchantId(),original.boundSpaceId(),original.staffId())
+                        .orElseThrow(() -> ApiException.forbidden("WORK_PHONE_PROJECT_UNKNOWN","原工作手机没有可核实的项目归属"));
+                if (!project.equals(deviceProjectId(next.merchantId(),next.boundSpaceId(),original.staffId()).orElse(null)))
+                    throw ApiException.forbidden("WORK_PHONE_SWAP_SCOPE","替换手机须与原手机属于同一真实项目");
+                var duty=workPhoneAttendance.requireCurrentNightDuty(actor.id(),project,Instant.now());
+                var context=workPhoneAttendance.requireSwapContext(original);
+                returnBoundDevice(new DeviceReturnRequest(actual.idempotencyKey()+":return",reason,actual.evidenceAttachmentIds(),
+                        original.deviceCode(),original.staffId(),false,reason),true);
+                var bound=bind(new DeviceBindRequest(actual.idempotencyKey()+":bind",reason,actual.evidenceAttachmentIds(),
+                        next.deviceId(),"staff_work_phone",next.bindingScope(),next.boundSpaceId(),next.mdmDeviceRef(),null,
+                        next.merchantId(),original.staffId()));
+                workPhoneAttendance.swapped(context,repository.findByDeviceId(next.deviceId()).orElseThrow());
+                auditEventService.recordSuccess("terminal.work_phone.swapped",permission,"terminal_device",bound.id(),null,
+                        actual.idempotencyKey(),Map.of("original_device_id",original.deviceId(),"replacement_device_id",next.deviceId(),
+                                "staff_id",original.staffId(),"shift_id",context.shiftId(),"position_mapping_id",mapping.id(),"night_duty_shift_id",duty.originalShiftId(),
+                                "night_duty_effective_shift_id",duty.effectiveShiftId(),"reason",reason));
+                return bound;
+            },DeviceBindingResponse.class);
+        } catch (RuntimeException error) {
+            auditEventService.recordFailure("terminal.work_phone.swap_failed",permission,"terminal_device",null,null,
+                    request==null?null:request.idempotencyKey(),codeOf(error));
+            throw error;
+        }
     }
 
     @Transactional
@@ -803,6 +869,12 @@ public class TerminalDeviceService {
             throw ApiException.badRequest("VALIDATION_FAILED", "工作手机领用必须指定持有员工 (staff_id)");
         }
 
+        boolean continuingPhone = existingDevice != null && "bound".equals(existingDevice.status())
+                && "staff_work_phone".equals(existingDevice.terminalType());
+        if (continuingPhone && (!"staff_work_phone".equals(terminalType)
+                || !java.util.Objects.equals(existingDevice.staffId(), staffId))) {
+            throw ApiException.conflict("WORK_PHONE_RETURN_REQUIRED", "在用工作手机须先实际归还，不能直接改领用人或终端类型");
+        }
         Instant now = Instant.now();
         TerminalDeviceRecord record = new TerminalDeviceRecord(
                 "dev_" + slug(deviceId),
@@ -819,7 +891,7 @@ public class TerminalDeviceService {
                 trimToNull(actual.boundSpaceId()),
                 staffId,
                 "bound",
-                now,
+                continuingPhone ? existingDevice.boundAt() : now,
                 null,
                 null,
                 null,
@@ -852,6 +924,10 @@ public class TerminalDeviceService {
     }
 
     private DeviceBindingResponse returnBoundDevice(DeviceReturnRequest request) {
+        return returnBoundDevice(request, false);
+    }
+
+    private DeviceBindingResponse returnBoundDevice(DeviceReturnRequest request, boolean swap) {
         DeviceReturnRequest actual = requireRequest(request);
         String deviceCode = requireText(actual.deviceCode(), "device_code");
         if (Boolean.TRUE.equals(actual.hasPendingTasks())) {
@@ -863,6 +939,13 @@ public class TerminalDeviceService {
             throw ApiException.conflict("INVALID_DEVICE_STATUS", "只有已绑定的设备才能归还");
         }
         Instant now = Instant.now();
+        if ("staff_work_phone".equals(existing.terminalType())) {
+            if (!java.util.Objects.equals(existing.staffId(), firstNonBlank(actual.staffId(), existing.staffId())))
+                throw ApiException.conflict("WORK_PHONE_OWNER_CHANGED", "归还不能改写原手机持有人");
+            if (!swap && !Boolean.FALSE.equals(actual.hasPendingTasks()))
+                throw ApiException.conflict("RETURN_CHECK_REQUIRED", "须确认本人当班工作及收尾检查均已完成");
+            workPhoneAttendance.returned(existing, now, swap);
+        }
         TerminalDeviceRecord returned = new TerminalDeviceRecord(
                 existing.id(),
                 existing.deviceId(),

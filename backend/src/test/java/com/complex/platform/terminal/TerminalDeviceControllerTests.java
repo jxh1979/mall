@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.terminal;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -470,6 +470,11 @@ class TerminalDeviceControllerTests {
 
     @TestConfiguration
     static class TestBeans {
+        @Bean
+        com.complex.platform.access.staff.StaffWorkPhoneAttendanceService staffWorkPhoneAttendanceService() {
+            return Mockito.mock(com.complex.platform.access.staff.StaffWorkPhoneAttendanceService.class);
+        }
+
         @Bean
         TerminalDeviceService terminalDeviceService() {
             return Mockito.mock(TerminalDeviceService.class);

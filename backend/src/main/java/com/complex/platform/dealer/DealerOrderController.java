@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -30,8 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class DealerOrderController {
 
     private final DealerOrderService service;
+    private final DealerDeliveryService delivery;
 
-    public DealerOrderController(DealerOrderService service) {
+    public DealerOrderController(DealerOrderService service, DealerDeliveryService delivery) {
+        this.delivery = delivery;
         this.service = service;
     }
 
@@ -103,9 +105,27 @@ public class DealerOrderController {
     }
 
     @PostMapping("/orders/{id}/sign")
-    public ApiResponse<DealerOrderRecord> signOrder(@PathVariable String id, @RequestBody DealerIdempotentRequest request) {
+    public ApiResponse<DealerOrderRecord> signOrder(@PathVariable String id, @RequestBody com.complex.platform.dealer.dto.DealerDeliveryReceiptRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.signOrder(id, request.idempotencyKey()));
+        return ApiResponse.ok(delivery.receive(id, request));
+    }
+
+    @GetMapping("/orders/{id}/delivery")
+    public ApiResponse<DealerDeliveryRecord> delivery(@PathVariable String id) { return ApiResponse.ok(delivery.get(id)); }
+
+    @PostMapping("/delivery/discrepancies/{id}/resolutions")
+    public ApiResponse<DealerDeliveryRecord.Resolution> proposeResolution(@PathVariable String id, @RequestBody com.complex.platform.dealer.dto.DealerDeliveryResolutionRequest request) {
+        return ApiResponse.ok(delivery.propose(id, request));
+    }
+
+    @PostMapping("/delivery/resolutions/{id}/physical-completion")
+    public ApiResponse<DealerDeliveryRecord.Resolution> completePhysical(@PathVariable String id, @RequestBody com.complex.platform.dealer.dto.DealerDeliveryPhysicalRequest request) {
+        return ApiResponse.ok(delivery.completePhysical(id, request));
+    }
+
+    @PostMapping("/delivery/resolutions/{id}/replacement-shipment")
+    public ApiResponse<DealerDeliveryRecord.Batch> shipReplacement(@PathVariable String id, @RequestBody com.complex.platform.dealer.dto.DealerDeliveryPhysicalRequest request) {
+        return ApiResponse.ok(delivery.shipReplacement(id, request));
     }
 
     @PostMapping("/orders/{id}/cancel-request")

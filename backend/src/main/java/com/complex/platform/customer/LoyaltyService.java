@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
@@ -34,6 +36,9 @@ public class LoyaltyService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.context.ApplicationContext applicationContext;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private PointsRecoveryService pointsRecoveries;
 
     private final CustomerRepository repository;
     private final AuditEventService auditEventService;
@@ -73,7 +78,8 @@ public class LoyaltyService {
         long levelMultiplier = levelMultiplierBasisPoints(account.level());
         long birthdayMultiplier = birthdayMultiplierBasisPoints(customer, now);
         long awarded = applyMultiplier(applyMultiplier(basePoints, levelMultiplier), birthdayMultiplier);
-        long balanceAfter = account.balance() + awarded;
+        long recovery = pointsRecoveries == null ? 0 : pointsRecoveries.consume(customerId, awarded, account.balance(), sourceId, now);
+        long balanceAfter = account.balance() + awarded - recovery;
         long keepProgress = account.keepThresholdProgress() + awarded;
         Instant expireAt = validityDays != null && validityDays > 0
                 ? now.plusSeconds((long) validityDays * 86_400L)
@@ -88,7 +94,7 @@ public class LoyaltyService {
                 sourceId,
                 description,
                 expireAt,
-                expireAt == null ? null : awarded,
+                expireAt == null ? null : awarded - recovery,
                 false,
                 now));
         // 审计留痕（P2 缺口修复）：积分入账可追溯，与 confirmPoints/earnPointsPending 留痕口径一致。
@@ -207,9 +213,10 @@ public class LoyaltyService {
         }
         Instant now = now();
         CustomerPointsAccountRecord account = loadOrCreateForUpdate(earn.customerId(), now);
-        long balanceAfter = Math.max(0, account.balance() + delta);
+        long recovery = delta > 0 && pointsRecoveries != null ? pointsRecoveries.consume(earn.customerId(), delta, account.balance(), sourceDocId, now) : 0;
+        long balanceAfter = Math.max(0, account.balance() + delta - recovery);
         long appliedDelta = balanceAfter - account.balance(); // 余额下限 0：实际变动（已花光时不为负）。
-        long keepProgress = Math.max(0, account.keepThresholdProgress() + appliedDelta);
+        long keepProgress = Math.max(0, account.keepThresholdProgress() + delta);
         repository.savePoints(withBalance(account, balanceAfter, keepProgress, now));
         // ① 追加一条带符号的 confirm 分录（正=本次新确认、负=本次冲正回滚）——账本只增不改，每次变动都留痕。
         repository.savePointsLedger(new CustomerPointsLedgerRecord(
@@ -231,12 +238,14 @@ public class LoyaltyService {
                 sourceDocType,
                 sourceDocId));
         // ② 同步 earn 行生命周期列（非金额事实列）：status：target>0→confirmed（计入余额）、
-        //    target==0→pending（全部回滚未确认）；有有效期批次令 remaining_points 同步为 target
-        //    （过期口径与实际入余额一致）。confirmed_amount 已被 DB 触发器冻结，不再回写。
+        //    target==0→pending（全部回滚未确认）；有有效期批次仅累加本次净入余额，
+        //    保留该批之前未花的剩余量，不让已抵欠或已消费积分再次到期扣减。首次确认前无已入账剩余量。
+        //    confirmed_amount 已被 DB 触发器冻结，不再回写。
         String status = target > 0
                 ? CustomerPointsLedgerRecord.STATUS_CONFIRMED
                 : CustomerPointsLedgerRecord.STATUS_PENDING;
-        Long remaining = earn.expireAt() == null ? null : target;
+        long previousRemaining = confirmed > 0 && earn.remainingPoints() != null ? Math.max(0, earn.remainingPoints()) : 0;
+        Long remaining = earn.expireAt() == null ? null : Math.max(0, previousRemaining + appliedDelta);
         repository.updatePointsLedgerLifecycle(earn.id(), status, remaining);
         auditEventService.recordSuccess("points.earned", "not_applicable", "customer_points",
                 earn.customerId(), null, sourceDocId,
@@ -580,7 +589,8 @@ public class LoyaltyService {
                 "checkin_" + UUID.randomUUID().toString().replace("-", ""),
                 customerId, today, streak, award,
                 sourceTerminal == null ? "miniapp" : sourceTerminal, now));
-        long balanceAfter = account.balance() + award;
+        long recovery = pointsRecoveries == null ? 0 : pointsRecoveries.consume(customerId, award, account.balance(), "check_in", now);
+        long balanceAfter = account.balance() + award - recovery;
         long keepProgress = account.keepThresholdProgress() + award;
         CustomerPointsAccountRecord updated = new CustomerPointsAccountRecord(
                 account.id(), account.customerId(), balanceAfter, account.level(), account.recentSummary(),

@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,7 +29,7 @@ class DealerRefundApprovalInterleavingTests {
     private final IdempotencyService idempotency = mock(IdempotencyService.class);
     private final SupervisorReviewService reviews = mock(SupervisorReviewService.class);
     private final DealerOrderService service = new DealerOrderService(repository, dealers, authorization,
-            idempotency, mock(AuditEventService.class), null, reviews, null, null, null);
+            idempotency, mock(AuditEventService.class), null, reviews, null, null, null, mock(JdbcDealerDeliveryRepository.class));
 
     private DealerOrderRefundRecord refund(String status) {
         return new DealerOrderRefundRecord("refund-race", "order-race", "payment-race", 3000L,

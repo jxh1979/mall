@@ -1,4 +1,5 @@
 package com.complex.platform.leasing;
+// 文件版本：V0.01
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -98,6 +99,12 @@ class JdbcLeasingRepository implements LeasingRepository {
     public Optional<LeasingLeadRecord> findLeadById(String id) {
         return jdbcTemplate.query("SELECT * FROM leasing_leads WHERE id = :id", Map.of("id", id), this::mapLead)
                 .stream().findFirst();
+    }
+
+    @Override
+    public Optional<LeasingLeadRecord> findLeadByIdForUpdate(String id) {
+        return jdbcTemplate.query("SELECT * FROM leasing_leads WHERE id = :id FOR UPDATE",
+                Map.of("id", id), this::mapLead).stream().findFirst();
     }
 
     // ---------- intents ----------

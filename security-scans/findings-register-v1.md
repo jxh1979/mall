@@ -1,10 +1,10 @@
-# Findings Register V1.03
+# Findings Register V1.04
 
 > 本清单由 `tools/generate-formal-security-baseline.mjs` 生成。P0 未修复或未正式豁免前，不允许进入公开生产安全准入。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 840
-- OpenAPI SHA-256: `5f758044d63a9c57bbf29bf75899ae97b208d4fdf1624b6bcc88b0844afbbeda`
+- OpenAPI operation count: 882
+- OpenAPI SHA-256: `55f947ad3c619a85e4a3ced64c0d48d79cc925acdcd9fb634928d275672c6c99`
 
 ## status-policy
 

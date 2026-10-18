@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 
@@ -12,6 +12,11 @@ public record StaffShiftCoverRecord(
         String coverUserId,
         String arrangedBy,
         String reason,
-        Instant createdAt
+        Instant createdAt,
+        Instant startAt,
+        Instant endAt,
+        String handoverNote,
+        String coverShiftId,
+        Instant sourceUpdatedAt
 ) {
 }

@@ -1,4 +1,5 @@
 package com.complex.platform.facility;
+// 文件版本：V0.01
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,10 +32,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class SiteEntryReportServiceTests {
 
     private InMemorySiteEntryReportRepository reports;
+    private final Map<String, com.complex.platform.evidence.EvidenceAttachmentRecord> files = new LinkedHashMap<>();
+    private com.complex.platform.evidence.EvidenceEventRepository evidence;
+    private com.complex.platform.evidence.EvidenceAttachmentValidator attachments;
+    private com.complex.platform.common.idempotency.IdempotencyService idempotency;
 
     @BeforeEach
     void setUp() {
         reports = new InMemorySiteEntryReportRepository();
+        evidence = mock(com.complex.platform.evidence.EvidenceEventRepository.class);
+        attachments = mock(com.complex.platform.evidence.EvidenceAttachmentValidator.class);
+        org.mockito.Mockito.when(evidence.findAttachmentById(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(call -> Optional.ofNullable(files.get(call.getArgument(0))));
+        idempotency = new com.complex.platform.common.idempotency.IdempotencyService(
+                new com.complex.platform.support.InMemoryIdempotencyRepository(), new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @AfterEach
@@ -85,6 +96,8 @@ class SiteEntryReportServiceTests {
         SiteEntryReportRecord approved = property.review(created.id(), review("approve", "k_review"));
         authenticateOutsourced("usr_vendor_a", "proj_1");
         SiteEntryReportRecord inProgress = scoped.submit(approved.id(), submit("k_submit"));
+        registerFile("att_done", inProgress.id());
+        scoped.uploadCompletion(inProgress.id(), new SiteEntryCompletionUploadRequest(List.of("att_done"), "完工", "k_material"));
         property = propertyService("usr_ops", "proj_1");
         SiteEntryReportRecord accepted = property.accept(inProgress.id(), accept("pass", "k_accept"));
 
@@ -102,6 +115,8 @@ class SiteEntryReportServiceTests {
         reports.insert(raw("ser_own_progress", "in_progress", "usr_vendor_a", "proj_1"));
         reports.insert(raw("ser_other_progress", "in_progress", "usr_vendor_b", "proj_1"));
 
+        registerFile("att_1", "ser_own_progress");
+        registerFile("att_2", "ser_own_progress");
         SiteEntryReportRecord uploaded = scoped.uploadCompletion(
                 "ser_own_progress", new SiteEntryCompletionUploadRequest(List.of("att_1", "att_2"), "完工照片", "k_upload"));
 
@@ -149,6 +164,86 @@ class SiteEntryReportServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("INVALID_STATE"));
     }
 
+    @Test
+    void rectifiedCompletionCanBeSubmittedAndAcceptedAgain() {
+        reports.insert(raw("ser_rectifying", "rectifying", "usr_vendor_a", "proj_1"));
+        registerFile("att_rectified", "ser_rectifying");
+        SiteEntryReportService vendor = outsourcedService("usr_vendor_a", "proj_1");
+        SiteEntryReportRecord submitted = vendor.uploadCompletion("ser_rectifying",
+                new SiteEntryCompletionUploadRequest(List.of("att_rectified"), "整改后的完工材料", "rectified-upload"));
+        assertThat(submitted.status()).isEqualTo("in_progress");
+        SiteEntryReportService property = propertyService("usr_ops", "proj_1");
+        assertThat(property.accept(submitted.id(), accept("pass", "rectified-accept")).status()).isEqualTo("accepted");
+    }
+
+    @Test
+    void completionAndAcceptanceKeepEveryRoundAndReplayOnlyOnce() {
+        reports.insert(raw("rounds", "in_progress", "usr_vendor_a", "proj_1"));
+        registerFile("before", "rounds");
+        registerFile("after", "rounds");
+        var vendor = outsourcedService("usr_vendor_a", "proj_1");
+        var first = new SiteEntryCompletionUploadRequest(List.of("before"), "原材料", "first");
+        vendor.uploadCompletion("rounds", first);
+        vendor.uploadCompletion("rounds", first);
+        var property = propertyService("usr_ops", "proj_1");
+        var rejected = new SiteEntryReportAcceptanceRequest(1, "rectify", "须补照片", "reject");
+        property.accept("rounds", rejected);
+        property.accept("rounds", rejected);
+        vendor = outsourcedService("usr_vendor_a", "proj_1");
+        var activeVendor = vendor;
+        assertThatThrownBy(() -> activeVendor.uploadCompletion("rounds",
+                new SiteEntryCompletionUploadRequest(List.of("before"), "仍用旧附件", "reuse")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("NEW_COMPLETION_REQUIRED"));
+        vendor.uploadCompletion("rounds", new SiteEntryCompletionUploadRequest(List.of("after"), "已整改", "second"));
+        property = propertyService("usr_ops", "proj_1");
+        var activeProperty = property;
+        assertThatThrownBy(() -> activeProperty.accept("rounds", new SiteEntryReportAcceptanceRequest(1, "pass", "旧页面", "stale")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("COMPLETION_CHANGED"));
+        property.accept("rounds", new SiteEntryReportAcceptanceRequest(3, "pass", "通过", "accept-new"));
+        var history = property.history("rounds");
+        assertThat(history).extracting(SiteEntryHistoryRecord::action)
+                .containsExactly("completion", "acceptance", "completion", "acceptance");
+        assertThat(history.get(0).attachmentIds()).containsExactly("before");
+        assertThat(history.get(1).note()).isEqualTo("须补照片");
+        assertThat(history.get(3).completionSequence()).isEqualTo(3);
+    }
+
+    @Test
+    void acceptanceRequiresCompletionAndEvidenceMustBelongToReport() {
+        reports.insert(raw("empty", "in_progress", "usr_vendor_a", "proj_1"));
+        var property = propertyService("usr_ops", "proj_1");
+        assertThatThrownBy(() -> property.accept("empty", accept("pass", "without-material")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("COMPLETION_REQUIRED"));
+        registerFile("foreign", "other-report");
+        var vendor = outsourcedService("usr_vendor_a", "proj_1");
+        assertThatThrownBy(() -> vendor.uploadCompletion("empty",
+                new SiteEntryCompletionUploadRequest(List.of("made-up"), "伪造", "missing")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("EVIDENCE_ATTACHMENT_NOT_FOUND"));
+        assertThatThrownBy(() -> vendor.uploadCompletion("empty",
+                new SiteEntryCompletionUploadRequest(List.of("foreign"), "跨报备", "foreign")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SITE_ENTRY_EVIDENCE_MISMATCH"));
+        assertThat(reports.history("empty")).isEmpty();
+    }
+
+    @Test
+    void reusedSubmissionKeyWithDifferentMaterialsIsRejected() {
+        reports.insert(raw("same-key", "in_progress", "usr_vendor_a", "proj_1"));
+        registerFile("a", "same-key");
+        registerFile("b", "same-key");
+        var vendor = outsourcedService("usr_vendor_a", "proj_1");
+        vendor.uploadCompletion("same-key", new SiteEntryCompletionUploadRequest(List.of("a"), "first", "one"));
+        assertThatThrownBy(() -> vendor.uploadCompletion("same-key",
+                new SiteEntryCompletionUploadRequest(List.of("b"), "changed", "one")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+        assertThat(reports.history("same-key")).hasSize(1);
+    }
+
+    private void registerFile(String id, String reportId) {
+        files.put(id, new com.complex.platform.evidence.EvidenceAttachmentRecord(id, id + ".png", "image/png", 10L,
+                "facility_site_entry_report", reportId, "completion", "file/" + id, "/file/" + id, "uploaded", null,
+                Instant.now(), Instant.now(), null));
+    }
+
     private SiteEntryReportRequest createReq(String projectId, String key) {
         return new SiteEntryReportRequest(projectId, "sp_1", "店铺装修围挡施工",
                 LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-05"), 6,
@@ -164,7 +259,7 @@ class SiteEntryReportServiceTests {
     }
 
     private SiteEntryReportAcceptanceRequest accept(String result, String key) {
-        return new SiteEntryReportAcceptanceRequest(result, "ok", key);
+        return new SiteEntryReportAcceptanceRequest(1, result, "ok", key);
     }
 
     private SiteEntryReportRecord raw(String id, String status, String assigneeId, String projectId) {
@@ -176,17 +271,20 @@ class SiteEntryReportServiceTests {
 
     private SiteEntryReportService outsourcedService(String userId, String projectId) {
         authenticateOutsourced(userId, projectId);
-        return new SiteEntryReportService(reports, mock(AuditEventService.class), new AuthorizationService(null));
+        return new SiteEntryReportService(reports, mock(AuditEventService.class), new AuthorizationService(null), evidence, attachments, idempotency);
     }
 
     private SiteEntryReportService propertyService(String userId, String projectId) {
         authenticate(new AccessActor(userId, userId, "staff", projectId, null, "active"));
-        return new SiteEntryReportService(reports, mock(AuditEventService.class), new AuthorizationService(null));
+        var auth = org.mockito.Mockito.spy(new AuthorizationService(null));
+        org.mockito.Mockito.doAnswer(call -> projectId.equals(call.getArgument(1)))
+                .when(auth).canReachProject(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(String[].class));
+        return new SiteEntryReportService(reports, mock(AuditEventService.class), auth, evidence, attachments, idempotency);
     }
 
     private SiteEntryReportService merchantService(String userId, String projectId, String merchantId) {
         authenticate(new AccessActor(userId, userId, "merchant", projectId, merchantId, "active"));
-        return new SiteEntryReportService(reports, mock(AuditEventService.class), new AuthorizationService(null));
+        return new SiteEntryReportService(reports, mock(AuditEventService.class), new AuthorizationService(null), evidence, attachments, idempotency);
     }
 
     private void authenticateOutsourced(String userId, String projectId) {
@@ -200,6 +298,13 @@ class SiteEntryReportServiceTests {
 
     static class InMemorySiteEntryReportRepository implements SiteEntryReportRepository {
         final Map<String, SiteEntryReportRecord> store = new LinkedHashMap<>();
+        final Map<String, List<SiteEntryHistoryRecord>> histories = new LinkedHashMap<>();
+
+        @Override public Optional<SiteEntryReportRecord> findByIdForUpdate(String id) { return findById(id); }
+        @Override public List<SiteEntryHistoryRecord> history(String id) { return List.copyOf(histories.getOrDefault(id, List.of())); }
+        @Override public void appendHistory(SiteEntryHistoryRecord record) {
+            histories.computeIfAbsent(record.reportId(), id -> new ArrayList<>()).add(record);
+        }
 
         @Override
         public void insert(SiteEntryReportRecord record) {

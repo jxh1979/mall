@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
@@ -33,7 +35,7 @@ class SiteEntryReportControllerTests {
     void setUp() {
         service = mock(SiteEntryReportService.class);
         authorizationService = mock(AuthorizationService.class);
-        controller = new SiteEntryReportController(service, authorizationService);
+        controller = new SiteEntryReportController(service, authorizationService, mock(com.complex.platform.evidence.EvidenceEventService.class));
         outsourced = new AccessActor("usr_vendor_a", "vendor-a", "outsourced_vendor", "proj_1", null, "active");
         when(authorizationService.currentActor()).thenReturn(outsourced);
         when(authorizationService.isOutsourcedVendor(outsourced)).thenReturn(true);
@@ -42,6 +44,10 @@ class SiteEntryReportControllerTests {
     @Test
     void outsourcedReadCreateAndSubmitUseAssignedFinePermissions() {
         when(service.list()).thenReturn(new PageResponse<>(List.of(), 1, 500, 0));
+        var report = new SiteEntryReportRecord("ser_1", "proj_1", null, "施工", LocalDate.now(), LocalDate.now(),
+                1, "联系人", null, "usr_vendor_a", "in_progress", null, null, "usr_vendor_a",
+                java.time.Instant.now(), java.time.Instant.now(), List.of(), null, null, null);
+        when(service.findById("ser_1")).thenReturn(report);
 
         controller.list();
         controller.get("ser_1");
@@ -101,6 +107,6 @@ class SiteEntryReportControllerTests {
     }
 
     private SiteEntryReportAcceptanceRequest accept(String result, String key) {
-        return new SiteEntryReportAcceptanceRequest(result, "ok", key);
+        return new SiteEntryReportAcceptanceRequest(1, result, "ok", key);
     }
 }

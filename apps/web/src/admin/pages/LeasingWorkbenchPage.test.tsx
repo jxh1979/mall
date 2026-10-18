@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -71,6 +72,18 @@ function renderPage(overrides: Partial<AdminPageProps> = {}, contactPhone?: () =
 }
 
 describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
+  it("已签线索禁止人工回退和再次转意向，仍可正常跟进", async () => {
+    renderPage();
+    await screen.findByTestId("leasing-lead-select-l-2");
+    fireEvent.click(screen.getByTestId("leasing-lead-select-l-2"));
+    expect((screen.getByTestId("leasing-intent-create") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId("leasing-lead-status-update") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId("leasing-follow-add") as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("leasing-lead-status").querySelector('option[value="signed"]')).toBeNull();
+    fireEvent.click(screen.getByTestId("leasing-lead-select-l-1"));
+    expect((screen.getByTestId("leasing-intent-create") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/admin/leasing/workbench");

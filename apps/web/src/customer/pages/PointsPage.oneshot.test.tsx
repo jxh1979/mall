@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -32,6 +33,8 @@ function stubFetch(): void {
         return Promise.resolve(envelope({ id: "redemption_1", item_name: "精酿啤酒", quantity: 1, total_points: 100, status: "issued" }, true));
       }
       if (url.endsWith("/customer/points")) return Promise.resolve(envelope({ customer_id: "c-1", balance: 320, level: "黄金", recent_summary: null }));
+      if (url.endsWith("/customer/ticket-rewards")) return Promise.resolve(envelope({ rewards: [], pending_recovery: 0 }));
+      if (url.endsWith("/customer/ticket-reward-rules")) return Promise.resolve(envelope([]));
       if (url.includes("/points/redemption-items")) {
         return Promise.resolve(envelope({ items: [{ id: "ri-1", item_name: "精酿啤酒", item_type: "酒水", points_cost: 100, stock_quantity: 5, status: "active" }] }));
       }

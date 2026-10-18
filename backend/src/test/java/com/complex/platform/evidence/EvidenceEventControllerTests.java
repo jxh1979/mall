@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.evidence;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -50,7 +50,7 @@ class EvidenceEventControllerTests {
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private EvidenceEventService service;
 
     @Autowired
@@ -322,11 +322,6 @@ class EvidenceEventControllerTests {
 
     @TestConfiguration
     static class TestBeans {
-        @Bean
-        EvidenceEventService evidenceEventService() {
-            return Mockito.mock(EvidenceEventService.class);
-        }
-
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);

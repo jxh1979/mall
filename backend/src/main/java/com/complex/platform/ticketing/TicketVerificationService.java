@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -211,6 +211,7 @@ public class TicketVerificationService {
                 signatureValue,
                 signatureVersion
         ));
+        eventPublisher.publishEvent(new TicketRewardFacts.CredentialPresented(saved.id(), customerId));
         return toCredentialResponse(saved);
     }
 
@@ -337,13 +338,7 @@ public class TicketVerificationService {
                 original.merchantId(),
                 original.verifiedPeople()
         ));
-        // F-TXN-03 按核销张数：冲正回滚积分份额——以冲正后该订单最新 Σused/Σtotal 发积分确认事件，
-        // customer 域据此把已确认份额对齐更低的 target（冲正一张即按份回滚 1/Σtotal），取代原"冲正全额 deduct"。
-        String reversedOrderId = reversedEntitlement == null ? null : reversedEntitlement.orderId();
-        if (reversedOrderId != null && !reversedOrderId.isBlank()) {
-            long[] units = sumOrderUnits(reversedOrderId);
-            eventPublisher.publishEvent(new PointsConfirmRequestedEvent(reversedOrderId, units[0], units[1]));
-        }
+        eventPublisher.publishEvent(new TicketRewardFacts.Reversed(original.id()));
         return new VerificationResponse(reversal.id(), reversal.verificationNo(), reversal.status(), reversal.resultReason());
     }
 
@@ -358,20 +353,6 @@ public class TicketVerificationService {
             compensationFulfillmentPort.recordFulfillment(entitlement.compensationItemId(), verification.id(), now,
                     settlementPriceCent);
         }
-    }
-
-    private long[] sumOrderUnits(String orderId) {
-        long used = 0L;
-        long total = 0L;
-        for (IssuedEntitlementRecord e : repository.listIssuedEntitlementsByOrderId(orderId)) {
-            // CG-08b：补偿补发行不计入原订单积分份额（原积分记录保留、按原核销锁定的等待期处理）。
-            if (e.compensationItemId() != null) {
-                continue;
-            }
-            used += e.usedTimes();
-            total += e.totalTimes();
-        }
-        return new long[]{used, total};
     }
 
     /**
@@ -649,8 +630,7 @@ public class TicketVerificationService {
         if (updated.compensationItemId() != null) {
             recordCompensationFulfillment(updated, verification, now, settlementPriceCent);
         } else if (updated.orderId() != null && !updated.orderId().isBlank()) {
-            long[] units = sumOrderUnits(updated.orderId());
-            eventPublisher.publishEvent(new PointsConfirmRequestedEvent(updated.orderId(), units[0], units[1]));
+            eventPublisher.publishEvent(new TicketRewardFacts.Used(verification.id(), credential == null ? null : credential.id()));
         }
         // 结算重构批１：核销成功 → 发 settlement.settled，settlement 域 AFTER_COMMIT 双写 settlement_transactions
         // （核销结算逐笔流水,观察期与旧 allocated 快照口径对账）。异步、不属核销主链——下游失败不回滚核销。
@@ -803,8 +783,8 @@ public class TicketVerificationService {
         if (consumed.compensationItemId() != null) {
             recordCompensationFulfillment(consumed, verification, now, settlementPriceCent);
         } else if (consumed.orderId() != null && !consumed.orderId().isBlank()) {
-            long[] units = sumOrderUnits(consumed.orderId());
-            eventPublisher.publishEvent(new PointsConfirmRequestedEvent(consumed.orderId(), units[0], units[1]));
+            eventPublisher.publishEvent(new TicketRewardFacts.Used(verification.id(),
+                    repository.findTicketCredentialByToken(request.credentialPayload()).map(TicketCredentialRecord::id).orElse(null)));
         }
         eventPublisher.publishEvent(new SettlementSettledEvent(
                 verification.id(), // AUD-012：本次游乐核销记录 id → 不可变增量结算幂等键

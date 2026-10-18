@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
@@ -135,11 +135,12 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         return saved;
     }
 
+    @Transactional
     public LeasingLeadRecord assignLead(String leadId, LeasingLeadAssignRequest request) {
         authorizationService.requirePlatformScope();
         LeasingLeadAssignRequest actual = requireRequest(request);
         String ownerUserId = requireText(actual.ownerUserId(), "owner_user_id");
-        LeasingLeadRecord ex = requireLead(leadId);
+        LeasingLeadRecord ex = requireLeadForUpdate(leadId, "leasing.lead.manage");
         LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(ex.id(), ex.contactName(),
                 ex.contactPhone(), ex.source(), ex.intendedBusinessType(), ex.intendedSpaceId(), ex.intendedAreaSqm(),
                 ex.brandId(), ownerUserId, ex.status(), ex.lostOrHoldReason(), ex.lastFollowUpAt(), ex.projectId(),
@@ -149,15 +150,20 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         return saved;
     }
 
+    @Transactional
     public LeasingLeadRecord updateLeadStatus(String leadId, LeasingLeadStatusRequest request) {
         authorizationService.requirePlatformScope();
         LeasingLeadStatusRequest actual = requireRequest(request);
         String status = requireEnum(actual.status(), LEAD_STATUSES, "status");
+        if ("signed".equals(status)) {
+            throw ApiException.conflict("LEASING_SIGNED_REQUIRES_EFFECTIVE_CONTRACT",
+                    "已签约状态只能由合同审批生效后自动更新");
+        }
         String reason = trimToNull(actual.reason());
         if (LEAD_REASON_REQUIRED.contains(status) && reason == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "流转到该状态必须填写理由：" + status);
         }
-        LeasingLeadRecord ex = requireLead(leadId);
+        LeasingLeadRecord ex = requireLeadForUpdate(leadId, "leasing.lead.manage");
         // CG-01（PGM「招商运营细则」）：「已签约后不得回退至未签约状态」——已签约线索改任何其他状态一律拒绝。
         if ("signed".equals(ex.status()) && !"signed".equals(status)) {
             throw ApiException.conflict("LEASING_LEAD_ALREADY_SIGNED", "已签约的线索不得回退至未签约状态");
@@ -225,10 +231,14 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
     }
 
     /** 线索转意向：lead → converted_to_intent，生成意向（stage 起始 initial_contact）。 */
+    @Transactional
     public LeasingIntentRecord createIntent(LeasingIntentRequest request) {
         authorizationService.requirePlatformScope();
         LeasingIntentRequest actual = requireRequest(request);
-        LeasingLeadRecord lead = requireLead(actual.leadId());
+        LeasingLeadRecord lead = requireLeadForUpdate(actual.leadId(), "leasing.intent.manage");
+        if ("signed".equals(lead.status())) {
+            throw ApiException.conflict("LEASING_LEAD_ALREADY_SIGNED", "已签约的线索不能再次创建意向");
+        }
         requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()));
         Instant now = Instant.now();
         LeasingIntentRecord saved = repository.saveIntent(new LeasingIntentRecord(
@@ -446,26 +456,24 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         return repository.listAllFollowUpsPaged(currentProjectScope(), page, size);
     }
 
+    @Transactional
     public LeasingFollowUpRecord createFollowUp(LeasingFollowUpRequest request) {
         authorizationService.requirePlatformScope();
         LeasingFollowUpRequest actual = requireRequest(request);
         String type = requireEnum(actual.refType(), FOLLOW_UP_REF_TYPES, "ref_type");
         String refId = requireText(actual.refId(), "ref_id");
+        String leadId = "lead".equals(type) ? refId : requireIntent(refId).leadId();
+        LeasingLeadRecord lead = requireLeadForUpdate(leadId, "leasing.lead.manage");
         Instant now = Instant.now();
         LeasingFollowUpRecord saved = repository.saveFollowUp(new LeasingFollowUpRecord(
                 "follow_" + UUID.randomUUID(), type, refId, trimToNull(actual.method()),
                 requireText(actual.content(), "content"), actual.nextPlanAt(),
-                authorizationService.currentActor().id(), null, now));
-        // 回写线索 last_follow_up_at（3 天提醒依据）：ref=lead 直接回写，ref=intent 回写其所属线索。
-        String leadId = "lead".equals(type) ? refId
-                : repository.findIntentById(refId).map(LeasingIntentRecord::leadId).orElse(null);
-        if (leadId != null) {
-            repository.findLeadById(leadId).ifPresent(lead -> repository.saveLead(new LeasingLeadRecord(
-                    lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
-                    lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(),
-                    "pending_follow_up".equals(lead.status()) ? "following_up" : lead.status(),
-                    lead.lostOrHoldReason(), now, lead.projectId(), lead.createdAt(), now)));
-        }
+                authorizationService.currentActor().id(), lead.projectId(), now));
+        repository.saveLead(new LeasingLeadRecord(
+                lead.id(), lead.contactName(), lead.contactPhone(), lead.source(), lead.intendedBusinessType(),
+                lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(), lead.ownerUserId(),
+                "pending_follow_up".equals(lead.status()) ? "following_up" : lead.status(),
+                lead.lostOrHoldReason(), now, lead.projectId(), lead.createdAt(), now));
         auditEventService.recordSuccess("leasing.follow_up.created", "leasing.lead.manage", "leasing_follow_up",
                 saved.id(), null, actual.idempotencyKey(), Map.of("ref_type", type, "ref_id", refId));
         return saved;
@@ -499,6 +507,18 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
     private LeasingLeadRecord requireLead(String leadId) {
         return repository.findLeadById(requireText(leadId, "lead_id"))
                 .orElseThrow(() -> ApiException.notFound("LEASING_LEAD_NOT_FOUND", "招商线索不存在或已被删除"));
+    }
+
+    private LeasingLeadRecord requireLeadForUpdate(String leadId, String permission) {
+        authorizationService.requirePermission(permission);
+        LeasingLeadRecord lead = repository.findLeadByIdForUpdate(requireText(leadId, "lead_id"))
+                .orElseThrow(() -> ApiException.notFound("LEASING_LEAD_NOT_FOUND", "招商线索不存在或已被删除"));
+        var actor = authorizationService.currentActor();
+        if (!authorizationService.isPlatformAdmin(actor)
+                && (lead.projectId() == null || !authorizationService.canReachProject(actor, lead.projectId(), permission))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "招商线索不在本权限可触及的项目范围内");
+        }
+        return lead;
     }
 
     private LeasingIntentRecord requireIntent(String intentId) {

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +35,7 @@ function makeApi(): AdminApi {
       lastPostBody = init?.body ? JSON.parse(String(init.body)) : null;
       return Promise.resolve(raw({ id: "se-new" }));
     }
+    if (url.endsWith("/history")) return Promise.resolve(envelope([]));
     if (url.includes("site-entry-reports")) return Promise.resolve(envelope(ENTRIES));
     return Promise.resolve(envelope([]));
   }));

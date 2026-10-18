@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.money.MoneyRounding;
 import java.time.Instant;
 
@@ -100,6 +102,23 @@ final class InventoryCostMath {
                 return new Result(perUnit(rowTotal, qty), rowTotal, null);
             }
         }
+    }
+
+    /** 退回恢复原出库总成本；不能用已舍入单价乘数量，也不能以当前其他批次均价代替。 */
+    static Result sourceReturn(InventoryItemCostStateRecord state, int quantity, Long sourceTotalCostCent, Instant now) {
+        if (quantity <= 0 || sourceTotalCostCent != null && sourceTotalCostCent < 0) {
+            throw new IllegalArgumentException("退回数量须为正且原成本不得为负");
+        }
+        if (sourceTotalCostCent == null) {
+            if (state.hasCostBasis()) {
+                throw com.complex.platform.common.api.ApiException.conflict("INVENTORY_RETURN_COST_UNKNOWN", "原出库成本未知，须核实原成本后办理，不能套用当前均价或按零成本入账");
+            }
+            return new Result(null, null, withRolled(state, Math.addExact(state.onHandQuantity(), quantity),
+                    state.totalCostCent(), state.cumulativeInCostCent(), state.cumulativeOutCostCent(), false, now));
+        }
+        return new Result(perUnit(sourceTotalCostCent, quantity), sourceTotalCostCent,
+                withRolled(state, Math.addExact(state.onHandQuantity(), quantity), Math.addExact(state.totalCostCent(), sourceTotalCostCent),
+                        Math.addExact(state.cumulativeInCostCent(), sourceTotalCostCent), state.cumulativeOutCostCent(), true, now));
     }
 
     /** 按持有总成本比例折算 qty 份的成本；持有量为 0 时按 0（有基准但已出清）。 */

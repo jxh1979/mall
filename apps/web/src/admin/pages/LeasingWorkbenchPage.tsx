@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -376,6 +377,10 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       setFormError(TEXT.noLead);
       return;
     }
+    if (lead.selected.status === "signed") {
+      setFormError("已签约的线索不能回退状态。");
+      return;
+    }
     const request = { idempotencyKey: nextKey("leasing-lead-status"), status: leadStatus, reason: "完整后台推进线索状态" };
     await runAction("leasing_lead_status_changed", request, () => api.post(`/api/v1/leasing/leads/${lead.selected!.id}/status`, request));
   }
@@ -398,6 +403,10 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   async function createIntent() {
     if (!lead.selected) {
       setFormError(TEXT.leadRequired);
+      return;
+    }
+    if (lead.selected.status === "signed") {
+      setFormError("已签约的线索不能再次创建意向。");
       return;
     }
     const request = { idempotencyKey: nextKey("leasing-intent-create"), leadId: lead.selected.id, intendedSpaceId: intentSpaceId };
@@ -592,7 +601,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             </div>
             <div className="admin-form-row" data-testid="leasing-lead-actions">
               <button type="button" data-testid="leasing-lead-assign" disabled={busyAction !== ""} onClick={() => void assignLead()}>指派</button>
-              <button type="button" data-testid="leasing-lead-status-update" disabled={busyAction !== ""} onClick={() => void updateLeadStatus()}>更新状态</button>
+              <button type="button" data-testid="leasing-lead-status-update" disabled={busyAction !== "" || lead.selected?.status === "signed"} title={lead.selected?.status === "signed" ? "已签约后不能回退状态" : undefined} onClick={() => void updateLeadStatus()}>更新状态</button>
               <button type="button" data-testid="leasing-follow-add" disabled={busyAction !== ""} onClick={() => void addFollowUp()}>添加跟进</button>
             </div>
 
@@ -606,7 +615,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <label>合同到期日<CnDatePicker data-testid="leasing-sign-expiry-date" value={signExpiryDate} onChange={setSignExpiryDate} /></label>
             </div>
             <div className="admin-form-row" data-testid="leasing-intent-actions">
-              <button type="button" data-testid="leasing-intent-create" disabled={busyAction !== ""} onClick={() => void createIntent()}>从线索建意向</button>
+              <button type="button" data-testid="leasing-intent-create" disabled={busyAction !== "" || lead.selected?.status === "signed"} title={lead.selected?.status === "signed" ? "已签约的线索不能再次创建意向" : undefined} onClick={() => void createIntent()}>从线索建意向</button>
               <button type="button" data-testid="leasing-intent-advance" disabled={busyAction !== ""} onClick={() => void advanceIntent()}>推进意向</button>
               <button type="button" data-testid="leasing-intent-sign" disabled={busyAction !== ""} onClick={() => void signIntent()}>签约→合同草稿</button>
             </div>

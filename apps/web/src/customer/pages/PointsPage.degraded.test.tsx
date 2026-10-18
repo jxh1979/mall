@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +10,8 @@ describe("PointsPage 副资源降级（批2）", () => {
 
   it("兑换目录失败 → 积分余额（主资源）照常，积分商城显示降级提示，无整页错误", async () => {
     const service = {
+      listTicketRewards: vi.fn().mockResolvedValue({ rewards: [], pendingRecovery: 0 }),
+      listTicketRewardRules: vi.fn().mockResolvedValue([]),
       getPoints: vi.fn().mockResolvedValue({ customerId: "c-1", balance: 320, level: "黄金", recentSummary: null }),
       listCheckIns: vi.fn().mockResolvedValue([]),
       listRedemptionItems: vi.fn().mockRejectedValue(new Error("boom")),

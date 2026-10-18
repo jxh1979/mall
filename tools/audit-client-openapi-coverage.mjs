@@ -1,3 +1,5 @@
+// 文件版本：V0.01
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -14,7 +16,7 @@ const scanFiles = [
   'apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt',
 ];
 
-const apiPathPattern = /\/api\/[A-Za-z0-9_?&=/:{}.${}\-[\]]*/g;
+const apiPathPattern = /\/api\/(?:\$\{[^}\r\n]*\}|[A-Za-z0-9_?&=/:{}.\-$\[\]])*/g;
 
 function normalizeApiPath(rawPath) {
   return rawPath.replace(/[),.;]+$/g, '').split('?')[0];
@@ -64,6 +66,11 @@ function lineNumberAt(source, index) {
   }
   return line;
 }
+
+const interpolationProbe = '/api/v1/staff/attendance/receipt-events/${urlEncode(id)}/reviews';
+assert.equal([...interpolationProbe.matchAll(apiPathPattern)][0][0], interpolationProbe);
+assert.equal(matchesOpenApiPath(interpolationProbe, '/api/v1/staff/attendance/receipt-events/{id}/reviews'), true);
+assert.equal(matchesOpenApiPath(interpolationProbe, '/api/v1/staff/attendance/receipt-events/{id}/review'), false);
 
 if (!fs.existsSync(openapiPath)) {
   console.error(`[client-openapi-coverage] Missing ${path.relative(rootDir, openapiPath)}`);

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -410,6 +410,20 @@ public class AuthorizationService implements CallerScopeResolver {
                 && SessionIssuer.MASTER_ACCOUNT_TYPE.equals(normalize(actor.accountType()))
                 && SessionIssuer.MASTER_USER_ID.equals(actor.id())
                 && SessionIssuer.MASTER_USERNAME.equals(actor.username());
+    }
+
+    /** 供定时任务核实指定收件人的实际查看能力，不切换会话或消耗单次授权。 */
+    public boolean hasEffectivePermission(AccessActor actor, String permissionCode) {
+        if (actor == null || !"active".equals(actor.status()) || !knownPermission(permissionCode)) return false;
+        try {
+            Optional<AccessRepository.UserIdentity> identity = identityAtStart(actor);
+            EffectivePermissions result = computeEffectivePermissions(
+                    actor.id(), isPlatformAdminBridge(actor), isMasterAuthority(actor), effect -> true);
+            requireIdentityUnchanged(actor, identity);
+            return result.grants().contains(permissionCode);
+        } catch (ApiException denied) {
+            return false;
+        }
     }
 
     /**

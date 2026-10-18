@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -218,6 +218,8 @@ data class DeviceReturnRequest(
   @SerialName("has_pending_tasks")
   val hasPendingTasks: Boolean = false,
   val reason: String? = null,
+  val operatorNote: String? = null,
+  val evidenceAttachmentIds: List<String> = emptyList(),
 )
 
 enum class ReturnStatus {
@@ -615,6 +617,7 @@ data class StaffShiftUpsertRequest(
   val endAt: String,
   val pointSpaceIds: List<String>? = null,
   val note: String? = null,
+  val nightDutyManager: Boolean = false,
 )
 
 @Serializable
@@ -628,7 +631,50 @@ data class StaffShiftRow(
   val note: String? = null,
   val reviewId: String? = null,
   val publicationStatus: String? = null,
+  val nightDutyProjectId: String? = null,
 )
+
+// 工作手机实际领取：事件编号固定，时钟证明与原设备/班次绑定，观察到的墙钟时间只供复核。
+@Serializable
+data class AttendanceAnchorRequest(val idempotencyKey: String, val shiftId: String, val bootId: String, val elapsedMillis: Long)
+
+@Serializable
+data class WorkPhoneAttendanceContext(val id: String, val deviceId: String, val userId: String, val shiftId: String? = null,
+  val bindingAt: String? = null, val staffProfileId: String? = null, val previousContextId: String? = null,
+  val closedAt: String? = null, val closeReason: String? = null, val createdAt: String? = null)
+
+@Serializable
+data class AttendanceTimeAnchor(val id: String, val contextId: String, val bootId: String, val elapsedMillis: Long, val serverAt: String)
+
+@Serializable
+data class AttendanceAnchorResponse(val context: WorkPhoneAttendanceContext, val anchor: AttendanceTimeAnchor)
+
+@Serializable
+data class AttendanceReceiptRequest(val eventId: String, val deviceId: String, val contextId: String? = null,
+  val anchorId: String? = null, val bootId: String, val elapsedMillis: Long, val observedAt: String,
+  val method: String, val tagRef: String? = null, val spaceId: String? = null)
+
+@Serializable
+data class AttendanceReceiptRecoveryRequest(val original: AttendanceReceiptRequest,val reason: String,val handoverEvidence: String,
+  val proposedContextId: String? = null)
+
+@Serializable
+data class AttendanceReceiptEvent(val id: String, val status: String, val actualAt: String? = null,
+  val observedAt: String? = null, val reason: String? = null, val reviewId: String? = null,
+  val userId: String? = null, val shiftId: String? = null, val contextId: String? = null, val deviceId: String? = null)
+
+@Serializable
+data class AttendanceReceiptReviewRequest(val idempotencyKey: String, val shiftId: String, val actualAt: String,
+  val reason: String, val handoverEvidence: String)
+
+@Serializable
+data class AttendanceReceiptReview(val id: String, val eventId: String, val reviewId: String, val status: String,
+  val shiftId: String, val actualAt: String, val reason: String, val handoverEvidence: String,
+  val initiatedBy: String? = null, val createdAt: String? = null, val decidedAt: String? = null)
+
+@Serializable
+data class WorkPhoneSwapRequest(val idempotencyKey: String, val oldDeviceCode: String, val replacementDeviceId: String,
+  val reason: String, val evidenceAttachmentIds: List<String> = emptyList())
 
 @Serializable
 data class AttendancePunchRequest(

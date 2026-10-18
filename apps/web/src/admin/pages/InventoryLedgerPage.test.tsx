@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -53,6 +54,24 @@ function renderPage(api: AdminApiClient = makeApi()) {
 }
 
 describe("InventoryLedgerPage KPI 聚焦视图（带参重进本页）", () => {
+  it("普通项目员工旧台账读取被拒后仍能独立查看授权隔离仓库，只有查看权不能处置", async () => {
+    const api = makeApi(vi.fn(async (path: string) => {
+      if (path === "/api/v1/inventory/quarantine/warehouses") return [{ id: "project-warehouse", name: "项目中心仓" }];
+      if (path.includes("/quarantine?")) return [{ id: "isolated-lot", itemId: "damaged-goods", quantity: 2, remainingQuantity: 2, receivedAt: "2026-10-18T10:00:00Z", sourceId: "difference" }];
+      if (path.includes("/quarantine/isolated-lot/dispositions")) return [];
+      throw new Error("旧台账需要商户范围");
+    }));
+    render(<InventoryLedgerPage api={api} user={{ id: "project-staff", username: "项目查看人员", accountType: "staff" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={{ status: "ready", value: { grants: ["inventory.stock.view"], denies: [], wildcard: false } }} />);
+    await screen.findByText("旧台账需要商户范围");
+    fireEvent.click(screen.getByRole("button", { name: "隔离库存与后续处置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "查看处置" }));
+    expect(await screen.findByText("damaged-goods 的隔离处置")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "新建隔离处置方案" })).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/quarantine/warehouses");
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     window.history.replaceState({}, "", "/admin/inventory/ledger");

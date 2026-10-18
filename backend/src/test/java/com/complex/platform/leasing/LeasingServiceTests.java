@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,6 +52,7 @@ class LeasingServiceTests {
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
         // 3.2 默认：平台管理员无 project scope（全量）；跨项目用例再覆写。
         when(authz.currentProjectScopeQuietly()).thenReturn(Optional.empty());
+        when(authz.isPlatformAdmin(org.mockito.ArgumentMatchers.any())).thenReturn(true);
         // 3.13 默认：空间存在性放行（专项用例再覆写为 false）。
         org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
         service = new LeasingService(repo, audit, authz, contractService, platformService);
@@ -352,7 +353,36 @@ class LeasingServiceTests {
     }
 
     /** 内存仓储（实现 V161 重建后的 11 个方法）。 */
+    @Test
+    void manualStatusCannotDeclareUnsignedLeadSigned() {
+        LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                "客户", null, "outbound", null, null, null, null, "manual-signed"));
+        assertThatThrownBy(() -> service.updateLeadStatus(lead.id(),
+                new LeasingLeadStatusRequest("signed", null, "manual-status")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("LEASING_SIGNED_REQUIRES_EFFECTIVE_CONTRACT"));
+        assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo("pending_follow_up");
+    }
+
+    @Test
+    void signedLeadCannotCreateAnotherIntent() {
+        Instant now = Instant.now();
+        repo.saveLead(new LeasingLeadRecord("lead_signed_intent", "已签客户", null, "outbound",
+                null, null, null, null, "u", "signed", null, now, null, now, now));
+        assertThatThrownBy(() -> service.createIntent(new LeasingIntentRequest(
+                "lead_signed_intent", null, null, Map.of(), "signed-intent")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("LEASING_LEAD_ALREADY_SIGNED"));
+        assertThat(repo.listIntents(null)).isEmpty();
+        assertThat(repo.findLeadById("lead_signed_intent").orElseThrow().status()).isEqualTo("signed");
+    }
+
     private static final class InMemoryLeasingRepository implements LeasingRepository {
+        @Override
+        public Optional<LeasingLeadRecord> findLeadByIdForUpdate(String id) {
+            return findLeadById(id);
+        }
+
         private final Map<String, LeasingLeadRecord> leads = new LinkedHashMap<>();
         private final Map<String, LeasingIntentRecord> intents = new LinkedHashMap<>();
         private final Map<String, LeasingBrandRecord> brands = new LinkedHashMap<>();

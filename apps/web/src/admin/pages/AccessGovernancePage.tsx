@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -53,6 +53,7 @@ const POSITION_LABELS: Record<string, string> = {
   outsourced_facility: "外包设施",
   outsourced_security_cleaning: "外包安保保洁",
   ops_manager: "运营经理",
+  night_duty_manager: "夜班值班经理",
 };
 function zhPosition(code?: string | null): string {
   if (!code) return "—";
@@ -807,7 +808,9 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
         <h3>给用户定职位自动适配</h3>
         <div className="admin-inline-form" data-testid="access-user-position-form">
           <select aria-label="用户" value={positionForm.userId} onChange={(event) => setPositionForm({ ...positionForm, userId: event.target.value })}>{users.map((user) => <option key={user.id} value={user.id}>{user.username} ({user.id})</option>)}</select>
-          <input aria-label="岗位编码" placeholder="岗位编码" value={positionForm.positionCode} onChange={(event) => setPositionForm({ ...positionForm, positionCode: event.target.value })} />
+          <datalist id="access-position-codes">{Object.entries(POSITION_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}</datalist>
+          <p>工作手机故障换机限夜班值班经理；须有生效的岗位模板、对应范围与换机权限。撤销岗位后不能继续换机。</p>
+          <input aria-label="岗位编码" placeholder="岗位编码" list="access-position-codes" value={positionForm.positionCode} onChange={(event) => setPositionForm({ ...positionForm, positionCode: event.target.value })} />
           <select aria-label="职级" data-testid="access-user-position-level" value={positionForm.staffLevelId} onChange={(event) => setPositionForm({ ...positionForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select>
           <input aria-label="基础薪资元" type="number" min="0" placeholder="基础薪资(元)" value={positionForm.baseSalaryYuan} onChange={(event) => setPositionForm({ ...positionForm, baseSalaryYuan: event.target.value })} />
           <input aria-label="薪资备注" placeholder="薪资备注" value={positionForm.salaryDetail} onChange={(event) => setPositionForm({ ...positionForm, salaryDetail: event.target.value })} />
@@ -984,7 +987,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
             },
             content: (
               <>
-                <label>岗位编码<input data-testid="access-position-role-template-position" aria-label="岗位编码" placeholder="岗位编码" value={templateForm.positionCode} onChange={(event) => setTemplateForm({ ...templateForm, positionCode: event.target.value })} /></label>
+                <label>岗位编码<input data-testid="access-position-role-template-position" aria-label="岗位编码" placeholder="岗位编码" list="access-position-codes" value={templateForm.positionCode} onChange={(event) => setTemplateForm({ ...templateForm, positionCode: event.target.value })} /></label>
                 <label>职级<select data-testid="access-position-role-template-level" aria-label="职级" value={templateForm.staffLevelId} onChange={(event) => setTemplateForm({ ...templateForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select></label>
                 <label>角色<select data-testid="access-position-role-template-role" aria-label="角色" value={templateForm.roleId} onChange={(event) => setTemplateForm({ ...templateForm, roleId: event.target.value })}><option value="">不绑定角色</option>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
                 <label>权限模板编号<input data-testid="access-position-role-template-template-id" aria-label="权限模板编号" placeholder="权限模板编号" value={templateForm.templateId} onChange={(event) => setTemplateForm({ ...templateForm, templateId: event.target.value })} /></label>
@@ -1047,7 +1050,7 @@ export function AccessGovernancePage({ api, user, setActionResult, setGlobalErro
             content: (
               <>
                 <label>申请角色<select aria-label="申请角色" value={grantForm.roleId} onChange={(event) => setGrantForm({ ...grantForm, roleId: event.target.value })}>{roles.map((role) => <option key={role.id} value={role.id}>{roleLabel(role)}</option>)}</select></label>
-                <label>申请岗位<input aria-label="申请岗位" placeholder="岗位编码" value={grantForm.positionCode} onChange={(event) => setGrantForm({ ...grantForm, positionCode: event.target.value })} /></label>
+                <label>申请岗位<input aria-label="申请岗位" placeholder="岗位编码" list="access-position-codes" value={grantForm.positionCode} onChange={(event) => setGrantForm({ ...grantForm, positionCode: event.target.value })} /></label>
                 <label>申请职级<select aria-label="申请职级" value={grantForm.staffLevelId} onChange={(event) => setGrantForm({ ...grantForm, staffLevelId: event.target.value })}>{staffLevelOptions()}</select></label>
                 <label>{grantForm.requestType === "temporary_permission" ? "临时权限码" : "权限码"}<input aria-label={grantForm.requestType === "temporary_permission" ? "临时权限码" : "权限码"} placeholder="权限码，逗号分隔" value={grantForm.permissionCodes} onChange={(event) => setGrantForm({ ...grantForm, permissionCodes: event.target.value })} /></label>
                 <label>过期时间<input aria-label="过期时间" type="datetime-local" value={grantForm.expiresAt} onChange={(event) => setGrantForm({ ...grantForm, expiresAt: event.target.value })} /></label>

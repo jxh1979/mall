@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -60,7 +60,7 @@ class FinanceControllerTests {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     private com.complex.platform.dealer.JdbcDealerOrderRepository dealerOrderRepository;
 
-    @Autowired
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private FinanceService service;
 
     @Autowired
@@ -414,11 +414,6 @@ class FinanceControllerTests {
 
     @TestConfiguration
     static class TestBeans {
-        @Bean
-        FinanceService financeService() {
-            return Mockito.mock(FinanceService.class);
-        }
-
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);

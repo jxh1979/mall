@@ -1,5 +1,6 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
+import { DealerDeliveryPanel } from "../../dealer/DealerDeliveryPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -14,13 +15,13 @@ import type { AdminPageProps } from "../types";
  */
 type DealerRow = { id: string; dealerName?: string; status?: string; creditSuspended?: boolean };
 type ContractRow = { id: string; contractNo?: string; creditTerm?: boolean; firstPaymentRatioBps?: number | null; firstPaymentAmountCent?: number | null; firstPaymentDeadlineDays?: number | null; balanceDueDays?: number | null; freightCent?: number | null; freeShippingThresholdCent?: number | null; freightBearer?: string; freightTemplateVersion?: number; termsVersion?: number; contractSignedAt?: string | null; firstPaymentAnchor?: string | null; firstPaymentFixedAt?: string | null; balanceDueAnchor?: string | null; balanceDueFixedAt?: string | null };
-type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null; returnedAmountCent?: number; contractSnapshot?: ContractRow | null };
+type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; deliveryCompletedAt?: string | null; contractSnapshot?: ContractRow | null };
 type PaymentRow = { id: string; method?: string; amountCent?: number; status?: string; appliedCent?: number; verifiedBy?: string | null; referenceNo?: string | null };
 type RefundRow = { id: string; paymentId?: string; amountCent?: number; status?: string; reviewId?: string | null; executedBy?: string | null; financeRefundId?: string | null };
 type OverpaymentRow = { id: string; orderId?: string; amountCent?: number; status?: string; targetOrderId?: string | null; unconfirmedAmountCent?: number; prepaymentBalanceCent?: number; appliedAmountCent?: number; allocations?: { id: string; usage: string; amountCent: number; targetOrderId?: string | null; refundId?: string | null; confirmationAttachmentIds?: string[] }[] };
 
 const ANCHORS: Record<string, string> = { contract_signed: "合同签署", order_created: "订单创建", payment_notified: "通知付款", shipped: "实际出库", signed: "实际签收", fixed_date: "合同约定固定截止" };
-const netDue = (order: OrderRow) => Math.max(0, (order.totalAmountCent ?? 0) - (order.returnedAmountCent ?? 0));
+const netDue = (order: OrderRow) => Math.max(0, (order.totalAmountCent ?? 0) - (order.returnedAmountCent ?? 0) - (order.deliveryAdjustmentCent ?? 0));
 const unpaid = (order: OrderRow) => Math.max(0, netDue(order) - (order.paidAmountCent ?? 0));
 const localTime = (value?: string | null) => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
 const ORDER_STATUS: Record<string, string> = {
@@ -65,6 +66,8 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
   const [allocationKey, setAllocationKey] = React.useState("");
   const [allocationEvidence, setAllocationEvidence] = React.useState<{ id: string; name: string }[]>([]);
   const [allocationBusy, setAllocationBusy] = React.useState(false);
+  const canManageDelivery = useCan(effectivePermissions, ["dealer.order.manage", "evidence.attachment.create"]);
+  const canShipDelivery = useCan(effectivePermissions, ["dealer.order.ship", "evidence.attachment.create"]);
   const canReadFinance = useCan(effectivePermissions, ["finance.ar_ap.view"]);
   const canUploadConfirmation = useCan(effectivePermissions, ["evidence.attachment.create", "dealer.order.payment.verify"]);
   // 条款
@@ -340,7 +343,6 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
                   </>
                 ) : null}
                 {order.status === "pending_shipment" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.ship"]} data-testid="order-ship" onClick={() => void act(`/api/v1/dealers/orders/${order.id}/ship`, {}, "dealer_order_shipped", { 订单: order.orderNo, 状态: "配送中" })}>仓库出库</PermissionButton> : null}
-                {order.status === "shipping" ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.manage"]} data-testid="order-sign" onClick={() => void act(`/api/v1/dealers/orders/${order.id}/sign`, {}, "dealer_order_signed", { 订单: order.orderNo, 说明: "签收不表示货款已结清" })}>登记签收</PermissionButton> : null}
                 {["pending_payment", "payment_verifying", "pending_shipment"].includes(order.status ?? "") ? <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.manage"]} data-testid="order-cancel-request" onClick={() => void act(`/api/v1/dealers/orders/${order.id}/cancel-request`, { reason: prompt("取消原因（必填）：") }, "dealer_order_cancel_requested", { 订单: order.orderNo, 状态: "取消中" })}>申请取消</PermissionButton> : null}
                 {order.status === "cancelling" ? (
                   <>
@@ -349,6 +351,8 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
                   </>
                 ) : null}
               </div>
+
+              {["shipping", "signed", "completed", "returning", "partially_returned", "returned"].includes(order.status ?? "") && <DealerDeliveryPanel key={order.id} api={api} orderId={order.id} status={order.status} canManage={canManageDelivery} canShip={canShipDelivery} onChanged={async () => { await selectOrder(order); await loadDealer(dealer.id); }} />}
 
               <h3>到账登记与核验（只支持对公转账、平台线上支付）</h3>
               <div className="admin-form-grid" data-testid="payment-form">

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,6 +56,7 @@ class StaffJdbcIntegrationTests {
     private com.complex.platform.access.AccessRepository accessRepository;
 
     @Autowired StaffRegistrationService registrations;
+    @Autowired StaffWorkPhoneAttendanceService workPhoneAttendance;
     @Autowired com.complex.platform.terminal.TerminalDeviceRepository terminals;
     @Autowired com.complex.platform.governance.review.SupervisorReviewRepository reviews;
     @Autowired com.complex.platform.governance.review.SupervisorReviewService reviewService;
@@ -370,12 +371,12 @@ class StaffJdbcIntegrationTests {
         assertThat(service.listMyShifts().items()).hasSize(1);
         var checkIn=service.punch(new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(key(),"check_in","nfc","space:sp_point_3","sp_point_3",null));
         assertThat(checkIn.judgement()).isEqualTo("late");
-        var checkOut=service.punch(new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(key(),"check_out","qr","space:sp_point_3","sp_point_3",null));
-        assertThat(checkOut.judgement()).isEqualTo("early_leave");
+        assertThatThrownBy(() -> service.punch(new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(key(),"check_out","qr","space:sp_point_3","sp_point_3",null)))
+                .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEVICE_RETURN_REQUIRED"));
+        workPhoneAttendance.returned(terminals.findByDeviceId(device).orElseThrow(),Instant.now(),false);
         assertThat(service.listMyAttendance().items()).hasSize(2);
-        jdbcTemplate.update("DELETE FROM staff_shift_schedules WHERE user_id=?",staff.userId());
-        var orphan=service.punch(new com.complex.platform.access.staff.dto.StaffAttendancePunchRequest(key(),"check_in","nfc","space:sp_point_3","sp_point_3",null));
-        assertThat(orphan.judgement()).isEqualTo("no_shift");
+        assertThat(service.listMyAttendance().items()).filteredOn(r->"check_out".equals(r.punchType()))
+                .extracting(StaffAttendanceRecord::judgement).containsExactly("early_leave");
     }
 
     @org.junit.jupiter.api.Test

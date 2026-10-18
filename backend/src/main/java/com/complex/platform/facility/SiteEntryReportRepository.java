@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -10,6 +12,12 @@ public interface SiteEntryReportRepository {
     void update(SiteEntryReportRecord record);
 
     Optional<SiteEntryReportRecord> findById(String id);
+
+    Optional<SiteEntryReportRecord> findByIdForUpdate(String id);
+
+    List<SiteEntryHistoryRecord> history(String reportId);
+
+    void appendHistory(SiteEntryHistoryRecord record);
 
     List<SiteEntryReportRecord> list();
 

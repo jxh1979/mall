@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { unwrap } from "../customer/client/customerClient";
 
 function getApiBaseUrl(): string {
@@ -63,6 +63,14 @@ export class DealerPortalApi {
     return this.request<T>(path, "POST", body);
   }
 
+  postForm<T>(path: string, body: FormData): Promise<T> {
+    return this.request<T>(path, "POST", body);
+  }
+
+  readFile(path: string): Promise<Blob> {
+    return this.request<Blob>(path, "GET", undefined, true);
+  }
+
   async login(loginName: string, password: string): Promise<{ id: string; username: string; accountType: string }> {
     const result = await this.request<{ user: { id: string; username: string; accountType: string } }>("/api/v1/auth/login", "POST", {
       loginName, password, terminalType: DEALER_PORTAL_TERMINAL,
@@ -74,18 +82,21 @@ export class DealerPortalApi {
     await this.request("/api/v1/auth/logout", "POST", { idempotencyKey: `dp-logout-${Date.now()}` }).catch(() => undefined);
   }
 
-  private async request<T>(path: string, method: string, body?: JsonBody): Promise<T> {
+  private async request<T>(path: string, method: string, body?: JsonBody | FormData, raw = false): Promise<T> {
     const headers = new Headers({ "x-terminal-type": DEALER_PORTAL_TERMINAL, "x-requested-with": "XMLHttpRequest" });
     const init: RequestInit = { method, headers, credentials: "include" };
     if (body) {
-      const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : `dp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      headers.set("content-type", "application/json");
+      const multipart = body instanceof FormData;
+      const jsonBody = multipart ? {} : body;
+      const idempotencyKey = typeof jsonBody.idempotencyKey === "string" ? jsonBody.idempotencyKey : `dp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      if (!multipart) headers.set("content-type", "application/json");
       headers.set("idempotency-key", idempotencyKey);
       const csrf = readCookie("XSRF-TOKEN");
       if (csrf) headers.set("x-xsrf-token", csrf);
-      init.body = JSON.stringify(snakeKeys({ ...body, idempotencyKey }));
+      init.body = multipart ? body : JSON.stringify(snakeKeys({ ...jsonBody, idempotencyKey }));
     }
     const response = await fetch(`${this.apiBaseUrl}${path}`, init);
+    if (response.ok && raw) return await response.blob() as T;
     const text = await response.text();
     if (response.status === 401 && !path.includes("/auth/")) this.onSessionExpired?.();
     if (!response.ok) {

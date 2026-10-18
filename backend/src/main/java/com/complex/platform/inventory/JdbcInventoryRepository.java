@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +17,21 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class JdbcInventoryRepository implements InventoryRepository {
+
+    @Override
+    public Optional<InventoryQuarantineLotRecord> findQuarantineLotById(String id) {
+        return jdbcTemplate.query("SELECT * FROM inventory_quarantine_lots WHERE id=:id", Map.of("id", id), (rs, n) -> {
+            try {
+                return new InventoryQuarantineLotRecord(rs.getString("id"), rs.getString("stock_balance_id"), rs.getString("item_id"),
+                        rs.getString("warehouse_id"), rs.getString("project_id"), rs.getString("source_type"), rs.getString("source_id"),
+                        rs.getInt("quantity"), rs.getInt("remaining_quantity"),
+                        objectMapper.readValue(rs.getString("evidence_attachment_ids"), new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {}),
+                        rs.getString("received_by"), com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant(rs, "received_at"));
+            } catch (JsonProcessingException e) {
+                throw new java.sql.SQLException("隔离来源凭证格式无效", e);
+            }
+        }).stream().findFirst();
+    }
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -376,6 +393,19 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId) {
+        return saveStockMovement(movement, projectId, false);
+    }
+
+    @Override
+    public StockMovementRecord saveSourceReturnMovement(StockMovementRecord movement, String projectId) {
+        if (InventoryCostMath.direction(movement.sourceLocationId(), movement.targetLocationId()) != InventoryCostMath.Direction.INBOUND
+                || !"return".equals(movement.movementType())) {
+            throw new IllegalArgumentException("原出库成本仅可用于实物退回入库");
+        }
+        return saveStockMovement(movement, projectId, true);
+    }
+
+    private StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId, boolean sourceReturn) {
         // V296 成本台账：所有流水写入的单一汇聚点，在此统一按移动加权口径计成本（各入口无须自理）。
         // 先 FOR UPDATE 锁状态行（同物料并发出入库串行化；写路径均在 @Transactional 内），
         // 再查流水 id 是否已存在——幂等重放不得二次滚动状态、保留库中已定稿的成本列。
@@ -384,8 +414,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         if (stockMovementRowExists(movement.id())) {
             return replayExisting(movement, projectId);
         }
+        if (sourceReturn && state.isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.conflict("INVENTORY_RETURN_COST_SOURCE_MISSING", "退回商品缺少有效成本台账");
+        }
         InventoryCostMath.Result result = state
-                .map(current -> InventoryCostMath.apply(
+                .map(current -> sourceReturn ? InventoryCostMath.sourceReturn(current, movement.quantity(), movement.totalCostCent(), Instant.now()) : InventoryCostMath.apply(
                         current,
                         InventoryCostMath.direction(movement.sourceLocationId(), movement.targetLocationId()),
                         movement.quantity(),

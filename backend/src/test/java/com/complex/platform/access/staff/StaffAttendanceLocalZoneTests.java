@@ -1,9 +1,10 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -60,6 +61,12 @@ class StaffAttendanceLocalZoneTests {
         var devices=mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
         when(devices.findByDeviceId("phone")).thenReturn(java.util.Optional.of(new com.complex.platform.terminal.TerminalDeviceRecord("phone","phone","phone","staff_work_phone","project",null,null,null,null,null,null,null,"sp1","bound",fixedNow,null,null,null,null,fixedNow,fixedNow)));
         org.springframework.test.util.ReflectionTestUtils.setField(service,"terminalRepository",devices);
+        var phoneAttendance=mock(StaffWorkPhoneAttendanceService.class);
+        when(phoneAttendance.receivedLive(any(),any())).thenAnswer(call -> new StaffWorkPhoneAttendanceService.Context(
+                "ctx","phone",fixedNow,"sp1","usr_1",call.getArgument(1),null,null,null,fixedNow));
+        when(phoneAttendance.receiptJudgement(anyString(),any(StaffShiftRecord.class),anyString(),any(Instant.class)))
+                .thenAnswer(call -> ((Instant)call.getArgument(3)).isAfter(((StaffShiftRecord)call.getArgument(1)).startAt()) ? "late" : "normal");
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"workPhoneAttendance",phoneAttendance);
         var request=new org.springframework.mock.web.MockHttpServletRequest();
         request.setAttribute("com.complex.platform.gate.verified_terminal",new com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal("staff_work_phone","phone",true));
         org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(new org.springframework.web.context.request.ServletRequestAttributes(request));
@@ -84,15 +91,15 @@ class StaffAttendanceLocalZoneTests {
 
     /** 北京 8/3 05:00 下班打卡：命中跨零点的那个班，且未到 06:00 结束 → 早退。 */
     @Test
-    void crossMidnightCheckOutBeforeShiftEndHitsThatShiftAsEarlyLeave() {
+    void crossMidnightReceiptHitsOriginalShiftAndUsesActualStart() {
         stubNightShift();
         Instant at0500 = Instant.parse("2026-08-02T21:00:00Z");
 
         StaffAttendanceRecord saved = build(at0500).punch(new StaffAttendancePunchRequest(
-                "k1", "check_out", "qr", "space:test", null, null));
+                "k1", "check_in", "qr", "space:test", null, null));
 
         assertThat(saved.shiftId()).isEqualTo("shf_night");
-        assertThat(saved.judgement()).isEqualTo("early_leave");
+        assertThat(saved.judgement()).isEqualTo("late");
 
         // 拉候选走的是时间窗，不是 work_date：窗口须真正罩住该班。
         ArgumentCaptor<Instant> from = ArgumentCaptor.forClass(Instant.class);
@@ -104,15 +111,15 @@ class StaffAttendanceLocalZoneTests {
 
     /** 北京 8/3 06:30 下班打卡：已过 06:00 结束 → 正常（仍命中该班，靠「距结束最近」兜底）。 */
     @Test
-    void crossMidnightCheckOutAfterShiftEndHitsThatShiftAsNormal() {
+    void independentCheckoutCannotReplaceActualPhoneReturn() {
         stubNightShift();
         Instant at0630 = Instant.parse("2026-08-02T22:30:00Z");
 
-        StaffAttendanceRecord saved = build(at0630).punch(new StaffAttendancePunchRequest(
-                "k2", "check_out", "qr", "space:test", null, null));
-
-        assertThat(saved.shiftId()).isEqualTo("shf_night");
-        assertThat(saved.judgement()).isEqualTo("normal");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> build(at0630).punch(new StaffAttendancePunchRequest(
+                "k2", "check_out", "qr", "space:test", null, null)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        error -> assertThat(error.code()).isEqualTo("DEVICE_RETURN_REQUIRED"));
+        org.mockito.Mockito.verify(repo,org.mockito.Mockito.never()).saveAttendance(any());
     }
 
     /**

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -10,7 +10,8 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 import type { AdminPageProps } from "../types";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
-type ShiftRow = { id: string; userId?: string; workDate?: string; startAt?: string; endAt?: string; pointSpaceIds?: string[]; note?: string; createdBy?: string; reviewId?: string };
+type ShiftRow = { nightDutyProjectId?: string | null; id: string; userId?: string; workDate?: string; startAt?: string; endAt?: string; pointSpaceIds?: string[]; note?: string; createdBy?: string; reviewId?: string };
+type ReceiptEvent = { userId?: string; contextId?: string; id: string; deviceId: string; shiftId?: string; observedAt?: string; actualAt?: string; method: string; status: string; reason?: string; reviewId?: string };
 type AttendanceRow = { id: string; userId?: string; punchType?: string; punchedAt?: string; method?: string; judgement?: string; spaceId?: string; deviceFingerprint?: string };
 
 const TEXT = {
@@ -20,7 +21,9 @@ const TEXT = {
 };
 
 const JUDGE_LABELS: Record<string, string> = { normal: "正常", late: "迟到", early_leave: "早退", no_shift: "无班次" };
-const METHOD_LABELS: Record<string, string> = { nfc: "NFC", qr: "扫码", manual: "历史手动记录", charging_disconnect: "离开充电设施" };
+type ReceiptReview = { id: string; reviewId: string; status: string; actualAt: string; shiftId: string; reason: string; handoverEvidence: string; initiatedBy: string; createdAt: string };
+
+const METHOD_LABELS: Record<string, string> = { nfc: "NFC", qr: "扫码", manual: "人工记录", charging_disconnect: "离开充电设施", device_return: "本班手机归还" };
 const TYPE_LABELS: Record<string, string> = { check_in: "上班", check_out: "下班" };
 const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
@@ -48,6 +51,19 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   const [settingReason, setSettingReason] = React.useState("");
   const [settingMessage, setSettingMessage] = React.useState("");
   const [historyText, setHistoryText] = React.useState("");
+  const [coverShift, setCoverShift] = React.useState<ShiftRow | null>(null);
+  const [coverForm, setCoverForm] = React.useState({ userId: "", start: "", end: "", reason: "", handover: "" });
+  const [coverError, setCoverError] = React.useState("");
+  const [coverSaving, setCoverSaving] = React.useState(false);
+  const [coverHistory, setCoverHistory] = React.useState("");
+  const [receiptUser, setReceiptUser] = React.useState("");
+  const [receiptRows, setReceiptRows] = React.useState<ReceiptEvent[] | null>(null);
+  const [receiptError, setReceiptError] = React.useState("");
+  const [reviewEvent, setReviewEvent] = React.useState<ReceiptEvent | null>(null);
+  const [reviewForm, setReviewForm] = React.useState({ shiftId: "", actualAt: "", reason: "", handoverEvidence: "" });
+  const [reviewError, setReviewError] = React.useState("");
+  const [reviewSaving, setReviewSaving] = React.useState(false);
+  const [receiptReviewHistory, setReceiptReviewHistory] = React.useState<ReceiptReview[] | null>(null);
   const [date, setDate] = React.useState(today);
   const [shifts, setShifts] = React.useState<ShiftRow[]>([]);
   const [attendance, setAttendance] = React.useState<AttendanceRow[]>([]);
@@ -56,6 +72,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   const [end, setEnd] = React.useState("");
   const [points, setPoints] = React.useState("");
   const [note, setNote] = React.useState("");
+  const [nightDuty, setNightDuty] = React.useState(false);
   // 引导式「新增排班」弹窗状态（范式：字段留页面持有，弹窗只编排）。
   const [shiftOpen, setShiftOpen] = React.useState(false);
   const [shiftError, setShiftError] = React.useState("");
@@ -72,6 +89,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   const [batchEndTime, setBatchEndTime] = React.useState("");
   const [batchPoints, setBatchPoints] = React.useState("");
   const [batchNote, setBatchNote] = React.useState("");
+  const [batchNightDuty, setBatchNightDuty] = React.useState(false);
   const [batchError, setBatchError] = React.useState("");
   const [batchSaving, setBatchSaving] = React.useState(false);
   const [batchSummary, setBatchSummary] = React.useState("");
@@ -91,6 +109,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         { label: "结束", value: localTime(row.endAt) },
         { label: "点位", value: row.pointSpaceIds?.length ? row.pointSpaceIds.join("、") : "未指定" },
         { label: "备注", value: row.note ?? "—" },
+        { label: "夜班值班职责", value: row.nightDutyProjectId ? "项目 " + row.nightDutyProjectId : "无" },
         { label: "排班编号", value: row.id },
       ],
     });
@@ -102,7 +121,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
       fields: [
         { label: "员工", value: row.userId ?? "—" },
         { label: "类型", value: TYPE_LABELS[row.punchType ?? ""] ?? row.punchType ?? "—" },
-        { label: "打卡时间(服务器)", value: localTime(row.punchedAt) },
+        { label: "已核实实际时间", value: localTime(row.punchedAt) },
         { label: "方式", value: METHOD_LABELS[row.method ?? ""] ?? row.method ?? "—" },
         { label: "判定", value: JUDGE_LABELS[row.judgement ?? ""] ?? row.judgement ?? "—" },
         { label: "点位", value: row.spaceId ?? "—" },
@@ -150,14 +169,50 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         endAt: new Date(end).toISOString(),
         pointSpaceIds: points.split(",").map((value) => value.trim()).filter(Boolean),
         note: note.trim() || null,
+        nightDutyManager: nightDuty,
       });
       setActionResult({ 结果: "排班申请已提交，等待主管上一级审批", 审批单: result?.reviewId });
       setBatchSummary("排班申请已提交，批准后才会出现在生效排班中。审批单：" + (result?.reviewId ?? "—"));
       setEditingShift(null);
-      setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote("");
+      setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setNightDuty(false);
       setShiftOpen(false);
       await reload();
     } catch (e) { setShiftError((e as Error).message); } finally { setShiftSaving(false); }
+  };
+
+  const submitReceiptReview = async () => {
+    if (!reviewEvent || !reviewForm.shiftId.trim() || !reviewForm.actualAt || !reviewForm.reason.trim() || !reviewForm.handoverEvidence.trim()) {
+      setReviewError("请填写原班次、核实的实际领取时间、原因和实际交接核实事实"); return;
+    }
+    setReviewSaving(true); setReviewError("");
+    try {
+      const result = await api.post<ReceiptReview>("/api/v1/staff/attendance/receipt-events/" + encodeURIComponent(reviewEvent.id) + "/review", {
+        shiftId: reviewForm.shiftId.trim(), actualAt: new Date(reviewForm.actualAt).toISOString(),
+        reason: reviewForm.reason.trim(), handoverEvidence: reviewForm.handoverEvidence.trim(),
+      });
+      setActionResult({ 结果: "核时申请已提交，经办主管的上一级批准后才计入考勤", 审批单: result.reviewId });
+      setReceiptReviewHistory([result]); setReviewEvent(null);
+    } catch (error) { setReviewError((error as Error).message); } finally { setReviewSaving(false); }
+  };
+
+  const saveCover = async () => {
+    if (!coverShift) return;
+    const { userId: target, start: from, end: to, reason, handover } = coverForm;
+    if (!target.trim() || !from || !to || !reason.trim() || !handover.trim()) {
+      setCoverError("请填写顶班员工、起止时刻、事由及实际交接事实。"); return;
+    }
+    if (new Date(to) <= new Date(from) || new Date(from) < new Date(coverShift.startAt ?? "") || new Date(to) > new Date(coverShift.endAt ?? "")) {
+      setCoverError("顶班时段须在原班次内，结束晚于开始。"); return;
+    }
+    setCoverSaving(true); setCoverError("");
+    try {
+      await api.post("/api/v1/staff/shifts/" + encodeURIComponent(coverShift.id) + "/cover", {
+        coverUserId: target.trim(), startAt: new Date(from).toISOString(), endAt: new Date(to).toISOString(),
+        reason: reason.trim(), handoverNote: handover.trim(),
+      });
+      setActionResult("顶班已安排，按获安排时段考勤；原员工的出勤和缺勤记录保留。");
+      setCoverShift(null); await reload();
+    } catch (error) { setCoverError((error as Error).message); } finally { setCoverSaving(false); }
   };
 
   // 批量排班：一批员工 × 日期窗口内勾中的星期几 × 每日同一时段，一次生成。跨零点顺延在后端做
@@ -185,6 +240,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         endTime: batchEndTime,
         pointSpaceIds: splitList(batchPoints),
         note: batchNote.trim() || null,
+        nightDutyManager: batchNightDuty,
       });
       const created = result?.createdCount ?? 0;
       const updated = result?.updatedCount ?? 0;
@@ -237,15 +293,27 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
       </fieldset> : null}
       {settingMessage ? <p role="status">{settingMessage}</p> : null}
       {historyText ? <pre aria-label="排班修改历史">{historyText}</pre> : null}
+      {coverHistory ? <pre aria-label="顶班记录">{coverHistory}</pre> : null}
+      {coverShift ? <fieldset><legend>安排临时顶班 · 原员工 {coverShift.userId}</legend>
+        <p>原班次：{localTime(coverShift.startAt)} 至 {localTime(coverShift.endAt)}。记录实际交接，原员工缺勤不被抹除；顶班不直接等同加班。</p>
+        <label>顶班员工<input aria-label="顶班员工" value={coverForm.userId} onChange={(e) => setCoverForm({ ...coverForm, userId: e.target.value })} /></label>
+        <label>顶班开始<input aria-label="顶班开始" type="datetime-local" value={coverForm.start} onChange={(e) => setCoverForm({ ...coverForm, start: e.target.value })} /></label>
+        <label>顶班结束<input aria-label="顶班结束" type="datetime-local" value={coverForm.end} onChange={(e) => setCoverForm({ ...coverForm, end: e.target.value })} /></label>
+        <label>顶班事由<input aria-label="顶班事由" value={coverForm.reason} onChange={(e) => setCoverForm({ ...coverForm, reason: e.target.value })} /></label>
+        <label>实际交接事实<textarea aria-label="实际交接事实" value={coverForm.handover} onChange={(e) => setCoverForm({ ...coverForm, handover: e.target.value })} /></label>
+        {coverError ? <p role="alert">{coverError}</p> : null}
+        <button type="button" disabled={coverSaving} onClick={() => void saveCover()}>确认安排顶班</button>
+        <button type="button" disabled={coverSaving} onClick={() => setCoverShift(null)}>取消顶班填写</button>
+      </fieldset> : null}
       <div className="admin-form-row" data-testid="shift-editor">
-        <button type="button" data-testid="shift-create-open" onClick={() => { setEditingShift(null); setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setShiftError(""); setShiftOpen(true); }}>＋ 新增排班</button>
+        <button type="button" data-testid="shift-create-open" onClick={() => { setEditingShift(null); setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setNightDuty(false); setShiftError(""); setShiftOpen(true); }}>＋ 新增排班</button>
         <button type="button" data-testid="shift-batch-open" onClick={() => { setBatchError(""); setBatchSummary(""); setBatchOpen(true); }}>＋ 批量排班(按周)</button>
       </div>
       {batchSummary ? <p data-testid="shift-batch-result">{batchSummary}</p> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="shift-table">
-            <thead><tr><th>员工</th><th>开始</th><th>结束</th><th>点位</th><th>备注</th><th>详情</th></tr></thead>
+            <thead><tr><th>员工</th><th>开始</th><th>结束</th><th>点位</th><th>夜班值班职责</th><th>备注</th><th>详情</th></tr></thead>
             <tbody>
               {shifts.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`shift-row-${row.id}`}
@@ -255,18 +323,30 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                   <td>{localTime(row.startAt)}</td>
                   <td>{localTime(row.endAt)}</td>
                   <td>{row.pointSpaceIds?.length ? row.pointSpaceIds.join("、") : "未指定"}</td>
+                  <td>{row.nightDutyProjectId ? "本项目夜班值班经理" : "—"}</td>
                   <td>{row.note ?? "—"}</td>
                 <td className="admin-row-detail-cell">
+                  <button type="button" onClick={(event) => {
+                    event.stopPropagation(); setCoverShift(row); setCoverError("");
+                    setCoverForm({ userId: "", start: "", end: "", reason: "", handover: "" });
+                  }}>安排顶班</button>
+                  <button type="button" onClick={async (event) => {
+                    event.stopPropagation();
+                    try {
+                      const entries = await api.get<Array<{ coverUserId: string; originalUserId: string; startAt: string; endAt: string; reason: string; handoverNote: string }>>("/api/v1/staff/shifts/" + encodeURIComponent(row.id) + "/covers");
+                      setCoverHistory(entries.length ? entries.map((entry) => "原员工：" + entry.originalUserId + "；顶班员工：" + entry.coverUserId + "\n安排时段：" + localTime(entry.startAt) + " ~ " + localTime(entry.endAt) + "\n事由：" + entry.reason + "\n实际交接：" + entry.handoverNote).join("\n\n") : "暂无顶班记录。");
+                    } catch (error) { setCoverHistory((error as Error).message); }
+                  }}>顶班记录</button>
                   {row.createdBy === user.id && new Date(row.startAt ?? "").getTime() > Date.now() ? <button type="button" onClick={(event) => {
                     event.stopPropagation(); setEditingShift(row.id); setUserId(row.userId ?? "");
                     const inputTime = (value?: string) => { const d = new Date(value ?? ""); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16); };
-                    setStart(inputTime(row.startAt)); setEnd(inputTime(row.endAt)); setPoints((row.pointSpaceIds ?? []).join(",")); setNote(""); setShiftOpen(true);
+                    setStart(inputTime(row.startAt)); setEnd(inputTime(row.endAt)); setPoints((row.pointSpaceIds ?? []).join(",")); setNote(""); setNightDuty(Boolean(row.nightDutyProjectId)); setShiftOpen(true);
                   }}>申请修改</button> : null}
                   <button type="button" onClick={async (event) => {
                     event.stopPropagation();
                     try {
                       const entries = await api.get<Array<{ reviewId: string; before: ShiftRow | null; after: ShiftRow; appliedAt: string | null }>>("/api/v1/staff/shifts/" + encodeURIComponent(row.id) + "/history");
-                      setHistoryText(entries.length ? entries.map((entry) => "审批单：" + entry.reviewId + "；" + (entry.appliedAt ? "已发布" : "未发布") + "\n原时间：" + localTime(entry.before?.startAt) + " ~ " + localTime(entry.before?.endAt) + "\n申请时间：" + localTime(entry.after.startAt) + " ~ " + localTime(entry.after.endAt) + "\n事由：" + (entry.after.note ?? "—")).join("\n\n") : "暂无修改历史。");
+                      setHistoryText(entries.length ? entries.map((entry) => "审批单：" + entry.reviewId + "；" + (entry.appliedAt ? "已发布" : "未发布") + "\n原时间：" + localTime(entry.before?.startAt) + " ~ " + localTime(entry.before?.endAt) + "\n申请时间：" + localTime(entry.after.startAt) + " ~ " + localTime(entry.after.endAt) + "\n夜班职责：" + (entry.before?.nightDutyProjectId ?? "无") + " → " + (entry.after.nightDutyProjectId ?? "无") + "\n事由：" + (entry.after.note ?? "—")).join("\n\n") : "暂无修改历史。");
                     } catch (error) { setHistoryText((error as Error).message); }
                   }}>修改历史</button><button type="button" className="admin-row-detail-btn" aria-label="查看排班详情" onClick={(event) => { event.stopPropagation(); openShiftDetail(row); }}>查看详情</button></td></tr>
               ))}
@@ -274,10 +354,56 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             </tbody>
           </table>
         </div>
+        <h3>工作手机领取事件</h3>
+        <label>查询领取事件的员工<input aria-label="查询领取事件的员工" placeholder="留空查本人" value={receiptUser} onChange={(e) => setReceiptUser(e.target.value)} /></label>
+        <button type="button" onClick={async () => {
+          setReceiptError(""); setReceiptRows(null);
+          try { setReceiptRows(await api.get<ReceiptEvent[]>("/api/v1/staff/attendance/receipt-events" + (receiptUser.trim() ? "?user_id=" + encodeURIComponent(receiptUser.trim()) : ""))); }
+          catch (error) { setReceiptError((error as Error).message); }
+        }}>查看领取事件</button>
+        {receiptError ? <p role="alert">{receiptError}</p> : null}
+        {receiptRows ? <div className="admin-table-scroll">
+          <p>手机记录时间仅为待核实证据；时间未核实的事件不直接计作上班，原始记录保留供处理。</p>
+          <table className="admin-table" aria-label="工作手机领取事件">
+            <thead><tr><th>事件</th><th>设备</th><th>班次</th><th>手机记录时间</th><th>已核实实际时间</th><th>方式</th><th>状态</th><th>核实与审批</th></tr></thead>
+            <tbody>{receiptRows.map((row) => <tr key={row.id}><td>{row.id}</td><td>{row.deviceId}</td><td>{row.shiftId ?? "待确认"}</td>
+              <td>{localTime(row.observedAt)}</td><td>{localTime(row.actualAt)}</td><td>{METHOD_LABELS[row.method] ?? row.method}</td>
+              <td>{({ pending_review: "时间待核实", accepted: "已计入考勤", rejected: "未采纳" } as Record<string, string>)[row.status] ?? row.status}</td>
+              <td>{row.status === "pending_review" ? <button type="button" onClick={() => {
+                setReviewEvent(row); setReviewError("");
+                setReviewForm({ shiftId: row.shiftId ?? "", actualAt: "", reason: "", handoverEvidence: "" });
+              }}>提交实际时间核实</button> : null}
+                <button type="button" onClick={async () => {
+                  setReceiptError("");
+                  try { setReceiptReviewHistory(await api.get<ReceiptReview[]>("/api/v1/staff/attendance/receipt-events/" + encodeURIComponent(row.id) + "/reviews")); }
+                  catch (error) { setReceiptError((error as Error).message); }
+                }}>核时审批历史</button>
+              </td></tr>)}
+              {!receiptRows.length ? <tr><td colSpan={8}>暂无领取事件</td></tr> : null}</tbody>
+          </table>
+        </div> : null}
+        {reviewEvent ? <fieldset aria-label="实际领取时间核实">
+          <legend>核实原领取事件 {reviewEvent.id}</legend>
+          <p>员工：{reviewEvent.userId ?? "原事件员工"}；设备：{reviewEvent.deviceId}；原领用：{reviewEvent.contextId ?? "待核对"}。经办主管的上一级审批，不能自行指定审批人。</p>
+          <label>原班次编号<input aria-label="原班次编号" value={reviewForm.shiftId} onChange={(e) => setReviewForm({ ...reviewForm, shiftId: e.target.value })} /></label>
+          <label>核实的实际领取时间<input aria-label="核实的实际领取时间" type="datetime-local" value={reviewForm.actualAt} onChange={(e) => setReviewForm({ ...reviewForm, actualAt: e.target.value })} /></label>
+          <label>补证原因<input aria-label="补证原因" value={reviewForm.reason} onChange={(e) => setReviewForm({ ...reviewForm, reason: e.target.value })} /></label>
+          <label>实际交接核实事实<textarea aria-label="实际交接核实事实" value={reviewForm.handoverEvidence} onChange={(e) => setReviewForm({ ...reviewForm, handoverEvidence: e.target.value })} /></label>
+          <p>请写明核对的原领用登记、交接人员及已确认事实。手机墙钟不作为已核实时间；审批前保持待核，驳回不会直接认定缺勤。</p>
+          {reviewError ? <p role="alert">{reviewError}</p> : null}
+          <button type="button" disabled={reviewSaving} onClick={() => void submitReceiptReview()}>提交上一级核时审批</button>
+          <button type="button" disabled={reviewSaving} onClick={() => setReviewEvent(null)}>取消补证填写</button>
+        </fieldset> : null}
+        {receiptReviewHistory ? <div aria-label="核时审批历史">
+          <p>审批在“主管复核”中办理。原事件和每次补证记录均保留。</p>
+          {receiptReviewHistory.map((entry) => <p key={entry.id}>审批单：{entry.reviewId}；{({ pending: "待上一级审批", approved: "已批准并计入考勤", rejected: "已驳回，原时间仍待核实" } as Record<string, string>)[entry.status] ?? entry.status}；
+            班次：{entry.shiftId}；拟确认时间：{localTime(entry.actualAt)}；原因：{entry.reason}；核实事实：{entry.handoverEvidence}</p>)}
+          {!receiptReviewHistory.length ? <p>暂无核时申请</p> : null}
+        </div> : null}
         <h3>当日考勤记录(严格无宽限判定)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="attendance-table">
-            <thead><tr><th>员工</th><th>类型</th><th>打卡时间(服务器)</th><th>方式</th><th>判定</th><th>点位</th><th>详情</th></tr></thead>
+            <thead><tr><th>员工</th><th>类型</th><th>已核实实际时间</th><th>方式</th><th>判定</th><th>点位</th><th>详情</th></tr></thead>
             <tbody>
               {attendance.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`attendance-row-${row.id}`}
@@ -327,6 +453,8 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             content: (
               <>
                 <label>点位(space_id 逗号分隔)<input data-testid="shift-points-input" value={points} onChange={(event) => setPoints(event.target.value)} /></label>
+                <label><input type="checkbox" data-testid="shift-night-duty-input" checked={nightDuty} onChange={(event) => setNightDuty(event.target.checked)} />承担所属项目本日夜班值班经理职责</label>
+                <p>职责随排班审批生效，同项目同日一名。改派先审批取消原班职责，再审批新安排；临时顶班按已记录的交接时段承接。</p>
                 <label>备注<input data-testid="shift-note-input" value={note} onChange={(event) => setNote(event.target.value)} /></label>
               </>
             ),
@@ -338,6 +466,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
           { label: "开始", value: start ? localTime(start) : "未填写" },
           { label: "结束", value: end ? localTime(end) : "未填写" },
           { label: "点位", value: points.split(",").map((v) => v.trim()).filter(Boolean).join("、") || "未指定" },
+          { label: "夜班值班职责", value: nightDuty ? "承担所属项目本日夜班值班经理职责" : "无" },
           { label: "备注", value: note.trim() || "—" },
         ]}
       />
@@ -389,6 +518,8 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                   ? <p data-testid="shift-batch-overnight-hint">跨零点班:结束时间为<strong>次日 {batchEndTime}</strong>(系统自动顺延到第二天,排班员不用另选日期)。</p>
                   : null}
                 <label>点位(space_id 逗号分隔,整批共用)<input data-testid="shift-batch-points-input" value={batchPoints} onChange={(event) => setBatchPoints(event.target.value)} /></label>
+                <label><input type="checkbox" data-testid="shift-batch-night-duty-input" checked={batchNightDuty} onChange={(event) => setBatchNightDuty(event.target.checked)} />整批承担各自所属项目的夜班值班经理职责</label>
+                <p>每个项目每日只能安排一名夜班值班经理；同一项目请勿同时选多名员工。</p>
                 <label>备注(整批共用)<input data-testid="shift-batch-note-input" value={batchNote} onChange={(event) => setBatchNote(event.target.value)} /></label>
               </>
             ),
@@ -400,6 +531,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
           { label: "只排", value: batchWeekdays.length ? batchWeekdays.map((day) => WEEKDAY_LABELS[day - 1]).join("、") : "范围内每天" },
           { label: "每日时段", value: `${batchStartTime || "未填写"} 至 ${batchEndTime || "未填写"}${crossesMidnight(batchStartTime, batchEndTime) ? "(次日)" : ""}` },
           { label: "点位", value: splitList(batchPoints).join("、") || "未指定" },
+          { label: "夜班值班职责", value: batchNightDuty ? "整批承担，按项目每日一名" : "无" },
           { label: "备注", value: batchNote.trim() || "—" },
         ]}
       />

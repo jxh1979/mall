@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AccessActor;
@@ -30,10 +32,13 @@ public class SiteEntryReportController {
 
     private final SiteEntryReportService service;
     private final AuthorizationService authorizationService;
+    private final com.complex.platform.evidence.EvidenceEventService evidence;
 
-    public SiteEntryReportController(SiteEntryReportService service, AuthorizationService authorizationService) {
+    public SiteEntryReportController(SiteEntryReportService service, AuthorizationService authorizationService,
+            com.complex.platform.evidence.EvidenceEventService evidence) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.evidence = evidence;
     }
 
     @GetMapping
@@ -48,8 +53,34 @@ public class SiteEntryReportController {
     // M723-F06：明文联系电话看一次扣一次（操作员 2026-10-03）；业务读权限照旧不扣
     @com.complex.platform.access.ConsumesSingleUseGrant(PhoneMask.VIEW_PLAINTEXT_PERMISSION)
     public ApiResponse<SiteEntryReportRecord> get(@PathVariable("report_id") String reportId) {
-        requireReadPermission();
+        requireReadPermission(reportId);
         return ApiResponse.ok(maskPhoneForUnauthorized(service.findById(reportId)));
+    }
+
+    @GetMapping("/{report_id}/history")
+    public ApiResponse<java.util.List<SiteEntryHistoryRecord>> history(@PathVariable("report_id") String reportId) {
+        requireReadPermission(reportId);
+        return ApiResponse.ok(service.history(reportId));
+    }
+
+    @PostMapping(value = "/{report_id}/attachments", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<com.complex.platform.evidence.EvidenceAttachmentRecord> uploadAttachment(
+            @PathVariable("report_id") String reportId,
+            @org.springframework.web.bind.annotation.RequestPart("file") org.springframework.web.multipart.MultipartFile file) {
+        authorizationService.requirePermission(UPLOAD_COMPLETION_ASSIGNED);
+        service.findById(reportId);
+        return ApiResponse.ok(evidence.uploadAttachment(file, "facility_site_entry_report", reportId, "completion"));
+    }
+
+    @GetMapping("/{report_id}/attachments/{attachment_id}/file")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> attachmentFile(
+            @PathVariable("report_id") String reportId, @PathVariable("attachment_id") String attachmentId) {
+        requireReadPermission(reportId);
+        service.requireReportAttachment(reportId, attachmentId);
+        java.nio.file.Path path = evidence.resolveAttachmentFile(attachmentId);
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(evidence.attachmentContentType(attachmentId)))
+                .body(new org.springframework.core.io.FileSystemResource(path));
     }
 
     @PostMapping
@@ -121,7 +152,14 @@ public class SiteEntryReportController {
     }
 
     private void requireReadPermission() {
+        requireReadPermission(null);
+    }
+
+    private void requireReadPermission(String reportId) {
         AccessActor actor = authorizationService.currentActor();
-        authorizationService.requirePermission(authorizationService.isOutsourcedVendor(actor) ? VIEW_ASSIGNED : REVIEW);
+        String projectId = reportId == null ? actor.organizationId() : service.findById(reportId).projectId();
+        authorizationService.requirePermission(authorizationService.isOutsourcedVendor(actor) ? VIEW_ASSIGNED
+                : authorizationService.currentActorHasPermission(ACCEPT)
+                        && authorizationService.canReachProject(actor, projectId, ACCEPT) ? ACCEPT : REVIEW);
     }
 }

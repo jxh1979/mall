@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -48,11 +48,6 @@ public class StaffService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> INTEGRITY_FAILURES =
             Set.of("root_detected", "debug_detected", "abnormal");
-    // 打卡拉候选班次的时间窗(打卡时刻 ±12 小时)。班次通常 8 小时,12h 足够覆盖早到/晚退,
-    // 又不至于把隔天的同名班拉进来。只影响「无班次覆盖」时的兜底匹配:区间覆盖的班必定在窗内,不受它影响。
-    // ponytail: 觉得兜底匹配太松(离班 11 小时还认)就把它调小,一个常量的事。
-    private static final long SHIFT_MATCH_WINDOW_SECONDS = 12 * 3600L;
-
     // 一次批量排班最多生成多少个班次(员工数 × 天数)。一周 7 天 × 一个班组几十人绰绰有余,
     // 又拦住「全选员工 × 31 天」手滑一次排出上万条把请求拖死。
     // ponytail: 真有超大班组再往上调,一个常量的事。
@@ -70,6 +65,8 @@ public class StaffService {
     private com.complex.platform.access.AccessService accessService;
     @org.springframework.beans.factory.annotation.Autowired
     private com.complex.platform.terminal.TerminalDeviceRepository terminalRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffWorkPhoneAttendanceService workPhoneAttendance;
     @org.springframework.beans.factory.annotation.Autowired
     private StaffApprovalService staffApprovals;
     @org.springframework.beans.factory.annotation.Autowired
@@ -678,10 +675,18 @@ public class StaffService {
             throw ApiException.forbidden("SHIFT_AUTHOR_REQUIRED", "排班修改须由原排班负责人办理，员工应先向负责人申请");
         }
         if (previous != null) requireReason(request.note());
-        return new StaffShiftRecord(previous == null ? "shf_" + UUID.randomUUID() : previous.id(),
+        var draft = new StaffShiftRecord(previous == null ? "shf_" + UUID.randomUUID() : previous.id(),
                 request.userId().trim(), request.workDate(), request.startAt(), request.endAt(),
                 request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds(), request.note(), actor,
                 previous == null ? now : previous.createdAt(), now);
+        if (request.nightDutyManager()) {
+            String project = repository.findUserProjectId(draft.userId())
+                    .orElseThrow(() -> ApiException.badRequest("NIGHT_DUTY_PROJECT_REQUIRED", "夜班值班经理须有明确的所属项目"));
+            draft = draft.withNightDutyProject(project);
+            repository.requireNightDutySchedule(draft);
+        }
+        repository.requireShiftDoesNotRewriteCover(draft);
+        return draft;
     }
 
     /**
@@ -757,7 +762,7 @@ public class StaffService {
             Instant endAt = endDate.atTime(endTime).atZone(LocalZone.ID).toInstant();
             for (String userId : userIds) {
                 StaffShiftRecord row = draftShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
-                        request.idempotencyKey(), userId, date, startAt, endAt, points, request.note()));
+                        request.idempotencyKey(), userId, date, startAt, endAt, points, request.note(), null, request.nightDutyManager()));
                 saved.add(row);
             }
         }
@@ -818,11 +823,33 @@ public class StaffService {
         if (coverUserId == null) throw ApiException.badRequest("VALIDATION_FAILED", "须填写顶班员工");
         if (coverUserId.equals(shift.userId())) throw ApiException.badRequest("VALIDATION_FAILED", "顶班员工不能是原班次员工");
         String reason = requireReason(request.reason());
+        requireUserInScope(shift.userId());
         requireUserInScope(coverUserId);
+        if (request.startAt() == null || request.endAt() == null || !request.endAt().isAfter(request.startAt())
+                || request.startAt().isBefore(shift.startAt()) || request.endAt().isAfter(shift.endAt())) {
+            throw ApiException.badRequest("COVER_RANGE_INVALID", "顶班起止须在原班次范围内且结束晚于开始");
+        }
+        String handover = requireReason(request.handoverNote());
         String actor = authorizationService.currentActor().id();
         return idempotencyService.execute("staffShiftCover:" + shift.id(), request.idempotencyKey(), request, () -> {
+            java.util.stream.Stream.of(shift.userId(), coverUserId).sorted().forEach(repository::lockAttendanceUser);
+            if (!repository.findShiftById(shift.id()).orElseThrow().updatedAt().equals(shift.updatedAt()))
+                throw ApiException.conflict("SHIFT_CHANGED", "原班次已变更，请核对后重新安排顶班");
+            if (repository.listShiftCovers(shift.id()).stream().anyMatch(row ->
+                    row.startAt().isBefore(request.endAt()) && row.endAt().isAfter(request.startAt()))) {
+                throw ApiException.conflict("COVER_SOURCE_OVERLAP", "原班次的该时段已经安排顶班，不能再安排第二人");
+            }
+            if (repository.listShiftsForUserOverlapping(coverUserId, request.startAt(), request.endAt()).stream()
+                    .anyMatch(row -> row.startAt().isBefore(request.endAt()) && row.endAt().isAfter(request.startAt()))) {
+                throw ApiException.conflict("COVER_SHIFT_OVERLAP", "顶班员工该时段已有班次，不能重复计算实际时段");
+            }
+            Instant now = clock.instant();
+            var coverShift = repository.upsertShift(new StaffShiftRecord("shift_" + UUID.randomUUID(), coverUserId,
+                    java.time.LocalDate.ofInstant(request.startAt(), LocalZone.ID), request.startAt(), request.endAt(),
+                    shift.pointSpaceIds(), "临时顶班：" + reason, actor, now, now));
             StaffShiftCoverRecord saved = repository.saveShiftCover(new StaffShiftCoverRecord("cover_" + UUID.randomUUID(),
-                    shift.id(), shift.userId(), coverUserId, actor, reason, clock.instant()));
+                    shift.id(), shift.userId(), coverUserId, actor, reason, now, request.startAt(), request.endAt(),
+                    handover, coverShift.id(), shift.updatedAt()));
             auditEventService.recordSuccess("staff.shift.covered", "staff.shift.manage", "staff_shift", shift.id(), null,
                     request.idempotencyKey(), Map.of("cover_user_id", coverUserId, "original_user_id", shift.userId(), "reason", reason));
             return saved;
@@ -836,6 +863,9 @@ public class StaffService {
 
     public List<StaffShiftCoverRecord> shiftCovers(String shiftId) {
         authorizationService.requirePermission("staff.shift.manage");
+        var source = repository.findShiftById(shiftId)
+                .orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "原排班不存在"));
+        requireUserInScope(source.userId());
         List<StaffShiftCoverRecord> covers = repository.listShiftCovers(shiftId);
         auditEventService.recordSuccess("staff.shift.covers_viewed", "staff.shift.manage", "staff_shift", shiftId, null, null, Map.of("count", covers.size()));
         return covers;
@@ -968,8 +998,8 @@ public class StaffService {
         if (!"charging_disconnect".equals(method) && trimToNull(request.tagRef()) == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "NFC 或扫码须包含读取到的点位标签");
         }
-        if (("charging_disconnect".equals(method) || "nfc".equals(method)) && !"check_in".equals(request.punchType())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "NFC 和离开充电设施仅记录上班领取");
+        if (!"check_in".equals(request.punchType())) {
+            throw ApiException.badRequest("DEVICE_RETURN_REQUIRED", "下班须办理本班工作手机实际归还，不能独立扫码下班");
         }
         var actor = authorizationService.currentActor();
         var terminal = com.complex.platform.gate.TerminalIdentityHolder.current()
@@ -997,9 +1027,10 @@ public class StaffService {
         repository.lockAttendanceUser(actor.id());
         String method = request.method();
         Instant now = clock.instant();
-        java.util.List<StaffShiftRecord> shifts = repository.listShiftsForUserOverlapping(
-                actor.id(), now.minusSeconds(SHIFT_MATCH_WINDOW_SECONDS), now.plusSeconds(SHIFT_MATCH_WINDOW_SECONDS));
-        StaffShiftRecord shift = pickShift(shifts, request.punchType(), now);
+        StaffShiftRecord shift = StaffAttendanceShiftMatcher.match(repository,actor.id(),request.punchType(),now);
+        var phoneContext=workPhoneAttendance.receivedLive(terminalRepository.findByDeviceId(deviceId).orElseThrow(), shift == null ? null : shift.id());
+        if (phoneContext.shiftId()!=null && (shift==null || !phoneContext.shiftId().equals(shift.id())))
+            shift=repository.findShiftById(phoneContext.shiftId()).orElseThrow();
         if ("check_in".equals(request.punchType())) {
             var first = repository.findFirstCheckIn(actor.id(), shift == null ? null : shift.id(),
                     java.time.LocalDate.ofInstant(now, LocalZone.ID));
@@ -1009,7 +1040,7 @@ public class StaffService {
         if (shift == null) {
             judgement = "no_shift";
         } else if (request.punchType().equals("check_in")) {
-            judgement = now.isAfter(shift.startAt()) ? "late" : "normal";
+            judgement = workPhoneAttendance.receiptJudgement(actor.id(),shift,deviceId,now);
         } else {
             judgement = now.isBefore(shift.endAt()) ? "early_leave" : "normal";
         }
@@ -1021,22 +1052,6 @@ public class StaffService {
                 "staff_attendance_record", saved.id(), null, request.idempotencyKey(),
                 java.util.Map.of("punch_type", saved.punchType(), "judgement", judgement, "method", method));
         return saved;
-    }
-
-    /** 配班两段优先级:先认「区间覆盖打卡时刻」的班(跨零点班照样命中);一个都没覆盖再退回「距起止最近」
-     * (保留早到/晚退也能匹配上的既有行为)。多个覆盖时仍取最近。 */
-    private StaffShiftRecord pickShift(java.util.List<StaffShiftRecord> shifts, String punchType, Instant now) {
-        java.util.List<StaffShiftRecord> covering = shifts.stream()
-                .filter(shift -> !now.isBefore(shift.startAt()) && !now.isAfter(shift.endAt()))
-                .toList();
-        return nearestShift(covering.isEmpty() ? shifts : covering, punchType, now);
-    }
-
-    private static StaffShiftRecord nearestShift(java.util.List<StaffShiftRecord> shifts, String punchType,
-            Instant now) {
-        return shifts.stream().min(java.util.Comparator.comparingLong(shift -> Math.abs(
-                (punchType.equals("check_in") ? shift.startAt() : shift.endAt()).toEpochMilli()
-                        - now.toEpochMilli()))).orElse(null);
     }
 
     /** E2:员工看自己最近 30 天打卡记录。 */
@@ -1890,7 +1905,7 @@ public class StaffService {
     }
 
     /** F批(2026-07-02 拍板六态口径):考勤月视图——出勤/缺勤(有排班无上班卡)/迟到/早退/
-     * 未打下班卡/请假(approved 覆盖);无排班=休;同日多问题并列。 */
+     * 未打下班卡/请假(approved 覆盖)；另有实际时间待核pending_review，不直接认定缺勤；无排班=休，同日多问题并列。 */
     public java.util.List<StaffAttendanceDayRecord> myAttendanceMonthView(String month) {
         authorizationService.requirePermission("staff.shift.view");
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {
@@ -1924,6 +1939,10 @@ public class StaffService {
             }
             java.util.Set<String> statuses = new java.util.LinkedHashSet<>();
             for (StaffShiftRecord shift : dayShifts) {
+                if (workPhoneAttendance.hasPendingTimeEvidence(actor.id(),shift)) {
+                    statuses.add("pending_review");
+                    continue;
+                }
                 List<StaffAttendanceRecord> ownPunches = punches.stream()
                         .filter(p -> shift.id().equals(p.shiftId())).toList();
                 StaffAttendanceRecord checkIn = ownPunches.stream()

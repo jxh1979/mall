@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -201,7 +201,7 @@ class DealerPortalJdbcIntegrationTests {
 
     /** 门户全链：注册资料提交 → （内部审核启用门户）→ 库存外显只显示四态 → 询价 → 下单 → 付款登记 → 签收 → 退货申请；只见本企业数据。 */
     @Test
-    void portalFlowFromProfileSubmissionToReturnRequestShowsOnlyOwnDataAndFourStockStates() {
+    void portalFlowFromProfileSubmissionToReturnRequestShowsOnlyOwnDataAndFourStockStates() throws Exception {
         actAs(staff);
         DealerRecord dealer = dealerService.createDealer(new DealerCreateRequest(key(), "门户经销商" + suffix, "9131" + System.nanoTime(), "法人", "联系人", "13900000000"));
         DealerPortalAccountRecord account = portalAccounts.createPortalAccount(dealer.id(), new DealerPortalAccountRequest(key(), "dealer_" + suffix, "Portal#2026", "企业联系人"));
@@ -268,7 +268,14 @@ class DealerPortalJdbcIntegrationTests {
         orders.shipOrder(draft.id(), new DealerShipRequest(key(), "出库"));
         actAsDealer(account.userId(), dealer.projectId());
         assertThat(portal.getOrder(draft.id()).status()).isEqualTo("shipping");
-        assertThat(portal.signOrder(draft.id(), key()).status()).as("4000 货款 + 1000 运费 = 5000 全额到账，签收即完成").isEqualTo("completed");
+        String deliveryProof = portal.uploadDeliveryEvidence(draft.id(), DealerTestDeliveries.file()).id();
+        assertThat(portal.readDeliveryEvidence(draft.id(),deliveryProof).getBody().getContentAsByteArray()).isEqualTo(DealerTestDeliveries.file().getBytes());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.portal.delivery_evidence_viewed' AND business_id=? AND event_result='success'",Long.class,deliveryProof)).isEqualTo(1L);
+        var anotherOwnOrder=portal.createOrder(new DealerOrderDraftRequest(key(),contract.id(),List.of(new DealerOrderLineRequest(itemA,"箱",1,null)),"另一订单凭证隔离"));
+        assertThatThrownBy(()->portal.readDeliveryEvidence(anotherOwnOrder.id(),deliveryProof)).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("ATTACHMENT_NOT_FOUND"));
+        var signedReceipt=DealerTestDeliveries.full(draft.id(),portal.listLines(draft.id()).items(),deliveryProof);
+        assertThat(portal.signOrder(draft.id(), signedReceipt).status()).as("4000 货款 + 1000 运费 = 5000 全额到账，签收即完成").isEqualTo("completed");
+        assertThat(portal.delivery(draft.id()).receipts()).hasSize(1);
 
         // 退货申请（门户自助）→ 待审批
         DealerReturnRecord ret = portal.requestReturn(draft.id(), new DealerReturnRequest(key(), "unopened_resalable", List.of(new DealerReturnLineRequest(itemA, "箱", 1)), "未拆封"));
@@ -285,6 +292,25 @@ class DealerPortalJdbcIntegrationTests {
         actAsDealer(otherAccount.userId(), other.projectId());
         assertThatThrownBy(() -> portal.getOrder(draft.id())).isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEALER_ORDER_NOT_FOUND"));
         assertThat(portal.listOrders().items()).isEmpty();
+        assertThatThrownBy(() -> portal.readDeliveryEvidence(draft.id(),deliveryProof)).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEALER_ORDER_NOT_FOUND"));
+        assertThatThrownBy(()->portal.signOrder(draft.id(),signedReceipt)).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEALER_ORDER_NOT_FOUND"));
+        assertThatThrownBy(()->portal.delivery(draft.id())).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEALER_ORDER_NOT_FOUND"));
+        assertThatThrownBy(()->portal.uploadDeliveryEvidence(draft.id(),DealerTestDeliveries.file())).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("DEALER_ORDER_NOT_FOUND"));
+        SecurityContextHolder.clearContext();
+        assertThatThrownBy(()->portal.signOrder(draft.id(),signedReceipt)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(()->portal.delivery(draft.id())).isInstanceOf(ApiException.class);
+        assertThatThrownBy(()->portal.uploadDeliveryEvidence(draft.id(),DealerTestDeliveries.file())).isInstanceOf(ApiException.class);
+        assertThatThrownBy(()->portal.readDeliveryEvidence(draft.id(),deliveryProof)).isInstanceOf(ApiException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.delivery.receive_failed' AND business_id=? AND event_result='failure'",Long.class,draft.id())).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.delivery.view_failed' AND business_id=? AND event_result='failure'",Long.class,draft.id())).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.delivery.viewed' AND business_id=? AND event_result='success'",Long.class,draft.id())).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='evidence.attachment_upload_failed' AND business_id=? AND event_result='failure'",Long.class,draft.id())).isEqualTo(2L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.delivery.received' AND business_id=? AND event_result='success'",Long.class,draft.id())).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='evidence.attachment_uploaded' AND business_id=? AND event_result='success'",Long.class,deliveryProof)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dealer_delivery_receipts WHERE order_id=?",Long.class,draft.id())).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM evidence_attachments WHERE business_type='dealer_delivery' AND business_id=?",Long.class,draft.id())).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.portal.delivery_evidence_view_failed' AND business_id=? AND event_result='failure'",Long.class,deliveryProof)).isEqualTo(3L);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='dealer.portal.delivery_evidence_view_failed' AND business_id=? AND actor_id IS NULL",Long.class,deliveryProof)).isEqualTo(1L);
     }
 
     /** ENUM:181 / BSM:1246：停用生效时立即终止全部门户登录会话，门户账号停用，已完成订单与审计记录保留；停用后门户访问被拒并留痕。 */

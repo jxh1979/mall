@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -67,6 +67,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
 
     @Autowired private DealerService dealerService;
     @Autowired private DealerOrderService orders;
+    @Autowired private DealerDeliveryService delivery;
     @Autowired private DealerReturnService returns;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private JdbcTemplate jdbc;
@@ -411,7 +412,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         actAs(warehouse);
         orders.shipOrder(draft.id(), new DealerShipRequest(key(), "出库"));
         actAs(sales);
-        return orders.signOrder(draft.id(), key());
+        return delivery.receive(draft.id(), DealerTestDeliveries.full(draft.id(), orders.listLines(draft.id()).items(), DealerTestDeliveries.proof(admissionFiles, draft.id())));
     }
 
     private DealerOrderRecord pendingOrder() {

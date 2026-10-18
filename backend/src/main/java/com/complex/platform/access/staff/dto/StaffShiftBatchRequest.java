@@ -1,5 +1,7 @@
 package com.complex.platform.access.staff.dto;
 
+// 文件版本：V0.01
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -21,6 +23,11 @@ public record StaffShiftBatchRequest(
         String startTime,
         String endTime,
         List<String> pointSpaceIds,
-        String note
+        String note,
+        boolean nightDutyManager
 ) {
+    public StaffShiftBatchRequest(String idempotencyKey, List<String> userIds, LocalDate startDate, Integer days,
+            List<Integer> weekdays, String startTime, String endTime, List<String> pointSpaceIds, String note) {
+        this(idempotencyKey,userIds,startDate,days,weekdays,startTime,endTime,pointSpaceIds,note,false);
+    }
 }

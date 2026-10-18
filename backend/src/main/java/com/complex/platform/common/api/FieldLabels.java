@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -448,6 +448,26 @@ public final class FieldLabels {
         p("trigger_type", "触发方式");
         p("steps", "步骤");
         p("reserve_release_delay_periods", "保留释放延迟期数");
+
+        p("agreement_basis", "双方确认依据");
+        p("boot_id", "手机本次启动标识");
+        p("buyer_contact", "买方联系人");
+        p("context_id", "手机领用记录");
+        p("proposed_context_id", "待复核的手机领用记录");
+        p("contract_number", "合同编号");
+        p("delivery_batch_id", "交付批次");
+        p("disposition_type", "处置方式");
+        p("entity_id", "主体");
+        p("event_id", "事件编号");
+        p("handover_evidence", "交接依据");
+        p("lot_id", "库存批次");
+        p("old_device_code", "原工作手机编码");
+        p("physical_route", "实物处理方式");
+        p("replacement_device_id", "更换后的工作手机");
+        p("resolution_type", "差异处理方式");
+        p("responsibility_party", "责任承担方");
+        p("source_note", "来源说明");
+        p("tag_ref", "标签引用");
 
         // ── 通用 ────────────────────────────────────────────────────
         p("id", "标识");

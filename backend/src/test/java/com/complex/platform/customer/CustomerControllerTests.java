@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.customer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -54,7 +54,7 @@ class CustomerControllerTests {
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
     private CustomerService service;
 
     @Autowired
@@ -420,11 +420,6 @@ class CustomerControllerTests {
 
     @TestConfiguration
     static class TestBeans {
-        @Bean
-        CustomerService customerService() {
-            return Mockito.mock(CustomerService.class);
-        }
-
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);

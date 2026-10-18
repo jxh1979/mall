@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -22,10 +22,12 @@ public class JdbcDealerOrderRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper mapper;
+    private final com.complex.platform.inventory.InventoryRepository inventory;
 
-    public JdbcDealerOrderRepository(NamedParameterJdbcTemplate jdbc, ObjectMapper mapper) {
+    public JdbcDealerOrderRepository(NamedParameterJdbcTemplate jdbc, ObjectMapper mapper, com.complex.platform.inventory.InventoryRepository inventory) {
         this.jdbc = jdbc;
         this.mapper = mapper;
+        this.inventory = inventory;
     }
 
     // ── 订单 ──
@@ -92,7 +94,7 @@ public class JdbcDealerOrderRepository {
         return jdbc.query("""
                 SELECT * FROM dealer_orders
                  WHERE status IN ('shipping', 'signed', 'returning', 'partially_returned', 'returned') AND overdue = FALSE AND balance_due_at IS NOT NULL AND balance_due_at < :now
-                   AND paid_amount_cent < total_amount_cent - returned_amount_cent
+                   AND paid_amount_cent < total_amount_cent - returned_amount_cent - delivery_adjustment_cent
                 """, Map.of("now", Timestamp.from(now)), this::mapOrder);
     }
 
@@ -110,7 +112,7 @@ public class JdbcDealerOrderRepository {
                 rs.getString("ar_ap_item_id"), rs.getString("reviewed_by"), nullableInstant(rs, "reviewed_at"), nullableInstant(rs, "payment_notified_at"),
                 rs.getString("shipped_by"), nullableInstant(rs, "shipped_at"), nullableInstant(rs, "signed_at"), nullableInstant(rs, "completed_at"),
                 rs.getString("cancel_requested_by"), rs.getString("cancel_reason"), nullableInstant(rs, "cancelled_at"), rs.getString("note"),
-                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getLong("returned_amount_cent"), readContractSnapshot(rs.getString("contract_snapshot")));
+                rs.getString("created_by"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getLong("returned_amount_cent"), readContractSnapshot(rs.getString("contract_snapshot")), rs.getLong("delivery_adjustment_cent"), nullableInstant(rs, "delivery_completed_at"));
     }
 
     public void lockContractSnapshot(String orderId, DealerContractRecord contract) {
@@ -139,7 +141,7 @@ public class JdbcDealerOrderRepository {
     public void applyReturn(String orderId, long acceptedAmountCent, String status) {
         jdbc.update("""
                 UPDATE dealer_orders SET returned_amount_cent = returned_amount_cent + :amt, status = :status,
-                    overdue = CASE WHEN paid_amount_cent >= total_amount_cent - returned_amount_cent - :amt THEN FALSE ELSE overdue END,
+                    overdue = CASE WHEN paid_amount_cent >= total_amount_cent - returned_amount_cent - delivery_adjustment_cent - :amt THEN FALSE ELSE overdue END,
                     updated_at = now() WHERE id = :id
                 """, new MapSqlParameterSource().addValue("amt", acceptedAmountCent).addValue("status", status).addValue("id", orderId));
     }
@@ -374,20 +376,23 @@ public class JdbcDealerOrderRepository {
 
     /** 出库：预留转实扣（quantity 与 reserved 同减），并落库存流水。 */
     public boolean shipFromWarehouse(String itemId, String warehouseId, int qty, String orderId, String operatorId) {
-        int updated = jdbc.update("""
+        return shipFromWarehouse(itemId, warehouseId, qty, "dealer_order", orderId, operatorId, Instant.now(), List.of());
+    }
+
+    public boolean shipFromWarehouse(String itemId, String warehouseId, int qty, String businessType, String businessId,
+            String operatorId, Instant shippedAt, List<String> evidenceIds) {
+        var sources = jdbc.query("""
                 UPDATE inventory_stock_balances SET quantity = quantity - :qty, reserved_quantity = reserved_quantity - :qty, updated_at = now()
                  WHERE id = (SELECT id FROM inventory_stock_balances WHERE item_id = :item AND warehouse_id = :wh AND reserved_quantity >= :qty AND quantity >= :qty
-                             ORDER BY reserved_quantity DESC LIMIT 1)
-                """, new MapSqlParameterSource().addValue("qty", qty).addValue("item", itemId).addValue("wh", warehouseId));
-        if (updated == 0) {
-            return false;
-        }
-        jdbc.update("""
-                INSERT INTO inventory_stock_movements (id, movement_type, item_id, source_location_id, target_location_id, quantity, business_type, business_id,
-                    operator_id, status, created_at)
-                VALUES (:id, 'dealer_outbound', :item, :wh, NULL, :qty, 'dealer_order', :order, :op, 'completed', now())
-                """, new MapSqlParameterSource().addValue("id", "mov_" + java.util.UUID.randomUUID()).addValue("item", itemId).addValue("wh", warehouseId)
-                .addValue("qty", qty).addValue("order", orderId).addValue("op", operatorId));
+                             ORDER BY reserved_quantity DESC, id LIMIT 1)
+                   AND reserved_quantity >= :qty AND quantity >= :qty
+                RETURNING location_id,merchant_id,COALESCE(project_id,(SELECT project_id FROM warehouses WHERE id=:wh)) project_id
+                """, new MapSqlParameterSource().addValue("qty", qty).addValue("item", itemId).addValue("wh", warehouseId),
+                (r,n)->new String[]{r.getString("location_id"),r.getString("merchant_id"),r.getString("project_id")});
+        if (sources.isEmpty()) return false;
+        String[] source=sources.getFirst();
+        inventory.saveStockMovement(new com.complex.platform.inventory.StockMovementRecord("mov_"+java.util.UUID.randomUUID(),
+                "dealer_outbound",itemId,source[0],null,qty,null,null,businessType,businessId,null,operatorId,evidenceIds,"completed",shippedAt,source[1]),source[2]);
         return true;
     }
 

@@ -1,10 +1,14 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 public interface InventoryRepository {
+    default Optional<InventoryQuarantineLotRecord> findQuarantineLotById(String id) { throw new UnsupportedOperationException(); }
+
     InventoryItemRecord saveInventoryItem(InventoryItemRecord item);
 
     List<InventoryItemRecord> listInventoryItems();
@@ -65,6 +69,12 @@ public interface InventoryRepository {
     List<SupplierReconciliationRecord> listSupplierReconciliations();
 
     StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId);
+
+    /** 已核实原出库来源的实物退回；totalCostCent 为本次应恢复的原总成本，NULL 表示原成本未知。 */
+    default StockMovementRecord saveSourceReturnMovement(StockMovementRecord movement, String projectId) {
+        throw new UnsupportedOperationException();
+    }
+
 
     // ── V296 成本台账：default 以不破坏测试替身（同 V277 先例）。 ──
     /** 状态行缺席时按物料归属商户初始化（INSERT..SELECT ON CONFLICT DO NOTHING）。 */

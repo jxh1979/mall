@@ -1,4 +1,5 @@
 package com.complex.platform.leasing;
+// 文件版本：V0.01
 
 import com.complex.platform.common.api.PageResponse;
 import java.util.List;
@@ -31,6 +32,8 @@ public interface LeasingRepository {
     }
 
     Optional<LeasingLeadRecord> findLeadById(String id);
+
+    Optional<LeasingLeadRecord> findLeadByIdForUpdate(String id);
 
     LeasingIntentRecord saveIntent(LeasingIntentRecord intent);
 

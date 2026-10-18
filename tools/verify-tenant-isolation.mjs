@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // verify:tenant-isolation
 // 租户隔离机审闸口（对齐 docs/data-isolation-and-tenant-scope-security-spec-v0.1.md §6A.1，
 // 闭合 ISO-GAP-02「无 verify:tenant-isolation 自动闸口」）。
@@ -31,6 +31,7 @@
 //   即：本闸口能抓住「某 direct 表压根没有按 scope 过滤的查询路径」这一类硬越权，
 //   不能证明每个调用点都正确注入了 scope（后者靠单测/运行时 AC-ISO 用例，见 §4/§6A.3）。
 
+import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -135,7 +136,7 @@ const TABLE_TOKEN = "([a-zA-Z_][\\w]*)";
 function extractCteNames(sql) {
   const names = new Set();
   // WITH <name> AS (  以及  ), <name> AS (
-  const re = new RegExp(`(?:\\bWITH\\s+|\\)\\s*,\\s*)${TABLE_TOKEN}\\s+AS\\s*\\(`, "gi");
+  const re = new RegExp(`(?:\\bWITH\\s+(?:RECURSIVE\\s+)?|\\)\\s*,\\s*)${TABLE_TOKEN}(?:\\s*\\([^)]*\\))?\\s+AS\\s*\\(`, "gi");
   let m;
   while ((m = re.exec(sql)) !== null) names.add(m[1].toLowerCase());
   return names;
@@ -169,6 +170,12 @@ function extractReferencedTables(sql, cteNames) {
   }
   return tables;
 }
+
+// 递归名可排除，但 CTE 体内的真实表仍须进入隔离校验。
+const recursiveProbe = "WITH RECURSIVE duty(id) AS (SELECT id FROM staff_shift_schedules UNION ALL SELECT c.id FROM staff_shift_covers c JOIN duty d ON c.id=d.id) SELECT * FROM duty JOIN unknown_table u ON true";
+assert.deepEqual([...extractReferencedTables(recursiveProbe, extractCteNames(recursiveProbe))].sort(),
+  ["staff_shift_covers", "staff_shift_schedules", "unknown_table"]);
+assert.deepEqual([...extractCteNames("WITH a AS (SELECT 1), b(x) AS (SELECT 2) SELECT * FROM b")], ["a", "b"]);
 
 // 针对某 direct 表，判定该源码是否存在「带 scope 谓词的读取」。
 // 读取 = SELECT ... FROM <table> ；scope 谓词 = `<scope_col> = :` 或 `<scope_col> IN (`。
