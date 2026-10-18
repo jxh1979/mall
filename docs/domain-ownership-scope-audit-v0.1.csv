@@ -283,6 +283,7 @@ staff_shift_covers,inherited,shift_id,shift_id -> staff_shifts -> staff_profiles
 staff_shift_revisions,inherited,review_id/shift_id,review_id -> supervisor_reviews; published shift_id -> staff_shifts -> staff_profiles company/merchant scope,must join through scope path before multi-complex rollout,V0.02,covered
 staff_shift_schedules,direct,project_id,project_id column on staff_shift_schedules,ready for project/merchant scoped query enforcement,V0.02,covered
 stocktake,direct,merchant_id,merchant_id column on stocktake,ready for project/merchant scoped query enforcement,V0.02,covered
+stored_value_bonus_policies,direct,project_id,project_id column on stored_value_bonus_policies,ready for project/merchant scoped query enforcement,V0.02,covered
 stored_value_merchant_refund_rules,direct,merchant_id,merchant_id column on stored_value_merchant_refund_rules,ready for project/merchant scoped query enforcement,V0.02,covered
 stored_value_topup_intents,direct,project_id,project_id column on stored_value_topup_intents,ready for project/merchant scoped query enforcement,V0.02,covered
 supervisor_review_decisions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.02,covered

@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 739 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 741 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -579,7 +579,9 @@
 | access | `GET` | `/api/v1/access/grant-requests/summary` | `getAccessGrantSummary` | 授权申请治理汇总 | `-` | `access.grant_request.view` | `staff-token` | `project` | web | 否 | `access.grant_request.summary_viewed` | `access.grant_request.summary_view_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | `configureStoredValueMerchantRefundRule` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `StoredValueMerchantRefundRuleRequest` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_configured` | `stored_value.merchant_refund_rule_failed` |
 | customer | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | `getStoredValueMerchantRefundRule` | 查询商户级储值卡退款规则 | `-` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_viewed` | `stored_value.merchant_refund_rule_view_failed` |
-| customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收） | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/bonus-policies` | `configureStoredValueBonusPolicy` | 配置综合体通用卡充值赠送比例（仅平台，按项目，须同时配置上下限） | `StoredValueBonusPolicyRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.bonus_policy_configured` | `stored_value.bonus_policy_config_failed` |
+| customer | `GET` | `/api/v1/loyalty/stored-value/bonus-policies/{project_id}` | `getStoredValueBonusPolicy` | 查询综合体通用卡充值赠送比例（仅平台） | `-` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.bonus_policy_viewed` | `stored_value.bonus_policy_view_failed` |
 | audit | `GET` | `/api/v1/audit/operation-events` | `queryAuditOperationEvents` | 跨对象查询操作留痕 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `audit.operation_log.viewed` | `audit.operation_log.view_failed` |
 | audit | `GET` | `/api/v1/audit/operation-events/export` | `exportAuditOperationEvents` | 导出操作留痕（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `platform` | web | 否 | `audit.operation_log.exported` | `audit.operation_log.export_failed` |
 | platform | `GET` | `/api/v1/platform/space-types` | `listSpaceTypes` | 空间类型字典列表 | `-` | `governance.space.view` | `staff-token` | `platform` | web | 否 | `space_type.viewed` | `space_type.view_failed` |
