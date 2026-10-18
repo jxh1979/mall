@@ -71,7 +71,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `due_date` | date | 是 | 到期日 |
 | `aging_days` | int | 是 | 按未收/未付余额计算 |
 | `status` | enum | 是 | 见 §5 |
-| `source_type` | enum | 是 | `contract_fee`、`order`、`verification`、`refund`、`purchase`、`inventory_difference`、`employee_commission`、`manual_adjustment`、`third_party_reconciliation`、`pass_drink_settlement`（通票免费酒水平台↔酒吧结算，F-TXN-03 piece③b）、`dispatch_commission_transfer`（CG-07 派驻/营销人员提成由酒吧按月拨付人员所属主体的内部结算应付：direction=payable、counterparty=所属主体、merchant=酒吧、source_id=`bar_commission_settlements.id`、会计期间=该月、到期=月末后第一个付账日；由 `StaffService.closeCommissionSettlement` 追加写入，同（月, 酒吧, 主体）不重复；提成计提本身不再写 `employee_commission` 逐单应付）、`purchase_inbound`（采购入库确认形成的供应商应付，CG-10，2026-10-17、`dealer_order`（经销订单应收，CG-11b：审核通过通知付款时建、到账核验回写、尾款逾期置 overdue、取消置 cancelled；权威集合见 `FinanceService.SOURCE_TYPES`） |
+| `source_type` | enum | 是 | `contract_fee`、`order`、`verification`、`refund`、`purchase`、`inventory_difference`、`employee_commission`、`manual_adjustment`、`third_party_reconciliation`、`pass_drink_settlement`（通票免费酒水平台↔酒吧结算，F-TXN-03 piece③b）、`dispatch_commission_transfer`（CG-07 派驻/营销人员提成由酒吧按月拨付人员所属主体的内部结算应付：direction=payable、counterparty=所属主体、merchant=酒吧、source_id=`bar_commission_settlements.id`、会计期间=该月、到期=月末后第一个付账日；由 `StaffService.closeCommissionSettlement` 追加写入，同（月, 酒吧, 主体）不重复；提成计提本身不再写 `employee_commission` 逐单应付）、`purchase_inbound`（采购入库确认形成的供应商应付，CG-10，2026-10-17）、`dealer_order`（经销订单应收，CG-11b：审核通过通知付款时建、到账核验回写、尾款逾期置 overdue、取消置 cancelled；CG-11c 退货验收后按退货金额同单冲减 `amount_cent` 与 `unpaid_amount_cent`（不跨订单抵扣，冲至 0 置 settled），超出未收货款的部分走退款不动台账；权威集合见 `FinanceService.SOURCE_TYPES`） |
 | `source_id` | uuid/varchar | 否 | 来源对象 |
 | `contract_id` | uuid | 否 | 关联合同 |
 | `space_id` | uuid | 否 | 关联铺位/点位/区域 |

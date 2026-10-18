@@ -1,6 +1,6 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.17
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.18
 
-> 版本：V0.17 ｜ 最后更新：2026-10-17 ｜ 覆盖迁移基线：V452 ｜ 状态：现行
+> 版本：V0.18 ｜ 最后更新：2026-10-17 ｜ 覆盖迁移基线：V453 ｜ 状态：现行
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
 > **M09 现行口径（2026-09-03）：** 三份业务 HTML 是业务真源；本文细化但不得新增业务。迁移、Java、OpenAPI、页面和测试只证明当前实现事实，不得反向定义业务规则。下文带“建议”“任务”或未标已落地的结构/API 均为目标设计或缺口，不代表当前实现。R7/R5 横幅仅作历史留痕，现行实现以本轮逐项标注为准。
@@ -105,7 +105,7 @@
 | 兑换扣减聚合 | `RedemptionStockDeduction` | 积分兑换/礼物领取的库存预占与扣减（pass-2） |
 | 主管复核聚合 | 当前技术载体 `InventoryHighValueReview` | HTML 只要求主管复核，不授权绕开治理队列；当前技术载体不得被升级为业务旁路规则 |
 | 门店要货聚合（目标） | `StoreRequisition`, `StoreRequisitionEvent` | 九态、操作者、时间、拣配、配送、签收和差异；当前未实现 |
-| 经销聚合 | `DealerRecord`, `DealerContractRecord`（含付款条款与运费模板版本）, `DealerPriceCatalogRecord`（+`Line`）, `DealerInquiryRecord`, `DealerExternalStockRecord`（CG-11a），`DealerOrderRecord`（+`Line` / `Payment` / `Refund` / `Overpayment`，CG-11b，`DealerOrderService` + `DealerOrderDeadlineJob`）；`DistributorReturn`（目标） | 冻结经销全链；准入 / 合同 / 目录 / 询价 / 外显（V451）与订单 / 付款 / 预留 / 出库 / 取消退款 / 逾期 / 超收（V452）已落地，退货未实现，不增加 HTML 外状态 |
+| 经销聚合 | `DealerRecord`, `DealerContractRecord`（含付款条款与运费模板版本）, `DealerPriceCatalogRecord`（+`Line`）, `DealerInquiryRecord`, `DealerExternalStockRecord`（CG-11a），`DealerOrderRecord`（+`Line` / `Payment` / `Refund` / `Overpayment`，CG-11b，`DealerOrderService` + `DealerOrderDeadlineJob`），`DealerReturnRecord`（+`Line`）、`DealerInvoiceRecord`（CG-11c，`DealerReturnService` + `JdbcDealerReturnRepository`） | 冻结经销全链；准入 / 合同 / 目录 / 询价 / 外显（V451）、订单 / 付款 / 预留 / 出库 / 取消退款 / 逾期 / 超收（V452）与退货 / 退款 / 红冲 / 开票（V453）已落地，不增加 HTML 外状态 |
 | 交接与跨主体流转聚合 | `TraceHandover`, `TransferOrder`, `CustodyHistory` | 五段交接、补录证据、所有权/保管主体、期限和扫码时间；当前仅部分实现 |
 
 ### 3.2 核心对象说明
@@ -194,15 +194,16 @@ V085 的 `inventory_purchase_requests.status` CHECK 允许下列八个值：
 
 每次状态转换必须记录操作者和时间。HTML 未给机读 code；实现时可细化 code，但不得增加或删除业务状态。
 
-### 4.5 经销状态（经销商 / 询价 / 价格目录 CG-11a V451、订单 CG-11b V452 已实现；退货单为冻结目标）
+### 4.5 经销状态（经销商 / 询价 / 价格目录 CG-11a V451、订单 CG-11b V452、退货单 / 发票 CG-11c V453 已实现）
 
 | 对象 | 中文状态 | 机读 code（CG-11a） |
 |---|---|---|
 | 经销商 | 待提交、审核中、已通过、已驳回、已停用 | `dealers.status`：pending_submission / under_review / approved / rejected / deactivated（CHECK `chk_dealers_status`；`portal_enabled` 只能在 approved 下为真；`credit_suspended` 为尾款逾期暂停账期订单标记，CG-11b） |
 | 询价 | 待报价、报价审批中、已报价、已失效 | `dealer_inquiries.status`：pending_quote / quote_approval / quoted / expired |
 | 价格目录 | 草稿、待审批、已生效、已失效 | `dealer_price_catalogs.status`：draft / pending_approval / effective / expired（同一合同只有一版 effective，部分唯一索引） |
-| 经销订单 | 草稿、待审核、已驳回、待付款、付款核验中、待出库、配送中、已签收、已完成、取消中、已取消、待退款、退货中、部分退货、已退货 | `dealer_orders.status`：draft / pending_review / rejected / pending_payment / payment_verifying / pending_shipment / shipping / signed / completed / cancelling / cancelled / pending_refund / returning / partially_returned / returned（CHECK `chk_dealer_orders_status`；退货三态由 CG-11c 写入）。到账 `dealer_order_payments.status`：pending_verification / verified / rejected / late；退款 `dealer_order_refunds.status`：pending_request / pending_approval / approved / rejected / refunded；超收 `dealer_order_overpayments.status`：unconfirmed / prepayment / offset_applied |
-| 经销退货单 | 待审批、已驳回、待收货、验收中、待红冲、待退款、退款中、退款失败、部分完成、已完成 |
+| 经销订单 | 草稿、待审核、已驳回、待付款、付款核验中、待出库、配送中、已签收、已完成、取消中、已取消、待退款、退货中、部分退货、已退货 | `dealer_orders.status`：draft / pending_review / rejected / pending_payment / payment_verifying / pending_shipment / shipping / signed / completed / cancelling / cancelled / pending_refund / returning / partially_returned / returned（CHECK `chk_dealer_orders_status`；退货三态由 CG-11c `DealerReturnService` 写入：审批通过 → returning，退货单结清后明细全部退回 → returned，否则 → partially_returned；`returned_amount_cent` 累加验收金额）。到账 `dealer_order_payments.status`：pending_verification / verified / rejected / late；退款 `dealer_order_refunds.status`：pending_request / pending_approval / approved / rejected / refunded；超收 `dealer_order_overpayments.status`：unconfirmed / prepayment / offset_applied |
+| 经销退货单 | 待审批、已驳回、待收货、验收中、待红冲、待退款、退款中、退款失败、部分完成、已完成 | `dealer_returns.status`：pending_approval / rejected / pending_receipt / inspecting / pending_reversal / pending_refund / refunding / refund_failed / partially_completed / completed（CHECK `chk_dealer_returns_status`）；`reason_type` unopened_resalable / quality_issue（CHECK `chk_dealer_returns_reason`）；`return_freight_bearer` dealer / sales_entity / pending_confirmation；验收后已开票 → pending_reversal，未开票且退款 > 0 → pending_refund（开既有退款审批，`refund_review_id` / `refund_approved`），退款 0 → 直接结清；验收数量＝申请数量 → completed，否则 partially_completed；退款执行人≠验收人 |
+| 经销电子发票 | 待开票、开票中、已开具、开票失败、已红冲、已作废 | `dealer_invoices.status`：pending / issuing / issued / failed / reversed / voided（CHECK `chk_dealer_invoices_status`）；`reversed_by_return_id` 记录红冲退货单，`reissued_from_invoice_id` 记录重开来源；同一订单同时只一张 pending / issuing / issued |
 
 ### 4.6 库存批次状态
 
@@ -795,6 +796,7 @@ V112 已建立两张子表并提供正式 list/create API；供应商主表没�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 增 | §3 聚合表、§4.5 | 版本升 V0.18；CG-11c 经销退货 / 退款 / 红冲 / 开票落地（V453：dealer_returns、dealer_return_lines、dealer_invoices；dealer_contracts.return_freight_bearer / first_leg_freight_refundable；dealer_orders.returned_amount_cent；dealer_order_lines.returned_quantity；权限 dealer.return.* / dealer.invoice.manage；`/api/v1/dealers/**` 新增 13 操作；可复售回库流水 dealer_return_restock、隔离流水 dealer_return_quarantine；应收冲减走 ar_ap_items 同单冲减） | BSM:1238-1251；ENUM:174、178-179、182 |
 | 2026-10-17 | 增 | §3 聚合表、§4.5 | 版本升 V0.17；CG-11b 经销订单 / 到账 / 退款 / 超收落地（V452：dealer_orders、dealer_order_lines、dealer_order_payments、dealer_order_refunds、dealer_order_overpayments；dealer_contracts 付款条款与运费模板列；dealers.credit_suspended；权限 dealer.order.*；`/api/v1/dealers/**` 新增 19 操作；E-13 与逾期由 DealerOrderDeadlineJob 驱动，默认关闭） | BSM:1226-1234；ENUM:173、176-180 |
 | 2026-10-17 | 增 | §3 聚合表、§4.5 | 版本升 V0.16；CG-11a 经销商 / 经销合同 / 价格目录 / 询价 / 库存外显落地（V451：dealers、dealer_contracts、dealer_price_catalogs(+lines)、dealer_inquiries；权限 dealer.*；`/api/v1/dealers/**` 18 操作）；职责分离在服务层硬校验（DEALER_SOD_SAME_PERSON） | BSM:1216-1222；ENUM:170-172、175、178 |
 | 2026-09-03 | M09 互审修订（V0.15） | §5.6、§11、§12 | 补齐账户注销时提醒存酒、客人主动放弃后按到期规则转所在酒吧自有库存，并登记当前注销服务无联动的实现缺口 | Codex 终审发现 C-M09-004，经同一 Grok 4.6 xhigh 会话定向复核确认；仅修两份文档，不修改代码、OpenAPI 或 HTML |

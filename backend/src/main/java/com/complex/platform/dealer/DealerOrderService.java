@@ -121,7 +121,9 @@ public class DealerOrderService {
                 DealerContractRecord saved = new DealerContractRecord(c.id(), c.dealerId(), c.contractNo(), c.salesEntityId(), c.centralWarehouseId(),
                         c.validFrom(), c.validTo(), c.status(), c.createdBy(), c.createdAt(), credit, request.firstPaymentRatioBps(),
                         request.firstPaymentAmountCent(), request.firstPaymentDeadlineDays(), request.balanceDueDays(), request.freightCent(),
-                        request.freeShippingThresholdCent(), bearer, c.freightTemplateVersion() + (freightChanged ? 1 : 0));
+                        request.freeShippingThresholdCent(), bearer, c.freightTemplateVersion() + (freightChanged ? 1 : 0),
+                        request.returnFreightBearer() == null ? c.returnFreightBearer() : trim(request.returnFreightBearer()),
+                        request.firstLegFreightRefundable() == null ? c.firstLegFreightRefundable() : request.firstLegFreightRefundable());
                 dealers.saveContract(saved);
                 audit.recordSuccess("dealer.contract_terms_updated", DealerService.MANAGE, "dealer_contract", contractId, null, request.idempotencyKey(),
                         meta("credit_term", credit, "freight_template_version", saved.freightTemplateVersion()));

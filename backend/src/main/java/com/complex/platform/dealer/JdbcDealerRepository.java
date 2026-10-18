@@ -86,10 +86,11 @@ public class JdbcDealerRepository {
         jdbc.update("""
                 INSERT INTO dealer_contracts (id, dealer_id, contract_no, sales_entity_id, central_warehouse_id, valid_from, valid_to, status, created_by, created_at,
                     credit_term, first_payment_ratio_bps, first_payment_amount_cent, first_payment_deadline_days, balance_due_days,
-                    freight_cent, free_shipping_threshold_cent, freight_bearer, freight_template_version)
+                    freight_cent, free_shipping_threshold_cent, freight_bearer, freight_template_version, return_freight_bearer, first_leg_freight_refundable)
                 VALUES (:id, :dealer, :no, :entity, :wh, :from, :to, :status, :by, :at,
-                    :credit, :ratio, :amount, :deadline_days, :balance_days, :freight, :free_threshold, :bearer, :ft_version)
+                    :credit, :ratio, :amount, :deadline_days, :balance_days, :freight, :free_threshold, :bearer, :ft_version, :return_bearer, :first_leg)
                 ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, credit_term = EXCLUDED.credit_term,
+                    return_freight_bearer = EXCLUDED.return_freight_bearer, first_leg_freight_refundable = EXCLUDED.first_leg_freight_refundable,
                     first_payment_ratio_bps = EXCLUDED.first_payment_ratio_bps, first_payment_amount_cent = EXCLUDED.first_payment_amount_cent,
                     first_payment_deadline_days = EXCLUDED.first_payment_deadline_days, balance_due_days = EXCLUDED.balance_due_days,
                     freight_cent = EXCLUDED.freight_cent, free_shipping_threshold_cent = EXCLUDED.free_shipping_threshold_cent,
@@ -99,7 +100,8 @@ public class JdbcDealerRepository {
                 .addValue("to", Date.valueOf(c.validTo())).addValue("status", c.status()).addValue("by", c.createdBy()).addValue("at", ts(c.createdAt()))
                 .addValue("credit", c.creditTerm()).addValue("ratio", c.firstPaymentRatioBps()).addValue("amount", c.firstPaymentAmountCent())
                 .addValue("deadline_days", c.firstPaymentDeadlineDays()).addValue("balance_days", c.balanceDueDays()).addValue("freight", c.freightCent())
-                .addValue("free_threshold", c.freeShippingThresholdCent()).addValue("bearer", c.freightBearer()).addValue("ft_version", c.freightTemplateVersion()));
+                .addValue("free_threshold", c.freeShippingThresholdCent()).addValue("bearer", c.freightBearer()).addValue("ft_version", c.freightTemplateVersion())
+                .addValue("return_bearer", c.returnFreightBearer()).addValue("first_leg", c.firstLegFreightRefundable()));
     }
 
     public Optional<DealerContractRecord> findContract(String id) {
@@ -115,7 +117,8 @@ public class JdbcDealerRepository {
                 rs.getString("central_warehouse_id"), rs.getDate("valid_from").toLocalDate(), rs.getDate("valid_to").toLocalDate(), rs.getString("status"),
                 rs.getString("created_by"), nullableInstant(rs, "created_at"), rs.getBoolean("credit_term"), intOrNull(rs, "first_payment_ratio_bps"),
                 longOrNull(rs, "first_payment_amount_cent"), intOrNull(rs, "first_payment_deadline_days"), intOrNull(rs, "balance_due_days"),
-                longOrNull(rs, "freight_cent"), longOrNull(rs, "free_shipping_threshold_cent"), rs.getString("freight_bearer"), rs.getInt("freight_template_version"));
+                longOrNull(rs, "freight_cent"), longOrNull(rs, "free_shipping_threshold_cent"), rs.getString("freight_bearer"), rs.getInt("freight_template_version"),
+                rs.getString("return_freight_bearer"), (Boolean) rs.getObject("first_leg_freight_refundable"));
     }
 
     static Integer intOrNull(ResultSet rs, String column) throws SQLException {

@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 792 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 805 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -737,6 +737,19 @@
 | dealer | `POST` | `/api/v1/dealers/refunds/{id}/approval` | `openDealerOrderRefundApproval` | 开启经销退款审批 | `object` | `dealer.order.payment.verify` | `staff-token` | `project` | web | 是 | `dealer.order.refund_requested` | `dealer.order.refund_request_failed` |
 | dealer | `POST` | `/api/v1/dealers/refunds/{id}/execute` | `executeDealerOrderRefund` | 执行经销退款（原路退回） | `object` | `dealer.order.refund.execute` | `staff-token` | `project` | web | 是 | `dealer.order.refund_executed` | `dealer.order.refund_execute_failed` |
 | dealer | `POST` | `/api/v1/dealers/overpayments/{id}/use` | `confirmDealerOverpaymentUse` | 确认超收用途 | `object` | `dealer.order.payment.verify` | `staff-token` | `project` | web | 是 | `dealer.order.overpayment_use_confirmed` | `dealer.order.overpayment_use_failed` |
+| dealer | `GET` | `/api/v1/dealers/orders/{id}/returns` | `listDealerReturns` | 经销订单退货单列表 | `-` | `dealer.return.view` | `staff-token` | `project` | web | 否 | `dealer.return.viewed` | `dealer.return.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/returns` | `requestDealerReturn` | 申请经销退货 | `object` | `dealer.return.manage` | `staff-token` | `project` | web | 是 | `dealer.return.requested` | `dealer.return.request_failed` |
+| dealer | `GET` | `/api/v1/dealers/returns/{id}` | `getDealerReturn` | 经销退货单详情 | `-` | `dealer.return.view` | `staff-token` | `project` | web | 否 | `dealer.return.viewed` | `dealer.return.view_failed` |
+| dealer | `GET` | `/api/v1/dealers/returns/{id}/lines` | `listDealerReturnLines` | 经销退货单明细 | `-` | `dealer.return.view` | `staff-token` | `project` | web | 否 | `dealer.return.viewed` | `dealer.return.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/returns/{id}/decision` | `decideDealerReturn` | 审批经销退货 | `object` | `dealer.return.review` | `staff-token` | `project` | web | 是 | `dealer.return.decided` | `dealer.return.decide_failed` |
+| dealer | `POST` | `/api/v1/dealers/returns/{id}/receive` | `receiveDealerReturn` | 退货收货 | `object` | `dealer.return.inspect` | `staff-token` | `project` | web | 是 | `dealer.return.received` | `dealer.return.receive_failed` |
+| dealer | `POST` | `/api/v1/dealers/returns/{id}/inspection` | `inspectDealerReturn` | 退货验收 | `object` | `dealer.return.inspect` | `staff-token` | `project` | web | 是 | `dealer.return.inspected` | `dealer.return.inspect_failed` |
+| dealer | `POST` | `/api/v1/dealers/returns/{id}/invoice-reversal` | `reverseDealerInvoice` | 红冲原发票并按最新未退金额重开 | `object` | `dealer.invoice.manage` | `staff-token` | `project` | web | 是 | `dealer.invoice.reversed` | `dealer.invoice.reverse_failed` |
+| dealer | `POST` | `/api/v1/dealers/returns/{id}/freight-confirmation` | `confirmDealerReturnFreight` | 确认退回运费承担方 | `object` | `dealer.return.manage` | `staff-token` | `project` | web | 是 | `dealer.return.freight_confirmed` | `dealer.return.freight_confirm_failed` |
+| dealer | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | `recordDealerReturnRefundResult` | 登记退货退款执行结果 | `object` | `dealer.return.refund.execute` | `staff-token` | `project` | web | 是 | `dealer.return.refund_executed` | `dealer.return.refund_execute_failed` |
+| dealer | `GET` | `/api/v1/dealers/orders/{id}/invoices` | `listDealerInvoices` | 经销订单电子发票列表 | `-` | `dealer.return.view` | `staff-token` | `project` | web | 否 | `dealer.invoice.viewed` | `dealer.invoice.view_failed` |
+| dealer | `POST` | `/api/v1/dealers/orders/{id}/invoices` | `requestDealerInvoice` | 申请电子发票 | `object` | `dealer.invoice.manage` | `staff-token` | `project` | web | 是 | `dealer.invoice.requested` | `dealer.invoice.request_failed` |
+| dealer | `POST` | `/api/v1/dealers/invoices/{id}/issue` | `issueDealerInvoice` | 登记发票开具 | `object` | `dealer.invoice.manage` | `staff-token` | `project` | web | 是 | `dealer.invoice.issued` | `dealer.invoice.issue_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-ledger` | `listInventoryCostLedger` | 查询库存成本流水（移动加权） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_ledger.viewed` | `inventory.cost_ledger.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-summary` | `getInventoryCostSummary` | 期间出库成本汇总（分红成本侧取数点） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_summary.viewed` | `inventory.cost_summary.view_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/plans` | `listDividendPlans` | 分红方案列表（商户 scope 账号只见本商户） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `dividend.plans_listed` | `dividend.plans_list_failed` |
