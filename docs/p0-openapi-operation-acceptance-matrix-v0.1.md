@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 755 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 773 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -700,6 +700,24 @@
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | `counterRefundStoredValueAccount` | 会员储值到店柜台退款（商户预收卡唯一可达退款路径） | `StoredValueCounterRefundRequest` | `customer.stored_value.refund` | `staff-token` | `project` | web | 是 | `stored_value.counter_refund` | `stored_value.counter_refund_failed` |
 | partner | `POST` | `/api/v1/partner/orgs/{org_id}/bind-user` | `bindUserToPartnerOrg` | 账号绑定外部协作机构 | `PartnerOrgUserBindRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner.org.user_bound` | `partner.org.user_bind_failed` |
 | partner | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | `unbindUserFromPartnerOrg` | 账号解绑外部协作机构 | `PartnerOrgUserBindRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner.org.user_unbound` | `partner.org.user_unbind_failed` |
+| dealer | `GET` | `/api/v1/dealers` | `listDealers` | 经销商清单 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.viewed` | `dealer.view_failed` |
+| dealer | `POST` | `/api/v1/dealers` | `createDealer` | 经销商建档（待提交） | `object` | `dealer.manage` | `staff-token` | `project` | web | 是 | `dealer.created` | `dealer.create_failed` |
+| dealer | `POST` | `/api/v1/dealers/{id}/submit` | `submitDealer` | 提交经销商准入审核 | `object` | `dealer.manage` | `staff-token` | `project` | web | 是 | `dealer.submitted` | `dealer.submit_failed` |
+| dealer | `POST` | `/api/v1/dealers/{id}/review` | `reviewDealer` | 经销商准入审核 | `object` | `dealer.review` | `staff-token` | `project` | web | 是 | `dealer.reviewed` | `dealer.review_failed` |
+| dealer | `POST` | `/api/v1/dealers/{id}/deactivate` | `deactivateDealer` | 停用经销商 | `object` | `dealer.manage` | `staff-token` | `project` | web | 是 | `dealer.deactivated` | `dealer.deactivate_failed` |
+| dealer | `GET` | `/api/v1/dealers/{id}/contracts` | `listDealerContracts` | 经销合同清单 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.contract_viewed` | `dealer.contract_view_failed` |
+| dealer | `POST` | `/api/v1/dealers/{id}/contracts` | `createDealerContract` | 登记经销合同 | `object` | `dealer.manage` | `staff-token` | `project` | web | 是 | `dealer.contract_created` | `dealer.contract_create_failed` |
+| dealer | `GET` | `/api/v1/dealers/contracts/{id}/price-catalogs` | `listDealerPriceCatalogs` | 合同价格目录版本清单 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.price_catalog_viewed` | `dealer.price_catalog_view_failed` |
+| dealer | `POST` | `/api/v1/dealers/contracts/{id}/price-catalogs` | `createDealerPriceCatalogDraft` | 新建价格目录草稿版本 | `object` | `dealer.price_catalog.edit` | `staff-token` | `project` | web | 是 | `dealer.price_catalog.drafted` | `dealer.price_catalog.draft_failed` |
+| dealer | `GET` | `/api/v1/dealers/contracts/{id}/external-stock` | `listDealerExternalStock` | 经销库存外显 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.external_stock.viewed` | `dealer.external_stock.view_failed` |
+| dealer | `GET` | `/api/v1/dealers/price-catalogs/{id}/lines` | `listDealerPriceCatalogLines` | 价格目录明细 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.price_catalog_line_viewed` | `dealer.price_catalog_line_view_failed` |
+| dealer | `POST` | `/api/v1/dealers/price-catalogs/{id}/submit` | `submitDealerPriceCatalog` | 提交价格目录审批 | `object` | `dealer.price_catalog.edit` | `staff-token` | `project` | web | 是 | `dealer.price_catalog.submitted` | `dealer.price_catalog.submit_failed` |
+| dealer | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | `decideDealerPriceCatalog` | 审批价格目录 | `object` | `dealer.price_catalog.approve` | `staff-token` | `project` | web | 是 | `dealer.price_catalog.decided` | `dealer.price_catalog.decide_failed` |
+| dealer | `GET` | `/api/v1/dealers/{id}/inquiries` | `listDealerInquiries` | 询价清单 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.inquiry_viewed` | `dealer.inquiry_view_failed` |
+| dealer | `POST` | `/api/v1/dealers/{id}/inquiries` | `createDealerInquiry` | 登记询价（未定价商品） | `object` | `dealer.inquiry.manage` | `staff-token` | `project` | web | 是 | `dealer.inquiry.created` | `dealer.inquiry.create_failed` |
+| dealer | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | `quoteDealerInquiry` | 对询价报价 | `object` | `dealer.inquiry.quote` | `staff-token` | `project` | web | 是 | `dealer.inquiry.quoted` | `dealer.inquiry.quote_failed` |
+| dealer | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | `decideDealerInquiryQuote` | 审批报价 | `object` | `dealer.inquiry.approve` | `staff-token` | `project` | web | 是 | `dealer.inquiry.decided` | `dealer.inquiry.decide_failed` |
+| dealer | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | `expireDealerInquiry` | 报价置为已失效 | `object` | `dealer.inquiry.quote` | `staff-token` | `project` | web | 是 | `dealer.inquiry.expired` | `dealer.inquiry.expire_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-ledger` | `listInventoryCostLedger` | 查询库存成本流水（移动加权） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_ledger.viewed` | `inventory.cost_ledger.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-summary` | `getInventoryCostSummary` | 期间出库成本汇总（分红成本侧取数点） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_summary.viewed` | `inventory.cost_summary.view_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/plans` | `listDividendPlans` | 分红方案列表（商户 scope 账号只见本商户） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `dividend.plans_listed` | `dividend.plans_list_failed` |

@@ -77,6 +77,10 @@
     {
       "name": "compliance",
       "description": "合规域（含 R5 T8 企微会话合规链）"
+    },
+    {
+      "name": "dealer",
+      "description": "经销（CG-11：经销商准入、价格目录、询价、订单、退货）"
     }
   ],
   "paths": {
@@ -34050,6 +34054,1352 @@
             "$ref": "#/components/responses/Success"
           },
           "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealers",
+        "summary": "经销商清单",
+        "description": "CG-11a（BSM:1216-1222）：经销商准入档案，状态五态 pending_submission 待提交 / under_review 审核中 / approved 已通过 / rejected 已驳回 / deactivated 已停用（ENUM:170）；portal_enabled 表示四项资料审核通过后已启用独立经销商门户。",
+        "x-permission": "dealer.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.viewed",
+        "x-audit-event-failure": "dealer.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "createDealer",
+        "summary": "经销商建档（待提交）",
+        "description": "新建经销商档案，初始状态待提交；与商户、供应商、外部协作机构隔离建档。",
+        "x-permission": "dealer.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.created",
+        "x-audit-event-failure": "dealer.create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "dealer_name": {
+                    "type": "string",
+                    "description": "经销商名称",
+                    "maxLength": 200
+                  },
+                  "unified_social_credit_code": {
+                    "type": "string",
+                    "description": "统一社会信用代码",
+                    "maxLength": 64
+                  },
+                  "legal_representative": {
+                    "type": "string",
+                    "description": "法定代表人",
+                    "maxLength": 100
+                  },
+                  "contact_name": {
+                    "type": "string",
+                    "description": "联系人",
+                    "maxLength": 100
+                  },
+                  "contact_phone": {
+                    "type": "string",
+                    "description": "联系电话",
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "dealer_name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/submit": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "submitDealer",
+        "summary": "提交经销商准入审核",
+        "description": "待提交 / 已驳回 → 审核中。失败码：DEALER_STATUS_INVALID。",
+        "x-permission": "dealer.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.submitted",
+        "x-audit-event-failure": "dealer.submit_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/review": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "reviewDealer",
+        "summary": "经销商准入审核",
+        "description": "审核中 → 已通过 / 已驳回。BSM:1217「企业资料、合同、开票和银行资料审核通过后，才可启用独立经销商 Web 门户」：approve 须四项 *_reviewed 全为 true，通过即 portal_enabled=true；否则 409 DEALER_REVIEW_INCOMPLETE。reject 须填原因。",
+        "x-permission": "dealer.review",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.reviewed",
+        "x-audit-event-failure": "dealer.review_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "审批结论：approve 通过 / reject 驳回",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "company_profile_reviewed": {
+                    "type": "boolean",
+                    "description": "企业资料审核通过"
+                  },
+                  "contract_reviewed": {
+                    "type": "boolean",
+                    "description": "合同审核通过"
+                  },
+                  "invoice_reviewed": {
+                    "type": "boolean",
+                    "description": "开票资料审核通过"
+                  },
+                  "bank_reviewed": {
+                    "type": "boolean",
+                    "description": "银行资料审核通过"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/deactivate": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "deactivateDealer",
+        "summary": "停用经销商",
+        "description": "已通过 → 已停用（ENUM:181）：立即撤销门户资格，已完成记录保留；停用后新询价、新目录、新交易一律禁止（DEALER_DEACTIVATED）。",
+        "x-permission": "dealer.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.deactivated",
+        "x-audit-event-failure": "dealer.deactivate_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "停用原因（必填）",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/contracts": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerContracts",
+        "summary": "经销合同清单",
+        "description": "该经销商的经销合同（销售主体、中心仓、有效期）。",
+        "x-permission": "dealer.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.contract_viewed",
+        "x-audit-event-failure": "dealer.contract_view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "createDealerContract",
+        "summary": "登记经销合同",
+        "description": "每份合同指定销售主体（ENUM:182）与中心仓（BSM:1229，库存外显按该仓计算）；只有准入已通过的经销商可登记。",
+        "x-permission": "dealer.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.contract_created",
+        "x-audit-event-failure": "dealer.contract_create_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "contract_no": {
+                    "type": "string",
+                    "description": "合同编号",
+                    "maxLength": 64
+                  },
+                  "sales_entity_id": {
+                    "type": "string",
+                    "description": "销售主体（business_entities.id）",
+                    "maxLength": 64
+                  },
+                  "central_warehouse_id": {
+                    "type": "string",
+                    "description": "中心仓（warehouses.id）",
+                    "maxLength": 64
+                  },
+                  "valid_from": {
+                    "type": "string",
+                    "description": "生效日期",
+                    "format": "date"
+                  },
+                  "valid_to": {
+                    "type": "string",
+                    "description": "到期日期",
+                    "format": "date"
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "contract_no",
+                  "sales_entity_id",
+                  "central_warehouse_id",
+                  "valid_from",
+                  "valid_to"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/contracts/{id}/price-catalogs": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerPriceCatalogs",
+        "summary": "合同价格目录版本清单",
+        "description": "ENUM:172 四态 draft 草稿 / pending_approval 待审批 / effective 已生效 / expired 已失效；同一合同同一时刻只有一版生效，版本只影响生效后的订单。",
+        "x-permission": "dealer.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.price_catalog_viewed",
+        "x-audit-event-failure": "dealer.price_catalog_view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销合同编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "createDealerPriceCatalogDraft",
+        "summary": "新建价格目录草稿版本",
+        "description": "版本号＝该合同最大版本+1；明细为合同单价，不读取内部结算价，不按经销商等级折扣（BSM:1219）。",
+        "x-permission": "dealer.price_catalog.edit",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.price_catalog.drafted",
+        "x-audit-event-failure": "dealer.price_catalog.draft_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销合同编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  },
+                  "lines": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "item_id": {
+                          "type": "string",
+                          "description": "库存商品 id",
+                          "maxLength": 64
+                        },
+                        "spec": {
+                          "type": "string",
+                          "description": "规格",
+                          "maxLength": 100
+                        },
+                        "unit_price_cent": {
+                          "type": "integer",
+                          "description": "合同单价（分，>0；不复用内部结算价）",
+                          "minimum": 1
+                        },
+                        "tax_rate_bps": {
+                          "type": "integer",
+                          "description": "税率快照（万分比，仅审计快照）",
+                          "minimum": 0,
+                          "maximum": 10000
+                        },
+                        "expected_restock_date": {
+                          "type": "string",
+                          "description": "预计到货日（缺货时对外显示「预计交期」）",
+                          "format": "date"
+                        }
+                      },
+                      "required": [
+                        "item_id",
+                        "unit_price_cent"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/contracts/{id}/external-stock": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerExternalStock",
+        "summary": "经销库存外显",
+        "description": "BSM:1221 / ENUM:175：按现行生效目录商品与合同中心仓可用量只给 in_stock 有货 / low 紧张 / out_of_stock 缺货 / expected_restock 预计交期，不返回任何数量、仓库总库存或内部调拨信息。",
+        "x-permission": "dealer.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.external_stock.viewed",
+        "x-audit-event-failure": "dealer.external_stock.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销合同编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/price-catalogs/{id}/lines": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerPriceCatalogLines",
+        "summary": "价格目录明细",
+        "description": "商品 + 规格 → 合同单价（分）、税率快照、预计到货日。",
+        "x-permission": "dealer.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.price_catalog_line_viewed",
+        "x-audit-event-failure": "dealer.price_catalog_line_view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "价格目录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/price-catalogs/{id}/submit": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "submitDealerPriceCatalog",
+        "summary": "提交价格目录审批",
+        "description": "草稿 → 待审批。",
+        "x-permission": "dealer.price_catalog.edit",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.price_catalog.submitted",
+        "x-audit-event-failure": "dealer.price_catalog.submit_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "价格目录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/price-catalogs/{id}/decision": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "decideDealerPriceCatalog",
+        "summary": "审批价格目录",
+        "description": "待审批 → 已生效（旧版本同时失效）/ 草稿（驳回）。ENUM:178「合同价格编辑与审批不得同人」：审批人为编辑人或提交人 → 403 DEALER_SOD_SAME_PERSON。",
+        "x-permission": "dealer.price_catalog.approve",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.price_catalog.decided",
+        "x-audit-event-failure": "dealer.price_catalog.decide_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "价格目录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "审批结论：approve 通过 / reject 驳回",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/{id}/inquiries": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerInquiries",
+        "summary": "询价清单",
+        "description": "ENUM:171 四态 pending_quote 待报价 / quote_approval 报价审批中 / quoted 已报价 / expired 已失效。",
+        "x-permission": "dealer.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.inquiry_viewed",
+        "x-audit-event-failure": "dealer.inquiry_view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "createDealerInquiry",
+        "summary": "登记询价（未定价商品）",
+        "description": "BSM:1220「已定合同价商品可下单；未定价商品只能询价」：现行生效目录已含该商品+规格 → 409 ITEM_ALREADY_PRICED；经销商须已通过且未停用。",
+        "x-permission": "dealer.inquiry.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.inquiry.created",
+        "x-audit-event-failure": "dealer.inquiry.create_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销商编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "dealer_contract_id": {
+                    "type": "string",
+                    "description": "经销合同编号",
+                    "maxLength": 64
+                  },
+                  "item_id": {
+                    "type": "string",
+                    "description": "库存商品 id",
+                    "maxLength": 64
+                  },
+                  "spec": {
+                    "type": "string",
+                    "description": "规格",
+                    "maxLength": 100
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "description": "询价数量（>0）",
+                    "minimum": 1
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "dealer_contract_id",
+                  "item_id",
+                  "quantity"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/inquiries/{id}/quote": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "quoteDealerInquiry",
+        "summary": "对询价报价",
+        "description": "待报价 → 报价审批中。",
+        "x-permission": "dealer.inquiry.quote",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.inquiry.quoted",
+        "x-audit-event-failure": "dealer.inquiry.quote_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "询价编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "quoted_price_cent": {
+                    "type": "integer",
+                    "description": "报价单价（分，>0）",
+                    "minimum": 1
+                  },
+                  "quote_valid_until": {
+                    "type": "string",
+                    "description": "报价有效期",
+                    "format": "date"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "quoted_price_cent",
+                  "quote_valid_until"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/inquiries/{id}/decision": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "decideDealerInquiryQuote",
+        "summary": "审批报价",
+        "description": "报价审批中 → 已报价（报价审批通过后才能订购）/ 待报价（驳回）。报价人不得审批自己的报价 → 403 DEALER_SOD_SAME_PERSON。",
+        "x-permission": "dealer.inquiry.approve",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.inquiry.decided",
+        "x-audit-event-failure": "dealer.inquiry.decide_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "询价编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "审批结论：approve 通过 / reject 驳回",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "意见 / 原因",
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/inquiries/{id}/expire": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "expireDealerInquiry",
+        "summary": "报价置为已失效",
+        "description": "已报价 → 已失效。",
+        "x-permission": "dealer.inquiry.quote",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.inquiry.expired",
+        "x-audit-event-failure": "dealer.inquiry.expire_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "询价编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
             "$ref": "#/components/responses/Error"
           },
           "403": {

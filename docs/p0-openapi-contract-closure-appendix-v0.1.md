@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 755 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 332 | 人工权限矩阵正文未覆盖 231 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1510 | 人工事件矩阵正文未覆盖 1469 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 755 | 人工任务映射正文未逐项覆盖 749 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 453 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 773 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 340 | 人工权限矩阵正文未覆盖 239 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1546 | 人工事件矩阵正文未覆盖 1505 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 773 | 人工任务映射正文未逐项覆盖 767 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 465 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -163,6 +163,14 @@
 | `customer.voucher.manage` | staff-token | merchant | 3 | createVoucherDefinition, issueVouchers, revokeVoucher | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.redeem` | staff-token | merchant | 1 | redeemVoucher | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.view` | customer-token, staff-token | customer, merchant | 5 | customerVoucherWallet, listVoucherDefinitions, listVoucherInstances, listVoucherRedemptions, listVoucherOverview | OpenAPI 补充，以本附录为准 |
+| `dealer.inquiry.approve` | staff-token | project | 1 | decideDealerInquiryQuote | OpenAPI 补充，以本附录为准 |
+| `dealer.inquiry.manage` | staff-token | project | 1 | createDealerInquiry | OpenAPI 补充，以本附录为准 |
+| `dealer.inquiry.quote` | staff-token | project | 2 | quoteDealerInquiry, expireDealerInquiry | OpenAPI 补充，以本附录为准 |
+| `dealer.manage` | staff-token | project | 4 | createDealer, submitDealer, deactivateDealer, createDealerContract | OpenAPI 补充，以本附录为准 |
+| `dealer.price_catalog.approve` | staff-token | project | 1 | decideDealerPriceCatalog | OpenAPI 补充，以本附录为准 |
+| `dealer.price_catalog.edit` | staff-token | project | 2 | createDealerPriceCatalogDraft, submitDealerPriceCatalog | OpenAPI 补充，以本附录为准 |
+| `dealer.review` | staff-token | project | 1 | reviewDealer | OpenAPI 补充，以本附录为准 |
+| `dealer.view` | staff-token | project | 6 | listDealers, listDealerContracts, listDealerPriceCatalogs, listDealerExternalStock, listDealerPriceCatalogLines, listDealerInquiries | OpenAPI 补充，以本附录为准 |
 | `energy.meter.manage` | staff-token | platform | 3 | listEnergyMeters, createEnergyMeter, updateEnergyMeter | OpenAPI 补充，以本附录为准 |
 | `energy.reading.manage` | staff-token | platform | 7 | listEnergyReadings, recordEnergyReading, reviewEnergyReading, getEnergyMeterDifference, settleEnergyFee, settleEnergyFeeShortcut, listAbnormalReadings | OpenAPI 补充，以本附录为准 |
 | `entity.binding.manage` | staff-token | project-merchant | 3 | createBusinessEntity, createBusinessEntityBinding, changeBusinessEntityBinding | 已在权限矩阵正文出现 |
@@ -930,6 +938,42 @@
 | `customer.voucher_transfer_outgoing_viewed` | success | `listOutgoingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/outgoing` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.voucher_transfer_preview_view_failed` | failure | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.voucher_transfer_preview_viewed` | success | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `dealer.contract_create_failed` | failure | `createDealerContract` | `POST` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.contract_created` | success | `createDealerContract` | `POST` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.contract_view_failed` | failure | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.contract_viewed` | success | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.create_failed` | failure | `createDealer` | `POST` | `/api/v1/dealers` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.created` | success | `createDealer` | `POST` | `/api/v1/dealers` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.deactivate_failed` | failure | `deactivateDealer` | `POST` | `/api/v1/dealers/{id}/deactivate` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.deactivated` | success | `deactivateDealer` | `POST` | `/api/v1/dealers/{id}/deactivate` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.external_stock.view_failed` | failure | `listDealerExternalStock` | `GET` | `/api/v1/dealers/contracts/{id}/external-stock` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.external_stock.viewed` | success | `listDealerExternalStock` | `GET` | `/api/v1/dealers/contracts/{id}/external-stock` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.inquiry_view_failed` | failure | `listDealerInquiries` | `GET` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.inquiry_viewed` | success | `listDealerInquiries` | `GET` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.create_failed` | failure | `createDealerInquiry` | `POST` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.inquiry.manage` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.created` | success | `createDealerInquiry` | `POST` | `/api/v1/dealers/{id}/inquiries` | P0-待归类 | `dealer.inquiry.manage` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.decide_failed` | failure | `decideDealerInquiryQuote` | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | P0-待归类 | `dealer.inquiry.approve` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.decided` | success | `decideDealerInquiryQuote` | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | P0-待归类 | `dealer.inquiry.approve` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.expire_failed` | failure | `expireDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.expired` | success | `expireDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.quote_failed` | failure | `quoteDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
+| `dealer.inquiry.quoted` | success | `quoteDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | P0-待归类 | `dealer.inquiry.quote` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog_line_view_failed` | failure | `listDealerPriceCatalogLines` | `GET` | `/api/v1/dealers/price-catalogs/{id}/lines` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog_line_viewed` | success | `listDealerPriceCatalogLines` | `GET` | `/api/v1/dealers/price-catalogs/{id}/lines` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog_view_failed` | failure | `listDealerPriceCatalogs` | `GET` | `/api/v1/dealers/contracts/{id}/price-catalogs` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog_viewed` | success | `listDealerPriceCatalogs` | `GET` | `/api/v1/dealers/contracts/{id}/price-catalogs` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog.decide_failed` | failure | `decideDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | P0-待归类 | `dealer.price_catalog.approve` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog.decided` | success | `decideDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | P0-待归类 | `dealer.price_catalog.approve` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog.draft_failed` | failure | `createDealerPriceCatalogDraft` | `POST` | `/api/v1/dealers/contracts/{id}/price-catalogs` | P0-待归类 | `dealer.price_catalog.edit` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog.drafted` | success | `createDealerPriceCatalogDraft` | `POST` | `/api/v1/dealers/contracts/{id}/price-catalogs` | P0-待归类 | `dealer.price_catalog.edit` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog.submit_failed` | failure | `submitDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/submit` | P0-待归类 | `dealer.price_catalog.edit` | 接口级事件，以本附录为准 |
+| `dealer.price_catalog.submitted` | success | `submitDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/submit` | P0-待归类 | `dealer.price_catalog.edit` | 接口级事件，以本附录为准 |
+| `dealer.review_failed` | failure | `reviewDealer` | `POST` | `/api/v1/dealers/{id}/review` | P0-待归类 | `dealer.review` | 接口级事件，以本附录为准 |
+| `dealer.reviewed` | success | `reviewDealer` | `POST` | `/api/v1/dealers/{id}/review` | P0-待归类 | `dealer.review` | 接口级事件，以本附录为准 |
+| `dealer.submit_failed` | failure | `submitDealer` | `POST` | `/api/v1/dealers/{id}/submit` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.submitted` | success | `submitDealer` | `POST` | `/api/v1/dealers/{id}/submit` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.view_failed` | failure | `listDealers` | `GET` | `/api/v1/dealers` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.viewed` | success | `listDealers` | `GET` | `/api/v1/dealers` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `device.policy_violation` | success | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
 | `device.policy_violation_failed` | failure | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | TERM-终端设备 | `mdm.device.manage` | 接口级事件，以本附录为准 |
 | `dividend.approve_failed` | failure | `approveDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/approve` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
@@ -2382,6 +2426,10 @@
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractDraft` | `POST` | `/api/v1/contracts` | 起草合同(草拟) | `contract.draft.manage` | `contract.drafted` / `contract.draft_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | 创建合同关键日期 | `compliance.contract_key_date.manage` | `compliance.contract_key_date.create` / `compliance.contract_key_date.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createDealer` | `POST` | `/api/v1/dealers` | 经销商建档（待提交） | `dealer.manage` | `dealer.created` / `dealer.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createDealerContract` | `POST` | `/api/v1/dealers/{id}/contracts` | 登记经销合同 | `dealer.manage` | `dealer.contract_created` / `dealer.contract_create_failed` | web | operation 级补充 |
+| P0-待归类 | `createDealerInquiry` | `POST` | `/api/v1/dealers/{id}/inquiries` | 登记询价（未定价商品） | `dealer.inquiry.manage` | `dealer.inquiry.created` / `dealer.inquiry.create_failed` | web | operation 级补充 |
+| P0-待归类 | `createDealerPriceCatalogDraft` | `POST` | `/api/v1/dealers/contracts/{id}/price-catalogs` | 新建价格目录草稿版本 | `dealer.price_catalog.edit` | `dealer.price_catalog.drafted` / `dealer.price_catalog.draft_failed` | web | operation 级补充 |
 | P0-待归类 | `createEnergyMeter` | `POST` | `/api/v1/energy/meters` | 创建能源表计 | `energy.meter.manage` | `energy.meter_saved` / `energy.meter_save_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | 创建设备台账 | `facility.equipment.manage` | `facility.equipment_created` / `facility.equipment_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks` | 创建巡检任务 | `facility.inspection.manage` | `facility.inspection_task_created` / `facility.inspection_task_create_failed` | web | operation 级补充 |
@@ -2399,7 +2447,11 @@
 | P0-待归类 | `createPartnerSubordinate` | `POST` | `/api/v1/partner/subordinates` | 自助开通下属账号 | `partner.subordinate.manage` | `partner_subordinate.created` / `partner_subordinate.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createServiceOrder` | `POST` | `/api/v1/services/orders` | 代客下单(指定履约人) | `service.order.create` | `service.order.created` / `service.order.create_failed` | staff_work_phone, web, tablet, app | operation 级补充 |
 | P0-待归类 | `createSiteEntryReport` | `POST` | `/api/v1/facility/site-entry-reports` | 外包创建进场报备单（施工/装修进场前报备） | `facility.site_entry.create_assigned` | `facility.site_entry.create_assigned` / `facility.site_entry.create_failed` | web | operation 级补充 |
+| P0-待归类 | `deactivateDealer` | `POST` | `/api/v1/dealers/{id}/deactivate` | 停用经销商 | `dealer.manage` | `dealer.deactivated` / `dealer.deactivate_failed` | web | operation 级补充 |
+| P0-待归类 | `decideDealerInquiryQuote` | `POST` | `/api/v1/dealers/inquiries/{id}/decision` | 审批报价 | `dealer.inquiry.approve` | `dealer.inquiry.decided` / `dealer.inquiry.decide_failed` | web | operation 级补充 |
+| P0-待归类 | `decideDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | 审批价格目录 | `dealer.price_catalog.approve` | `dealer.price_catalog.decided` / `dealer.price_catalog.decide_failed` | web | operation 级补充 |
 | P0-待归类 | `disablePartnerSubordinate` | `POST` | `/api/v1/partner/subordinates/{user_id}/disable` | 停用下属账号 | `partner.subordinate.manage` | `partner_subordinate.disabled` / `partner_subordinate.disable_failed` | web | operation 级补充 |
+| P0-待归类 | `expireDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | 报价置为已失效 | `dealer.inquiry.quote` | `dealer.inquiry.expired` / `dealer.inquiry.expire_failed` | web | operation 级补充 |
 | P0-待归类 | `exportAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events/export` | 导出操作留痕（敏感） | `audit.operation_log.export` | `audit.operation_log.exported` / `audit.operation_log.export_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractPeriodBills` | `POST` | `/api/v1/contracts/{contract_id}/period-bills` | 某期全费目挂账(租金+物业费+能源费) | `finance.ar_ap.manage` | `contract.fee_billed` / `contract.period_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractRentBill` | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | 生成某期合同租金应收(base+递增−免租) | `finance.ar_ap.manage` | `contract.rent_billed` / `contract.rent_bill_failed` | web | operation 级补充 |
@@ -2420,6 +2472,12 @@
 | P0-待归类 | `listContractKeyDates` | `GET` | `/api/v1/compliance/contract-key-dates` | 查询合同关键日期列表 | `compliance.contract_key_date.view` | `compliance.contract_key_date.list` / `compliance.contract_key_date.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listContracts` | `GET` | `/api/v1/contracts` | 合同清单 | `contract.draft.manage` | `contract.viewed` / `contract.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractSettlements` | `GET` | `/api/v1/contracts/{contract_id}/settlements` | 退租结算清单 | `contract.settlement.manage` | `contract.settlements_viewed` / `contract.settlements_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | 经销合同清单 | `dealer.view` | `dealer.contract_viewed` / `dealer.contract_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealerExternalStock` | `GET` | `/api/v1/dealers/contracts/{id}/external-stock` | 经销库存外显 | `dealer.view` | `dealer.external_stock.viewed` / `dealer.external_stock.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealerInquiries` | `GET` | `/api/v1/dealers/{id}/inquiries` | 询价清单 | `dealer.view` | `dealer.inquiry_viewed` / `dealer.inquiry_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealerPriceCatalogLines` | `GET` | `/api/v1/dealers/price-catalogs/{id}/lines` | 价格目录明细 | `dealer.view` | `dealer.price_catalog_line_viewed` / `dealer.price_catalog_line_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealerPriceCatalogs` | `GET` | `/api/v1/dealers/contracts/{id}/price-catalogs` | 合同价格目录版本清单 | `dealer.view` | `dealer.price_catalog_viewed` / `dealer.price_catalog_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealers` | `GET` | `/api/v1/dealers` | 经销商清单 | `dealer.view` | `dealer.viewed` / `dealer.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listEffectiveDisabledTerminalSwitches` | `GET` | `/api/v1/terminals/capability-switches/effective` | 当前终端的已关闭开关行（前端菜单 gating 数据源） | `not_applicable` | `terminal_switch.effective_viewed` / `terminal_switch.effective_view_failed` | web, miniapp, app, kiosk, tablet, staff_work_phone, staff_private_phone, merchant_portal, merchant_app, mobile_admin | operation 级补充 |
 | P0-待归类 | `listEnergyMeters` | `GET` | `/api/v1/energy/meters` | 表计列表 | `energy.meter.manage` | `energy.meter.viewed` / `energy.meter.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listEnergyReadings` | `GET` | `/api/v1/energy/readings` | 抄表读数列表 | `energy.reading.manage` | `energy.reading.viewed` / `energy.reading.view_failed` | web | operation 级补充 |
@@ -2462,6 +2520,7 @@
 | P0-待归类 | `myServiceStats` | `GET` | `/api/v1/services/orders/my-stats` | 我的服务统计(当月次数+参考收入) | `service.order.perform` | `service.order.stats_viewed` / `service.order.stats_view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `publishFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | 发布平面图导入候选 | `floor_plan.import.manage` | `floor_plan.import_published` / `floor_plan.import_publish_failed` | web | operation 级补充 |
 | P0-待归类 | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | 跨对象查询操作留痕 | `audit.operation_log.view` | `audit.operation_log.viewed` / `audit.operation_log.view_failed` | web | operation 级补充 |
+| P0-待归类 | `quoteDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | 对询价报价 | `dealer.inquiry.quote` | `dealer.inquiry.quoted` / `dealer.inquiry.quote_failed` | web | operation 级补充 |
 | P0-待归类 | `raiseContractChange` | `POST` | `/api/v1/contracts/{contract_id}/changes` | 发起合同变更(6 类) | `contract.change.manage` | `contract.change_raised` / `contract.change_raise_failed` | web | operation 级补充 |
 | P0-待归类 | `recheckFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/recheck` | 复查整改后的巡检任务 | `facility.inspection.manage` | `facility.inspection_task_rechecked` / `facility.inspection_task_recheck_failed` | web | operation 级补充 |
 | P0-待归类 | `recordEnergyReading` | `POST` | `/api/v1/energy/readings` | 录入抄表读数 | `energy.reading.manage` | `energy.reading_recorded` / `energy.reading_record_failed` | web | operation 级补充 |
@@ -2471,6 +2530,7 @@
 | P0-待归类 | `requestContractScopeGrant` | `POST` | `/api/v1/contracts/{contract_id}/scope-requests` | 超范围下单经营申请(拦下后可申请,走既有审批链) | `contract.scope_request.raise` | `contract.scope_request_raised` / `contract.scope_request_raise_failed` | web | operation 级补充 |
 | P0-待归类 | `resolveContractDispute` | `POST` | `/api/v1/contracts/settlements/{settlement_id}/resolve-dispute` | 裁决退租争议→回到待结算 | `contract.settlement.dispute.resolve` | `contract.dispute_resolved` / `contract.dispute_resolve_failed` | web | operation 级补充 |
 | P0-待归类 | `resumeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/resume` | 恢复工单 | `facility.work_order.manage` | `facility.work_order_resumed` / `facility.work_order_resume_failed` | web | operation 级补充 |
+| P0-待归类 | `reviewDealer` | `POST` | `/api/v1/dealers/{id}/review` | 经销商准入审核 | `dealer.review` | `dealer.reviewed` / `dealer.review_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewEnergyReading` | `POST` | `/api/v1/energy/readings/{reading_id}/review` | 复核异常抄表读数 | `energy.reading.manage` | `energy.reading_reviewed` / `energy.reading_review_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/review` | 报修方回访工单 | `facility.work_order.manage` | `facility.work_order_reviewed` / `facility.work_order_review_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewSiteEntryReport` | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/review` | 物业审核进场报备（平台侧） | `facility.site_entry.review` | `facility.site_entry.review` / `facility.site_entry.review_failed` | web | operation 级补充 |
@@ -2512,6 +2572,8 @@
 | P0-待归类 | `startFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/start` | 开始巡检任务 | `facility.inspection.manage` | `facility.inspection_task_started` / `facility.inspection_task_start_failed` | web | operation 级补充 |
 | P0-待归类 | `startFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/start` | 开始处理工单 | `facility.work_order.manage` | `facility.work_order_started` / `facility.work_order_start_failed` | web | operation 级补充 |
 | P0-待归类 | `submitContract` | `POST` | `/api/v1/contracts/{contract_id}/submit` | 提交进审批链(→待确认) | `contract.draft.manage` | `contract.submitted` / `contract.submit_failed` | web | operation 级补充 |
+| P0-待归类 | `submitDealer` | `POST` | `/api/v1/dealers/{id}/submit` | 提交经销商准入审核 | `dealer.manage` | `dealer.submitted` / `dealer.submit_failed` | web | operation 级补充 |
+| P0-待归类 | `submitDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/submit` | 提交价格目录审批 | `dealer.price_catalog.edit` | `dealer.price_catalog.submitted` / `dealer.price_catalog.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitFacilityInspectionRecord` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/records` | 提交巡检记录 | `facility.inspection.manage` | `facility.inspection_record_submitted` / `facility.inspection_record_submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | 提交账单争议 | `merchant.billing.dispute.submit` | `merchant.billing.dispute.submit` / `merchant.billing.dispute.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitMerchantPortalSettlementDispute` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | 商户专区·结算单异议留言 | `merchant.portal.settlement.dispute` | `merchant_portal.settlement.disputed` / `merchant_portal.settlement.dispute_failed` | web, merchant_portal | operation 级补充 |
