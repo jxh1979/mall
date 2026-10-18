@@ -57,12 +57,13 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(12); // 含排班发布和普通扣除上限审批。
+        assertThat(page.total()).isEqualTo(15); // 含排班发布、普通扣除上限审批与 CG-12 三类人力操作（员工状态变更、奖惩、申诉）。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
                         "permission_grant_l1", "permission_grant_l2", "permission_grant_l3",
-                        "staff.shift.publish", "staff.payroll.penalty_cap.adjust");
+                        "staff.shift.publish", "staff.payroll.penalty_cap.adjust",
+                        "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal");
         assertThat(page.items())
                 .filteredOn(policy -> "contract_violation".equals(policy.actionType()))
                 .first()

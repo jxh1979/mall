@@ -1869,7 +1869,7 @@
         ],
         "operationId": "createAmusementVerification",
         "summary": "游乐权益核销",
-        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。",
+        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。达硬上限（安全容量）阻断并由系统自动停运（项目 paused，记 auto_paused_reason=hard_capacity，停运与 over_capacity 异常在独立事务落库，不随被拒核销回滚）；出场释放使项目实时在玩人数回落到硬上限以下后，由系统自动恢复开放（paused→open，留痕 amusement.project.auto_reopened，triggered_by=system）；高危事故停运与人工状态不自动恢复——BSM「容量分两道」条。",
         "x-permission": "amusement.verification.execute",
         "x-failure-codes": [
           "TICKET_NOT_FOUND",
@@ -6942,6 +6942,7 @@
         ],
         "operationId": "receivePurchaseRequest",
         "summary": "采购单入库确认(arrived→received,生成入库流水)",
+        "description": "入库确认后按供应合同的价格口径与账期形成对供应商的应付（direction=payable、source_type=purchase_inbound、source_id=采购单 id、金额=入库数量×unit_cost_cent、到期日按合同账期或供应商默认结算档推算），同事务进入应收应付台账；重放同一幂等键不重复挂账。",
         "x-permission": "inventory.purchase.approve",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -6973,7 +6974,8 @@
                 "additionalProperties": false,
                 "required": [
                   "idempotency_key",
-                  "location_id"
+                  "location_id",
+                  "unit_cost_cent"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -6990,6 +6992,12 @@
                     "type": "string",
                     "description": "结构化库房 id(可空,挂在余额上)",
                     "maxLength": 64
+                  },
+                  "unit_cost_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "入库确认录入的合同单价（分，非负）；据此形成对供应商的应付（金额=入库数量×单价），缺省即 400 VALIDATION_FAILED"
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -9662,7 +9670,7 @@
         ],
         "operationId": "syncTerminalTasks",
         "summary": "同步终端任务",
-        "description": "用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 离线同步的核销尝试：规则不允许的结果落 rejected 记录、设备/网络/凭证技术原因落 failed，任务结果同态（status/reason），同批其他任务照常处理。",
         "x-permission": "terminal.device.bind",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -10244,7 +10252,8 @@
         ],
         "operationId": "createTicketOrder",
         "x-failure-codes": [
-          "CONTRACT_SCOPE_VIOLATION"
+          "CONTRACT_SCOPE_VIOLATION",
+          "PARK_WIDE_FAULT_SALES_SUSPENDED"
         ],
         "summary": "创建票务订单（含一体机辅助售票）",
         "x-permission": "ticket.order.create",
@@ -10276,7 +10285,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。"
+        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。"
       }
     },
     "/api/v1/ticketing/orders/{order_id}/issue": {
@@ -10900,6 +10909,7 @@
         ],
         "operationId": "createTicketVerification",
         "summary": "正式核销",
+        "description": "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回、不落记录。",
         "x-permission": "verification.execute",
         "x-data-scope": "project-point",
         "x-terminal-allowed": [
@@ -10962,7 +10972,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+        "description": "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。"
       }
     },
     "/api/v1/ticketing/verifications/{id}/reverse": {
@@ -13512,6 +13522,7 @@
         ],
         "operationId": "customerStoredValueSettle",
         "summary": "客人储值充值入账（支付成功后）",
+        "description": "CG-06a：入账时按项目赠送比例拆为本金（实付）与赠送金两段分别记账（ENUM「储值卡类型与收款主体」），余额＝本金＋赠送金；topup 流水记录两段拆分；商户级卡赠送金为 0。",
         "x-permission": "customer.stored_value.topup",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13558,6 +13569,7 @@
         ],
         "operationId": "customerStoredValueConsume",
         "summary": "客人储值消费（余额扣减）",
+        "description": "CG-06a：通用卡扣款顺序写死先扣本金、后扣赠送金；商户级卡按发卡商户自定（平台代录）的 consume_order 扣减；consume 流水记录扣减的本金与赠送金各多少（BSM「我的余额」）。",
         "x-permission": "customer.stored_value.consume",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13604,6 +13616,7 @@
         ],
         "operationId": "customerStoredValueAccount",
         "summary": "客人储值账户查询",
+        "description": "CG-06a：返回 principal_cent（未消费本金）与 bonus_cent（未使用赠送金）分列（BSM「我的余额」：含本金与赠送金分列），balance_cent 为两段之和。",
         "x-permission": "customer.stored_value.view",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13655,6 +13668,7 @@
         ],
         "operationId": "customerStoredValueAccounts",
         "summary": "客人储值卡列表（我的全部卡：通用卡 + 各商户卡分别余额）",
+        "description": "CG-06a：每张卡返回 principal_cent / bonus_cent 分列；通用卡与商户级卡分列展示（BSM「我的余额」）。",
         "x-permission": "customer.stored_value.view",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -13821,6 +13835,7 @@
         ],
         "operationId": "refundStoredValueAccount",
         "summary": "会员储值退卡/退余额（后台）",
+        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -18324,6 +18339,877 @@
             "$ref": "#/components/responses/Error"
           }
         }
+      }
+    },
+    "/api/v1/amusement/park-wide-faults": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementParkWideFaults",
+        "summary": "查询全园故障状态记录",
+        "description": "CG-08a（ENUM「全园故障与补偿通票」）：按综合体项目列出全园故障状态记录（待第二岗位确认生效 / 生效中 / 待第二岗位确认解除 / 已解除），含发起人、确认人、岗位与时点；有项目范围的账号只见本综合体。",
+        "x-permission": "amusement.park_fault.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.park_fault.viewed",
+        "x-audit-event-failure": "amusement.park_fault.view_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending_activation",
+                "active",
+                "pending_lift",
+                "lifted"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "initiateAmusementParkWideFault",
+        "summary": "发起全园故障状态（第一岗位）",
+        "description": "CG-08a（ENUM「全园故障与补偿通票」：「全园故障状态由游乐公司负责人和工程或安全岗位共同确认后生效」）：游乐公司负责人或工程/安全岗位任一方发起，记录为「待第二岗位确认生效」，须另一岗位、另一人确认后才生效。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验（x-permission 只能登记一个码，另一岗位权限码见 role 字段说明）。同综合体已有未解除记录 → 409 PARK_WIDE_FAULT_ALREADY_OPEN；无项目范围的账号必须传 project_id。全程留痕（amusement_park_wide_fault_actions）。",
+        "x-permission": "amusement.park_fault.confirm_as_head",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.park_fault.initiated",
+        "x-audit-event-failure": "amusement.park_fault.initiate_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "role",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "description": "综合体项目编号；有项目范围的账号可省略（取当前范围，传入须一致）。",
+                    "maxLength": 64
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "amusement_head",
+                      "engineering_safety"
+                    ],
+                    "description": "本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "全园故障情形：全部游乐项目均不可运行，或供电、消防、入口系统等公共关键设施故障导致游乐园必须整体关闭。",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/park-wide-faults/{fault_id}/confirm-activation": {
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "confirmAmusementParkWideFaultActivation",
+        "summary": "第二岗位确认全园故障状态生效",
+        "description": "CG-08a：第二岗位确认后立即生效——自此停止所有纯游乐门票和所有包含游乐权益的通票的新销售（createTicketOrder 返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED；酒吧票、演出票不受影响）。确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN，同一人换岗位亦拒），且岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认生效阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_ACTIVATION。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。",
+        "x-permission": "amusement.park_fault.confirm_as_engineering_safety",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.park_fault.activated",
+        "x-audit-event-failure": "amusement.park_fault.activate_failed",
+        "parameters": [
+          {
+            "name": "fault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "全园故障状态记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "role"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "amusement_head",
+                      "engineering_safety"
+                    ],
+                    "description": "本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "确认说明。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/park-wide-faults/{fault_id}/initiate-lift": {
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "initiateAmusementParkWideFaultLift",
+        "summary": "发起解除全园故障状态（第一岗位）",
+        "description": "CG-08a（「全园故障状态的解除同样由游乐公司负责人和工程或安全岗位共同确认」）：仅生效中的记录可发起解除（否则 409 PARK_WIDE_FAULT_NOT_ACTIVE）；发起后进入「待第二岗位确认解除」，此阶段仍停售，直至另一岗位确认。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。",
+        "x-permission": "amusement.park_fault.confirm_as_head",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.park_fault.lift_initiated",
+        "x-audit-event-failure": "amusement.park_fault.lift_initiate_failed",
+        "parameters": [
+          {
+            "name": "fault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "全园故障状态记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "role",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "amusement_head",
+                      "engineering_safety"
+                    ],
+                    "description": "本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "解除依据：公共关键设施或游乐项目恢复情况。",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/park-wide-faults/{fault_id}/confirm-lift": {
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "confirmAmusementParkWideFaultLift",
+        "summary": "第二岗位确认解除全园故障状态",
+        "description": "CG-08a：第二岗位确认后解除，恢复纯游乐门票与含游乐权益通票的新销售。确认人须与解除发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN），岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认解除阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_LIFT。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。",
+        "x-permission": "amusement.park_fault.confirm_as_engineering_safety",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.park_fault.lifted",
+        "x-audit-event-failure": "amusement.park_fault.lift_failed",
+        "parameters": [
+          {
+            "name": "fault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "全园故障状态记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "role"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "amusement_head",
+                      "engineering_safety"
+                    ],
+                    "description": "本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "确认说明。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/park-wide-faults/{fault_id}/actions": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementParkWideFaultActions",
+        "summary": "查询全园故障状态留痕",
+        "description": "CG-08a：该记录的发起 / 确认生效 / 发起解除 / 确认解除逐条留痕（谁、以哪个岗位、何时、说明）。",
+        "x-permission": "amusement.park_fault.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.park_fault.viewed",
+        "x-audit-event-failure": "amusement.park_fault.view_failed",
+        "parameters": [
+          {
+            "name": "fault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "全园故障状态记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/compensation-policies/{project_id}": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "getAmusementCompensationPolicy",
+        "summary": "查询全园故障补偿有效期参数",
+        "description": "CG-08b（ENUM「全园故障与补偿通票」：「自发放之日起在后台配置的补偿有效期内有效（业务参数，按项目可配，出厂默认一年，须同时配置上下限）」）：返回该综合体项目生效的补偿有效期（天）与上下限；项目未单独配置时回落出厂行（__global__：365 天）。",
+        "x-permission": "amusement.park_fault.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.fault_compensation.viewed",
+        "x-audit-event-failure": "amusement.fault_compensation.view_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "综合体项目编号；__global__ 为出厂回落行",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "configureAmusementCompensationPolicy",
+        "summary": "配置全园故障补偿有效期参数（含上下限）",
+        "description": "CG-08b：按综合体项目配置补偿有效期天数，须同时填写下限与上限，缺任一或不满足 1 ≤ 下限 ≤ 天数 ≤ 上限 → 400 VALIDATION_FAILED。幂等键必填，审计留痕。",
+        "x-permission": "amusement.compensation_policy.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.fault_compensation.policy_configured",
+        "x-audit-event-failure": "amusement.fault_compensation.policy_config_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "综合体项目编号；__global__ 为出厂回落行",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "validity_days",
+                  "min_days",
+                  "max_days"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "validity_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "补偿有效期（天），自发放之日起算。"
+                  },
+                  "min_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "下限（天）。"
+                  },
+                  "max_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "上限（天）。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementFaultCompensationBatches",
+        "summary": "查询某次全园故障的补偿批次",
+        "description": "CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、延长与补发数量、补偿有效期截止。",
+        "x-permission": "amusement.park_fault.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.fault_compensation.viewed",
+        "x-audit-event-failure": "amusement.fault_compensation.view_failed",
+        "parameters": [
+          {
+            "name": "fault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "全园故障状态记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "initiateAmusementFaultCompensationBatch",
+        "summary": "发起全园故障补偿批次（第一岗位：快照受影响人份）",
+        "description": "CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；尚未核销但游乐权益仍在有效期内的人份/次份 → extend（只延长原核销权，不增加次数；多次票只补受影响的 1 次份）。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。",
+        "x-permission": "amusement.park_fault.confirm_as_head",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.fault_compensation.batch_initiated",
+        "x-audit-event-failure": "amusement.fault_compensation.batch_initiate_failed",
+        "parameters": [
+          {
+            "name": "fault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "全园故障状态记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "role",
+                  "reason",
+                  "bearer_company_id"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "amusement_head",
+                      "engineering_safety"
+                    ],
+                    "description": "本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "发放原因。",
+                    "maxLength": 2000
+                  },
+                  "bearer_company_id": {
+                    "type": "string",
+                    "description": "决定发放补偿的域主管公司的具体法律主体（承担本次完整补偿新增的实际履约）。",
+                    "maxLength": 64
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/compensation-batches/{batch_id}/confirm": {
+      "post": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "confirmAmusementFaultCompensationBatch",
+        "summary": "第二岗位确认并发放补偿",
+        "description": "CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：extend 人份的原权益 valid_to 延长到发放日 + 补偿有效期（取较晚者）；full_reissue 人份在原票下按票种完整票面补发各权益各一次（标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。",
+        "x-permission": "amusement.park_fault.confirm_as_engineering_safety",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "amusement.fault_compensation.batch_issued",
+        "x-audit-event-failure": "amusement.fault_compensation.batch_issue_failed",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "补偿批次编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "role"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "amusement_head",
+                      "engineering_safety"
+                    ],
+                    "description": "本次操作所用岗位：amusement_head＝游乐公司负责人（须持 amusement.park_fault.confirm_as_head）；engineering_safety＝工程或安全岗位（须持 amusement.park_fault.confirm_as_engineering_safety）。"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "确认说明。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/amusement/compensation-batches/{batch_id}/items": {
+      "get": {
+        "tags": [
+          "amusement"
+        ],
+        "operationId": "listAmusementFaultCompensationItems",
+        "summary": "查询补偿批次的补偿记录",
+        "description": "CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（延长 / 完整补发）、状态（待确认 / 已发放 / 已使用）、延长后截止、补发权益行、履约核销与锁定结算价。",
+        "x-permission": "amusement.park_fault.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "amusement.fault_compensation.viewed",
+        "x-audit-event-failure": "amusement.fault_compensation.view_failed",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "补偿批次编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
       }
     },
     "/api/v1/inventory/risk-alerts": {
@@ -23145,6 +24031,7 @@
         "x-audit-event-success": "leasing.lead.status_changed",
         "x-audit-event-failure": "leasing.lead.status_change_failed",
         "x-auth-context": "staff-token",
+        "description": "已签约线索改任何其他状态一律 409 LEASING_LEAD_ALREADY_SIGNED（PGM「招商运营细则」：已签约后不得回退至未签约状态）；lost/on_hold 须填 reason。",
         "parameters": [
           {
             "name": "lead_id",
@@ -23365,7 +24252,7 @@
         "x-audit-event-success": "leasing.intent.signed",
         "x-audit-event-failure": "leasing.intent.sign_failed",
         "x-auth-context": "staff-token",
-        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。",
+        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。",
         "parameters": [
           {
             "name": "intent_id",
@@ -23851,7 +24738,7 @@
         "x-audit-event-success": "contract.activated",
         "x-audit-event-failure": "contract.activate_failed",
         "x-auth-context": "staff-token",
-        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。",
+        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。",
         "parameters": [
           {
             "name": "contract_id",
@@ -24507,6 +25394,7 @@
         ],
         "operationId": "listSpaceRentalStatus",
         "summary": "铺位平面图着色数据源(可租/已租/即将到期)",
+        "description": "六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在未结清的退租结算单——结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已结清结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已结清或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。",
         "x-permission": "contract.draft.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -27270,7 +28158,8 @@
           "customer"
         ],
         "operationId": "configureStoredValueMerchantCard",
-        "summary": "配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）",
+        "summary": "配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序",
+        "description": "CG-06a：consume_order 为商户级卡消费扣款顺序（由发卡商户自定、由平台运营代为录入后台；BSM「支付方式」），principal_first=先本金后赠送金、bonus_first=先赠送金后本金；通用卡写死先本金后赠送金不可配置。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -27282,6 +28171,105 @@
         "requestBody": {
           "$ref": "#/components/requestBodies/StoredValueMerchantCardConfigRequest"
         },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/bonus-policies": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "configureStoredValueBonusPolicy",
+        "summary": "配置综合体通用卡充值赠送比例（仅平台，按项目，须同时配置上下限）",
+        "description": "CG-06a（ENUM「储值卡类型与收款主体」：「每笔充值拆为本金与赠送金两段分别记账，赠送比例可配（业务参数，按项目可配，须同时配置上下限）」）：值与上下限同在、取值须落在闭区间内，否则 400 VALIDATION_FAILED；仅对综合体通用卡充值生效，商户级卡赠送口径待裁决（赠送金 0）。",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.bonus_policy_configured",
+        "x-audit-event-failure": "stored_value.bonus_policy_config_failed",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/StoredValueBonusPolicyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/loyalty/stored-value/bonus-policies/{project_id}": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getStoredValueBonusPolicy",
+        "summary": "查询综合体通用卡充值赠送比例（仅平台）",
+        "description": "CG-06a：返回该项目当前赠送比例及上下限；未配置返回比例 0（不赠送）。project_id 传 __global__ 查询无项目范围的通用卡。",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "stored_value.bonus_policy_viewed",
+        "x-audit-event-failure": "stored_value.bonus_policy_view_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "综合体项目 id；__global__＝无项目范围的通用卡。"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
@@ -27916,6 +28904,7 @@
         ],
         "operationId": "blacklistCustomerAccount",
         "summary": "拉黑客人账号（永久禁止使用服务，无到期）",
+        "description": "CG-06b（BSM「核销单位」「储值预付卡 / 余额」：账户关闭的，储值本金退还本人）：拉黑即关闭账户，同事务内把该客人名下综合体通用卡的未消费本金全额退还本人（退款打款登记 finance_refunds，退款执行主体＝长沙项目公司）、未使用赠送金作废（adjust 流水）、卡置 closed；商户级卡不动，由发卡商户按自设规则到店办理；重复拉黑不重复退。",
         "x-permission": "customer.account.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -28926,7 +29915,7 @@
         ],
         "operationId": "listVacantSpaces",
         "summary": "空置铺位明细(出租率钻取)",
-        "description": "BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(空置/洽谈中/已退租)。 M737：按 contract.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出铺位项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
+        "description": "BI S3(2026-07-02 拍板):未出租的商铺/摊位实时明细,与出租率快照同过滤同口径 (shop/booth、非人工不可租、无生效合同覆盖当日),含推导租赁态(已退租/洽谈中/空置,按此优先级)。CG-09：与铺位看板 listSpaceRentalStatus 共用同一推导——最近一份合同存在未结清退租结算单(结算单开立起、含合同仍 effective)或租期已结束而未结清即「已退租」且不计入已租面积,结算完成(settled)即转空置;只有已签约未生效合同的铺位不算已退租。 M737：按 contract.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出铺位项目落在可触及项目内的行，项目为空的行不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "contract.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -30241,15 +31230,15 @@
           "staff"
         ],
         "operationId": "addStaffPayrollAdjustment",
-        "summary": "奖金/处罚手录(必须带事由)",
-        "description": "F批:奖惩手工录入,事由必填,审计留痕;计入当月薪资(月结时聚合)。",
+        "summary": "发起奖金/处罚复核(必须带事由；HR 会签＋直属领导向上三级通过后入账)",
+        "description": "F批:奖惩手工录入,事由必填,审计留痕。CG-12（BSM:1487 / ENUM:283「绩效扣分与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效」）：bonus / penalty 都只发起复核，返回复核单（object_id 为通过后入账的奖惩记录 id）；全部通过后才计入当月薪资（月结时聚合）。失败码：HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE、APPROVAL_LINE_EMPTY。",
         "x-permission": "staff.payroll.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": true,
-        "x-audit-event-success": "staff.payroll.adjustment_added",
+        "x-audit-event-success": "staff.payroll.adjustment_requested",
         "x-audit-event-failure": "staff.payroll.adjustment_add_failed",
         "requestBody": {
           "required": true,
@@ -30264,7 +31253,8 @@
                   "month",
                   "adj_type",
                   "amount_cent",
-                  "reason"
+                  "reason",
+                  "hr_approver_id"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -30300,6 +31290,11 @@
                     "type": "string",
                     "description": "事由(必填,钱路留痕硬约束)。",
                     "maxLength": 255
+                  },
+                  "hr_approver_id": {
+                    "type": "string",
+                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
+                    "maxLength": 80
                   }
                 }
               }
@@ -30321,6 +31316,138 @@
           }
         },
         "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/payroll/adjustments/appeals": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffAdjustmentAppeals",
+        "summary": "扣罚申诉清单(本人/人事按员工)",
+        "description": "CG-12：员工看本人申诉（staff.payroll.view_mine）；人事按 user_id 查看须 staff.payroll.manage 且员工在范围内。status：pending（裁定中）/ upheld（维持）/ revoked（已撤销，reversal_adjustment_id 为冲回记录）。",
+        "x-permission": "staff.payroll.view_mine",
+        "x-data-scope": "self",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.payroll.adjustment_appeals_viewed",
+        "x-audit-event-failure": "staff.payroll.adjustment_appeals_view_failed",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/staff/payroll/adjustments/{id}/appeals": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "submitStaffAdjustmentAppeal",
+        "summary": "员工对已生效扣罚提出申诉",
+        "description": "CG-12（BSM:1487「员工可对扣分提出申诉，申诉同样报至 HR 与直属领导向上三级裁定，过程与结论均留痕」）：只能由被扣罚员工本人对已生效的扣罚（adj_type=penalty）提出，事由必填；申诉走同一「HR 会签＋直属领导向上三级」链，链全部通过＝撤销（以 penalty_reversal 记录冲回原调整，原记录保留），任一节点驳回＝维持。失败码：ADJUSTMENT_NOT_FOUND、APPEAL_SELF_ONLY、APPEAL_ONLY_FOR_PENALTY、APPEAL_PENDING、APPEAL_ALREADY_REVOKED、HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE。",
+        "x-permission": "staff.payroll.view_mine",
+        "x-data-scope": "self",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.payroll.adjustment_appeal_submitted",
+        "x-audit-event-failure": "staff.payroll.adjustment_appeal_submit_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "扣罚记录编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "申诉事由（必填，留痕）",
+                    "maxLength": 1000
+                  },
+                  "hr_approver_id": {
+                    "type": "string",
+                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "reason",
+                  "hr_approver_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/staff/payroll/commissions": {
@@ -30458,6 +31585,339 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/dispatches": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "createStaffDispatch",
+        "summary": "登记派驻记录（员工 → 派驻酒吧）",
+        "description": "CG-07（BSM「派驻人员的成本与报酬」「营销人员的归属与报酬」）：登记一名员工派驻到某家酒吧的起始日期；所属主体取自员工档案的所属公司，派驻酒吧为商户编号。同一员工在同一酒吧只允许一条进行中的派驻（重复登记 409 STAFF_DISPATCH_ALREADY_ACTIVE）；档案无所属公司 409 STAFF_COMPANY_REQUIRED。派驻期间该员工在该酒吧促成订单的提成，由该酒吧按月拨付给所属主体（见 closeStaffCommissionSettlement）。",
+        "x-permission": "staff.profile.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.dispatch.created",
+        "x-audit-event-failure": "staff.dispatch.create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "user_id",
+                  "merchant_id",
+                  "start_date"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "员工账号（access_users.id），须已有员工档案。",
+                    "maxLength": 64
+                  },
+                  "merchant_id": {
+                    "type": "string",
+                    "description": "派驻酒吧（商户编号）。",
+                    "maxLength": 64
+                  },
+                  "start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "派驻开始日期（YYYY-MM-DD）。"
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "备注。",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffDispatches",
+        "summary": "查询派驻记录",
+        "description": "CG-07：按员工账号 / 派驻酒吧筛选派驻记录（所属主体、派驻酒吧、派驻起止时间分别记录）；商户角色只见本商户的派驻记录。",
+        "x-permission": "staff.profile.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.dispatch.viewed",
+        "x-audit-event-failure": "staff.dispatch.view_failed",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/dispatches/{dispatch_id}/end": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "endStaffDispatch",
+        "summary": "结束派驻记录",
+        "description": "CG-07：填写派驻结束日期（缺省为当日）并留痕事由；已结束的记录再次结束 409 STAFF_DISPATCH_ALREADY_ENDED。结束后该员工此后在该酒吧的提成不再进入该酒吧向其所属主体的月结拨付。",
+        "x-permission": "staff.profile.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.dispatch.ended",
+        "x-audit-event-failure": "staff.dispatch.end_failed",
+        "parameters": [
+          {
+            "name": "dispatch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "派驻记录编号",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "派驻结束日期（YYYY-MM-DD），缺省为当日；不得早于开始日期。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "结束事由。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/commission-settlements/close": {
+      "post": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "closeStaffCommissionSettlement",
+        "summary": "提成月结拨付（酒吧 → 人员所属主体）",
+        "description": "CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」「平台内部各主体之间的应收应付，每月有三个付账日」）：按（酒吧商户 → 人员所属主体 → 月）汇总派驻记录覆盖计提日的员工在该酒吧的提成（作废/取消的计提不计），每组生成一条内部结算应付（ar_ap_items：direction=payable、source_type=dispatch_commission_transfer、counterparty=所属主体、merchant=酒吧、会计期间=该月），金额为总额、收支两条线不轧差；到期日＝该月月末之后的第一个付账日（三个付账日取结算配置出厂行）。同（月, 酒吧, 主体）已月结的组不重复挂账（重复执行返回 settlements=0）。提成计提本身不再按单对员工本人挂应付。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "staff.commission_settlement.closed",
+        "x-audit-event-failure": "staff.commission_settlement.close_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "month"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "month": {
+                    "type": "string",
+                    "description": "月份(YYYY-MM)。",
+                    "pattern": "^\\d{4}-\\d{2}$",
+                    "maxLength": 7
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/staff/commission-settlements": {
+      "get": {
+        "tags": [
+          "staff"
+        ],
+        "operationId": "listStaffCommissionSettlements",
+        "summary": "查询提成月结拨付记录（按月）",
+        "description": "CG-07：返回该月各（酒吧 → 所属主体）的拨付金额、计提笔数、人数、到期付账日与对应应付台账项编号；项目口径只见本综合体。",
+        "x-permission": "staff.payroll.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "staff.commission_settlement.viewed",
+        "x-audit-event-failure": "staff.commission_settlement.view_failed",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}$",
+              "maxLength": 7
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
           },
           "400": {
             "$ref": "#/components/responses/Error"
@@ -32456,6 +33916,7 @@
         ],
         "operationId": "counterRefundStoredValueAccount",
         "summary": "会员储值到店柜台退款（商户预收卡唯一可达退款路径）",
+        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -38105,7 +39566,7 @@
         ],
         "operationId": "settlementConfigUpsertHighValueThreshold",
         "summary": "维护高价值判定阈值(草案)",
-        "description": "结算配置中心 V350：按 项目公司 × 商户 配置全平台唯一的「高价值判定阈值(分)」——物品进货价高于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。",
+        "description": "结算配置中心 V350：按 项目公司 × 商户 配置全平台唯一的「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -39377,8 +40838,8 @@
           "staff"
         ],
         "operationId": "setStaffEmploymentStatus",
-        "summary": "更新员工任职状态",
-        "description": "在当前公司或商户范围内调整任职状态，保留注册、存档及其他资料。",
+        "summary": "发起员工任职状态变更复核",
+        "description": "CG-12（BSM:1478「辞退与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效，生效即转「离职」」）：任一目标状态（待入职 / 在职 / 试岗 / 停岗 / 离职）都只发起「HR 会签（hr_review 平行线，hr_approver_id 须经角色持有 staff.hr.review）＋该员工直属领导向上三级」复核，返回复核单（review_status=pending_review）；全部节点通过后才写入，通过前档案状态不变。注册审批时系统置的初始状态不算「变更」。失败码：HR_APPROVER_REQUIRED、HR_APPROVER_LACKS_ROLE、APPROVAL_LINE_EMPTY（员工本人不得充当 HR 节点）、EMPLOYMENT_STATUS_CHANGED（通过落地时状态已被其他已生效复核变更）。",
         "x-permission": "staff.profile.review",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -39388,7 +40849,7 @@
           "staff_private_phone"
         ],
         "x-idempotency-required": true,
-        "x-audit-event-success": "staff.profile.employment_status_changed",
+        "x-audit-event-success": "staff.profile.employment_status_change_requested",
         "x-audit-event-failure": "staff.profile.employment_status_change_failed",
         "responses": {
           "200": {
@@ -39440,12 +40901,18 @@
                     "type": "string",
                     "description": "填写改动缘由",
                     "maxLength": 1000
+                  },
+                  "hr_approver_id": {
+                    "type": "string",
+                    "description": "HR 会签人员工账号（须经角色持有 staff.hr.review）",
+                    "maxLength": 80
                   }
                 },
                 "required": [
                   "idempotency_key",
                   "employment_status",
-                  "reason"
+                  "reason",
+                  "hr_approver_id"
                 ]
               }
             }
@@ -42590,6 +44057,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/StoredValueMerchantCardConfigRequest"
+            }
+          }
+        }
+      },
+      "StoredValueBonusPolicyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/StoredValueBonusPolicyRequest"
             }
           }
         }
@@ -53481,6 +54958,54 @@
               "merchant_prepaid",
               "platform_collect"
             ]
+          },
+          "consume_order": {
+            "type": "string",
+            "description": "CG-06a 商户级卡消费扣款顺序（由发卡商户自定、由平台运营代为录入；BSM「支付方式」）：principal_first=先本金后赠送金（缺省）；bonus_first=先赠送金后本金；空＝保留现值。通用卡写死先本金后赠送金，不在此配置。",
+            "enum": [
+              "principal_first",
+              "bonus_first"
+            ]
+          }
+        }
+      },
+      "StoredValueBonusPolicyRequest": {
+        "type": "object",
+        "description": "请求载荷 `StoredValueBonusPolicyRequest`；CG-06a 综合体通用卡充值赠送比例（业务参数，按项目可配，须同时配置上下限；ENUM「储值卡类型与收款主体」）。赠送金＝实付本金×bonus_bps/10000，仅对综合体通用卡充值生效；未配置的项目不赠送。",
+        "additionalProperties": false,
+        "required": [
+          "bonus_bps",
+          "min_bps",
+          "max_bps"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目 id；空＝无项目范围的通用卡（存为 __global__）。",
+            "maxLength": 64
+          },
+          "bonus_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "赠送比例（万分比）；须落在 [min_bps, max_bps] 闭区间内。"
+          },
+          "min_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "已配置下限（万分比）。"
+          },
+          "max_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "已配置上限（万分比）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "配置缘由（审计留痕）。",
+            "maxLength": 255
           }
         }
       },

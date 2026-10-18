@@ -603,10 +603,8 @@ public class BarBillingService {
                 "calculated",
                 Instant.now()
         ));
-        // A5(REQ-26b 增强)：有归属销售人员且金额>0 时贯通 finance 应付台账（非销售/0 元仅保留计算台账，满足 D13"或"）。
-        if (saved.commissionAmountCent() > 0 && saved.salesStaffId() != null) {
-            receivableLedgerService.createPayableForCommission(saved);
-        }
+        // CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」）：提成不再按单对员工本人挂 finance 应付；
+        // 金额留在 bar_commission_calculations，由工资单按月汇总，并由酒吧按月拨付人员所属主体（StaffService 提成月结）。
         return saved;
     }
 

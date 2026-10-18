@@ -55,6 +55,11 @@ public class TicketOrderService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     PointsAccrualRateConfigPort pointsAccrualRateConfigPort;
 
+    // CG-08a（ENUM「全园故障与补偿通票」）：全园故障状态生效期间停售纯游乐门票与含游乐权益的通票。字段注入免改构造点；
+    // 旧构造/未注入的单测为 null 视为无全园故障（生产由 Spring 恒注入 amusement 域的 AmusementParkWideFaultSalesGate）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    ParkWideFaultSalesGate parkWideFaultSalesGate;
+
     @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
@@ -88,6 +93,9 @@ public class TicketOrderService {
         if (contractScopeGuard != null && orderBarId != null) {
             contractScopeGuard.requireTicketSaleAllowed(orderBarId);
         }
+        // CG-08a：全园故障状态生效中 → 纯游乐门票与含游乐权益的通票一律拒单（置于库存扣减前，拒单零副作用）；
+        // 酒吧票、演出票等不含游乐权益的票种不受影响；局部设备/单个项目故障不走此闸（付款前明确提示后仍可售）。
+        requireAmusementSalesOpen(ticketType.id(), orderBarId);
         int quantity = requirePositive(actual.quantity(), "quantity");
         // D-024（BSM-1.6.6 / BSM-1.7.3 / PGM-1.15.3）：需要人脸照的票种，购票时必须录入购票人人脸，拒绝的不能购票——
         //   任何渠道下单即闸（置于库存扣减前，拒单零副作用）：每张票一张脸照（柜台由工作人员现场录入，客人端本人拍摄）；
@@ -759,6 +767,49 @@ public class TicketOrderService {
         }
         requireBarSellable(typeBarId);
         return typeBarId;
+    }
+
+    /** CG-08a 全园故障售票闸：票种含任一游乐类权益（entitlement_type 以 amusement 开头）且所属综合体全园故障生效中 → 拒单。 */
+    private void requireAmusementSalesOpen(String ticketTypeId, String orderBarId) {
+        if (parkWideFaultSalesGate == null || !ticketTypeHasAmusementEntitlement(ticketTypeId)) {
+            return;
+        }
+        if (parkWideFaultSalesGate.salesSuspended(resolveComplexProjectId(orderBarId))) {
+            throw ApiException.conflict("PARK_WIDE_FAULT_SALES_SUSPENDED",
+                    "游乐园全园故障状态生效中，纯游乐门票与含游乐权益的通票暂停销售，解除后恢复");
+        }
+    }
+
+    /** 票种是否含游乐类权益（与 TicketVerificationService / AmusementService 同口径：entitlement_type 以 amusement 开头）。 */
+    private boolean ticketTypeHasAmusementEntitlement(String ticketTypeId) {
+        for (TicketTypeEntitlementRecord binding : repository.listTicketTypeEntitlements(ticketTypeId)) {
+            boolean amusement = repository.findEntitlementTemplateById(binding.entitlementTemplateId())
+                    .map(template -> template.entitlementType() != null
+                            && template.entitlementType().trim().toLowerCase(java.util.Locale.ROOT).startsWith("amusement"))
+                    .orElse(false);
+            if (amusement) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 订单所属综合体：优先当前项目范围（员工/终端 token），其次单店票归属酒吧所在综合体；都定位不到返回 null（闸内 fail-closed）。 */
+    private String resolveComplexProjectId(String orderBarId) {
+        if (authorizationService != null) {
+            try {
+                java.util.Optional<String> scope = authorizationService.currentProjectScopeQuietly();
+                if (scope.isPresent()) {
+                    return scope.get();
+                }
+            } catch (Exception ignored) {
+                // 无安全上下文（内部调用/单测）：继续按酒吧归属定位。
+            }
+        }
+        if (orderBarId != null && barDirectory != null) {
+            return barDirectory.findMerchant(orderBarId).map(MerchantRecord::projectId).orElse(null);
+        }
+        return null;
     }
 
     /** AUD-076 停售闸：归属酒吧不存在/非 bar/已存档/停业(status≠active) → 停售 TICKET_BAR_OFFLINE（已售票不受影响）。 */
