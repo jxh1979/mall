@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 741 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 747 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -403,6 +403,12 @@
 | amusement | `GET` | `/api/v1/amusement/safety-notices` | `listAmusementSafetyNotices` | 查询游乐安全告知列表 | `-` | `amusement.safety_notice.view` | `staff-token` | `project-amusement` | tablet, staff_work_phone | 否 | `amusement.safety_notice.list` | `amusement.safety_notice.list_failed` |
 | amusement | `POST` | `/api/v1/amusement/safety-notices` | `createAmusementSafetyNotice` | 创建游乐安全告知/免责须知 | `object` | `amusement.safety_notice.manage` | `staff-token` | `project-amusement` | tablet, staff_work_phone | 是 | `amusement.safety_notice.create` | `amusement.safety_notice.create_failed` |
 | amusement | `POST` | `/api/v1/amusement/safety-notices/{noticeId}/acknowledgements` | `acknowledgeAmusementSafetyNotice` | 登记安全告知签字确认（免责确认） | `object` | `amusement.waiver.acknowledge` | `staff-token` | `project-amusement` | tablet, staff_work_phone | 是 | `amusement.waiver.acknowledge` | `amusement.waiver.acknowledge_failed` |
+| amusement | `GET` | `/api/v1/amusement/park-wide-faults` | `listAmusementParkWideFaults` | 查询全园故障状态记录 | `-` | `amusement.park_fault.view` | `staff-token` | `project` | web | 否 | `amusement.park_fault.viewed` | `amusement.park_fault.view_failed` |
+| amusement | `POST` | `/api/v1/amusement/park-wide-faults` | `initiateAmusementParkWideFault` | 发起全园故障状态（第一岗位） | `object` | `amusement.park_fault.confirm_as_head` | `staff-token` | `project` | web, staff_work_phone | 是 | `amusement.park_fault.initiated` | `amusement.park_fault.initiate_failed` |
+| amusement | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/confirm-activation` | `confirmAmusementParkWideFaultActivation` | 第二岗位确认全园故障状态生效 | `object` | `amusement.park_fault.confirm_as_engineering_safety` | `staff-token` | `project` | web, staff_work_phone | 是 | `amusement.park_fault.activated` | `amusement.park_fault.activate_failed` |
+| amusement | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/initiate-lift` | `initiateAmusementParkWideFaultLift` | 发起解除全园故障状态（第一岗位） | `object` | `amusement.park_fault.confirm_as_head` | `staff-token` | `project` | web, staff_work_phone | 是 | `amusement.park_fault.lift_initiated` | `amusement.park_fault.lift_initiate_failed` |
+| amusement | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/confirm-lift` | `confirmAmusementParkWideFaultLift` | 第二岗位确认解除全园故障状态 | `object` | `amusement.park_fault.confirm_as_engineering_safety` | `staff-token` | `project` | web, staff_work_phone | 是 | `amusement.park_fault.lifted` | `amusement.park_fault.lift_failed` |
+| amusement | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/actions` | `listAmusementParkWideFaultActions` | 查询全园故障状态留痕 | `-` | `amusement.park_fault.view` | `staff-token` | `project` | web | 否 | `amusement.park_fault.viewed` | `amusement.park_fault.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/risk-alerts` | `listInventoryRiskAlerts` | 查询库存风险预警列表 | `-` | `inventory.risk_alert.view` | `staff-token` | `warehouse` | web, mobile_admin | 否 | `inventory.risk_alert.list` | `inventory.risk_alert.list_failed` |
 | inventory | `POST` | `/api/v1/inventory/risk-alerts/scan` | `scanInventoryRiskAlerts` | 触发库存风险扫描 | `object` | `inventory.risk.scan` | `staff-token` | `warehouse` | web, mobile_admin | 是 | `inventory.risk.scan` | `inventory.risk.scan_failed` |
 | inventory | `GET` | `/api/v1/inventory/stock-batches` | `listInventoryStockBatches` | 查询库存批次列表 | `-` | `inventory.stock.view` | `staff-token` | `warehouse` | web, mobile_admin | 否 | `inventory.stock_batch.list` | `inventory.stock_batch.list_failed` |

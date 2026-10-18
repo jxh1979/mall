@@ -61,6 +61,7 @@ const VendorSiteEntriesPage = React.lazy(() => import("./pages/VendorSiteEntries
 const AmusementSafetyPage = React.lazy(() => import("./pages/AmusementSafetyPage").then((m) => ({ default: m.AmusementSafetyPage })));
 const AmusementInspectionTasksPage = React.lazy(() => import("./pages/AmusementInspectionTasksPage").then((m) => ({ default: m.AmusementInspectionTasksPage })));
 const AmusementSessionsPage = React.lazy(() => import("./pages/AmusementSessionsPage").then((m) => ({ default: m.AmusementSessionsPage })));
+const AmusementParkWideFaultPage = React.lazy(() => import("./pages/AmusementParkWideFaultPage").then((m) => ({ default: m.AmusementParkWideFaultPage })));
 const AmusementVerificationRecordsPage = React.lazy(() => import("./pages/AmusementVerificationRecordsPage").then((m) => ({ default: m.AmusementVerificationRecordsPage })));
 const AmusementGroupBookingsPage = React.lazy(() => import("./pages/AmusementGroupBookingsPage").then((m) => ({ default: m.AmusementGroupBookingsPage })));
 const SupervisorReviewPage = React.lazy(() => import("./pages/SupervisorReviewPage").then((m) => ({ default: m.SupervisorReviewPage })));
@@ -288,6 +289,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AmusementInspectionTasksPage {...props} />;
     case "ADM-AMU-005":
       return <AmusementVerificationRecordsPage {...props} />;
+    case "ADM-AMU-006":
+      return <AmusementParkWideFaultPage {...props} />;
     case "ADM-GOV-006":
       return <SupervisorReviewPage {...props} />;
     case "ADM-GOV-009":

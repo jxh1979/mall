@@ -1,4 +1,4 @@
-# 游乐设施运营系统开发设计文档 V0.05
+# 游乐设施运营系统开发设计文档 V0.06
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
@@ -1180,6 +1180,15 @@ com.complex.amusement
 - dto
 - mapper
 
+## 15A. 全园故障状态（CG-08a，迁移 V446，依据 ENUM「全园故障与补偿通票」）
+
+- **表**：`amusement_park_wide_faults`（id、project_id→projects、status pending_activation|active|pending_lift|lifted、reason、initiated_by/role/at、activation_confirmed_by/role、activated_at、lift_initiated_by/role/at、lift_reason、lift_confirmed_by/role、lifted_at；部分唯一索引 `(project_id) WHERE status <> 'lifted'`：同综合体同一时刻只允许一条未解除记录）；`amusement_park_wide_fault_actions`（fault_id、action initiate|confirm_activation|initiate_lift|confirm_lift、actor_id、actor_role、note、created_at）。
+- **岗位 → 权限码**（技术决定）：游乐公司负责人＝`amusement.park_fault.confirm_as_head`；工程或安全岗位＝`amusement.park_fault.confirm_as_engineering_safety`；查看＝`amusement.park_fault.view`。请求以 `role` 指明本次所用岗位，服务端按该岗位的权限码校验。
+- **服务** `AmusementParkWideFaultService`：`initiate`（任一岗位发起 → pending_activation；同综合体已有未解除记录 409 `PARK_WIDE_FAULT_ALREADY_OPEN`）、`confirmActivation`（第二人且另一岗位 → active；同一人 403 `PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN`，同岗位 409 `PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED`，非待确认 409 `PARK_WIDE_FAULT_NOT_PENDING_ACTIVATION`）、`initiateLift`（仅 active → pending_lift，否则 409 `PARK_WIDE_FAULT_NOT_ACTIVE`）、`confirmLift`（同上双人双岗 → lifted，非待确认解除 409 `PARK_WIDE_FAULT_NOT_PENDING_LIFT`）、`list`、`listActions`。所有写操作幂等键必填、审计事件 `amusement.park_fault.initiated/activated/lift_initiated/lifted` 与 `*_failed`。
+- **售票闸**：`ticketing.ParkWideFaultSalesGate`（amusement 域实现 `AmusementParkWideFaultSalesGate`，只读）。`TicketOrderService.createOrder` 在库存扣减前：票种含任一游乐类权益（`entitlement_type` 以 amusement 开头）且所属综合体处于 active 或 pending_lift → 409 `PARK_WIDE_FAULT_SALES_SUSPENDED`。综合体定位：当前项目范围 → 单店票归属酒吧的 `merchants.project_id` → 都定位不到则任一综合体生效即停售（fail-closed）。
+- **后台页** ADM-AMU-006「全园故障状态」（`/admin/amusement/park-wide-faults`）：当前状态卡、发起 / 第二岗位确认生效 / 发起解除 / 第二岗位确认解除、留痕表、历史表。
+- **未含**：核销侧停止、补偿通票发放（CG-08b 另批）；局部设备/单个项目故障的付款前提示沿用既有项目/设备状态口径。
+
 ## 16. 验收标准
 
 P0 完成时必须满足：
@@ -1223,6 +1232,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-17 | 增 | 抬头、§15A | V0.06：CG-08a 全园故障状态表、岗位→权限码、服务与错误码、票务售票闸、后台页 | ENUM「全园故障与补偿通票」条；迁移 V446 |
 | 2026-09-01 | 改 | 文首、§18 | V0.05 门禁同步：把 BSM 经营看板引用补全为唯一条目名；业务正文与范围不变 | `verify:entry-anchors` 唯一锚点要求 |
 | 2026-09-01 | 改 | §9 | V0.04 Grok 只读复审返修：游乐报表改回现行 P0 经营看板，不再把现行客流、核销、容量和异常看板误标为 P2 | M07 同一 Grok 会话第二次复审阻断项 1；BSM「连接经营看板，管理层看项目客流、容量和异常」及 A §8 |
 | 2026-09-01 | 改 | §2.1、§8、§9、§12.2、§14、§17 | V0.03 Grok 只读复审返修：P1 增强只保留动态容量；事故/故障/投诉记录、设备状态和现场核验留痕改回现行业务；删除未获 HTML 批准的电子免责与深度工单增强；准确登记 `approveReopen` 只联动 `maintenance/closed → open`、不强翻 `paused` 的代码缺口 | M07 同一 Grok 会话复审阻断项 1-2；ENUM「游乐增强阶段」、BSM「后续增强能力」及 `AmusementInspectionService.reopenProjectIfBlocked` |

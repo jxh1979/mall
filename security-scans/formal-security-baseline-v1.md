@@ -3,8 +3,8 @@
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 741
-- OpenAPI SHA-256: `a97c9357f263defcd6f863d710e261ee1ac8a621fc957e82670c038273f8b3ea`
+- OpenAPI operation count: 747
+- OpenAPI SHA-256: `85746987782e0ce10bd86147821639c3d03a1aaa2b19886015154aa0d921d5c5`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`
@@ -42,7 +42,7 @@
 | `device-credential` | 4 |
 | `open-app-credential` | 1 |
 | `public` | 7 |
-| `staff-token` | 686 |
+| `staff-token` | 692 |
 | `webhook-signature` | 4 |
 
 | 检查项 | 结论 |
@@ -57,8 +57,8 @@
 
 | 指标 | 数量 |
 |---|---:|
-| 全部 operation | 741 |
-| 写 operation | 445 |
+| 全部 operation | 747 |
+| 写 operation | 449 |
 | public operation | 7 |
 | open-app/webhook operation | 5 |
 
@@ -73,9 +73,9 @@
 | `provider-webhook` | 3 |
 | `server-to-server` | 2 |
 | `staff_private_phone` | 39 |
-| `staff_work_phone` | 80 |
+| `staff_work_phone` | 84 |
 | `tablet` | 102 |
-| `web` | 704 |
+| `web` | 710 |
 
 当前 SecurityConfig 允许 `/docs/**`、`/swagger-ui/**`、`/v3/api-docs/**` 公开访问。该配置可用于内网开发和联调，但公网公开生产必须关闭或加认证保护。
 
