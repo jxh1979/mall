@@ -1916,18 +1916,18 @@ class InventoryServiceTests {
         final Map<String, TraceHandoverExceptionRecord> traceHandoverExceptions = new LinkedHashMap<>();
         final List<Map<String, Object>> robotTaskEvents = new ArrayList<>();
 
-        // V350 高价值判定读进货价（inventory_item_cost_state.avg_unit_cost_cent）。
-        private final Map<String, InventoryItemCostStateRecord> costStates = new LinkedHashMap<>();
+        // 高价值判定读该物品最近一次采购入库流水的实际到货单价（BSM「高价值物品」；不再读
+        // inventory_item_cost_state.avg_unit_cost_cent 移动加权均价）。
+        private final Map<String, Long> latestArrivalCosts = new LinkedHashMap<>();
 
-        /** 播种某物品的进货价（分/单位），使其在高价值判定里有成本基准。 */
-        void seedCost(String itemId, long avgUnitCostCent) {
-            costStates.put(itemId, new InventoryItemCostStateRecord(
-                    itemId, null, 0L, 0L, avgUnitCostCent, 0L, 0L, "moving_average", true, Instant.now()));
+        /** 播种某物品最近一次实际到货价（分/单位），使其在高价值判定里有到货价基准。 */
+        void seedCost(String itemId, long latestArrivalUnitCostCent) {
+            latestArrivalCosts.put(itemId, latestArrivalUnitCostCent);
         }
 
         @Override
-        public Optional<InventoryItemCostStateRecord> findCostState(String itemId) {
-            return Optional.ofNullable(costStates.get(itemId));
+        public Optional<Long> findLatestPurchaseArrivalUnitCostCent(String itemId) {
+            return Optional.ofNullable(latestArrivalCosts.get(itemId));
         }
 
         @Override

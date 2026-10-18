@@ -210,6 +210,11 @@ public interface TicketingRepository {
 
     IssuedEntitlementRecord updateIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
+    /** CG-08b 全园故障补偿「只延长原核销权」：valid_to 取较晚者，不增加次数。返回受影响行数；default 0 兼容内存测试双子。 */
+    default int extendIssuedEntitlementValidTo(String id, java.time.Instant newValidTo, java.time.Instant now) {
+        return 0;
+    }
+
     List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit);
 
     VerificationRecord saveVerification(VerificationRecord verification);

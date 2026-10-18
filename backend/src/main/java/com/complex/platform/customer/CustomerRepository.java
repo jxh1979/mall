@@ -243,6 +243,15 @@ public interface CustomerRepository {
         throw new UnsupportedOperationException("saveStoredValueMerchantRefundRule not supported by this repository");
     }
 
+    /** CG-06a 通用卡充值赠送比例（按项目；projectScope 见 {@link StoredValueBonusPolicyRecord#scopeOf}）。 */
+    default Optional<StoredValueBonusPolicyRecord> findStoredValueBonusPolicy(String projectScope) {
+        return Optional.empty();
+    }
+
+    default StoredValueBonusPolicyRecord saveStoredValueBonusPolicy(StoredValueBonusPolicyRecord policy) {
+        throw new UnsupportedOperationException("saveStoredValueBonusPolicy not supported by this repository");
+    }
+
     /** 幂等校验：按 idempotency_key 查已落库的储值流水。 */
     default Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdempotencyKey(String key) {
         return Optional.empty();

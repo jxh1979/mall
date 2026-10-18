@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -12,7 +12,10 @@ import type { AdminPageProps } from "../types";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
-type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; leaveDeductionCent?: number; taxCent?: number; totalCent?: number };
+type PayrollRow = { id: string; userId?: string; month?: string; baseCent?: number; commissionCent?: number; bonusCent?: number; penaltyCent?: number; leaveDeductionCent?: number; taxCent?: number; totalCent?: number; payerCompanyId?: string | null };
+// CG-07 提成月结拨付（bar_commission_settlements）：酒吧 → 人员所属主体 → 月，一组一条内部结算应付。
+type CommissionSettlementRow = { id: string; month?: string; merchantId?: string | null; companyId?: string | null; amountCent?: number; calculationCount?: number; staffCount?: number; arApItemId?: string | null; dueDate?: string | null };
+const cnDay = (value?: string | null) => (value ? value.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日") : "—");
 type LeaveRow = { id: string; userId?: string; leaveType?: string; startDate?: string; endDate?: string; reason?: string; status?: string; reviewNote?: string };
 
 const TEXT = {
@@ -48,6 +51,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
   const [month, setMonth] = React.useState(currentMonth);
   const [payroll, setPayroll] = React.useState<PayrollRow[]>([]);
   const [leaves, setLeaves] = React.useState<LeaveRow[]>([]);
+  const [settlements, setSettlements] = React.useState<CommissionSettlementRow[]>([]);
   const [leaveNotice, setLeaveNotice] = React.useState<string | null>(null);
   const [baseUser, setBaseUser] = React.useState("");
   const [baseSalary, setBaseSalary] = React.useState("");
@@ -68,11 +72,13 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
     async () => {
       // 副资源容错（外包页范式）：待审请假归排班主管审批，薪资账号可能无权（403）——降级为区块提示，
       // 不拖垮当月薪资明细主内容。
-      const [payRows, leaveRes] = await Promise.all([
+      const [payRows, leaveRes, settlementRows] = await Promise.all([
         api.get<PayrollRow[]>(`/api/v1/staff/payroll?month=${month}`),
         loadSecondaryIfPermitted(canShiftManage, () => api.get<LeaveRow[]>("/api/v1/staff/leaves?status=pending"), [] as LeaveRow[]),
+        api.get<CommissionSettlementRow[]>(`/api/v1/staff/commission-settlements?month=${month}`),
       ]);
       setPayroll(payRows ?? []);
+      setSettlements(Array.isArray(settlementRows) ? settlementRows : []);
       setLeaves(leaveRes.data);
       setLeaveNotice(leaveRes.notice);
     },
@@ -135,6 +141,13 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
     await reload();
   };
 
+  // CG-07：按（酒吧 → 人员所属主体 → 月）汇总派驻人员提成，生成内部结算应付；重复执行不重复挂账。
+  const closeCommissionSettlement = async () => {
+    const result = await api.post<{ settlements?: number }>("/api/v1/staff/commission-settlements/close", { month });
+    setActionResult({ action: "commission_settlement_closed", month, settlements: result?.settlements });
+    await reload();
+  };
+
   const review = async (id: string, decision: "approve" | "reject") => {
     await api.post(`/api/v1/staff/leaves/${id}/review`, { decision, reviewNote: decision === "approve" ? "准" : "驳回" });
     setActionResult({ action: "leave_reviewed", id, decision });
@@ -150,6 +163,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         { label: "所属月份", value: cnMonth(row.month ?? month) },
         { label: "固定工资", value: money(row.baseCent) },
         { label: "提成", value: money(row.commissionCent) },
+        { label: "发放主体（代扣个税）", value: row.payerCompanyId ?? "—" },
         { label: "奖金", value: money(row.bonusCent) },
         { label: "处罚", value: money(row.penaltyCent) },
         { label: "请假扣薪", value: money(row.leaveDeductionCent) },
@@ -222,6 +236,7 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
       <div className="admin-toolbar">
         <label>月份:<CnDatePicker mode="month" data-testid="payroll-month" value={month} onChange={(v) => setMonth(v || currentMonth())} /></label>
         <button type="button" data-testid="payroll-close" onClick={() => void closeMonth()}>执行月结(重结=覆盖)</button>
+        <button type="button" data-testid="payroll-commission-close" onClick={() => void closeCommissionSettlement()}>提成月结拨付(酒吧→所属主体)</button>
       </div>
       <div className="admin-kpi-grid" data-testid="staff-payroll-summary">
         <div className="admin-kpi-card"><span>实发合计（元）</span><strong className="admin-kpi-value--text" data-testid="staff-payroll-kpi-total">{payrollTotalKpi.status === "ready" && payrollTotalKpi.value !== null ? money(payrollTotalKpi.value) : "—"}</strong><small>平台口径·{cnMonth(month)}{payrollTotalKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="staff.payroll_net_total" from={monthDay} to={monthDay} testid="staff-payroll-metric-detail-total" /> : null}</small></div>
@@ -273,13 +288,14 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
         <h3>当月薪资单(月结后生成;员工端仅见已定格月份)</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="payroll-table">
-            <thead><tr><th>员工</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>请假扣薪</th><th>代扣个税</th><th>实发合计</th><th>详情</th></tr></thead>
+            <thead><tr><th>员工</th><th>发放主体</th><th>固定工资</th><th>提成</th><th>奖金</th><th>处罚</th><th>请假扣薪</th><th>代扣个税</th><th>实发合计</th><th>详情</th></tr></thead>
             <tbody>
               {payroll.map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`payroll-row-${row.id}`}
                   onClick={() => openPayrollDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPayrollDetail(row); } }}>
                   <td>{row.userId ?? "—"}</td>
+                  <td data-testid={`payroll-payer-${row.id}`}>{row.payerCompanyId ?? "—"}</td>
                   <td>{money(row.baseCent)}</td>
                   <td>{money(row.commissionCent)}</td>
                   <td>{money(row.bonusCent)}</td>
@@ -288,6 +304,26 @@ export function StaffPayrollLeavePage({ api, setGlobalError, setActionResult, ef
                   <td>{money(row.taxCent)}</td>
                   <td>{money(row.totalCent)}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看薪资单详情" onClick={(event) => { event.stopPropagation(); openPayrollDetail(row); }}>查看详情</button></td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <h3>提成月结拨付(酒吧 → 人员所属主体，按三个付账日结清)</h3>
+        <p className="admin-muted-action">派驻/营销人员在酒吧促成订单的提成，由该酒吧按月拨付给人员所属主体，列入本人工资单由所属主体统一发放并代扣个人所得税；拨付为内部结算应付，总额收付、不轧差。</p>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="commission-settlement-table">
+            <thead><tr><th>酒吧</th><th>所属主体</th><th>拨付金额</th><th>计提笔数</th><th>人数</th><th>到期付账日</th><th>应付台账项</th></tr></thead>
+            <tbody>
+              {settlements.length === 0 ? <tr><td colSpan={7}>本月尚未执行提成月结拨付</td></tr> : settlements.map((row) => (
+                <tr key={row.id} data-testid={`commission-settlement-row-${row.id}`}>
+                  <td>{row.merchantId ?? "—"}</td>
+                  <td>{row.companyId ?? "—"}</td>
+                  <td>{money(row.amountCent)}</td>
+                  <td>{row.calculationCount ?? 0}</td>
+                  <td>{row.staffCount ?? 0}</td>
+                  <td>{cnDay(row.dueDate)}</td>
+                  <td className="admin-id-cell" title={row.arApItemId ?? ""}>{row.arApItemId ?? "—"}</td>
+                </tr>
               ))}
             </tbody>
           </table>
