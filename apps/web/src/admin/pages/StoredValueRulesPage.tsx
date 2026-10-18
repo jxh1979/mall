@@ -9,13 +9,28 @@ import { PermissionButton } from "../security/Can";
 //   GET  /api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}（合并返回发卡+资金+退款规则）
 //   POST /api/v1/loyalty/stored-value/merchant-card-config（发卡资格 + 资金模式，仅平台可改）
 //   POST /api/v1/loyalty/stored-value/merchant-refund-rules（可退 + 退款比例）
+//   GET  /api/v1/loyalty/stored-value/bonus-policies/{project_id} / POST …/bonus-policies（CG-06a 通用卡充值赠送比例，按项目，含上下限）
 type MerchantCardRule = {
   merchantId?: string | null;
   refundAllowed?: boolean;
   refundRatioBps?: number;
   cardIssuanceEnabled?: boolean;
   fundOwnership?: string;
+  // CG-06a：商户级卡消费扣款顺序（BSM「支付方式」：由发卡商户自定、由平台运营代为录入后台）。
+  consumeOrder?: string;
 };
+type BonusPolicy = { projectId?: string; bonusBps?: number; minBps?: number; maxBps?: number };
+const GLOBAL_SCOPE = "__global__";
+const CONSUME_ORDERS: Array<[string, string]> = [
+  ["principal_first", "先扣本金、后扣赠送金"],
+  ["bonus_first", "先扣赠送金、后扣本金"],
+];
+function consumeOrderLabel(code?: string | null): string {
+  return CONSUME_ORDERS.find(([c]) => c === code)?.[1] ?? "先扣本金、后扣赠送金";
+}
+function pctOf(bps?: number): string {
+  return bps == null ? "—" : `${(bps / 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+}
 
 const MANAGE = ["customer.stored_value.refund"];
 
@@ -40,6 +55,14 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
   const [fundOwnership, setFundOwnership] = React.useState("merchant_prepaid");
   const [refundAllowed, setRefundAllowed] = React.useState(true);
   const [refundPct, setRefundPct] = React.useState("100");
+  const [consumeOrder, setConsumeOrder] = React.useState("principal_first");
+  // CG-06a 通用卡充值赠送比例（按项目可配，须同时配置上下限）。
+  const [bonusProjectInput, setBonusProjectInput] = React.useState("");
+  const [bonusPolicy, setBonusPolicy] = React.useState<BonusPolicy | null>(null);
+  const [bonusPct, setBonusPct] = React.useState("0");
+  const [bonusMinPct, setBonusMinPct] = React.useState("0");
+  const [bonusMaxPct, setBonusMaxPct] = React.useState("0");
+  const [bonusReason, setBonusReason] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -50,6 +73,7 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
       setFundOwnership(r?.fundOwnership ?? "merchant_prepaid");
       setRefundAllowed(r?.refundAllowed ?? true);
       setRefundPct(r?.refundRatioBps == null ? "100" : String(r.refundRatioBps / 100));
+      setConsumeOrder(r?.consumeOrder ?? "principal_first");
     },
     { onError: setGlobalError, fallbackMessage: "商户储值卡规则读取失败" },
   );
@@ -63,10 +87,42 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
   async function saveCardConfig() {
     if (!merchantId.trim()) { setGlobalError("请先查询一个商户"); return; }
     await api.post("/api/v1/loyalty/stored-value/merchant-card-config", {
-      merchantId: merchantId.trim(), cardIssuanceEnabled: cardEnabled, fundOwnership,
+      merchantId: merchantId.trim(), cardIssuanceEnabled: cardEnabled, fundOwnership, consumeOrder,
     });
-    setActionResult({ action: "stored_value_card_config_saved", merchantId: merchantId.trim(), cardIssuanceEnabled: cardEnabled, fundOwnership });
+    setActionResult({ action: "stored_value_card_config_saved", merchantId: merchantId.trim(), cardIssuanceEnabled: cardEnabled, fundOwnership, consumeOrder });
     reload();
+  }
+
+  function bonusScope(): string {
+    return bonusProjectInput.trim() || GLOBAL_SCOPE;
+  }
+
+  async function loadBonusPolicy() {
+    try {
+      const p = await api.get<BonusPolicy>(`/api/v1/loyalty/stored-value/bonus-policies/${encodeURIComponent(bonusScope())}`);
+      setBonusPolicy(p ?? null);
+      setBonusPct(String((p?.bonusBps ?? 0) / 100));
+      setBonusMinPct(String((p?.minBps ?? 0) / 100));
+      setBonusMaxPct(String((p?.maxBps ?? 0) / 100));
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "赠送比例读取失败");
+    }
+  }
+
+  async function saveBonusPolicy() {
+    const bonusValue = Number(bonusPct);
+    const minValue = Number(bonusMinPct);
+    const maxValue = Number(bonusMaxPct);
+    if ([bonusValue, minValue, maxValue].some((v) => !Number.isFinite(v) || v < 0 || v > 100)) { setGlobalError("赠送比例及上下限按百分比填写（0-100），三项须同时填写"); return; }
+    const bonusBps = Math.round(bonusValue * 100);
+    const minBps = Math.round(minValue * 100);
+    const maxBps = Math.round(maxValue * 100);
+    if (minBps > bonusBps || bonusBps > maxBps) { setGlobalError("赠送比例须落在上下限之间"); return; }
+    await api.post("/api/v1/loyalty/stored-value/bonus-policies", {
+      projectId: bonusProjectInput.trim() || null, bonusBps, minBps, maxBps, reason: bonusReason.trim() || null,
+    });
+    setActionResult({ action: "stored_value_bonus_policy_saved", projectId: bonusScope(), bonusBps, minBps, maxBps });
+    void loadBonusPolicy();
   }
 
   async function saveRefundRule() {
@@ -86,6 +142,20 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
         title="储值规则配置"
         description="储值卡两类：① 综合体通用卡为平台缺省账户、全场通用、无商户级配置；② 商户级卡按发卡商户配置发卡资格、资金模式（充值入账归属）与可退规则。本页配置商户级卡；充值必须支付成功才入账，账户可冻结/解冻。"
       />
+      <h3>综合体通用卡充值赠送比例（仅平台；按项目可配，须同时配置上下限；通用卡扣款顺序写死先本金后赠送金）</h3>
+      <div className="admin-form-grid" data-testid="stored-value-bonus-policy-form">
+        <label>项目 id（空＝无项目范围的通用卡）<input aria-label="赠送比例项目 id" placeholder="项目 id" value={bonusProjectInput} onChange={(e) => setBonusProjectInput(e.target.value)} /></label>
+        <button type="button" data-testid="stored-value-bonus-policy-query" onClick={() => void loadBonusPolicy()}>查询赠送比例</button>
+        <span className="admin-muted-action" data-testid="stored-value-bonus-policy-current">
+          {bonusPolicy ? `当前：赠送 ${pctOf(bonusPolicy.bonusBps)}，下限 ${pctOf(bonusPolicy.minBps)}，上限 ${pctOf(bonusPolicy.maxBps)}` : "未查询"}
+        </span>
+        <label>赠送比例(%)<input aria-label="赠送比例" type="number" min="0" max="100" value={bonusPct} onChange={(e) => setBonusPct(e.target.value)} /></label>
+        <label>下限(%)<input aria-label="赠送比例下限" type="number" min="0" max="100" value={bonusMinPct} onChange={(e) => setBonusMinPct(e.target.value)} /></label>
+        <label>上限(%)<input aria-label="赠送比例上限" type="number" min="0" max="100" value={bonusMaxPct} onChange={(e) => setBonusMaxPct(e.target.value)} /></label>
+        <label>配置缘由<input aria-label="赠送比例配置缘由" value={bonusReason} onChange={(e) => setBonusReason(e.target.value)} /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="stored-value-bonus-policy-save" onClick={() => void saveBonusPolicy()}>保存赠送比例</PermissionButton>
+      </div>
+
       <div className="admin-form-row" data-testid="stored-value-merchant-filter">
         <label>商户 id<input aria-label="商户 id" placeholder="商户 id" value={merchantInput} onChange={(e) => setMerchantInput(e.target.value)} /></label>
         <button type="button" data-testid="stored-value-query" onClick={() => setMerchantId(merchantInput)}>查询商户卡规则</button>
@@ -100,9 +170,10 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
               <div className="admin-kpi-card"><span>资金模式</span><strong>{fundLabel(rule?.fundOwnership)}</strong></div>
               <div className="admin-kpi-card"><span>可退</span><strong>{rule?.refundAllowed === false ? "拒退" : "允许"}</strong></div>
               <div className="admin-kpi-card"><span>可退比例</span><strong>{rule?.refundRatioBps == null ? "—" : `${(rule.refundRatioBps / 100).toFixed(0)}%`}</strong></div>
+              <div className="admin-kpi-card"><span>扣款顺序</span><strong>{consumeOrderLabel(rule?.consumeOrder)}</strong></div>
             </div>
 
-            <h3>发卡资格与资金模式（仅平台可改；资金模式只影响之后新开的卡）</h3>
+            <h3>发卡资格、资金模式与扣款顺序（仅平台可改；资金模式只影响之后新开的卡；扣款顺序由发卡商户自定、平台代录）</h3>
             <div className="admin-form-grid" data-testid="stored-value-card-config-form">
               <label>发卡资格
                 <select aria-label="发卡资格" value={cardEnabled ? "on" : "off"} onChange={(e) => setCardEnabled(e.target.value === "on")}>
@@ -115,7 +186,12 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
                   {FUND_OWNERSHIPS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}
                 </select>
               </label>
-              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="stored-value-card-config-save" onClick={() => void saveCardConfig()}>保存发卡与资金模式</PermissionButton>
+              <label>消费扣款顺序
+                <select aria-label="消费扣款顺序" value={consumeOrder} onChange={(e) => setConsumeOrder(e.target.value)}>
+                  {CONSUME_ORDERS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}
+                </select>
+              </label>
+              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="stored-value-card-config-save" onClick={() => void saveCardConfig()}>保存发卡、资金模式与扣款顺序</PermissionButton>
             </div>
 
             <h3>退款规则（发卡商户可设可否退与退回比例，余下为商户留存）</h3>

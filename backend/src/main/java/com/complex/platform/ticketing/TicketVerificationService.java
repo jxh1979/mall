@@ -60,6 +60,10 @@ public class TicketVerificationService {
     // S5：赠送权益内部结算价的唯一解析口径（预扣与兑付同源）。由 repository 直接构造——它无状态、无外部依赖，
     // 各兼容构造点无须逐个补参，且永不为 null（免掉一层空判分支）。
     private final InternalSettlementPriceResolver priceResolver;
+    // CG-08b（ENUM「全园故障与补偿通票」）：补偿补发权益核销成功 → 履约锁定到补偿记录（用一次即用尽）。
+    // 字段注入免改构造点；旧构造/未注入的单测为 null（不回写）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    CompensationFulfillmentPort compensationFulfillmentPort;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketVerificationService(
@@ -308,10 +312,23 @@ public class TicketVerificationService {
      * F-TXN-03 按核销张数：聚合该订单全部已发权益的 Σused_times / Σtotal_times（张=use），
      * 作为积分确认事件的 verifiedUnits / totalUnits（核销/冲正后读到的最新值；customer 域据此对齐确认份额）。
      */
+    /** CG-08b：补偿履约只记到补偿记录，不改原核销/原结算，不产生积分。 */
+    private void recordCompensationFulfillment(IssuedEntitlementRecord entitlement, VerificationRecord verification,
+            Instant now, Long settlementPriceCent) {
+        if (compensationFulfillmentPort != null) {
+            compensationFulfillmentPort.recordFulfillment(entitlement.compensationItemId(), verification.id(), now,
+                    settlementPriceCent);
+        }
+    }
+
     private long[] sumOrderUnits(String orderId) {
         long used = 0L;
         long total = 0L;
         for (IssuedEntitlementRecord e : repository.listIssuedEntitlementsByOrderId(orderId)) {
+            // CG-08b：补偿补发行不计入原订单积分份额（原积分记录保留、按原核销锁定的等待期处理）。
+            if (e.compensationItemId() != null) {
+                continue;
+            }
             used += e.usedTimes();
             total += e.totalTimes();
         }
@@ -577,7 +594,10 @@ public class TicketVerificationService {
         ));
         // P0 清单#2 / F-TXN-03 按核销张数：核销成功 → 发积分确认事件，带该订单最新 Σused/Σtotal；
         // customer 域据此把已确认份额对齐 floor(总额 × Σused / Σtotal)（多次/多人票部分核销按张数比例确认）。
-        if (updated.orderId() != null && !updated.orderId().isBlank()) {
+        // CG-08b：补偿补发权益的使用不重复产生原人份/次份的积分与成长值（不发积分确认事件），履约锁定到补偿记录。
+        if (updated.compensationItemId() != null) {
+            recordCompensationFulfillment(updated, verification, now, settlementPriceCent);
+        } else if (updated.orderId() != null && !updated.orderId().isBlank()) {
             long[] units = sumOrderUnits(updated.orderId());
             eventPublisher.publishEvent(new PointsConfirmRequestedEvent(updated.orderId(), units[0], units[1]));
         }
@@ -728,7 +748,10 @@ public class TicketVerificationService {
                 amusementVerificationId
         ));
         // 与通用成功路径同：发积分确认（按核销张数 Σused/Σtotal）+ 结算 settled 事件，令下游对齐本次游乐核销。
-        if (consumed.orderId() != null && !consumed.orderId().isBlank()) {
+        // CG-08b：补偿补发权益的使用不重复产生积分与成长值，履约锁定到补偿记录。
+        if (consumed.compensationItemId() != null) {
+            recordCompensationFulfillment(consumed, verification, now, settlementPriceCent);
+        } else if (consumed.orderId() != null && !consumed.orderId().isBlank()) {
             long[] units = sumOrderUnits(consumed.orderId());
             eventPublisher.publishEvent(new PointsConfirmRequestedEvent(consumed.orderId(), units[0], units[1]));
         }

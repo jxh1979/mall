@@ -52,9 +52,13 @@ public class FinanceService implements TerminationSettlementPort {
             "employee_commission", "inventory_difference", "turnover_rent", "cam", "deposit",
             "property_fee", "pass_drink_settlement", "ticket_distribution", "dividend_payout",
             "dividend_reserve_withheld", "dividend_reserve_released", "termination_penalty", "deposit_refund",
+            // CG-10：采购入库确认形成的供应商应付（BSM「应收应付台账」来源「含采购入库形成的供应商应付」）。
+            "purchase_inbound",
             // D7 超池特批·超额 C 口径(甲标签法):池内额过 ticket_distribution(项目公司承担)、超出总池的超额部分过
             //   platform_incentive_subsidy(L3 娱乐平台公司承担)。DB 层 source_type 自由 VARCHAR 无 CHECK,零迁移。
-            "platform_incentive_subsidy");
+            "platform_incentive_subsidy",
+            // CG-07：派驻/营销人员提成由酒吧按月拨付人员所属主体的内部结算应付（StaffService 提成月结写入）。
+            "dispatch_commission_transfer");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -91,7 +95,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
             Map.entry("dividend_reserve_released", "分红留存已释放"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
-            Map.entry("platform_incentive_subsidy", "平台激励补贴(超池特批)"));
+            Map.entry("platform_incentive_subsidy", "平台激励补贴(超池特批)"),
+            Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"));
 
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;

@@ -341,6 +341,22 @@ public interface AmusementRepository {
     boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus);
 
     /**
+     * CG-02（BSM「因达到硬安全容量而自动停运的项目，在玩人数回落到硬安全容量以下后由系统自动恢复开放」）：
+     * 单条原子 UPDATE——仅当项目 paused 且 auto_paused_reason=hard_capacity 且项目维实时在玩人数
+     * （amusement_capacity_snapshot dimension=project 的 occupied_count）< 项目硬安全容量（amusement_projects.capacity，>0）
+     * 时 paused→open 并清空原因；返回本次是否真的翻转（并发多路出场只有一路为 true）。
+     * 事故停运（safety_incident）、人工 maintenance/closed/paused 一律不满足条件、不动。default false 以不破坏测试替身。
+     */
+    default boolean reopenProjectIfHardCapacityRecovered(String projectId, Instant now) {
+        return false;
+    }
+
+    /** 项目维实时在玩人数（amusement_capacity_snapshot dimension=project 的 occupied_count）；无快照行 = 空。 */
+    default java.util.OptionalInt findProjectInPlayCount(String projectId) {
+        return java.util.OptionalInt.empty();
+    }
+
+    /**
      * T3.1 巡检到期调度（amusement_inspection_tasks，V143）：按 (project_id, COALESCE(device_id,''), due_at)
      * 唯一索引幂等 upsert 一张 pending 待办（ON CONFLICT DO NOTHING——同一到期点只生成一次，重复调度不产生重复待办）。
      */

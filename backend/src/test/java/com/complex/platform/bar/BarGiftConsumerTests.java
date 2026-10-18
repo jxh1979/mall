@@ -291,11 +291,6 @@ class BarGiftConsumerTests {
         }
 
         @Override
-        public String createPayableForCommission(BarCommissionCalculationRecord commission) {
-            return null;
-        }
-
-        @Override
         public String createRefundPayable(BarBillRecord bill, BarOrderRecord order, String adjustmentId,
                 long refundAmountCent, String idempotencyKey, String reason, List<String> evidenceAttachmentIds) {
             return null;

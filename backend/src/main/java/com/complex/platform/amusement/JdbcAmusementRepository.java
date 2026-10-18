@@ -95,6 +95,9 @@ class JdbcAmusementRepository implements AmusementRepository {
                     project_name = EXCLUDED.project_name,
                     capacity = EXCLUDED.capacity,
                     open_status = EXCLUDED.open_status,
+                    -- CG-02：整行保存改了营业态（人工改状态）即清空系统自动停运原因；营业态未变则保留。
+                    auto_paused_reason = CASE WHEN amusement_projects.open_status = EXCLUDED.open_status
+                                              THEN amusement_projects.auto_paused_reason ELSE NULL END,
                     safety_template_id = EXCLUDED.safety_template_id,
                     eligibility_rule_json = EXCLUDED.eligibility_rule_json,
                     location_point_id = EXCLUDED.location_point_id,
@@ -1684,9 +1687,12 @@ class JdbcAmusementRepository implements AmusementRepository {
 
     @Override
     public boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus) {
+        // CG-02：经本通用 CAS 改动营业态（检修 maintenance→open、巡检 closed/maintenance→open 等）即不再是系统自动停运，
+        // 一并清空 auto_paused_reason。
         int updated = jdbcTemplate.update("""
                 UPDATE amusement_projects
                    SET open_status = :new_status,
+                       auto_paused_reason = NULL,
                        updated_at = :updated_at
                  WHERE id = :id
                    AND open_status = :expected_status
@@ -1696,6 +1702,54 @@ class JdbcAmusementRepository implements AmusementRepository {
                 .addValue("new_status", newStatus)
                 .addValue("updated_at", timestampWithTimeZone(Instant.now())));
         return updated == 1;
+    }
+
+    /**
+     * CG-02 出场回落自动恢复开放：单条原子 UPDATE 把「仍为硬超容自动停运」与「项目维在玩人数 < 硬安全容量」两个条件
+     * 和状态翻转绑在一起——并发多路出场在同一行上串行化，只有一路更新到行（返回 true），其余看到的已是 open。
+     * 项目维快照行键：dimension=project 且 session/point/device 均空（与 claimCapacityAcrossDimensions 写入键一致）。
+     * 硬安全容量取 amusement_projects.capacity 当前配置（>0 才算配置了硬上限）。
+     */
+    @Override
+    public boolean reopenProjectIfHardCapacityRecovered(String projectId, Instant now) {
+        int updated = jdbcTemplate.update("""
+                UPDATE amusement_projects p
+                   SET open_status = 'open',
+                       auto_paused_reason = NULL,
+                       updated_at = :updated_at
+                 WHERE p.id = :id
+                   AND p.open_status = 'paused'
+                   AND p.auto_paused_reason = 'hard_capacity'
+                   AND p.capacity > 0
+                   AND EXISTS (
+                       SELECT 1
+                         FROM amusement_capacity_snapshot s
+                        WHERE s.project_id = p.id
+                          AND s.dimension = 'project'
+                          AND COALESCE(s.session_id, '') = ''
+                          AND COALESCE(s.location_point_id, '') = ''
+                          AND COALESCE(s.device_id, '') = ''
+                          AND s.occupied_count < p.capacity)
+                """, new MapSqlParameterSource()
+                .addValue("id", projectId)
+                .addValue("updated_at", timestampWithTimeZone(now)));
+        return updated == 1;
+    }
+
+    @Override
+    public java.util.OptionalInt findProjectInPlayCount(String projectId) {
+        List<Integer> rows = jdbcTemplate.query("""
+                SELECT occupied_count
+                  FROM amusement_capacity_snapshot
+                 WHERE project_id = :project_id
+                   AND dimension = 'project'
+                   AND COALESCE(session_id, '') = ''
+                   AND COALESCE(location_point_id, '') = ''
+                   AND COALESCE(device_id, '') = ''
+                 LIMIT 1
+                """, new MapSqlParameterSource().addValue("project_id", projectId),
+                (rs, n) -> rs.getInt("occupied_count"));
+        return rows.isEmpty() ? java.util.OptionalInt.empty() : java.util.OptionalInt.of(rows.get(0));
     }
 
     @Override

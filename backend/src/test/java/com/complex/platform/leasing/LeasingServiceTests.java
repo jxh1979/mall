@@ -43,6 +43,7 @@ class LeasingServiceTests {
     private final AuthorizationService authz = mock(AuthorizationService.class);
     private final ContractService contractService = mock(ContractService.class);
     private final PlatformService platformService = mock(PlatformService.class);
+    private final AuditEventService audit = mock(AuditEventService.class);
     private LeasingService service;
 
     @BeforeEach
@@ -53,7 +54,7 @@ class LeasingServiceTests {
         when(authz.currentProjectScopeQuietly()).thenReturn(Optional.empty());
         // 3.13 默认：空间存在性放行（专项用例再覆写为 false）。
         org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
-        service = new LeasingService(repo, mock(AuditEventService.class), authz, contractService, platformService);
+        service = new LeasingService(repo, audit, authz, contractService, platformService);
     }
 
     // 3.13：意向空间传了必须真实存在（挂空编号=400）；不传放行。
@@ -185,8 +186,12 @@ class LeasingServiceTests {
         assertThat(advanced.lastStageChangeBy()).isEqualTo("usr_supervisor");
     }
 
+    /**
+     * CG-01（PGM「招商运营细则」：「合同审批全部通过、生效后转为已签约」）：签约只起草合同草稿，线索状态不动；
+     * 已签约要等合同生效（{@link #contractEffectiveMarksSourceLeadSignedOnceWithAudit}）。
+     */
     @Test
-    void signPendingSigningIntentCreatesContractAndMarksLeadSigned() {
+    void signPendingSigningIntentCreatesContractDraftWithoutMarkingLeadSigned() {
         when(contractService.createDraft(any())).thenReturn(new ContractRecord(
                 "ctr_new", "mch_1", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
@@ -202,13 +207,66 @@ class LeasingServiceTests {
                         e -> assertThat(e.code()).isEqualTo("LEASING_INTENT_NOT_PENDING_SIGNING"));
 
         service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "k4"));
+        String statusBeforeSign = repo.findLeadById(lead.id()).orElseThrow().status();
         ContractRecord contract = service.signIntent(intent.id(), new LeasingSignRequest(
                 "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k5"));
         assertThat(contract.id()).isEqualTo("ctr_new");
-        assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo("signed");
+        // 线索状态保持签约前原值：合同只是起草，未经审批、未生效。
+        assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo(statusBeforeSign);
+        assertThat(statusBeforeSign).isNotEqualTo("signed");
+        // 合同绑到来源意向，供生效后反查。
+        assertThat(repo.contractOfIntent(intent.id())).isEqualTo("ctr_new");
         // AUD-003 边界：带既有 merchant_id 签约不新建绑定（其绑定由治理域管理），只有自动建商户路径才建。
         org.mockito.Mockito.verify(platformService, org.mockito.Mockito.never())
                 .createBusinessEntityBinding(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** CG-01：合同生效 → 来源线索置已签约，留痕一次；重复生效回调（重放）不二次改写、不二次留痕。 */
+    @Test
+    void contractEffectiveMarksSourceLeadSignedOnceWithAudit() {
+        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+                "ctr_eff", "mch_1", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
+                null, null, null, Instant.now(), Instant.now()));
+        LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                "孙八", null, "referral", null, null, null, null, "e1"));
+        LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), null, null, Map.of(), "e2"));
+        service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "e3"));
+        service.signIntent(intent.id(), new LeasingSignRequest(
+                "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "e4"));
+        assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isNotEqualTo("signed");
+
+        service.markSourceLeadSigned("ctr_eff", "act_1");
+        assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo("signed");
+        service.markSourceLeadSigned("ctr_eff", "act_1");
+        assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo("signed");
+        org.mockito.Mockito.verify(audit, org.mockito.Mockito.times(1)).recordSuccess(
+                org.mockito.ArgumentMatchers.eq("leasing.lead.signed"), any(), org.mockito.ArgumentMatchers.eq("leasing_lead"),
+                org.mockito.ArgumentMatchers.eq(lead.id()), any(), any(), any());
+    }
+
+    /** CG-01：不是招商签约起草的合同（无绑定意向）生效 → 无事发生、不留痕。 */
+    @Test
+    void contractEffectiveWithoutLeasingSourceIsNoOp() {
+        service.markSourceLeadSigned("ctr_not_from_leasing", "act_x");
+        org.mockito.Mockito.verify(audit, org.mockito.Mockito.never()).recordSuccess(
+                org.mockito.ArgumentMatchers.eq("leasing.lead.signed"), any(), any(), any(), any(), any(), any());
+    }
+
+    /** CG-01（PGM「已签约后不得回退至未签约状态」）：已签约线索改任何其他状态一律 409，状态不变。 */
+    @Test
+    void signedLeadCannotBeRolledBackByStatusUpdate() {
+        Instant now = Instant.now();
+        repo.saveLead(new LeasingLeadRecord("lead_done", "已签约客户", null, "outbound", null, null, null, null, "u",
+                "signed", null, now, null, now, now));
+        for (String target : List.of("pending_follow_up", "following_up", "converted_to_intent", "negotiating",
+                "lost", "on_hold")) {
+            assertThatThrownBy(() -> service.updateLeadStatus("lead_done",
+                    new LeasingLeadStatusRequest(target, "试图回退", "rb_" + target)))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.code()).isEqualTo("LEASING_LEAD_ALREADY_SIGNED"));
+            assertThat(repo.findLeadById("lead_done").orElseThrow().status()).isEqualTo("signed");
+        }
     }
 
     @Test
@@ -334,6 +392,40 @@ class LeasingServiceTests {
         @Override
         public Optional<LeasingIntentRecord> findIntentById(String id) {
             return Optional.ofNullable(intents.get(id));
+        }
+
+        // CG-01：意向 ↔ 合同绑定 + 线索 CAS 置已签约（与 JdbcLeasingRepository 同语义）。
+        private final Map<String, String> intentContracts = new LinkedHashMap<>();
+
+        String contractOfIntent(String intentId) {
+            return intentContracts.get(intentId);
+        }
+
+        @Override
+        public void bindIntentContract(String intentId, String contractId) {
+            intentContracts.put(intentId, contractId);
+        }
+
+        @Override
+        public Optional<LeasingIntentRecord> findIntentByContractId(String contractId) {
+            return intentContracts.entrySet().stream()
+                    .filter(e -> contractId.equals(e.getValue()))
+                    .map(e -> intents.get(e.getKey()))
+                    .filter(java.util.Objects::nonNull)
+                    .findFirst();
+        }
+
+        @Override
+        public boolean markLeadSignedIfNotSigned(String leadId, Instant now) {
+            LeasingLeadRecord lead = leads.get(leadId);
+            if (lead == null || "signed".equals(lead.status())) {
+                return false;
+            }
+            leads.put(leadId, new LeasingLeadRecord(lead.id(), lead.contactName(), lead.contactPhone(), lead.source(),
+                    lead.intendedBusinessType(), lead.intendedSpaceId(), lead.intendedAreaSqm(), lead.brandId(),
+                    lead.ownerUserId(), "signed", lead.lostOrHoldReason(), lead.lastFollowUpAt(), lead.projectId(),
+                    lead.createdAt(), now));
+            return true;
         }
 
         @Override

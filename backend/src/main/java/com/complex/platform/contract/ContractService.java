@@ -82,6 +82,9 @@ public class ContractService {
     // 退租结算落财务台账端口(finance 实现)。构造器 @Lazy 注入(防初始化环,与 turnoverRentPort 同范式;
     // 字段注入曾被判死刑=运行时可能注入 null 致静默跳过落账);旧构造传 null=降级只留结算快照。
     private final com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort;
+    // CG-01：合同生效→来源招商线索置已签约端口（leasing 实现）。构造器 @Lazy 注入防初始化环（LeasingService→ContractService→本端口）；
+    // 旧构造传 null=不是招商签约起草的合同场景（单测）不触发。
+    private final ContractEffectiveLeadPort effectiveLeadPort;
 
     @Autowired
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
@@ -89,7 +92,8 @@ public class ContractService {
             PlatformRepository platformRepository,
             MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver,
             @org.springframework.context.annotation.Lazy com.complex.platform.finance.FinanceService turnoverRentPort,
-            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort) {
+            @org.springframework.context.annotation.Lazy com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort,
+            @org.springframework.context.annotation.Lazy ContractEffectiveLeadPort effectiveLeadPort) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
@@ -98,19 +102,20 @@ public class ContractService {
         this.merchantFeeRecipientResolver = merchantFeeRecipientResolver;
         this.turnoverRentPort = turnoverRentPort;
         this.terminationSettlementPort = terminationSettlementPort;
+        this.effectiveLeadPort = effectiveLeadPort;
     }
 
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository,
             MerchantFeeNotificationRecipientResolver merchantFeeRecipientResolver) {
-        this(repository, auditEventService, authorizationService, notificationService, platformRepository, merchantFeeRecipientResolver, null, null);
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, merchantFeeRecipientResolver, null, null, null);
     }
 
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, NotificationService notificationService,
             PlatformRepository platformRepository) {
-        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null, null, null);
+        this(repository, auditEventService, authorizationService, notificationService, platformRepository, null, null, null, null);
     }
 
     // 单测便捷构造：仅注入退租结算端口（其余 finance 端口/依赖 null）。
@@ -119,7 +124,13 @@ public class ContractService {
             PlatformRepository platformRepository,
             com.complex.platform.finance.TerminationSettlementPort terminationSettlementPort) {
         this(repository, auditEventService, authorizationService, notificationService, platformRepository,
-                null, null, terminationSettlementPort);
+                null, null, terminationSettlementPort, null);
+    }
+
+    // 单测便捷构造：仅注入合同生效→线索已签约端口。
+    ContractService(ContractRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, ContractEffectiveLeadPort effectiveLeadPort) {
+        this(repository, auditEventService, authorizationService, null, null, null, null, null, effectiveLeadPort);
     }
 
     // ============ 起草 ============
@@ -379,6 +390,11 @@ public class ContractService {
         //   且每期账单各带自身 due_date（期首），看板按 due_date 逐期确认收入，不在生效日堆叠整租期。
         //   若改 @Scheduled 累积巨量空跑作业，反更重；catch-up 仍可手工调 period-bills 端点（P1-B 按钮）。
         int billed = scheduleTermBills(effective);
+        // CG-01（PGM「招商运营细则」）：「合同审批全部通过、生效后转为已签约」——来源招商线索在此置已签约
+        // （签约起草 LeasingService.signIntent 不再置）。同一生效事务内，生效失败则线索不动。
+        if (effectiveLeadPort != null) {
+            effectiveLeadPort.markSourceLeadSigned(contractId, actual.idempotencyKey());
+        }
         auditEventService.recordSuccess("contract.activated", "contract.lifecycle.activate", "contract", contractId,
                 null, actual.idempotencyKey(), Map.of("space_count", spaceIds.size(), "rent_bills", billed));
         return effective;
