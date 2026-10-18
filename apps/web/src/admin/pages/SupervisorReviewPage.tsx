@@ -23,6 +23,10 @@ const REVIEW_LABELS: Record<string, string> = {
   contract_snapshot: "合同快照", definition_snapshot: "基础定义快照",
   one_level_up: "一级上级审批", two_levels_up: "两级上级审批",
   top_authority: "最高权限审批", specific_role: "指定岗位审批",
+  hr_three_levels_up: "人力会签＋直属领导向上三级复核",
+  "staff.profile.employment_status.change": "员工状态变更", "staff.payroll.adjustment.add": "员工奖惩入账",
+  "staff.payroll.adjustment.appeal": "员工扣罚申诉", staff_profile: "员工档案", staff_payroll_adjustment: "员工奖惩记录",
+  staff_payroll_adjustment_appeal: "员工扣罚申诉单",
   contract: "合同", bar_bill: "酒吧账单", access_grant_request: "权限授权申请",
 };
 

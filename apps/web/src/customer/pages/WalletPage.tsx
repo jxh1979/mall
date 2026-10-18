@@ -32,6 +32,13 @@ function yuan(cent: number): string {
   return `¥${(cent / 100).toFixed(2)}`;
 }
 
+// CG-06a（BSM「我的余额」：含本金与赠送金分列；逐笔记录本金与赠送金拆分）。
+function splitLabel(principalCent: number | undefined, bonusCent: number | undefined): string {
+  return `本金 ${yuan(principalCent ?? 0)} · 赠送金 ${yuan(bonusCent ?? 0)}`;
+}
+
+const TXN_TYPE_LABELS: Record<string, string> = { topup: "充值", consume: "消费", refund: "退款", adjust: "调整" };
+
 // ⑦ 储值钱包（AUD-061）：多卡（通用卡 + 各商户卡）分卡余额展示 + 选卡充值与交易记录。3.17：error/loading/empty 分离可重试。
 export function WalletPage({ service }: { service: CustomerService }): React.ReactElement {
   const [accounts, setAccounts] = useState<StoredValueAccount[]>([]);
@@ -180,7 +187,12 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
                       </Tag>
                     </span>
                   }
-                  description={<Text strong>余额 {yuan(acc.balanceCent)}</Text>}
+                  description={
+                    <Space direction="vertical" size={0}>
+                      <Text strong>余额 {yuan(acc.balanceCent)}</Text>
+                      <Text type="secondary" data-testid="wallet-card-split">{splitLabel(acc.principalCent, acc.bonusCent)}</Text>
+                    </Space>
+                  }
                 />
               </List.Item>
             )}
@@ -235,7 +247,8 @@ export function WalletPage({ service }: { service: CustomerService }): React.Rea
           <List dataSource={transactions} locale={{ emptyText: "暂无交易记录" }} renderItem={(txn) => (
             <List.Item key={txn.id}>
               <Space direction="vertical">
-                <Text>{({ topup: "充值", consume: "消费", refund: "退款" } as Record<string, string>)[txn.txnType] ?? "余额变动"} · {yuan(txn.amountCent)}</Text>
+                <Text>{TXN_TYPE_LABELS[txn.txnType] ?? "余额变动"} · {yuan(txn.amountCent)}</Text>
+                <Text type="secondary" data-testid="wallet-txn-split">{splitLabel(txn.principalCent, txn.bonusCent)}{txn.reason ? ` · ${txn.reason}` : ""}</Text>
                 <Text type="secondary">余额 {yuan(txn.balanceAfterCent)} · {new Date(txn.createdAt).toLocaleString("zh-CN")}</Text>
               </Space>
             </List.Item>

@@ -169,6 +169,10 @@ const STATUS_LABELS: Record<string, string> = {
   role_viewable_projects: "角色可查看项目",
   // 审计结果
   success: "成功",
+  // CG-05 核销记录状态（ENUM「核销记录状态」五态）：已冲正 / 异常 / 人工放行（历史保留，HTML 已禁止）
+  reversed: "已冲正",
+  anomaly: "异常",
+  manual_overridden: "人工放行（历史保留）",
   failure: "失败",
   // 授权申请类型
   temporary_permission: "临时权限",

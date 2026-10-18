@@ -254,6 +254,43 @@ public interface AmusementRepository {
     /** 阶段3 只读：并发在场容量快照；merchantId=null 为平台视角不加租户谓词。 */
     List<AmusementCapacitySnapshotRecord> listCapacitySnapshots(String merchantId);
 
+    // ---- CG-03 在玩人数系统自动清零（BSM「出场自动扣减」「在玩人数不允许人工调整」）：以下写口只供系统调度调用，无人工入口。----
+
+    /** 该项目在 before 之前最后变动、且仍有在玩人数的并发快照（项目维/点位设备维）：{行数, 人数合计}。default 0 兼容内存双子。 */
+    default int[] countStaleConcurrentSnapshots(String projectId, Instant before) {
+        return new int[] {0, 0};
+    }
+
+    /** 营业日结束自动清零：只清 before 之前最后变动的并发快照（项目维/点位设备维），新营业日已产生的计数不动。返回行数。 */
+    default int zeroStaleConcurrentSnapshots(String projectId, Instant before, Instant now) {
+        return 0;
+    }
+
+    /** 场次结束前该场次维与该项目并发维仍有在玩人数的快照：{行数, 人数合计}。 */
+    default int[] countSessionConcurrentSnapshots(String projectId, String sessionId) {
+        return new int[] {0, 0};
+    }
+
+    /** 场次结束自动清空：该场次维 + 该项目并发维（项目/点位设备）在玩人数清零。返回行数。 */
+    default int zeroSessionConcurrentSnapshots(String projectId, String sessionId, Instant now) {
+        return 0;
+    }
+
+    /** end_time 已过、仍为 scheduled/open 的场次（待系统按场次结束置 closed）。 */
+    default List<AmusementSessionRecord> listEndedUnclosedSessions(Instant now) {
+        return List.of();
+    }
+
+    /** 系统按场次结束置 closed（仅 scheduled/open 且 end_time ≤ now）。返回是否本次流转。 */
+    default boolean closeSessionIfEnded(String sessionId, Instant now) {
+        return false;
+    }
+
+    /** 清零留痕纯追加；同项目同营业日 / 同场次已记录则不重复（返回 false）。 */
+    default boolean insertConcurrentResetLogIfAbsent(AmusementConcurrentResetLogRecord record) {
+        return false;
+    }
+
     AmusementDeviceStatusRecord saveDeviceStatus(AmusementDeviceStatusRecord status);
 
     List<AmusementDeviceStatusRecord> listDeviceStatuses();
@@ -302,6 +339,22 @@ public interface AmusementRepository {
      * 仅当当前 open_status 等于 expectedCurrentStatus 时更新，避免并发误流转；返回是否更新成功。
      */
     boolean updateProjectOpenStatus(String projectId, String expectedCurrentStatus, String newStatus);
+
+    /**
+     * CG-02（BSM「因达到硬安全容量而自动停运的项目，在玩人数回落到硬安全容量以下后由系统自动恢复开放」）：
+     * 单条原子 UPDATE——仅当项目 paused 且 auto_paused_reason=hard_capacity 且项目维实时在玩人数
+     * （amusement_capacity_snapshot dimension=project 的 occupied_count）< 项目硬安全容量（amusement_projects.capacity，>0）
+     * 时 paused→open 并清空原因；返回本次是否真的翻转（并发多路出场只有一路为 true）。
+     * 事故停运（safety_incident）、人工 maintenance/closed/paused 一律不满足条件、不动。default false 以不破坏测试替身。
+     */
+    default boolean reopenProjectIfHardCapacityRecovered(String projectId, Instant now) {
+        return false;
+    }
+
+    /** 项目维实时在玩人数（amusement_capacity_snapshot dimension=project 的 occupied_count）；无快照行 = 空。 */
+    default java.util.OptionalInt findProjectInPlayCount(String projectId) {
+        return java.util.OptionalInt.empty();
+    }
 
     /**
      * T3.1 巡检到期调度（amusement_inspection_tasks，V143）：按 (project_id, COALESCE(device_id,''), due_at)

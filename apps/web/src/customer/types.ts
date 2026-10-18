@@ -175,6 +175,9 @@ export type StoredValueAccount = {
   cardScope: string;
   fundOwnership: string | null;
   balanceCent: number;
+  // CG-06a：本金 / 赠送金两段分列（BSM「我的余额」），balanceCent = principalCent + bonusCent。
+  principalCent: number;
+  bonusCent: number;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -187,6 +190,9 @@ export type StoredValueTransaction = {
   txnType: string;
   amountCent: number;
   balanceAfterCent: number;
+  // CG-06a：本笔变动中的本金 / 赠送金部分（带方向）。
+  principalCent: number;
+  bonusCent: number;
   reason: string | null;
   createdAt: string;
 };

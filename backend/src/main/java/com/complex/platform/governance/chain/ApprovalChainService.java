@@ -35,6 +35,8 @@ import static com.complex.platform.common.Strings.requireText;
 public class ApprovalChainService {
 
     private static final int MAX_DEPTH = 20;
+    /** CG-12（BSM:1478「直属领导、向上三级」）：HR 会签档位主线固定取该员工直属上级链前三级。 */
+    static final int HR_CHAIN_LEVELS = 3;
 
     /** 平行线：另行指定该条线的最终审批人。 */
     public record ParallelLine(String lineCode, String finalApproverId) {
@@ -83,6 +85,23 @@ public class ApprovalChainService {
             }
             if (!designated && !main.isEmpty()) {
                 nodes.add(node(reviewId, ApprovalChainNode.MAIN_LINE, seq, ApprovalChainNode.KIND_ROLE, null));
+            }
+        } else if (level == ApprovalLevel.HR_THREE_LEVELS_UP) {
+            // CG-12（BSM:1478 / BSM:1487「须经 HR 与该员工直属领导、向上三级复核后生效」；PGM-1.7.1「申请人与直接受益人不得审批与自己相关的申请」）：
+            // 主线自「该员工」（直接受益人）的直属上级起向上取三级（链不足三级到顶为止，与「无上级即到顶」一致），申请人与该员工不成为节点；
+            // 员工无直属上级时不生成任何节点（含平行线），fail-closed。HR 会签由调用方以平行线 hr_review 指定。
+            String start = beneficiaryId == null || beneficiaryId.isBlank() ? initiatedBy : beneficiaryId;
+            List<String> path = superiorPath(start, initiatedBy, beneficiaryId);
+            List<String> main = path.subList(0, Math.min(HR_CHAIN_LEVELS, path.size()));
+            if (main.isEmpty()) {
+                return nodes;
+            }
+            if (finalApproverId != null && !finalApproverId.isBlank() && !main.contains(finalApproverId)) {
+                throw ApiException.badRequest("FINAL_APPROVER_NOT_IN_CHAIN", "指定的最终审批人不在该员工直属领导向上三级之内");
+            }
+            int seq = 1;
+            for (String approver : main) {
+                nodes.add(node(reviewId, ApprovalChainNode.MAIN_LINE, seq++, ApprovalChainNode.KIND_USER, approver));
             }
         } else {
             List<String> path = superiorPath(initiatedBy, initiatedBy, beneficiaryId);

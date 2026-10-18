@@ -333,14 +333,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                     entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                     value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                     allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                    parent_ticket_id, slot_index, bar_id, component_full_price_cent
+                    parent_ticket_id, slot_index, bar_id, component_full_price_cent, compensation_item_id
                 )
                 VALUES (
                     :id, :ticket_type_id, :order_id, :entitlement_template_id, :entitlement_code,
                     :entitlement_type, :merchant_id, :venue_id, :point_id, :total_times, :used_times,
                     :value_amount_cent, :status, :valid_from, :valid_to, :created_at, :updated_at, :num_people,
                     :allocated_revenue_cent, :entitlement_kind, :agreement_price_cent, :consumption_window, :exclusive_merchant_id,
-                    :parent_ticket_id, :slot_index, :bar_id, :component_full_price_cent
+                    :parent_ticket_id, :slot_index, :bar_id, :component_full_price_cent, :compensation_item_id
                 )
                 -- bar_id（酒吧归属快照）出票时定，不可变，故不在 ON CONFLICT SET。
                 ON CONFLICT (id) DO UPDATE SET
@@ -488,10 +488,23 @@ class JdbcTicketingRepository implements TicketingRepository {
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                        allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                       parent_ticket_id, slot_index, bar_id, component_full_price_cent
+                       parent_ticket_id, slot_index, bar_id, component_full_price_cent, compensation_item_id
                   FROM issued_entitlements
                  WHERE entitlement_code = :entitlement_code
                 """, Map.of("entitlement_code", entitlementCode), rowMapper::mapIssuedEntitlement).stream().findFirst();
+    }
+
+    @Override
+    public int extendIssuedEntitlementValidTo(String id, java.time.Instant newValidTo, java.time.Instant now) {
+        // CG-08b：只延长（valid_to 取较晚者），不改次数、不改状态。
+        return jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET valid_to = GREATEST(valid_to, :new_valid_to),
+                       updated_at = :updated_at
+                 WHERE id = :id AND status = 'active'
+                """, new MapSqlParameterSource().addValue("id", id)
+                .addValue("new_valid_to", java.sql.Timestamp.from(newValidTo))
+                .addValue("updated_at", java.sql.Timestamp.from(now)));
     }
 
     @Override
@@ -513,7 +526,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
                        value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
                        allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                       parent_ticket_id, slot_index, bar_id, component_full_price_cent
+                       parent_ticket_id, slot_index, bar_id, component_full_price_cent, compensation_item_id
                   FROM issued_entitlements
                  WHERE status = 'active'
                    AND (merchant_id = :merchant_id OR :merchant_id IS NULL)

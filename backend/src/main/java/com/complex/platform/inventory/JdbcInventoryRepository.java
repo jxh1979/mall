@@ -530,6 +530,25 @@ class JdbcInventoryRepository implements InventoryRepository {
                         rs.getTimestamp("updated_at").toInstant())).stream().findFirst();
     }
 
+    /**
+     * 高价值判定用：该物品最近一次采购入库流水的实际到货单价（分）。只认 movement_type=inbound 且
+     * business_type=purchase_request（采购单 received 时写入），按 created_at 取最近一笔；
+     * 无此流水或该笔 unit_cost_cent 为空 ⇒ 空 = 到货价未知。不加锁，不卡出入库写路径。
+     */
+    @Override
+    public Optional<Long> findLatestPurchaseArrivalUnitCostCent(String itemId) {
+        List<Long> rows = jdbcTemplate.query("""
+                SELECT unit_cost_cent
+                  FROM inventory_stock_movements
+                 WHERE item_id = :item_id
+                   AND movement_type = 'inbound'
+                   AND business_type = 'purchase_request'
+                 ORDER BY created_at DESC
+                 LIMIT 1
+                """, Map.of("item_id", itemId), (rs, i) -> rs.getObject("unit_cost_cent", Long.class));
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
     @Override
     public void updateCostState(InventoryItemCostStateRecord state) {
         jdbcTemplate.update("""

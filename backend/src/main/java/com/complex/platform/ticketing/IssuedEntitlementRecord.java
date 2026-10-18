@@ -45,8 +45,25 @@ public record IssuedEntitlementRecord(
         // D6 套票折扣落库：出票定价时记录该权益「满额份额」(各分项标准价按人拆的份额,分)。可空:
         //   component_price 全空(回退均摊)→ null=无分项满额价=无套票折扣。核销结算时与 allocated 走同一增量公式算
         //   verifiedFull,折扣增量=max(0, verifiedFull−verified) 落 settlement_transactions.discount_amount_cent。
-        Long componentFullPriceCent
+        Long componentFullPriceCent,
+        // CG-08b（ENUM「全园故障与补偿通票」）：非空＝本行是全园故障补偿补发的权益（原票下、完整票面），指向补偿记录；
+        // 核销时不重复产生积分与成长值、履约锁定到该补偿记录、不计入原订单积分份额。原票行与普通发放为 null。
+        String compensationItemId
 ) {
+
+    /** 27 参兼容构造（无补偿标记）：既有发放/测试构造点不变，compensationItemId 置 null。 */
+    public IssuedEntitlementRecord(
+            String id, String entitlementCode, String ticketTypeId, String orderId, String entitlementTemplateId,
+            String entitlementType, String merchantId, String venueId, String pointId, int totalTimes, int usedTimes,
+            Long valueAmountCent, String status, Instant validFrom, Instant validTo, Instant createdAt, Instant updatedAt,
+            int numPeople, Long allocatedRevenueCent, String entitlementKind, Long agreementPriceCent,
+            String consumptionWindow, String exclusiveMerchantId, String parentTicketId, int slotIndex, String barId,
+            Long componentFullPriceCent) {
+        this(id, entitlementCode, ticketTypeId, orderId, entitlementTemplateId, entitlementType, merchantId, venueId,
+                pointId, totalTimes, usedTimes, valueAmountCent, status, validFrom, validTo, createdAt, updatedAt,
+                numPeople, allocatedRevenueCent, entitlementKind, agreementPriceCent, consumptionWindow,
+                exclusiveMerchantId, parentTicketId, slotIndex, barId, componentFullPriceCent, null);
+    }
 
     public int remainingTimes() {
         return totalTimes - usedTimes;
@@ -80,7 +97,8 @@ public record IssuedEntitlementRecord(
                 parentTicketId,
                 slotIndex,
                 barId,
-                componentFullPriceCent
+                componentFullPriceCent,
+                compensationItemId
         );
     }
 
@@ -90,6 +108,6 @@ public record IssuedEntitlementRecord(
                 entitlementType, merchantId, venueId, pointId, totalTimes, usedTimes, valueAmountCent, status,
                 validFrom, validTo, createdAt, updatedAt, numPeople, allocatedRevenueCent, entitlementKind,
                 agreementPriceCent, consumptionWindow, exclusiveMerchantId, parentTicketId, slotIndex, barId,
-                componentFullPriceCent);
+                componentFullPriceCent, compensationItemId);
     }
 }

@@ -413,14 +413,13 @@ class StaffJdbcIntegrationTests {
                 key(), "usr_admin", 800000L));
         service.addCommission(new com.complex.platform.access.staff.dto.StaffCommissionRequest(
                 key(), "usr_admin", month, "manual", null, 120000L, "订位提成"));
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), "usr_admin", month, "bonus", 50000L, "月度之星"));
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), "usr_admin", month, "penalty", 20000L, "迟到3次"));
+        // CG-12：奖惩入账改走 HR 会签＋三级复核链（HrApprovalChainJdbcIntegrationTests），薪资算法用例直接落已生效记录。
+        repository.insertPayrollAdjustment("adj_" + key(), "usr_admin", month, "bonus", 50000L, "月度之星", "usr_admin", java.time.Instant.now());
+        repository.insertPayrollAdjustment("adj_" + key(), "usr_admin", month, "penalty", 20000L, "迟到3次", "usr_admin", java.time.Instant.now());
         // 事由缺失必须拒绝(钱路留痕硬约束)。
         assertThatThrownBy(() -> service.addPayrollAdjustment(
                 new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                        key(), "usr_admin", month, "penalty", 100L, " ")))
+                        key(), "usr_admin", month, "penalty", 100L, " ", "usr_m010_reviewer")))
                 .isInstanceOf(ApiException.class);
 
         // 月结前员工不可见(拍板:月结后才可见)。
@@ -438,8 +437,7 @@ class StaffJdbcIntegrationTests {
         assertThat(statement.totalCent()).isEqualTo(800000L + 120000L + 50000L - 20000L);
 
         // 补录奖金后重结=覆盖,仍单行。
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), "usr_admin", month, "bonus", 10000L, "补录"));
+        repository.insertPayrollAdjustment("adj_" + key(), "usr_admin", month, "bonus", 10000L, "补录", "usr_admin", java.time.Instant.now());
         service.closePayroll(new com.complex.platform.access.staff.dto.StaffPayrollCloseRequest(key(), month));
         java.util.List<com.complex.platform.access.staff.StaffPayrollStatementRecord> after =
                 service.listMyPayroll(month).items().stream()
@@ -532,8 +530,7 @@ class StaffJdbcIntegrationTests {
                 .extracting(StaffShiftRecord::userId).doesNotContain(userId);
 
         // 奖惩:写入即带员工项目;usr_admin(无档案)行 project 为 NULL → scoped 不可见。
-        service.addPayrollAdjustment(new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), userId, "2099-07", "bonus", 1000L, "隔离测试"));
+        repository.insertPayrollAdjustment("adj_" + key(), userId, "2099-07", "bonus", 1000L, "隔离测试", "usr_admin", java.time.Instant.now());
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT project_id FROM staff_payroll_adjustments WHERE user_id = ?", String.class, userId))
                 .isEqualTo("project_main");
@@ -573,12 +570,13 @@ class StaffJdbcIntegrationTests {
     void idempotencyPreventsDuplicateAdjustmentCommissionAndLeave() {
         // P0 真幂等(2026-07-03):奖惩/提成/请假重复提交=命中重放,不重复入账/建单。
         authenticateAsPlatformAdmin();
+        // CG-12：奖惩只发起复核；同幂等键重复提交=命中重放，只建一张复核单 / 一条待入账申请。
         var adjReq = new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                key(), "usr_admin", "2099-06", "bonus", 1000L, "幂等测试奖金");
-        service.addPayrollAdjustment(adjReq);
-        service.addPayrollAdjustment(adjReq);
+                key(), "usr_admin", "2099-06", "bonus", 1000L, "幂等测试奖金", "usr_m010_reviewer");
+        var first = service.addPayrollAdjustment(adjReq);
+        assertThat(service.addPayrollAdjustment(adjReq).reviewId()).isEqualTo(first.reviewId());
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM staff_payroll_adjustments WHERE user_id='usr_admin' AND reason='幂等测试奖金'",
+                "SELECT COUNT(*) FROM staff_payroll_adjustment_requests WHERE user_id='usr_admin' AND reason='幂等测试奖金'",
                 Integer.class)).isEqualTo(1);
 
         var cmlReq = new com.complex.platform.access.staff.dto.StaffCommissionRequest(
@@ -605,7 +603,7 @@ class StaffJdbcIntegrationTests {
         authenticateAsPlatformAdmin();
         assertThatThrownBy(() -> service.addPayrollAdjustment(
                 new com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest(
-                        key(), "usr_admin", "2099-05", "penalty", 100L, " ")))
+                        key(), "usr_admin", "2099-05", "penalty", 100L, " ", "usr_m010_reviewer")))
                 .isInstanceOf(ApiException.class);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM audit_events WHERE event_name='staff.payroll.adjustment_add_failed' AND event_result='failure'",
