@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 736 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 741 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -639,6 +639,11 @@
 | staff | `POST` | `/api/v1/staff/payroll/adjustments` | `addStaffPayrollAdjustment` | 奖金/处罚手录(必须带事由) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.adjustment_added` | `staff.payroll.adjustment_add_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/commissions` | `addStaffCommission` | 提成入台账(手录/系统写入口) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.commission_added` | `staff.payroll.commission_add_failed` |
 | staff | `POST` | `/api/v1/staff/payroll/close` | `closeStaffPayrollMonth` | 月结(定格全员薪资单) | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.payroll.month_closed` | `staff.payroll.month_close_failed` |
+| staff | `GET` | `/api/v1/staff/dispatches` | `listStaffDispatches` | 查询派驻记录 | `-` | `staff.profile.view` | `staff-token` | `project` | web, mobile_admin | 否 | `staff.dispatch.viewed` | `staff.dispatch.view_failed` |
+| staff | `POST` | `/api/v1/staff/dispatches` | `createStaffDispatch` | 登记派驻记录（员工 → 派驻酒吧） | `object` | `staff.profile.review` | `staff-token` | `project` | web | 是 | `staff.dispatch.created` | `staff.dispatch.create_failed` |
+| staff | `POST` | `/api/v1/staff/dispatches/{dispatch_id}/end` | `endStaffDispatch` | 结束派驻记录 | `object` | `staff.profile.review` | `staff-token` | `project` | web | 是 | `staff.dispatch.ended` | `staff.dispatch.end_failed` |
+| staff | `POST` | `/api/v1/staff/commission-settlements/close` | `closeStaffCommissionSettlement` | 提成月结拨付（酒吧 → 人员所属主体） | `object` | `staff.payroll.manage` | `staff-token` | `platform` | web | 是 | `staff.commission_settlement.closed` | `staff.commission_settlement.close_failed` |
+| staff | `GET` | `/api/v1/staff/commission-settlements` | `listStaffCommissionSettlements` | 查询提成月结拨付记录（按月） | `-` | `staff.payroll.manage` | `staff-token` | `platform` | web | 否 | `staff.commission_settlement.viewed` | `staff.commission_settlement.view_failed` |
 | staff | `GET` | `/api/v1/staff/payroll` | `listStaffPayroll` | 全员薪资单(人事,按月) | `-` | `staff.payroll.manage` | `staff-token` | `platform` | web | 否 | `staff.payroll.viewed` | `staff.payroll.view_failed` |
 | staff | `GET` | `/api/v1/staff/payroll/mine` | `listMyStaffPayroll` | 我的薪资(员工手机;仅已月结月份) | `-` | `staff.payroll.view_mine` | `staff-token` | `platform` | staff_private_phone, web | 否 | `staff.payroll_mine.viewed` | `staff.payroll_mine.view_failed` |
 | staff | `GET` | `/api/v1/staff/leaves` | `listStaffLeaves` | 查请假(主管/后台,按状态) | `-` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone | 否 | `staff.leave.viewed` | `staff.leave.view_failed` |
