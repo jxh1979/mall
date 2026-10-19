@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -231,6 +231,11 @@ public interface FinanceRepository {
         if (current.size() > 1) throw com.complex.platform.common.api.ApiException.conflict(
                 "PURCHASE_PAYABLE_AMBIGUOUS", "采购来源存在多张有效应付，请核实更正链");
         return current.stream().findFirst();
+    }
+
+    /** 该台账项是否已有派生行回指（origin_item_id＝该项：合同账单作废冲正、V344 补录红冲/重述）——这样的原行不再是有效款项。 */
+    default boolean hasCorrectionItems(String itemId) {
+        return listArApItems().stream().anyMatch(item -> itemId.equals(item.originItemId()));
     }
 
     default boolean isPurchasePayableReplaced(String itemId) {

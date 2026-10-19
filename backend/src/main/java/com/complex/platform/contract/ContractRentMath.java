@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import java.time.LocalDate;
 import java.util.Map;
 
@@ -11,6 +13,8 @@ import java.util.Map;
  *   baseRentCent: number（基础月租，分）
  *   freeRentMonths: number（自生效起前 N 个月免租=装修期免租，可选）
  *   increase: { mode: "ratio"|"amount", value: number, everyMonths: number=12 }（按年递增，可选）
+ *   increaseFrom: "yyyy-MM-dd"（递增起算日，可选；缺省＝合同生效日）。第三轮裁决第 3 条「续租/变更录入的月租就是新的基数；原递增条款的周期与比例沿用，
+ *     但从续租/变更生效日起重新计期」：续租终审、面积/位置变更子合同写入该日，递增期数自该日起算（免租期仍自合同生效日起算）。
  */
 public final class ContractRentMath {
 
@@ -39,7 +43,9 @@ public final class ContractRentMath {
             return base;
         }
         int everyMonths = (int) Math.max(1, longVal(inc.get("everyMonths")) == 0 ? 12 : longVal(inc.get("everyMonths")));
-        int periods = monthsElapsed / everyMonths;     // 满几个递增周期
+        Object from = rentTerms.get("increaseFrom");
+        int periods = (from == null ? monthsElapsed : monthsBetween(LocalDate.parse(from.toString()), period))
+                / everyMonths;     // 自递增起算日满几个递增周期
         if (periods <= 0) {
             return base;
         }
@@ -90,6 +96,10 @@ public final class ContractRentMath {
         assert periodAmountCent(free, eff, "2026-02") == 0 : "free-rent month";
         assert periodAmountCent(free, eff, "2026-05") == 100000 : "after free-rent";
         assert periodAmountCent(flat, eff, "2025-12") == 0 : "before effective";
+        Map<String, Object> renewed = Map.of("baseRentCent", 120000, "increaseFrom", "2027-07-01",
+                "increase", Map.of("mode", "ratio", "value", 0.10, "everyMonths", 12));
+        assert periodAmountCent(renewed, eff, "2028-06") == 120000 : "restart: first cycle on new base";
+        assert periodAmountCent(renewed, eff, "2028-07") == 132000 : "restart: +10% after one full cycle";
         System.out.println("ContractRentMath self-check OK");
     }
 }

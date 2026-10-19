@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -57,7 +57,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(36); // 包括工资、绩效及酒吧分配审批。
+        assertThat(page.total()).isEqualTo(39); // 包括工资、绩效、酒吧分配及合同三类（HP-C01）审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
@@ -76,6 +76,26 @@ class SupervisorReviewServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .containsExactly("governance.supervisor_review.policies_viewed");
+    }
+
+    /**
+     * HP-C01（BSM L1349「合同的新建、到期终止、变更分别使用各自配置的审批流程模板，三类均遵守同一全平台审批模型」；
+     * PGM L536「三类各走各自的审批流程模板」）：三类合同事项各登记一条恒阻断策略——主线 one_level_up 只作下限（指定最终审批人即
+     * 补全到该人），平行线由合同模板决定、策略不固定线，审批意见必填。
+     */
+    @Test
+    void contractPoliciesAreRegisteredAndBlockByDefault() {
+        var page = service.listPolicies();
+        for (String action : List.of("contract.new", "contract.expiry_termination", "contract.change")) {
+            assertThat(page.items()).filteredOn(policy -> action.equals(policy.actionType())).first().satisfies(policy -> {
+                assertThat(policy.policyCode()).isEqualTo("contract_" + action.substring("contract.".length()));
+                assertThat(policy.blocksByDefault()).isTrue();
+                assertThat(policy.minAmountCent()).isZero();
+                assertThat(policy.approvalLevel()).isEqualTo("one_level_up");
+                assertThat(policy.parallelLineCodes()).isEmpty();
+                assertThat(policy.requiredEvidenceTypes()).containsExactly("reason");
+            });
+        }
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.07
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -54,6 +54,8 @@ class FinanceServiceTests {
     private InMemoryAuditEventRepository auditEventRepository;
     private AuthorizationService authorizationService;
     private FinanceService service;
+    // 第三轮裁决第 4 条：合同域回调端口记录（每登记一笔收付款回调一次）。
+    private final List<ArApItemRecord> settlementProgress = new java.util.ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -72,7 +74,10 @@ class FinanceServiceTests {
                 operations,
                 auditEventService,
                 authorizationService,
-                new com.complex.platform.common.BusinessDayResolver(4)
+                new com.complex.platform.common.BusinessDayResolver(4),
+                com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(),
+                null,
+                settlementProgress::add
         );
         service.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
         // AUD-007 退款额度闸已 fail-closed 常在：默认给宽松引擎 + 操作者，令既有「额度内退款成功」用例仍过；
@@ -1329,6 +1334,27 @@ class FinanceServiceTests {
         assertThat(financeRepository.findArApItemById(restated.id()).orElseThrow().adjustmentId()).isEqualTo(requested.id());
     }
 
+    /**
+     * 第三轮裁决第 4 条「差额收齐后→「已结清」」：补录调整审批通过（红冲＋重述，BSM L1322 账单异议「异议成立后多退少补」）改了未清额，
+     * 与登记收付款同样回调合同域，复核欠费追缴中的退租结算单（回调入参＝重述行）。
+     */
+    @Test
+    void backfillApprovalNotifiesSettlementProgressWithRestatedRow() {
+        stubActor("staff_finance_cb");
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-cb", "receivable", 100000L));
+        service.createDailyClose(new DailyCloseRequest(
+                "daily-close-backfill-cb", "lock", List.of(),
+                LocalDate.parse("2026-06-30"), "project", "project_cb", false));
+        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
+                "adj-req-cb", "backfill", List.of(), item.id(), -40000L, "异议成立调减"));
+        stubActor("staff_finance_cb_reviewer");
+        settlementProgress.clear();
+        service.approveAdjustment(requested.id(),
+                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-cb", "ok", List.of(), "approve"));
+        assertThat(settlementProgress).extracting(ArApItemRecord::id).containsExactly("arap_res_" + requested.id());
+        assertThat(settlementProgress.get(0).unpaidAmountCent()).isEqualTo(60000L);
+    }
+
     @Test
     void backfillSelfDecisionForbiddenBySeparationOfDuties() {
         stubActor("staff_finance_self");
@@ -1677,13 +1703,191 @@ class FinanceServiceTests {
         // #3② 根治：退押金写 deposit_ledger refund 行扣减余额 → 同商户第二笔退款按已减余额封顶，不超退。
         service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
                 "dep-init2", "note", List.of(), "merchant_ref", "collect", 40000L, "init"));   // 余额 40000
-        long refund1 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_a");
-        long refund2 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_b");
+        long refund1 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_a", LocalDate.now());
+        long refund2 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_b", LocalDate.now());
         assertThat(refund1).isEqualTo(30000L);                 // 余额 40000，全退请求 30000
         assertThat(refund2).isEqualTo(10000L);                 // 余额只剩 10000 → 封顶 10000（非再退 30000）
         assertThat(refund1 + refund2).isEqualTo(40000L);       // 共退=实交，不超退
         // 第三笔余额已空 → 实退 0，不落账。
-        assertThat(service.createDepositRefundPayable("merchant_ref", 5000L, "cst_ref_c")).isZero();
+        assertThat(service.createDepositRefundPayable("merchant_ref", 5000L, "cst_ref_c", LocalDate.now())).isZero();
+    }
+
+    // ============ HP-C03 变更押金补退差额（BSM L1353「批准生效后登记应收或应退，实际收款或退款成功后才更新已收押金余额，未结差额继续跟进……
+    // 不将未来应收视为到账，也不覆盖原收款历史」） ============
+    private void depositCollect(String key, String merchantId, long amountCent) {
+        service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
+                key, "note", List.of(), merchantId, "collect", amountCent, "init"));
+    }
+
+    /** 登记：差额&gt;0 挂应收、&lt;0 挂应付（取绝对值），source_type=deposit_adjustment、来源＝子合同、到期日＝办理期限；押金余额与台账行不变；同变更重放同一台账项。 */
+    @Test
+    void depositAdjustmentRegistersArApDueOnDeadlineWithoutTouchingBalance() {
+        depositCollect("dep-adj-init", "merchant_adj", 300000L);
+        int ledgerRows = financeRepository.depositLedger.size();
+        ArApItemRecord item = service.registerDepositAdjustment("merchant_adj", "ctr_child", "cch_1", 250000L,
+                LocalDate.parse("2026-09-30"));
+        assertThat(item).extracting(ArApItemRecord::direction, ArApItemRecord::sourceType, ArApItemRecord::sourceId,
+                ArApItemRecord::amountCent, ArApItemRecord::unpaidAmountCent, ArApItemRecord::dueDate, ArApItemRecord::status)
+                .containsExactly("receivable", "deposit_adjustment", "ctr_child", 250000L, 250000L, LocalDate.parse("2026-09-30"),
+                        "pending_collection");
+        assertThat(financeRepository.currentDepositBalance("merchant_adj")).isEqualTo(300000L);
+        assertThat(financeRepository.depositLedger).hasSize(ledgerRows);
+        ArApItemRecord replay = service.registerDepositAdjustment("merchant_adj", "ctr_child", "cch_1", 250000L,
+                LocalDate.parse("2026-09-30"));
+        assertThat(replay.id()).isEqualTo(item.id());
+        ArApItemRecord refund = service.registerDepositAdjustment("merchant_adj", "ctr_child2", "cch_2", -60000L,
+                LocalDate.parse("2026-10-15"));
+        assertThat(refund).extracting(ArApItemRecord::direction, ArApItemRecord::amountCent, ArApItemRecord::dueDate)
+                .containsExactly("payable", 60000L, LocalDate.parse("2026-10-15"));
+        assertThat(financeRepository.depositLedger).hasSize(ledgerRows);
+    }
+
+    /** 补缴应收按每笔实收写 deposit_ledger collect 行并加余额：部分收款 → partial_paid，余款付清 → settled。 */
+    @Test
+    void depositAdjustmentCollectionsWriteCollectRowPerPaymentThenSettle() {
+        depositCollect("dep-adj-c0", "merchant_adjc", 300000L);
+        ArApItemRecord item = service.registerDepositAdjustment("merchant_adjc", "ctr_c", "cch_c", 250000L,
+                LocalDate.parse("2026-09-30"));
+        ArApPaymentResponse first = service.registerArApPayment(item.id(), paymentRequest("pay-adj-1", 100000L));
+        assertThat(first.item().status()).isEqualTo("partial_paid");
+        assertThat(financeRepository.currentDepositBalance("merchant_adjc")).isEqualTo(400000L);
+        ArApPaymentResponse second = service.registerArApPayment(item.id(), paymentRequest("pay-adj-2", 150000L));
+        assertThat(second.item().status()).isEqualTo("settled");
+        assertThat(financeRepository.currentDepositBalance("merchant_adjc")).isEqualTo(550000L);
+        assertThat(financeRepository.depositLedger).filteredOn(r -> item.id().equals(r.arApItemId()))
+                .extracting(DepositLedgerRecord::action, DepositLedgerRecord::amountCent, DepositLedgerRecord::balanceAfterCent)
+                .containsExactly(tuple("collect", 100000L, 400000L), tuple("collect", 150000L, 550000L));
+    }
+
+    /** 退还应付付款写 deposit_ledger refund 行并减余额；余额不足 → DEPOSIT_INSUFFICIENT，付款不落、余额不变。 */
+    @Test
+    void depositAdjustmentRefundPaymentWritesRefundRowAndRejectsWhenBalanceShort() {
+        depositCollect("dep-adj-r0", "merchant_adjr", 50000L);
+        ArApItemRecord item = service.registerDepositAdjustment("merchant_adjr", "ctr_r", "cch_r", -60000L,
+                LocalDate.parse("2026-10-15"));
+        assertThatThrownBy(() -> service.registerArApPayment(item.id(), paymentRequest("pay-adj-r1", 60000L)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEPOSIT_INSUFFICIENT"));
+        assertThat(financeRepository.currentDepositBalance("merchant_adjr")).isEqualTo(50000L);
+        assertThat(financeRepository.findArApItemByIdForUpdate(item.id()).orElseThrow().unpaidAmountCent()).isEqualTo(60000L);
+        depositCollect("dep-adj-r2", "merchant_adjr", 20000L);
+        ArApPaymentResponse paid = service.registerArApPayment(item.id(), paymentRequest("pay-adj-r3", 60000L));
+        assertThat(paid.item().status()).isEqualTo("settled");
+        assertThat(financeRepository.currentDepositBalance("merchant_adjr")).isEqualTo(10000L);
+        assertThat(financeRepository.depositLedger).filteredOn(r -> item.id().equals(r.arApItemId()))
+                .extracting(DepositLedgerRecord::action, DepositLedgerRecord::amountCent, DepositLedgerRecord::balanceAfterCent)
+                .containsExactly(tuple("refund", 60000L, 10000L));
+    }
+
+    /**
+     * HP-C06（BSM L1352／ENUM L252「押金退还……不早于等待期届满……押金退还支付不受三个付账日与账单异议期约束」）：合同域算好的到期日原样落台账
+     * （不推到付账日）；所在地今天早于到期日 → 登记付款 409 DEPOSIT_REFUND_NOT_DUE、提示含可支付日期、未付不变；到期日当天可付。
+     */
+    @Test
+    void depositRefundPayableKeepsDueDateAndRejectsPaymentBeforeDue() {
+        depositCollect("dep-rw-0", "merchant_rw", 100000L);
+        LocalDate today = LocalDate.now(com.complex.platform.common.LocalZone.ID);
+        LocalDate future = today.plusDays(1);
+        while (java.util.Set.of(5, 15, 25).contains(future.getDayOfMonth())) {
+            future = future.plusDays(1);   // 取非付账日，证明不被推到 5/15/25
+        }
+        LocalDate notDueDate = future;
+        service.createDepositRefundPayable("merchant_rw", 60000L, "cst_rw_future", notDueDate);
+        service.createDepositRefundPayable("merchant_rw", 40000L, "cst_rw_today", today);
+        ArApItemRecord notDue = financeRepository.listArApItems().stream()
+                .filter(i -> "cst_rw_future".equals(i.sourceId())).findFirst().orElseThrow();
+        ArApItemRecord dueToday = financeRepository.listArApItems().stream()
+                .filter(i -> "cst_rw_today".equals(i.sourceId())).findFirst().orElseThrow();
+        assertThat(notDue).extracting(ArApItemRecord::sourceType, ArApItemRecord::dueDate)
+                .containsExactly("deposit_refund", notDueDate);
+        assertThatThrownBy(() -> service.registerArApPayment(notDue.id(), paymentRequest("pay-rw-early", 60000L)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("DEPOSIT_REFUND_NOT_DUE");
+                    assertThat(e.getMessage()).contains(notDueDate.toString());
+                });
+        assertThat(financeRepository.findArApItemByIdForUpdate(notDue.id()).orElseThrow().unpaidAmountCent()).isEqualTo(60000L);
+        ArApPaymentResponse paid = service.registerArApPayment(dueToday.id(), paymentRequestAt("pay-rw-today", 40000L, null));
+        assertThat(paid.item().status()).isEqualTo("settled");
+        assertThat(paid.item().dueDate()).isEqualTo(today);
+    }
+
+    /**
+     * 第三轮控制席约定「押金退还付款闸同时校验所登记的 paymentTime（所在地日期）不早于到期日」（照 POINTS_BILL_NOT_DUE）：今天已到到期日，
+     * 但登记的付款时间是到期日前一天 → 409 DEPOSIT_REFUND_NOT_DUE、未付不变；不填付款时间（缺省 now）当天可付。
+     */
+    @Test
+    void depositRefundPaymentTimeBeforeDueDateIsRejected() {
+        depositCollect("dep-rw-pt", "merchant_rwpt", 100000L);
+        LocalDate today = LocalDate.now(com.complex.platform.common.LocalZone.ID);
+        service.createDepositRefundPayable("merchant_rwpt", 40000L, "cst_rw_pt", today);
+        ArApItemRecord due = financeRepository.listArApItems().stream()
+                .filter(i -> "cst_rw_pt".equals(i.sourceId())).findFirst().orElseThrow();
+        Instant dayBefore = today.minusDays(1).atTime(12, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+        assertThatThrownBy(() -> service.registerArApPayment(due.id(), paymentRequestAt("pay-rw-pt-early", 40000L, dayBefore)))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("DEPOSIT_REFUND_NOT_DUE");
+                    assertThat(e.getMessage()).contains(today.toString());
+                });
+        assertThat(financeRepository.findArApItemByIdForUpdate(due.id()).orElseThrow().unpaidAmountCent()).isEqualTo(40000L);
+        assertThat(service.registerArApPayment(due.id(), paymentRequestAt("pay-rw-pt-ok", 40000L, null)).item().status())
+                .isEqualTo("settled");
+    }
+
+    /** 第三轮裁决第 4 条：settleArApItem 统一回写点每登记一笔收付款即回调合同域，入参为已回写 paid/unpaid/status 的台账项。 */
+    @Test
+    void paymentCallsBackSettlementProgressWithUpdatedItem() {
+        depositCollect("dep-rw-cb", "merchant_rwcb", 100000L);
+        service.createDepositRefundPayable("merchant_rwcb", 50000L, "cst_rw_cb",
+                LocalDate.now(com.complex.platform.common.LocalZone.ID));
+        ArApItemRecord item = financeRepository.listArApItems().stream()
+                .filter(i -> "cst_rw_cb".equals(i.sourceId())).findFirst().orElseThrow();
+        service.registerArApPayment(item.id(), paymentRequestAt("pay-rw-cb-1", 20000L, null));
+        service.registerArApPayment(item.id(), paymentRequestAt("pay-rw-cb-2", 30000L, null));
+        assertThat(settlementProgress).extracting(ArApItemRecord::id, ArApItemRecord::sourceType, ArApItemRecord::sourceId,
+                        ArApItemRecord::unpaidAmountCent, ArApItemRecord::status)
+                .containsExactly(tuple(item.id(), "deposit_refund", "cst_rw_cb", 30000L, "partial_paid"),
+                        tuple(item.id(), "deposit_refund", "cst_rw_cb", 0L, "settled"));
+    }
+
+    /**
+     * 第四轮裁决第 3 条（财务结算 PRD L957「终止结算既有多级审批全部通过后，系统按清单自动落账，使相应应收未付额与押金余额等额减少并可对账」）：
+     * 押金余额 500000，两笔应收 300000、200000，抵扣上限 400000 → 按给定顺序经 settleArApItem 以「押金抵扣」（deposit_offset，流水号＝结算单 id）销账：
+     * 第一笔结清、第二笔余 100000；写一条 deposit_ledger 抵扣（deduct）行 400000、余额 100000；随后押金退还 100000 按扣减后余额落账、余额归零（不二次扣减）。
+     * 系统按清单自动落账、不另设确认入口：不按操作人权限范围校验（操作人无任何权限亦落账）。
+     */
+    @Test
+    void depositOffsetSettlesReceivablesInOrderAndWritesOneDeductRow() {
+        depositCollect("dep-off-0", "merchant_off", 500000L);
+        ArApItemRecord rent = offsetReceivable("arap_off_rent", 300000L);
+        ArApItemRecord penalty = offsetReceivable("arap_off_pen", 200000L);
+        org.mockito.Mockito.doThrow(ApiException.forbidden("PERMISSION_DENIED", "无权限"))
+                .when(authorizationService).requirePermission(org.mockito.ArgumentMatchers.anyString());
+        List<TerminationSettlementPort.DepositOffset> offsets = service.offsetReceivablesWithDeposit("merchant_off", "cst_off",
+                List.of(rent.id(), penalty.id()), 400000L);
+        assertThat(offsets).containsExactly(new TerminationSettlementPort.DepositOffset(rent.id(), 300000L),
+                new TerminationSettlementPort.DepositOffset(penalty.id(), 100000L));
+        assertThat(financeRepository.findArApItemById(rent.id()).orElseThrow())
+                .extracting(ArApItemRecord::unpaidAmountCent, ArApItemRecord::status).containsExactly(0L, "settled");
+        assertThat(financeRepository.findArApItemById(penalty.id()).orElseThrow())
+                .extracting(ArApItemRecord::unpaidAmountCent, ArApItemRecord::status).containsExactly(100000L, "partial_paid");
+        assertThat(financeRepository.listArApPayments(rent.id()))
+                .extracting(ArApPaymentRecord::paymentMethod, ArApPaymentRecord::bankFlowRef, ArApPaymentRecord::amountCent)
+                .containsExactly(tuple("deposit_offset", "cst_off", 300000L));
+        assertThat(financeRepository.depositLedger).filteredOn(r -> "deduct".equals(r.action()))
+                .extracting(DepositLedgerRecord::amountCent, DepositLedgerRecord::balanceAfterCent)
+                .containsExactly(tuple(400000L, 100000L));
+        assertThat(service.createDepositRefundPayable("merchant_off", 100000L, "cst_off", LocalDate.now())).isEqualTo(100000L);
+        assertThat(financeRepository.currentDepositBalance("merchant_off")).isZero();
+    }
+
+    private ArApItemRecord offsetReceivable(String id, long amountCent) {
+        return financeRepository.saveArApItem(new ArApItemRecord(id, "NO-" + id, "receivable", "merchant_off", "contract",
+                "ctr_off|2026-08|rent", amountCent, 0L, amountCent, "CNY", LocalDate.parse("2026-08-01"), "2026-08",
+                "pending_collection", Instant.now(), Instant.now(), "merchant_off", "org_1"));
+    }
+
+    private ArApPaymentRequest paymentRequestAt(String idempotencyKey, long amountCent, Instant paymentTime) {
+        return new ArApPaymentRequest(idempotencyKey, "register payment", List.of(), amountCent, "bank_transfer", paymentTime,
+                "bank_flow_" + idempotencyKey);
     }
 
     // ─── F-OPS-08 物业费固定计费（替代已废止 CAM 权重分摊 + 年度 true-up）──────────────

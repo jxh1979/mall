@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -60,6 +61,7 @@ const STATUS_LABELS: Record<string, string> = {
   deposit_offsetting: "押金抵扣中",
   arrears_collecting: "欠费追缴中",
   disputed: "有争议",
+  disputed_litigation: "有争议，诉讼/仲裁",   // ENUM L252；HP-C04：商户不接受主管裁决
   // 合同抽成模式 / 变更类型 / 结算触发
   fixed_ratio: "固定比例",
   guarantee_or_commission_higher: "保底与抽成取高",

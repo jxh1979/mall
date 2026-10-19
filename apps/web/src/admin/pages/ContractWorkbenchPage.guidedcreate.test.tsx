@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.01
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ContractWorkbenchPage } from "./ContractWorkbenchPage";
@@ -74,6 +75,40 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     expect(screen.getByTestId("contract-draft-error").textContent).toContain("生效日期");
   });
 
+  // 第三轮裁决第 1 条「纯提成合同的押金由招商按合同约定金额直接录入，不走月数公式，但不得为零」：收租方式选「纯提成」才出「押金（元）」，
+  // 必填且不得为零，起草随载荷提交约定押金（分）；其余收租方式不出此项（押金由后端按「收取月数×签约月租」计算）。
+  it("纯提成起草：只在选纯提成时出「押金（元）」，必填且不得为零，提交带约定押金", async () => {
+    const posts: CapturedPost[] = [];
+    const props = baseProps();
+    props.api = makeApi(posts);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-draft-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-draft-open"));
+    expect(screen.queryByLabelText("押金（元）")).toBeNull();
+    fireEvent.change(screen.getByLabelText("收租方式"), { target: { value: "turnover_only" } });
+    await waitFor(() => expect(screen.queryByLabelText("押金（元）")).not.toBeNull());
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试商户1/ })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "merchant-1" } });
+    fireEvent.change(screen.getByLabelText("合同主体 id"), { target: { value: "subject-1" } });
+    for (const [label, day] of [["生效日期", "1"], ["到期日期", "28"]] as const) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      fireEvent.click(within(screen.getByRole("dialog", { name: label })).getByRole("button", { name: day }));
+    }
+    fireEvent.click(screen.getByTestId("contract-draft-next"));
+    await waitFor(() => expect(screen.getByTestId("contract-draft-error").textContent).toContain("押金"));
+    fireEvent.change(screen.getByLabelText("押金（元）"), { target: { value: "0" } });
+    fireEvent.click(screen.getByTestId("contract-draft-next"));
+    expect(screen.getByTestId("contract-draft-error").textContent).toContain("押金");
+    fireEvent.change(screen.getByLabelText("押金（元）"), { target: { value: "5000" } });
+    fireEvent.click(screen.getByTestId("contract-draft-next"));
+    await waitFor(() => expect(screen.queryByTestId("contract-draft-summary")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("contract-draft-create"));
+    await waitFor(() => expect(posts.some((p) => p.url.endsWith("/api/v1/contracts"))).toBe(true));
+    const body = posts.find((p) => p.url.endsWith("/api/v1/contracts"))!.body;
+    expect(body.deposit_cent).toBe(500000);
+    expect((body.rent_terms as Record<string, unknown>).rent_billing_mode).toBe("turnover_only");
+  });
+
   it("起草弹窗含「经营范围」类目勾选组（既有词表），可勾选/取消", async () => {
     render(<ContractWorkbenchPage {...baseProps()} />);
     await waitFor(() => expect(screen.getByTestId("contract-draft-open")).toBeTruthy());
@@ -109,6 +144,8 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     await waitFor(() => expect(screen.getByTestId("contract-change-scope-categories")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("变更经营范围-烈酒"));
     fireEvent.click(screen.getByLabelText("变更经营范围-啤酒"));
+    // HP-C01：变更按「变更」类模板走统一审批，模板三线各须指定最终审批人（缺则前端拦下不发 POST）。
+    for (const line of ["business_review", "finance_review", "legal_review"]) fireEvent.change(screen.getByTestId(`contract-change-line-${line}`), { target: { value: `usr_${line}` } });
     fireEvent.click(screen.getByTestId("contract-change-raise"));
     await waitFor(() => expect(posts.some((p) => p.url.includes("/api/v1/contracts/ctr-1/changes"))).toBe(true));
     const change = posts.find((p) => p.url.includes("/api/v1/contracts/ctr-1/changes"))!;
@@ -131,6 +168,8 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     fireEvent.click(screen.getByLabelText("清空经营范围"));
     expect((screen.getByLabelText("变更经营范围-啤酒") as HTMLInputElement).checked).toBe(false);
     expect((screen.getByLabelText("变更经营范围-啤酒") as HTMLInputElement).disabled).toBe(true);
+    // HP-C01：变更按「变更」类模板走统一审批，模板三线各须指定最终审批人（缺则前端拦下不发 POST）。
+    for (const line of ["business_review", "finance_review", "legal_review"]) fireEvent.change(screen.getByTestId(`contract-change-line-${line}`), { target: { value: `usr_${line}` } });
     fireEvent.click(screen.getByTestId("contract-change-raise"));
     await waitFor(() => expect(posts.some((p) => p.url.includes("/api/v1/contracts/ctr-3/changes"))).toBe(true));
     const change = posts.find((p) => p.url.includes("/api/v1/contracts/ctr-3/changes"))!;

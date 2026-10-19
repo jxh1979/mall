@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.44
+文档版本：V0.45
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3614,3 +3614,39 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 
 - `docs/decisions/2026-10-18-cg-pending-decisions.md`：第 19 条「现行确认规则」改为「作废：按 BSM L1143 公司代收小费与服务费同样拨付（2026-10-18 操作员裁决）。」，文档版本 V0.01→V0.02；该文件「原始答复留痕」第 19 行「暂不做，只拨提成」与「当前分类与完成边界」表保留为 2026-10-17 核对时的历史，不改。
 - 仓内无实施台账类文档（第六批实施台账 `实施台账-V0.44.json` 在本机 Codex 输出目录，不在仓内）。`docs/` 内 grep「第六批／HP-H05／TK-18」命中的均为 PRD／设计文档的实现衔接句（`platform-governance-prd-v0.1.md` §12B.5.1、`supply-chain-inventory-product-prd-v0.1.md` §7.9、`r5-spec-T1-staff-tables-dev-design-20260618.md` 变更记录、`finance-settlement-product-prd-v0.1.md` CG-07 实现现状、`bar-business-operations-product-prd-v0.1.md` 实现衔接）与 2026-08 第六批 HTML 修订轮的历史记录（`prd-audit/rounds/b6/`、`html-prd-coverage.csv`），无须另改状态句。
+
+## 2026-10-18～19 第七批（合同/退租/押金）操作员裁决（文档同步，HTML 不改）
+
+### 来源与范围
+
+2026-10-18 至 2026-10-19 控制席接手 Codex 席「代码全面补齐」第七批（batch07，工作树 `feature/business-code-batch07-20261018`，实施台账 HP-C01～HP-C04，并新增 HP-C06），就核对与五轮复核中 HTML 与既有裁决都未写明、正常业务会遇到的点向操作员弹窗，操作员逐项答复；原文记录于控制席任务书 `B07-BRIEF.md` 末尾五节「操作员裁决补充」（本机 `html-audit-20261017/`，不在仓内）。本节逐字登记所选选项原文并注明落地代码位置；三份业务 HTML 保持冻结、一句不改。本节追加时，原台账除文档版本 V0.44→V0.45 外，其他历史字节保持。另：第七批任务书条目 4 原写「退租结算状态与押金支付不因异议暂停（按 HTML 字面）」，HTML 中无原句，控制席已于弹窗中向操作员说明为误写并作废。
+
+### 裁决原文（逐字）与落地代码位置
+
+| 编号 | 裁决原文（逐字） | 落地代码位置 |
+|---|---|---|
+| 1 | HP-C01 阶段数上下限：操作员选「主线层级数配上下限」：阶段数＝主线自动补全后的层级数。三类模板各配最少/最多层级（按综合体），发起时校验：补全后层级数不在上下限内即拒绝。岗位＝必需的部门线集合（业务/财务/法务）。现有 ApprovalChainService 只有下限 roleChainFloor，需补上限列与校验。 | 迁移 `V494__contract_approval_templates_by_type.sql`（三类模板）、`V496__contract_approval_template_main_levels.sql`（`min_main_levels`/`max_main_levels`）；`ContractService.saveApprovalFlow`、提交审批时数补全后主线层级（400 `CONTRACT_APPROVAL_LEVELS_OUT_OF_RANGE`）；`ContractApprovalTemplateRecord`；前端 `ContractWorkbenchPage.tsx` 模板页签。 |
+| 2 | HP-C02 退租对应期间截止月：操作员选「发起时必填退租日」：发起退租/提前终止变更时必填「退租日」，期间＝生效月→退租日所在月（合同到期走到期日所在月）。齐单核对、缺单判定、欠费口径都按这个截止月。 | `ContractService.raiseChange`（move_out/early_termination 必填 `moveOutDate`）、`documentsThroughMonth`、`checkSettlementDocuments`（`POST /api/v1/contracts/settlements/{settlement_id}/documents-check`）；`JdbcContractRepository.listMissingTerminationDocuments`、`sumUnpaidArForContract`（截止月参数）；迁移 `V495__contract_settlement_documents_check.sql`。 |
+| 3 | HP-C03 原合同押金月数：操作员选「本批补齐 BSM L1347」：本批新增条目：押金收取月数业务参数（全平台、默认 3、须同时配上下限、下限不低于 3、校验拒绝更低值/零/负）＋签约时押金＝月数×签约月租并把月数写入生效快照；HP-C03 读快照月数。 | 迁移 `V497__contract_deposit_months_policy.sql`；`ContractService.saveDepositMonthsSetting`（`POST /api/v1/contracts/deposit-months`）、`depositFor`；面积/位置变更目标押金＝快照月数×变更后月租，差额经 `TerminationSettlementPort` 登记应收/应付（`source_type=deposit_adjustment`，到期日＝办理期限），实际收退成功经 `FinanceService.settleArApItem` 才写 `deposit_ledger`。 |
+| 4 | 续租机制（D-06）：操作员选「同一合同延期」：续租变更载荷带续租后月租、新到期日、押金办理期限；终审通过时延长到期日、换月租、重固化快照、状态回「生效」、补排延长期账单，并按公式登记押金差额。ENUM L255「续租审批未完成期间按原合同继续出账」自然满足。 | `ContractService` 续租终审（延期、换租、重固化快照、补排延长期、铺位占用校验 409 `CONTRACT_SPACE_CONFLICT`、押金差额登记）；前端变更表单续租三项。 |
+| 5 | HP-C04 商户退租异议：操作员选「进有争议挂起」：商户异议→结算单进「有争议」挂起、最后审批不得通过；主管裁决（写结论留痕）后回待结算继续审批；商户不接受裁决→「有争议，诉讼/仲裁」无限期挂起，有结果后由主管录结果继续。本批一并实现该状态。押金退还因算账未完成自然顺延。 | 迁移 `V498__contract_settlement_dispute_litigation.sql`（`dispute_resolution`、状态 `disputed_litigation`）；`MerchantPortalService` 异议置 `disputed`；`ContractService.resolveDispute` 写结论；最后审批对争议两态 409。 |
+| 6 | HP-C04「不接受裁决」由谁点：操作员选「商户在商户专区点」：主管裁决后，商户在商户专区该结算单上可点「不接受裁决」（必填理由），单子进「有争议，诉讼/仲裁」。诉讼/仲裁有结果后，由有裁决权的主管在后台录入结果，单子回待结算继续审批。 | `POST /api/v1/merchant-portal/settlements/{settlement_id}/reject-resolution`（`MerchantPortalService`）；前端 `MerchantZoneSettlementsPage.tsx`、`ContractWorkbenchPage.tsx`。 |
+| 7 | 押金退还等待期（新增条目 HP-C06）：操作员选「纳入本批」：新增条目 HP-C06：等待期项目参数（默认 30 日、上下限）；押金退还应付到期日＝max(算账完成日, 最后审批完成日＋等待期)，支付不早于该日；晚于等待期的顺延原因与预计时间在商户专区显示。 | 迁移 `V499__contract_deposit_refund_wait_policy.sql`；`ContractService.saveDepositRefundWaitSetting`（`POST /api/v1/contracts/deposit-refund-wait`）；`FinanceService.settleArApItem` 付款闸 409 `DEPOSIT_REFUND_NOT_DUE`（今天与所登记 paymentTime 均不早于到期日）；商户专区显示预计退押金日期。现设计下落账即终审，「算账晚于等待期而顺延」无触发路径，公式与展示保留。 |
+| 8 | 纯提成合同押金：操作员选「押金按约定金额录入」：纯提成合同的押金由招商按合同约定金额直接录入，不走月数公式，但不得为零；这类合同变更/续租时押金不按公式重算。 | `ContractService.createDraft`/`editDraftRentTerms`/`depositFor`（纯提成约定押金，0 拒绝）；变更/续租不重算不登记差额；前端纯提成押金输入。 |
+| 9 | 退租日所在月之后未收的预排应收、未缴的押金补缴应收：操作员答「这个情况不存在，不可能存在的」。 | 不做处理，不加代码。 |
+| 10 | 续租和面积/位置变更后的租金递增条款：操作员选「新月租为基数重新计期」：续租/变更录入的月租就是新的基数；原递增条款的周期与比例沿用，但从续租/变更生效日起重新计期。 | `rent_terms.increaseFrom`（续租、面积/位置变更、租金调整写入生效日）；`ContractRentMath` 按其计期。 |
+| 11 | 「押金抵扣中」「欠费追缴中」进入时机：操作员选「按押金够不够分流」：终审落账后：押金足以抵扣全部欠费、有余额要退的→「押金抵扣中」，押金退还付清后→「已结清」；押金不足抵扣的→「欠费追缴中」，差额收齐后→「已结清」；押金正好抵完、无退无欠→直接「已结清」。 | `ContractService.postedStatus`、`onArApItemPaid`（`TerminationSettlementProgressPort`，由 `FinanceService.settleArApItem` 回调）；状态集合分「落账前／落账后」。 |
+| 12 | 「续签中」何时开始：操作员答「这种情况也不会出现，因为正常情况都是提前30天，我要完成签约的。」 | 第二轮为「期满仍在审」加的到期转「续签中」处理整体撤回；原租期内发起续租合同保持「生效中」，终审即延期。 |
+| 13 | 放行期终审当月按哪边出账：操作员答「不会出现这种情况」。 | 第二轮补排「原到期月之后至终审所在月」整体撤回。 |
+| 14 | 诉讼/仲裁结果录入后能否再提新异议：操作员选「不能再提」：诉讼/仲裁结果录入后，该结算单商户专区不再提供「提异议」和「不接受裁决」，按结果继续审批落账。 | `MerchantPortalService`（409 `SETTLEMENT_NOT_DISPUTABLE`／`SETTLEMENT_NOT_REJECTABLE`）；前端不显示两按钮。 |
+| 15 | 提前终止违约金：操作员选「违约金并入押金抵扣」：押金先抵欠费加违约金，剩余才退；不够的进「欠费追缴中」，违约金和欠费都收齐才「已结清」。 | `TerminationSettlementMath`（抵扣基数＝未清应收＋违约金）；`JdbcContractRepository.sumUnpaidTerminationPenalty`。 |
+| 16 | 面积/位置变更后剩余租期出账：操作员选「变更生效时重排」：本批做：变更生效时作废父合同自变更生效月起尚未收款的预排租金/物业费应收（留痕），按子合同新月租和重新计期的递增重排剩余租期。 | 迁移 `V501__contract_rent_bill_void_on_amendment.sql`（`voided_at`/`void_reason`）、`V502__contract_rent_bill_unique_live_only.sql`；`JdbcContractRepository.voidUnpaidRentBills`（V344 冲正行，原行不动）；`ContractService` 变更终审重排；被冲正原行不可再收款（409 `AR_AP_ITEM_REVERSED`）、不计入分红抵欠与账龄。 |
+| 17 | 退租结算押金抵扣部分的台账销账：操作员选「本批做」：终审落账时把被押金覆盖的应收逐笔以「押金抵扣」销账，并写一条押金台账抵扣行减余额，可对账；「欠费追缴中」的收齐判定随之改为看台账未收额。 | `ContractService` 终审落账押金抵扣销账（经 `FinanceService.settleArApItem`）、`deposit_ledger` 抵扣行；依据财务结算 PRD L957。 |
+| 18 | 招商签约合同没有月租：操作员选「合同草稿可编辑补录」：合同工作台增加草稿编辑，签约起草后在草稿上补录租金条款再提交；非纯提成合同月租为 0 的不得提交审批。 | `POST /api/v1/contracts/{contract_id}/rent-terms`（`ContractService.editDraftRentTerms`，仅草拟中）；`ContractService.submit` 零月租 400；前端「编辑租金条款」。 |
+| 19 | 系统自动抵扣/作废碰到日结锁定的应收：操作员选「终审即上级审批、照常执行」：退租结算的多级审批、变更的审批全部通过即视同上级审批，系统对已锁定应收照常抵扣/作废，金额归入当期、不改原日结金额。人工登记收款仍受锁定拦截。 | `FinanceService.settleArApItem`（系统落账不查锁、人工仍 409 `DAY_CLOSE_LOCKED`）；`voidUnpaidRentBills` 锁定原行的冲正行与重排应收同记作废当日，原日结记录不动。 |
+| 20 | 租金调整（rent_change）生效后的预排账单：操作员选「同样生效时重排」：租金调整生效时，作废自生效月起尚未收款的预排租金应收（留痕），按调整后月租重排剩余租期；递增同样以新月租为基数从生效日起重新计期。 | `ContractService` 租金调整终审（必填调整后月租；作废＋重排，只动租金）；终审时合同已非生效中 409 `CONTRACT_NOT_EFFECTIVE`。 |
+
+### 同批说明
+
+- 到期终止结算接入多级审批（迁移 `V500__contract_settlement_expiry_review.sql`，结算单挂到期终止复核单），删除手动「确认退押金并落账」入口 `POST /api/v1/contracts/settlements/{settlement_id}/complete`——依据 BSM L1352「各种终止结算，都要经过多级审批」「不再单设手动确认入口」，非新裁决。
+- 生产库 `complex` 现有 9 份合同为 2026-06/07 冒烟数据（押金空、租金条款空），快照无押金月数，面积/位置变更与续租会 409 `CONTRACT_DEPOSIT_MONTHS_MISSING`；`contract_settlements` 无「押金抵扣中/欠费追缴中」存量单。

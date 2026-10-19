@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -79,6 +79,19 @@ describe("FinanceArApLedgerPage 来源类型（退租相关可辨识）", () => 
     fireEvent.click(screen.getByTestId("finance-ledger-row-ar-dr"));
     await waitFor(() => expect(screen.getByText("来源类型")).toBeTruthy());
     expect(screen.getByText("退租押金退还")).toBeTruthy();
+  });
+
+  // HP-C03-3：面积/位置变更与续租的押金补退差额（source_type=deposit_adjustment）在台账显中文来源。
+  it("台账详情展示来源类型中文标签（变更押金补退差额）", async () => {
+    const rows: FinanceLedgerRow[] = [
+      { id: "ar-adj", itemNo: "ARAP-ADJ-1", direction: "receivable", status: "pending_collection", amountCent: 150000, unpaidAmountCent: 150000, dueDate: "2026-09-30", sourceType: "deposit_adjustment" },
+    ];
+    const getPaged = vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 });
+    renderPage(makeApi(getPaged));
+    await waitFor(() => expect(getPaged).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("finance-ledger-row-ar-adj"));
+    await waitFor(() => expect(screen.getByText("来源类型")).toBeTruthy());
+    expect(screen.getByText("变更押金补退差额")).toBeTruthy();
   });
 });
 

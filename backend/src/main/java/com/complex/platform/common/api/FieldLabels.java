@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -410,6 +410,8 @@ public final class FieldLabels {
         p("final_approver_id", "最终审批人");
         p("line_code", "审批线");
         p("line_name", "审批线名称");
+        p("required_line_codes", "必需审批线");
+        p("parallel_lines.line_code", "并行审批线");
         p("min_start_rank", "最低起点层级");
         p("entry_user_id", "起点人");
         p("superior_id", "直接上级");

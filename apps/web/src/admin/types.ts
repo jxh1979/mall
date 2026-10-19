@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 export type AdminUser = {
   id: string;
   username: string;
@@ -1042,6 +1042,8 @@ export type MerchantZoneSettlementRow = {
   status?: string;
   settlementItems?: unknown[];
   disputeReason?: string | null;
+  disputeResolution?: string | null;   // HP-C04（V498）：主管裁决结论与诉讼/仲裁结果
+  resolvedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };

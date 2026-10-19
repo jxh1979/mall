@@ -1,4 +1,4 @@
-# 招商获客业务域 PRD（V1.06·据需求重建）
+# 招商获客业务域 PRD（V1.07·据需求重建）
 
 > 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径；最终业务解释仍以三份业务 HTML 为准。
 >
@@ -53,6 +53,7 @@
   - **可拆边界**：「后续可拆」= 新建一条 active 绑定替换旧绑定，指向不同 运营/合同/结算 主体；**不是**在 `merchants` 的 `*_entity_id` 快照列上改写。`merchants.business_entity_id/contract_entity_id/settlement_entity_id` 仅为档案快照。
   - 合同签署时另在 `contracts.contract_subject_id/operation_subject_id/settlement_subject_id` 固化该合同主体快照，与商户当前 active 绑定**可不一致**（无外键强绑），勿假定二者恒等。
 - 转换时生成正式 merchant 档案，喂入合同环（合同 draft 引用该商户 + 报价条款），并把合同绑到来源意向（`leasing_intents.contract_id`，V442）；**线索不在签约时置已签约——合同审批全部通过、生效后（`ContractService.activate` 经 `ContractEffectiveLeadPort` 回调 `LeasingService.markSourceLeadSigned`）才转为已签约并留痕 `leasing.lead.signed`**（PGM「招商运营细则」，2026-10-17 CG-01 对齐）。审批驳回退回起草的，线索保持原状态。
+- **签约草稿补录租金条款（第四轮裁决第 4 条「合同草稿可编辑补录」）**：`signIntent` 仍按意向 `rent_terms` 起草、不改；意向条款没有月租的签约草稿，须在合同工作台草稿上「编辑租金条款」补录月租（押金随之按「收取月数×月租」重算）后才能提交审批，非纯提成合同月租为 0 提交即被拒（「请先在草稿上补录月租」）。
 - **实现保证（AUD-002/003 修复，2026-07-21）**：签约转换 = 一次原子业务事务——`signIntent` 公有入口 `@Transactional`，自动建商户 → 即建 `business_entity_bindings`（`binding_type` 四主体、`active`，稳定幂等键按意向派生）→ 合同 draft → 合同绑到来源意向 → 审计留痕（`leasing.intent.signed`，语义=合同草稿已起草，不表示线索已签约）；**任一步失败整体回滚，无孤儿商户/绑定/合同**。幂等重签命中同一商户与同一 active 绑定、不重复建。绑定创建仅在「无既有 `merchant_id`、签约自动建档」路径触发（带既有商户签约，其主体绑定由治理域主体绑定页管理，不在此重建）。
 - **合同起草原子性（AUD-002）**：`ContractService.createDraft` 亦已 `@Transactional`——字段/空间校验前置于落库（校验失败零脏写）、空间存在性+租期重叠早检在保存前完成、幂等命中(重放)也必过业务校验后才返回既有草稿；失败草稿整体回滚，重试走完整校验、无半成品可复用。
 
