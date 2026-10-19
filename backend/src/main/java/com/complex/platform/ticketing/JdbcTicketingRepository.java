@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -1126,10 +1126,10 @@ class JdbcTicketingRepository implements TicketingRepository {
     public Optional<CatalogPriceRef> findActiveCatalogPrice(String itemCode) {
         // 批10/E(V379):目录生效价(is_draft=FALSE + active)。草案不生效、归档无生效行 → empty → 调用方 fail-closed。
         return jdbcTemplate.query("""
-                SELECT merchant_id, price_cent FROM internal_price_catalog
+                SELECT id, merchant_id, price_cent FROM internal_price_catalog
                  WHERE item_code = :item_code AND is_draft = FALSE AND status = 'active'
                 """, Map.of("item_code", itemCode),
-                (rs, i) -> new CatalogPriceRef(rs.getString("merchant_id"), rs.getLong("price_cent")))
+                (rs, i) -> new CatalogPriceRef(rs.getString("merchant_id"), rs.getLong("price_cent"), rs.getString("id")))
                 .stream().findFirst();
     }
 

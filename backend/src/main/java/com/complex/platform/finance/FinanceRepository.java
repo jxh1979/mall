@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -328,6 +328,11 @@ public interface FinanceRepository {
 
     default List<FinanceRefundRecord> listRefunds(String merchantId, String projectId) {
         throw new UnsupportedOperationException("退款仓储未实现列表");
+    }
+
+    /** FS-021-R6：按可触及项目集合（null=平台全量）与商户（null=不限）列退款。 */
+    default List<FinanceRefundRecord> listRefundsForProjects(String merchantId, java.util.Set<String> projectIds) {
+        throw new UnsupportedOperationException("退款仓储未实现按项目列表");
     }
 
     default void appendRefundAttempt(FinanceRefundAttemptRecord attempt) {

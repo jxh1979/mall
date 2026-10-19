@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
@@ -359,12 +359,13 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
                 : (lead != null ? lead.intendedSpaceId() : null);
         java.math.BigDecimal area = intent.intendedAreaSqm() != null ? intent.intendedAreaSqm()
                 : (lead != null ? lead.intendedAreaSqm() : null);
-        MerchantRecord merchant = platformService.createMerchant(new MerchantProfileRequest(
+        MerchantRecord merchant = platformService.createMerchantOnLeasingSign(new MerchantProfileRequest(
                 "lease-sign-merchant-" + intent.id(),
                 "auto-created on leasing sign", List.of(),
                 contactName != null ? contactName : ("招商签约商户-" + intent.id()),
                 // V348 业态必填：线索意向业态直接带入（同五值词表）；线索阶段还没定业态的落「其他」，
                 // 由招商在商户档案里改正——不猜成「零售」，猜错＝通票分账把份额拆给错的业态。
+                // FS-024：落「其他」时档案里还没有主管公司可填，走不触发必填的签约建档入口；补填前由结算/分账写口 409 守住。
                 businessType != null ? businessType : "other",
                 null, null, null,
                 contactName, contactPhone, contactName,

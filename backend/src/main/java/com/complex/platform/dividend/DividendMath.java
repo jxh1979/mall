@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.money.MoneyRounding;
 
 /**
@@ -23,7 +25,9 @@ import com.complex.platform.common.money.MoneyRounding;
  *
  * <p>V299 恒等式（与 dividend_statements 的 DB CHECK 一一对应）：
  * <ul>
- *   <li>distributable = max(netProfit − applied, 0)（applied=本期结转弥补额；关闭期 applied=0，退化为 max(netProfit,0)）</li>
+ *   <li>distributable = max(netProfit − applied, 0)（applied=本期结转弥补额；关闭期 applied=0，退化为 max(netProfit,0)）；
+ *       V507 FS-014 财务已登记依法可分配金额时再与之取小（BSM L1785「本次分配不得超出该金额」；裁决 2026-10-19 第 1 条
+ *       「取小、不补」），结转链不动——取小不叠加扣减，已在核定额中扣除的亏损不重复扣</li>
  *   <li>platformShare + principalGross = distributable（余数归主理人，劈分不丢分）</li>
  *   <li>principalNet = principalGross − tax（tax = principalGross * taxRateBps / 10000，<b>整除截断·对齐税局</b>）</li>
  * </ul>
@@ -143,6 +147,22 @@ public final class DividendMath {
             boolean arrearsOffset, long arrearsOutstandingCent,
             long[] customDeductionRawCents,
             boolean payoutFloor, int reserveBps, long reserveFixedCent) {
+        return compute(netProfitCent, platformShareBps, taxRateBps, lossCarryforward, carryInCent,
+                arrearsOffset, arrearsOutstandingCent, customDeductionRawCents,
+                payoutFloor, reserveBps, reserveFixedCent, null);
+    }
+
+    /**
+     * V507 FS-014 完整分配（V309 + 依法可分配金额）。legalCapCent 为空时逐分等于 V309 口径。
+     *
+     * @param legalCapCent 财务登记的依法可分配金额（分，非负；空=未核定）
+     */
+    public static Distribution compute(
+            long netProfitCent, int platformShareBps, int taxRateBps,
+            boolean lossCarryforward, long carryInCent,
+            boolean arrearsOffset, long arrearsOutstandingCent,
+            long[] customDeductionRawCents,
+            boolean payoutFloor, int reserveBps, long reserveFixedCent, Long legalCapCent) {
         requireBps(platformShareBps, "platformShareBps");
         requireBps(taxRateBps, "taxRateBps");
         requireBps(reserveBps, "reserveBps");
@@ -152,6 +172,9 @@ public final class DividendMath {
         long carryIn = Math.max(carryInCent, 0L);
         long carryApplied = lossCarryforward ? Math.min(carryIn, Math.max(netProfitCent, 0L)) : 0L;
         long distributable = Math.max(netProfitCent - carryApplied, 0L);
+        if (legalCapCent != null) {
+            distributable = Math.min(distributable, Math.max(legalCapCent, 0L));
+        }
         long carryAfter = carryIn - carryApplied + Math.max(-netProfitCent, 0L);
 
         // R-7(2026-07-28 拍板):平台分成【四舍五入】——旧整除截断平台恒少收、差额白送主理人且不留痕。

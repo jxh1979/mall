@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,6 +15,7 @@ const SUMMARY = {
   rules: [
     { incomeType: "ticket", revenueStream: "all_pass_ticket", invoiceItemName: "综合体验服务费", taxCategory: "综合体验/娱乐平台服务", evidenceRequired: "购票页截图、用户协议、对账单", invoiceable: true },
     { incomeType: "giveaway_transfer", revenueStream: null, invoiceItemName: "内部领用单/成本转付单", taxCategory: "内部成本转付", evidenceRequired: "核销记录、内部结算价快照", invoiceable: false },
+    { incomeType: "points_issuance", revenueStream: null, invoiceItemName: "积分发行费", taxCategory: "积分发行费", evidenceRequired: "", invoiceable: true },
   ],
   overIssued: [
     { billId: "sb_1", incomeType: "ticket", settlementItemId: null, subjectName: "娱乐平台公司", dueAmountCent: 4000, openAmountCent: 10000, overIssuedCent: 6000 },
@@ -40,8 +42,18 @@ const ITEMS = {
       culturalFeeApplicable: false, culturalFeeRateBps: 0, culturalFeeCent: 0,
       status: "pending", invoiceNo: null, remark: null,
     },
+    {
+      // FS-022-R1：积分发行费月账单行——开票主体＝收款方（全国积分结算中心），购方＝合同销售方。
+      id: "sii_pts_1", billId: null, pointsBillId: "tpmb_1", settlementItemId: null, projectId: "p1",
+      periodStart: "2026-05-01", periodEnd: "2026-05-31", incomeType: "points_issuance",
+      subjectEntityId: "be_center", subjectName: "全国积分结算中心", invoiceItemName: "积分发行费",
+      taxCategory: "积分发行费", evidenceRequired: "",
+      amountCent: 6000, vatRateBps: 0, vatAmountCent: 0,
+      culturalFeeApplicable: false, culturalFeeRateBps: 0, culturalFeeCent: 0,
+      status: "pending", invoiceNo: null, remark: null, buyerEntityId: "be_seller", buyerName: "北辰酒吧经营公司",
+    },
   ],
-  page: 1, pageSize: 200, total: 2,
+  page: 1, pageSize: 200, total: 3,
 };
 
 function makeApi(): AdminApiClient {
@@ -97,6 +109,16 @@ describe("开票清单 ADM-STL-002", () => {
     expect(detail).toContain("已开票");
     expect(detail).toContain("运营服务费");
     expect(detail).toContain("不计");
+  });
+
+  it("积分发行费行显示收入类型与购方（合同销售方）", async () => {
+    renderPage();
+    const detail = () => screen.queryAllByTestId("settlement-invoice-item-table").map((t) => t.textContent ?? "").join("");
+    await waitFor(() => expect(detail()).toContain("北辰酒吧经营公司"));
+    expect(detail()).toContain("积分发行费");
+    expect(detail()).not.toContain("points_issuance");
+    const rules = screen.getByTestId("settlement-invoice-rule-table");
+    expect(rules.textContent).toContain("积分月账单收款方");
   });
 
   it("已超开时提示先红冲再重开", async () => {

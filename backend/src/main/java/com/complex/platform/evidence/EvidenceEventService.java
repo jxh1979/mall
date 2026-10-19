@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -574,6 +574,20 @@ public class EvidenceEventService {
                     throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "经销退款凭证不在授权项目范围内");
                 }
                 return authorizationService.currentMerchantIdQuietly();
+            }
+            // FS-021-R6（BSM L1673「所有数据默认按项目隔离」）：共享财务退款的凭证按退款所属项目办理，项目财务无商户编号也可上传/查看；
+            //   商户账号仍只限本商户的退款。
+            if (refund != null && "ar_ap_payment".equals(refund.sourceType())) {
+                String permission = "evidence.timeline.view".equals(evidencePermission) ? "finance.ar_ap.view" : "finance.refund.create";
+                authorizationService.requirePermissions(permission, evidencePermission);
+                String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
+                if (merchant != null && !merchant.equals(refund.merchantId())) {
+                    throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的退款凭证");
+                }
+                if (!authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(), permission, evidencePermission)) {
+                    throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "退款凭证不在授权项目范围内");
+                }
+                return Optional.ofNullable(merchant);
             }
         }
         if (!java.util.Set.of("dealer_admission", "dealer_overpayment").contains(type == null ? "" : type)) {

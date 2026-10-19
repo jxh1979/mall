@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.13
+// 文件版本：V0.14
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -95,14 +95,16 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                     leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                     rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
+                    supervising_company_id, supervising_company_reason
                 )
                 VALUES (
                     :id, :merchant_name, :merchant_type, :business_entity_id, :contract_entity_id,
                     :settlement_entity_id, :contact_name, :contact_phone, :owner_person, :mall_block_code, :area_square_meter,
                     :leased_area_square_meter, :secondary_contact_name, :secondary_contact_phone,
                     :rent_per_square_meter, :cooperation_form, :status, :created_at, :updated_at,
-                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason, :project_id
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason, :project_id,
+                    :supervising_company_id, :supervising_company_reason
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_name = EXCLUDED.merchant_name,
@@ -127,7 +129,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     delete_status = EXCLUDED.delete_status,
                     delete_requested_by = EXCLUDED.delete_requested_by,
                     delete_requested_at = EXCLUDED.delete_requested_at,
-                    delete_reason = EXCLUDED.delete_reason
+                    delete_reason = EXCLUDED.delete_reason,
+                    supervising_company_id = EXCLUDED.supervising_company_id,
+                    supervising_company_reason = EXCLUDED.supervising_company_reason
                 """, merchantParameters(merchant));
         return merchant;
     }
@@ -139,7 +143,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
+                       supervising_company_id, supervising_company_reason
                   FROM merchants
                  ORDER BY created_at DESC, id
                  LIMIT 500
@@ -154,7 +159,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
+                       supervising_company_id, supervising_company_reason
                   FROM merchants
                  WHERE (:include_archived OR (archived_at IS NULL AND delete_status <> 'approved'))
                  ORDER BY created_at DESC, id
@@ -194,7 +200,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
+                       supervising_company_id, supervising_company_reason
                   FROM merchants
                  WHERE id = :id
                 """, Map.of("id", merchantId), this::mapMerchant).stream().findFirst();
@@ -251,7 +258,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, area_square_meter,
                        leased_area_square_meter, secondary_contact_name, secondary_contact_phone,
                        rent_per_square_meter, cooperation_form, status, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id,
+                       supervising_company_id, supervising_company_reason
                   FROM merchants
                  WHERE project_id = :project_id AND business_entity_id = :business_entity_id
                    AND archived_at IS NULL AND delete_status <> 'approved'
@@ -486,7 +494,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 + "contract_entity_id, settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, "
                 + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
                 + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
-                + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id FROM merchants" + where
+                + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id, "
+                + "supervising_company_id, supervising_company_reason FROM merchants" + where
                 + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapMerchant);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
@@ -653,7 +662,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("delete_requested_by", merchant.deleteRequestedBy())
                 .addValue("delete_requested_at", timestampWithTimeZone(merchant.deleteRequestedAt()))
                 .addValue("delete_reason", merchant.deleteReason())
-                .addValue("project_id", merchant.projectId());
+                .addValue("project_id", merchant.projectId())
+                .addValue("supervising_company_id", merchant.supervisingCompanyId())
+                .addValue("supervising_company_reason", merchant.supervisingCompanyReason());
     }
 
     private MapSqlParameterSource projectParameters(ProjectRecord project) {
@@ -746,7 +757,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
                 resultSet.getString("delete_reason"),
-                resultSet.getString("project_id")
+                resultSet.getString("project_id"),
+                resultSet.getString("supervising_company_id"),
+                resultSet.getString("supervising_company_reason")
         );
     }
 
@@ -1360,7 +1373,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 + "contract_entity_id, settlement_entity_id, contact_name, contact_phone, owner_person, mall_block_code, "
                 + "area_square_meter, leased_area_square_meter, secondary_contact_name, secondary_contact_phone, "
                 + "rent_per_square_meter, cooperation_form, status, created_at, updated_at, archived_at, archived_by, "
-                + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id FROM merchants" + where
+                + "delete_status, delete_requested_by, delete_requested_at, delete_reason, project_id, "
+                + "supervising_company_id, supervising_company_reason FROM merchants" + where
                 + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapMerchant);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }

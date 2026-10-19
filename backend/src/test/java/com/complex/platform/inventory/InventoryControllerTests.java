@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -480,6 +480,11 @@ class InventoryControllerTests {
         @Bean
         InventoryService inventoryService() {
             return Mockito.mock(InventoryService.class);
+        }
+
+        @Bean
+        InventoryTransferFlowService inventoryTransferFlowService() {
+            return Mockito.mock(InventoryTransferFlowService.class);
         }
 
         @Bean

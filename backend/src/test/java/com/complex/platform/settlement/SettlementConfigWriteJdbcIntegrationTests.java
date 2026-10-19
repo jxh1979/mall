@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.03
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -235,6 +237,38 @@ class SettlementConfigWriteJdbcIntegrationTests {
         // 写入口按「填了哪列」推导 rule_type(每客单价)——第一段固定规则显式二选一,配置页/引擎同一解释。
         assertThat(rule.ruleType()).isEqualTo(JdbcSettlementBillRepository.RULE_PER_GUEST);
         assertThat(rule.fixedAmountCent()).isNull();
+    }
+
+    /**
+     * FS-024（ENUM L195「未指定的不得开通任何结算与分账」）：业态为「其他」且档案未指定主管公司的商户，
+     * 商户分账固定规则与内部结算价目录两个写入口一律 409 MERCHANT_SUPERVISING_COMPANY_MISSING；指定后放行。
+     */
+    @Test
+    void otherFormatMerchantWithoutSupervisingCompanyCannotOpenSettlementOrDistribution() {
+        String merchant = "merch_scw_other_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                + " VALUES (?, '其他业态商户', 'other', 'active', now(), now())", merchant);
+        assertThatThrownBy(() -> writeService.saveMerchantRate(
+                new MerchantRateRequest("mo1", PROJECT, merchant, 500L, null), DRAFTER))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_MISSING"));
+        assertThatThrownBy(() -> writeService.saveInternalPriceItem(
+                new SettlementConfigWriteRequests.InternalPriceItemRequest("mo2", null, merchant, "spirit", "FS024 商品", 1000L),
+                DRAFTER))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_MISSING"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ticket_distribution_merchant_rates WHERE merchant_id = ?", Integer.class, merchant))
+                .isZero();
+
+        jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES ('be_scw_city', '城市项目公司', 'project_company', 'active', now(), now()) ON CONFLICT (id) DO NOTHING");
+        jdbcTemplate.update("UPDATE merchants SET supervising_company_id = 'be_scw_city',"
+                + " supervising_company_reason = '无对应经营域' WHERE id = ?", merchant);
+        writeService.saveMerchantRate(new MerchantRateRequest("mo3", PROJECT, merchant, 500L, null), DRAFTER);
+        assertThat(writeService.saveInternalPriceItem(
+                new SettlementConfigWriteRequests.InternalPriceItemRequest("mo4", null, merchant, "spirit", "FS024 商品", 1000L),
+                DRAFTER)).startsWith("sku_");
     }
 
     /** S8 写入口收窄:①方式只剩 by_rank_tier(第二段);②每客单价/固定额严格二选一,双填双空均拒。 */

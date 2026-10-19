@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -153,6 +155,48 @@ public class JdbcSettlementInvoiceRepository {
     }
 
     // ------------------------------------------------------------------
+    // FS-022-R1：积分发行费月账单来源（已形成正式应收的账单；已收额取应收应付台账）
+    // ------------------------------------------------------------------
+
+    /** 锁住积分月账单行并取开票所需事实；尚未形成正式应收返回 null。同账单并发生成在此串行。 */
+    public PointsBillSource lockPointsBillSource(String pointsBillId) {
+        String sql = """
+                SELECT b.id, b.project_id, b.billing_month, b.seller_entity_id, b.seller_merchant_id,
+                       b.receiver_entity_id, a.paid_amount_cent
+                  FROM ticket_points_monthly_bills b
+                  JOIN ar_ap_items a ON a.id = b.ar_ap_item_id
+                 WHERE b.id = :id
+                   FOR UPDATE OF b
+                """;
+        return jdbcTemplate.query(sql, new MapSqlParameterSource().addValue("id", pointsBillId), rs -> rs.next()
+                ? new PointsBillSource(rs.getString("id"), rs.getString("project_id"),
+                        rs.getObject("billing_month", LocalDate.class), rs.getString("seller_entity_id"),
+                        rs.getString("seller_merchant_id"), rs.getString("receiver_entity_id"),
+                        rs.getLong("paid_amount_cent"))
+                : null);
+    }
+
+    /** 已收额高于已开额（占额三态合计）的积分月账单，供定时作业逐张生成清单。 */
+    public List<String> listPointsBillsToInvoice() {
+        return jdbcTemplate.queryForList("""
+                SELECT b.id FROM ticket_points_monthly_bills b
+                  JOIN ar_ap_items a ON a.id = b.ar_ap_item_id
+                 WHERE a.paid_amount_cent > (SELECT COALESCE(SUM(s.amount_cent), 0) FROM settlement_invoice_items s
+                                              WHERE s.points_bill_id = b.id AND s.status IN """ + OPEN_STATUSES + """
+                                            )
+                 ORDER BY b.id
+                """, new MapSqlParameterSource(), String.class);
+    }
+
+    public long sumOpenPointsAmountCent(String pointsBillId) {
+        Long v = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0) FROM settlement_invoice_items
+                 WHERE points_bill_id = :id AND status IN """ + OPEN_STATUSES,
+                new MapSqlParameterSource().addValue("id", pointsBillId), Long.class);
+        return v == null ? 0L : v;
+    }
+
+    // ------------------------------------------------------------------
     // 落库
     // ------------------------------------------------------------------
 
@@ -163,13 +207,13 @@ public class JdbcSettlementInvoiceRepository {
                     subject_entity_id, subject_name, invoice_item_name, tax_category, evidence_required,
                     amount_cent, vat_rate_bps, vat_amount_cent,
                     cultural_fee_applicable, cultural_fee_rate_bps, cultural_fee_cent,
-                    status, remark, created_by, updated_by
+                    status, remark, created_by, updated_by, points_bill_id, buyer_entity_id, buyer_merchant_id
                 ) VALUES (
                     :id, :bill_id, :settlement_item_id, :project_id, :period_start, :period_end, :income_type,
                     :subject_entity_id, :subject_name, :invoice_item_name, :tax_category, :evidence_required,
                     :amount_cent, :vat_rate_bps, :vat_amount_cent,
                     :cultural_fee_applicable, :cultural_fee_rate_bps, :cultural_fee_cent,
-                    :status, :remark, :actor, :actor
+                    :status, :remark, :actor, :actor, :points_bill_id, :buyer_entity_id, :buyer_merchant_id
                 )
                 """;
         jdbcTemplate.update(sql, new MapSqlParameterSource()
@@ -193,7 +237,10 @@ public class JdbcSettlementInvoiceRepository {
                 .addValue("cultural_fee_cent", item.culturalFeeCent())
                 .addValue("status", item.status())
                 .addValue("remark", item.remark())
-                .addValue("actor", item.updatedBy()));
+                .addValue("actor", item.updatedBy())
+                .addValue("points_bill_id", item.pointsBillId())
+                .addValue("buyer_entity_id", item.buyerEntityId())
+                .addValue("buyer_merchant_id", item.buyerMerchantId()));
     }
 
     public String findStatus(String itemId) {
@@ -235,7 +282,8 @@ public class JdbcSettlementInvoiceRepository {
                        subject_entity_id, subject_name, invoice_item_name, tax_category, evidence_required,
                        amount_cent, vat_rate_bps, vat_amount_cent,
                        cultural_fee_applicable, cultural_fee_rate_bps, cultural_fee_cent,
-                       status, invoice_no, remark
+                       status, invoice_no, remark, points_bill_id, buyer_entity_id,
+                       (SELECT be.entity_name FROM business_entities be WHERE be.id = buyer_entity_id) AS buyer_name
                   FROM settlement_invoice_items
                 """ + LIST_FILTER + """
                  ORDER BY period_start DESC, subject_name NULLS LAST, income_type, id
@@ -253,7 +301,8 @@ public class JdbcSettlementInvoiceRepository {
                         rs.getInt("vat_rate_bps"), rs.getLong("vat_amount_cent"),
                         rs.getBoolean("cultural_fee_applicable"), rs.getInt("cultural_fee_rate_bps"),
                         rs.getLong("cultural_fee_cent"), rs.getString("status"),
-                        rs.getString("invoice_no"), rs.getString("remark")));
+                        rs.getString("invoice_no"), rs.getString("remark"), rs.getString("points_bill_id"),
+                        rs.getString("buyer_entity_id"), rs.getString("buyer_name")));
     }
 
     public long count(String projectId, LocalDate periodStart, String subjectEntityId, String status) {
@@ -346,7 +395,14 @@ public class JdbcSettlementInvoiceRepository {
             LocalDate periodStart, LocalDate periodEnd, String incomeType, String subjectEntityId, String subjectName,
             String invoiceItemName, String taxCategory, String evidenceRequired, long amountCent, int vatRateBps,
             long vatAmountCent, boolean culturalFeeApplicable, int culturalFeeRateBps, long culturalFeeCent,
-            String status, String invoiceNo, String remark) {
+            String status, String invoiceNo, String remark,
+            // FS-022-R1：积分发行费行的来源账单与购方（合同销售方）；结算单行为 null。
+            String pointsBillId, String buyerEntityId, String buyerName) {
+    }
+
+    /** FS-022-R1：开票所需的积分月账单事实（收款方＝开票主体，合同销售方＝购方，已收额取应收应付台账）。 */
+    public record PointsBillSource(String pointsBillId, String projectId, LocalDate billingMonth, String sellerEntityId,
+            String sellerMerchantId, String receiverEntityId, long paidAmountCent) {
     }
 
     /** 按开票主体的分组汇总。 */

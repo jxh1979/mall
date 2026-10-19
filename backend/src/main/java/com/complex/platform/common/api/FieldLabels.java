@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.05
+// 文件版本：V0.07
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -63,6 +63,7 @@ public final class FieldLabels {
         p("applicability_basis", "税目适用依据");
         p("calculation_basis", "计税依据");
         p("failure_reason", "失败原因");
+        p("new_account_ref", "新收款账户");   // FS-021-R5：收款方财务负责人审批更换收款账户
         p("identity_basis", "身份认定依据");
         p("manual_reason", "人工抄表原因");
         p("new_meter_name", "新表名称");
@@ -86,6 +87,8 @@ public final class FieldLabels {
         p("entity_name", "主体名称");
         p("entity_role", "主体角色");
         p("business_entity_id", "经营主体");
+        p("supervising_company_id", "主管公司");
+        p("supervising_company_reason", "主管公司指定理由");
         p("subject_id", "主体");
         p("subject_type", "主体类型");
         p("partner_id", "合作方");
@@ -580,6 +583,12 @@ public final class FieldLabels {
         p("platform_company_id", "平台公司");
         p("next_user_id", "接手人员");
         p("target_service_staff_id", "目标服务人员");
+        // ── 第八批：内部要货差异处理 / 分红依法可分配金额 ───────────────
+        p("disposition_id", "差异处理登记");
+        p("responsible_party", "责任方");
+        p("legal_distributable_cent", "依法可分配金额");
+        p("tax_accounting_ref", "财税核算依据");
+        p("resolution_ref", "分配决议");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -44,6 +46,8 @@ class SettlementBatch2PostingTests {
         // 过账走 FinanceService.createArApItem(@GuardedAction)——需登录主体过审计/鉴权。
         // 平台管理员:merchant scope 空(与 bar 域过账测试同口径),无终端开关/准入策略拦截。
         TestSecurityActors.asPlatformAdmin();
+        // FS-021：过账到期日按财务指定付账日推算，缺规则/日历即拒绝过账——种已批规则与工作日历。
+        com.complex.platform.support.InternalPayDayFixtures.seed(jdbcTemplate);
     }
 
     @AfterEach
@@ -117,22 +121,39 @@ class SettlementBatch2PostingTests {
         assertThat(billStatus(billId)).isEqualTo("draft"); // 单不变
     }
 
-    /** S4/R-3 负额守卫:冲正月分账明细为负(向商户追回)时,负额过账口径未启用 → fail-loud 拒绝,防负行被静默跳过丢账。 */
+    /**
+     * FS-021-R1（BSM L755「一律按总额收付、收支两条线，不得轧差」；BSM L804「每一段冲回都生成反向结算记录」）：
+     * 负额明细（向商户追回）过账为该商户的单独追收应收，与他家/本家应付分别收付，不再拒绝过账、也不从应付里扣。
+     */
     @Test
-    void billWithNegativeItemsIsRejectedFailLoud() {
+    void negativeItemPostsAsSeparateRecoveryReceivable() {
         String billId = seedBill("confirmed");
         String pos = seedItem(billId, "m1", 5000L);
-        String neg = seedItem(billId, "m2", -3000L); // 冲正月:向 m2 追回 30 元
+        String neg = seedItem(billId, "m2", -3000L); // 向 m2 追回 30 元
 
-        assertThatThrownBy(() -> service.postBill(billId))
-                .hasMessageContaining("负额");
+        java.util.concurrent.atomic.AtomicInteger posted = new java.util.concurrent.atomic.AtomicInteger();
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> posted.set(service.postBill(billId))))
+                .as("负额明细不再拒绝过账").isNull();
+        assertThat(posted.get()).isEqualTo(2);
 
-        // fail-loud 在挂账前:两条明细都还是 draft、无 ar_ap、单不动(钱一分没动也一分没丢)。
-        assertThat(itemStatus(pos)).isEqualTo("draft");
-        assertThat(itemStatus(neg)).isEqualTo("draft");
-        assertThat(arApCountBySource(pos)).isZero();
-        assertThat(arApCountBySource(neg)).isZero();
-        assertThat(billStatus(billId)).isEqualTo("confirmed");
+        Map<String, Object> payable = arApBySource(pos);
+        assertThat(payable.get("direction")).isEqualTo("payable");
+        assertThat(((Number) payable.get("amount_cent")).longValue()).isEqualTo(5000L);
+        Map<String, Object> recovery = jdbcTemplate.queryForMap(
+                "SELECT * FROM ar_ap_items WHERE source_type = 'ticket_distribution_recovery' AND source_id = ?", neg);
+        assertThat(recovery.get("direction")).isEqualTo("receivable");
+        assertThat(((Number) recovery.get("amount_cent")).longValue()).isEqualTo(3000L);
+        assertThat(recovery.get("counterparty_id")).isEqualTo("m2");
+        assertThat(itemStatus(pos)).isEqualTo("posted");
+        assertThat(itemStatus(neg)).isEqualTo("posted");
+        assertThat(itemArApId(neg)).isEqualTo(recovery.get("id"));
+        assertThat(billStatus(billId)).isEqualTo("settled");
+
+        // 重放：已 settled 被拒，不新增第二笔追收。
+        assertThatThrownBy(() -> service.postBill(billId)).hasMessageContaining("只有已确认的账单才能过账");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM ar_ap_items WHERE source_type = 'ticket_distribution_recovery' AND source_id = ?",
+                Integer.class, neg)).isEqualTo(1);
     }
 
     // ---- helpers ----

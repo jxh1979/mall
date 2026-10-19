@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.04
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -152,6 +152,56 @@ public class JdbcAmusementFaultCompensationRepository {
                  WHERE id = :id AND status = 'issued'
                 """, new MapSqlParameterSource().addValue("id", id).addValue("verification_id", verificationId)
                 .addValue("at", ts(at)).addValue("price", settlementPriceCent)) > 0;
+    }
+
+    // ---------- FS-012 补偿履约与承担主体 ----------
+
+    /** 主体主数据中在用（active）的法律主体。 */
+    public boolean isActiveBusinessEntity(String id) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM business_entities WHERE id = :id AND status = 'active')",
+                new MapSqlParameterSource("id", id), Boolean.class));
+    }
+
+    /** 商户所属法律主体（merchants.business_entity_id）。 */
+    public Optional<String> findMerchantBusinessEntity(String merchantId) {
+        return jdbcTemplate.queryForList("SELECT business_entity_id FROM merchants WHERE id = :id",
+                new MapSqlParameterSource("id", merchantId), String.class).stream().filter(v -> v != null).findFirst();
+    }
+
+    /** 补偿履约行：一次核销一行（verification_id 唯一）。 */
+    public void insertFulfillment(String id, AmusementFaultCompensationItemRecord item, String bearerCompanyId, String entitlementId,
+            String verificationId, String providerMerchantId, Long settlementPriceCent, String priceCatalogEntryId, String payableItemId,
+            Instant fulfilledAt) {
+        jdbcTemplate.update("""
+                INSERT INTO amusement_compensation_fulfillments (id, item_id, batch_id, entitlement_id, verification_id, project_id,
+                        bearer_company_id, provider_merchant_id, settlement_price_cent, price_catalog_entry_id, payable_item_id, fulfilled_at)
+                VALUES (:id, :item_id, :batch_id, :entitlement_id, :verification_id, :project_id, :bearer_company_id,
+                        :provider_merchant_id, :price, :catalog_entry_id, :payable_item_id, :fulfilled_at)
+                """, new MapSqlParameterSource().addValue("id", id).addValue("item_id", item.id()).addValue("batch_id", item.batchId())
+                .addValue("entitlement_id", entitlementId).addValue("verification_id", verificationId)
+                .addValue("project_id", item.projectId()).addValue("bearer_company_id", bearerCompanyId)
+                .addValue("provider_merchant_id", providerMerchantId).addValue("price", settlementPriceCent)
+                .addValue("catalog_entry_id", priceCatalogEntryId).addValue("payable_item_id", payableItemId)
+                .addValue("fulfilled_at", ts(fulfilledAt)));
+    }
+
+    /** 冲正用：该次核销尚未冲正的补偿履约行（id、已形成的补偿应付）；已冲正的不再命中（重放不重复冲正）。 */
+    public Optional<Fulfillment> findFulfillmentByVerification(String verificationId) {
+        return jdbcTemplate.query("SELECT id, payable_item_id FROM amusement_compensation_fulfillments WHERE verification_id = :id"
+                        + " AND reversed_at IS NULL",
+                new MapSqlParameterSource("id", verificationId),
+                (rs, n) -> new Fulfillment(rs.getString("id"), rs.getString("payable_item_id"))).stream().findFirst();
+    }
+
+    public void markFulfillmentReversed(String id, String reversalItemId, Instant at) {
+        jdbcTemplate.update("""
+                UPDATE amusement_compensation_fulfillments SET reversed_at = :at, reversal_item_id = :reversal_item_id
+                 WHERE id = :id AND reversed_at IS NULL
+                """, new MapSqlParameterSource().addValue("id", id).addValue("reversal_item_id", reversalItemId).addValue("at", ts(at)));
+    }
+
+    public record Fulfillment(String id, String payableItemId) {
     }
 
     public List<AmusementFaultCompensationItemRecord> listItems(String batchId) {

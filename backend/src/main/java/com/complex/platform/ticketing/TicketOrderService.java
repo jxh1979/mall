@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -424,6 +424,8 @@ public class TicketOrderService {
         if (facePhotoService != null) {
             facePhotoService.discardStagedForOrder(order.id());
         }
+        // FS-013（BSM L755；裁决 2026-10-19 第 3 条「售出月」）：父票已建、paid_at 已定，结算域据此逐票锁定单一酒吧门票综合服务费。
+        eventPublisher.publishEvent(new TicketRewardFacts.Issued(order.id()));
         // P0 清单#2：支付成功（订单转 paid）→ 发积分入账事件，customer 域写 pending（幂等 source_doc=ticket_order/orderId）。
         // 无会员订单（customerId 为空）由消费者侧跳过。基础分=实付金额按后台可配的积分累计率折算（出厂默认每元 1 分，V340）。
         // 出票不产生奖励；实际使用事实由核销链提交。

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.util.List;
 import java.util.Optional;
@@ -144,8 +144,8 @@ public interface TicketingRepository {
         return Optional.empty();
     }
 
-    /** 目录生效价投影：绑定商户(引用归属校验用) + 价(分,0 合法=商户让利型)。 */
-    record CatalogPriceRef(String merchantId, long priceCent) {
+    /** 目录生效价投影：绑定商户(引用归属校验用) + 价(分,0 合法=商户让利型) + 目录行 id(FS-012:转正即新行,行 id＝价格版本)。 */
+    record CatalogPriceRef(String merchantId, long priceCent, String id) {
     }
 
     /**

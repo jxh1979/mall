@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.ApiException;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
@@ -69,6 +71,15 @@ public class InternalSettlementPriceResolver {
      * @return 解析到的目录生效价（可为 0）；空 = 未配价/无生效行，调用方 fail-closed
      */
     public Optional<Long> resolve(String barItemRef, String providerMerchantId, String catalogItemCode) {
+        return resolveVersioned(barItemRef, providerMerchantId, catalogItemCode).map(VersionedPrice::priceCent);
+    }
+
+    /** FS-012：解析到的目录生效价连同目录行 id（＝价格版本；转正即新行，旧行留库），补偿履约据此把价与版本一起锁定。 */
+    public record VersionedPrice(long priceCent, String catalogEntryId) {
+    }
+
+    /** 同 {@link #resolve}，另带目录行版本。 */
+    public Optional<VersionedPrice> resolveVersioned(String barItemRef, String providerMerchantId, String catalogItemCode) {
         if (barItemRef != null) {
             // 提供方归属必须对得上：A 吧的商品不能给 B 吧的权益当成本口径，否则钱结给谁全凭巧合。
             // 提供方为空 = 该权益没绑提供方 → 无从校验 → 不解析（自营吧同样不豁免，见 S5）。
@@ -82,18 +93,23 @@ public class InternalSettlementPriceResolver {
     }
 
     /** 目录生效价 + 条目归属校验（条目绑定商户必须 = 提供方，跨商户/跨项目引用在此断路）。 */
-    private Optional<Long> activeCatalogPrice(String itemCode, String providerMerchantId) {
+    private Optional<VersionedPrice> activeCatalogPrice(String itemCode, String providerMerchantId) {
         if (itemCode == null) {
             return Optional.empty();
         }
         return repository.findActiveCatalogPrice(itemCode)
                 .filter(ref -> providerMerchantId != null && providerMerchantId.equals(ref.merchantId()))
-                .map(TicketingRepository.CatalogPriceRef::priceCent);
+                .map(ref -> new VersionedPrice(ref.priceCent(), ref.id()));
     }
 
     /** 解析不到即抛 —— fail-closed 统一出口，错误码/文案只此一份。 */
     public long require(String barItemRef, String providerMerchantId, String catalogItemCode) {
-        return resolve(barItemRef, providerMerchantId, catalogItemCode)
+        return requireVersioned(barItemRef, providerMerchantId, catalogItemCode).priceCent();
+    }
+
+    /** 同 {@link #require}，另带目录行版本。 */
+    public VersionedPrice requireVersioned(String barItemRef, String providerMerchantId, String catalogItemCode) {
+        return resolveVersioned(barItemRef, providerMerchantId, catalogItemCode)
                 .orElseThrow(() -> ApiException.badRequest("ENTITLEMENT_PRICE_UNRESOLVED",
                         "该赠送权益未配置提供方的内部结算价（目录无生效价），无法核销结算"));
     }

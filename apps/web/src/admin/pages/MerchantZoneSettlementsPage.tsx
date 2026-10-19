@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -11,6 +11,7 @@ import { PermissionButton } from "../security/Can";
 import { TraceLink } from "../components/TraceLink";
 import type { AdminPageProps, MerchantZoneSettlementRow } from "../types";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { executionLabel } from "./FinanceInternalPayablePanel";
 
 const DISPUTE_PERMS = ["merchant.portal.settlement.dispute"];
 // 与后端 dispute_reason 列宽（500）一致；后端另有合并后长度校验。
@@ -128,6 +129,102 @@ function readKpiFocusFromUrl(): KpiFocus | null {
 function focusTitle(subset: KpiFocus["subset"]): string {
   if (subset === "open") return "未结清";
   return "结算单";
+}
+
+// FS-021-R4/R5：门票分账——本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来。
+// BSM L1597「异议期自该账单在商户专区可查看之日的次日起算」；BSM L1683「上述顺延一律不另行通知收款方，但该笔款项的待付状态须在系统中
+// 对收款方可见……付款失败待处理……注明失败原因与预计重付时间……更换收款账户须经收款方所属公司财务负责人审批」。
+// 对数字有异议走投诉与异议统一通道（BSM L1323，提出异议期间付款义务不暂停）。
+const PAYEE_PERMS = ["merchant.portal.payee_account.approve"];
+const TICKET_ROUTE_LABELS: Record<string, string> = {
+  ticket_distribution: "通票分账应付",
+  ticket_distribution_recovery: "通票分账追收",
+  platform_incentive_subsidy: "平台激励补贴",
+  single_bar_service_fee: "单店门票综合服务费",
+  compensation_fulfillment: "补偿新增履约结算",
+  compensation_fulfillment_recovery: "补偿应付已付追收",
+};
+type TicketSettlementRow = {
+  arApItemId: string; direction?: string; sourceType?: string; amountCent?: number; unpaidAmountCent?: number;
+  objectionDeadline?: string; designatedPayDay?: string; dueDate?: string; executionStatus: string; inTransit: boolean;
+  failureReason?: string | null; expectedRepayDate?: string | null;
+};
+
+function ticketStatusText(row: TicketSettlementRow): string {
+  if (row.direction === "receivable") return row.executionStatus === "settled" ? "已结清" : "待收（本商户应付平台）";
+  const label = executionLabel(row.executionStatus, row.inTransit);
+  return row.executionStatus === "failed_pending"
+    ? `${label}（原因：${row.failureReason ?? "—"}；预计重付 ${cnDate(row.expectedRepayDate)}）`
+    : label;
+}
+
+function TicketSettlementsSection({ api, effectivePermissions, setActionResult }: Pick<AdminPageProps, "api" | "effectivePermissions" | "setActionResult">) {
+  const [rows, setRows] = React.useState<TicketSettlementRow[]>([]);
+  const [picked, setPicked] = React.useState("");
+  const [account, setAccount] = React.useState("");
+  const [reason, setReason] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const load = React.useCallback(async () => {
+    const data = await api.get<TicketSettlementRow[]>("/api/v1/merchant-portal/ticket-settlements");
+    setRows(Array.isArray(data) ? data : []);
+  }, [api]);
+  React.useEffect(() => { void load().catch((e) => setError(e instanceof Error ? e.message : "门票分账读取失败")); }, [load]);
+  const selected = rows.find((row) => row.arApItemId === picked);
+
+  async function submitAccountChange() {
+    if (!selected || selected.executionStatus !== "failed_pending") { setError("只有付款失败待处理的款项可更换收款账户。"); return; }
+    if (!account.trim() || !reason.trim()) { setError("新收款账户与原因必填。"); return; }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.post(`/api/v1/merchant-portal/ticket-settlements/${encodeURIComponent(selected.arApItemId)}/account-change`,
+        { newAccountRef: account.trim(), reason: reason.trim() });
+      setActionResult({ action: "merchant_zone_payee_account_approved", status: "recorded", result });
+      setAccount("");
+      setReason("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "提交失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div data-testid="merchant-zone-ticket-settlements">
+      <h3>门票分账</h3>
+      <p className="admin-muted-action">异议截止日按账单在商户专区可查看之日次日起算；付款日为财务指定付账日（异议期未满、节假日或资金不足依规则顺延），顺延不另行通知，以此处状态为准。对数字有异议请通过投诉与异议通道提出，异议期间付款义务不暂停。</p>
+      {rows.length === 0 ? <p className="admin-muted-action" data-testid="merchant-zone-ticket-empty">暂无门票分账往来。</p> : (
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="merchant-zone-ticket-table">
+            <thead><tr><th>选择</th><th>款项</th><th>金额（元）</th><th>异议截止日</th><th>指定付账日</th><th>付款日</th><th>执行状态</th></tr></thead>
+            <tbody>{rows.map((row) => (
+              <tr key={row.arApItemId} data-testid={`merchant-zone-ticket-row-${row.arApItemId}`}>
+                <td><input type="radio" name="mz-ticket" aria-label={`选择款项 ${row.arApItemId}`} data-testid={`merchant-zone-ticket-pick-${row.arApItemId}`}
+                  checked={picked === row.arApItemId} onChange={() => setPicked(row.arApItemId)} /></td>
+                <td>{TICKET_ROUTE_LABELS[row.sourceType ?? ""] ?? "其他内部结算"}</td>
+                <td className="admin-num">{money(row.amountCent)}</td>
+                <td>{cnDate(row.objectionDeadline)}</td>
+                <td>{cnDate(row.designatedPayDay)}</td>
+                <td>{cnDate(row.dueDate)}</td>
+                <td>{ticketStatusText(row)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      <div className="admin-form-row" data-testid="merchant-zone-ticket-account-form">
+        <label>新收款账户<input data-testid="merchant-zone-ticket-account" value={account} onChange={(e) => setAccount(e.target.value)} maxLength={256} /></label>
+        <label>原因<input data-testid="merchant-zone-ticket-account-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={PAYEE_PERMS} data-testid="merchant-zone-ticket-account-submit"
+          disabled={busy || selected?.executionStatus !== "failed_pending"} onClick={() => { void submitAccountChange(); }}>
+          财务负责人审批更换收款账户
+        </PermissionButton>
+      </div>
+      {error ? <div className="admin-form-error" data-testid="merchant-zone-ticket-error">{error}</div> : null}
+    </div>
+  );
 }
 
 export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
@@ -327,6 +424,7 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
           </>
         )}
       </AdminDataState>
+      <TicketSettlementsSection api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.17
+// 文件版本：V0.19
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
@@ -84,7 +84,7 @@ class PlatformServiceTests {
                 null, null, "Jane", "18800000011",
                 null, null, null, null, null, null, null, null, "active", "org_1"));
 
-        assertThat(service.listMerchants(false, " other ", 2, 1).items())
+        assertThat(service.listMerchants(false, " retail ", 2, 1).items())
                 .extracting(MerchantRecord::id).containsExactly(second.id());
         service.listMerchants(true, null, 0, 0);
         service.listMerchants(false, "bar", 99, 1);
@@ -97,7 +97,7 @@ class PlatformServiceTests {
                 .containsEntry("entry", "/api/v1/platform/merchants")
                 .containsEntry("projectId", "") // D-032：平台管理员查询不按项目限定
                 .containsEntry("includeArchived", false)
-                .containsEntry("businessFormat", "other")
+                .containsEntry("businessFormat", "retail")
                 .containsEntry("page", 2).containsEntry("pageSize", 1)
                 .containsEntry("count", 1).containsEntry("total", 2L);
         assertThat(views.get(0).metadata().toString())
@@ -149,7 +149,7 @@ class PlatformServiceTests {
     private MerchantRecord seedMerchant(String key) {
         if (!platformRepository.businessEntityExists("be_1")) seedEntity("be_1");
         return service.createMerchant(new MerchantProfileRequest(
-                key, "seed", List.of(), "存档删除测试商户", "other", "be_1",
+                key, "seed", List.of(), "存档删除测试商户", "retail", "be_1",
                 null, null, "Jane", "18800000011",
                 null, null, null, null, null, null, null, null, "active", "org_1"));
     }
@@ -177,7 +177,7 @@ class PlatformServiceTests {
         service.requestDeleteMerchant(merchant.id(), new MerchantDeleteRequest("keep-delete-req", "清理"));
 
         MerchantRecord updated = service.updateMerchant(merchant.id(), new MerchantProfileRequest(
-                "keep-update", "rename", List.of(), "改名后的商户", "other", "be_other",
+                "keep-update", "rename", List.of(), "改名后的商户", "retail", "be_other",
                 "be_contract_x", "be_settlement_x", "Jane", "18800000011",
                 null, null, null, null, null, null, null, null, "active"));
 
@@ -195,7 +195,7 @@ class PlatformServiceTests {
     @Test
     void updateMerchantRejectsUnknownMerchant() {
         assertThatThrownBy(() -> service.updateMerchant("mch_missing", new MerchantProfileRequest(
-                "update-missing", "update", List.of(), "幽灵商户", "other", null,
+                "update-missing", "update", List.of(), "幽灵商户", "retail", null,
                 null, null, null, null, null, null, null, null, null, null, null, null, "active")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("MERCHANT_NOT_FOUND"));
@@ -206,12 +206,12 @@ class PlatformServiceTests {
     @Test
     void createMerchantRejectsCooperationFormOutsideSixModes() {
         assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
-                "coop-bad", "seed", List.of(), "合作方式错的商户", "other", null,
+                "coop-bad", "seed", List.of(), "合作方式错的商户", "retail", null,
                 null, null, null, null, null, null, null, null, null, null, null, "fixed_rent_plus_commission", "active", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("MERCHANT_COOPERATION_FORM_INVALID"));
         MerchantRecord lease = service.createMerchant(new MerchantProfileRequest(
-                "coop-lease", "seed", List.of(), "租赁商户", "other", null,
+                "coop-lease", "seed", List.of(), "租赁商户", "retail", null,
                 null, null, null, null, null, null, null, null, null, null, null, "lease", "active", "org_1"));
         assertThat(lease.cooperationForm()).isEqualTo("lease");
         assertThat(seedMerchant("coop-null").cooperationForm()).isNull();
@@ -221,12 +221,12 @@ class PlatformServiceTests {
     @Test
     void createMerchantRejectsStatusOutsideEnumeratedStates() {
         assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
-                "status-bad", "seed", List.of(), "状态错的商户", "other", null,
+                "status-bad", "seed", List.of(), "状态错的商户", "retail", null,
                 null, null, null, null, null, null, null, null, null, null, null, null, "draft", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
         assertThat(service.createMerchant(new MerchantProfileRequest(
-                "status-pending", "seed", List.of(), "待准入商户", "other", null,
+                "status-pending", "seed", List.of(), "待准入商户", "retail", null,
                 null, null, null, null, null, null, null, null, null, null, null, null, "pending_admission", "org_1")).status())
                 .isEqualTo("pending_admission");
     }
@@ -507,6 +507,114 @@ class PlatformServiceTests {
                 null, null, null, null, null, null, null, null, "active", "org_1")))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("MERCHANT_BUSINESS_FORMAT_INVALID"));
+    }
+
+    // ---- FS-024（ENUM L195「选“其他”的商户，必须在商户档案里指定一家主管公司并说明理由，未指定的不得开通任何结算与分账」；
+    //      操作员裁决 2026-10-19 第二轮第 7 条「本批补字段与闸」；控制席：主管公司只能从在用的城市项目公司／域主管公司中选）----
+
+    private MerchantProfileRequest otherMerchant(String key, String supervisingCompanyId, String reason) {
+        return new MerchantProfileRequest(
+                key, "fs024", List.of(), "其他业态商户", "other", null,
+                null, null, "Jane", "18800000011",
+                null, null, null, null, null, null, null, null, "active", "org_1",
+                supervisingCompanyId, reason);
+    }
+
+    @Test
+    void createMerchantOtherFormatRequiresSupervisingCompanyAndReason() {
+        seedEntity("be_sup");
+        assertThatThrownBy(() -> service.createMerchant(otherMerchant("fs024-none", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_REQUIRED"));
+        assertThatThrownBy(() -> service.createMerchant(otherMerchant("fs024-noreason", "be_sup", " ")))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_REQUIRED"));
+        MerchantRecord saved = service.createMerchant(otherMerchant("fs024-ok", "be_sup", "无对应经营域，由该公司主管"));
+        assertThat(saved.supervisingCompanyId()).isEqualTo("be_sup");
+        assertThat(saved.supervisingCompanyReason()).isEqualTo("无对应经营域，由该公司主管");
+        // 修改档案同样校验：清掉主管公司即拒。
+        assertThatThrownBy(() -> service.updateMerchant(saved.id(), otherMerchant("fs024-upd", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_REQUIRED"));
+    }
+
+    /**
+     * 招商签约自动建档（LeasingService.autoCreateMerchantForSign）：线索未定业态落「其他」时档案里还没有主管公司可填，
+     * 该入口不触发必填（ENUM L195 的后果只是「未指定的不得开通任何结算与分账」，由结算/分账写口 409 守住）；填了无效主体仍拒；
+     * 之后人工更新档案仍按 FS-024 必填。
+     */
+    @Test
+    void leasingSignAutoCreateOfOtherFormatMerchantDoesNotRequireSupervisingCompany() {
+        MerchantRecord saved = service.createMerchantOnLeasingSign(otherMerchant("fs024-sign", null, null));
+        assertThat(platformRepository.findMerchantById(saved.id()).orElseThrow())
+                .extracting(MerchantRecord::merchantType, MerchantRecord::supervisingCompanyId, MerchantRecord::supervisingCompanyReason)
+                .containsExactly("other", null, null);
+        assertThatThrownBy(() -> service.createMerchantOnLeasingSign(otherMerchant("fs024-sign-bad", "be_missing", "理由")))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_INVALID"));
+        assertThatThrownBy(() -> service.updateMerchant(saved.id(), otherMerchant("fs024-sign-upd", null, null)))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_REQUIRED"));
+    }
+
+    /** 主管公司沿用 requireBusinessEntity 的项目关联闸（M009-006）：项目范围操作者只能填关联当前项目的主体；平台管理员不受此限。 */
+    @Test
+    void projectScopedOperatorCannotPickSupervisingCompanyOutsideCurrentProject() {
+        twoProjectFixtures();
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor("employee-a", "employee-a", "employee", "org_1", null, "active"), "token", List.of()));
+        assertThatThrownBy(() -> service.createMerchant(otherMerchant("fs024-scope-b", "scoped-company-b", "他项目主体")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PROJECT_SCOPE_MISMATCH"));
+        assertThat(service.createMerchant(otherMerchant("fs024-scope-a", "scoped-company-a", "本项目主体")).supervisingCompanyId())
+                .isEqualTo("scoped-company-a");
+        TestSecurityActors.asPlatformAdmin();
+        assertThat(service.createMerchant(otherMerchant("fs024-scope-admin", "scoped-company-b", "平台管理员不受项目限定")).supervisingCompanyId())
+                .isEqualTo("scoped-company-b");
+    }
+
+    @Test
+    void createMerchantRejectsSupervisingCompanyUnlessFormatIsOther() {
+        seedEntity("be_sup");
+        assertThatThrownBy(() -> service.createMerchant(new MerchantProfileRequest(
+                "fs024-bar", "fs024", List.of(), "酒吧商户", "bar", null,
+                null, null, "Jane", "18800000011",
+                null, null, null, null, null, null, null, null, "active", "org_1",
+                "be_sup", "酒吧归娱乐平台公司，不该填")))
+                .isInstanceOfSatisfying(ApiException.class, e ->
+                        assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_NOT_ALLOWED"));
+    }
+
+    @Test
+    void createMerchantRejectsSupervisingCompanyThatIsNotActiveProjectOrManagementCompany() {
+        platformRepository.saveBusinessEntity(new BusinessEntityRecord(
+                "be_platform", "顶层平台", "platform", null, null, null, "active", Instant.EPOCH, Instant.EPOCH));
+        platformRepository.saveBusinessEntity(new BusinessEntityRecord(
+                "be_retired", "停用域公司", "management_company", null, null, null, "inactive", Instant.EPOCH, Instant.EPOCH));
+        for (String bad : List.of("be_platform", "be_retired", "be_missing")) {
+            assertThatThrownBy(() -> service.createMerchant(otherMerchant("fs024-" + bad, bad, "理由")))
+                    .as(bad)
+                    .isInstanceOfSatisfying(ApiException.class, e ->
+                            assertThat(e.code()).isEqualTo("MERCHANT_SUPERVISING_COMPANY_INVALID"));
+        }
+    }
+
+    /** 按前端真实请求形状（adminClient.mapKeys 把键转蛇形）反序列化后创建，主管公司两项落到档案。 */
+    @Test
+    void createMerchantFromSnakeCasePayloadKeepsSupervisingCompany() throws Exception {
+        seedEntity("be_city");
+        ObjectMapper mapper = new ObjectMapper()
+                .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE);
+        MerchantProfileRequest request = mapper.readValue("""
+                {"idempotency_key":"merchant-profile-create-fs024","merchant_name":"其他业态商户",
+                 "merchant_type":"other","contact_name":"张三","contact_phone":"13912345678",
+                 "supervising_company_id":"be_city","supervising_company_reason":"无对应经营域，由城市项目公司主管",
+                 "project_id":"org_1"}
+                """, MerchantProfileRequest.class);
+        MerchantRecord saved = service.createMerchant(request);
+        assertThat(platformRepository.findMerchantById(saved.id()).orElseThrow())
+                .extracting(MerchantRecord::merchantType, MerchantRecord::supervisingCompanyId,
+                        MerchantRecord::supervisingCompanyReason)
+                .containsExactly("other", "be_city", "无对应经营域，由城市项目公司主管");
     }
 
     // V348 按业态查询（分账按业态拆份额要用）：只返回该业态的商户。
@@ -894,7 +1002,7 @@ class PlatformServiceTests {
 
     private MerchantRecord unboundMerchant(String key) {
         return service.createMerchant(new MerchantProfileRequest(
-                key, "seed", List.of(), "待绑定商户", "other", null, null, null,
+                key, "seed", List.of(), "待绑定商户", "retail", null, null, null,
                 "Jane", "18800000011", null, null, null, null, null, null, null, null, "active", "org_1"));
     }
 
@@ -1058,7 +1166,7 @@ class PlatformServiceTests {
 
     private MerchantProfileRequest numericMerchant(String key, String status,
             BigDecimal area, BigDecimal leasedArea, BigDecimal rent) {
-        return new MerchantProfileRequest(key, null, List.of(), "数值验证商户", "other",
+        return new MerchantProfileRequest(key, null, List.of(), "数值验证商户", "retail",
                 null, null, null, null, null, null, null, area, leasedArea, null, null, rent, null, status, "org_1");
     }
 
@@ -1198,7 +1306,7 @@ class PlatformServiceTests {
                 .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         for (String entity : List.of("missing-company", "scoped-company-b")) {
             MerchantProfileRequest request = mapper.convertValue(Map.of(
-                    "idempotencyKey", "initial-" + entity, "merchantName", "商户", "merchantType", "other",
+                    "idempotencyKey", "initial-" + entity, "merchantName", "商户", "merchantType", "retail",
                     "status", "active", "businessEntityId", entity), MerchantProfileRequest.class);
             assertThatThrownBy(() -> service.createMerchant(request)).isInstanceOf(ApiException.class);
         }
@@ -1214,11 +1322,11 @@ class PlatformServiceTests {
                 "deleteStatus", "none", "createdAt", Instant.EPOCH, "updatedAt", Instant.EPOCH), MerchantRecord.class));
         org.junit.jupiter.api.Assertions.assertAll(
                 () -> assertThatThrownBy(() -> service.updateMerchant("scoped-merchant-a", mapper.convertValue(Map.of(
-                        "idempotencyKey", "move-project", "merchantName", "商户", "merchantType", "other",
+                        "idempotencyKey", "move-project", "merchantName", "商户", "merchantType", "retail",
                         "projectId", "other-project", "status", "active"), MerchantProfileRequest.class)))
                         .isInstanceOf(ApiException.class),
                 () -> assertThatThrownBy(() -> service.updateMerchant("legacy-unassigned", mapper.convertValue(Map.of(
-                        "idempotencyKey", "claim-project", "merchantName", "商户", "merchantType", "other",
+                        "idempotencyKey", "claim-project", "merchantName", "商户", "merchantType", "retail",
                         "projectId", "org_1", "status", "active"), MerchantProfileRequest.class)))
                         .isInstanceOf(ApiException.class));
     }

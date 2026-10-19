@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -81,7 +81,18 @@ class FinanceRefundLifecycleTests {
     }
 
     private void actor(String id) {
-        when(authorization.currentActor()).thenReturn(new AccessActor(id, id, "staff", "org_1", null, "active"));
+        // FS-021-R6：共享财务退款按「可触及项目 + 商户交集」办理；本类沿用 currentMerchantScope / currentProjectScopeQuietly
+        //   两个桩表达操作人范围——商户账号的商户号随桩变化，可触及项目：有项目桩＝只到该项目，商户账号＝只到本类款项所在项目，
+        //   否则为平台口径。
+        doAnswer(i -> new AccessActor(id, id, "staff", "org_1", authorization.currentMerchantScope().orElse(null), "active"))
+                .when(authorization).currentActor();
+        doAnswer(i -> authorization.currentMerchantScope()).when(authorization).currentMerchantIdQuietly();
+        doAnswer(i -> authorization.currentProjectScopeQuietly()
+                .map(AuthorizationService.ProjectReach::ownOnly)
+                .orElseGet(() -> authorization.currentMerchantScope().isPresent()
+                        ? AuthorizationService.ProjectReach.ownOnly("project")
+                        : new AuthorizationService.ProjectReach(true, true, null, false, Set.of())))
+                .when(authorization).projectReach(any(), any(String[].class));
     }
 
     private void itemDirection(String direction) {

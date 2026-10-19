@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -503,6 +503,61 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
                 .containsEntry("resolution_id",batchId).containsEntry("resolved_by",engineer);
         assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id=?",Integer.class,"ie_cg02_"+suffix+"_2")).isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM issued_entitlements WHERE order_id=? AND compensation_item_id IS NOT NULL",Integer.class,"order_cg02_"+suffix)).isEqualTo(1);
+    }
+
+    /**
+     * FS-012-R1（BSM L800、ENUM L148「本次完整补偿新增实际履约所用的内部结算价及其规则版本，按补偿实际履约时生效的版本计算并锁定到该笔
+     * 补偿履约记录」）：游乐入场补偿按履约时目录生效价锁价，不取票面值；提供方与承担主体同为游乐公司时只留履约记录、不对自己挂账。
+     */
+    @Test
+    void amusementCompensationAdmissionLocksCatalogPriceNotFaceValue() {
+        seed(5, 1);
+        String merchant = "mch_cg02_" + suffix;
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, business_entity_id, status, created_at, updated_at)"
+                + " VALUES (?, '游乐补偿测试商户', 'amusement', 'be_amusement', 'active', now(), now())", merchant);
+        String sku = "sku_cg02_" + suffix;
+        jdbcTemplate.update("INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name, price_cent, status,"
+                + " is_draft, updated_by, created_at, updated_at) VALUES (?, ?, ?, 'amusement', '游乐补偿测试', 2600, 'active', FALSE,"
+                + " 'seed_fs012', now(), now())", sku + "_v1", sku, merchant);
+        jdbcTemplate.update("UPDATE entitlement_templates SET catalog_item_code=?, merchant_id=? WHERE id=?", sku, merchant, "et_cg02_" + suffix);
+        jdbcTemplate.update("UPDATE issued_entitlements SET merchant_id=?, value_amount_cent=8800 WHERE order_id=?", merchant, "order_cg02_" + suffix);
+        enter(1);
+        lifecycle.endEarly(sessionId, new AmusementSessionLifecycleService.EndRequest("early-fs012-" + suffix, true, Instant.now(),
+                "设备临时停机，现场清场完成", List.of()));
+        String batchId = jdbcTemplate.queryForObject("SELECT batch_id FROM amusement_fault_compensation_items WHERE original_session_id=?",
+                String.class, sessionId);
+        String complex = businessDays.complexId(projectId);
+        AmusementBusinessDayTestFixture.authenticate(AmusementBusinessDayTestFixture.actor(jdbcTemplate, complex,
+                List.of("amusement.park_fault.confirm_as_head", "amusement.park_fault.view")), complex);
+        compensationService.confirmBatch(batchId, new CompensationBatchConfirmRequest("fs012-head-" + suffix,
+                AmusementParkWideFaultService.ROLE_HEAD, "负责人确认"));
+        AmusementBusinessDayTestFixture.authenticate(AmusementBusinessDayTestFixture.actor(jdbcTemplate, complex,
+                List.of("amusement.park_fault.confirm_as_engineering_safety", "amusement.park_fault.view")), complex);
+        compensationService.confirmBatch(batchId, new CompensationBatchConfirmRequest("fs012-eng-" + suffix,
+                AmusementParkWideFaultService.ROLE_ENGINEERING_SAFETY, "工程岗确认"));
+        String compensationCode = jdbcTemplate.queryForObject("SELECT entitlement_code FROM issued_entitlements WHERE order_id=?"
+                + " AND compensation_item_id IS NOT NULL", String.class, "order_cg02_" + suffix);
+        String next = "sess2_cg02_" + suffix;
+        jdbcTemplate.update("INSERT INTO amusement_sessions (id, project_id, start_time, end_time, capacity, used_capacity, status,"
+                + " created_at, updated_at) VALUES (?, ?, now() - interval '5 minutes', now() + interval '1 hour', 100, 0, 'open', now(), now())",
+                next, projectId);
+        lifecycle.lockSessionWindow(repository.findSessionById(next).orElseThrow());
+        authenticate(userId);
+        amusementService.createVerification(new VerificationRequest("in_comp_" + suffix, "entitlement_code", compensationCode, null, null,
+                Map.of("project_id", projectId, "session_id", next, "staff_id", "usr_gate")));
+
+        Map<String, Object> item = jdbcTemplate.queryForMap("SELECT id, fulfilled_verification_id, fulfilled_settlement_price_cent"
+                + " FROM amusement_fault_compensation_items WHERE batch_id=?", batchId);
+        assertThat(item.get("fulfilled_settlement_price_cent")).isEqualTo(2600L);
+        assertThat(jdbcTemplate.queryForObject("SELECT settlement_price_cent FROM ticket_verifications WHERE id=?", Long.class,
+                item.get("fulfilled_verification_id"))).isEqualTo(2600L);
+        Map<String, Object> fulfillment = jdbcTemplate.queryForMap("SELECT id, settlement_price_cent, price_catalog_entry_id, payable_item_id,"
+                + " bearer_company_id, provider_merchant_id FROM amusement_compensation_fulfillments WHERE item_id=?", item.get("id"));
+        assertThat(fulfillment).containsEntry("settlement_price_cent", 2600L).containsEntry("price_catalog_entry_id", sku + "_v1")
+                .containsEntry("payable_item_id", null).containsEntry("bearer_company_id", "be_amusement")
+                .containsEntry("provider_merchant_id", merchant);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type='compensation_fulfillment' AND source_id=?",
+                Integer.class, fulfillment.get("id"))).isZero();
     }
 
     /** 无已入场客人的提前结束：不建补偿记录、不建入场待办（未入场的票可再次使用）。 */

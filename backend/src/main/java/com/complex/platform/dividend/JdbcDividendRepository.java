@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -44,7 +44,7 @@ class JdbcDividendRepository implements DividendRepository {
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent, "
             + "loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent, "
-            + "principal_type, custom_deduction_cent";
+            + "principal_type, custom_deduction_cent, legal_distributable_cent";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -340,7 +340,7 @@ class JdbcDividendRepository implements DividendRepository {
                     paid_at, created_at, updated_at,
                     loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent,
                     loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent,
-                    principal_type, custom_deduction_cent)
+                    principal_type, custom_deduction_cent, legal_distributable_cent)
                 VALUES (:id, :merchant_id, :plan_id, :kind, :period_label, :period_start, :period_end,
                     :principal_user_id, :platform_share_bps, :tax_rate_bps, :revenue_domains,
                     :include_inventory_cost, :expense_types, :revenue_cent, :cost_cent, :expense_cent,
@@ -349,7 +349,7 @@ class JdbcDividendRepository implements DividendRepository {
                     :computed_by, NULL, NULL, NULL, NULL, NULL, NULL, :created_at, :updated_at,
                     :loss_carryforward_enabled, :loss_carryforward_in_cent, :loss_carryforward_applied_cent,
                     :loss_carryforward_after_cent, :arrears_offset_cent, :reserve_withheld_cent, :payout_cent,
-                    :principal_type, :custom_deduction_cent)
+                    :principal_type, :custom_deduction_cent, :legal_distributable_cent)
                 """, new MapSqlParameterSource()
                 .addValue("id", s.id())
                 .addValue("merchant_id", s.merchantId())
@@ -388,7 +388,8 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("reserve_withheld_cent", s.reserveWithheldCent())
                 .addValue("payout_cent", s.payoutCent())
                 .addValue("principal_type", s.principalType())
-                .addValue("custom_deduction_cent", s.customDeductionCent()));
+                .addValue("custom_deduction_cent", s.customDeductionCent())
+                .addValue("legal_distributable_cent", s.legalDistributableCent(), Types.BIGINT));
     }
 
     @Override
@@ -526,7 +527,8 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getLong("reserve_withheld_cent"),
                 rs.getLong("payout_cent"),
                 rs.getString("principal_type"),
-                rs.getLong("custom_deduction_cent"));
+                rs.getLong("custom_deduction_cent"),
+                rs.getObject("legal_distributable_cent", Long.class));
     }
 
     // ── V304 发放保护线留存·释放 ──────────────────────────────
@@ -632,13 +634,6 @@ class JdbcDividendRepository implements DividendRepository {
 
     // ── 三来源期间取数 ─────────────────────────────────────────
 
-    private static MapSqlParameterSource windowParams(String merchantId, Instant from, Instant to) {
-        return new MapSqlParameterSource()
-                .addValue("merchant_id", merchantId)
-                .addValue("from", timestampWithTimeZone(from))
-                .addValue("to", timestampWithTimeZone(to));
-    }
-
     private long sumOrZero(String sql, MapSqlParameterSource params) {
         Long total = jdbcTemplate.queryForObject(sql, params, Long.class);
         return total == null ? 0L : total;
@@ -682,26 +677,80 @@ class JdbcDividendRepository implements DividendRepository {
     }
 
     @Override
-    public long sumTicketAllocatedCent(String merchantId, Instant from, Instant to) {
-        // allocated_revenue_cent IS NULL（direct 出票/无订单）不计，保守不归任何商户（清单#4 同口径）。
+    public long sumTicketSettledCent(String merchantId, LocalDate periodStart, LocalDate periodEnd) {
+        // 与结算域同一事实源：月度分账单（生产只由月结作业按平台口径每月一张）已确认后的该商户明细终额（带符号，跨月冲正自然净额）。
         return sumOrZero("""
-                SELECT COALESCE(SUM(allocated_revenue_cent), 0)
-                  FROM issued_entitlements
-                 WHERE merchant_id = :merchant_id
-                   AND allocated_revenue_cent IS NOT NULL
-                   AND created_at >= :from AND created_at < :to
-                """, windowParams(merchantId, from, to));
+                SELECT COALESCE(SUM(i.final_amount_cent), 0)
+                  FROM settlement_items i
+                  JOIN settlement_bills b ON b.id = i.bill_id
+                 WHERE i.merchant_id = :merchant_id
+                   AND b.status IN ('confirmed', 'settled')
+                   AND b.period_start >= :period_start AND b.period_end <= :period_end
+                """, new MapSqlParameterSource()
+                        .addValue("merchant_id", merchantId)
+                        .addValue("period_start", periodStart, Types.DATE)
+                        .addValue("period_end", periodEnd, Types.DATE));
     }
 
     @Override
-    public long sumTicketRefundCent(String merchantId, Instant from, Instant to) {
-        return sumOrZero("""
-                SELECT COALESCE(SUM(refund_amount_cent), 0)
-                  FROM ticket_refunds
-                 WHERE merchant_id = :merchant_id
-                   AND status = 'success'
-                   AND succeeded_at >= :from AND succeeded_at < :to
-                """, windowParams(merchantId, from, to));
+    public List<String> listUnconfirmedTicketSettlementMonths(List<String> months) {
+        return months.stream().filter(month -> !Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM settlement_bills
+                                WHERE period_start = :month_start AND status IN ('confirmed', 'settled'))
+                """, new MapSqlParameterSource("month_start", java.time.YearMonth.parse(month).atDay(1)),
+                Boolean.class))).toList();
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.settlement.SingleBarServiceFeeService singleBarServiceFees;
+
+    @Override
+    public long sumSingleBarServiceFeeCent(String merchantId, LocalDate periodStart, LocalDate periodEnd) {
+        return singleBarServiceFees.barTotal(merchantId, periodStart, periodEnd);
+    }
+
+    @Override
+    public Optional<DividendRecords.DividendLegalConfirmationRecord> findLegalConfirmation(
+            String merchantId, String periodLabel) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, period_label, legal_distributable_cent, tax_accounting_ref, resolution_ref,
+                       note, confirmed_by, confirmed_at
+                  FROM dividend_legal_confirmations
+                 WHERE merchant_id = :merchant_id AND period_label = :period_label
+                """, new MapSqlParameterSource()
+                        .addValue("merchant_id", merchantId)
+                        .addValue("period_label", periodLabel),
+                (rs, n) -> new DividendRecords.DividendLegalConfirmationRecord(
+                        rs.getString("id"), rs.getString("merchant_id"), rs.getString("period_label"),
+                        rs.getLong("legal_distributable_cent"), rs.getString("tax_accounting_ref"),
+                        rs.getString("resolution_ref"), rs.getString("note"), rs.getString("confirmed_by"),
+                        nullableInstant(rs, "confirmed_at"))).stream().findFirst();
+    }
+
+    @Override
+    public void upsertLegalConfirmation(DividendRecords.DividendLegalConfirmationRecord c) {
+        jdbcTemplate.update("""
+                INSERT INTO dividend_legal_confirmations (id, merchant_id, period_label, legal_distributable_cent,
+                    tax_accounting_ref, resolution_ref, note, confirmed_by, confirmed_at)
+                VALUES (:id, :merchant_id, :period_label, :legal_distributable_cent, :tax_accounting_ref,
+                    :resolution_ref, :note, :confirmed_by, :confirmed_at)
+                ON CONFLICT (merchant_id, period_label) DO UPDATE SET
+                    legal_distributable_cent = EXCLUDED.legal_distributable_cent,
+                    tax_accounting_ref = EXCLUDED.tax_accounting_ref,
+                    resolution_ref = EXCLUDED.resolution_ref,
+                    note = EXCLUDED.note,
+                    confirmed_by = EXCLUDED.confirmed_by,
+                    confirmed_at = EXCLUDED.confirmed_at
+                """, new MapSqlParameterSource()
+                .addValue("id", c.id())
+                .addValue("merchant_id", c.merchantId())
+                .addValue("period_label", c.periodLabel())
+                .addValue("legal_distributable_cent", c.legalDistributableCent())
+                .addValue("tax_accounting_ref", c.taxAccountingRef())
+                .addValue("resolution_ref", c.resolutionRef())
+                .addValue("note", c.note(), Types.VARCHAR)
+                .addValue("confirmed_by", c.confirmedBy())
+                .addValue("confirmed_at", timestampWithTimeZone(c.confirmedAt())));
     }
 
     @Override

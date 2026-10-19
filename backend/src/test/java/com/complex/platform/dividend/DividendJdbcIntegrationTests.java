@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,6 +18,7 @@ import com.complex.platform.dividend.DividendRecords.DividendStatementLineRecord
 import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
+import com.complex.platform.dividend.dto.DividendLegalConfirmationRequest;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
@@ -278,37 +279,9 @@ class DividendJdbcIntegrationTests {
         // ── 种子三来源（月中时点，落 2026-07 经营日窗）────────────────────────
         Instant inWindow = Instant.parse("2026-07-15T12:00:00Z");
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.ofInstant(inWindow, java.time.ZoneOffset.UTC);
-        // 收入·售票：issued_entitlements 权益分配收入 2500.00 − ticket_refunds 退款 500.00。
-        jdbcTemplate.update("""
-                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, status, created_at, updated_at)
-                VALUES ('tt_div_jdbc', '分红JDBC测试票', 'fixed', 'active', ?, ?)
-                """, ts, ts);
-        jdbcTemplate.update("""
-                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
-                        default_value_cent, status, created_at, updated_at)
-                VALUES ('et_div_jdbc', '分红JDBC权益', 'admission', 1, 0, 'active', ?, ?)
-                """, ts, ts);
-        // fk_issued_entitlements_order（V159 NOT VALID 对新写强制）：权益前先落票订单父行
-        // （TicketTransferJdbcIntegrationTests 同款种子范式）。@Transactional 回滚自动清理，无 FK 序问题。
-        jdbcTemplate.update("""
-                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
-                        pay_status, issue_status, status, created_at, updated_at)
-                VALUES ('order_div_jdbc', 'ONO_DIV_JDBC', 'tt_div_jdbc', 1, 'web', 250000,
-                        'paid', 'issued', 'created', ?, ?)
-                """, ts, ts);
-        jdbcTemplate.update("""
-                INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id,
-                        entitlement_code, entitlement_type, merchant_id, total_times, used_times,
-                        allocated_revenue_cent, status, valid_from, valid_to, created_at, updated_at)
-                VALUES ('ie_div_jdbc', 'tt_div_jdbc', 'order_div_jdbc', 'et_div_jdbc', 'code_div_jdbc',
-                        'admission', ?, 1, 0, 250000, 'active', ?, ?, ?, ?)
-                """, MERCHANT, ts, ts, ts, ts);
-        // V324：退款有效终态=success，收入仅按 status='success' 且 succeeded_at 落窗扣减（非 created_at/全状态）。
-        jdbcTemplate.update("""
-                INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel,
-                        status, succeeded_at, merchant_id, created_at, updated_at)
-                VALUES ('tr_div_jdbc', 'ie_div_jdbc', 50000, '分红JDBC测试退款', 'original', 'success', ?, ?, ?, ?)
-                """, ts, MERCHANT, ts, ts);
+        // 收入·售票（FS-015）：已确认月度分账单——单一酒吧门票直付 1200.00 + 通票池分配 800.00。
+        seedSettledTicketRevenue("e2e", "2026-07", "confirmed", 120_000L, 80_000L);
+        seedLegalConfirmation("2026-07");
         // 成本：V296 出库流水（仅源库位）带成本 600.00。
         jdbcTemplate.update("""
                 INSERT INTO inventory_items (id, item_name, item_type, unit, status, created_at, updated_at)
@@ -350,7 +323,7 @@ class DividendJdbcIntegrationTests {
         assertThat(result.computed()).hasSize(1);
         DividendStatementRecord statement = result.computed().get(0);
 
-        // 数字恒等三来源：收入 = 250000−50000；成本 = 60000；费用 = 人工30000+租金40000；净利 = 70000。
+        // 数字恒等三来源：收入 = 已核销结算 120000+80000；成本 = 60000；费用 = 人工30000+租金40000；净利 = 70000。
         assertThat(statement.revenueCent()).isEqualTo(200_000L);
         assertThat(statement.costCent()).isEqualTo(60_000L);
         assertThat(statement.expenseCent()).isEqualTo(70_000L);
@@ -361,27 +334,24 @@ class DividendJdbcIntegrationTests {
         assertThat(statement.principalNetCent()).isEqualTo(11_200L);
 
         // 三来源独立复核：单头金额与来源台账逐项一致。
-        Long ticketAlloc = jdbcTemplate.queryForObject(
-                "SELECT SUM(allocated_revenue_cent) FROM issued_entitlements WHERE merchant_id = ?",
-                Long.class, MERCHANT);
-        Long ticketRefund = jdbcTemplate.queryForObject(
-                "SELECT SUM(refund_amount_cent) FROM ticket_refunds WHERE merchant_id = ?", Long.class, MERCHANT);
+        Long ticketSettled = jdbcTemplate.queryForObject(
+                "SELECT SUM(final_amount_cent) FROM settlement_items WHERE merchant_id = ?", Long.class, MERCHANT);
         Long cost = jdbcTemplate.queryForObject(
                 "SELECT SUM(total_cost_cent) FROM inventory_stock_movements WHERE merchant_id = ? "
                         + "AND source_location_id IS NOT NULL AND target_location_id IS NULL",
                 Long.class, MERCHANT);
         Long expense = jdbcTemplate.queryForObject(
                 "SELECT SUM(amount_cent) FROM merchant_expense_entries WHERE merchant_id = ?", Long.class, MERCHANT);
-        assertThat(statement.revenueCent()).isEqualTo(ticketAlloc - ticketRefund);
+        assertThat(statement.revenueCent()).isEqualTo(ticketSettled);
         assertThat(statement.costCent()).isEqualTo(cost);
         assertThat(statement.expenseCent()).isEqualTo(expense);
 
         // 明细行落表且来源行合计 = 净利润（含独立的租金费用行）。
         List<DividendStatementLineRecord> lines = repository.listLines(statement.id(), null);
         long sourceSum = lines.stream()
-                .filter(l -> !List.of("net_profit", "loss_carryforward", "platform_share", "principal_gross",
-                        "tax_withheld", "principal_net", "arrears_offset", "reserve_withheld", "payout")
-                        .contains(l.lineType()))
+                .filter(l -> !List.of("net_profit", "loss_carryforward", "legal_cap", "platform_share",
+                        "principal_gross", "tax_withheld", "principal_net", "arrears_offset", "reserve_withheld",
+                        "payout").contains(l.lineType()))
                 .mapToLong(DividendStatementLineRecord::amountCent).sum();
         assertThat(sourceSum).isEqualTo(statement.netProfitCent());
         assertThat(lines).anyMatch(l -> l.lineType().equals("expense_rent_allocation") && l.amountCent() == -40_000L);
@@ -585,6 +555,9 @@ class DividendJdbcIntegrationTests {
                         source, source_ref, note, operator_user_id, created_at)
                 VALUES ('mex_jdbc_lcf', ?, '2026-07', 'labor', 50000, 'manual', NULL, '亏损结转JDBC', 'usr_div_jdbc', ?)
                 """, MERCHANT, java.time.OffsetDateTime.ofInstant(ts, java.time.ZoneOffset.UTC));
+        seedSettledTicketRevenue("lcf07", "2026-07", "confirmed", 0L, 0L);
+        seedSettledTicketRevenue("lcf08", "2026-08", "confirmed", 0L, 0L);
+        seedLegalConfirmation("2026-07");
 
         DividendService service = serviceWithPlatformActor("usr_div_jdbc");
         DividendStatementRecord july = service.compute(
@@ -610,8 +583,13 @@ class DividendJdbcIntegrationTests {
 
     // ── V303 欠款抵扣真实结算端到端（真调 FinanceService.settleArApItem，非 mock）──
 
-    /** 种子售票分量收入（allocated_revenue_cent），落 2026-07 窗；无退款/成本/费用 → 净利=收入。 */
-    private void seedTicketRevenue(String suffix, long allocatedCent, java.time.OffsetDateTime ts) {
+    /** 种子售票收入，落 2026-07；无退款/成本/费用 → 净利=收入。 */
+    private void seedTicketRevenue(String suffix, long cent, java.time.OffsetDateTime ts) {
+        seedSettledTicketRevenue(suffix, "2026-07", "confirmed", cent, 0L);
+    }
+
+    /** 旧「发放即分摊」口径的权益分摊额（issued_entitlements.allocated_revenue_cent，含未核销）。 */
+    private void seedIssuedEntitlementRevenue(String suffix, long allocatedCent, java.time.OffsetDateTime ts) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, status, created_at, updated_at)
                 VALUES (?, '分红欠款抵扣票', 'fixed', 'active', ?, ?)
@@ -633,6 +611,35 @@ class DividendJdbcIntegrationTests {
                 VALUES (?, ?, ?, ?, ?, 'admission', ?, 1, 0, ?, 'active', ?, ?, ?, ?)
                 """, "ie_" + suffix, "tt_" + suffix, "order_" + suffix, "et_" + suffix, "code_" + suffix,
                 MERCHANT, allocatedCent, ts, ts, ts, ts);
+    }
+
+    /** FS-015 已核销门票结算额：一张月度分账单（项目隔离），该商户单店直付明细 + 通票池分配明细（0 不落）。 */
+    private void seedSettledTicketRevenue(String suffix, String month, String billStatus, long exclusiveCent, long poolCent) {
+        java.time.YearMonth ym = java.time.YearMonth.parse(month);
+        jdbcTemplate.update("""
+                INSERT INTO settlement_bills (id, project_id, period_start, period_end, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, now(), now())
+                """, "sb_div_" + suffix, "proj_div_" + suffix, ym.atDay(1), ym.atEndOfMonth(), billStatus);
+        if (exclusiveCent != 0L) {
+            jdbcTemplate.update("""
+                    INSERT INTO settlement_items (id, bill_id, merchant_id, distribution_method,
+                            calculated_amount_cent, final_amount_cent, status)
+                    VALUES (?, ?, ?, 'exclusive_full', ?, ?, 'draft')
+                    """, "si_div_ex_" + suffix, "sb_div_" + suffix, MERCHANT, exclusiveCent, exclusiveCent);
+        }
+        if (poolCent != 0L) {
+            jdbcTemplate.update("""
+                    INSERT INTO settlement_items (id, bill_id, merchant_id, distribution_method,
+                            calculated_amount_cent, final_amount_cent, status)
+                    VALUES (?, ?, ?, 'by_rank_tier', ?, ?, 'draft')
+                    """, "si_div_pool_" + suffix, "sb_div_" + suffix, MERCHANT, poolCent, poolCent);
+        }
+    }
+
+    /** FS-014 财务已登记依法可分配金额（核定额高于经营口径 → 本次分配按经营口径，既有金额断言不变）。 */
+    private void seedLegalConfirmation(String period) {
+        repository.upsertLegalConfirmation(new DividendRecords.DividendLegalConfirmationRecord("dlc_jdbc_" + period,
+                MERCHANT, period, 1_000_000_000L, "财税核算报告", "股东会分配决议", null, "usr_div_fin", Instant.now()));
     }
 
     /** 种子该商户一笔未清应收（direction=receivable, counterparty=merchant）。 */
@@ -662,6 +669,7 @@ class DividendJdbcIntegrationTests {
     void arrearsOffsetSettlesReceivablesAndPaysNetAtApprove() {
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("arr", 1_000_000L, ts);
+        seedLegalConfirmation("2026-07");
         seedReceivable("arap_r1_arr", "AR-ARR-001", 60_000L, ts);
         seedReceivable("arap_r2_arr", "AR-ARR-002", 40_000L, ts);
         repository.insertPlan(arrearsPlan("divp_jdbc_arr"));
@@ -717,6 +725,7 @@ class DividendJdbcIntegrationTests {
         TestSecurityActors.asPlatformAdmin();   // 预检原子路径本不达 settleArApItem，仍一致注入上下文（保险）。
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("arr2", 1_000_000L, ts);
+        seedLegalConfirmation("2026-07");
         seedReceivable("arap_r_arr2", "AR-ARR2-001", 100_000L, ts);
         repository.insertPlan(arrearsPlan("divp_jdbc_arr2"));
 
@@ -767,6 +776,7 @@ class DividendJdbcIntegrationTests {
     void payoutFloorWithholdsReserveAsReleasablePayableAtApprove() {
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("floor", 1_000_000L, ts);
+        seedLegalConfirmation("2026-07");
         repository.insertPlan(floorPlan("divp_jdbc_floor"));
 
         DividendService service = serviceWithPlatformActor("usr_div_jdbc");
@@ -820,6 +830,7 @@ class DividendJdbcIntegrationTests {
     void reserveReleaseFlipsWithheldToReleasedIdempotently() {
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("rel", 1_000_000L, ts);
+        seedLegalConfirmation("2026-07");
         repository.insertPlan(floorPlan("divp_jdbc_rel"));
 
         DividendService service = serviceWithRealPlatformActor("usr_div_real_submitter");
@@ -907,5 +918,106 @@ class DividendJdbcIntegrationTests {
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                 .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
                         .isEqualTo("DIVIDEND_RESERVE_NOT_RELEASED"));
+    }
+
+    // ── FS-015 分红票务收入取已确认月度分账结算额（BSM L755「确认已核销部分的门票收入」、L1689、L807）──
+
+    private static DividendPlanRecord ticketOnlyPlan(String id) {
+        Instant now = Instant.parse("2026-07-18T00:00:00Z");
+        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+                8000, 2000, "monthly", List.of("ticket"), false, List.of("labor"),
+                null, "active", null, "usr_div_jdbc", now, now, false, false, false, 0, 0L);
+    }
+
+    @Test
+    void ticketRevenueUsesConfirmedSettlementNotIssuedEntitlements() {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        // 旧口径：发放即分摊 250000（含未核销）+ 成功退票 30000 —— 都不再进入分红收入（退票必为完全未核销票）。
+        seedIssuedEntitlementRevenue("fs015", 250_000L, ts);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_refunds (id, target_id, refund_amount_cent, reason, refund_channel,
+                        status, succeeded_at, merchant_id, created_at, updated_at)
+                VALUES ('tr_div_fs015', 'ie_fs015', 30000, '未核销退票', 'original', 'success', ?, ?, ?, ?)
+                """, ts, MERCHANT, ts, ts);
+        // 已确认月度分账单：单店直付 120000 + 通票池分配 80000。
+        seedSettledTicketRevenue("fs015", "2026-07", "confirmed", 120_000L, 80_000L);
+        // FS-013 单一酒吧门票综合服务费（售出月 2026-07）：未退票 2000+1500，封顶 3000；已退票那张不计。
+        jdbcTemplate.update("""
+                INSERT INTO single_bar_service_fee_months (id, project_id, bar_merchant_id, billing_month, cap_cent)
+                VALUES ('sbfm_div_fs015', 'proj_div_fs015', ?, DATE '2026-07-01', 3000)
+                """, MERCHANT);
+        jdbcTemplate.update("""
+                INSERT INTO single_bar_service_fee_tickets (parent_ticket_id, order_id, month_id, base_cent, config_id,
+                        fee_bps, fee_cent, refund_id)
+                VALUES ('tkt_div_fs015_a', 'ord_div_fs015', 'sbfm_div_fs015', 20000, 'csfc_div', 1000, 2000, NULL),
+                       ('tkt_div_fs015_b', 'ord_div_fs015', 'sbfm_div_fs015', 15000, 'csfc_div', 1000, 1500, NULL),
+                       ('tkt_div_fs015_c', 'ord_div_fs015', 'sbfm_div_fs015', 9990, 'csfc_div', 1000, 999, 'tr_div_fs015')
+                """);
+        repository.insertPlan(ticketOnlyPlan("divp_jdbc_fs015"));
+
+        DividendStatementRecord s = serviceWithPlatformActor("usr_div_jdbc").compute(
+                new DividendComputeRequest("fs015-jdbc-c", "2026-07", "official", MERCHANT)).computed().get(0);
+        assertThat(s.revenueCent()).isEqualTo(200_000L);
+        assertThat(s.expenseCent()).isEqualTo(3_000L);
+        assertThat(s.netProfitCent()).isEqualTo(197_000L);
+        List<DividendStatementLineRecord> lines = repository.listLines(s.id(), null);
+        assertThat(lines).anyMatch(l -> l.lineType().equals("revenue_ticket") && l.amountCent() == 200_000L
+                && l.detail().contains("已核销"));
+        assertThat(lines).noneMatch(l -> l.lineType().equals("revenue_ticket_refund"));
+        assertThat(lines).anyMatch(l -> l.lineType().equals("expense_ticket_service_fee") && l.amountCent() == -3_000L);
+    }
+
+    @Test
+    void draftOverPoolBillBlocksOfficialDividend() {
+        // 当月分账单仍为 draft（超池待特批）：正式分红不得确认（与酒吧侧「来源未定即拒」同范式）。
+        seedSettledTicketRevenue("fs015d", "2031-05", "draft", 0L, 50_000L);
+        repository.insertPlan(ticketOnlyPlan("divp_jdbc_fs015d"));
+        assertThatThrownBy(() -> serviceWithPlatformActor("usr_div_jdbc").compute(
+                new DividendComputeRequest("fs015d-jdbc-c", "2031-05", "official", MERCHANT)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .satisfies(e -> assertThat(((com.complex.platform.common.api.ApiException) e).code())
+                        .isEqualTo("TICKET_SETTLEMENT_PENDING"))
+                .hasMessageContaining("2031-05");
+    }
+
+    // ── FS-014 依法可分配金额（BSM L1785；裁决 2026-10-19 第 1 条「取小、不补」）──
+
+    @Test
+    void legalConfirmationSnakeCaseRequestCapsAndApprovalPaysCapped() throws Exception {
+        java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
+        seedTicketRevenue("legal", 1_000_000L, ts);
+        repository.insertPlan(ticketOnlyPlan("divp_jdbc_legal"));
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        DividendStatementRecord draft = service.compute(
+                new DividendComputeRequest("legal-jdbc-c", "2026-07", "official", MERCHANT)).computed().get(0);
+        // 前端真实请求形状（adminClient 蛇形键）。
+        DividendLegalConfirmationRequest request = new com.fasterxml.jackson.databind.ObjectMapper()
+                .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
+                .readValue("""
+                        {"idempotency_key":"legal-jdbc-1","legal_distributable_cent":900000,
+                         "tax_accounting_ref":"财税核算报告 TA-2026-07","resolution_ref":"股东会分配决议 R-2026-07",
+                         "note":"已提取法定公积"}
+                        """, DividendLegalConfirmationRequest.class);
+        DividendStatementRecord capped = service.confirmLegal(draft.id(), request);
+        assertThat(capped.distributableCent()).isEqualTo(900_000L);
+        assertThat(repository.findStatementById(capped.id()).orElseThrow().legalDistributableCent()).isEqualTo(900_000L);
+        assertThat(repository.findStatementById(draft.id()).orElseThrow().status()).isEqualTo("voided");
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT legal_distributable_cent, tax_accounting_ref, resolution_ref, confirmed_by"
+                        + " FROM dividend_legal_confirmations WHERE merchant_id = ? AND period_label = '2026-07'", MERCHANT);
+        assertThat(((Number) row.get("legal_distributable_cent")).longValue()).isEqualTo(900_000L);
+        assertThat(row.get("resolution_ref")).isEqualTo("股东会分配决议 R-2026-07");
+        assertThat(row.get("confirmed_by")).isEqualTo("usr_div_jdbc");
+
+        service.submit(capped.id(), new DividendActionRequest("legal-jdbc-s", null));
+        serviceWithPlatformActor("usr_div_jdbc_approver").approve(capped.id(), new DividendActionRequest("legal-jdbc-a", null));
+        Long payable = jdbcTemplate.queryForObject(
+                "SELECT amount_cent FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?",
+                Long.class, capped.id());
+        assertThat(payable).isEqualTo(capped.payoutCent()).isEqualTo(144_000L);
+        // DB 硬保证：本次分配超出依法核定额的单不得落库。
+        assertInsertRejected(() -> jdbcTemplate.update(
+                "UPDATE dividend_statements SET legal_distributable_cent = 1 WHERE id = ?", capped.id()),
+                "chk_ds_distributable");
     }
 }

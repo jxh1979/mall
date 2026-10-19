@@ -1,8 +1,8 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -156,6 +156,22 @@ class TicketingServiceTests {
 
         assertThat(orderEvents).noneMatch(PointsEarnRequestedEvent.class::isInstance);
         assertThat(orderEvents).noneMatch(PointsConfirmRequestedEvent.class::isInstance);
+    }
+
+    // FS-013（BSM L755；裁决 2026-10-19 第 3 条「售出月，只退款剔除」）：出票完成发布出票事实，单一酒吧门票据此逐票锁定综合服务费。
+    @Test
+    void issuingOrderPublishesIssuedFactForServiceFeeLock() {
+        TicketTypeRecord ticketType = createTicketType("issued-fact");
+        EntitlementTemplateRecord template = createTemplate("issued-fact", 1, 9900L);
+        service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
+                "issued-fact-bind", "bind", List.of(), template.id(), 1, 2, 9900L, "default", 1, 9900L));
+        TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
+                "issued-fact-order", "create", List.of(), ticketType.id(), null, 1,
+                LocalDate.parse("2026-06-20"), "admin", "13800138000", "customer_issued_fact"));
+        service.issueTicketOrder(order.id(), new StatusChangeRequest(
+                "issued-fact-issue", "issue", "paid offline", List.of()));
+
+        assertThat(orderEvents).contains(new TicketRewardFacts.Issued(order.id()));
     }
 
     @Test

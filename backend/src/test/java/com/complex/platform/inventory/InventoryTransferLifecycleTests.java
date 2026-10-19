@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -18,13 +20,11 @@ import com.complex.platform.evidence.AuditEvent;
 import com.complex.platform.evidence.AuditEventRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.TraceabilityService;
-import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceRepository;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import com.complex.platform.inventory.dto.ReceiveTransferRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,12 +32,11 @@ import java.util.Objects;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 /**
  * AUD-002/003：借调归还生命周期（return/cancel）单测。
  * 借用型(lending+borrow)收货后归还→溯源码归属翻回出让方+状态 returned；
- * 已挂应付的调拨单取消→冲销应付(未收款才可冲)+状态 cancelled。
+ * 已发货的单不能直接取消（FS-011：须实际退回验收或经复核完成损失处理），只有新建的借调单可直接取消。
  *
  * <p>InventoryRepository 用 Mockito mock + 有状态 Answer(orders/lines/traceOwners 三张内存表),
  * 只桩流转/溯源相关方法,避免手写上百个接口方法。
@@ -137,41 +136,15 @@ class InventoryTransferLifecycleTests {
     }
 
     @Test
-    void cancelShippedOrderReversesUnpaidPayableAndMarksCancelled() {
-        seedOrder(order("to_ship", "supply", null, "supply_1", "m_b", "shipped"));
-        ArApItemRecord payable = new ArApItemRecord(
-                "arap_trf_to_ship", "ARAP-TRF-to_ship", "payable", "supply_1", "inventory_transfer", "to_ship",
-                12000L, 0L, 12000L, "CNY", LocalDate.parse("2026-07-01"), null,
-                "pending_payment", Instant.now(), Instant.now(), "m_b", null);
-        when(financeRepository.findArApItemById("arap_trf_to_ship")).thenReturn(Optional.of(payable));
+    void cancelShippedOrderIsRejectedUntilReturnOrLoss() {
+        // FS-011（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库」）：
+        // 已发货的借调单不能直接取消，也不动台账。
+        seedOrder(order("to_lend", "lending", "purchase", "m_a", "m_b", "shipped"));
 
-        InventoryTransferOrderRecord cancelled = service.cancelTransferOrder(
-                "to_ship", new ReceiveTransferRequest("idem-cancel-1", null, null));
-
-        assertThat(cancelled.status()).isEqualTo("cancelled");
-        ArgumentCaptor<ArApItemRecord> captor = ArgumentCaptor.forClass(ArApItemRecord.class);
-        verify(financeRepository).updateArApItemLedger(captor.capture());
-        ArApItemRecord reversed = captor.getValue();
-        assertThat(reversed.status()).isEqualTo("cancelled");
-        assertThat(reversed.paidAmountCent()).isZero();
-        assertThat(reversed.unpaidAmountCent()).isZero();
-        // amount_cent 保持正值留痕(updateArApItemLedger 不改金额,且 DB CHECK 要求 >0)。
-        assertThat(reversed.amountCent()).isEqualTo(12000L);
-    }
-
-    @Test
-    void cancelRejectsPartiallyPaidPayable() {
-        seedOrder(order("to_ship2", "supply", null, "supply_1", "m_b", "shipped"));
-        ArApItemRecord partlyPaid = new ArApItemRecord(
-                "arap_trf_to_ship2", "ARAP-TRF-to_ship2", "payable", "supply_1", "inventory_transfer", "to_ship2",
-                12000L, 5000L, 7000L, "CNY", LocalDate.parse("2026-07-01"), null,
-                "pending_payment", Instant.now(), Instant.now(), "m_b", null);
-        when(financeRepository.findArApItemById("arap_trf_to_ship2")).thenReturn(Optional.of(partlyPaid));
-
-        assertThatThrownBy(() -> service.cancelTransferOrder(
-                "to_ship2", new ReceiveTransferRequest("idem-cancel-2", null, null)))
+        assertThatThrownBy(() -> service.cancelTransferOrder("to_lend", new ReceiveTransferRequest("idem-cancel-to_lend", null, null)))
                 .isInstanceOf(ApiException.class)
-                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("TRANSFER_PAYABLE_PARTIALLY_PAID"));
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS"));
+        assertThat(orders.get("to_lend").status()).isEqualTo("shipped");
         verify(financeRepository, never()).updateArApItemLedger(any());
     }
 

@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.45
+文档版本：V0.46
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3650,3 +3650,28 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 
 - 到期终止结算接入多级审批（迁移 `V500__contract_settlement_expiry_review.sql`，结算单挂到期终止复核单），删除手动「确认退押金并落账」入口 `POST /api/v1/contracts/settlements/{settlement_id}/complete`——依据 BSM L1352「各种终止结算，都要经过多级审批」「不再单设手动确认入口」，非新裁决。
 - 生产库 `complex` 现有 9 份合同为 2026-06/07 冒烟数据（押金空、租金条款空），快照无押金月数，面积/位置变更与续租会 409 `CONTRACT_DEPOSIT_MONTHS_MISSING`；`contract_settlements` 无「押金抵扣中/欠费追缴中」存量单。
+
+## 2026-10-19 第八批（财务/分红）操作员裁决（文档同步，HTML 不改）
+
+### 来源与范围
+
+2026-10-19 控制席接手 Codex 席「代码全面补齐」第八批（batch08，工作树 `feature/business-code-batch08-20261019`，实施台账 FS-011、FS-012、FS-013、FS-014、FS-015、FS-021、FS-022 未关闭部分、FS-023，并新增 FS-024），先以只读核对工作流列出 HTML 与既有裁决都未写明、正常业务会遇到的点，向操作员弹窗两轮共 7 条，操作员逐项答复；原文记录于控制席任务书 `B08-BRIEF.md` 两节「操作员裁决补充」（本机 `html-audit-20261017/`，不在仓内）。本节逐字登记所选选项原文并注明落地代码位置；三份业务 HTML 保持冻结、一句不改。本节追加时，原台账除文档版本 V0.45→V0.46 外，其他历史字节保持。
+
+### 裁决原文（逐字）与落地代码位置
+
+| 编号 | 裁决原文（逐字） | 落地代码位置 |
+|---|---|---|
+| 1 | FS-014 依法核定金额低于经营算出金额的差额：操作员选「不补」：每期按经营算出的金额与依法核定金额取小发放，被压下的部分留在公司，以后不单独补分。 | 迁移 `V507__dividend_legal_distributable_and_ticket_settled.sql`；`POST /api/v1/finance/dividends/statements/{id}/legal-confirmation`（`DividendService`，财务登记依法可分配金额，提交/审批前置闸，分配取小）；前端 `FinanceDividendsPage.tsx`。 |
+| 2 | FS-011 要货前序九态：操作员选「本批做，不同意退回草稿」：本批补齐九态与每次转换留痕、未出库取消须审批；供货主体不同意时退回草稿，门店改后可重新提交，不想要了再自行取消。 | 迁移 `V503__store_requisition_states_and_receipts.sql`、`V504__store_requisition_discrepancy_dispositions.sql`；`InventoryTransferFlowService`（submit / supplier-review / pick / ship / deliver / receive / dispositions 及复核）；`POST /api/v1/inventory/transfer-orders/{order_id}/{submit,lines,supplier-review,pick,deliver,dispositions}`；合格签收后按合格数量×锁定单价形成货款并入门店库存；已出库不得直接取消；前端 `InventoryTransferWorkbenchPage.tsx`。 |
+| 3 | FS-013 单店门票综合服务费计费月：操作员选「售出月，只退款剔除」：按客人付款成功（售出）所在月计入；之后只有整张退款成功才从原月剔除重算；到期没用的票照常计费。 | 迁移 `V506__single_bar_service_fee_months.sql`；`SingleBarServiceFeeService`（逐票快照、计费月汇总后封顶、单独挂应收不轧差、整张退款成功回原月重算只登记未覆盖差额，BSM L755 逐句）。 |
+| 4 | FS-021 原月已结付后撤销的核销：操作员选「单独列追收、按原月重算」：当月应付照常全额付；被撤销那笔按原月口径另列追收：单店按该次核销原结付金额，分池按原月剔除该次核销后重算各家应得的差额逐家追回；两笔分别收付。 | 迁移 `V508__internal_settlement_pay_days_and_recovery.sql`；`SettlementReversedConsumer`、`TicketDistributionSettlementService.recoveries`、`SettlementPostingService`（来源 `ticket_distribution_recovery`）；三个付账日与钱路规则 `InternalPayDayService`/`InternalPayDayController`（按过账时刻取生效版本并固化）；内部应付执行状态 `InternalPayableExecutionService`/`InternalPayableController`；前端 `InternalPayDaysPanel.tsx`、`FinanceInternalPayablePanel.tsx`。 |
+| 5 | FS-012 补偿应付已付后核销被撤销：操作员选「已付部分另挂追收」：比照门票分账裁决：冲正只取消未付部分；已付出的部分另挂一笔对提供方的追收应收，单独收回。 | 迁移 `V505__amusement_compensation_fulfillments.sql`；`AmusementCompensationFulfillmentAdapter`（补偿履约逐笔记录、按承担公司形成对提供方应付、到期日按钱路付账日固化；冲正时未付部分 V344 冲正＋重述承接已付，已付部分挂来源 `compensation_fulfillment_recovery` 追收应收）。 |
+| 6 | FS-021 分池重算后的正差额：操作员选「补付」：重算后多得的家按正差额补付，少得的家按负差额追回，收付分列（现状保持）。 | `TicketDistributionSettlementService.recoveries` 正差额挂 `ticket_distribution` 应付、负差额挂追收应收；测试固定。 |
+| 7 | FS-023 商户业态「其他」的主管公司：操作员选「本批补字段与闸」：本批新增条目 FS-024：商户档案增「主管公司」与「理由」（仅业态为其他时必填），未指定不得开通结算与分账；到期归属按该主管公司。到期作业对单家没指定的商户单行记错、不卡整批。 | 迁移 `V511__merchant_supervising_company.sql`；`PlatformService.createMerchant/updateMerchant`（other 必填、主体须在用的城市项目公司或域主管公司、项目关联闸）；招商签约自动建档 `createMerchantOnLeasingSign` 不要求（HTML 只禁「开通结算与分账」）；闸在 `POST /api/v1/settlement/config/merchant-rate` 与 `/internal-price-item`（409 `MERCHANT_SUPERVISING_COMPANY_MISSING`）；`SettlementExpiryJob` 逐商户容错；前端 `OrganizationMerchantPage.tsx`。 |
+
+### 同批说明（控制席技术决定，非业务裁决）
+
+- FS-015：分红票务收入改取已确认的月度分账结算额（已核销口径），去掉退票重复扣减（`V507`、`DividendService`）。FS-022-R1：积分发行费月账单接入统一开票清单（`V509`）。FS-023：到期余额带售票项目并按（项目，经营域）解析域公司、作废终结状态仍归属且「从未检票」与「已检票场次终结未核销」分两类、实际渠道费只扣一次并记配置版本、多人票未到人份在首场次结束时处理（`V510`、`SettlementExpiryJob`）。
+- 补偿核销时若该钱路的付账日规则未经财务审批、或次月出账起算的异议期所在年份工作日历未批，核销按既有 fail-closed 范式拒绝（409 `PAY_DAY_NOT_CONFIGURED` / 400 `WORKING_CALENDAR_MISSING`），与「目录有引用但无生效价即拒核销」同一口径；属上线前配置前提，不建补挂机制。
+- 第 7 条的「开通结算与分账」按仓库口径指分账固定规则与内部结算价目录两个写口；分红方案（`DividendService.createPlan`）属分红、不属分账，未加该闸。
+- 既有前端用例 `LeasingWorkbenchPage.test.tsx`「已签线索禁止人工回退…」点选后同步断言在全量负载下偶发红（本批与第七批各复现一次），改为 `waitFor`，断言内容不变。

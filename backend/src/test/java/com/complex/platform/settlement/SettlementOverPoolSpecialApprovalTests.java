@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -57,6 +59,8 @@ class SettlementOverPoolSpecialApprovalTests {
 
     @BeforeEach
     void setUp() {
+        // FS-021：过账到期日按财务指定付账日推算，缺规则/日历即拒绝——种已批钱路规则与工作日历。
+        com.complex.platform.support.InternalPayDayFixtures.seed(jdbcTemplate);
         // 过账走 FinanceService.createArApItem(@GuardedAction)——需登录主体过鉴权/审计（同批2-4 过账测试口径）。
         TestSecurityActors.asPlatformAdmin();
     }

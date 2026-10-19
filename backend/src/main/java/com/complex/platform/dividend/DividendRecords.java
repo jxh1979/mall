@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.02
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -137,7 +139,32 @@ public final class DividendRecords {
             // V308 主理人类型快照（公司股东单 taxCent 恒 0，chk_ds_company_no_tax 硬保证）。
             String principalType,
             // V309 自定义扣除合计快照（逐项留痕在明细行；发放额恒等含本项）。
-            long customDeductionCent) {
+            long customDeductionCent,
+            // V507 FS-014 财务登记的依法可分配金额快照（未核定为空；本次分配 = min(经营候选额, 本额)）。
+            Long legalDistributableCent) {
+
+        /** 向后兼容构造（V507 之前的形态）：未核定依法可分配金额。 */
+        public DividendStatementRecord(
+                String id, String merchantId, String planId, String kind, String periodLabel,
+                LocalDate periodStart, LocalDate periodEnd, String principalUserId, int platformShareBps,
+                int taxRateBps, List<String> revenueDomains, boolean includeInventoryCost, List<String> expenseTypes,
+                long revenueCent, long costCent, long expenseCent, long netProfitCent, long distributableCent,
+                long platformShareCent, long principalGrossCent, long taxCent, long principalNetCent,
+                long noCostBasisCount, String status, String rejectReason, String arApItemId, String computedBy,
+                String submittedBy, Instant submittedAt, String approvedBy, Instant approvedAt, String paidBy,
+                Instant paidAt, Instant createdAt, Instant updatedAt, boolean lossCarryforwardEnabled,
+                long lossCarryforwardInCent, long lossCarryforwardAppliedCent, long lossCarryforwardAfterCent,
+                long arrearsOffsetCent, long reserveWithheldCent, long payoutCent, String principalType,
+                long customDeductionCent) {
+            this(id, merchantId, planId, kind, periodLabel, periodStart, periodEnd, principalUserId,
+                    platformShareBps, taxRateBps, revenueDomains, includeInventoryCost, expenseTypes, revenueCent,
+                    costCent, expenseCent, netProfitCent, distributableCent, platformShareCent, principalGrossCent,
+                    taxCent, principalNetCent, noCostBasisCount, status, rejectReason, arApItemId, computedBy,
+                    submittedBy, submittedAt, approvedBy, approvedAt, paidBy, paidAt, createdAt, updatedAt,
+                    lossCarryforwardEnabled, lossCarryforwardInCent, lossCarryforwardAppliedCent,
+                    lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent, principalType,
+                    customDeductionCent, null);
+        }
 
         /** 商户侧（主理人视图）脱敏：内部操作员 id 与应付款项 id 不外发（平台侧照旧全量）。 */
         @com.fasterxml.jackson.annotation.JsonIgnore
@@ -150,8 +177,21 @@ public final class DividendRecords {
                     createdAt, updatedAt,
                     lossCarryforwardEnabled, lossCarryforwardInCent, lossCarryforwardAppliedCent,
                     lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent,
-                    principalType, customDeductionCent);
+                    principalType, customDeductionCent, legalDistributableCent);
         }
+    }
+
+    /** V507 FS-014 财务登记的依法可分配金额（商户 × 期间；财税核算依据与分配决议必填）。 */
+    public record DividendLegalConfirmationRecord(
+            String id,
+            String merchantId,
+            String periodLabel,
+            long legalDistributableCent,
+            String taxAccountingRef,
+            String resolutionRef,
+            String note,
+            String confirmedBy,
+            Instant confirmedAt) {
     }
 
     /** 算式明细行（append-only；detail 说明取数口径，可追溯到三个来源台账）。 */

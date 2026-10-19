@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import com.complex.platform.ticketing.SettlementSettledEvent;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
@@ -39,18 +41,27 @@ public class SettlementSettledConsumer {
     //   会让每笔核销都白算一遍按件和(多数场景配的是按票计或非首笔,算了也不用);
     //   ③解析器只此一处取价,配置改价后未计提的票用新价,与兑付侧天然一致。
     private final com.complex.platform.ticketing.InternalSettlementPriceResolver priceResolver;
+    // FS-013：单一酒吧门票售出时已逐票锁定综合服务费、按计费月另挂应收，核销时不再另抽。
+    private final SingleBarServiceFeeService singleBarServiceFees;
 
     public SettlementSettledConsumer(JdbcSettlementTransactionRepository repository,
                                      JdbcSettlementBillRepository billRepository,
-                                     com.complex.platform.ticketing.InternalSettlementPriceResolver priceResolver) {
+                                     com.complex.platform.ticketing.InternalSettlementPriceResolver priceResolver,
+                                     SingleBarServiceFeeService singleBarServiceFees) {
         this.repository = repository;
         this.billRepository = billRepository;
         this.priceResolver = priceResolver;
+        this.singleBarServiceFees = singleBarServiceFees;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onSettlementSettled(SettlementSettledEvent event) {
+        if (event.compensationItemId() != null) {
+            // FS-012（BSM L800「补偿履约与原履约分别记录，原核销和原结算不回改」；CG 第 39 条「防止重复记原票分账」）：
+            // 补偿新增履约由承担主体按履约时锁定价与提供方另行结算（补偿履约记录 + 补偿应付），不进原票分账事实。
+            return;
+        }
         int total = event.totalTimes();
         int used = event.usedTimes();
         Long allocated = event.allocatedRevenueCent();
@@ -115,7 +126,10 @@ public class SettlementSettledConsumer {
         //   ③【复位】冲正行取原行之反，该票净额抵回 0 → 锚点自动复位，下一次核销重新收一道（票还在、费该收）。
         long compServiceFeeCent = 0L;
         String compServiceFeeConfigId = null;
+        // FS-013(BSM L755「单店门票综合服务费按前述计费月汇总后的应收总额另行收取」;裁决 2026-10-19 第 3 条「售出月」):
+        //   售出时已锁定的单一酒吧门票不在核销行上再抽,票款按毛额结付、服务费单独挂应收(不轧差)。
         if (verified > 0L && event.parentTicketId() != null
+                && !singleBarServiceFees.accruedAtSale(event.parentTicketId())
                 && TicketDistributionSettlementService.FORMAT_BAR.equals(
                         billRepository.merchantBusinessFormat(event.merchantId()))) {
             var svcFee = billRepository.findComprehensiveServiceFee(

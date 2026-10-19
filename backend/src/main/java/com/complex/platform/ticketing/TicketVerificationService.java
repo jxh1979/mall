@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -352,6 +352,10 @@ public class TicketVerificationService {
         //   - finance 域 VerificationReversedConsumer（P1#19）：落"冲正已通知"审计留痕（无独立财务冲销对象，仅留痕）。
         // 消费者均按各自 source_doc 幂等；下游异常将随同事务回滚本次冲正（与既有 confirm 链同语义）。
         if (!DAY_REPLAY_REASON.equals(original.resultReason())) {
+        // FS-012-R5：补偿补发权益的核销被冲正 → 对冲该次补偿履约已形成的承担方补偿应付。
+        if (reversedEntitlement != null && reversedEntitlement.compensationItemId() != null && compensationFulfillmentPort != null) {
+            compensationFulfillmentPort.reverseFulfillment(original.id(), now);
+        }
         eventPublisher.publishEvent(new VerificationReversedEvent(
                 original.id(),
                 reversal.id(),
@@ -369,13 +373,30 @@ public class TicketVerificationService {
      * F-TXN-03 按核销张数：聚合该订单全部已发权益的 Σused_times / Σtotal_times（张=use），
      * 作为积分确认事件的 verifiedUnits / totalUnits（核销/冲正后读到的最新值；customer 域据此对齐确认份额）。
      */
-    /** CG-08b：补偿履约只记到补偿记录，不改原核销/原结算，不产生积分。 */
+    /** CG-08b：补偿履约只记到补偿记录，不改原核销/原结算，不产生积分。FS-012：逐笔记录并锁定履约时目录价与版本。 */
     private void recordCompensationFulfillment(IssuedEntitlementRecord entitlement, VerificationRecord verification,
-            Instant now, Long settlementPriceCent) {
+            Instant now, InternalSettlementPriceResolver.VersionedPrice price) {
         if (compensationFulfillmentPort != null) {
-            compensationFulfillmentPort.recordFulfillment(entitlement.compensationItemId(), verification.id(), now,
-                    settlementPriceCent);
+            compensationFulfillmentPort.recordFulfillment(entitlement.compensationItemId(), entitlement.id(), verification.id(),
+                    providerMerchantId(entitlement), now, price);
         }
+    }
+
+    /**
+     * FS-012（BSM L800 / ENUM L148「本次完整补偿新增实际履约所用的内部结算价及其规则版本，按补偿实际履约时生效的版本计算并锁定到该笔
+     * 补偿履约记录」；台账 Q15「不沿用原售票或原履约价格」）：补偿补发权益一律按履约时目录生效价锁价并带目录行版本，不取票面值。
+     * 模板无任何目录引用（如酒吧入场资格，BSM L750 不设内部结算价）→ 返回 null，只留履约记录；有引用而无生效价、
+     * 或提供方兑付类（赠酒/实物/专属直付，与普通核销同口径）取不到价 → fail-closed。
+     */
+    private InternalSettlementPriceResolver.VersionedPrice compensationPrice(IssuedEntitlementRecord entitlement) {
+        EntitlementTemplateRecord template = repository.findEntitlementTemplateById(entitlement.entitlementTemplateId()).orElse(null);
+        String barItemRef = template == null ? null : template.barItemRef();
+        String catalogItemCode = template == null ? null : template.catalogItemCode();
+        if (barItemRef == null && catalogItemCode == null && !InternalSettlementPriceResolver.providerRedeemed(
+                entitlement.entitlementType(), entitlement.entitlementKind(), entitlement.exclusiveMerchantId())) {
+            return null;
+        }
+        return priceResolver.requireVersioned(barItemRef, providerMerchantId(entitlement), catalogItemCode);
     }
 
     /**
@@ -597,7 +618,11 @@ public class TicketVerificationService {
         // AUD-066：首次成功核销定格父票 first_used_at + 首场次键（方案2 整票退款闸门、方案3 绑定人锚点）。
         markTicketInstanceFirstUse(updated, now);
         // 结算重构批3-1(PRD §6.1)：核销成功 → 判定本次结算价并写入核销记录 settlement_price_cent（供对账/by_entitlement_price 分账）。
-        Long settlementPriceCent = resolveSettlementPrice(updated);
+        // FS-012：补偿补发权益按履约时目录生效价锁价（含版本），其余照旧。
+        InternalSettlementPriceResolver.VersionedPrice compensationPrice =
+                updated.compensationItemId() == null ? null : compensationPrice(updated);
+        Long settlementPriceCent = updated.compensationItemId() == null ? resolveSettlementPrice(updated)
+                : compensationPrice == null ? null : compensationPrice.priceCent();
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
                 "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
@@ -629,7 +654,7 @@ public class TicketVerificationService {
         // customer 域据此把已确认份额对齐 floor(总额 × Σused / Σtotal)（多次/多人票部分核销按张数比例确认）。
         // CG-08b：补偿补发权益的使用不重复产生原人份/次份的积分与成长值（不发积分确认事件），履约锁定到补偿记录。
         if (updated.compensationItemId() != null) {
-            recordCompensationFulfillment(updated, verification, now, settlementPriceCent);
+            recordCompensationFulfillment(updated, verification, now, compensationPrice);
         } else if (updated.orderId() != null && !updated.orderId().isBlank()) {
             eventPublisher.publishEvent(new TicketRewardFacts.Used(verification.id(), credential == null ? null : credential.id()));
         }
@@ -660,7 +685,9 @@ public class TicketVerificationService {
                 //   平台级操作者返回空 → null → 平台默认口径（与提成费率 / 高价值阈值同一取数范式）。
                 authorizationService == null ? null : authorizationService.currentProjectScopeQuietly().orElse(null),
                 // S3：本次核销的权益属于哪一张票 —— 门票综合服务费「一张票只收一道」的判定锚点。
-                updated.parentTicketId()
+                updated.parentTicketId(),
+                // FS-012：补偿补发权益不写普通核销结算事实（消费者据此跳过）。
+                updated.compensationItemId()
         ));
         if (credential != null) {
             // AUD-012 凭证消费 CAS(仅 active→consumed):0 行=该凭证已被并发撤销(转赠领取撤销原持有人旧码)
@@ -690,7 +717,8 @@ public class TicketVerificationService {
                     settlementPriceCent,
                     // S6：成本承担方随事件带下游——商户让利型不挂商户应付（HTML:737「不与商户结算」），
                     //   履约（0 元单/出品/扣库）照常。取自票面 binding 配置（发放来源的同一份配置）。
-                    costBearer(updated)
+                    // FS-012：补偿补发的赠饮由承担主体经补偿应付结算，不挂平台赠饮应付。
+                    updated.compensationItemId() != null ? GiftVerifiedEvent.COST_BEARER_COMPENSATION : costBearer(updated)
             ));
         }
         return new VerificationResponse(verification.id(), verification.verificationNo(), verification.status(), verification.resultReason());
@@ -758,7 +786,10 @@ public class TicketVerificationService {
                 throw ApiException.conflict("MULTI_PERSON_CROSS_SESSION_FORBIDDEN","多人票不允许跨场次使用");
         }
         boolean dayReplay=consumption==com.complex.platform.amusement.AmusementEntitlementGateway.Consumption.DAY_REPLAY;
-        Long settlementPriceCent=dayReplay?null:consumed.valueAmountCent();
+        // FS-012：游乐补偿入场同样按履约时目录生效价锁价（含版本），不取票面值。
+        InternalSettlementPriceResolver.VersionedPrice compensationPrice=dayReplay||consumed.compensationItemId()==null?null:compensationPrice(consumed);
+        Long settlementPriceCent=dayReplay?null:consumed.compensationItemId()==null?consumed.valueAmountCent()
+                :compensationPrice==null?null:compensationPrice.priceCent();
         VerificationRecord verification=repository.saveVerification(new VerificationRecord(
                 ticketId,"VA"+hash(admission.id()).substring(0,48),consumed.id(),consumed.entitlementCode(),
                 credential==null?"entitlement_code":"dynamic_qr",verificationPayload(admission.credentialPayload(),credential),
@@ -768,14 +799,15 @@ public class TicketVerificationService {
                 settlementPriceCent,admission.id()));
         if(!dayReplay) {
             if(consumed.compensationItemId()!=null)
-                recordCompensationFulfillment(consumed,verification,now,settlementPriceCent);
+                recordCompensationFulfillment(consumed,verification,now,compensationPrice);
             else if(consumed.orderId()!=null && !consumed.orderId().isBlank())
                 eventPublisher.publishEvent(new TicketRewardFacts.Used(verification.id(),credential==null?null:credential.id()));
             eventPublisher.publishEvent(new SettlementSettledEvent(
                 verification.id(),now,consumed.id(),consumed.orderId(),consumed.ticketTypeId(),
                 consumed.entitlementType(),consumed.merchantId(),consumed.totalTimes(),consumed.usedTimes(),
                 consumed.numPeople(),consumed.allocatedRevenueCent(),consumed.validTo(),consumed.exclusiveMerchantId(),
-                settlementPriceCent,consumed.componentFullPriceCent(),window.complexId(),consumed.parentTicketId()));
+                settlementPriceCent,consumed.componentFullPriceCent(),window.complexId(),consumed.parentTicketId(),
+                consumed.compensationItemId()));
         }
         if(credential!=null && repository.markTicketCredentialConsumed(credential.id(),now)==0)
             throw ApiException.conflict("CREDENTIAL_EXPIRED","核销凭证已过期，请刷新后重试");

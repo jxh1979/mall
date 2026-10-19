@@ -1,6 +1,6 @@
-# 商户、铺位与合同数据模型 V0.22
+# 商户、铺位与合同数据模型 V0.23
 
-> 版本：V0.22 ｜ 最后更新：2026-10-19 ｜ 状态：现行开发模型
+> 版本：V0.23 ｜ 最后更新：2026-10-19 ｜ 状态：现行开发模型
 > 业务最终解释权：三份业务 HTML。本文只把 HTML 业务关系映射到当前迁移和代码；HTML 与代码不一致时，业务按 HTML，代码列为实现差距。
 
 采集范围：V002、V005、V010、V080、V110、V162、V163、V164、V171、V184、V203、V281、V307、V314、V318、V346、V348、V354、V384，以及当前治理、合同、合规、财务和商户专区实现。
@@ -69,7 +69,7 @@ V318/V354 的 `parent_entity_id` 和角色白名单反映当前代码结构，�
 
 - 主档：`id`、`merchant_name`、`merchant_type`、`status`、负责人和两组联系人。
 - `merchant_type` 经 V348/V384 限为 `bar/catering/retail/amusement/media/other`，对应 HTML 六业态，一个商户一个业态。
-- 当前 `merchants` 没有“其他”业态所需的主管公司和选择理由字段，因而尚不能落实“未指定主管公司不得开通任何结算与分账”的准入限制；这是实现差距，不得把缺字段理解为可以绕过限制。
+- V511（FS-024）起 `merchants.supervising_company_id` / `supervising_company_reason` 承载“其他”业态的主管公司与理由：业态为其他时创建/修改档案必填，只能选在用的城市项目公司或域主管公司；其他业态不得填写（CHECK 封口）。商户分账固定规则与内部结算价目录写入口对未指定主管公司的“其他”业态商户拒绝（409 `MERCHANT_SUPERVISING_COMPANY_MISSING`）；到期未核销款归该主管公司，未指定的由到期作业单行记错、不卡整批。
 - `business_entity_id/contract_entity_id/settlement_entity_id` 是当前商户档案快照，不能代替 `business_entity_bindings` 的唯一生效关系。
 - `allowed_business_scope` 是合同允许经营品类范围，不等于商户主档同时属于多个业态。
 

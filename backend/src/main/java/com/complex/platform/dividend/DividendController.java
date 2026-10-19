@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
@@ -69,6 +71,14 @@ public class DividendController {
     @GetMapping("/statements/{id}")
     public ApiResponse<DividendStatementDetailRecord> getStatement(@PathVariable("id") String statementId) {
         return ApiResponse.ok(service.getStatement(statementId));
+    }
+
+    /** FS-014 财务登记依法可分配金额（finance.dividend.manage；仅正式草稿/已驳回单，按核定额取小重算）。 */
+    @PostMapping("/statements/{id}/legal-confirmation")
+    public ApiResponse<DividendStatementRecord> confirmLegal(
+            @PathVariable("id") String statementId,
+            @RequestBody com.complex.platform.dividend.dto.DividendLegalConfirmationRequest request) {
+        return ApiResponse.ok(service.confirmLegal(statementId, request));
     }
 
     @PostMapping("/statements/{id}/submit")

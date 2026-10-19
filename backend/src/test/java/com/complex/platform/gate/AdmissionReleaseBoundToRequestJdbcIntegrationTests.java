@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -297,7 +297,9 @@ class AdmissionReleaseBoundToRequestJdbcIntegrationTests {
                 "partial_paid",
                 now,
                 now,
-                merchantId
+                merchantId,
+                // FS-021-R6：共享财务退款按项目范围办理，台账须有项目归属（本人项目 org）。
+                "org"
         ));
         financeRepository.saveArApPayment(new ArApPaymentRecord(
                 paymentId,

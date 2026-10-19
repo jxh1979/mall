@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.LocalZone;
@@ -436,6 +436,14 @@ public class JdbcSettlementConfigWriteRepository {
     /** 商户存在性(落草案先验:给明确 400 而不是 FK 违约 500)。 */
     public boolean merchantExists(String merchantId) {
         Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchants WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", merchantId), Integer.class);
+        return n != null && n > 0;
+    }
+
+    /** FS-024:业态为「其他」且档案未指定主管公司(V511 supervising_company_id)的商户 → true(写入口据此拒绝开通结算/分账)。 */
+    public boolean otherFormatWithoutSupervisingCompany(String merchantId) {
+        Integer n = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM merchants WHERE id = :id AND merchant_type = 'other' AND supervising_company_id IS NULL",
                 new MapSqlParameterSource().addValue("id", merchantId), Integer.class);
         return n != null && n > 0;
     }

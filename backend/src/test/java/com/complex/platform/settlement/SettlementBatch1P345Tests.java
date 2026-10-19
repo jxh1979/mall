@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.03
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
@@ -32,6 +34,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 })
 class SettlementBatch1P345Tests {
 
+    private static final String PROJECT = "proj_b1p345";
+    /**
+     * 到期作业扫全库;FS-023 起还扫未到期的多人票未到人份(首场次结束即处理),用当前时刻会扫到别的用例残留的真实票。
+     * 本类到期用例统一放在固定的远期过去时刻,只处理本类自己 seed 的行。
+     */
+    private static final Instant NOW = Instant.parse("2010-01-10T00:00:00Z");
+
     @Autowired
     private SettlementReconciliationJob reconciliationJob;
 
@@ -58,6 +67,9 @@ class SettlementBatch1P345Tests {
         }
         for (String mid : providerMerchantIds) { // 商户在引用它的权益/流水之后删(FK 顺序)
             jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", mid);
+        }
+        if (!entIds.isEmpty()) {
+            jdbcTemplate.update("DELETE FROM projects WHERE id = ?", PROJECT);
         }
         entIds.clear();
         reconDates.clear();
@@ -96,7 +108,7 @@ class SettlementBatch1P345Tests {
     @Test
     void expireUnverifiedAllocatesUnverifiedPartToPlatformEntity() {
         String suffix = Long.toString(System.nanoTime());
-        Instant now = Instant.now();
+        Instant now = NOW;
         // valid_to 已过、total=4/used=1 -> 未核销 3/4:unverified = 8000×3/4 = 6000,verified=2000。
         String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
         jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ? WHERE id = ?",
@@ -128,7 +140,7 @@ class SettlementBatch1P345Tests {
     @Test
     void expireUnverifiedIsIdempotentOnRepeatRun() {
         String suffix = Long.toString(System.nanoTime());
-        Instant now = Instant.now();
+        Instant now = NOW;
         String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
         jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ? WHERE id = ?",
                 java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)), ent);
@@ -145,7 +157,7 @@ class SettlementBatch1P345Tests {
     @Test
     void expireSkipsDirectIssuedWithNullAllocated() {
         String suffix = Long.toString(System.nanoTime());
-        Instant now = Instant.now();
+        Instant now = NOW;
         // allocated=null(direct 出票)-> 查询 WHERE allocated IS NOT NULL 排除,不归项目。
         String ent = seedIssuedEntitlement(suffix, 4, 1, null, now.minus(2, ChronoUnit.DAYS));
         jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ? WHERE id = ?",
@@ -163,7 +175,7 @@ class SettlementBatch1P345Tests {
     @Test
     void expireUnverifiedRoutesAmusementProviderToAmusementEntity() {
         String suffix = Long.toString(System.nanoTime());
-        Instant now = Instant.now();
+        Instant now = NOW;
         String amuMerchant = "m_ue_amu_" + suffix;
         jdbcTemplate.update("""
                 INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
@@ -200,7 +212,7 @@ class SettlementBatch1P345Tests {
     @Test
     void expireUnverifiedRoutesMediaProviderToMediaEntity() {
         String suffix = Long.toString(System.nanoTime());
-        Instant now = Instant.now();
+        Instant now = NOW;
         String mediaMerchant = "m_ue_media_" + suffix;
         String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
         seedProviderMerchant(mediaMerchant, "media"); // V384 六值新增
@@ -228,25 +240,25 @@ class SettlementBatch1P345Tests {
     @Test
     void expireUnverifiedBlocksWhenProviderMerchantMissing() {
         String suffix = Long.toString(System.nanoTime());
-        Instant now = Instant.now();
+        Instant now = NOW;
         String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
         // 提供方商户在档案里查不到(不建 merchants 行)。
         jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ?, merchant_id = ? WHERE id = ?",
                 java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)), "m_ue_ghost_" + suffix, ent);
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> expiryJob.expireUnverified(now))
-                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                .hasMessageContaining("查不到提供方商户的经营业态");
+        // FS-024（控制席补充约定）:逐商户 try/catch —— 定不出收款方的商户单行记错(日志)、不卡整批,本商户一分钱不落。
+        org.assertj.core.api.Assertions.assertThatCode(() -> expiryJob.expireUnverified(now))
+                .doesNotThrowAnyException();
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?", Integer.class, ent);
-        assertThat(count).as("事务整体回滚,一分钱没落").isZero();
+        assertThat(count).as("该商户跳过,一分钱没落").isZero();
     }
 
     /** S8 fail-loud:归属种子被删(有金额没有收款方=配置坏)→ 拒绝落账,零行落地,宁可阻断不出错账。 */
     @Test
     void expireUnverifiedFailsLoudWhenAttributionSeedMissing() {
         String suffix = Long.toString(System.nanoTime());
-        Instant now = Instant.now();
+        Instant now = NOW;
         String ent = seedIssuedEntitlement(suffix, 4, 1, 8000L, now.minus(2, ChronoUnit.DAYS));
         jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = ? WHERE id = ?",
                 java.sql.Timestamp.from(now.minus(1, ChronoUnit.HOURS)), ent);
@@ -254,13 +266,13 @@ class SettlementBatch1P345Tests {
         jdbcTemplate.update("UPDATE revenue_stream_attribution SET status = 'inactive'"
                 + " WHERE revenue_stream = 'all_pass_ticket' AND project_id IS NULL AND is_draft = FALSE");
         try {
-            org.assertj.core.api.Assertions.assertThatThrownBy(() -> expiryJob.expireUnverified(now))
-                    .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                    .hasMessageContaining("未核销权益款无法落账");
+            // FS-024(控制席补充约定):逐商户 try/catch —— 该商户单行记错、不卡整批,本商户一分钱不落。
+            org.assertj.core.api.Assertions.assertThatCode(() -> expiryJob.expireUnverified(now))
+                    .doesNotThrowAnyException();
             Integer count = jdbcTemplate.queryForObject(
                     "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?",
                     Integer.class, ent);
-            assertThat(count).isZero(); // 事务整体回滚,一分钱没落
+            assertThat(count).isZero(); // 该商户跳过,一分钱没落
         } finally {
             jdbcTemplate.update("UPDATE revenue_stream_attribution SET status = 'active'"
                     + " WHERE revenue_stream = 'all_pass_ticket' AND project_id IS NULL AND is_draft = FALSE");
@@ -307,12 +319,17 @@ class SettlementBatch1P345Tests {
                 ON CONFLICT (id) DO NOTHING
                 """, templateId, totalTimes, ct, ct);
         String orderId = "order_" + ent;
+        // FS-023-R1:到期余额按售票订单锁定的项目解析域公司,订单无项目即阻断 → 夹具订单须带项目。
+        jdbcTemplate.update("""
+                INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)
+                VALUES (?, 'complex', ?, 'active', now(), now()) ON CONFLICT (id) DO NOTHING
+                """, PROJECT, PROJECT);
         jdbcTemplate.update("""
                 INSERT INTO ticket_orders (id, order_no, customer_id, ticket_type_id, quantity, visit_date,
-                    sales_channel, amount_cent, currency, pay_status, issue_status, status, created_at, updated_at)
-                VALUES (?, ?, NULL, ?, ?, NULL, 'web', 0, 'CNY', 'paid', 'issued', 'created', ?, ?)
+                    sales_channel, amount_cent, currency, pay_status, issue_status, status, created_at, updated_at, project_id)
+                VALUES (?, ?, NULL, ?, ?, NULL, 'web', 0, 'CNY', 'paid', 'issued', 'created', ?, ?, ?)
                 ON CONFLICT (id) DO NOTHING
-                """, orderId, "ON-" + ent, typeId, totalTimes, ct, ct);
+                """, orderId, "ON-" + ent, typeId, totalTimes, ct, ct, PROJECT);
         jdbcTemplate.update("""
                 INSERT INTO issued_entitlements (id, ticket_type_id, order_id, entitlement_template_id,
                     entitlement_code, entitlement_type, merchant_id, venue_id, point_id,

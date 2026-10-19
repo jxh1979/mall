@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -115,7 +115,8 @@ describe("MerchantZoneSettlementsPage 留言提异议（M023-006）", () => {
 
   it("已结清 / 已作废的结算单不可留言（按钮禁用）", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("merchant-zone-settlement-pick-st-3")).toBeTruthy());
+    // 等默认选中（首行）落定后再改选，避免默认选中回写覆盖本次点选（本页另有门票分账异步加载）。
+    await waitFor(() => expect((screen.getByTestId("merchant-zone-settlement-pick-st-1") as HTMLInputElement).checked).toBe(true));
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-3"));
     expect((screen.getByTestId("merchant-zone-settlement-dispute-submit") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-4"));
@@ -350,5 +351,84 @@ describe("MerchantZoneSettlementsPage 落账后与诉讼/仲裁结果录入后�
     expect(screen.queryByTestId("merchant-zone-settlement-dispute-submit")).toBeNull();
     expect(screen.queryByTestId("merchant-zone-settlement-reject-submit")).toBeNull();
     expect(calls.some((call) => call.method === "POST")).toBe(false);
+  });
+});
+
+// FS-021-R4/R5（BSM L1597「异议期自该账单在商户专区可查看之日的次日起算」；BSM L1683「待付状态须在系统中对收款方可见」
+// 「更换收款账户须经收款方所属公司财务负责人审批」）：商户专区「门票分账」。夹具按后端 Execution 真实蛇形形状。
+describe("MerchantZoneSettlementsPage 门票分账", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const TICKET_ROWS = [
+    { ar_ap_item_id: "ap-1", direction: "payable", source_type: "ticket_distribution", counterparty_id: "bar-1", project_id: "p1",
+      amount_cent: 500000, unpaid_amount_cent: 500000, visible_at: "2026-11-01T00:00:00Z", objection_deadline: "2026-11-13",
+      designated_pay_day: "2026-11-25", due_date: "2026-11-26", execution_status: "pending", in_transit: true,
+      failure_reason: null, expected_repay_date: null, attempts: [], postponements: [] },
+    { ar_ap_item_id: "ap-2", direction: "payable", source_type: "ticket_distribution", counterparty_id: "bar-1", project_id: "p1",
+      amount_cent: 80000, unpaid_amount_cent: 80000, visible_at: "2026-10-01T00:00:00Z", objection_deadline: "2026-10-15",
+      designated_pay_day: "2026-10-25", due_date: "2026-10-27", execution_status: "failed_pending", in_transit: false,
+      failure_reason: "收款账户被冻结", expected_repay_date: "2026-11-05", attempts: [], postponements: [] },
+    { ar_ap_item_id: "ar-3", direction: "receivable", source_type: "ticket_distribution_recovery", counterparty_id: "bar-1", project_id: "p1",
+      amount_cent: 2000, unpaid_amount_cent: 2000, visible_at: "2026-11-01T00:00:00Z", objection_deadline: "2026-11-13",
+      designated_pay_day: "2026-11-05", due_date: "2026-11-16", execution_status: "pending", in_transit: false,
+      failure_reason: null, expected_repay_date: null, attempts: [], postponements: [] },
+    // V344 红冲：已被冲正的补偿应付原行不再是待付，显示「已冲正」。
+    { ar_ap_item_id: "ap-4", direction: "payable", source_type: "compensation_fulfillment", counterparty_id: "bar-1", project_id: "p1",
+      amount_cent: 120000, unpaid_amount_cent: 120000, visible_at: "2026-10-01T00:00:00Z", objection_deadline: "2026-10-15",
+      designated_pay_day: "2026-10-25", due_date: "2026-10-27", execution_status: "reversed", in_transit: false,
+      failure_reason: null, expected_repay_date: null, attempts: [], postponements: [] },
+  ];
+
+  function stubTicketApi(calls: Call[]): AdminApi {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST" && url.includes("/account-change")) return Promise.resolve(single({ id: "ipac-1" }));
+      if (url.includes("/ticket-settlements")) return Promise.resolve(single(TICKET_ROWS));
+      return Promise.resolve(envelope([]));
+    }));
+    return new AdminApi("test-token");
+  }
+
+  function renderTicketPage(calls: Call[]) {
+    render(<MerchantZoneSettlementsPage api={stubTicketApi(calls)} user={{ id: "u1", username: "merchant", accountType: "merchant_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} navigateTo={vi.fn()} />);
+  }
+
+  it("门票分账页签显示异议截止日、指定付账日、付款日与执行状态（在途为待付；失败注明原因与预计重付）", async () => {
+    const calls: Call[] = [];
+    renderTicketPage(calls);
+    await waitFor(() => expect(screen.queryByTestId("merchant-zone-ticket-row-ap-1")).not.toBeNull());
+    const inTransit = screen.getByTestId("merchant-zone-ticket-row-ap-1").textContent ?? "";
+    expect(inTransit).toContain("2026年11月13日");
+    expect(inTransit).toContain("2026年11月25日");
+    expect(inTransit).toContain("2026年11月26日");
+    expect(inTransit).toContain("待付（银行在途）");
+    const failed = screen.getByTestId("merchant-zone-ticket-row-ap-2").textContent ?? "";
+    expect(failed).toContain("付款失败待处理");
+    expect(failed).toContain("收款账户被冻结");
+    expect(failed).toContain("2026年11月5日");
+    expect(screen.getByTestId("merchant-zone-ticket-row-ar-3").textContent).toContain("通票分账追收");
+    const reversed = screen.getByTestId("merchant-zone-ticket-row-ap-4").textContent ?? "";
+    expect(reversed).toContain("已冲正");
+    expect(reversed).not.toContain("待付");
+  });
+
+  it("收款方财务负责人对付款失败的款项登记新收款账户，请求体为蛇形键", async () => {
+    const calls: Call[] = [];
+    renderTicketPage(calls);
+    await waitFor(() => expect(screen.queryByTestId("merchant-zone-ticket-pick-ap-2")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("merchant-zone-ticket-pick-ap-2"));
+    fireEvent.change(screen.getByTestId("merchant-zone-ticket-account"), { target: { value: "新账户 6222****0001" } });
+    fireEvent.change(screen.getByTestId("merchant-zone-ticket-account-reason"), { target: { value: "原账户被冻结" } });
+    fireEvent.click(screen.getByTestId("merchant-zone-ticket-account-submit"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.includes("/ticket-settlements/ap-2/account-change"))).toBe(true));
+    const body = calls.find((c) => c.method === "POST")!.body!;
+    expect(body.new_account_ref).toBe("新账户 6222****0001");
+    expect(body.reason).toBe("原账户被冻结");
+    expect(typeof body.idempotency_key).toBe("string");
   });
 });

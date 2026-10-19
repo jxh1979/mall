@@ -6,7 +6,7 @@
   "verification_command": "npm run verify:security-baseline",
   "baseline_path": "security-scans/formal-security-baseline-v1.md",
   "findings_register_path": "security-scans/findings-register-v1.md",
-  "openapi_operation_count": 973,
+  "openapi_operation_count": 994,
   "security_baseline_version": "V1.05",
   "plaintext_secret_present": false,
   "notes": "第五批接口同步后在160实际执行 npm run verify:security-baseline 通过，核验930项正式接口及派生安全基线。证据仅覆盖该命令的静态检查，不代表真实支付渠道联调、完整运行时审计或生产准入；原有未解决生产阻断保留。",

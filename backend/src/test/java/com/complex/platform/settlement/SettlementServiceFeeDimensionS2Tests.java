@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
@@ -55,6 +57,7 @@ class SettlementServiceFeeDimensionS2Tests {
     private final Set<String> ticketTypeIds = new LinkedHashSet<>();
     private final List<String> looseVerificationIds = new ArrayList<>();
     private final List<String> merchantIds = new ArrayList<>();
+    private final List<String> saleSnapshotMonthIds = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -64,6 +67,11 @@ class SettlementServiceFeeDimensionS2Tests {
     @AfterEach
     void cleanup() {
         com.complex.platform.support.TestSecurityActors.clear();
+        for (String monthId : saleSnapshotMonthIds) {
+            jdbcTemplate.update("DELETE FROM single_bar_service_fee_tickets WHERE month_id = ?", monthId);
+            jdbcTemplate.update("DELETE FROM single_bar_service_fee_months WHERE id = ?", monthId);
+        }
+        saleSnapshotMonthIds.clear();
         for (String vid : looseVerificationIds) {
             com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate,
                     "DELETE FROM settlement_transactions WHERE verification_id = ?", vid);
@@ -253,6 +261,26 @@ class SettlementServiceFeeDimensionS2Tests {
 
         assertThat(feeOf("xcap1")).isEqualTo(1000L);
         assertThat(feeOf("xcap2")).as("单一酒吧门票可封顶,第二笔只收剩余额度").isEqualTo(200L);
+    }
+
+    /**
+     * FS-013(BSM L755「单店门票综合服务费按前述计费月汇总后的应收总额另行收取」;裁决 2026-10-19 第 3 条「售出月」):
+     * 出票时已按售出月逐票锁定服务费的单一酒吧门票,核销时不再从这张票上另抽一道(否则同一张票收两道、且又从票款里扣)。
+     */
+    @Test
+    void singleBarTicketLockedAtSaleIsNotChargedAgainAtVerification() {
+        String pid = newProject();
+        seedFeeWithCap(pid, null, null, 1000, 1200L);
+        String monthId = "sbfm_s2_" + System.nanoTime();
+        saleSnapshotMonthIds.add(monthId);
+        jdbcTemplate.update("INSERT INTO single_bar_service_fee_months (id, project_id, bar_merchant_id, billing_month, cap_cent)"
+                + " VALUES (?, ?, 'barX', ?, 1200)", monthId, pid, MONTH.atDay(1));
+        jdbcTemplate.update("INSERT INTO single_bar_service_fee_tickets (parent_ticket_id, order_id, month_id, base_cent,"
+                + " config_id, fee_bps, fee_cent) VALUES ('tkt_sold1', 'ord_sold1', ?, 10000, 'csfc_any', 1000, 1000)", monthId);
+
+        settleViaConsumer(pid, "sold1", "barX", "barX", 10000L);
+
+        assertThat(feeOf("sold1")).as("售出时已锁定逐票服务费,核销不再另抽").isZero();
     }
 
     // ─────── 经营域闸:只适用于酒吧相关票务 ───────

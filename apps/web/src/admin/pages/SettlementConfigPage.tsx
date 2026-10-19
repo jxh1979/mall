@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -9,6 +9,7 @@ import { hasPermissions } from "../security/PermissionGate";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { ApiError } from "../../shared/apiError";
 import type { AdminPageProps, BusinessEntityRow } from "../types";
+import { InternalPayDaysPanel } from "./InternalPayDaysPanel";
 
 // 结算配置中心（新立项）总控页 —— PRD settlement-rebuild §9（ADM-STL-001）。
 // 批0：①「看全局」当前生效配置一览；②草案待复核队列 + 复核转正。
@@ -507,6 +508,9 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
             { key: "overview", label: "概览", children: overviewTab },
             { key: "ticket-distribution", label: "通票分账", forceRender: true, children: ticketDistributionTab },
             { key: "commission-points", label: "提成与积分", forceRender: true, children: commissionPointsTab },
+            // FS-021-R3：三个付账日、钱路指派规则与非积分商户账单异议期。
+            { key: "internal-pay-days", label: "付账日与钱路指派", forceRender: true,
+              children: <InternalPayDaysPanel api={api} effectivePermissions={effectivePermissions} /> },
           ]}
         />
         {/* 待复核草案队列各栏目共用一份（testid 唯一），放在页签下方常驻，任一栏目改动落草案后都在此复核转正。 */}

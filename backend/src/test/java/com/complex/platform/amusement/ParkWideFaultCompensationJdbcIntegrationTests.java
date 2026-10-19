@@ -1,10 +1,14 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.amusement.dto.CompensationBatchConfirmRequest;
@@ -13,7 +17,11 @@ import com.complex.platform.amusement.dto.CompensationPolicyRequest;
 import com.complex.platform.amusement.dto.ParkWideFaultConfirmRequest;
 import com.complex.platform.amusement.dto.ParkWideFaultInitiateRequest;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.InternalPayableExecutionService;
+import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.support.TestSecurityActors;
+import com.complex.platform.ticketing.CompensationFulfillmentPort;
 import com.complex.platform.ticketing.EntitlementTemplateRecord;
 import com.complex.platform.ticketing.IssuedEntitlementRecord;
 import com.complex.platform.ticketing.TicketOrderRecord;
@@ -22,10 +30,14 @@ import com.complex.platform.ticketing.TicketTypeRecord;
 import com.complex.platform.ticketing.TicketingRepository;
 import com.complex.platform.ticketing.TicketingService;
 import com.complex.platform.ticketing.dto.VerificationRequest;
+import com.complex.platform.ticketing.dto.VerificationReverseRequest;
+import com.complex.platform.ticketing.SettlementSettledEvent;
 import com.complex.platform.ticketing.VerificationResponse;
+import com.complex.platform.settlement.SettlementSettledConsumer;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -35,15 +47,23 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
+import org.springframework.test.util.AopTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * CG-08b 全园故障补偿通票（ENUM「全园故障与补偿通票」）：补偿对象快照（已入场核销且本场次受影响 / 尚未核销但仍在有效期内）、
  * 仍在原票下办理（延长原核销权不增加次数 / 另补一次完整票面权益）、同一故障同一人份只补一次、批量发放前双岗位确认、
  * 补偿有效期参数（出厂默认一年，上下限须同时配置）、补偿机会用一次即用尽且履约锁定到补偿记录。
+ * FS-012：补偿新增实际履约逐笔记录并锁定履约时目录生效价与版本、按承担主体对实际提供方形成补偿应付、不进普通结算事实与赠饮应付、
+ * 承担主体须为在用法律主体、冲正时对冲承担方应付。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -51,10 +71,19 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
 @Transactional
+@AutoConfigureMockMvc
+@RecordApplicationEvents
 class ParkWideFaultCompensationJdbcIntegrationTests {
 
     private static final String HEAD = AmusementParkWideFaultService.ROLE_HEAD;
     private static final String ENG = AmusementParkWideFaultService.ROLE_ENGINEERING_SAFETY;
+    /** 承担主体：游乐公司（V354 主体主数据种子，active）。 */
+    private static final String BEARER = "be_amusement";
+
+    @Autowired private MockMvc mockMvc;
+    @Autowired private ApplicationEvents events;
+    @Autowired private SettlementSettledConsumer settlementSettledConsumer;
+    @Autowired private com.complex.platform.settlement.JdbcSettlementTransactionRepository settlementTransactions;
 
     @Autowired private AmusementFaultCompensationService compensationService;
     @Autowired private AmusementParkWideFaultService faultService;
@@ -67,6 +96,9 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     @Autowired private AmusementRepository amusementRepository;
     @Autowired private JdbcAmusementFaultCompensationRepository compensationRepository;
     @Autowired private com.complex.platform.governance.review.SupervisorReviewService reviews;
+    @Autowired private FinanceService financeService;
+    @Autowired private InternalPayableExecutionService internalPayableExecution;
+    @Autowired private CompensationFulfillmentPort compensationFulfillmentPort;
 
     private String suffix;
     private String projectId;
@@ -82,11 +114,15 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     private String headUser;
     private String engineeringUser;
     private String bothRolesUser;
+    private String financeUser;             // 登记收付款（finance.payment.register）
     private String deviceCode;
+    private String providerMerchantId;      // 补发权益的实际提供方商户
+    private String drinkItemCode;           // 酒水权益的内部结算价目录条目
 
     @BeforeEach
     void seed() {
         suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        com.complex.platform.support.InternalPayDayFixtures.seed(jdbcTemplate); // 补偿应付按付账日规则与日历推算到期日
         projectId = "prj_cg08b_" + suffix;
         jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
                 + " VALUES (?, 'complex', '补偿测试综合体', 'active', now(), now())", projectId);
@@ -109,6 +145,12 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 "published", 1, 60, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         String amusementTemplate = template("amusement_pass", 5500L);
         String drinkTemplate = template("bar_drink", 3300L);
+        // FS-012：酒水权益挂内部结算价目录（BSM L750「由对应域主管公司决定采用内部结算价……与实际提供方结算」）。
+        providerMerchantId = "mch_cg08b_" + suffix;
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                + " VALUES (?, '补偿测试提供方', 'bar', 'active', now(), now())", providerMerchantId);
+        drinkItemCode = catalog("drink", 1200L);
+        jdbcTemplate.update("UPDATE entitlement_templates SET catalog_item_code=? WHERE id=?", drinkItemCode, drinkTemplate);
         orderId = "ord_cg08b_" + suffix;
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(orderId, "ON-" + suffix, "cus_cg08b_" + suffix, ticketTypeId, null, 1,
                 LocalDate.now(), "web", null, 8800L, null, 8800L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
@@ -135,6 +177,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         engineeringUser = user("eng", List.of("amusement.park_fault.confirm_as_engineering_safety", "amusement.park_fault.view"));
         bothRolesUser = user("both", List.of("amusement.park_fault.confirm_as_head",
                 "amusement.park_fault.confirm_as_engineering_safety", "amusement.park_fault.view"));
+        financeUser = user("fin", List.of("finance.payment.register"));
     }
 
     @AfterEach
@@ -148,9 +191,9 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         AmusementParkWideFaultRecord fault = activateFault();
         actAs(bothRolesUser);
         AmusementFaultCompensationBatchRecord batch = compensationService.initiateBatch(fault.id(),
-                new CompensationBatchInitiateRequest("cg08b-init-" + suffix, HEAD, "供电故障，游乐园整体关闭", "ent_amusement_co"));
+                new CompensationBatchInitiateRequest("cg08b-init-" + suffix, HEAD, "供电故障，游乐园整体关闭", BEARER));
         assertThat(batch.status()).isEqualTo("pending_confirmation");
-        assertThat(batch.bearerCompanyId()).isEqualTo("ent_amusement_co");
+        assertThat(batch.bearerCompanyId()).isEqualTo(BEARER);
         assertThat(batch.validityDays()).isEqualTo(365);
         List<Map<String, Object>> pending = jdbcTemplate.queryForList(
                 "SELECT entitlement_id, kind, status, original_session_id, original_entry_verification_id, share_count"
@@ -219,7 +262,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         // 同一故障下同一人份只补偿一次：再次发起无可补偿人份。
         actAs(headUser);
         assertThatThrownBy(() -> compensationService.initiateBatch(fault.id(),
-                new CompensationBatchInitiateRequest("cg08b-again-" + suffix, HEAD, "重复发起", "ent_amusement_co")))
+                new CompensationBatchInitiateRequest("cg08b-again-" + suffix, HEAD, "重复发起", BEARER)))
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).code()).isEqualTo("COMPENSATION_NO_ELIGIBLE_SHARES");
     }
@@ -245,7 +288,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         AmusementParkWideFaultRecord fault = activateFault();
         actAs(headUser);
         AmusementFaultCompensationBatchRecord batch = compensationService.initiateBatch(fault.id(),
-                new CompensationBatchInitiateRequest("cg08b-init2-" + suffix, HEAD, "消防系统故障", "ent_amusement_co"));
+                new CompensationBatchInitiateRequest("cg08b-init2-" + suffix, HEAD, "消防系统故障", BEARER));
         assertThat(batch.validityDays()).isEqualTo(400);
         actAs(engineeringUser);
         AmusementFaultCompensationBatchRecord issued = compensationService.confirmBatch(batch.id(),
@@ -259,7 +302,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         AmusementParkWideFaultRecord fault = activateFault();
         actAs(headUser);
         AmusementFaultCompensationBatchRecord batch = compensationService.initiateBatch(fault.id(),
-                new CompensationBatchInitiateRequest("cg08b-init3-" + suffix, HEAD, "入口系统故障", "ent_amusement_co"));
+                new CompensationBatchInitiateRequest("cg08b-init3-" + suffix, HEAD, "入口系统故障", BEARER));
         actAs(engineeringUser);
         compensationService.confirmBatch(batch.id(), new CompensationBatchConfirmRequest("cg08b-ok3-" + suffix, ENG, "确认"));
         String itemId = (String) jdbcTemplate.queryForMap("SELECT id FROM amusement_fault_compensation_items WHERE batch_id = ? AND kind = 'full_reissue'",
@@ -367,6 +410,270 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 .noneMatch(row -> unverifiedEntitlementId.equals(row.get("entitlement_id")));
     }
 
+    /**
+     * FS-012-R1/R2（BSM L800、ENUM L148「本次完整补偿新增实际履约所用的内部结算价及其规则版本，按补偿实际履约时生效的版本计算并锁定到该笔
+     * 补偿履约记录」；台账 02｜Q15；CG 第 39 条）：同一补偿记录下补发的各项权益每次实际履约逐笔记录，锁定履约时目录生效价与条目版本，
+     * 由批次承担主体对实际提供方形成补偿应付（普通内部结算：BSM L1673/L1683 按财务指定付账日、次月出账日起的异议期与银行工作日推算并固化，
+     * 不挂提供方账本）；同一请求重放不重复挂账；履约后目录改价不动已锁记录。
+     */
+    @Test
+    void everyReissuedEntitlementFulfillmentIsRecordedWithLockedCatalogVersion() {
+        String giftItemCode = addGiftDrinkBinding(800L);
+        String itemId = issueFullReissue();
+        VerificationResponse drink = verify("fs012-drink-" + suffix, compensationEntitlement(itemId, "bar_drink"));
+        assertThat(verify("fs012-drink-" + suffix, compensationEntitlement(itemId, "bar_drink")).id()).isEqualTo(drink.id());
+        String giftVersion = promote(giftItemCode, 900L);
+        VerificationResponse gift = verify("fs012-gift-" + suffix, compensationEntitlement(itemId, "gift_drink"));
+        promote(drinkItemCode, 1500L);
+
+        List<Map<String, Object>> payables = jdbcTemplate.queryForList("SELECT id, direction, counterparty_id, merchant_id, amount_cent,"
+                + " unpaid_amount_cent, status, due_date, accounting_period FROM ar_ap_items"
+                + " WHERE source_type = 'compensation_fulfillment' AND project_id = ? ORDER BY amount_cent DESC", projectId);
+        assertThat(payables).extracting(r -> ((Number) r.get("amount_cent")).longValue()).containsExactly(1200L, 900L);
+        for (Map<String, Object> r : payables) {
+            assertThat(r).containsEntry("direction", "payable").containsEntry("counterparty_id", providerMerchantId)
+                    .containsEntry("merchant_id", null).containsEntry("status", "pending_payment")
+                    .containsEntry("accounting_period", YearMonth.now().toString());
+            assertThat(r.get("unpaid_amount_cent")).isEqualTo(r.get("amount_cent"));
+            Map<String, Object> s = jdbcTemplate.queryForMap("SELECT route, project_id, visible_at, objection_deadline, scheduled_due_date"
+                    + " FROM internal_payable_schedules WHERE ar_ap_item_id = ?", r.get("id"));
+            assertThat(s).containsEntry("route", "compensation_fulfillment").containsEntry("project_id", projectId);
+            assertThat(r.get("due_date")).isEqualTo(s.get("scheduled_due_date"));
+            assertThat(((Timestamp) s.get("visible_at")).toInstant()).as("次月出账后才可查看").isAfter(Instant.now());
+            assertThat(((java.sql.Date) s.get("scheduled_due_date")).toLocalDate())
+                    .as("付账日不早于异议期届满").isAfterOrEqualTo(((java.sql.Date) s.get("objection_deadline")).toLocalDate());
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT settlement_price_cent FROM ticket_verifications WHERE id = ?", Long.class,
+                drink.id())).isEqualTo(1200L);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT verification_id, batch_id, bearer_company_id, provider_merchant_id,"
+                + " settlement_price_cent, price_catalog_entry_id, payable_item_id, project_id FROM amusement_compensation_fulfillments"
+                + " WHERE item_id = ? ORDER BY settlement_price_cent DESC", itemId);
+        assertThat(rows).hasSize(2);
+        assertThat(rows.get(0)).containsEntry("verification_id", drink.id()).containsEntry("settlement_price_cent", 1200L)
+                .containsEntry("price_catalog_entry_id", drinkItemCode + "_v1").containsEntry("payable_item_id", payables.get(0).get("id"));
+        assertThat(rows.get(1)).containsEntry("verification_id", gift.id()).containsEntry("settlement_price_cent", 900L)
+                .containsEntry("price_catalog_entry_id", giftVersion).containsEntry("payable_item_id", payables.get(1).get("id"));
+        for (Map<String, Object> r : rows) {
+            assertThat(r).containsEntry("bearer_company_id", BEARER).containsEntry("provider_merchant_id", providerMerchantId)
+                    .containsEntry("project_id", projectId);
+        }
+    }
+
+    /** FS-012-R2（BSM L751「商户让利的零元免费权益不结算」）：履约时目录价为 0 → 只留补偿履约记录，不挂补偿应付。 */
+    @Test
+    void zeroPricedConcessionCompensationPostsNoPayable() {
+        String zeroVersion = promote(drinkItemCode, 0L);
+        String itemId = issueFullReissue();
+        VerificationResponse drink = verify("fs012-zero-" + suffix, compensationEntitlement(itemId, "bar_drink"));
+        assertThat(jdbcTemplate.queryForObject("SELECT fulfilled_settlement_price_cent FROM amusement_fault_compensation_items WHERE id = ?",
+                Long.class, itemId)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type = 'compensation_fulfillment'"
+                + " AND project_id = ?", Integer.class, projectId)).isZero();
+        assertThat(jdbcTemplate.queryForMap("SELECT verification_id, settlement_price_cent, price_catalog_entry_id, payable_item_id"
+                + " FROM amusement_compensation_fulfillments WHERE item_id = ?", itemId))
+                .containsEntry("verification_id", drink.id()).containsEntry("settlement_price_cent", 0L)
+                .containsEntry("price_catalog_entry_id", zeroVersion).containsEntry("payable_item_id", null);
+    }
+
+    /**
+     * FS-012-R3（BSM L800「补偿履约与原履约分别记录，原核销和原结算不回改」；CG 第 39 条「防止重复记原票分账」）：
+     * 补偿补发权益核销不写普通核销结算事实；普通核销照写。结算消费者是提交后另开事务，本类测试事务不提交，
+     * 故把两次核销实际发布的事件交给消费者本体（绕过事务代理）在本事务内落库。按核销权威事实补建缺失结算（AUD-017）也不把补偿核销补回去。
+     */
+    @Test
+    void compensationVerificationWritesNoOrdinarySettlementFact() {
+        String itemId = issueFullReissue();
+        VerificationResponse compensation = verify("fs012-st-comp-" + suffix, compensationEntitlement(itemId, "bar_drink"));
+        VerificationResponse ordinary = verify("fs012-st-normal-" + suffix, drinkEntitlementId);
+        SettlementSettledConsumer consumer = AopTestUtils.getUltimateTargetObject(settlementSettledConsumer);
+        events.stream(SettlementSettledEvent.class).forEach(consumer::onSettlementSettled);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM settlement_transactions WHERE verification_id = ?", Integer.class,
+                compensation.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM settlement_transactions WHERE verification_id = ?", Integer.class,
+                ordinary.id())).isEqualTo(1);
+        assertThat(settlementTransactions.findMissingVerificationSettlementFacts(Integer.MAX_VALUE))
+                .noneMatch(fact -> compensation.id().equals(fact.verificationId()));
+    }
+
+    /** FS-012-R3：补偿赠饮照常出 0 元赠饮单，但不再挂「平台→酒吧」赠饮应付，改由承担主体对酒吧挂补偿应付。 */
+    @Test
+    void compensationGiftDrinkPostsNoPassDrinkPayable() {
+        addGiftDrinkBinding(800L);
+        String itemId = issueFullReissue();
+        VerificationResponse gift = verify("fs012-gift-only-" + suffix, compensationEntitlement(itemId, "gift_drink"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type = 'pass_drink_settlement'"
+                + " AND source_id = ?", Integer.class, gift.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM bar_gift_redemptions WHERE verification_id = ?", Integer.class,
+                gift.id())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type = 'compensation_fulfillment'"
+                + " AND project_id = ? AND amount_cent = 800", Integer.class, projectId)).isEqualTo(1);
+    }
+
+    /** FS-012-R5（CG 第 39 条：形成的账款须与实际履约一致）：补偿核销被冲正 → 按 V344 范式追加严格取反的冲正行，承担方应付净额归零。 */
+    @Test
+    void reversingCompensationVerificationReversesBearerPayable() {
+        String itemId = issueFullReissue();
+        VerificationResponse drink = verify("fs012-rev-" + suffix, compensationEntitlement(itemId, "bar_drink"));
+        ticketingService.reverseVerification(drink.id(), new VerificationReverseRequest("fs012-rev-do-" + suffix, "误核销冲正"),
+                "staff_fs012");
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT id, amount_cent, paid_amount_cent, unpaid_amount_cent, status,"
+                + " origin_item_id FROM ar_ap_items WHERE source_type = 'compensation_fulfillment' AND project_id = ?"
+                + " ORDER BY amount_cent DESC", projectId);
+        assertThat(rows).extracting(r -> ((Number) r.get("amount_cent")).longValue()).containsExactly(1200L, -1200L);
+        assertThat(rows.get(1)).containsEntry("origin_item_id", rows.get(0).get("id")).containsEntry("status", "reversed")
+                .containsEntry("unpaid_amount_cent", -1200L).containsEntry("paid_amount_cent", 0L);
+        assertThat(rows.get(0)).containsEntry("status", "pending_payment").containsEntry("origin_item_id", null);
+        Map<String, Object> fulfillment = jdbcTemplate.queryForMap("SELECT reversed_at, reversal_item_id FROM amusement_compensation_fulfillments"
+                + " WHERE verification_id = ?", drink.id());
+        assertThat(fulfillment.get("reversed_at")).isNotNull();
+        assertThat(fulfillment.get("reversal_item_id")).isEqualTo(rows.get(1).get("id"));
+        // 操作员裁决 2026-10-19 第二轮第 5 条：全部未付时只冲正，不挂追收（上面 containsExactly 已断言无重述行）。
+        assertThat(recoveryRows()).as("全部未付撤销不挂追收").isEmpty();
+        // 冲正后原行不再是有效款项：承担方财务不得再对它登记已发起付款（与登记收付同码 409 AR_AP_ITEM_REVERSED），钱不会先汇出再被拦。
+        actAs(financeUser);
+        assertThatThrownBy(() -> internalPayableExecution.initiate((String) rows.get(0).get("id"),
+                new InternalPayableExecutionService.InitiateRequest("fs012-rev-pay-" + suffix, "BANK-REV-" + suffix, null)))
+                .isInstanceOf(ApiException.class).extracting(e -> ((ApiException) e).code()).isEqualTo("AR_AP_ITEM_REVERSED");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM internal_payable_payment_attempts WHERE ar_ap_item_id = ?",
+                Integer.class, rows.get(0).get("id"))).isZero();
+    }
+
+    /**
+     * 操作员裁决 2026-10-19 第二轮第 5 条「已付部分另挂追收」（比照门票分账裁决：冲正只取消未付部分；已付出的部分另挂一笔对提供方的追收应收，
+     * 单独收回）：补偿应付 1200 已付 500 后该次核销被撤销 → 原行不动；V344 冲正行严格取反、重述行承接已付部分（三行净额＝已付 500、未付归零）；
+     * 已付 500 对提供方另挂追收应收（source_type=compensation_fulfillment_recovery，幂等键取该次冲正 id），到期日按该钱路付账日规则推算并固化。
+     */
+    @Test
+    void partiallyPaidCompensationPayableReversalRecoversPaidPartFromProvider() {
+        String verificationId = reverseAfterPartialPayment(500L);
+
+        List<Map<String, Object>> rows = compensationRows();
+        assertThat(rows).extracting(r -> ((Number) r.get("amount_cent")).longValue()).containsExactly(1200L, 500L, -1200L);
+        Map<String, Object> origin = rows.get(0);
+        assertThat(origin).containsEntry("status", "partial_paid").containsEntry("paid_amount_cent", 500L)
+                .containsEntry("unpaid_amount_cent", 700L).containsEntry("origin_item_id", null);
+        assertThat(rows.get(1)).as("重述行承接已付部分").containsEntry("paid_amount_cent", 500L).containsEntry("unpaid_amount_cent", 0L)
+                .containsEntry("status", "settled").containsEntry("origin_item_id", origin.get("id"));
+        Map<String, Object> reversal = rows.get(2);
+        assertThat(reversal).as("冲正行严格取反").containsEntry("paid_amount_cent", -500L).containsEntry("unpaid_amount_cent", -700L)
+                .containsEntry("status", "reversed").containsEntry("origin_item_id", origin.get("id"));
+        assertThat(jdbcTemplate.queryForMap("SELECT reversed_at, reversal_item_id FROM amusement_compensation_fulfillments"
+                + " WHERE verification_id = ?", verificationId)).containsEntry("reversal_item_id", reversal.get("id"));
+
+        List<Map<String, Object>> recoveries = recoveryRows();
+        assertThat(recoveries).hasSize(1);
+        Map<String, Object> recovery = recoveries.get(0);
+        assertThat(recovery).containsEntry("direction", "receivable").containsEntry("counterparty_id", providerMerchantId)
+                .containsEntry("merchant_id", null).containsEntry("project_id", projectId).containsEntry("source_id", reversal.get("id"))
+                .containsEntry("amount_cent", 500L).containsEntry("paid_amount_cent", 0L).containsEntry("unpaid_amount_cent", 500L)
+                .containsEntry("status", "pending_collection").containsEntry("accounting_period", YearMonth.now().toString())
+                .containsEntry("origin_item_id", null);
+        Map<String, Object> s = jdbcTemplate.queryForMap("SELECT route, project_id, counterparty_id, objection_deadline, scheduled_due_date"
+                + " FROM internal_payable_schedules WHERE ar_ap_item_id = ?", recovery.get("id"));
+        assertThat(s).containsEntry("route", "compensation_fulfillment_recovery").containsEntry("project_id", projectId)
+                .containsEntry("counterparty_id", providerMerchantId);
+        assertThat(recovery.get("due_date")).isEqualTo(s.get("scheduled_due_date"));
+        assertThat(((java.sql.Date) s.get("scheduled_due_date")).toLocalDate())
+                .as("付账日不早于异议期届满").isAfterOrEqualTo(((java.sql.Date) s.get("objection_deadline")).toLocalDate());
+    }
+
+    /** 裁决第 5 条「单独收回」：追收应收按前端真实请求形状（蛇形键）经登记收款接口（统一回写点 settleArApItem）收回。 */
+    @Test
+    void compensationRecoveryIsCollectedThroughArApPaymentEndpoint() throws Exception {
+        reverseAfterPartialPayment(500L);
+        List<Map<String, Object>> recoveries = recoveryRows();
+        assertThat(recoveries).hasSize(1);
+        String recoveryId = (String) recoveries.get(0).get("id");
+        AccessActor admin = new AccessActor(financeUser, "u_" + financeUser, "platform_admin", "org_1", null, "active");
+        mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + recoveryId + "/payments")
+                        .with(request -> {
+                            request.addHeader("X-Terminal-Type", "web");
+                            return authentication(new UsernamePasswordAuthenticationToken(admin, "token", List.of()))
+                                    .postProcessRequest(request);
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"fs012-cpr-pay-" + suffix + "\",\"amount_cent\":500,"
+                                + "\"payment_method\":\"bank_transfer\",\"bank_flow_ref\":\"BANK-CPR-" + suffix + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.item.status").value("settled"))
+                .andExpect(jsonPath("$.data.item.unpaid_amount_cent").value(0));
+        assertThat(jdbcTemplate.queryForMap("SELECT paid_amount_cent, unpaid_amount_cent, status FROM ar_ap_items WHERE id = ?", recoveryId))
+                .containsEntry("paid_amount_cent", 500L).containsEntry("unpaid_amount_cent", 0L).containsEntry("status", "settled");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_payments WHERE ar_ap_item_id = ?", Integer.class, recoveryId))
+                .isEqualTo(1);
+    }
+
+    /** 裁决第 5 条：同一次冲正重放不重复冲正、不双挂追收（幂等键取该次冲正 id）。 */
+    @Test
+    void replayedCompensationReversalDoesNotDoubleRecover() {
+        String verificationId = reverseAfterPartialPayment(500L);
+        compensationFulfillmentPort.reverseFulfillment(verificationId, Instant.now());
+        compensationFulfillmentPort.reverseFulfillment(verificationId, Instant.now().plusSeconds(1));
+        assertThat(compensationRows()).extracting(r -> ((Number) r.get("amount_cent")).longValue()).containsExactly(1200L, 500L, -1200L);
+        assertThat(recoveryRows()).hasSize(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_compensation_fulfillments WHERE verification_id = ?",
+                Integer.class, verificationId)).isEqualTo(1);
+    }
+
+    /** 补发酒水核销形成补偿应付 1200 → 承担方先付 paidCent → 撤销该次核销；返回该次核销 id。 */
+    private String reverseAfterPartialPayment(long paidCent) {
+        String itemId = issueFullReissue();
+        VerificationResponse drink = verify("fs012-part-" + suffix, compensationEntitlement(itemId, "bar_drink"));
+        String payableId = jdbcTemplate.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'compensation_fulfillment'"
+                + " AND project_id = ?", String.class, projectId);
+        actAs(financeUser);
+        financeService.registerArApPayment(payableId, new ArApPaymentRequest("fs012-part-pay-" + suffix, null, List.of(), paidCent,
+                "bank_transfer", null, "BANK-CPF-" + suffix));
+        TestSecurityActors.asPlatformAdmin();
+        ticketingService.reverseVerification(drink.id(), new VerificationReverseRequest("fs012-part-rev-" + suffix, "误核销冲正"),
+                "staff_fs012");
+        return drink.id();
+    }
+
+    private List<Map<String, Object>> compensationRows() {
+        return jdbcTemplate.queryForList("SELECT id, amount_cent, paid_amount_cent, unpaid_amount_cent, status, origin_item_id FROM ar_ap_items"
+                + " WHERE source_type = 'compensation_fulfillment' AND project_id = ? ORDER BY amount_cent DESC", projectId);
+    }
+
+    private List<Map<String, Object>> recoveryRows() {
+        return jdbcTemplate.queryForList("SELECT id, direction, counterparty_id, merchant_id, project_id, source_id, amount_cent,"
+                + " paid_amount_cent, unpaid_amount_cent, status, due_date, accounting_period, origin_item_id FROM ar_ap_items"
+                + " WHERE source_type = 'compensation_fulfillment_recovery' AND project_id = ?", projectId);
+    }
+
+    /** FS-012-R4（ENUM L148「发放记录须明确该公司的具体法律主体」）：承担主体须为主体主数据中在用的法律主体。 */
+    @Test
+    void initiateBatchRejectsUnknownBearerEntity() {
+        AmusementParkWideFaultRecord fault = activateFault();
+        actAs(headUser);
+        assertThatThrownBy(() -> compensationService.initiateBatch(fault.id(),
+                new CompensationBatchInitiateRequest("fs012-bearer-" + suffix, HEAD, "供电故障", "ent_not_exist")))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code()).isEqualTo("COMPENSATION_BEARER_ENTITY_INVALID");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM amusement_fault_compensation_batches WHERE fault_id = ?",
+                Integer.class, fault.id())).isZero();
+    }
+
+    /** FS-012-R4：按前端真实请求形状（adminClient 把键转蛇形）发起补偿批次，承担主体为主体主数据编号。 */
+    @Test
+    void initiateBatchAcceptsFrontendSnakeCaseBody() throws Exception {
+        AmusementParkWideFaultRecord fault = activateFault();
+        AccessActor head = new AccessActor(headUser, "u_" + headUser, "platform_admin", "org_1", null, "active");
+        mockMvc.perform(post("/api/v1/amusement/park-wide-faults/" + fault.id() + "/compensation-batches")
+                        .with(request -> {
+                            request.addHeader("X-Terminal-Type", "web");
+                            return authentication(new UsernamePasswordAuthenticationToken(head, "token", List.of()))
+                                    .postProcessRequest(request);
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"fs012-mvc-" + suffix + "\",\"role\":\"amusement_head\","
+                                + "\"reason\":\"供电故障，游乐园整体关闭\",\"bearer_company_id\":\"be_amusement\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.bearer_company_id").value(BEARER));
+        assertThat(jdbcTemplate.queryForObject("SELECT bearer_company_id FROM amusement_fault_compensation_batches WHERE fault_id = ?",
+                String.class, fault.id())).isEqualTo(BEARER);
+    }
+
     // ---------- helpers ----------
 
     private void actAsVerifier() {
@@ -407,9 +714,77 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     private void seedDevice() {
         deviceCode = "device_cg08b_" + suffix;
         Timestamp ts = Timestamp.from(Instant.now());
+        // 设备绑提供方商户：赠饮须在提供它的商户核销（S5 K16）。
         jdbcTemplate.update("INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope, status,"
-                + " created_at, updated_at) VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?)",
-                deviceCode, "dev-" + deviceCode, "DC-" + deviceCode, ts, ts);
+                + " merchant_id, created_at, updated_at) VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?, ?)",
+                deviceCode, "dev-" + deviceCode, "DC-" + deviceCode, providerMerchantId, ts, ts);
+    }
+
+    /** 负责人发起、工程岗确认全园故障补偿；返回已入场人份的完整补发补偿记录，随后以平台管理员在提供方设备上核销。 */
+    private String issueFullReissue() {
+        AmusementParkWideFaultRecord fault = activateFault();
+        actAs(headUser);
+        AmusementFaultCompensationBatchRecord batch = compensationService.initiateBatch(fault.id(),
+                new CompensationBatchInitiateRequest("fs012-init-" + suffix, HEAD, "供电故障，游乐园整体关闭", BEARER));
+        actAs(engineeringUser);
+        compensationService.confirmBatch(batch.id(), new CompensationBatchConfirmRequest("fs012-ok-" + suffix, ENG, "确认"));
+        TestSecurityActors.asPlatformAdmin();
+        seedDevice();
+        return jdbcTemplate.queryForObject("SELECT id FROM amusement_fault_compensation_items WHERE batch_id = ? AND kind = 'full_reissue'",
+                String.class, batch.id());
+    }
+
+    private String compensationEntitlement(String itemId, String type) {
+        return jdbcTemplate.queryForObject("SELECT id FROM issued_entitlements WHERE compensation_item_id = ? AND entitlement_type = ?",
+                String.class, itemId, type);
+    }
+
+    private VerificationResponse verify(String key, String entitlementId) {
+        String code = jdbcTemplate.queryForObject("SELECT entitlement_code FROM issued_entitlements WHERE id = ?", String.class, entitlementId);
+        return ticketingService.createVerification(new VerificationRequest(key, "qr", code, deviceCode, "point_cg08b_" + suffix, Map.of()));
+    }
+
+    /** 内部结算价目录生效条目（item_code 稳定，行 id＝价格版本）。 */
+    private String catalog(String key, long priceCent) {
+        String code = "sku_cg08b_" + key + "_" + suffix;
+        catalogRow(code + "_v1", code, priceCent);
+        return code;
+    }
+
+    /** 目录转正新价：旧生效行软替换为 inactive（留库即版本史），新行生效；返回新版本行 id。 */
+    private String promote(String code, long priceCent) {
+        jdbcTemplate.update("UPDATE internal_price_catalog SET status = 'inactive' WHERE item_code = ? AND is_draft = FALSE AND status = 'active'",
+                code);
+        String id = code + "_v" + System.nanoTime();
+        catalogRow(id, code, priceCent);
+        return id;
+    }
+
+    private void catalogRow(String id, String code, long priceCent) {
+        jdbcTemplate.update("INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name, price_cent, status,"
+                + " is_draft, updated_by, created_at, updated_at) VALUES (?, ?, ?, 'beverage', '补偿测试条目', ?, 'active', FALSE,"
+                + " 'seed_fs012', now(), now())", id, code, providerMerchantId, priceCent);
+    }
+
+    /** 票种追加一项平台出资型赠饮（提供方商品挂目录价、提供方有台位），完整补发时随票面一起补；返回目录条目编码。 */
+    private String addGiftDrinkBinding(long priceCent) {
+        String code = catalog("gift", priceCent);
+        String productId = "barprod_cg08b_" + suffix;
+        jdbcTemplate.update("INSERT INTO bar_products (id, bar_id, product_name, product_type, price_cent, currency, inventory_item_id,"
+                + " stock_location_id, stock_deduction_required, status, internal_settlement_price_cent, catalog_item_code, created_at,"
+                + " updated_at) VALUES (?, ?, '补偿赠饮', 'beverage', 3800, 'CNY', NULL, 'default', FALSE, 'active', ?, ?, now(), now())",
+                productId, providerMerchantId, priceCent, code);
+        jdbcTemplate.update("INSERT INTO bar_tables (id, bar_id, merchant_id, table_code, table_name, table_type, capacity,"
+                + " allowed_pass_free_guest_count, min_consumption_cent, currency, status, created_at, updated_at)"
+                + " VALUES (?, ?, NULL, ?, '补偿赠饮台', 'standard', 4, 0, 0, 'CNY', 'active', now(), now())",
+                "table_cg08b_" + suffix, providerMerchantId, "TC_cg08b_" + suffix);
+        Instant now = Instant.now();
+        String id = "tpl_cg08b_gift_" + suffix;
+        ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(id, "权益-赠饮", "gift_drink", 1, 0L, "active",
+                null, null, null, productId, now, now, "physical", null, "per_use", null, false));
+        ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord("bind_" + id, ticketTypeId, id, 1, 1,
+                0L, "default", 1, 0L, now, now));
+        return code;
     }
 
     private String user(String key, List<String> permissions) {

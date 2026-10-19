@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.amusement.AmusementParkWideFaultService.roleLabel;
 
@@ -124,6 +124,10 @@ public class AmusementFaultCompensationService {
             String role = faultService.requireRoleWithPermission(request == null ? null : request.role());
             String reason = requireText(request.reason(), "必须填写发放原因");
             String bearer = requireText(request.bearerCompanyId(), "必须指明决定发放补偿的域主管公司的具体法律主体");
+            // FS-012-R4（ENUM L148「发放记录须明确该公司的具体法律主体」）：承担主体须为主体主数据中在用的法律主体。
+            if (!repository.isActiveBusinessEntity(bearer)) {
+                throw ApiException.badRequest("COMPENSATION_BEARER_ENTITY_INVALID", "承担主体须为主体主数据中在用的法律主体");
+            }
             return idempotencyService.execute("initiateFaultCompensationBatch", request.idempotencyKey(), request, () -> {
                 AmusementParkWideFaultRecord fault = requireFault(faultId);
                 if (fault.activatedAt() == null) {

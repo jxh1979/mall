@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.03
+
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -29,6 +31,18 @@ public class JdbcSettlementTransactionRepository {
      * 同一业务事件重放不重复入账，且<b>永不 UPDATE</b>（账本 append-only，历史行不可变）。
      */
     public void insertImmutableFact(SettlementTransactionRecord record) {
+        insertFact(record, null);
+    }
+
+    /**
+     * FS-023：到期未核销事实另带立项分类与实际渠道费（ENUM L48「各项均只扣一次」、L49「两类各自单独立项留痕」、
+     * L51「每笔分摊的结果与所用合同版本必须留痕」；PGM L302 尾差单列并写明承担主体）。幂等口径同 {@link #insertImmutableFact}。
+     */
+    public void insertUnverifiedFact(SettlementTransactionRecord record, UnverifiedExtras extras) {
+        insertFact(record, extras);
+    }
+
+    private void insertFact(SettlementTransactionRecord record, UnverifiedExtras extras) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("id", record.id())
                 .addValue("transaction_no", record.transactionNo())
@@ -57,7 +71,12 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("beneficiary_entity_id", record.beneficiaryEntityId())
                 .addValue("parent_ticket_id", record.parentTicketId())
                 .addValue("gift_cost_cent", record.giftCostCent())
-                .addValue("gift_cost_config_id", record.giftCostConfigId());
+                .addValue("gift_cost_config_id", record.giftCostConfigId())
+                .addValue("unverified_category", extras == null ? null : extras.category())
+                .addValue("channel_fee_cent", extras == null ? 0L : extras.channelFeeCent())
+                .addValue("channel_fee_config_id", extras == null ? null : extras.channelFeeConfigId())
+                .addValue("channel_fee_residual_cent", extras == null ? 0L : extras.channelFeeResidualCent())
+                .addValue("channel_fee_residual_entity_id", extras == null ? null : extras.channelFeeResidualEntityId());
 
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (
@@ -67,7 +86,9 @@ public class JdbcSettlementTransactionRepository {
                     beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to,
                     exclusive_merchant_id, business_at, discount_amount_cent,
                     comp_service_fee_cent, comp_service_fee_config_id, beneficiary_entity_id,
-                    parent_ticket_id, gift_cost_cent, gift_cost_config_id
+                    parent_ticket_id, gift_cost_cent, gift_cost_config_id,
+                    unverified_category, channel_fee_cent, channel_fee_config_id,
+                    channel_fee_residual_cent, channel_fee_residual_entity_id
                 )
                 VALUES (
                     :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
@@ -76,7 +97,9 @@ public class JdbcSettlementTransactionRepository {
                     :beneficiary_type, :merchant_id, :project_id, :settlement_status, :entitlement_valid_to,
                     :exclusive_merchant_id, :business_at, :discount_amount_cent,
                     :comp_service_fee_cent, :comp_service_fee_config_id, :beneficiary_entity_id,
-                    :parent_ticket_id, :gift_cost_cent, :gift_cost_config_id
+                    :parent_ticket_id, :gift_cost_cent, :gift_cost_config_id,
+                    :unverified_category, :channel_fee_cent, :channel_fee_config_id,
+                    :channel_fee_residual_cent, :channel_fee_residual_entity_id
                 )
                 ON CONFLICT (transaction_no) DO NOTHING
                 """, params);
@@ -234,8 +257,8 @@ public class JdbcSettlementTransactionRepository {
      * AUD-019 到期归项目"可没收终态"白名单：扫已过期(valid_to &lt; :now)且存在未核销部分(total_times &gt; used_times)、
      * allocated 非空的权益，<b>并排除退款/转赠链</b>：
      * <ul>
-     *   <li>{@code status='active'}：已成功退款(status='refunded')/已没收(forfeited)的权益天然排除——
-     *       退款给客户的金额不能再以未使用到期名义归项目(AUD-019 根因)；</li>
+     *   <li>{@code status IN ('active','forfeited')}：已成功退款(status='refunded')的权益天然排除——
+     *       退款给客户的金额不能再以未使用到期名义归项目(AUD-019 根因)；到期作废(forfeited)是未退款的终结状态，须照常归属(FS-023-R2)；</li>
      *   <li>父票实例非 active(refund_pending/refunded/transferring/forfeited)一并排除——覆盖"退款申请中/已批准"
      *       尚未冻结权益的时间窗（此时权益仍 active 但实例已冻结）。</li>
      * </ul>
@@ -246,26 +269,69 @@ public class JdbcSettlementTransactionRepository {
      * 兜底成酒吧＝有金额却定不出真正的收款方时默认记给娱乐平台公司，传媒/游乐公司的钱就这么悄悄没了。
      * 现改为如实返回 NULL，由 {@code SettlementExpiryJob} fail-loud 阻断落账。
      */
+    // FS-023-R2/R4：作废(forfeited)终结状态同样要归属（TicketOrderExpiryJob 把到期且从未使用的权益置 forfeited，
+    //   只取 active 会让恰恰从未使用的票永不落归属事实）；另取多人票首场次已开启、本人份从未检票的权益（未到期），
+    //   由作业按首场次实际闭店时刻判定是否已可处理（ENUM L48「于该场次结束时按本条处理，不等票面有效期届满」）。
+    //   人份汇总（是否检票、入场次数）按同父票同 slot 全部权益取；入场类权益口径同 TicketRewardService（ticket/entry/admission/amusement*）。
     public java.util.List<ExpiredUnverifiedRow> findExpiredUnverifiedEntitlements(Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
         return jdbcTemplate.query("""
-                SELECT e.id, e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
-                       e.total_times, e.used_times, e.allocated_revenue_cent, e.valid_to,
-                       m.merchant_type AS business_format
-                  FROM issued_entitlements e
-                  LEFT JOIN merchants m ON m.id = e.merchant_id
-                 WHERE e.valid_to < :now
-                   AND e.total_times > e.used_times
-                   AND e.allocated_revenue_cent IS NOT NULL
-                   AND e.status = 'active'
-                   -- 已知边界(低危,复核提示)：V285 之前遗留权益 parent_ticket_id 可能为 NULL，此时下句 NOT EXISTS 恒真、
-                   --   父实例次级守卫失效；但「退款申请中(refund_pending)」是靠父实例冻结实现的，无父实例的遗留权益不会进入
-                   --   该窄窗；已成功退款仍由上句 e.status='active'(退款→refunded)主挡。故仅「遗留 NULL 父 + refund_pending」
-                   --   这一不会发生的组合未被次级守卫覆盖，无实际敞口。
-                   AND NOT EXISTS (
-                       SELECT 1 FROM ticket_instances ti
-                        WHERE ti.id = e.parent_ticket_id
-                          AND ti.status <> 'active')
+                SELECT c.*,
+                       vs.session_date,
+                       EXTRACT(EPOCH FROM h.open_time)::int  AS open_s,
+                       EXTRACT(EPOCH FROM h.close_time)::int AS close_s,
+                       sl.checked_in, sl.visits, sl.opened,
+                       (EXISTS (SELECT 1 FROM settlement_transactions a
+                                 WHERE a.parent_ticket_id = c.parent_ticket_id
+                                   AND a.transaction_type = 'verification_settled'
+                                   AND a.verification_id IS NOT NULL
+                                   AND a.exclusive_merchant_id IS NULL)
+                        -- 同票已有到期事实扣过渠道费（如多人票未到人份先于首场次结束时处理）：固定额不再扣第二次（ENUM L48「各项均只扣一次」）
+                        OR EXISTS (SELECT 1 FROM settlement_transactions f
+                                     JOIN issued_entitlements fe ON fe.id = f.entitlement_id
+                                    WHERE fe.parent_ticket_id = c.parent_ticket_id
+                                      AND f.transaction_type = 'unverified_expired'
+                                      AND (f.channel_fee_cent <> 0 OR f.channel_fee_residual_cent <> 0))) AS anchored
+                  FROM (
+                      SELECT e.id, e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
+                             e.total_times, e.used_times, e.allocated_revenue_cent, e.valid_to,
+                             e.parent_ticket_id, e.slot_index,
+                             m.merchant_type AS business_format,
+                             m.supervising_company_id,
+                             o.project_id, o.sales_channel,
+                             COALESCE(ti.num_people, 1) AS parent_num_people, ti.first_session_key
+                        FROM issued_entitlements e
+                        LEFT JOIN merchants m ON m.id = e.merchant_id
+                        LEFT JOIN ticket_orders o ON o.id = e.order_id
+                        LEFT JOIN ticket_instances ti ON ti.id = e.parent_ticket_id
+                       WHERE e.total_times > e.used_times
+                         AND e.allocated_revenue_cent IS NOT NULL
+                         AND e.status IN ('active', 'forfeited')
+                         -- 父实例非 active(退款申请中/已退/转赠中)一并排除；无父实例的遗留权益照旧可没收。
+                         AND (ti.id IS NULL OR ti.status = 'active')
+                         -- 已落到期事实的权益（一权益一次处理即写全两类）不再重扫：免得历史行每日重算归属、重分固定渠道费。
+                         AND NOT EXISTS (SELECT 1 FROM settlement_transactions x
+                                          WHERE x.entitlement_id = e.id AND x.transaction_type = 'unverified_expired')
+                         AND (e.valid_to < :now
+                              OR (ti.num_people > 1 AND ti.first_session_key IS NOT NULL
+                                  AND NOT EXISTS (SELECT 1 FROM issued_entitlements u
+                                                   WHERE u.parent_ticket_id = e.parent_ticket_id
+                                                     AND u.slot_index = e.slot_index AND u.used_times > 0)))
+                  ) c
+                  LEFT JOIN venue_sessions vs ON vs.id = c.first_session_key
+                  LEFT JOIN venue_business_hours h ON h.venue_id = vs.venue_id AND h.is_draft = FALSE
+                        AND h.day_of_week = EXTRACT(DOW FROM vs.session_date)::int
+                  CROSS JOIN LATERAL (
+                      SELECT BOOL_OR(s.used_times > 0) AS checked_in,
+                             MAX(s.total_times) FILTER (WHERE s.entitlement_type IN ('ticket', 'entry', 'admission')
+                                                           OR s.entitlement_type LIKE 'amusement%') AS visits,
+                             MAX(s.used_times)  FILTER (WHERE s.entitlement_type IN ('ticket', 'entry', 'admission')
+                                                           OR s.entitlement_type LIKE 'amusement%') AS opened
+                        FROM issued_entitlements s
+                       WHERE s.id = c.id
+                          OR (s.parent_ticket_id = c.parent_ticket_id AND s.slot_index = c.slot_index)
+                  ) sl
+                 ORDER BY c.parent_ticket_id NULLS LAST, c.id
                 """, params, (rs, i) -> new ExpiredUnverifiedRow(
                         rs.getString("id"),
                         rs.getString("order_id"),
@@ -276,7 +342,30 @@ public class JdbcSettlementTransactionRepository {
                         rs.getInt("used_times"),
                         rs.getLong("allocated_revenue_cent"),
                         rs.getTimestamp("valid_to").toInstant(),
-                        rs.getString("business_format")));
+                        rs.getString("business_format"),
+                        rs.getString("supervising_company_id"),
+                        rs.getString("project_id"),
+                        rs.getString("sales_channel"),
+                        rs.getString("parent_ticket_id"),
+                        rs.getInt("parent_num_people"),
+                        rs.getString("first_session_key"),
+                        rs.getObject("session_date", java.time.LocalDate.class),
+                        (Integer) rs.getObject("open_s"),
+                        (Integer) rs.getObject("close_s"),
+                        rs.getBoolean("checked_in"),
+                        rs.getInt("visits"),
+                        rs.getInt("opened"),
+                        rs.getBoolean("anchored")));
+    }
+
+    /** FS-023-R1：该项目唯一有效的城市项目公司（ENUM L49「餐饮域与零售域 → 城市项目公司」）；0 或多家返回全部供调用方阻断。 */
+    public java.util.List<String> findProjectCompanies(String projectId) {
+        return jdbcTemplate.queryForList("""
+                SELECT e.id FROM business_entities e
+                  JOIN business_entity_projects p ON p.business_entity_id = e.id
+                 WHERE p.project_id = :project_id AND e.entity_role = 'project_company' AND e.status = 'active'
+                 ORDER BY e.id
+                """, new MapSqlParameterSource().addValue("project_id", projectId), String.class);
     }
 
     /**
@@ -291,6 +380,7 @@ public class JdbcSettlementTransactionRepository {
      * 故仅重建<b>无任何遗留累计行</b>(NOT EXISTS verification_id IS NULL 的 verification_settled 行)的权益；
      * 遗留行承载的历史交由其自身，不重建、不双计。判别用 verification_id IS NULL(新行必带 verification_id)，无需 cutover 时间。
      */
+    // FS-012：补偿补发权益的核销不进普通核销结算事实（在线消费者跳过），补建同样排除，不把它补回原票分账。
     public java.util.List<MissingSettledFact> findMissingVerificationSettlementFacts(int limit) {
         return jdbcTemplate.query("""
                 SELECT v.id AS verification_id, v.entitlement_id, v.created_at,
@@ -301,6 +391,7 @@ public class JdbcSettlementTransactionRepository {
                   FROM ticket_verifications v
                   JOIN issued_entitlements e ON e.id = v.entitlement_id
                  WHERE v.status = 'success'
+                   AND e.compensation_item_id IS NULL
                    AND NOT EXISTS (SELECT 1 FROM settlement_transactions s WHERE s.transaction_no = 'ST-VS-' || v.id)
                    AND NOT EXISTS (SELECT 1 FROM ticket_verifications r WHERE r.entitlement_id = v.entitlement_id AND r.status = 'reversed')
                    AND NOT EXISTS (SELECT 1 FROM settlement_transactions leg
@@ -412,9 +503,30 @@ public class JdbcSettlementTransactionRepository {
             long allocatedRevenueCent,
             Instant validTo,
             // S8 未核销款分流:提供该权益的商户业态(merchants.merchant_type,与 S11 池基过滤同一套判定源)。
-            // amusement → 未核销款归游乐公司;其余 → 归娱乐平台公司(业务 HTML「通票结算口径」)。
-            String businessFormat
+            String businessFormat,
+            // FS-024(V511):「其他」业态商户在档案指定的主管公司;未指定为 null,作业对该商户单行记错、不落账。
+            String supervisingCompanyId,
+            // FS-023-R1:售票锁定的项目与销售渠道(订单快照,不从操作者反推)。
+            String projectId,
+            String salesChannel,
+            // FS-023-R2/R4:父票、父票人数、首场次键及其营业日与营业时段(秒,可空);人份是否检票、入场次数。
+            String parentTicketId,
+            int parentNumPeople,
+            String firstSessionKey,
+            java.time.LocalDate sessionDate,
+            Integer sessionOpenSecond,
+            Integer sessionCloseSecond,
+            boolean slotCheckedIn,
+            int slotVisits,
+            int slotOpened,
+            // FS-023-R3:父票的固定金额渠道费是否已扣过(进池核销锚点已由月结按首笔核销计过,或同票到期事实已扣)。
+            boolean parentAnchored
     ) {
+    }
+
+    /** FS-023 到期未核销事实附加列。 */
+    public record UnverifiedExtras(String category, long channelFeeCent, String channelFeeConfigId,
+                                   long channelFeeResidualCent, String channelFeeResidualEntityId) {
     }
 
 }
