@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -150,6 +150,22 @@ class PlatformJdbcIntegrationTests {
     }
 
     // M011-002：夹具只用服务层白名单内的合作方式/商户状态（BEQR-148 六类、BEQR-155），更新路径 lease→joint_operation 证明列可改。
+    /** FS-024（V511）：主管公司与理由随档案落库并读回；按 id 查询与列表同一映射。 */
+    @Test
+    void merchantSupervisingCompanyRoundTrips() {
+        jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES ('be_fs024_city', '城市项目公司', 'project_company', 'active', now(), now()) ON CONFLICT (id) DO NOTHING");
+        Instant now = Instant.parse("2026-10-19T02:00:00Z");
+        repository.saveMerchant(new MerchantRecord("mch_fs024_other", "其他业态商户", "other", null, null, null,
+                "Jane", "18800000011", null, null, null, null, null, null, null, null, "active", now, now,
+                null, null, "none", null, null, null, null, "be_fs024_city", "无对应经营域，由城市项目公司主管"));
+        assertThat(repository.findMerchantById("mch_fs024_other").orElseThrow())
+                .extracting(MerchantRecord::supervisingCompanyId, MerchantRecord::supervisingCompanyReason)
+                .containsExactly("be_fs024_city", "无对应经营域，由城市项目公司主管");
+        assertThat(repository.listMerchants()).filteredOn(m -> m.id().equals("mch_fs024_other"))
+                .extracting(MerchantRecord::supervisingCompanyId).containsExactly("be_fs024_city");
+    }
+
     @Test
     void createUpdateAndListMerchantPersistsFormalFields() {
         Instant createdAt = Instant.parse("2026-06-14T02:00:00Z");

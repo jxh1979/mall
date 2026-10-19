@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V502**，发现 **209** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V511**，发现 **214** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -64,6 +64,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `amusement_business_day_configs` | `project_id` | direct | V483 | `V483__amusement_business_day_versions.sql` |
 | `amusement_capacity_config` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
 | `amusement_capacity_snapshot` | `project_id` | direct | V083 | `V083__amusement_three_dim_capacity.sql` |
+| `amusement_compensation_fulfillments` | `project_id` | direct | V505 | `V505__amusement_compensation_fulfillments.sql` |
 | `amusement_compensation_policies` | `project_id` | direct | V447 | `V447__amusement_fault_compensation.sql` |
 | `amusement_concurrent_reset_log` | `project_id` | direct | V448 | `V448__amusement_concurrent_count_auto_reset.sql` |
 | `amusement_device_statuses` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
@@ -143,6 +144,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `customer_stored_value_accounts` | `merchant_id` + `project_id` | direct | V090, V175 | `V090__member_stored_value_paid_membership_transfer.sql`<br>`V175__stored_value_merchant_scoped_cards.sql` |
 | `dealers` | `project_id` | direct | V451 | `V451__dealer_admission_price_catalog.sql` |
 | `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
+| `dividend_legal_confirmations` | `merchant_id` | direct | V507 | `V507__dividend_legal_distributable_and_ticket_settled.sql` |
 | `dividend_plans` | `merchant_id` | direct | V299 | `V299__dividend_engine.sql` |
 | `dividend_reserve_releases` | `merchant_id` | direct | V304 | `V304__dividend_reserve_release.sql` |
 | `dividend_statement_lines` | `merchant_id` | direct | V299 | `V299__dividend_engine.sql` |
@@ -165,6 +167,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `high_value_thresholds` | `merchant_id` + `project_id` | direct | V350 | `V350__high_value_threshold_unify.sql` |
 | `integration_channel_store_map` | `merchant_id` | direct | V334 | `V334__integration_order_sync_merchant_attribution.sql` |
 | `integration_order_syncs` | `merchant_id` | direct | V334 | `V334__integration_order_sync_merchant_attribution.sql` |
+| `internal_payable_schedules` | `project_id` | direct | V508 | `V508__internal_settlement_pay_days_and_recovery.sql` |
 | `internal_price_catalog` | `merchant_id` | direct | V379 | `V379__internal_price_catalog.sql` |
 | `inventory_high_value_reviews` | `merchant_id` | direct | V237 | `V237__inventory_isolation_fixes.sql` |
 | `inventory_item_cost_state` | `merchant_id` | direct | V296 | `V296__inventory_cost_ledger.sql` |
@@ -217,8 +220,10 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `settlement_bills` | `project_id` | direct | V224 | `V224__settlement_bills_batch2.sql` |
 | `settlement_invoice_items` | `project_id` | direct | V362 | `V362__settlement_invoice_list.sql` |
 | `settlement_items` | `merchant_id` | direct | V224 | `V224__settlement_bills_batch2.sql` |
+| `settlement_objection_period_policy` | `project_id` | direct | V508 | `V508__internal_settlement_pay_days_and_recovery.sql` |
 | `settlement_tax_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `settlement_transactions` | `merchant_id` + `project_id` | direct | V222 | `V222__settlement_transactions_batch1.sql` |
+| `single_bar_service_fee_months` | `project_id` | direct | V506 | `V506__single_bar_service_fee_months.sql` |
 | `site_entry_reports` | `project_id` + `space_id` | direct | V179 | `V179__site_entry_reports.sql` |
 | `space_expiry_color_rules` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `spaces` | `merchant_id` + `project_id` | direct | V005 | `V005__p0_platform_master_data.sql` |

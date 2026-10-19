@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -23,6 +25,27 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
+    /** 池分账的三种方式（不含专属直付与 FS-021-R2 追收明细）：越池判定与超额两段拆只认这三种。 */
+    static final String POOL_METHODS_SQL = "'by_rank_tier','by_venue_per_guest','by_fixed_amount'";
+
+    /** 冲正行所冲原核销（ST-VS 行）的业务时刻。 */
+    private static final String ORIGINAL_AT = "(SELECT COALESCE(o.business_at, o.created_at) FROM settlement_transactions o"
+            + " WHERE o.transaction_no = 'ST-VS-' || st.verification_id)";
+
+    /**
+     * 月窗（FS-021-R2，操作员裁决 2026-10-19 第 4 条「单独列追收、按原月重算」）：按 business_at 落窗，但原月已结付后才撤销的
+     * 核销——冲正行落在当月、其原核销早于本窗——不计入当月（当月应付照常全额），改由原月口径另列追收。
+     * :recovery_cutoff 非空＝原月重算：本窗即原月，另并入原核销在本窗、冲正落在本窗之后且早于 cutoff 的冲正行。
+     */
+    private static final String WINDOW = """
+               AND ((COALESCE(st.business_at, st.created_at) >= :start AND COALESCE(st.business_at, st.created_at) < :end
+                     AND NOT (st.transaction_type = 'verification_reversed' AND COALESCE(%1$s < :start, FALSE)))
+                 OR (st.transaction_type = 'verification_reversed'
+                     AND COALESCE(st.business_at, st.created_at) >= :end
+                     AND COALESCE(st.business_at, st.created_at) < CAST(:recovery_cutoff AS timestamptz)
+                     AND %1$s >= :start AND %1$s < :end))
+            """.formatted(ORIGINAL_AT);
+
     public JdbcSettlementBillRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -43,7 +66,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      */
     public ChannelFeeConfig findChannelFee(String projectId, String channel) {
         ChannelFeeConfig cfg = jdbcTemplate.query("""
-                SELECT fee_bps, fixed_amount_cent FROM channel_fee_configs
+                SELECT id, fee_bps, fixed_amount_cent FROM channel_fee_configs
                  WHERE status = 'active' AND is_draft = FALSE
                    AND (channel IS NULL OR channel = :channel)
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
@@ -53,7 +76,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         .addValue("project_id", projectId)
                         .addValue("channel", channel),
                 rs -> rs.next()
-                        ? new ChannelFeeConfig(rs.getInt("fee_bps"),
+                        ? new ChannelFeeConfig(rs.getString("id"), rs.getInt("fee_bps"),
                                 rs.getObject("fixed_amount_cent") == null ? null : rs.getLong("fixed_amount_cent"))
                         : null);
         return requireConfigured(cfg, "channel_fee_configs", projectId);
@@ -151,17 +174,21 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * (严格二分,不另写查询)——两处各写各的迟早口径漂移,费被双记或漏记时对账查不出来。
      */
     public PooledTotals sumPooledTotals(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return sumPooledTotals(projectId, monthStart, nextMonthStart, null);
+    }
+
+    public PooledTotals sumPooledTotals(String projectId, Instant monthStart, Instant nextMonthStart, Instant recoveryCutoff) {
         return jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(verified_amount_cent), 0)  AS revenue_cent,
                        COALESCE(SUM(comp_service_fee_cent), 0) AS comp_service_fee_cent,
                        COALESCE(SUM(gift_cost_cent), 0)        AS gift_cost_cent
-                  FROM settlement_transactions
+                  FROM settlement_transactions st
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND verification_id IS NOT NULL
                    AND exclusive_merchant_id IS NULL
-                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
+                """ + WINDOW + """
                    AND (:project_id::text IS NULL OR project_id = :project_id)
-                """, monthWindow(projectId, monthStart, nextMonthStart),
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff),
                 (rs, i) -> new PooledTotals(rs.getLong("revenue_cent"), rs.getLong("comp_service_fee_cent"),
                         rs.getLong("gift_cost_cent")));
     }
@@ -177,7 +204,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * ponytail: 解析不到（测试夹具直插流水、未建商户行）按酒吧计＝改造前口径，不静默丢钱；
      * 真要 fail-loud 需先把各处测试夹具补齐商户行，届时把 COALESCE 去掉即可。
      */
-    public List<FormatRevenue> aggregateFormatRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
+    public List<FormatRevenue> aggregateFormatRevenue(String projectId, Instant monthStart, Instant nextMonthStart,
+                                                      Instant recoveryCutoff) {
         // S4:各业态行带上本业态计提的综合服务费——费跟着核销走,游乐/餐饮份额的费从各自净份额扣,
         //   不错扣进酒吧池;Σ各业态费 与 sumPooledTotals 的费合计由引擎 K20 运行期互核。
         // S6:赠送权益预估成本(G)同一范式跟核销走——计提落在哪行核销上就扣在那行所属业态的份额里,
@@ -193,12 +221,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                  WHERE st.transaction_type IN ('verification_settled','verification_reversed')
                    AND st.verification_id IS NOT NULL
                    AND st.exclusive_merchant_id IS NULL
-                   AND COALESCE(st.business_at, st.created_at) >= :start
-                   AND COALESCE(st.business_at, st.created_at) < :end
+                """ + WINDOW + """
                    AND (:project_id::text IS NULL OR st.project_id = :project_id)
                  GROUP BY 1
                  ORDER BY 1
-                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
                 new FormatRevenue(rs.getString("business_format"),
                         rs.getLong("revenue_cent"), rs.getLong("discount_cent"),
                         rs.getLong("comp_service_fee_cent"), rs.getLong("gift_cost_cent")));
@@ -253,6 +280,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     // ponytail: 锚点=全期最早核销、不随冲正复位——锚点被冲正后同一张票再核销(新 verificationId)不再计费,
     //   平台少收该票一道(客人有利方向,入场冲正后重入场属罕见);真出现再照 S3 净额复位语义升级。
     public List<ChannelRevenue> aggregateChannelRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return aggregateChannelRevenue(projectId, monthStart, nextMonthStart, null);
+    }
+
+    public List<ChannelRevenue> aggregateChannelRevenue(String projectId, Instant monthStart, Instant nextMonthStart,
+                                                        Instant recoveryCutoff) {
         return jdbcTemplate.query("""
                 SELECT COALESCE(o.sales_channel, '')              AS sales_channel,
                        COALESCE(SUM(st.verified_amount_cent), 0)  AS revenue_cent,
@@ -273,12 +305,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                  WHERE st.transaction_type IN ('verification_settled','verification_reversed')
                    AND st.verification_id IS NOT NULL
                    AND st.exclusive_merchant_id IS NULL
-                   AND COALESCE(st.business_at, st.created_at) >= :start
-                   AND COALESCE(st.business_at, st.created_at) < :end
+                """ + WINDOW + """
                    AND (:project_id::text IS NULL OR st.project_id = :project_id)
                  GROUP BY 1
                  ORDER BY 1
-                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
                 new ChannelRevenue(rs.getString("sales_channel"), rs.getLong("revenue_cent"),
                         rs.getLong("ticket_count")));
     }
@@ -288,7 +319,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * S11①：<b>只算酒吧业态</b>——游乐/餐饮/零售的份额不进酒吧池，自然也不该参与酒吧的排名与客数聚合，
      * 否则一家餐厅会因为核销了几张餐券而占掉某个酒吧的分池名次。业态条件与 {@link #aggregateFormatRevenue} 同源。
      */
-    public List<MerchantMonthlyStat> aggregateMerchantStats(String projectId, Instant monthStart, Instant nextMonthStart) {
+    public List<MerchantMonthlyStat> aggregateMerchantStats(String projectId, Instant monthStart, Instant nextMonthStart,
+                                                            Instant recoveryCutoff) {
         return jdbcTemplate.query("""
                 SELECT st.merchant_id,
                        COALESCE(SUM(st.verified_count), 0) AS verified_count,
@@ -301,12 +333,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                    AND st.merchant_id IS NOT NULL
                    AND st.exclusive_merchant_id IS NULL
                    AND COALESCE(m.merchant_type, 'bar') = 'bar'
-                   AND COALESCE(st.business_at, st.created_at) >= :start
-                   AND COALESCE(st.business_at, st.created_at) < :end
+                """ + WINDOW + """
                    AND (:project_id::text IS NULL OR st.project_id = :project_id)
                  GROUP BY st.merchant_id
                  ORDER BY verified_count DESC, st.merchant_id
-                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
                 new MerchantMonthlyStat(rs.getString("merchant_id"),
                         rs.getInt("verified_count"), rs.getInt("guest_count")));
     }
@@ -316,7 +347,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * 每个专属商户一条 → 全额直付明细（method=exclusive_full，不进可分配池、不稀释他家分池）。
      * 按落定在 settlement_transactions 的 exclusive_merchant_id 过滤（非 join 活模板，历史结算不受改模板影响）。
      */
-    public List<ExclusiveMerchantRevenue> aggregateExclusiveRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
+    public List<ExclusiveMerchantRevenue> aggregateExclusiveRevenue(String projectId, Instant monthStart, Instant nextMonthStart,
+                                                                    Instant recoveryCutoff) {
         return jdbcTemplate.query("""
                 SELECT exclusive_merchant_id AS merchant_id,
                        entitlement_type,
@@ -325,15 +357,15 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        COALESCE(SUM(verified_count), 0)       AS verified_count,
                        COALESCE(SUM(num_people), 0)           AS guest_count,
                        COALESCE(SUM(comp_service_fee_cent), 0) AS comp_service_fee_cent
-                  FROM settlement_transactions
+                  FROM settlement_transactions st
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND verification_id IS NOT NULL
                    AND exclusive_merchant_id IS NOT NULL
-                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
+                """ + WINDOW + """
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                  GROUP BY exclusive_merchant_id, entitlement_type
                  ORDER BY exclusive_merchant_id, entitlement_type
-                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
                 new ExclusiveMerchantRevenue(rs.getString("merchant_id"), rs.getString("entitlement_type"),
                         rs.getLong("revenue_cent"), rs.getLong("discount_cent"),
                         rs.getInt("verified_count"), rs.getInt("guest_count"),
@@ -430,10 +462,40 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     private MapSqlParameterSource monthWindow(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return monthWindow(projectId, monthStart, nextMonthStart, null);
+    }
+
+    private MapSqlParameterSource monthWindow(String projectId, Instant monthStart, Instant nextMonthStart,
+                                              Instant recoveryCutoff) {
         return new MapSqlParameterSource()
                 .addValue("project_id", projectId)
                 .addValue("start", Timestamp.from(monthStart))
-                .addValue("end", Timestamp.from(nextMonthStart));
+                .addValue("end", Timestamp.from(nextMonthStart))
+                .addValue("recovery_cutoff", recoveryCutoff == null ? null : Timestamp.from(recoveryCutoff),
+                        java.sql.Types.TIMESTAMP);
+    }
+
+    /** FS-021-R2：本窗内被撤销核销所属的、早于本窗的原月（UTC 月首），按月升序。 */
+    public List<java.time.LocalDate> findRecoveredOriginalMonths(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT (date_trunc('month', COALESCE(o.business_at, o.created_at) AT TIME ZONE 'UTC'))::date
+                  FROM settlement_transactions st
+                  JOIN settlement_transactions o ON o.transaction_no = 'ST-VS-' || st.verification_id
+                 WHERE st.transaction_type = 'verification_reversed'
+                   AND COALESCE(st.business_at, st.created_at) >= :start AND COALESCE(st.business_at, st.created_at) < :end
+                   AND COALESCE(o.business_at, o.created_at) < :start
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 ORDER BY 1
+                """, monthWindow(projectId, monthStart, nextMonthStart), java.time.LocalDate.class);
+    }
+
+    /** FS-021-R2：追收明细按原月结算单拆分的金额与回指。 */
+    public void insertItemRecovery(String itemId, String originalBillId, long amountCent) {
+        jdbcTemplate.update("""
+                INSERT INTO settlement_item_recoveries (item_id, original_bill_id, amount_cent)
+                VALUES (:item_id, :original_bill_id, :amount_cent)
+                """, new MapSqlParameterSource().addValue("item_id", itemId).addValue("original_bill_id", originalBillId)
+                .addValue("amount_cent", amountCent));
     }
 
     // ---- S7 赠付差额结算(HTML:962「预扣与核销实付的差额留在娱乐平台公司,按可配规则调账留痕」)----
@@ -444,20 +506,21 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * 引擎用「Σ各规则 G ≡ 进池 G 合计」互核——若有 G 落库却没带规则 id,月结当场响亮停,
      * 而不是差额表悄悄少一块、财务月底对不上。
      */
-    public List<ConfigGiftCost> aggregateGiftCostByConfig(String projectId, Instant monthStart, Instant nextMonthStart) {
+    public List<ConfigGiftCost> aggregateGiftCostByConfig(String projectId, Instant monthStart, Instant nextMonthStart,
+                                                          Instant recoveryCutoff) {
         return jdbcTemplate.query("""
                 SELECT gift_cost_config_id                    AS config_id,
                        COALESCE(SUM(gift_cost_cent), 0)       AS gift_cost_cent
-                  FROM settlement_transactions
+                  FROM settlement_transactions st
                  WHERE transaction_type IN ('verification_settled','verification_reversed')
                    AND verification_id IS NOT NULL
                    AND exclusive_merchant_id IS NULL
                    AND gift_cost_config_id IS NOT NULL
-                   AND COALESCE(business_at, created_at) >= :start AND COALESCE(business_at, created_at) < :end
+                """ + WINDOW + """
                    AND (:project_id::text IS NULL OR project_id = :project_id)
                  GROUP BY 1
                  ORDER BY 1
-                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
                 new ConfigGiftCost(rs.getString("config_id"), rs.getLong("gift_cost_cent")));
     }
 
@@ -474,7 +537,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * <p>ponytail: 核销无结算事实行(direct 出票无分摊快照被消费者跳过)时其兑付不进本聚合——
      * 该场景无月窗/项目锚点可依;真出现由结算重建任务补建事实行后自然并入。
      */
-    public List<GiftPaid> aggregateGiftPaid(String projectId, Instant monthStart, Instant nextMonthStart) {
+    public List<GiftPaid> aggregateGiftPaid(String projectId, Instant monthStart, Instant nextMonthStart,
+                                            Instant recoveryCutoff) {
         return jdbcTemplate.query("""
                 SELECT st.ticket_type_id,
                        COALESCE(m.merchant_type, 'bar')       AS business_format,
@@ -487,12 +551,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                                                               ELSE 'verification_reversed' END
                   LEFT JOIN merchants m ON m.id = a.counterparty_id
                  WHERE a.source_type = 'pass_drink_settlement'
-                   AND COALESCE(st.business_at, st.created_at) >= :start
-                   AND COALESCE(st.business_at, st.created_at) < :end
+                """ + WINDOW + """
                    AND (:project_id::text IS NULL OR st.project_id = :project_id)
                  GROUP BY 1, 2
                  ORDER BY 1, 2
-                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) ->
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
                 new GiftPaid(rs.getString("ticket_type_id"), rs.getString("business_format"),
                         rs.getLong("paid_cent")));
     }
@@ -937,17 +1000,20 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 rs -> rs.next() ? rs.getString("special_approval_ref") : null);
     }
 
-    /** 该单待过账明细：status='draft' 且 final_amount_cent>0（final=0 由调用方天然跳过，此处直接不取）。
-     *  D7：带 distribution_method，供过账区分池明细(exclusive_full 除外)是否走超额 C 口径两段拆。 */
+    /** 该单待过账明细：status='draft' 且 final_amount_cent≠0（FS-021-R1：负额=向商户追回，过账为单独追收应收；final=0 不取）。
+     *  D7：带 distribution_method，供过账区分池明细是否走超额 C 口径两段拆。 */
     public List<PostableItem> findPostableItems(String billId) {
         return jdbcTemplate.query("""
-                SELECT id, merchant_id, final_amount_cent, distribution_method
-                  FROM settlement_items
-                 WHERE bill_id = :bill_id AND status = 'draft' AND final_amount_cent > 0
-                 ORDER BY id
+                SELECT i.id, i.merchant_id, i.final_amount_cent, i.distribution_method,
+                       COALESCE(b.project_id, m.project_id) AS payee_project_id
+                  FROM settlement_items i
+                  JOIN settlement_bills b ON b.id = i.bill_id
+                  LEFT JOIN merchants m ON m.id = i.merchant_id
+                 WHERE i.bill_id = :bill_id AND i.status = 'draft' AND i.final_amount_cent <> 0
+                 ORDER BY i.id
                 """, new MapSqlParameterSource().addValue("bill_id", billId),
                 (rs, i) -> new PostableItem(rs.getString("id"), rs.getString("merchant_id"),
-                        rs.getLong("final_amount_cent"), rs.getString("distribution_method")));
+                        rs.getLong("final_amount_cent"), rs.getString("distribution_method"), rs.getString("payee_project_id")));
     }
 
     /** 回写明细 ar_ap_item_id + status='posted'（仅当仍为 draft，防并发重复过账）。返回更新行数。 */
@@ -960,24 +1026,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("id", itemId).addValue("ar_ap_item_id", arApItemId));
     }
 
-    /** 该单是否仍有未过账（draft 且 final>0）明细；无 → 可置 settled。 */
+    /** 该单是否仍有未过账（draft 且 final≠0）明细；无 → 可置 settled。 */
     public boolean hasUnpostedItems(String billId) {
         Integer cnt = jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM settlement_items
-                 WHERE bill_id = :bill_id AND status = 'draft' AND final_amount_cent > 0
-                """, new MapSqlParameterSource().addValue("bill_id", billId), Integer.class);
-        return cnt != null && cnt > 0;
-    }
-
-    /**
-     * S4/R-3:该单是否存在<b>负额</b>待过账明细(冲正月向商户追回)。放开带符号后负数月结算单能正常落库,
-     * 但「向商户挂应收」的过账口径属过账激活批次——在那之前对负额单 fail-loud 拒过账,防止负额明细被
-     * {@code final_amount_cent > 0} 过滤静默跳过、整单却被标成已结算(钱悄悄丢)。
-     */
-    public boolean hasNegativeDraftItems(String billId) {
-        Integer cnt = jdbcTemplate.queryForObject("""
-                SELECT count(*) FROM settlement_items
-                 WHERE bill_id = :bill_id AND status = 'draft' AND final_amount_cent < 0
+                 WHERE bill_id = :bill_id AND status = 'draft' AND final_amount_cent <> 0
                 """, new MapSqlParameterSource().addValue("bill_id", billId), Integer.class);
         return cnt != null && cnt > 0;
     }
@@ -991,7 +1044,9 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 """, new MapSqlParameterSource().addValue("id", billId));
     }
 
-    public record PostableItem(String itemId, String merchantId, long finalAmountCent, String distributionMethod) {
+    /** payeeProjectId：往来对方所属项目——项目单即本单项目；平台单（project_id 为空）取该明细商户的项目。 */
+    public record PostableItem(String itemId, String merchantId, long finalAmountCent, String distributionMethod,
+                               String payeeProjectId) {
     }
 
     // ---- D7 超池特批出口 + 超额 C 口径 ----
@@ -1004,13 +1059,14 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      */
     public OverPoolContext findOverPoolContext(String billId) {
         return jdbcTemplate.query("""
-                SELECT b.status, b.project_id, b.available_pool_cent,
+                SELECT b.status, b.project_id, b.period_start, b.available_pool_cent,
                        b.special_approval_valid_until,
                        (b.special_approval_ref IS NOT NULL
                         AND b.special_approval_valid_until >= CURRENT_DATE) AS special_approval_active,
                        COALESCE((SELECT SUM(i.final_amount_cent) FROM settlement_items i
                                   WHERE i.bill_id = b.id
-                                    AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent
+                                    AND i.distribution_method IN (""" + POOL_METHODS_SQL + """
+                )), 0) AS pooled_distributed_cent
                   FROM settlement_bills b
                  WHERE b.id = :id
                 """, new MapSqlParameterSource().addValue("id", billId),
@@ -1018,7 +1074,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         ? new OverPoolContext(rs.getString("status"), rs.getString("project_id"),
                                 rs.getLong("available_pool_cent"), rs.getLong("pooled_distributed_cent"),
                                 rs.getBoolean("special_approval_active"),
-                                rs.getObject("special_approval_valid_until", java.time.LocalDate.class))
+                                rs.getObject("special_approval_valid_until", java.time.LocalDate.class),
+                                rs.getObject("period_start", java.time.LocalDate.class))
                         : null);
     }
 
@@ -1051,7 +1108,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * S9：specialApprovalActive = 有特批引用且到期日 ≥ 今日（DB 侧算，单一时钟）。
      */
     public record OverPoolContext(String status, String projectId, long availablePoolCent, long pooledDistributedCent,
-                                  boolean specialApprovalActive, java.time.LocalDate specialApprovalValidUntil) {
+                                  boolean specialApprovalActive, java.time.LocalDate specialApprovalValidUntil,
+                                  java.time.LocalDate periodStart) {
         public boolean overPool() {
             return pooledDistributedCent > availablePoolCent;
         }
@@ -1078,7 +1136,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        b.special_approval_ref, b.special_approval_valid_until,
                        COALESCE((SELECT SUM(i.final_amount_cent) FROM settlement_items i
                                   WHERE i.bill_id = b.id
-                                    AND i.distribution_method <> 'exclusive_full'), 0) AS pooled_distributed_cent,
+                                    AND i.distribution_method IN (""" + POOL_METHODS_SQL + """
+                )), 0) AS pooled_distributed_cent,
                        b.gift_cost_cent,
                        COALESCE(v.paid, 0)     AS gift_actual_paid_cent,
                        COALESCE(v.variance, 0) AS gift_variance_cent,
@@ -1214,8 +1273,11 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     public record PooledTotals(long revenueCent, long compServiceFeeCent, long giftCostCent) {
     }
 
-    /** V381 渠道抽成配置读投影:fixedAmountCent 非空=每张票固定金额,否则 feeBps 比例(照 ServiceFeeConfig 范式)。 */
-    public record ChannelFeeConfig(int feeBps, Long fixedAmountCent) {
+    /**
+     * V381 渠道抽成配置读投影:fixedAmountCent 非空=每张票固定金额,否则 feeBps 比例(照 ServiceFeeConfig 范式)。
+     * FS-023:id 供到期未核销款逐笔记录所用渠道费配置(ENUM L51「每笔分摊的结果与所用合同版本必须留痕」)。
+     */
+    public record ChannelFeeConfig(String id, int feeBps, Long fixedAmountCent) {
     }
 
     /**

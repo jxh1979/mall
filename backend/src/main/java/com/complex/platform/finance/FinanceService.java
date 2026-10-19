@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.14
+// 文件版本：V0.17
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -70,7 +70,11 @@ public class FinanceService implements TerminationSettlementPort {
             //   BarPayrollAllocationService 月结按 allocation 逐条写入，正额应付/负额应收）。
             "bar_payroll_transfer",
             // HP-C03：面积/位置变更子合同押金补退差额（BSM L1353「批准生效后登记应收或应退」）。
-            "deposit_adjustment");
+            "deposit_adjustment",
+            // FS-013：单一酒吧门票综合服务费按计费月汇总后单独挂酒吧应收（结算过账写入；退款重算的应退同来源 direction=payable）。
+            "single_bar_service_fee",
+            // FS-021-R1：通票分账负额明细（向商户追回）单独挂追收应收，不与应付轧差（BSM L755）。
+            "ticket_distribution_recovery");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -114,7 +118,13 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("staff_payroll", "员工工资"),
             Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"),
             Map.entry("bar_payroll_transfer", "酒吧报酬月结拨付"),
-            Map.entry("deposit_adjustment", "变更押金补退差额"));
+            Map.entry("deposit_adjustment", "变更押金补退差额"),
+            // FS-012：补偿新增履约由补偿批次承担主体对实际提供方的补偿应付（AmusementCompensationFulfillmentAdapter 写入）。
+            Map.entry("compensation_fulfillment", "补偿新增履约结算"),
+            // 裁决 2026-10-19 第二轮第 5 条：补偿应付已付部分在该次核销撤销后对提供方的追收应收。
+            Map.entry("compensation_fulfillment_recovery", "补偿应付已付追收"),
+            Map.entry("single_bar_service_fee", "单店门票综合服务费"),
+            Map.entry("ticket_distribution_recovery", "通票分账追收"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
@@ -1171,8 +1181,8 @@ public class FinanceService implements TerminationSettlementPort {
         ArApItemRecord item = repository.findArApItemByIdForUpdate(itemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         rejectPayrollMutation(item);
-        checkMerchantOwnership(item.merchantId());
-        checkProjectScope(item.projectId());
+        // FS-021-R6：锁账补录按项目范围与商户交集办理。
+        requireArApScope(item, "finance.locked_backfill.request");
         requireCurrentPurchasePayable(item);
 
         // 补录只针对已锁定台账（未锁定应直接改账，不走审批）。
@@ -1205,8 +1215,7 @@ public class FinanceService implements TerminationSettlementPort {
         ArApItemRecord item = repository.findArApItemByIdForUpdate(adjustment.arApItemId())
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         rejectPayrollMutation(item);
-        checkMerchantOwnership(item.merchantId());
-        checkProjectScope(item.projectId());
+        requireArApScope(item, "finance.locked_backfill.approve");
 
         Instant now = Instant.now();
         String approver = authorizationService.currentActor().id();
@@ -1498,6 +1507,13 @@ public class FinanceService implements TerminationSettlementPort {
         if (settlementProgress != null) {
             settlementProgress.onArApItemPaid(updated);
         }
+        // FS-021-R5（BSM L1683「每笔应付的实际到账结果回写该笔应付」）：确认到账即回写在途那次付款为到账。
+        if (ticketPointsJdbc != null) {
+            ticketPointsJdbc.update("""
+                    UPDATE internal_payable_payment_attempts SET status='succeeded',resolved_at=now(),resolved_by=?
+                     WHERE ar_ap_item_id=? AND status='initiated'
+                    """, permission == null ? "system" : authorizationService.currentActor().id(), current.id());
+        }
         return new ArApPaymentResponse(payment, updated);
     }
 
@@ -1741,9 +1757,9 @@ public class FinanceService implements TerminationSettlementPort {
         payment = repository.findArApPaymentByIdForUpdate(targetId)
                 .orElseThrow(() -> ApiException.notFound("PAYMENT_NOT_FOUND", "支付记录不存在：" + targetId));
         rejectPayrollMutation(item);
-        checkMerchantOwnership(item.merchantId());
-        // P1-A 跨项目退款拒绝(两维并存)。
-        checkProjectScope(item.projectId());
+        // FS-021-R6（BSM L1673「所有数据默认按项目隔离」；PGM L664 付款执行由财务中心负责）：按项目范围与商户交集办理，
+        //   项目财务没有商户编号也能办本项目的退款；他项目拒绝，商户账号仍只限本商户。
+        requireArApScope(item, "finance.refund.create");
 
         // R5 T7 硬拦截：已锁定台账禁止直接退款（影响金额），必须走补录审批。
         requireNotLocked(item.id());
@@ -1797,9 +1813,13 @@ public class FinanceService implements TerminationSettlementPort {
 
     public PageResponse<FinanceRefundRecord> listFinanceRefunds() {
         authorizationService.requirePermission("finance.ar_ap.view");
-        return readPage("finance_refund.listed", "finance_refund.list_failed", "finance.ar_ap.view", "finance_refund",
-                () -> repository.listRefunds(authorizationService.currentMerchantScope().orElse(null),
-                        authorizationService.currentProjectScopeQuietly().orElse(null)));
+        // FS-021-R6：可触及项目与商户交集在 SQL 内过滤（与应收应付列表同口径）。
+        return readPage("finance_refund.listed", "finance_refund.list_failed", "finance.ar_ap.view", "finance_refund", () -> {
+            var actor = authorizationService.currentActor();
+            var reach = authorizationService.projectReach(actor, "finance.ar_ap.view");
+            return repository.listRefundsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
+                    reach.platformAdmin() ? null : reach.organizationIds());
+        });
     }
 
     public FinanceRefundDetailRecord getFinanceRefund(String refundId) {
@@ -1828,7 +1848,7 @@ public class FinanceService implements TerminationSettlementPort {
         FinanceRefundRecord prepared = executeWrite("retryFinanceRefund:" + refundId, actual.idempotencyKey(),
                 actual, FinanceRefundRecord.class, "finance_refund.retried", "finance_refund.retry_failed",
                 "finance.refund.create", "finance_refund", () -> {
-                    FinanceRefundRecord refund = scopedRefund(refundId, true);
+                    FinanceRefundRecord refund = scopedRefund(refundId, true, "finance.refund.create");
                     requireRefundOpenForExecution(refund);
                     requireRefundExecutionAuthority(refund, actual.deviceId());
                     if (!canDispatchRefund(refund)) {
@@ -1879,7 +1899,7 @@ public class FinanceService implements TerminationSettlementPort {
         return executeWrite("recordFinanceRefundExecution:" + refundId, actual.idempotencyKey(), actual,
                 FinanceRefundRecord.class, "finance_refund.execution_recorded", "finance_refund.execution_failed",
                 "finance.refund.create", "finance_refund", () -> {
-                    FinanceRefundRecord refund = scopedRefund(refundId, true);
+                    FinanceRefundRecord refund = scopedRefund(refundId, true, "finance.refund.create");
                     requireRefundOpenForExecution(refund);
                     requireDealerRefundSource(refund, true, false);
                     requireRefundExecutionAuthority(refund, actual.deviceId());
@@ -1906,7 +1926,7 @@ public class FinanceService implements TerminationSettlementPort {
         return executeWrite("confirmFinanceRefundResult:" + refundId, actual.idempotencyKey(), actual,
                 FinanceRefundRecord.class, "finance_refund.confirmed", "finance_refund.confirm_failed",
                 "finance.payment.register", "finance_refund", () -> {
-                    FinanceRefundRecord refund = scopedRefund(refundId, true);
+                    FinanceRefundRecord refund = scopedRefund(refundId, true, "finance.payment.register");
                     requireDealerRefundSource(refund, false, true);
                     if ("success".equals(refund.status())) return refund;
                     requireRefundExecutionAuthority(refund, actual.deviceId());
@@ -1942,12 +1962,17 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.badRequest("REFUND_EVIDENCE_REQUIRED", "须上传真实退款执行或核实凭证");
         }
         // 经销退款已按真实项目及原收款核权；附件仍须绑定本笔退款并核实真实文件。
+        // FS-021-R6：项目/平台财务（无商户编号）不按商户过滤，商户账号仍限本商户的凭证。
         String merchantScope = "dealer_order_refund".equals(refund.sourceType())
-                ? null : authorizationService.currentMerchantScope().orElse(null);
+                ? null : authorizationService.currentMerchantIdQuietly().orElse(null);
         refundEvidenceValidator.requireRefundEvidence(attachments, refund.id(), merchantScope);
     }
 
     private FinanceRefundRecord scopedRefund(String refundId, boolean lock) {
+        return scopedRefund(refundId, lock, "finance.ar_ap.view");
+    }
+
+    private FinanceRefundRecord scopedRefund(String refundId, boolean lock, String permission) {
         if (lock && dealerRefunds != null) {
             FinanceRefundRecord snapshot = repository.findRefundById(requireText(refundId, "退款编号"), false)
                     .orElseThrow(() -> ApiException.notFound("REFUND_NOT_FOUND", "退款记录不存在"));
@@ -1977,9 +2002,13 @@ public class FinanceService implements TerminationSettlementPort {
             }
             return refund;
         }
-        checkMerchantOwnership(refund.merchantId());
-        Optional<String> project = authorizationService.currentProjectScopeQuietly();
-        if (project.isPresent() && !project.get().equals(refund.projectId())) {
+        // FS-021-R6：按该动作权限码的可触及项目办理；商户账号仍只限本商户。
+        var actor = authorizationService.currentActor();
+        var reach = authorizationService.projectReach(actor, permission);
+        if (!reach.platformAdmin() && trimToNull(actor.merchantId()) != null && !actor.merchantId().equals(refund.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
+        }
+        if (!reach.covers(refund.projectId())) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处理其他项目或归属未明的退款");
         }
         return refund;
@@ -2846,7 +2875,8 @@ public class FinanceService implements TerminationSettlementPort {
         }
     }
 
-    private void requireArApScope(ArApItemRecord item, String permission) {
+    /** FS-021-R5 内部应付执行状态同用此范围闸（同包）。 */
+    void requireArApScope(ArApItemRecord item, String permission) {
         authorizationService.requirePermission(permission);
         if ("staff_payroll".equals(item.sourceType())) {
             if (!"finance.ar_ap.view".equals(permission)) rejectPayrollMutation(item);

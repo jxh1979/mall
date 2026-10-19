@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -32,6 +32,7 @@ const TEXT = {
   loadFailed: "组织与商户档案读取失败",
   merchantNameRequired: "商户名称不能为空。",
   merchantTypeRequired: "必须选择商户业态（酒吧／餐饮／零售／游乐／传媒／其他）。",
+  supervisingCompanyRequired: "业态为其他时，必须指定一家主管公司并说明理由。",
   contactPhoneRequired: "联系电话不能为空。",
   cooperationPlaceholder: "请选择合作形式",
   focusClear: "清除筛选，返回全部",
@@ -50,6 +51,9 @@ const COOPERATION_FORMS: ReadonlyArray<{ code: string; label: string }> = [
   { code: "service_provider", label: "服务商接入" },
   { code: "other", label: "其他" },
 ];
+// FS-024（ENUM「商户业态」条：选“其他”的商户，必须在商户档案里指定一家主管公司并说明理由，未指定的不得开通任何结算与分账）：
+// 主管公司只能从在用的城市项目公司／域主管公司中选（与后端 PlatformService.SUPERVISING_COMPANY_ROLES 同词表）。
+const SUPERVISING_COMPANY_ROLES = ["project_company", "management_company"];
 function cooperationLabel(code: string | null | undefined) {
   return COOPERATION_FORMS.find((form) => form.code === code)?.label ?? formatBusinessStatus(code);
 }
@@ -91,6 +95,9 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [contactName, setContactName] = React.useState("");
   const [contactPhone, setContactPhone] = React.useState("");
   const [cooperationForm, setCooperationForm] = React.useState("");
+  // FS-024：业态为其他时必填的主管公司（在用主体 id）与指定理由。
+  const [supervisingCompanyId, setSupervisingCompanyId] = React.useState("");
+  const [supervisingCompanyReason, setSupervisingCompanyReason] = React.useState("");
   const [formError, setFormError] = React.useState("");
   // 引导式创建流（一期范式）：主按钮 → 分步弹窗 → 确认创建。
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -156,6 +163,15 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const entities = entityRows.rows;
   const merchants = merchantRows.rows;
   const projects = projectRows.rows;
+  // FS-024：主管公司候选＝在用的城市项目公司／域主管公司；列表与详情按 id 回显主体名称。
+  const supervisingCandidates = entities.filter((row) => row.status === "active" && SUPERVISING_COMPANY_ROLES.includes(row.entityRole ?? ""));
+  function supervisingCompanyName(id?: string | null) {
+    if (!id) return "-";
+    return entities.find((row) => row.id === id)?.entityName ?? id;
+  }
+  function supervisingCompanyError() {
+    return merchantType === "other" && (!supervisingCompanyId || !supervisingCompanyReason.trim()) ? TEXT.supervisingCompanyRequired : null;
+  }
   const resources = [entityRows, merchantRows, projectRows];
   const loading = resources.some((resource) => resource.loading);
   const error = resources.find((resource) => resource.error)?.error ?? null;
@@ -185,6 +201,11 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       setFormError(TEXT.merchantTypeRequired);
       return;
     }
+    const supervisingError = supervisingCompanyError();
+    if (supervisingError) {
+      setFormError(supervisingError);
+      return;
+    }
     // M012-007：三份 HTML 无联系电话格式规则，只做非空校验（操作员 2.2 答删除前端 11 位大陆手机号正则）。
     if (!contactPhone.trim()) {
       setFormError(TEXT.contactPhoneRequired);
@@ -201,6 +222,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       contactName,
       contactPhone: contactPhone.trim(),
       ...(cooperationForm ? { cooperationForm } : {}),
+      // FS-024：只在业态为其他时提交主管公司与理由（后端对其他业态填写一律拒绝）。
+      ...(merchantType === "other" ? { supervisingCompanyId, supervisingCompanyReason: supervisingCompanyReason.trim() } : {}),
     };
     // 范式约定（引导式流程）：提交失败 = 弹窗留开 + error prop 在弹窗内显错，不静默。
     try {
@@ -310,6 +333,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         { label: "商户", value: display(row.merchantName) },
         { label: "所属项目", value: merchantProjectName(row) },
         { label: "业态", value: row.merchantType ? formatBusinessStatus(row.merchantType) : "-" },
+        { label: "主管公司", value: row.merchantType === "other" ? supervisingCompanyName(row.supervisingCompanyId) : "-" },
+        { label: "主管公司指定理由", value: row.merchantType === "other" ? display(row.supervisingCompanyReason) : "-" },
         { label: "联系人", value: display(row.contactName) },
         { label: "联系电话", value: display(row.contactPhone) },
         { label: "区块", value: display(row.mallBlockCode) },
@@ -386,8 +411,8 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       <div className="admin-table-scroll" data-testid="organization-merchants-section">
         <table className="admin-table" data-testid="organization-merchants-table">
           {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
-          <thead><tr><th>商户</th><th>所属项目</th><th>业态</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th><th>详情</th></tr></thead>
-          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{merchantProjectName(row)}</td><td>{row.merchantType ? formatBusinessStatus(row.merchantType) : "-"}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{cooperationLabel(row.cooperationForm)}</td><td>{formatOrganizationStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <thead><tr><th>商户</th><th>所属项目</th><th>业态</th><th>主管公司</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th><th>详情</th></tr></thead>
+          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{merchantProjectName(row)}</td><td>{row.merchantType ? formatBusinessStatus(row.merchantType) : "-"}</td><td>{row.merchantType === "other" ? supervisingCompanyName(row.supervisingCompanyId) : "-"}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{cooperationLabel(row.cooperationForm)}</td><td>{formatOrganizationStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
         <TablePager testid="organization-merchants-pager" page={merchantRows.page} pageCount={merchantRows.pageCount} total={merchantRows.total} onPrev={merchantRows.prev} onNext={merchantRows.next} />
       </div>
@@ -482,12 +507,18 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         steps={[
           {
             title: "基本信息",
-            description: "填写商户名称并选择业态（业态决定通票分账时这家商户的份额归哪一类，必填）。",
-            validate: () => (!merchantName.trim() ? TEXT.merchantNameRequired : merchantType ? null : TEXT.merchantTypeRequired),
+            description: "填写商户名称并选择业态（业态决定通票分账时这家商户的份额归哪一类，必填）；业态为其他时须指定主管公司并说明理由。",
+            validate: () => (!merchantName.trim() ? TEXT.merchantNameRequired : !merchantType ? TEXT.merchantTypeRequired : supervisingCompanyError()),
             content: (
               <>
                 <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
                 <label>业态<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}><option value="">请选择业态</option>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
+                {merchantType === "other" ? (
+                  <>
+                    <label>主管公司<select data-testid="organization-merchant-supervising-company" value={supervisingCompanyId} onChange={(event) => setSupervisingCompanyId(event.target.value)}><option value="">请选择主管公司（在用的城市项目公司／域主管公司）</option>{supervisingCandidates.map((row) => <option key={row.id} value={row.id}>{display(row.entityName)}</option>)}</select></label>
+                    <label>指定理由<textarea data-testid="organization-merchant-supervising-reason" value={supervisingCompanyReason} onChange={(event) => setSupervisingCompanyReason(event.target.value)} /></label>
+                  </>
+                ) : null}
               </>
             ),
           },
@@ -513,6 +544,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         summary={[
           { label: "商户名称", value: merchantName },
           { label: "业态", value: merchantType ? formatBusinessStatus(merchantType) : "未选择" },
+          ...(merchantType === "other" ? [{ label: "主管公司", value: supervisingCompanyName(supervisingCompanyId) }, { label: "指定理由", value: supervisingCompanyReason }] : []),
           { label: "联系人", value: contactName },
           { label: "联系电话", value: contactPhone },
           { label: "合作形式", value: cooperationForm ? cooperationLabel(cooperationForm) : "未选择" },

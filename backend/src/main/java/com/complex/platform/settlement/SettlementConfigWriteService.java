@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.03
+
 import com.complex.platform.analytics.OperatingParamsService;
 import com.complex.platform.common.Hashing;
 import com.complex.platform.common.api.ApiException;
@@ -94,6 +96,7 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.projectId(), "project_id");
         String merchantId = requireText(req.merchantId(), "merchant_id");
         rejectSentinel(merchantId, "merchant_id");
+        requireSupervisingCompanyWhenOther(merchantId);
         Long perGuest = req.perGuestCent();
         Long fixed = req.fixedAmountCent();
         // S8/V374 二选一:同行双值无从消歧(两段化后没有项目级 method 兜底),落库前拦住并直说该怎么填。
@@ -387,6 +390,7 @@ public class SettlementConfigWriteService {
         if (!writeRepository.merchantExists(merchantId)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id 对应商户不存在:" + merchantId);
         }
+        requireSupervisingCompanyWhenOther(merchantId);
         String itemCode = trimToNull(req.itemCode());
         if (itemCode == null) {
             itemCode = "sku_" + Hashing.idempotencyCode(merchantId + "|" + itemName + "|" + idem);
@@ -625,6 +629,17 @@ public class SettlementConfigWriteService {
     }
 
     /** §8:拒绝用户直接传 COALESCE 哨兵字面量(否则与 NULL 种子撞键、转正删不掉致 500)。null/空放行(=走默认口径)。 */
+    /**
+     * FS-024(ENUM L195「选“其他”的商户,必须在商户档案里指定一家主管公司并说明理由,未指定的不得开通任何结算与分账」):
+     * 商户分账固定规则与内部结算价目录是商户开通分账/结算的写入口,「其他」业态且档案未指定主管公司的商户一律 409。
+     */
+    private void requireSupervisingCompanyWhenOther(String merchantId) {
+        if (writeRepository.otherFormatWithoutSupervisingCompany(merchantId)) {
+            throw ApiException.conflict("MERCHANT_SUPERVISING_COMPANY_MISSING",
+                    "业态为「其他」的商户「" + merchantId + "」未在商户档案指定主管公司,未指定的不得开通任何结算与分账;请先补齐商户档案");
+        }
+    }
+
     private void rejectSentinel(String value, String field) {
         if (value != null && SCOPE_SENTINELS.contains(value.trim())) {
             throw ApiException.badRequest("VALIDATION_FAILED",

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -207,5 +207,52 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     const { setGlobalError } = renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_WITH_DRAFTS), post));
     fireEvent.click(await screen.findByTestId("settlement-config-activate-tdmr_d_1"));
     await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith(expect.stringContaining("另一位")));
+  });
+});
+
+// FS-021-R3（BSM L1673「三个付账日……各笔普通内部结算应付只在配置的付账日中选定」；BSM L1683「每一笔应付具体落在哪一个付账日，
+// 由财务人员按其工作负荷统一制定规则，规则一经确定至少一年内不得变更」）：付账日与钱路指派。走真实 AdminApi（键名蛇形转换）。
+describe("SettlementConfigPage 付账日与钱路指派", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("提交钱路指派规则请求体为蛇形 {route, statement_day, pay_slot, effective_from}；待审规则可审批；补偿应付钱路可选", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST") return Promise.resolve(ok({ id: "ipdr-new", status: "pending" }));
+      if (url.includes("/internal-pay-days/rules")) {
+        return Promise.resolve(ok([{ id: "ipdr-1", kind: "route", route: "ticket_distribution", statement_day: 3, pay_slot: 3,
+          effective_from: "2027-01-01", status: "pending", reason: "按工作负荷", submitted_by: "u2" }]));
+      }
+      if (url.includes("/overview")) return Promise.resolve(ok({ platform_defaults: [], pending_draft_count: 0, pending_drafts: [] }));
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("internal-pay-day-rule-ipdr-1")).not.toBeNull());
+    expect(Array.from((screen.getByTestId("internal-pay-day-route") as HTMLSelectElement).options).map((o) => o.textContent)).toContain("补偿新增履约结算");
+    fireEvent.change(screen.getByTestId("internal-pay-day-route"), { target: { value: "ticket_distribution" } });
+    fireEvent.change(screen.getByTestId("internal-pay-day-statement-day"), { target: { value: "3" } });
+    fireEvent.change(screen.getByTestId("internal-pay-day-slot"), { target: { value: "3" } });
+    fireEvent.change(screen.getByTestId("internal-pay-day-effective-from"), { target: { value: "2027-06-01" } });
+    fireEvent.change(screen.getByTestId("internal-pay-day-reason"), { target: { value: "按工作负荷统一制定" } });
+    fireEvent.click(screen.getByTestId("internal-pay-day-submit"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/internal-pay-days/rules"))).toBe(true));
+    const body = calls.find((c) => c.method === "POST" && c.url.endsWith("/internal-pay-days/rules"))!.body!;
+    expect(body).toMatchObject({ kind: "route", route: "ticket_distribution", statement_day: 3, pay_slot: 3,
+      effective_from: "2027-06-01", reason: "按工作负荷统一制定" });
+    expect(typeof body.idempotency_key).toBe("string");
+
+    fireEvent.click(screen.getByTestId("internal-pay-day-approve-ipdr-1"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/rules/ipdr-1/decision"))).toBe(true));
+    expect(calls.find((c) => c.url.endsWith("/rules/ipdr-1/decision"))!.body).toMatchObject({ decision: "approve" });
   });
 });

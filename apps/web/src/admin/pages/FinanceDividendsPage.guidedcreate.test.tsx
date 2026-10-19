@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +25,7 @@ const STATEMENTS = [
     include_inventory_cost: true, expense_types: ["labor"],
     revenue_cent: 1020000, cost_cent: 150000, expense_cent: 220000, net_profit_cent: 650000,
     distributable_cent: 650000, platform_share_cent: 520000, principal_gross_cent: 130000,
-    tax_cent: 26000, principal_net_cent: 104000, no_cost_basis_count: 0,
+    tax_cent: 26000, principal_net_cent: 104000, no_cost_basis_count: 0, legal_distributable_cent: 650000,
     status: "draft", created_at: "2026-07-01T04:00:00Z",
   },
   {

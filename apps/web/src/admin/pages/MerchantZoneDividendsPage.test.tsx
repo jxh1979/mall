@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -61,6 +62,8 @@ function makeApi(): AdminApi {
           statement: STATEMENTS[0],
           lines: [
             { id: "l1", statement_id: "divs_q2", seq: 1, line_type: "revenue_bar", amount_cent: 800000, detail: "酒吧结账实收" },
+            { id: "l1t", statement_id: "divs_q2", seq: 2, line_type: "revenue_ticket", amount_cent: 220000, detail: "已确认月度分账单" },
+            { id: "l1l", statement_id: "divs_q2", seq: 3, line_type: "legal_cap", amount_cent: 650000, detail: "财务核定" },
             { id: "l2", statement_id: "divs_q2", seq: 2, line_type: "tax_withheld", amount_cent: -26000, detail: "代扣股息红利个税" },
             { id: "l3", statement_id: "divs_q2", seq: 3, line_type: "principal_net", amount_cent: 104000, detail: "净发放额" },
           ],
@@ -130,6 +133,15 @@ describe("MerchantZoneDividendsPage 我的分红", () => {
     expect(screen.getByTestId("merchant-dividend-reserve-hint").textContent).toContain("下期返还");
     // 只读：无释放按钮。
     expect(screen.queryByTestId("dividend-reserve-release-divs_q2")).toBeNull();
+  });
+
+  it("票务收入行按已核销结算口径命名，主理人可见依法可分配金额核定行（FS-014/FS-015）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-dividend-row-divs_q2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-dividend-row-divs_q2"));
+    await waitFor(() => expect(screen.queryByText(/分红明细 · 2026-Q2/)).not.toBeNull());
+    expect(screen.queryByText("已核销门票结算收入")).not.toBeNull();
+    expect(screen.queryByText("依法可分配金额（核定）")).not.toBeNull();
   });
 
   it("点行打开算式明细抽屉：逐项金额 + 取数口径说明", async () => {

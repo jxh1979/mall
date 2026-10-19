@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.02
+
 import java.time.Instant;
 
 /**
@@ -38,6 +40,8 @@ import java.time.Instant;
  *                             「门票综合服务费一张票只收一道」的判定锚点——消费者据此判断该票是否已收过这道费。
  *                             为空 = 不合规发放数据（V285 起每次出票都建父票实例，新发放恒有）→ 消费者<b>拒绝计提</b>，
  *                             不退化成「按核销笔数各收一道」。
+ * @param compensationItemId   FS-012：补偿补发权益的补偿记录 id（非补偿核销为 null）。补偿新增履约由承担主体与提供方另行结算
+ *                             （补偿履约记录 + 补偿应付），结算消费者对其不写普通核销结算事实，原票分账不重复计（BSM L800、CG 第 39 条）。
  */
 public record SettlementSettledEvent(
         String verificationId,
@@ -56,6 +60,17 @@ public record SettlementSettledEvent(
         Long settlementPriceCent,
         Long fullPriceCent,
         String projectId,
-        String parentTicketId
+        String parentTicketId,
+        String compensationItemId
 ) {
+
+    /** 兼容构造（非补偿核销，compensationItemId=null）：既有测试零改动。 */
+    public SettlementSettledEvent(String verificationId, Instant verifiedAt, String entitlementId, String orderId,
+            String ticketTypeId, String entitlementType, String merchantId, int totalTimes, int usedTimes, int numPeople,
+            Long allocatedRevenueCent, Instant validTo, String exclusiveMerchantId, Long settlementPriceCent,
+            Long fullPriceCent, String projectId, String parentTicketId) {
+        this(verificationId, verifiedAt, entitlementId, orderId, ticketTypeId, entitlementType, merchantId, totalTimes,
+                usedTimes, numPeople, allocatedRevenueCent, validTo, exclusiveMerchantId, settlementPriceCent, fullPriceCent,
+                projectId, parentTicketId, null);
+    }
 }

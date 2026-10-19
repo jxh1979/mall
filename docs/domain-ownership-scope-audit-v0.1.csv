@@ -4,6 +4,7 @@ access_users,direct,merchant_id,merchant_id column on access_users,ready for pro
 amusement_business_day_configs,direct,project_id,project_id column on amusement_business_day_configs,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_capacity_config,direct,project_id,project_id column on amusement_capacity_config,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_capacity_snapshot,direct,project_id,project_id column on amusement_capacity_snapshot,ready for project/merchant scoped query enforcement,V0.07,covered
+amusement_compensation_fulfillments,direct,project_id,project_id column on amusement_compensation_fulfillments,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_compensation_policies,direct,project_id,project_id column on amusement_compensation_policies,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_concurrent_reset_log,direct,complex_id,"complex_id is the locked actual projects.id; project_id denotes an amusement ride, not a complex; preserve original merchant scope",business-day version and interval locked at the real event; missing ownership is not filled from actor or global defaults,V0.07,covered
 amusement_device_statuses,direct,project_id,project_id column on amusement_device_statuses,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -155,6 +156,7 @@ dealer_returns,single_complex_default,P0_SINGLE_COMPLEX,single-complex default s
 dealers,direct,project_id,project_id column on dealers,ready for project/merchant scoped query enforcement,V0.07,covered
 deposit_ledger,direct,merchant_id,merchant_id column on deposit_ledger,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_deduction_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+dividend_legal_confirmations,direct,merchant_id,merchant_id column on dividend_legal_confirmations,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_plans,direct,merchant_id,merchant_id column on dividend_plans,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_reserve_releases,direct,merchant_id,merchant_id column on dividend_reserve_releases,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_statement_lines,direct,merchant_id,merchant_id column on dividend_statement_lines,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -221,6 +223,11 @@ integration_robot_task_events,inherited,provider_code/project linkage,provider_c
 integration_video_access_approvals,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,V0.07,covered
 integration_video_access_audits,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,V0.07,covered
 integration_video_anchors,inherited,provider_code/project linkage,provider_code/project linkage -> integration_provider_adapters,must join through scope path before multi-complex rollout,V0.07,covered
+internal_pay_day_rules,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+internal_payable_account_changes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+internal_payable_payment_attempts,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+internal_payable_postponements,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+internal_payable_schedules,direct,project_id,project_id column on internal_payable_schedules,ready for project/merchant scoped query enforcement,V0.07,covered
 internal_price_catalog,direct,merchant_id,merchant_id column on internal_price_catalog,ready for project/merchant scoped query enforcement,V0.07,covered
 internal_settlement_pay_days,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_high_value_reviews,direct,merchant_id,merchant_id column on inventory_high_value_reviews,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -242,8 +249,11 @@ inventory_trace_handover_exceptions,single_complex_default,P0_SINGLE_COMPLEX,sin
 inventory_trace_handover_steps,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_trace_handovers,direct,merchant_id,merchant_id column on inventory_trace_handovers,ready for project/merchant scoped query enforcement,V0.07,covered
 inventory_trace_ownership_history,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+inventory_transfer_dispositions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_transfer_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+inventory_transfer_order_events,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_transfer_orders,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+inventory_transfer_receipts,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_variance,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 invoice_subject_rules,direct,project_id,project_id column on invoice_subject_rules,ready for project/merchant scoped query enforcement,V0.07,covered
 issued_entitlements,direct,venue_id,venue_id column on issued_entitlements,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -323,10 +333,15 @@ service_responsibility_records,direct,merchant_id,merchant_id column on service_
 settlement_bill_format_shares,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 settlement_bills,direct,project_id,project_id column on settlement_bills,ready for project/merchant scoped query enforcement,V0.07,covered
 settlement_invoice_items,direct,project_id,project_id column on settlement_invoice_items,ready for project/merchant scoped query enforcement,V0.07,covered
+settlement_item_recoveries,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 settlement_items,direct,merchant_id,merchant_id column on settlement_items,ready for project/merchant scoped query enforcement,V0.07,covered
+settlement_objection_period_policy,direct,project_id,project_id column on settlement_objection_period_policy,ready for project/merchant scoped query enforcement,V0.07,covered
 settlement_reconciliation_status,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 settlement_tax_configs,direct,project_id,project_id column on settlement_tax_configs,ready for project/merchant scoped query enforcement,V0.07,covered
 settlement_transactions,direct,project_id,project_id column on settlement_transactions,ready for project/merchant scoped query enforcement,V0.07,covered
+single_bar_service_fee_adjustments,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+single_bar_service_fee_months,direct,project_id,project_id column on single_bar_service_fee_months,ready for project/merchant scoped query enforcement,V0.07,covered
+single_bar_service_fee_tickets,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 site_entry_report_history,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 site_entry_reports,direct,project_id,project_id column on site_entry_reports,ready for project/merchant scoped query enforcement,V0.07,covered
 space_expiry_color_rules,direct,project_id,project_id column on space_expiry_color_rules,ready for project/merchant scoped query enforcement,V0.07,covered

@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.money.MoneyRounding;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -59,6 +61,10 @@ public class TicketDistributionSettlementService {
     static final String METHOD_BY_FIXED_AMOUNT = "by_fixed_amount";
     // 批3-4(§6.4)：专属某商户「不分摊」直付明细方式——净额(毛额−综合服务费)归该商户，不进可分配池、不参与排名。
     static final String METHOD_EXCLUSIVE_FULL = "exclusive_full";
+    // FS-021-R2（操作员裁决 2026-10-19 第 4 条「单独列追收、按原月重算」）：原月已结付后才撤销的核销另列追收明细——
+    //   单店（专属直付）按该次核销原结付金额，分池按原月剔除该次核销后重算各家应得的差额逐家追回；与当月应付分别收付。
+    static final String METHOD_EXCLUSIVE_RECOVERY = "exclusive_recovery";
+    static final String METHOD_POOLED_RECOVERY = "pooled_recovery";
 
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_CONFIRMED = "confirmed";
@@ -129,6 +135,101 @@ public class TicketDistributionSettlementService {
         }
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        MonthCalc calc = compute(projectId, month, null);
+        List<RecoveryCalc> recoveries = recoveries(projectId, windowStart, windowEnd);
+
+        repository.upsertBill(calc.bill());
+
+        // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
+        String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);
+        repository.deleteItemsByBill(actualBillId);
+        // S11④ 各业态结算出口的留痕:每个业态一行「毛额 / 折扣补回 / 渠道费 / 净份额 / 归谁」。
+        //   本批只保证份额算得出、归属定得住、非酒吧业态不进酒吧池;各业态自己的完整结算单另批。
+        repository.deleteFormatSharesByBill(actualBillId);
+        for (FormatShare share : calc.formatShares().values()) {
+            String kind = ENTITY_BENEFICIARY_FORMATS.containsKey(share.format()) ? BENEFICIARY_ENTITY : BENEFICIARY_PER_MERCHANT;
+            String entityId = BENEFICIARY_ENTITY.equals(kind)
+                    ? attributionRepository.resolveManagementEntity(
+                            projectId, ENTITY_BENEFICIARY_FORMATS.get(share.format()))
+                    : null;
+            repository.upsertFormatShare(new SettlementBillFormatShareRecord(
+                    actualBillId, share.format(), share.grossCent(), share.platformBorneCent(),
+                    share.channelFeeCent(), share.compServiceFeeCent(), share.giftCostCent(),
+                    share.giftPaidCent(), share.netCent(), kind, entityId));
+        }
+        // S7 差额台账落痕(append-only):首结追加陈述行;幂等重算若结论有变,先冲正取反旧净额、再追加新陈述,
+        //   历史结论永在;结论没变不追加(重跑零膨胀)。收款主体快照与 G 同源(pass_gift_cost 归属流)。
+        writeGiftVarianceLedger(actualBillId, projectId, periodStart, periodEnd,
+                calc.giftVariance(), calc.bill().giftBeneficiaryEntityId());
+        for (ItemCalc item : calc.items()) {
+            // 专属直付明细 id 加 method 后缀,与该家池分账明细 id 区分(否则 PK/唯一键相撞被覆盖丢账)。
+            String itemId = METHOD_EXCLUSIVE_FULL.equals(item.method())
+                    ? "si_" + actualBillId + "_" + item.merchantId() + "_excl"
+                    : "si_" + actualBillId + "_" + item.merchantId();
+            repository.upsertItem(new SettlementItemRecord(
+                    itemId,
+                    actualBillId, item.merchantId(),
+                    item.verifiedCount(), item.guestCount(), item.rankNo(),
+                    item.method(), item.amount(), item.amount(), ITEM_STATUS_DRAFT));
+        }
+        // FS-021-R2：追收明细（每家每支一条，按原月拆分回指原月结算单），不计入当月分账合计与越池判定。
+        for (RecoveryCalc recovery : recoveries) {
+            String itemId = "si_rcv_" + java.util.UUID.nameUUIDFromBytes((actualBillId + "|" + recovery.merchantId() + "|"
+                    + recovery.method()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-", "");
+            repository.upsertItem(new SettlementItemRecord(itemId, actualBillId, recovery.merchantId(), 0, 0, null,
+                    recovery.method(), recovery.amount(), recovery.amount(), ITEM_STATUS_DRAFT));
+            recovery.byOriginalBill().forEach((originalBill, amount) ->
+                    repository.insertItemRecovery(itemId, originalBill, amount));
+        }
+        return actualBillId;
+    }
+
+    /**
+     * FS-021-R2：本窗内被撤销核销所属的原月（已结付），以原月口径两次重算——只含早于本窗的撤销 vs 再含本窗的撤销——之差，
+     * 逐家形成追收：单店（专属直付）即该次核销原结付金额，分池即原月剔除该次核销后各家应得的变化。原月账单与已付款不回改。
+     */
+    private List<RecoveryCalc> recoveries(String projectId, Instant windowStart, Instant windowEnd) {
+        java.util.LinkedHashMap<String, RecoveryCalc> out = new java.util.LinkedHashMap<>();
+        for (LocalDate originalStart : repository.findRecoveredOriginalMonths(projectId, windowStart, windowEnd)) {
+            YearMonth original = YearMonth.from(originalStart);
+            String originalBillId = repository.findBillId(projectId, original.atDay(1), original.atEndOfMonth());
+            java.util.Map<String, Long> before = recoveryKeys(compute(projectId, original, windowStart).items());
+            java.util.Map<String, Long> after = recoveryKeys(compute(projectId, original, windowEnd).items());
+            java.util.LinkedHashSet<String> keys = new java.util.LinkedHashSet<>(before.keySet());
+            keys.addAll(after.keySet());
+            for (String key : keys) {
+                long diff = after.getOrDefault(key, 0L) - before.getOrDefault(key, 0L);
+                if (diff == 0L) {
+                    continue;
+                }
+                String[] parts = key.split("\\|", 2);
+                RecoveryCalc cur = out.computeIfAbsent(key,
+                        k -> new RecoveryCalc(parts[0], parts[1], 0L, new java.util.LinkedHashMap<>()));
+                cur.byOriginalBill().merge(originalBillId, diff, Long::sum);
+                out.put(key, new RecoveryCalc(cur.merchantId(), cur.method(), cur.amount() + diff, cur.byOriginalBill()));
+            }
+        }
+        return new ArrayList<>(out.values());
+    }
+
+    private static java.util.Map<String, Long> recoveryKeys(List<ItemCalc> items) {
+        java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
+        for (ItemCalc item : items) {
+            String method = METHOD_EXCLUSIVE_FULL.equals(item.method()) ? METHOD_EXCLUSIVE_RECOVERY : METHOD_POOLED_RECOVERY;
+            out.merge(item.merchantId() + "|" + method, item.amount(), Long::sum);
+        }
+        return out;
+    }
+
+    /**
+     * 按月窗算出结算单头、业态份额、赠付差额与分账明细（只读，不落库）。recoveryCutoff 为空＝当月结算口径；
+     * 非空＝FS-021-R2 原月重算口径（另并入原核销在本月、冲正早于 cutoff 的撤销）。
+     */
+    private MonthCalc compute(String projectId, YearMonth month, Instant recoveryCutoff) {
+        LocalDate periodStart = month.atDay(1);
+        LocalDate periodEnd = month.atEndOfMonth();
+        Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
 
         // D6 套票折扣归属(§7.4)：项目级配置（默认 platform_absorb）。折扣额已在核销时逐笔落 discount_amount_cent（append-only 账本），
         //   本引擎按 discount_bearer 应用——项目承担部分让商户拿满额、并记入 bill.combo_discount_cent。无折扣(折扣额=0)时全程 +0=零行为变更。
@@ -140,7 +241,7 @@ public class TicketDistributionSettlementService {
         //    份额比例本身在【出票时】就按各权益票面原价占比拆好了(TicketOrderService.allocateRevenue),
         //    这里只是把权益级的份额按提供方业态归堆,不重新发明分摊算法。
         List<JdbcSettlementBillRepository.FormatRevenue> formatRows =
-                repository.aggregateFormatRevenue(projectId, windowStart, windowEnd);
+                repository.aggregateFormatRevenue(projectId, windowStart, windowEnd, recoveryCutoff);
         java.util.LinkedHashMap<String, FormatShare> formatShares = new java.util.LinkedHashMap<>();
         long ticketRevenue = 0L;
         long comboDiscountCent = 0L; // 本月项目公司实际承担的折扣入账(各业态 + 后续专属直付累加)。
@@ -158,7 +259,7 @@ public class TicketDistributionSettlementService {
         }
         // K20 不重不漏:业态汇总必须恰好覆盖同一批进池核销(分组条件写错/漏一个业态会在这里响亮停,
         //   而不是悄悄少算一笔)。收入/综合服务费/赠送权益预估成本三个合计都核——漏一个业态,娱乐平台公司就少收一笔。
-        var pooledTotals = repository.sumPooledTotals(projectId, windowStart, windowEnd);
+        var pooledTotals = repository.sumPooledTotals(projectId, windowStart, windowEnd, recoveryCutoff);
         if (ticketRevenue - comboDiscountCent != pooledTotals.revenueCent()) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
                     "业态份额汇总与进池核销总额不符:Σ各业态净额 " + (ticketRevenue - comboDiscountCent)
@@ -180,7 +281,7 @@ public class TicketDistributionSettlementService {
         //    G = 本月进池计提净额(按计提行快照的规则 id 分组);A = ar_ap_items(pass_drink_settlement) 对冲净额
         //    (月窗/项目/票种锚点取该核销的结算事实行,票种再走与计提同一个 findPassGiftCostConfig 归到规则)。
         //    三种规则(V373 快照定义):platform_absorb 仅留痕/carry_forward 结转下期/true_up_pool 回补当期池。
-        GiftVarianceCalc giftVariance = settleGiftVariance(projectId, periodStart, windowStart, windowEnd,
+        GiftVarianceCalc giftVariance = settleGiftVariance(projectId, periodStart, windowStart, windowEnd, recoveryCutoff,
                 pooledGiftCost);
 
         // ② 赠酒成本不在此扣(D5,2026-07-21 用户拍板删):通票免费酒水由 bar 域 BarGiftConsumer 每次核销按【内部结算价】
@@ -195,7 +296,7 @@ public class TicketDistributionSettlementService {
         //    固定金额=每张票固定金额 × 该渠道当期签名票数(票数按首笔核销锚点计,一张票多次核销只收一道,
         //    冲正月票数为负 → 费为负=向渠道追回,与比例模式负收入同一带符号口径;整数乘法无舍入)。
         long channelFee = 0L;
-        for (var cr : repository.aggregateChannelRevenue(projectId, windowStart, windowEnd)) {
+        for (var cr : repository.aggregateChannelRevenue(projectId, windowStart, windowEnd, recoveryCutoff)) {
             String channel = cr.salesChannel() == null || cr.salesChannel().isBlank() ? null : cr.salesChannel();
             var feeCfg = repository.findChannelFee(projectId, channel);
             // R-7:比例模式四舍五入到分(旧整除截断少扣渠道费)。
@@ -232,7 +333,7 @@ public class TicketDistributionSettlementService {
 
         // ⑥ 各酒吧当月统计(核销数降序)
         List<JdbcSettlementBillRepository.MerchantMonthlyStat> stats =
-                repository.aggregateMerchantStats(projectId, windowStart, windowEnd);
+                repository.aggregateMerchantStats(projectId, windowStart, windowEnd, recoveryCutoff);
 
         // ⑦ S8 两段分配（仅非专属进池；池基/排名/客数聚合已在仓储层按业态+排除专属过滤,S11）:
         //    第一段=固定规则酒吧按绝对额先拿;第二段=其余酒吧按排名档位归一化分尽余额;
@@ -249,7 +350,7 @@ public class TicketDistributionSettlementService {
         //   线性求和,不再月末重算),故此处按 entitlement_type 分组只是聚合口径遗留、与费率命中无关
         //   (下面 merchantAgg 又按商户合并回去)。
         List<JdbcSettlementBillRepository.ExclusiveMerchantRevenue> exclusives =
-                repository.aggregateExclusiveRevenue(projectId, windowStart, windowEnd);
+                repository.aggregateExclusiveRevenue(projectId, windowStart, windowEnd, recoveryCutoff);
         // V336 综合服务费月度封顶(用户 2026-07-21 拍板 A「按费率规则各自封」):费率规则可跨票种(商户级规则
         //   ticket_type_id=NULL)或跨商户(全局默认 merchant_id=NULL),故封顶【不能】逐 (商户×票种) 聚合行各自压——
         //   否则同商户多票种落同一条规则时会被压 N 次=N×封顶,违背「商户级规则=该商户当月封顶」。改为按【商户 × 解析到的规则 id】
@@ -319,7 +420,7 @@ public class TicketDistributionSettlementService {
         //   V375 种全局默认 be_ent_platform)+ 告警留痕。不是静默沉淀:金额与归属主体单列落 bill。
         long poolUndistributed = pooled.undistributedCent();
         String poolUndistributedEntityId = poolUndistributed == 0L ? null : attributedEntityId;
-        if (poolUndistributed != 0L) {
+        if (poolUndistributed != 0L && recoveryCutoff == null) {
             log.warn("结算告警:项目 {} 月 {} 可分配池余额 {} 分无第二段参与者(排名档位酒吧为空或权重全 0),"
                             + "显式归娱乐平台公司(主体 {})留痕待查",
                     projectId == null ? "平台默认" : projectId, month, poolUndistributed,
@@ -340,49 +441,15 @@ public class TicketDistributionSettlementService {
         String giftBeneficiaryEntityId =
                 attributionRepository.resolveManagementEntity(projectId, REVENUE_STREAM_PASS_GIFT_COST);
 
-        String billId = idFor(projectId, month);
-        repository.upsertBill(new SettlementBillRecord(
-                billId, projectId, periodStart, periodEnd,
+        SettlementBillRecord bill = new SettlementBillRecord(
+                idFor(projectId, month), projectId, periodStart, periodEnd,
                 ticketRevenue, channelFee, availablePool, distributed,
                 pooledServiceFee, exclusiveServiceFee, feeBeneficiaryEntityId,
                 pooledGiftCost, giftBeneficiaryEntityId,
                 method, specialApprovalRef, status, attributedEntityId, comboDiscountCent,
                 totalRoundingResidual, roundingResidualEntityId,
-                poolUndistributed, poolUndistributedEntityId));
-
-        // 幂等重跑:先清旧明细再写(明细集合随当月核销变化,覆盖式最简)
-        String actualBillId = repository.findBillId(projectId, periodStart, periodEnd);
-        repository.deleteItemsByBill(actualBillId);
-        // S11④ 各业态结算出口的留痕:每个业态一行「毛额 / 折扣补回 / 渠道费 / 净份额 / 归谁」。
-        //   本批只保证份额算得出、归属定得住、非酒吧业态不进酒吧池;各业态自己的完整结算单另批。
-        repository.deleteFormatSharesByBill(actualBillId);
-        for (FormatShare share : formatShares.values()) {
-            String kind = ENTITY_BENEFICIARY_FORMATS.containsKey(share.format()) ? BENEFICIARY_ENTITY : BENEFICIARY_PER_MERCHANT;
-            String entityId = BENEFICIARY_ENTITY.equals(kind)
-                    ? attributionRepository.resolveManagementEntity(
-                            projectId, ENTITY_BENEFICIARY_FORMATS.get(share.format()))
-                    : null;
-            repository.upsertFormatShare(new SettlementBillFormatShareRecord(
-                    actualBillId, share.format(), share.grossCent(), share.platformBorneCent(),
-                    share.channelFeeCent(), share.compServiceFeeCent(), share.giftCostCent(),
-                    share.giftPaidCent(), share.netCent(), kind, entityId));
-        }
-        // S7 差额台账落痕(append-only):首结追加陈述行;幂等重算若结论有变,先冲正取反旧净额、再追加新陈述,
-        //   历史结论永在;结论没变不追加(重跑零膨胀)。收款主体快照与 G 同源(pass_gift_cost 归属流)。
-        writeGiftVarianceLedger(actualBillId, projectId, periodStart, periodEnd,
-                giftVariance, giftBeneficiaryEntityId);
-        for (ItemCalc item : items) {
-            // 专属直付明细 id 加 method 后缀,与该家池分账明细 id 区分(否则 PK/唯一键相撞被覆盖丢账)。
-            String itemId = METHOD_EXCLUSIVE_FULL.equals(item.method())
-                    ? "si_" + actualBillId + "_" + item.merchantId() + "_excl"
-                    : "si_" + actualBillId + "_" + item.merchantId();
-            repository.upsertItem(new SettlementItemRecord(
-                    itemId,
-                    actualBillId, item.merchantId(),
-                    item.verifiedCount(), item.guestCount(), item.rankNo(),
-                    item.method(), item.amount(), item.amount(), ITEM_STATUS_DRAFT));
-        }
-        return actualBillId;
+                poolUndistributed, poolUndistributedEntityId);
+        return new MonthCalc(bill, formatShares, giftVariance, items);
     }
 
     /**
@@ -611,9 +678,10 @@ public class TicketDistributionSettlementService {
      * 若有 G 落库却没带规则 id,差额表会悄悄少一块,宁可当场拒绝出账。
      */
     private GiftVarianceCalc settleGiftVariance(String projectId, LocalDate periodStart,
-                                                Instant windowStart, Instant windowEnd, long pooledGiftCost) {
+                                                Instant windowStart, Instant windowEnd, Instant recoveryCutoff,
+                                                long pooledGiftCost) {
         List<JdbcSettlementBillRepository.ConfigGiftCost> gRows =
-                repository.aggregateGiftCostByConfig(projectId, windowStart, windowEnd);
+                repository.aggregateGiftCostByConfig(projectId, windowStart, windowEnd, recoveryCutoff);
         java.util.LinkedHashMap<String, Long> gByConfig = new java.util.LinkedHashMap<>();
         long gSum = 0L;
         for (var g : gRows) {
@@ -627,7 +695,7 @@ public class TicketDistributionSettlementService {
         }
         java.util.LinkedHashMap<String, Long> aByConfig = new java.util.LinkedHashMap<>();
         java.util.LinkedHashMap<String, Long> paidByFormat = new java.util.LinkedHashMap<>();
-        for (var p : repository.aggregateGiftPaid(projectId, windowStart, windowEnd)) {
+        for (var p : repository.aggregateGiftPaid(projectId, windowStart, windowEnd, recoveryCutoff)) {
             paidByFormat.merge(p.businessFormat(), p.paidCent(), Long::sum);
             aByConfig.merge(repository.findPassGiftCostConfig(projectId, p.ticketTypeId()).id(),
                     p.paidCent(), Long::sum);
@@ -772,6 +840,15 @@ public class TicketDistributionSettlementService {
         long netCent() {
             return grossCent - channelFeeCent - giftCostCent - compServiceFeeCent;
         }
+    }
+
+    /** 按月窗算出的结算单头 + 业态份额 + 赠付差额 + 分账明细（落库前）。 */
+    private record MonthCalc(SettlementBillRecord bill, java.util.LinkedHashMap<String, FormatShare> formatShares,
+                             GiftVarianceCalc giftVariance, List<ItemCalc> items) {
+    }
+
+    /** FS-021-R2 追收明细：某家某支的追收合计（负＝向该家追回）及按原月结算单拆分。 */
+    private record RecoveryCalc(String merchantId, String method, long amount, java.util.Map<String, Long> byOriginalBill) {
     }
 
     /** 分账中间结果（method：池分账=当月分配方式，专属直付=exclusive_full）。 */

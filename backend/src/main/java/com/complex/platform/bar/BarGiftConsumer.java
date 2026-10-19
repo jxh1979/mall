@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.GiftReversedEvent;
 import com.complex.platform.ticketing.GiftVerifiedEvent;
@@ -175,6 +177,11 @@ public class BarGiftConsumer {
         if (merchantConcession) {
             note = note + "; merchant concession: cost borne by merchant, no platform payable";
         }
+        // FS-012：补偿补发的赠饮由补偿批次承担主体经补偿应付与酒吧结算（BSM L800「补偿履约与原履约分别记录」），不挂平台赠饮应付。
+        boolean compensation = GiftVerifiedEvent.COST_BEARER_COMPENSATION.equals(event.costBearer());
+        if (compensation) {
+            note = note + "; fault compensation: cost borne by compensation bearer, no platform payable";
+        }
 
         // 4) 出品 deliver 事件（回填 inventory_movement_id 关联库存流水）。
         repository.saveProductionTicketEvent(new BarProductionTicketEventRecord(
@@ -224,7 +231,7 @@ public class BarGiftConsumer {
         // 通票免费酒水平台↔酒吧结算（F-TXN-03 piece③b）：按票务侧固化的内部结算价向提供方酒吧挂应付。
         // 自营吧(merchantId=null)/未启用结算(receivableLedgerService=null) → 无对手方，不挂应付（成本已记在 note）。
         // S6：商户让利型(merchant_concession)平台不承担成本 → 不挂应付（原因已记在 note）。
-        if (receivableLedgerService != null && merchantId != null && !merchantConcession) {
+        if (receivableLedgerService != null && merchantId != null && !merchantConcession && !compensation) {
             receivableLedgerService.createPayableForGiftSettlement(verificationId, merchantId, settlementPriceCent);
         }
     }

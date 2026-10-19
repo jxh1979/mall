@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -19,6 +19,7 @@ import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.DividendRecords.ExpenseTypeSumRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
+import com.complex.platform.dividend.dto.DividendLegalConfirmationRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -42,10 +43,11 @@ import static com.complex.platform.common.Strings.requireText;
  * 持股分红引擎（2026-07-18 拍板：净利润制 / 真实股东股息红利 20% 代扣 / 季度正式+月度预览）。
  *
  * <p>算式（整数分，恒等式由 V299 DB CHECK 硬保证）：
- * 期间收入（复用 revenue.net 商户行级谓词区间版：酒吧实收−酒吧退款 + 售票分量−售票退款，计入域可配）
+ * 期间收入（复用 revenue.net 商户行级谓词区间版：酒吧实收−酒吧退款 + 已确认月度分账单的已核销门票结算额（FS-015），计入域可配）
  * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关）
  * − 期间费用（V297 费用归集台账净额，计入类别可配）
- * = 净利润 → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
+ * = 净利润 → 本次分配 = min(经营口径可分配额, 财务登记的依法可分配金额)（FS-014，正式单未登记不得提交/审批）
+ * → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
  * 平台分成/风险准备金四舍五入、代扣个税整除截断对齐税局——2026-07-28 用户拍板） → 净发放额。
  *
  * <p>时窗：BusinessDayResolver 平台全局经营日切分（与 V296 成本汇总/营业额租金同口径）——三来源同窗才能恒等；
@@ -421,14 +423,23 @@ public class DividendService {
             addLine(lines, statementId, merchantId, seq, "revenue_bar_refund", -barRefund,
                     "酒吧已实际退成的商品分项" + window, now);
         }
+        long ticketServiceFee = 0L;
         if (plan.revenueDomains().contains("ticket")) {
-            long ticketGross = repository.sumTicketAllocatedCent(merchantId, from, to);
-            long ticketRefund = repository.sumTicketRefundCent(merchantId, from, to);
-            revenue += ticketGross - ticketRefund;
-            addLine(lines, statementId, merchantId, seq, "revenue_ticket", ticketGross,
-                    "售票分量（issued_entitlements 权益分配收入）" + window, now);
-            addLine(lines, statementId, merchantId, seq, "revenue_ticket_refund", -ticketRefund,
-                    "售票退款（ticket_refunds 本商户受理）" + window, now);
+            // FS-015（BSM L755「确认已核销部分的门票收入」、L1689「未核销不产生提供方结算」）：取已确认月度分账单的
+            //   已核销结算额，与结算域同一事实源；退票只发生在完全未核销的票上，从未计入结算额，不再另扣。
+            List<String> pending = repository.listUnconfirmedTicketSettlementMonths(period.months());
+            if (!pending.isEmpty() && "official".equals(kind)) {
+                throw ApiException.conflict("TICKET_SETTLEMENT_PENDING",
+                        "票务月度分账（" + String.join("、", pending) + "）尚未确认，不能确认分红");
+            }
+            long ticketSettled = repository.sumTicketSettledCent(merchantId, period.start(), period.end());
+            revenue += ticketSettled;
+            addLine(lines, statementId, merchantId, seq, "revenue_ticket", ticketSettled,
+                    "已核销门票结算额（已确认月度分账单：单一酒吧门票为已核销票款直付额，通票为核销入场后的池分配额；"
+                            + "到期未核销款与通票未核销减除额不计；月份 " + String.join("、", period.months()) + "）"
+                            + (pending.isEmpty() ? "" : "；分账未确认月份 " + String.join("、", pending) + " 暂不计"), now);
+            // FS-013 后单一酒吧门票综合服务费按售出月单独计收、不再从直付额内扣，按 BSM L1774 作为费用扣减。
+            ticketServiceFee = repository.sumSingleBarServiceFeeCent(merchantId, period.start(), period.end());
         }
 
         long cost = 0L;
@@ -453,6 +464,13 @@ public class DividendService {
                     "期间费用（V297 费用归集台账净额，月份桶 " + String.join("、", period.months()) + "）", now);
         }
 
+        if (ticketServiceFee > 0) {
+            expense += ticketServiceFee;
+            addLine(lines, statementId, merchantId, seq, "expense_ticket_service_fee", -ticketServiceFee,
+                    "单一酒吧门票综合服务费（计费月＝售出月，整张退款成功剔除后按月封顶；计费月 "
+                            + String.join("、", period.months()) + "）", now);
+        }
+
         long netProfit = revenue - cost - expense;
 
         // V303 扣除项三开关（默认全关时逐分等于 V299 现状）。
@@ -475,12 +493,17 @@ public class DividendService {
             customRaws[i] = resolveDeductionRaw(customItems.get(i), netProfit, revenue);
         }
 
+        // FS-014：正式单读财务登记的依法可分配金额（预览单不读），本次分配与经营口径取小。
+        DividendRecords.DividendLegalConfirmationRecord legal = "official".equals(kind)
+                ? repository.findLegalConfirmation(merchantId, period.label()).orElse(null) : null;
+        Long legalCap = legal == null ? null : legal.legalDistributableCent();
+
         DividendMath.Distribution dist = DividendMath.compute(
                 netProfit, plan.platformShareBps(), effectiveTaxBps,
                 plan.lossCarryforwardEnabled(), carryIn,
                 plan.arrearsOffsetEnabled(), arrearsOutstanding,
                 customRaws,
-                plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent());
+                plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent(), legalCap);
 
         addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
                 "净利润 = 收入 − 销货成本 − 费用（亏损期可分配额为 0，不倒扣主理人）", now);
@@ -492,6 +515,14 @@ public class DividendService {
             addLine(lines, statementId, merchantId, seq, "loss_carryforward", -dist.carryAppliedCent(),
                     "亏损结转：期初未弥补亏损累计 " + carryIn + " 分，" + note
                             + "，结转至下期 " + dist.carryAfterCent() + " 分", now);
+        }
+        if (legal != null) {
+            long operating = Math.max(netProfit - dist.carryAppliedCent(), 0L);
+            addLine(lines, statementId, merchantId, seq, "legal_cap", legal.legalDistributableCent(),
+                    "依法可分配金额（财务核定）：财税核算依据「" + legal.taxAccountingRef() + "」，分配决议「"
+                            + legal.resolutionRef() + "」" + (legal.note() == null ? "" : "，说明：" + legal.note())
+                            + "；经营口径可分配额 " + operating + " 分，本次分配取二者较小 " + dist.distributableCent()
+                            + " 分（已在核定额中扣除的事项不重复扣除；被压下部分留在公司，以后不单独补分）", now);
         }
         addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
                 "平台分成（" + plan.platformShareBps() + " 万分比，四舍五入到分）", now);
@@ -550,7 +581,7 @@ public class DividendService {
                 null, null, operator, null, null, null, null, null, null, now, now,
                 plan.lossCarryforwardEnabled(), dist.carryInCent(), dist.carryAppliedCent(),
                 dist.carryAfterCent(), dist.arrearsOffsetCent(), dist.reserveWithheldCent(), dist.payoutCent(),
-                plan.principalType(), dist.customDeductionCent());
+                plan.principalType(), dist.customDeductionCent(), legalCap);
         repository.insertStatement(statement);
         for (DividendStatementLineRecord line : lines) {
             repository.insertLine(line);
@@ -651,6 +682,7 @@ public class DividendService {
                 AuditedOperation.of("dividend.submitted", "dividend.submit_failed", MANAGE_PERM, STMT_TYPE),
                 (statement, operator, now) -> {
                     requireStatus(statement, "draft", "只有草稿单可以提交审阅");
+                    requireLegalAmount(statement);
                     requireTransition(repository.markSubmitted(statement.id(), operator, now), "提交审阅");
                 });
     }
@@ -720,6 +752,63 @@ public class DividendService {
                     requireStatus(statement, "approved", "只有审批通过的单可以标记发放");
                     requireTransition(repository.markPaid(statement.id(), operator, now), "标记发放");
                 });
+    }
+
+    /**
+     * FS-014 财务登记依法可分配金额（BSM L1785「由财务依据专业财税核算结果及公司有效分配决议，确认依法可分配金额，
+     * 本次分配不得超出该金额」）：仅正式草稿/已驳回单；登记后按 min(经营口径, 核定额) 重算（旧单作废 + 新草稿）。
+     */
+    @Transactional
+    public DividendStatementRecord confirmLegal(String statementId, DividendLegalConfirmationRequest request) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        String id = requireText(statementId, "statement_id");
+        return operations.executeWrite(
+                "confirmDividendLegalAmount:" + id,
+                request.idempotencyKey(),
+                request,
+                DividendStatementRecord.class,
+                AuditedOperation.of("dividend.legal_confirmed", "dividend.legal_confirm_failed", MANAGE_PERM, STMT_TYPE),
+                () -> confirmLegalInternal(id, request),
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
+    private DividendStatementRecord confirmLegalInternal(String id, DividendLegalConfirmationRequest request) {
+        DividendStatementRecord statement = requireStatement(id);
+        if ("preview".equals(statement.kind())) {
+            throw ApiException.conflict("DIVIDEND_PREVIEW_NOT_APPROVABLE", "月度预览单只可查看，不登记依法可分配金额");
+        }
+        if (!"draft".equals(statement.status()) && !"rejected".equals(statement.status())) {
+            throw ApiException.conflict("DIVIDEND_STATE_INVALID",
+                    "只有草稿或已驳回的正式单可以登记依法可分配金额（当前状态：" + statement.status() + "）");
+        }
+        if (request.legalDistributableCent() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "legal_distributable_cent is required");
+        }
+        String operator = currentOperator();
+        repository.upsertLegalConfirmation(new DividendRecords.DividendLegalConfirmationRecord(
+                "dlc_" + UUID.randomUUID().toString().replace("-", ""), statement.merchantId(), statement.periodLabel(),
+                requireNonNegLong(request.legalDistributableCent(), "legal_distributable_cent"),
+                requireText(request.taxAccountingRef(), "tax_accounting_ref"),
+                requireText(request.resolutionRef(), "resolution_ref"),
+                blankToNull(request.note()), operator, Instant.now()));
+        DividendPlanRecord plan = repository.findPlanById(statement.planId())
+                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "分红方案不存在：" + statement.planId()));
+        DividendComputeResultRecord result = runCompute(
+                List.of(plan), "official", DividendPeriod.parse(statement.periodLabel()), operator);
+        if (result.computed().isEmpty()) {
+            throw ApiException.conflict("DIVIDEND_STATE_INVALID", result.skipped().get(0).reason());
+        }
+        return result.computed().get(0);
+    }
+
+    /** FS-014 正式分红应付款形成前须已登记依法可分配金额（BSM L1785；PRD §6）。 */
+    private static void requireLegalAmount(DividendStatementRecord statement) {
+        if (statement.legalDistributableCent() == null) {
+            throw ApiException.conflict("DIVIDEND_LEGAL_AMOUNT_REQUIRED", "须先由财务登记依法可分配金额及分配决议");
+        }
     }
 
     /** C-1：状态 UPDATE 守卫 0 行=并发下状态已被变更，抛业务冲突（409），事务回滚（不产生半截副作用）。 */
@@ -864,6 +953,10 @@ public class DividendService {
         }
         if (stmt.reserveWithheldCent() <= 0) {
             throw ApiException.conflict("DIVIDEND_RESERVE_NONE", "该计算单没有发放保护线留存，无需释放");
+        }
+        // FS-014 BSM L1786「释放时核验原合法分配依据及本次支付依据」：本次支付依据随实际付款登记（凭证附件、银行流水）。
+        if (stmt.legalDistributableCent() == null) {
+            throw ApiException.conflict("DIVIDEND_LEGAL_BASIS_MISSING", "原分红单未登记依法可分配金额及分配决议，不能释放留存");
         }
         // finance 侧 re-tag 待释放留存应付 → 已释放（金额不变，全额一次）；已释放/无待释放应付 → empty。
         Optional<FinanceService.DividendReserveReleaseRef> ref =

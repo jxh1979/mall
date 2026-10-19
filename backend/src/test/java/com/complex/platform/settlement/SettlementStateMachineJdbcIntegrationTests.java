@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.03
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
@@ -34,6 +36,8 @@ class SettlementStateMachineJdbcIntegrationTests {
     @Autowired private SettlementExpiryJob expiryJob;
     @Autowired private SettlementReconciliationJob reconciliationJob;
     @Autowired private JdbcSettlementBillRepository billRepository;
+    @Autowired private TicketDistributionSettlementService settlementService;
+    @Autowired private SettlementPostingService postingService;
     @Autowired private JdbcTemplate jdbcTemplate;
 
     private final List<String> projects = new ArrayList<>();
@@ -54,13 +58,15 @@ class SettlementStateMachineJdbcIntegrationTests {
             jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", e);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + e);
         }
-        if (!entIds.isEmpty()) { // 夹具建的提供方商户(在引用它的权益之后删,FK 顺序)
+        if (!entIds.isEmpty()) { // 夹具建的提供方商户与售票项目(在引用它的权益/订单之后删,FK 顺序)
             jdbcTemplate.update("DELETE FROM merchants WHERE id = 'mch_sm'");
+            jdbcTemplate.update("DELETE FROM projects WHERE id = 'proj_sm_exp'");
         }
         for (String p : projects) {
             com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", p);
             jdbcTemplate.update("DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)", p);
             jdbcTemplate.update("DELETE FROM settlement_bills WHERE project_id = ?", p);
+            jdbcTemplate.update("DELETE FROM ticket_distribution_rank_tiers WHERE project_id = ?", p);
         }
     }
 
@@ -155,6 +161,162 @@ class SettlementStateMachineJdbcIntegrationTests {
                 "SELECT business_at FROM settlement_transactions WHERE transaction_no = ?",
                 Instant.class, "ST-VR-rev_" + p);
         assertThat(vrBusiness).isAfter(monthEnd(jan));
+    }
+
+    /**
+     * FS-021-R2 生产形态：原月由月结作业出平台单（project_id 为空、覆盖全部项目）并已结付，核销交易行带核销项目——
+     * 撤销仍须落当月，由当月单列追收（操作员裁决 2026-10-19 第 4 条），不得落回已结付的原月被丢弃。
+     */
+    @Test
+    void reversalOfMonthSettledByPlatformBillLandsInCurrentMonth() {
+        String p = uniqueProject();
+        Instant nov = Instant.parse("2011-11-20T10:00:00Z");
+        seedSettledFact("v_" + p, "ent_" + p, p, "mch_" + p, nov, 1000L, null);
+        YearMonth month = YearMonth.from(nov.atZone(ZoneOffset.UTC));
+        String platformBill = "sb_platform_" + p;
+        jdbcTemplate.update("""
+                INSERT INTO settlement_bills (id, project_id, period_start, period_end, status, created_at, updated_at)
+                VALUES (?, NULL, ?, ?, 'settled', now(), now())
+                """, platformBill, java.sql.Date.valueOf(month.atDay(1)), java.sql.Date.valueOf(month.atEndOfMonth()));
+        try {
+            reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
+                    "v_" + p, "rev_" + p, "ent_" + p, "order_x", "mch_" + p, 1));
+
+            Instant vrBusiness = jdbcTemplate.queryForObject(
+                    "SELECT business_at FROM settlement_transactions WHERE transaction_no = ?", Instant.class, "ST-VR-rev_" + p);
+            assertThat(vrBusiness).as("原月平台单已结付 → 冲正落当月").isAfter(monthEnd(nov));
+        } finally {
+            jdbcTemplate.update("DELETE FROM settlement_bills WHERE id = ?", platformBill);
+        }
+    }
+
+    // ─── FS-021-R2：已结付月份后撤销的核销单列追收、按原月重算（操作员裁决 2026-10-19 第 4 条） ───────────
+
+    /**
+     * 单店（专属直付）：原月已结付后撤销的那笔，按该次核销原结付金额单列追收；当月新核销照常全额应付，两笔分别收付（BSM L755 不得轧差）。
+     */
+    @Test
+    void exclusivePostedMonthReversalIsSeparateRecoveryNotNetted() {
+        String p = uniqueProject();
+        String bar = "smx_bar"; // 明细编号含账单号与商户号，商户号取短值
+        Instant sep = Instant.parse("2011-09-28T10:00:00Z");
+        seedSettledFact("vx_old_" + p, "ent_old_" + p, p, bar, sep, 2000L, bar);
+        seedBill(p, YearMonth.from(sep.atZone(ZoneOffset.UTC)), "settled"); // 原月已结付
+        YearMonth current = YearMonth.now(ZoneOffset.UTC);
+        seedSettledFact("vx_new_" + p, "ent_new_" + p, p, bar, current.atDay(1).atTime(12, 0).toInstant(ZoneOffset.UTC),
+                10000L, bar);
+        reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
+                "vx_old_" + p, "rx_" + p, "ent_old_" + p, "order_x", bar, 1)); // 冲正落当月
+
+        String billId = settlementService.settleMonth(p, current);
+
+        assertThat(itemAmount(billId, bar, "exclusive_full")).as("当月应付照常全额").isEqualTo(10000L);
+        assertThat(itemAmount(billId, bar, "exclusive_recovery")).as("撤销那笔单列追收原结付金额").isEqualTo(-2000L);
+        String originalBill = "sb_" + p + "_" + YearMonth.from(sep.atZone(ZoneOffset.UTC));
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT r.amount_cent FROM settlement_item_recoveries r JOIN settlement_items i ON i.id = r.item_id
+                 WHERE i.bill_id = ? AND r.original_bill_id = ?
+                """, Long.class, billId, originalBill)).isEqualTo(-2000L);
+
+        com.complex.platform.support.InternalPayDayFixtures.seed(jdbcTemplate);
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        try {
+            postingService.postBill(billId);
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT a.amount_cent FROM ar_ap_items a JOIN settlement_items i ON i.ar_ap_item_id = a.id
+                 WHERE i.bill_id = ? AND i.distribution_method = 'exclusive_full' AND a.direction = 'payable'
+                """, Long.class, billId)).isEqualTo(10000L);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT a.amount_cent FROM ar_ap_items a JOIN settlement_items i ON i.ar_ap_item_id = a.id
+                 WHERE i.bill_id = ? AND i.distribution_method = 'exclusive_recovery' AND a.direction = 'receivable'
+                   AND a.source_type = 'ticket_distribution_recovery'
+                """, Long.class, billId)).isEqualTo(2000L);
+    }
+
+    /**
+     * 分池：原月（两家按排名 60%/40% 分池，已结付）其中一笔核销次月撤销 → 按原月剔除该次核销后重算，各家差额逐家追回；
+     * 当月池只按当月核销分，不含该冲正。原月：A 两笔、B 一笔各 1000 → A 1800 / B 1200；剔除 A 一笔后 A、B 各一笔，
+     * 同票数按商户号排序 A 第 1 名 → A 1200 / B 800；差额 A −600、B −400。当月 B 新核销 5000 独家分尽。
+     */
+    @Test
+    void pooledPostedMonthReversalRecomputesOriginalMonthPerBar() {
+        String p = uniqueProject();
+        String a = "smp_a";
+        String b = "smp_b";
+        setRankTier(p, 1, 1, 6000);
+        setRankTier(p, 2, 9, 4000);
+        Instant aug = Instant.parse("2011-08-20T10:00:00Z");
+        seedSettledFact("vp_a1_" + p, "ent_a1_" + p, p, a, aug, 1000L, null);
+        seedSettledFact("vp_a2_" + p, "ent_a2_" + p, p, a, aug.plusSeconds(60), 1000L, null);
+        seedSettledFact("vp_b1_" + p, "ent_b1_" + p, p, b, aug.plusSeconds(120), 1000L, null);
+        seedBill(p, YearMonth.from(aug.atZone(ZoneOffset.UTC)), "settled");
+        YearMonth current = YearMonth.now(ZoneOffset.UTC);
+        seedSettledFact("vp_b2_" + p, "ent_b2_" + p, p, b, current.atDay(1).atTime(12, 0).toInstant(ZoneOffset.UTC),
+                5000L, null);
+        reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
+                "vp_a2_" + p, "rp_" + p, "ent_a2_" + p, "order_x", a, 1));
+
+        String billId = settlementService.settleMonth(p, current);
+
+        assertThat(itemAmount(billId, b, "by_rank_tier")).as("当月池不含原月冲正").isEqualTo(5000L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM settlement_items WHERE bill_id = ? AND merchant_id = ? AND distribution_method = 'by_rank_tier'",
+                Integer.class, billId, a)).isZero();
+        assertThat(itemAmount(billId, a, "pooled_recovery")).isEqualTo(-600L);
+        assertThat(itemAmount(billId, b, "pooled_recovery")).isEqualTo(-400L);
+        assertThat(num(jdbcTemplate.queryForMap("SELECT * FROM settlement_bills WHERE id = ?", billId), "available_pool_cent"))
+                .isEqualTo(5000L);
+    }
+
+    /**
+     * 操作员裁决 2026-10-19 第二轮第 6 条「分池重算后的正差额：补付」（现状保持）：原月（已结付）撤销名次在前一家的一笔核销后名次互换，
+     * 多得的家按正差额补付（挂通票分账应付）、少得的家按负差额追回（挂追收应收），与当月应付分别收付、互不轧差。
+     * 原月：A 两笔、B 三笔各 1000 → B 第 1 名 3000 / A 第 2 名 2000；剔除 B 一笔后各两笔，同票数按商户号 A 第 1 名 → A 2400 / B 1600；
+     * 差额 A +400、B −1400。当月 B 新核销 5000 独家分尽。
+     */
+    @Test
+    void pooledRecomputationPaysPositiveDeltaAndRecoversNegativeSeparately() {
+        String p = uniqueProject();
+        String a = "smq_a";
+        String b = "smq_b";
+        setRankTier(p, 1, 1, 6000);
+        setRankTier(p, 2, 9, 4000);
+        Instant jul = Instant.parse("2011-07-20T10:00:00Z");
+        seedSettledFact("vq_a1_" + p, "ent_a1_" + p, p, a, jul, 1000L, null);
+        seedSettledFact("vq_a2_" + p, "ent_a2_" + p, p, a, jul.plusSeconds(60), 1000L, null);
+        seedSettledFact("vq_b1_" + p, "ent_b1_" + p, p, b, jul.plusSeconds(120), 1000L, null);
+        seedSettledFact("vq_b2_" + p, "ent_b2_" + p, p, b, jul.plusSeconds(180), 1000L, null);
+        seedSettledFact("vq_b3_" + p, "ent_b3_" + p, p, b, jul.plusSeconds(240), 1000L, null);
+        seedBill(p, YearMonth.from(jul.atZone(ZoneOffset.UTC)), "settled");
+        YearMonth current = YearMonth.now(ZoneOffset.UTC);
+        seedSettledFact("vq_b4_" + p, "ent_b4_" + p, p, b, current.atDay(1).atTime(12, 0).toInstant(ZoneOffset.UTC),
+                5000L, null);
+        reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
+                "vq_b3_" + p, "rq_" + p, "ent_b3_" + p, "order_x", b, 1));
+
+        String billId = settlementService.settleMonth(p, current);
+
+        assertThat(itemAmount(billId, a, "pooled_recovery")).as("多得的家按正差额补付").isEqualTo(400L);
+        assertThat(itemAmount(billId, b, "pooled_recovery")).as("少得的家按负差额追回").isEqualTo(-1400L);
+        assertThat(itemAmount(billId, b, "by_rank_tier")).as("当月应付照常").isEqualTo(5000L);
+
+        com.complex.platform.support.InternalPayDayFixtures.seed(jdbcTemplate);
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        try {
+            postingService.postBill(billId);
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
+        // 收付分列：正差额为应付（ticket_distribution）、负差额为追收应收（ticket_distribution_recovery）、当月应付另一行，不轧差。
+        assertThat(arApForItem(billId, a, "pooled_recovery")).containsEntry("direction", "payable")
+                .containsEntry("source_type", "ticket_distribution").containsEntry("amount_cent", 400L);
+        assertThat(arApForItem(billId, b, "pooled_recovery")).containsEntry("direction", "receivable")
+                .containsEntry("source_type", "ticket_distribution_recovery").containsEntry("amount_cent", 1400L);
+        assertThat(arApForItem(billId, b, "by_rank_tier")).containsEntry("direction", "payable")
+                .containsEntry("source_type", "ticket_distribution").containsEntry("amount_cent", 5000L);
     }
 
     // ─── AUD-019：到期归项目排除退款/退款申请中 ─────────────────────────────────
@@ -330,6 +492,10 @@ class SettlementStateMachineJdbcIntegrationTests {
                 INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)
                 VALUES ('mch_sm', 'mch_sm', 'bar', 'active', now(), now())
                 ON CONFLICT (id) DO UPDATE SET merchant_type = EXCLUDED.merchant_type""");
+        // FS-023-R1:到期余额按售票订单锁定的项目解析域公司,订单无项目即阻断 → 夹具订单须带项目。
+        jdbcTemplate.update("""
+                INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)
+                VALUES ('proj_sm_exp', 'complex', 'proj_sm_exp', 'active', now(), now()) ON CONFLICT (id) DO NOTHING""");
         String ent = "ent_" + suffix;
         entIds.add(ent);
         String typeId = "tt_" + suffix;
@@ -349,8 +515,8 @@ class SettlementStateMachineJdbcIntegrationTests {
                 templateId, total, ct, ct);
         jdbcTemplate.update("""
                 INSERT INTO ticket_orders (id, order_no, customer_id, ticket_type_id, quantity, visit_date,
-                    sales_channel, amount_cent, currency, pay_status, issue_status, status, created_at, updated_at)
-                VALUES (?, ?, NULL, ?, ?, NULL, 'web', 0, 'CNY', 'paid', 'issued', 'created', ?, ?)
+                    sales_channel, amount_cent, currency, pay_status, issue_status, status, created_at, updated_at, project_id)
+                VALUES (?, ?, NULL, ?, ?, NULL, 'web', 0, 'CNY', 'paid', 'issued', 'created', ?, ?, 'proj_sm_exp')
                 ON CONFLICT (id) DO NOTHING""", orderId, "ON-" + ent, typeId, total, ct, ct);
         jdbcTemplate.update("""
                 INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people,
@@ -399,6 +565,31 @@ class SettlementStateMachineJdbcIntegrationTests {
                 "SELECT COUNT(*) FROM settlement_transactions WHERE entitlement_id = ? AND transaction_type='unverified_expired'",
                 Integer.class, entId);
         return n == null ? 0 : n;
+    }
+
+    private void setRankTier(String projectId, int rankFrom, int rankTo, int shareBps) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_distribution_rank_tiers (id, project_id, rank_from, rank_to, share_bps, status, is_draft)
+                VALUES (?, ?, ?, ?, ?, 'active', FALSE)
+                """, "trt_sm_" + projectId + "_" + rankFrom, projectId, rankFrom, rankTo, shareBps);
+    }
+
+    private long itemAmount(String billId, String merchantId, String method) {
+        return jdbcTemplate.queryForObject("""
+                SELECT final_amount_cent FROM settlement_items WHERE bill_id = ? AND merchant_id = ? AND distribution_method = ?
+                """, Long.class, billId, merchantId, method);
+    }
+
+    /** 该明细过账回写的应收应付行（方向、来源、金额）。 */
+    private java.util.Map<String, Object> arApForItem(String billId, String merchantId, String method) {
+        return jdbcTemplate.queryForMap("""
+                SELECT a.direction, a.source_type, a.amount_cent FROM ar_ap_items a JOIN settlement_items i ON i.ar_ap_item_id = a.id
+                 WHERE i.bill_id = ? AND i.merchant_id = ? AND i.distribution_method = ?
+                """, billId, merchantId, method);
+    }
+
+    private static long num(java.util.Map<String, Object> row, String col) {
+        return ((Number) row.get(col)).longValue();
     }
 
     private Instant monthStart(Instant in) {

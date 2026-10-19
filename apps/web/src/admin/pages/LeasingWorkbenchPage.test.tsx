@@ -76,7 +76,8 @@ describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
     renderPage();
     await screen.findByTestId("leasing-lead-select-l-2");
     fireEvent.click(screen.getByTestId("leasing-lead-select-l-2"));
-    expect((screen.getByTestId("leasing-intent-create") as HTMLButtonElement).disabled).toBe(true);
+    // 点选后状态驱动的按钮可用性要等渲染稳定（全量负载下偶发晚一拍），用 waitFor 而不是同步断言。
+    await waitFor(() => expect((screen.getByTestId("leasing-intent-create") as HTMLButtonElement).disabled).toBe(true));
     expect((screen.getByTestId("leasing-lead-status-update") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId("leasing-follow-add") as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByTestId("leasing-lead-status").querySelector('option[value="signed"]')).toBeNull();

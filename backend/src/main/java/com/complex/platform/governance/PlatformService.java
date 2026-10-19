@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.12
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -60,6 +60,9 @@ public class PlatformService {
 
     /** M009-005：PGM-018/019 主体角色——顶层平台 / 城市项目公司 / 域主管公司（业态主体）。 */
     public static final Set<String> BUSINESS_ENTITY_ROLES = Set.of("platform", "project_company", "management_company");
+
+    /** FS-024（ENUM L195；控制席补充约定 2026-10-19）：「其他」业态商户的主管公司只能从在用的城市项目公司／域主管公司中选。 */
+    public static final Set<String> SUPERVISING_COMPANY_ROLES = Set.of("project_company", "management_company");
 
     /** M009-036：空间状态闭集来自已发布迁移 V203 的 chk_spaces_status（active/unavailable），服务层前置校验以中文 400 安全失败。 */
     public static final Set<String> SPACE_STATUSES = Set.of("active", "unavailable");
@@ -177,6 +180,24 @@ public class PlatformService {
                 "createMerchant",
                 "mch_" + UUID.randomUUID(),
                 request,
+                false,
+                true
+        );
+    }
+
+    /**
+     * 招商签约自动建档入口（LeasingService.autoCreateMerchantForSign）：线索阶段未定业态的落「其他」，此时档案里还没有主管公司可填，
+     * 故不触发 FS-024 的必填（MERCHANT_SUPERVISING_COMPANY_REQUIRED）；填了则照常校验主体有效性，其他业态不得填写也照常。
+     * ENUM L195 规定的后果只是「未指定的不得开通任何结算与分账」，由结算/分账写口 409 与到期作业逐商户记错守住；
+     * 招商随后在档案里补填时经 {@link #updateMerchant} 仍按必填。
+     */
+    public MerchantRecord createMerchantOnLeasingSign(MerchantProfileRequest request) {
+        authorizationService.requirePlatformScope();
+        return saveMerchant(
+                "createMerchant",
+                "mch_" + UUID.randomUUID(),
+                request,
+                false,
                 false
         );
     }
@@ -188,6 +209,7 @@ public class PlatformService {
                 "updateMerchant:" + merchantId,
                 requireText(merchantId, "merchant_id"),
                 request,
+                true,
                 true
         );
     }
@@ -910,6 +932,28 @@ public class PlatformService {
 
 
     /** V348+V384 业态必填且必须是六值之一；招商自动建档与后台手工建档同一入口、同一校验。 */
+    /**
+     * FS-024（ENUM L195；操作员裁决 2026-10-19 第二轮第 7 条「本批补字段与闸」）：业态为「其他」的商户必须指定一家主管公司并说明理由，
+     * 主管公司只能是在用（status=active）的城市项目公司或域主管公司。缺失 400 MERCHANT_SUPERVISING_COMPANY_REQUIRED；
+     * 主体不存在／不在用／角色不符 400 MERCHANT_SUPERVISING_COMPANY_INVALID；项目范围操作者填未关联当前项目的主体 403 PROJECT_SCOPE_MISMATCH
+     * （与 requireBusinessEntity 同一项目关联闸，M009-006）。
+     */
+    private void requireSupervisingCompany(String entityId, String reason) {
+        if (entityId == null || reason == null) {
+            throw ApiException.badRequest("MERCHANT_SUPERVISING_COMPANY_REQUIRED",
+                    "业态为「其他」的商户必须在商户档案里指定一家主管公司并说明理由");
+        }
+        BusinessEntityRecord entity = repository.findBusinessEntityById(entityId).orElse(null);
+        if (entity == null || !"active".equals(entity.status())
+                || !SUPERVISING_COMPANY_ROLES.contains(entity.entityRole())) {
+            throw ApiException.badRequest("MERCHANT_SUPERVISING_COMPANY_INVALID",
+                    "主管公司只能从在用的城市项目公司或域主管公司中选择：" + entityId);
+        }
+        if (!platformWide() && !repository.businessEntityInProject(entityId, currentProject())) {
+            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该主体未关联当前项目");
+        }
+    }
+
     private static String requireBusinessFormat(String raw) {
         String value = requireText(raw, "merchant_type");
         if (!MERCHANT_BUSINESS_FORMATS.contains(value)) {
@@ -1023,7 +1067,8 @@ public class PlatformService {
             String operationId,
             String merchantId,
             MerchantProfileRequest request,
-            boolean update
+            boolean update,
+            boolean supervisingCompanyRequired
     ) {
         return executeWrite(
                 operationId,
@@ -1046,6 +1091,18 @@ public class PlatformService {
                     if (existing != null && trimToNull(request.projectId()) != null
                             && !java.util.Objects.equals(projectId, request.projectId().trim())) {
                         throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "普通档案更新不能变更商户的项目归属");
+                    }
+                    // FS-024（ENUM L195「选“其他”的商户，必须在商户档案里指定一家主管公司并说明理由」）：仅业态为其他时必填，其他业态不得填写；
+                    // 招商签约自动建档（supervisingCompanyRequired=false）不触发必填、填了才校验，见 createMerchantOnLeasingSign。
+                    String supervisingCompanyId = trimToNull(request.supervisingCompanyId());
+                    String supervisingCompanyReason = trimToNull(request.supervisingCompanyReason());
+                    if ("other".equals(merchantType)) {
+                        if (supervisingCompanyRequired || supervisingCompanyId != null || supervisingCompanyReason != null) {
+                            requireSupervisingCompany(supervisingCompanyId, supervisingCompanyReason);
+                        }
+                    } else if (supervisingCompanyId != null || supervisingCompanyReason != null) {
+                        throw ApiException.badRequest("MERCHANT_SUPERVISING_COMPANY_NOT_ALLOWED",
+                                "只有业态为「其他」的商户才在档案里指定主管公司与理由");
                     }
                     if (existing == null) {
                         if (trimToNull(request.businessEntityId()) != null) requireBusinessEntity(request.businessEntityId(), "business_entity_id");
@@ -1088,7 +1145,9 @@ public class PlatformService {
                             existing == null ? null : existing.deleteRequestedBy(),
                             existing == null ? null : existing.deleteRequestedAt(),
                             existing == null ? null : existing.deleteReason(),
-                            projectId
+                            projectId,
+                            supervisingCompanyId,
+                            supervisingCompanyReason
                     ));
                 }
         );

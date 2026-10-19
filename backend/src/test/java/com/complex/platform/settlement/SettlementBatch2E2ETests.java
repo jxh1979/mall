@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.support.TestSecurityActors;
@@ -63,6 +65,8 @@ class SettlementBatch2E2ETests {
 
     @BeforeEach
     void setUp() {
+        // FS-021：过账到期日按财务指定付账日推算，缺规则/日历即拒绝——种已批钱路规则与工作日历。
+        com.complex.platform.support.InternalPayDayFixtures.seed(jdbcTemplate);
         // 过账 postBill → FinanceService.createArApItem(@GuardedAction) 需登录主体过鉴权/审计。
         TestSecurityActors.asPlatformAdmin();
     }

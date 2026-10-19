@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -536,6 +536,18 @@ class JdbcFinanceRepository implements FinanceRepository {
             params.addValue("project", projectId);
         }
         return jdbcTemplate.query("SELECT * FROM finance_refunds WHERE 1=1" + scope
+                + " ORDER BY created_at DESC, id", params, this::mapRefund);
+    }
+
+    @Override
+    public List<FinanceRefundRecord> listRefundsForProjects(String merchantId, java.util.Set<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) {
+            return List.of();
+        }
+        var params = new MapSqlParameterSource().addValue("merchant", merchantId, java.sql.Types.VARCHAR)
+                .addValue("projects", projectIds);
+        return jdbcTemplate.query("SELECT * FROM finance_refunds WHERE (:merchant IS NULL OR merchant_id = :merchant)"
+                + (projectIds == null ? "" : " AND project_id IN (:projects)")
                 + " ORDER BY created_at DESC, id", params, this::mapRefund);
     }
 

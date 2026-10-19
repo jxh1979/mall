@@ -3601,6 +3601,216 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/finance/internal-payables/{ar_ap_item_id}:
+    get:
+      tags:
+        - finance
+      operationId: getInternalPayableExecution
+      summary: 查普通内部结算往来的付款时点与执行状态
+      description: ENUM L253 内部应付执行状态：pending=待付(含银行在途 in_transit=true)、failed_pending=付款失败待处理(注明 failure_reason 与
+        expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。
+      x-permission: finance.ar_ap.view
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      parameters:
+        - name: ar_ap_item_id
+          in: path
+          required: true
+          description: 应收应付款项编号
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts:
+    post:
+      tags:
+        - finance
+      operationId: initiateInternalPayment
+      summary: 登记内部应付已发起付款(银行在途)
+      description: BSM L1683：异议期未届满不进入付款 409 OBJECTION_PERIOD_NOT_EXPIRED；已发起未确认到账且未收到失败结果属在途，再发起 409
+        PAYMENT_IN_TRANSIT；换账户重付须引用收款方财务负责人已审批的 account_change_id(否则 409 ACCOUNT_CHANGE_NOT_APPROVED)；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED(与登记收付款同码)。到账仍走登记收付款，成功才结清。
+      x-permission: finance.payment.register
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.internal_payment.initiated
+      x-audit-event-failure: finance.internal_payment.initiate_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: ar_ap_item_id
+          in: path
+          required: true
+          description: 应收应付款项编号
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键。
+                bank_ref:
+                  type: string
+                  maxLength: 128
+                account_change_id:
+                  type: string
+                  maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts/{attempt_id}/failure:
+    post:
+      tags:
+        - finance
+      operationId: recordInternalPaymentFailure
+      summary: 登记内部应付付款明确失败(付款失败待处理)
+      description: BSM L1683：收到银行拒付、账户错误或冻结、款项退回等明确失败结果，标付款失败待处理并注明原因与预计重付时间；预计重付时间须在今天至下一个付账日之间，否则 400
+        REPAY_AFTER_NEXT_PAY_DAY；只有在途那次可登记 409 ATTEMPT_NOT_IN_TRANSIT；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED。
+      x-permission: finance.payment.register
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.internal_payment.failed
+      x-audit-event-failure: finance.internal_payment.fail_record_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: ar_ap_item_id
+          in: path
+          required: true
+          description: 应收应付款项编号
+          schema:
+            type: string
+            maxLength: 128
+        - name: attempt_id
+          in: path
+          required: true
+          description: 付款尝试编号
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - failure_reason
+                - expected_repay_date
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键。
+                failure_reason:
+                  type: string
+                  maxLength: 500
+                expected_repay_date:
+                  type: string
+                  format: date
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/finance/internal-payables/{ar_ap_item_id}/funds-insufficient:
+    post:
+      tags:
+        - finance
+      operationId: postponeInternalPaymentForFunds
+      summary: 资金不足顺延至下一个付账日
+      description: BSM L1683 顺延三：账上资金不足的，该笔付款顺延至下一个付账日(遇非银行工作日再顺延)，逐次留痕，不另行通知收款方，待付状态对收款方可见；在途的不属资金不足 409 PAYMENT_IN_TRANSIT；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED。
+      x-permission: finance.payment.register
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance.internal_payment.postponed
+      x-audit-event-failure: finance.internal_payment.postpone_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: ar_ap_item_id
+          in: path
+          required: true
+          description: 应收应付款项编号
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - note
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键。
+                note:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/refunds:
     post:
       tags:
@@ -5693,8 +5903,8 @@ paths:
       tags:
         - inventory
       operationId: cancelTransferOrder
-      summary: 取消借调单
-      description: 取消借调流转单：created 直接取消；shipped 需冲销发货时挂的应付（未收款才可冲）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      summary: "取消调拨／要货单"
+      description: "取消流转单：已发货（shipped，借调单）一律 409 TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库」），不再冲销应付；借调单 created 直接取消；FS-011 门店要货（supply）草稿直接取消，已提交未出库（pending_supplier_review/pending_picking/pending_outbound）须填 operator_note 发起审批（BSM L1212「未出库数量可经审批取消」），返回单据状态不变，审批批准后置 cancelled（写留痕、操作者为终审人）、驳回照常流转，审批中其他步骤 409 TRANSFER_CANCEL_PENDING；已出库（in_delivery/pending_receipt/discrepancy）409 TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS，须经 .../dispositions 差异处理；已完成或已取消 409 TRANSFER_ORDER_NOT_CANCELLABLE。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: inventory.transfer_order.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -5741,6 +5951,649 @@ paths:
                   type: string
                   maxLength: 500
                   description: 操作备注。
+      x-failure-codes:
+        - "TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS"
+        - "TRANSFER_ORDER_NOT_CANCELLABLE"
+        - "TRANSFER_CANCEL_PENDING"
+        - "CROSS_MERCHANT_FORBIDDEN"
+        - "CROSS_PROJECT_FORBIDDEN"
+  /api/v1/inventory/transfer-orders/{order_id}/submit:
+    post:
+      tags:
+        - "inventory"
+      operationId: "submitTransferOrder"
+      summary: "门店要货提交供货主体审核"
+      description: "FS-011（BSM L1212/L1213、ENUM L169）：门店要货（transfer_type=supply）草稿→待供货主体审核（draft→pending_supplier_review），写一行转换留痕（操作者与时间）。商户账号只能办理本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；状态不符 409 TRANSFER_ORDER_STATUS_CONFLICT；取消审批中 409 TRANSFER_CANCEL_PENDING。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_order_submitted"
+      x-audit-event-failure: "inventory.transfer_order_submit_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                operator_note:
+                  type: "string"
+                  maxLength: 500
+                  description: "操作备注。"
+      x-failure-codes:
+        - "CROSS_MERCHANT_FORBIDDEN"
+        - "TRANSFER_ORDER_STATUS_CONFLICT"
+        - "TRANSFER_CANCEL_PENDING"
+        - "TRANSFER_NOT_REQUISITION"
+        - "CROSS_PROJECT_FORBIDDEN"
+  /api/v1/inventory/transfer-orders/{order_id}/lines:
+    post:
+      tags:
+        - "inventory"
+      operationId: "editTransferOrderDraft"
+      summary: "门店要货草稿改单"
+      description: "FS-011（操作员裁决 2026-10-19 第 2 条：供货主体不同意退回草稿，门店改后可重新提交）：仅草稿（draft）可改，整单替换明细（同建单：至少一行、数量大于 0、单价不为负），不改状态。商户账号只能办理本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非草稿 409 TRANSFER_ORDER_STATUS_CONFLICT。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_order_draft_edited"
+      x-audit-event-failure: "inventory.transfer_order_draft_edit_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+                - "lines"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                lines:
+                  type: "array"
+                  minItems: 1
+                  items:
+                    type: "object"
+                    required:
+                      - "item_id"
+                      - "quantity"
+                    properties:
+                      item_id:
+                        type: "string"
+                        description: "物料 ID。"
+                      quantity:
+                        type: "integer"
+                        minimum: 1
+                        description: "数量。"
+                      unit_price_cent:
+                        type: "integer"
+                        minimum: 0
+                        description: "内部结算单价（分），建单/改单时锁定。"
+                      trace_codes:
+                        type: "array"
+                        items:
+                          type: "string"
+                        description: "随货溯源码。"
+                  description: "替换后的全部明细。"
+      x-failure-codes:
+        - "CROSS_MERCHANT_FORBIDDEN"
+        - "TRANSFER_ORDER_STATUS_CONFLICT"
+        - "TRANSFER_CANCEL_PENDING"
+        - "VALIDATION_FAILED"
+        - "CROSS_PROJECT_FORBIDDEN"
+  /api/v1/inventory/transfer-orders/{order_id}/supplier-review:
+    post:
+      tags:
+        - "inventory"
+      operationId: "supplierReviewTransferOrder"
+      summary: "供货主体审核门店要货"
+      description: "FS-011（BSM L1212「供货主体审核」；E-08；操作员裁决 2026-10-19 第 2 条）：待供货主体审核→同意进待拣配（pending_picking）；不同意须填 reason，退回草稿（draft），门店改后可重新提交。每次转换写留痕。商户账号不能代供货主体办理，403 SUPPLY_SIDE_ONLY；状态不符 409 TRANSFER_ORDER_STATUS_CONFLICT；取消审批中 409 TRANSFER_CANCEL_PENDING。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_order_supplier_reviewed"
+      x-audit-event-failure: "inventory.transfer_order_supplier_review_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+                - "decision"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                decision:
+                  type: "string"
+                  enum:
+                    - "approved"
+                    - "rejected"
+                  description: "approved 同意；rejected 不同意、退回草稿。"
+                reason:
+                  type: "string"
+                  maxLength: 500
+                  description: "审核意见；不同意时必填。"
+      x-failure-codes:
+        - "SUPPLY_SIDE_ONLY"
+        - "TRANSFER_ORDER_STATUS_CONFLICT"
+        - "TRANSFER_CANCEL_PENDING"
+        - "VALIDATION_FAILED"
+  /api/v1/inventory/transfer-orders/{order_id}/pick:
+    post:
+      tags:
+        - "inventory"
+      operationId: "pickTransferOrder"
+      summary: "门店要货拣配完成"
+      description: "FS-011（BSM L1212「仓库拣配」）：待拣配→待出库（pending_picking→pending_outbound），写留痕；出库沿用 POST .../ship（待出库→配送中，货款不在出库时形成）。商户账号不能代供货主体办理，403 SUPPLY_SIDE_ONLY；状态不符 409 TRANSFER_ORDER_STATUS_CONFLICT；取消审批中 409 TRANSFER_CANCEL_PENDING。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_order_picked"
+      x-audit-event-failure: "inventory.transfer_order_pick_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                operator_note:
+                  type: "string"
+                  maxLength: 500
+                  description: "操作备注。"
+      x-failure-codes:
+        - "SUPPLY_SIDE_ONLY"
+        - "TRANSFER_ORDER_STATUS_CONFLICT"
+        - "TRANSFER_CANCEL_PENDING"
+  /api/v1/inventory/transfer-orders/{order_id}/deliver:
+    post:
+      tags:
+        - "inventory"
+      operationId: "deliverTransferOrder"
+      summary: "门店要货送达待签收"
+      description: "FS-011（BSM L1212「配送、门店签收」）：配送中→待签收（in_delivery→pending_receipt），写留痕。送达属配送环节，由供货侧办理，商户账号 403 SUPPLY_SIDE_ONLY；状态不符 409 TRANSFER_ORDER_STATUS_CONFLICT；取消审批中 409 TRANSFER_CANCEL_PENDING。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_order_delivered"
+      x-audit-event-failure: "inventory.transfer_order_deliver_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                operator_note:
+                  type: "string"
+                  maxLength: 500
+                  description: "操作备注。"
+      x-failure-codes:
+        - "TRANSFER_ORDER_STATUS_CONFLICT"
+        - "TRANSFER_CANCEL_PENDING"
+        - "SUPPLY_SIDE_ONLY"
+  /api/v1/inventory/transfer-orders/{order_id}/receive:
+    post:
+      tags:
+        - "inventory"
+      operationId: "receiveTransferOrder"
+      summary: "调拨收货／门店要货签收"
+      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写入库流水（business_type=inventory_transfer）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_order_received"
+      x-audit-event-failure: "inventory.transfer_order_receive_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                scanned_trace_codes:
+                  type: "array"
+                  items:
+                    type: "string"
+                  description: "借调收货：随货溯源码清单（须扫齐，防调包）。"
+                operator_note:
+                  type: "string"
+                  maxLength: 500
+                  description: "操作备注。"
+                warehouse_id:
+                  type: "string"
+                  description: "门店要货签收：合格部分入库的本门店仓库。"
+                location_id:
+                  type: "string"
+                  description: "门店要货签收：合格部分入库库位。"
+                lines:
+                  type: "array"
+                  description: "门店要货签收：逐行登记。"
+                  items:
+                    type: "object"
+                    required:
+                      - "line_id"
+                      - "arrived_quantity"
+                      - "accepted_quantity"
+                      - "rejected_quantity"
+                    properties:
+                      line_id:
+                        type: "string"
+                        description: "要货明细 ID。"
+                      arrived_quantity:
+                        type: "integer"
+                        minimum: 0
+                        description: "实收数量。"
+                      accepted_quantity:
+                        type: "integer"
+                        minimum: 0
+                        description: "合格接收数量。"
+                      rejected_quantity:
+                        type: "integer"
+                        minimum: 0
+                        description: "拒收数量。"
+                      accepted_trace_codes:
+                        type: "array"
+                        items:
+                          type: "string"
+                        description: "合格接收件的溯源码。"
+      x-failure-codes:
+        - "CROSS_MERCHANT_FORBIDDEN"
+        - "TRANSFER_ORDER_NOT_PENDING_RECEIPT"
+        - "TRANSFER_RECEIVE_WAREHOUSE_INVALID"
+        - "TRACE_CODE_MISMATCH"
+        - "TRACE_OWNER_MISMATCH"
+        - "TRANSFER_CANCEL_PENDING"
+        - "INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED"
+        - "VALIDATION_FAILED"
+        - "STORE_RECEIPT_ONLY"
+  /api/v1/inventory/transfer-orders/{order_id}/dispositions:
+    get:
+      tags:
+        - "inventory"
+      operationId: "getTransferOrderFulfillment"
+      summary: "门店要货签收结果与差异处理"
+      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量……全部数量处理完且库存、款项记录齐全后完成要货单，付款是否结清另行显示」）：返回 lines（逐行 quantity 发货、accepted_quantity 合格、rejected_quantity 拒收、short_quantity 短少、resolved_quantity 已通过复核的退回验收与损失、claimed_quantity 未驳回的退回验收与损失、reshipped_quantity 未驳回的补发、unresolved_quantity 待处理＝发货－合格－已通过的退回验收与损失）、payable_item_id（当前有效的签收货款应付：货款调减通过后为重述行，全额调减后为空）与 dispositions（全部差异处理登记）。商户账号只能查看本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非门店要货单 400 TRANSFER_NOT_REQUISITION。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.view"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "inventory.transfer_fulfillment_viewed"
+      x-audit-event-failure: "inventory.transfer_fulfillment_view_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      x-failure-codes:
+        - "CROSS_MERCHANT_FORBIDDEN"
+        - "TRANSFER_NOT_REQUISITION"
+        - "TRANSFER_ORDER_NOT_FOUND"
+    post:
+      tags:
+        - "inventory"
+      operationId: "registerTransferDisposition"
+      summary: "登记门店要货差异处理"
+      description: "FS-011（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库。供货、配送保管和收货方按交接证据确认差异，财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款」）：仅差异处理中（discrepancy）的门店要货单可登记，状态为待复核（pending_review），复核通过才生效。return_accepted 退回验收、loss 损失（须 responsible_party：supplier 供货主体、carrier 配送保管方、receiver 收货方；amount_cent 由服务按该行锁定单价×数量算出）针对 line_id 的 quantity 件，二者合计（未驳回）不超过该行发货－合格，同一件只能有一个结果，超出 409 TRANSFER_DISPOSITION_EXCEEDS_DISCREPANCY；reship 补发（trace_codes 为补发货随货溯源码）合计不超过发货－合格；payment_adjustment 货款调减 amount_cent（分），不超过当前签收货款应付的未付金额，否则 409 TRANSFER_ADJUSTMENT_EXCEEDS_UNPAID，无签收货款 409 TRANSFER_PAYABLE_NOT_FOUND。evidence_attachment_ids 必填：交接证据须已上传（business_type=inventory_transfer_order、business_id=本单），缺失 400 EVIDENCE_REQUIRED、绑定不符 400 EVIDENCE_BINDING_MISMATCH。商户账号只能办理本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非商户账号须能触及门店所属项目，否则 403 CROSS_PROJECT_FORBIDDEN；非差异处理中 409 TRANSFER_ORDER_STATUS_CONFLICT。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "inventory.transfer_order.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_disposition_registered"
+      x-audit-event-failure: "inventory.transfer_disposition_register_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+                - "disposition_type"
+                - "reason"
+                - "evidence_attachment_ids"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                disposition_type:
+                  type: "string"
+                  enum:
+                    - "return_accepted"
+                    - "loss"
+                    - "reship"
+                    - "payment_adjustment"
+                  description: "return_accepted 退回验收；loss 损失；reship 补发；payment_adjustment 货款调减。"
+                line_id:
+                  type: "string"
+                  description: "要货明细 ID（货款调减不填）。"
+                quantity:
+                  type: "integer"
+                  minimum: 1
+                  description: "件数（货款调减不填）。"
+                responsible_party:
+                  type: "string"
+                  enum:
+                    - "supplier"
+                    - "carrier"
+                    - "receiver"
+                  description: "损失责任方（仅 loss）。"
+                amount_cent:
+                  type: "integer"
+                  minimum: 1
+                  description: "货款调减金额（分，仅 payment_adjustment）。"
+                trace_codes:
+                  type: "array"
+                  items:
+                    type: "string"
+                  description: "补发货随货溯源码（仅 reship，可空）。"
+                reason:
+                  type: "string"
+                  maxLength: 500
+                  description: "差异原因与处理依据。"
+                evidence_attachment_ids:
+                  type: "array"
+                  minItems: 1
+                  items:
+                    type: "string"
+                  description: "交接证据附件 ID。"
+      x-failure-codes:
+        - "CROSS_MERCHANT_FORBIDDEN"
+        - "TRANSFER_ORDER_STATUS_CONFLICT"
+        - "TRANSFER_DISPOSITION_EXCEEDS_DISCREPANCY"
+        - "TRANSFER_PAYABLE_NOT_FOUND"
+        - "TRANSFER_ADJUSTMENT_EXCEEDS_UNPAID"
+        - "EVIDENCE_REQUIRED"
+        - "EVIDENCE_ATTACHMENT_NOT_FOUND"
+        - "EVIDENCE_BINDING_MISMATCH"
+        - "EVIDENCE_NOT_UPLOADED"
+        - "TRANSFER_NOT_REQUISITION"
+        - "VALIDATION_FAILED"
+        - "CROSS_PROJECT_FORBIDDEN"
+  /api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/review:
+    post:
+      tags:
+        - "inventory"
+      operationId: "reviewTransferDisposition"
+      summary: "财务复核门店要货差异处理"
+      description: "FS-011（BSM L1212「财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款。全部数量处理完且库存、款项记录齐全后完成要货单」）：复核人须为持 finance.ar_ap.manage、能触及门店所属项目的非商户财务（商户账号含门店本店同事 403 FINANCE_REVIEW_ONLY，他项目 403 CROSS_PROJECT_FORBIDDEN）且不是登记人（403 SELF_REVIEW_FORBIDDEN），decision 为 approved 通过或 rejected 驳回，reason 必填。通过才生效：收货方担责的损失按该行锁定单价追加一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），供货主体或配送保管方担责只登记责任与金额、不形成应收应付；补发另开一张同供货主体、门店、物料与锁定单价的关联要货单（reship_order_id），从待拣配（pending_picking）起照常出库、配送、签收；货款调减按 V344 原应付行不动，追加严格取反的冲正行（reversal_item_id）与调减后的重述行（payable_item_id，全额调减则无）。拒收与短少的每一件都经通过的退回验收或损失有了结果、且无待复核项时，要货单 discrepancy→completed（写留痕）。已复核 409 TRANSFER_DISPOSITION_ALREADY_REVIEWED；商户账号只能办理本商户的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      x-permission: "finance.ar_ap.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "inventory.transfer_disposition_reviewed"
+      x-audit-event-failure: "inventory.transfer_disposition_review_failed"
+      parameters:
+        - name: "order_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "要货（调拨）单 ID 路径参数。"
+        - name: "disposition_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "差异处理登记 ID 路径参数。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              required:
+                - "idempotency_key"
+                - "decision"
+                - "reason"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  maxLength: 128
+                  description: "幂等键（X-Idempotency-Key 请求体镜像）。"
+                decision:
+                  type: "string"
+                  enum:
+                    - "approved"
+                    - "rejected"
+                  description: "approved 复核通过；rejected 驳回（该项不生效）。"
+                reason:
+                  type: "string"
+                  maxLength: 500
+                  description: "复核意见。"
+      x-failure-codes:
+        - "SELF_REVIEW_FORBIDDEN"
+        - "TRANSFER_DISPOSITION_NOT_FOUND"
+        - "TRANSFER_DISPOSITION_ALREADY_REVIEWED"
+        - "TRANSFER_ADJUSTMENT_EXCEEDS_UNPAID"
+        - "TRANSFER_PAYABLE_NOT_FOUND"
+        - "CROSS_MERCHANT_FORBIDDEN"
+        - "TRANSFER_NOT_REQUISITION"
+        - "VALIDATION_FAILED"
+        - "FINANCE_REVIEW_ONLY"
+        - "CROSS_PROJECT_FORBIDDEN"
   /api/v1/inventory/stock-movements/{movement_type}:
     post:
       tags:
@@ -6441,6 +7294,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
         "404":
@@ -7737,7 +8592,7 @@ paths:
         - ticketing
       operationId: confirmTicketRefundPayout
       summary: 退款确认拨付
-      description: 财务实际打完款后确认兑付，退款单“已通过”→“成功”。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。
+      description: 财务实际打完款后确认兑付，退款单“已通过”→“成功”。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。
       x-permission: ticket.refund.approve
       x-data-scope: project-order
       x-terminal-allowed:
@@ -13862,7 +14717,7 @@ paths:
         - amusement
       operationId: initiateAmusementFaultCompensationBatch
       summary: 发起全园故障补偿批次（第一岗位：快照受影响人份）
-      description: CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；尚未核销但游乐权益仍在有效期内的人份/次份 → extend（只延长原核销权，不增加次数；多次票只补受影响的 1 次份）。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      description: CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；尚未核销但游乐权益仍在有效期内的人份/次份 → extend（只延长原核销权，不增加次数；多次票只补受影响的 1 次份）。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）；承担主体须为主体主数据（business_entities）中在用（active）的法律主体，否则 400 COMPENSATION_BEARER_ENTITY_INVALID（FS-012，ENUM「发放记录须明确该公司的具体法律主体」）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
       x-permission: amusement.park_fault.confirm_as_head
       x-data-scope: project
       x-terminal-allowed:
@@ -13907,7 +14762,7 @@ paths:
                   maxLength: 2000
                 bearer_company_id:
                   type: string
-                  description: 决定发放补偿的域主管公司的具体法律主体（承担本次完整补偿新增的实际履约）。
+                  description: 决定发放补偿的域主管公司的具体法律主体（承担本次完整补偿新增的实际履约）；须为主体主数据 business_entities 中在用（active）的主体编号。
                   maxLength: 64
       responses:
         '200':
@@ -13931,7 +14786,7 @@ paths:
         - amusement
       operationId: confirmAmusementFaultCompensationBatch
       summary: 第二岗位确认并发放补偿
-      description: CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：extend 人份的原权益 valid_to 延长到发放日 + 补偿有效期（取较晚者）；full_reissue 人份在原票下按票种完整票面补发各权益各一次（标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。TK-18 场次提前结束批次（event_type=session_early_end，系统生成、无发起岗位）：第一次岗位确认只记为发起方并保持待确认，另一岗位、另一人再次确认才发放，并把该结束原件下已进批次的入场待办写回 compensation_issued。
+      description: CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：extend 人份的原权益 valid_to 延长到发放日 + 补偿有效期（取较晚者）；full_reissue 人份在原票下按票种完整票面补发各权益各一次（标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。FS-012：补发各项权益每次实际履约逐笔记录，锁定履约时内部结算价目录生效价与目录行版本（无目录引用的权益不设内部结算价、只留履约记录）；价格大于 0 且提供方商户不属承担主体时，由承担主体对实际提供方追加补偿应付（ar_ap_items source_type=compensation_fulfillment，普通内部结算，到期日按该钱路财务指定付账日、次月出账日起的异议期与银行工作日推算并固化到 internal_payable_schedules，同 FS-021-R4）；补偿核销不写普通核销结算事实、补偿赠饮不挂平台赠饮应付；该次核销冲正时按 V344 追加严格取反的冲正行；已付部分再追加重述行承接，并另挂一笔对提供方的追收应收（source_type=compensation_fulfillment_recovery，幂等键取该次冲正 id，到期日按该钱路付账日规则推算），全部未付时只冲正。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。TK-18 场次提前结束批次（event_type=session_early_end，系统生成、无发起岗位）：第一次岗位确认只记为发起方并保持待确认，另一岗位、另一人再次确认才发放，并把该结束原件下已进批次的入场待办写回 compensation_issued。
       x-permission: amusement.park_fault.confirm_as_engineering_safety
       x-data-scope: project
       x-terminal-allowed:
@@ -21641,6 +22496,93 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/merchant-portal/ticket-settlements:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantPortalTicketSettlements
+      summary: 商户专区·门票分账(本商户内部结算往来与待付状态)
+      description: BSM
+        L1597/L1683：本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来(项目范围按付款时点固化的项目判定)，含金额、异议截止日、财务指定付账日、当前付款日与执行状态(待付/付款失败待处理及原因与预计重付时间/已结清)；顺延不逐笔通知，以状态可见代替。无商户归属
+        403 MERCHANT_SCOPE_REQUIRED。
+      x-permission: merchant.portal.settlement.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change:
+    post:
+      tags:
+        - merchant-portal
+      operationId: approveMerchantPortalPayeeAccountChange
+      summary: 收款方财务负责人审批更换收款账户
+      description: BSM L1683「更换收款账户须经收款方所属公司财务负责人审批」：由收款方持该权限的人登记新收款账户即为审批；非本商户 403 CROSS_MERCHANT_FORBIDDEN，付款时点固化的项目不在本人范围 403 CROSS_PROJECT_FORBIDDEN；只有付款失败待处理的款项可换账户
+        409 ACCOUNT_CHANGE_NOT_ALLOWED。
+      x-permission: merchant.portal.payee_account.approve
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: true
+      x-audit-event-success: merchant_portal.payee_account.approved
+      x-audit-event-failure: merchant_portal.payee_account.approve_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: ar_ap_item_id
+          in: path
+          required: true
+          description: 应收应付款项编号
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - new_account_ref
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键。
+                new_account_ref:
+                  type: string
+                  maxLength: 256
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-portal/contracts:
     get:
       tags:
@@ -29918,6 +30860,7 @@ paths:
       x-audit-event-failure: dividend.compute_failed
       x-failure-codes:
         - DIVIDEND_PLAN_NOT_FOUND
+        - TICKET_SETTLEMENT_PENDING
       requestBody:
         $ref: "#/components/requestBodies/DividendComputeRequest"
       responses:
@@ -30049,6 +30992,50 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/finance/dividends/statements/{id}/legal-confirmation:
+    post:
+      tags:
+        - finance
+      operationId: confirmDividendLegalAmount
+      summary: 财务登记依法可分配金额（仅正式草稿/已驳回单；本次分配取经营口径与核定额较小者并重算）
+      description: "FS-014（BSM L1785「分红前置：正式分红应付款形成前，由财务依据专业财税核算结果及公司有效分配决议，确认依法可分配金额，本次分配不得超出该金额」；操作员裁决 2026-10-19 第 1 条「不补」：每期按经营算出的金额与依法核定金额取小发放，被压下的部分留在公司，以后不单独补分）。仅正式草稿或已驳回单可登记（预览单 409 DIVIDEND_PREVIEW_NOT_APPROVABLE，其他状态 409 DIVIDEND_STATE_INVALID）；同商户同期重登记覆盖；登记后按 min(经营口径可分配额, 核定额) 重算（旧单作废 + 新草稿，红字更正范式），返回新草稿单（legal_distributable_cent 为核定额快照，算式明细含 legal_cap 行）。未登记的正式单提交审阅或审批 409 DIVIDEND_LEGAL_AMOUNT_REQUIRED；保护线留存释放时原单未登记 409 DIVIDEND_LEGAL_BASIS_MISSING。"
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.legal_confirmed
+      x-audit-event-failure: dividend.legal_confirm_failed
+      x-failure-codes:
+        - DIVIDEND_STATEMENT_NOT_FOUND
+        - DIVIDEND_STATE_INVALID
+        - DIVIDEND_PREVIEW_NOT_APPROVABLE
+        - DIVIDEND_PLAN_NOT_FOUND
+        - TICKET_SETTLEMENT_PENDING
+      requestBody:
+        $ref: "#/components/requestBodies/DividendLegalConfirmationRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 分红计算单 ID。
   /api/v1/finance/dividends/statements/{id}/submit:
     post:
       tags:
@@ -30067,6 +31054,7 @@ paths:
         - DIVIDEND_STATEMENT_NOT_FOUND
         - DIVIDEND_STATE_INVALID
         - DIVIDEND_PREVIEW_NOT_APPROVABLE
+        - DIVIDEND_LEGAL_AMOUNT_REQUIRED
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -30110,6 +31098,7 @@ paths:
         - DIVIDEND_PREVIEW_NOT_APPROVABLE
         - SELF_APPROVAL_FORBIDDEN
         - DIVIDEND_ARREARS_CHANGED
+        - DIVIDEND_LEGAL_AMOUNT_REQUIRED
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -30292,6 +31281,7 @@ paths:
         - DIVIDEND_STATE_INVALID
         - DIVIDEND_RESERVE_NONE
         - DIVIDEND_RESERVE_ALREADY_RELEASED
+        - DIVIDEND_LEGAL_BASIS_MISSING
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -31009,7 +31999,7 @@ paths:
         - settlement
       operationId: settlementConfigUpsertMerchantRate
       summary: 维护每客单价/固定额(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。业态为其他且档案未指定主管公司的商户 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -31536,7 +32526,7 @@ paths:
         - settlement
       operationId: settlementPostBill
       summary: 结算单过账(挂应付台账)
-      description: 把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);超池 draft 单特批 confirmed 后由此人工过账。返回本次过账明细笔数。
+      description: 把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);超池 draft 单特批 confirmed 后由此人工过账。返回本次过账明细笔数。FS-013：同时把本单覆盖的项目×月份(平台单＝全部项目)的单一酒吧门票综合服务费计费月，按 min(Σ未退票逐票费, 该月首张票锁定的月度封顶) 各挂一笔酒吧应收(source_type=single_bar_service_fee，项目取计费月锁定的售票项目，0 元不挂、已挂不重复)，与票款应付分别收付、不轧差。FS-021：负额明细(向酒吧追回，含原月已结付后撤销核销的单列追收明细)过账为该酒吧的单独追收应收(source_type=ticket_distribution_recovery)，不与应付轧差；各笔往来到期日按该钱路财务指定付账日、次月出账日起的异议期与已审批银行工作日推算并固化(规则取过账时刻已生效的已批版本；付款时点的项目取往来对方所属项目，平台单取明细商户项目)，过账时缺已生效的付账日规则 409 PAY_DAY_NOT_CONFIGURED、缺日历 400 WORKING_CALENDAR_MISSING，账单保持已确认。
       x-auth-context: staff-token
       x-permission: settlement.bill.post
       x-data-scope: platform
@@ -31982,7 +32972,7 @@ paths:
         - settlement
       operationId: listSettlementInvoiceItems
       summary: 开票清单列表
-      description: 按结算单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。系统只生成清单交财务,不自建开票引擎。
+      description: 按结算单及积分发行费月账单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。积分发行费行(income_type=points_issuance)按该账单已收额生成,开票主体为账单收款方,points_bill_id 为来源积分月账单、buyer_entity_id/buyer_name 为购方(合同销售方),bill_id 为空;结算单行 points_bill_id、buyer_entity_id、buyer_name 为空。系统只生成清单交财务,不自建开票引擎。
       x-auth-context: staff-token
       x-permission: settlement.invoice.view
       x-data-scope: platform
@@ -32231,6 +33221,270 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/settlement/internal-pay-days/rules:
+    get:
+      tags:
+        - settlement
+      operationId: listInternalPayDayRules
+      summary: 查三个付账日与钱路指派规则(含待审与历史版本)
+      description: BSM L1673/L1683：三个付账日(全平台统一可配，初始 5/15/25 日)与各钱路(应收应付来源)的次月出账日及财务指定付账日规则，按生效起始日版本化，含待审、已批、驳回。平台范围。
+      x-permission: settlement.config.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - settlement
+      operationId: submitInternalPayDayRule
+      summary: 提交三个付账日或钱路指派规则(待另一人审批)
+      description: BSM L1673「系统在保存配置时校验：三个付账日中至少须有一个能满足该顺序，一个都不能满足的配置一律拒绝保存」：按生效后首个完整账期的出账日与异议期上限推算，三个付账日均早于异议届满即 400
+        PAY_DAY_ORDER_UNSATISFIABLE(缺已审批日历 400 WORKING_CALENDAR_MISSING)；BSM
+        L1683「规则一经确定至少一年内不得变更」：改变该钱路指定付账日的新规则，生效日早于上一已批规则生效日一年后 409
+        PAY_DAY_RULE_LOCKED(只调整出账日、指定付账日不变的不受此限)；钱路规则生效日不得早于今天；三个付账日自审批之日生效。kind=pay_days 填
+        first/second/third_pay_day；kind=route 填 route、statement_day、pay_slot、effective_from。
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.internal_pay_day_rule.submitted
+      x-audit-event-failure: settlement.internal_pay_day_rule.submit_failed
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - kind
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键。
+                kind:
+                  type: string
+                  enum:
+                    - pay_days
+                    - route
+                  description: pay_days=三个付账日；route=钱路指派规则。
+                route:
+                  type: string
+                  enum:
+                    - ticket_distribution
+                    - ticket_distribution_recovery
+                    - platform_incentive_subsidy
+                    - single_bar_service_fee
+                    - compensation_fulfillment
+                    - compensation_fulfillment_recovery
+                  description: 钱路(应收应付来源)，kind=route 必填。
+                first_pay_day:
+                  type: integer
+                  minimum: 1
+                  maximum: 28
+                second_pay_day:
+                  type: integer
+                  minimum: 1
+                  maximum: 28
+                third_pay_day:
+                  type: integer
+                  minimum: 1
+                  maximum: 28
+                statement_day:
+                  type: integer
+                  minimum: 1
+                  maximum: 28
+                  description: 该钱路次月出账日。
+                pay_slot:
+                  type: integer
+                  minimum: 1
+                  maximum: 3
+                  description: 财务指定落在第几个付账日。
+                effective_from:
+                  type: string
+                  format: date
+                  description: 钱路规则生效起始日(不早于今天)。
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/internal-pay-days/rules/{rule_id}/decision:
+    post:
+      tags:
+        - settlement
+      operationId: decideInternalPayDayRule
+      summary: 审批付账日配置(提交人不得自审)
+      description: 提交人审批自己的配置 403 SELF_APPROVAL_FORBIDDEN；已审批 409 PAY_DAY_RULE_ALREADY_DECIDED；通过时复核一年锁定与顺序校验；三个付账日自审批之日生效并同步全平台统一值。
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.internal_pay_day_rule.approved
+      x-audit-event-failure: settlement.internal_pay_day_rule.decision_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          description: 付账日配置编号
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - decision
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键。
+                decision:
+                  type: string
+                  enum:
+                    - approve
+                    - reject
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/internal-pay-days/objection-period:
+    get:
+      tags:
+        - settlement
+      operationId: getSettlementObjectionPeriod
+      summary: 查非积分商户账单异议期(按项目)
+      description: BSM L1597：非积分类商户账单异议期按项目可配，出厂默认 10 个工作日；项目未配置返回出厂行(project_id=__global__)。项目范围账号缺省取本项目、不得读别的项目。
+      x-permission: settlement.config.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          description: 综合体项目 id(项目范围账号可空＝本项目)。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - settlement
+      operationId: saveSettlementObjectionPeriod
+      summary: 配置非积分商户账单异议期及上下限(按项目)
+      description: BSM L1597「须同时配置上下限」：工作日数与上下限同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限，否则 400 VALIDATION_FAILED；保存时以上限复核付账日顺序(400
+        PAY_DAY_ORDER_UNSATISFIABLE)；项目范围账号只能改本项目。
+      x-permission: settlement.config.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.objection_period.configured
+      x-audit-event-failure: settlement.objection_period.config_failed
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - working_days
+                - min_days
+                - max_days
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键。
+                project_id:
+                  type: string
+                  maxLength: 64
+                working_days:
+                  type: integer
+                  minimum: 0
+                min_days:
+                  type: integer
+                  minimum: 0
+                max_days:
+                  type: integer
+                  minimum: 0
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/settlement/config/internal-price-item:
     post:
       tags:
@@ -32239,7 +33493,7 @@ paths:
       summary: 维护内部结算SKU目录条目(草案)
       description: 批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code
         留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格
-        0 为商户让利型合法价。
+        0 为商户让利型合法价。提供商家业态为其他且档案未指定主管公司 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -44749,6 +46003,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/DividendActionRequest"
+    DividendLegalConfirmationRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DividendLegalConfirmationRequest"
     VoucherDefinitionRequest:
       required: true
       content:
@@ -45665,6 +46925,14 @@ components:
             - joint_operation
             - other
           maxLength: 64
+        supervising_company_id:
+          type: string
+          description: 主管公司主体 ID（FS-024）；业态为“其他”时必填，只能是在用的城市项目公司或域主管公司；其他业态不得填写。
+          maxLength: 64
+        supervising_company_reason:
+          type: string
+          description: 指定主管公司的理由（FS-024）；业态为“其他”时必填，说明无对应经营域时由该公司主管的依据。
+          maxLength: 1000
     SpaceRequest:
       type: object
       description: 请求载荷 `SpaceRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -54052,6 +55320,37 @@ components:
         note:
           type: string
           description: 说明/理由（驳回必填，进入审计留痕）。
+          maxLength: 1000
+    DividendLegalConfirmationRequest:
+      type: object
+      description: 请求载荷 `DividendLegalConfirmationRequest`（FS-014 财务登记依法可分配金额）：金额为分；财税核算依据与公司有效分配决议必填。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - legal_distributable_cent
+        - tax_accounting_ref
+        - resolution_ref
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回首次响应。
+          maxLength: 128
+        legal_distributable_cent:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 依法可分配金额（分）；本次分配不得超出该金额。
+        tax_accounting_ref:
+          type: string
+          description: 专业财税核算结果依据（报告编号等）。
+          maxLength: 1000
+        resolution_ref:
+          type: string
+          description: 公司有效分配决议（编号/日期等）。
+          maxLength: 1000
+        note:
+          type: string
+          description: 说明（选填，如已提取公积、已弥补亏损的情况）。
           maxLength: 1000
     VoucherDefinitionRequest:
       type: object

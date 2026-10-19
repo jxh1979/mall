@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -32,7 +32,11 @@ public record MerchantRecord(
         String deleteRequestedBy,
         Instant deleteRequestedAt,
         String deleteReason,
-        String projectId
+        String projectId,
+        // FS-024（V511，ENUM L195）：业态为「其他」的商户在档案里指定的主管公司（在用的城市项目公司／域主管公司）与理由；
+        // 其他业态恒为空（CHECK 封口）。到期未核销款按该主管公司归属；未指定的不得开通任何结算与分账。
+        String supervisingCompanyId,
+        String supervisingCompanyReason
 ) {
     public MerchantRecord(
             String id, String merchantName, String merchantType, String businessEntityId, String contractEntityId,
@@ -50,13 +54,30 @@ public record MerchantRecord(
                 deleteReason, null);
     }
 
+    /** FS-024 前的 26 参构造点（既有代码/测试）：不带主管公司两项。 */
+    public MerchantRecord(
+            String id, String merchantName, String merchantType, String businessEntityId, String contractEntityId,
+            String settlementEntityId, String contactName, String contactPhone, String ownerPerson,
+            String mallBlockCode, BigDecimal areaSquareMeter, BigDecimal leasedAreaSquareMeter,
+            String secondaryContactName, String secondaryContactPhone, BigDecimal rentPerSquareMeter,
+            String cooperationForm, String status, Instant createdAt, Instant updatedAt, Instant archivedAt,
+            String archivedBy, String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt,
+            String deleteReason, String projectId) {
+        this(
+                id, merchantName, merchantType, businessEntityId, contractEntityId, settlementEntityId,
+                contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter,
+                secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm, status,
+                createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt,
+                deleteReason, projectId, null, null);
+    }
+
     public MerchantRecord withProject(String projectId) {
         return new MerchantRecord(
                 id, merchantName, merchantType, businessEntityId, contractEntityId, settlementEntityId,
                 contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter,
                 secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm, status,
                 createdAt, updatedAt, archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt,
-                deleteReason, projectId);
+                deleteReason, projectId, supervisingCompanyId, supervisingCompanyReason);
     }
 
     // ponytail: V260 前的 19 参构造点(既有代码/测试)不带存档/删除字段,默认未存档 + delete_status=none。
@@ -79,7 +100,8 @@ public record MerchantRecord(
                 settlementEntityId, contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter,
                 leasedAreaSquareMeter, secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm,
                 status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId,
+                supervisingCompanyId, supervisingCompanyReason);
     }
 
     /**
@@ -92,7 +114,8 @@ public record MerchantRecord(
                 ownerPerson, mallBlockCode, areaSquareMeter, leasedAreaSquareMeter, secondaryContactName,
                 com.complex.platform.common.PhoneMask.mask(secondaryContactPhone), rentPerSquareMeter,
                 cooperationForm, status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId,
+                supervisingCompanyId, supervisingCompanyReason);
     }
 
     /** M009-008：三个主体列以生效的四类主体绑定为准（PGM-026），绑定激活时由 PlatformService 同步投影。 */
@@ -102,7 +125,8 @@ public record MerchantRecord(
                 settlementEntityId, contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter,
                 leasedAreaSquareMeter, secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm,
                 status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId,
+                supervisingCompanyId, supervisingCompanyReason);
     }
 
     public MerchantRecord withDelete(String deleteStatus, String deleteRequestedBy, Instant deleteRequestedAt,
@@ -111,6 +135,7 @@ public record MerchantRecord(
                 settlementEntityId, contactName, contactPhone, ownerPerson, mallBlockCode, areaSquareMeter,
                 leasedAreaSquareMeter, secondaryContactName, secondaryContactPhone, rentPerSquareMeter, cooperationForm,
                 status, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, projectId,
+                supervisingCompanyId, supervisingCompanyReason);
     }
 }

@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -12,13 +13,15 @@ const BASE = "/api/v1/settlement/invoice-items";
 const MANAGE = ["settlement.invoice.manage"];
 
 type Item = {
-  id: string; billId: string; settlementItemId?: string | null; projectId?: string | null;
+  id: string; billId?: string | null; settlementItemId?: string | null; projectId?: string | null;
   periodStart: string; periodEnd: string; incomeType: string;
   subjectEntityId?: string | null; subjectName?: string | null;
   invoiceItemName: string; taxCategory?: string | null; evidenceRequired?: string | null;
   amountCent: number; vatRateBps: number; vatAmountCent: number;
   culturalFeeApplicable: boolean; culturalFeeRateBps: number; culturalFeeCent: number;
   status: string; invoiceNo?: string | null; remark?: string | null;
+  // FS-022-R1：积分发行费月账单行的来源账单与购方（合同销售方）；结算单行为空。
+  pointsBillId?: string | null; buyerName?: string | null;
 };
 type Subject = {
   subjectEntityId?: string | null; subjectName?: string | null;
@@ -51,6 +54,7 @@ const INCOME_LABELS: Record<string, string> = {
   show: "演出票",
   giveaway_transfer: "通票赠送权益兑付（内部转付）",
   marketing: "会员积分 / 门票折扣券（营销成本）",
+  points_issuance: "积分发行费",
 };
 
 const yuan = (cent?: number | null) => ((cent ?? 0) / 100).toFixed(2);
@@ -143,13 +147,13 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
   const exportCsv = () => {
     const header = [
       "结算月", "开票主体", "开票项目", "税目口径", "收入类型",
-      "开票金额(元)", "增值税率", "税额(元)", "文化事业建设费(元)", "凭证要件", "开票状态", "发票号", "结算单",
+      "开票金额(元)", "增值税率", "税额(元)", "文化事业建设费(元)", "凭证要件", "开票状态", "发票号", "来源单号", "购方",
     ].join(",");
     const lines = items.map((i) => [
       i.periodStart ?? "", i.subjectName ?? "（归属未配置）", i.invoiceItemName, i.taxCategory ?? "",
       label(INCOME_LABELS, i.incomeType), yuan(i.amountCent), pct(i.vatRateBps), yuan(i.vatAmountCent),
       i.culturalFeeApplicable ? yuan(i.culturalFeeCent) : "不计", i.evidenceRequired ?? "",
-      label(STATUS_LABELS, i.status), i.invoiceNo ?? "", i.billId,
+      label(STATUS_LABELS, i.status), i.invoiceNo ?? "", i.billId ?? i.pointsBillId ?? "", i.buyerName ?? "",
     ].map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","));
     // BOM 前缀：Excel 直接双击打开不乱码。
     const blob = new Blob(["﻿" + [header, ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
@@ -254,7 +258,7 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
                 <tr>
                   <th>结算月</th><th>开票项目</th><th>收入类型</th><th>开票金额(元)</th>
                   <th>税率</th><th>税额(元)</th><th>文建费(元)</th><th>凭证要件</th>
-                  <th>开票状态</th><th>发票号</th><th>操作</th>
+                  <th>开票状态</th><th>发票号</th><th>购方</th><th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -270,6 +274,7 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
                     <td>{i.evidenceRequired}</td>
                     <td>{label(STATUS_LABELS, i.status)}</td>
                     <td>{i.invoiceNo ?? "—"}</td>
+                    <td>{i.buyerName ?? "—"}</td>
                     <td>
                       {i.status === "pending" || i.status === "issuing" ? (
                         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} onClick={() => markIssued(i)} disabled={busy}>
@@ -314,7 +319,8 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
                   <td>{label(INCOME_LABELS, r.incomeType)}</td>
                   <td>{r.invoiceItemName}</td>
                   <td>{r.taxCategory}</td>
-                  <td>{r.revenueStream ? "按收入流业态归因解析" : "按该笔分账的商户收款主体"}</td>
+                  <td>{r.incomeType === "points_issuance" ? "积分月账单收款方（购方为合同销售方）"
+                    : r.revenueStream ? "按收入流业态归因解析" : "按该笔分账的商户收款主体"}</td>
                   <td>{r.evidenceRequired || "—"}</td>
                   <td>{r.invoiceable ? "对外开票" : "不开票（内部单据）"}</td>
                 </tr>

@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementLineRecord;
@@ -96,11 +98,23 @@ public interface DividendRepository {
     /** 酒吧退款：bar_bill_adjustments(adjustment_type='refund') 经 bar_bills 归商户，refunded_at 落窗口。 */
     long sumBarRefundCent(String merchantId, Instant from, Instant to);
 
-    /** 售票分量：issued_entitlements.allocated_revenue_cent（NULL 不计），created_at 落窗口。 */
-    long sumTicketAllocatedCent(String merchantId, Instant from, Instant to);
+    /**
+     * FS-015 已核销门票结算额：期间内已确认（confirmed/settled）月度分账单上该商户明细 final_amount_cent 合计
+     * （单一酒吧门票直付额 + 通票池分配额；未核销票款、通票未核销减除额、退票均不在其中）。
+     */
+    long sumTicketSettledCent(String merchantId, java.time.LocalDate periodStart, java.time.LocalDate periodEnd);
 
-    /** 售票退款：ticket_refunds（V220 直挂 merchant_id），created_at 落窗口。 */
-    long sumTicketRefundCent(String merchantId, Instant from, Instant to);
+    /** FS-015 期间内尚无已确认（confirmed/settled）月度分账单的月份（yyyy-MM；缺单或超池待特批 draft）。 */
+    List<String> listUnconfirmedTicketSettlementMonths(List<String> months);
+
+    /** FS-013/FS-015 单一酒吧门票综合服务费：该酒吧计费月落在期间内的月应收总额合计（按售出月、退票剔除后封顶）。 */
+    long sumSingleBarServiceFeeCent(String merchantId, java.time.LocalDate periodStart, java.time.LocalDate periodEnd);
+
+    // ── V507 FS-014 依法可分配金额 ─────────────────────────────
+    Optional<DividendRecords.DividendLegalConfirmationRecord> findLegalConfirmation(String merchantId, String periodLabel);
+
+    /** 同商户同期重登记覆盖（uq(merchant_id, period_label)）。 */
+    void upsertLegalConfirmation(DividendRecords.DividendLegalConfirmationRecord confirmation);
 
     /** 费用净额：V297 merchant_expense_entries 按月份桶 + 计入类别分类型汇总（冲销行为负值自然抵减）。 */
     List<DividendRecords.ExpenseTypeSumRecord> sumExpenseByType(

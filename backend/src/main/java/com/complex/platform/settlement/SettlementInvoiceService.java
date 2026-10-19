@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.money.MoneyRounding;
@@ -46,6 +48,8 @@ public class SettlementInvoiceService {
     static final String INCOME_TICKET = "ticket";
     /** 可分配池分账 → 各酒吧商户运营服务费(底稿 23 第 2 行)。 */
     static final String INCOME_SPV_SERVICE = "spv_service";
+    /** FS-022-R1 积分发行费(ENUM L84「平台应收的积分发行费各自全额挂账、各自开票」)。 */
+    static final String INCOME_POINTS_ISSUANCE = "points_issuance";
 
     private static final String STATUS_PENDING = "pending";
     private static final Set<String> BILL_INVOICEABLE_STATUSES = Set.of("confirmed", "settled");
@@ -135,24 +139,74 @@ public class SettlementInvoiceService {
             subjectName = fallbackName;
         }
 
-        int vatRateBps = orZero(repository.findTaxRateBps(source.projectId(), incomeType, "vat"));
-        // 含税额换算税额:税额 = 含税额 × 率 ÷ (10000 + 率),四舍五入到分(全局金额口径 D15.1)。
-        long vatCent = MoneyRounding.prorate(invoiceable, vatRateBps, MoneyRounding.BPS_DENOMINATOR + vatRateBps);
-
-        Integer culturalRate = repository.findTaxRateBps(source.projectId(), incomeType, "cultural_fee");
-        boolean culturalApplicable = culturalRate != null && culturalRate > 0;
-        // 文化事业建设费计费依据 = 取得的全部含税价款(财税〔2016〕25 号);最终认定权留财务,费率后台可配。
-        long culturalCent = culturalApplicable ? MoneyRounding.bpsOf(invoiceable, culturalRate) : 0L;
-
+        Tax tax = tax(source.projectId(), incomeType, invoiceable);
         repository.insert(new SettlementInvoiceItemRecord(
                 buildId(source.billId(), incomeType, settlementItemId),
                 source.billId(), settlementItemId, source.projectId(),
                 source.periodStart(), source.periodEnd(), incomeType,
                 subjectEntityId, subjectName, rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
-                invoiceable, vatRateBps, vatCent,
-                culturalApplicable, culturalApplicable ? culturalRate : 0, culturalCent,
-                STATUS_PENDING, null, actorId));
+                invoiceable, tax.vatRateBps(), tax.vatCent(),
+                tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
+                STATUS_PENDING, null, actorId, null, null, null));
         return 1;
+    }
+
+    /** 已收额高于已开额的积分月账单(定时作业逐张调 {@link #generateForPointsBill})。 */
+    public List<String> pointsBillsToInvoice() {
+        return repository.listPointsBillsToInvoice();
+    }
+
+    /**
+     * FS-022-R1:积分发行费月账单接入统一开票清单。ENUM L84「商户应收的兑换补偿与平台应收的积分发行费各自全额挂账、
+     * 各自开票……不得轧差」;BSM L1750「开票金额≤已收−已退−已开」;BSM L1803「平台内部各主体之间的往来需要开具发票」。
+     * 开票主体=账单收款方(全国积分结算中心/顶层平台公司),购方=合同销售方;本次可开额=该账单已收−已开(只取本账单金额,
+     * 不与兑换补偿相抵);≤0 不生成,故重跑幂等、每次收款只补开新收部分。账单行加锁,同账单并发生成串行。返回本次新增条目数。
+     */
+    @Transactional
+    public int generateForPointsBill(String pointsBillId, String actorId) {
+        var source = repository.lockPointsBillSource(pointsBillId);
+        if (source == null) {
+            return 0;   // 尚未形成正式应收,没有已收额可开
+        }
+        var rule = repository.findRule(source.projectId(), INCOME_POINTS_ISSUANCE);
+        if (rule == null || !rule.invoiceable()) {
+            return 0;
+        }
+        long invoiceable = source.paidAmountCent() - repository.sumOpenPointsAmountCent(pointsBillId);
+        if (invoiceable <= 0) {
+            return 0;
+        }
+        Tax tax = tax(source.projectId(), INCOME_POINTS_ISSUANCE, invoiceable);
+        repository.insert(new SettlementInvoiceItemRecord(
+                // 积分账单号本身已较长,条目 id 不再拼来源,免超 64 位;来源由 points_bill_id 列承载。
+                "sii_pts_" + java.util.UUID.randomUUID().toString().replace("-", ""), null, null, source.projectId(),
+                source.billingMonth(), source.billingMonth().withDayOfMonth(source.billingMonth().lengthOfMonth()),
+                INCOME_POINTS_ISSUANCE, source.receiverEntityId(), repository.findEntityName(source.receiverEntityId()),
+                rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
+                invoiceable, tax.vatRateBps(), tax.vatCent(),
+                tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
+                STATUS_PENDING, null, actorId, pointsBillId, source.sellerEntityId(), source.sellerMerchantId()));
+        auditEventService.recordSuccess("settlement.invoice.generated", "settlement.invoice.manage",
+                "ticket_points_bill", pointsBillId, "req_" + java.util.UUID.randomUUID(), null,
+                Map.of("created_item_count", 1, "amount_cent", invoiceable,
+                        "billing_month", String.valueOf(source.billingMonth())));
+        return 1;
+    }
+
+    /**
+     * 税额:含税额 × 率 ÷ (10000 + 率),四舍五入到分(全局金额口径 D15.1);文化事业建设费计费依据 = 取得的全部含税价款
+     * (财税〔2016〕25 号),最终认定权留财务,费率后台可配。未配即 0。
+     */
+    private Tax tax(String projectId, String incomeType, long amountCent) {
+        int vatRateBps = orZero(repository.findTaxRateBps(projectId, incomeType, "vat"));
+        long vatCent = MoneyRounding.prorate(amountCent, vatRateBps, MoneyRounding.BPS_DENOMINATOR + vatRateBps);
+        Integer culturalRate = repository.findTaxRateBps(projectId, incomeType, "cultural_fee");
+        boolean culturalApplicable = culturalRate != null && culturalRate > 0;
+        return new Tax(vatRateBps, vatCent, culturalApplicable, culturalApplicable ? culturalRate : 0,
+                culturalApplicable ? MoneyRounding.bpsOf(amountCent, culturalRate) : 0L);
+    }
+
+    private record Tax(int vatRateBps, long vatCent, boolean culturalApplicable, int culturalRateBps, long culturalCent) {
     }
 
     /**

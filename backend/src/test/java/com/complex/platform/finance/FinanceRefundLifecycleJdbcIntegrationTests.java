@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -198,6 +198,8 @@ class FinanceRefundLifecycleJdbcIntegrationTests {
                 futures.add(threads.submit(() -> {
                     AuthorizationService auth = mock(AuthorizationService.class);
                     when(auth.currentActor()).thenReturn(new AccessActor("operator", "operator", "staff", "org", null, "active"));
+                    when(auth.projectReach(any(), any(String[].class)))
+                            .thenReturn(new AuthorizationService.ProjectReach(true, true, null, false, java.util.Set.of()));
                     AuditEventService audit = new AuditEventService(new InMemoryAuditEventRepository());
                     IdempotencyService idempotency = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
                     idempotency.setTransactionManager(transactionManager);
@@ -242,6 +244,8 @@ class FinanceRefundLifecycleJdbcIntegrationTests {
         {
             AuthorizationService auth = mock(AuthorizationService.class);
             when(auth.currentActor()).thenReturn(new AccessActor("operator", "operator", "staff", "org", null, "active"));
+            when(auth.projectReach(any(), any(String[].class)))
+                    .thenReturn(new AuthorizationService.ProjectReach(true, true, null, false, java.util.Set.of()));
             PaymentGatewayRouter gateway = mock(PaymentGatewayRouter.class);
             when(gateway.refund(any())).thenAnswer(invocation -> {
                 assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();

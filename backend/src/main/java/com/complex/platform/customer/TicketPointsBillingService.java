@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.customer.TicketPointsBilling.*;
@@ -38,12 +38,15 @@ public class TicketPointsBillingService {
     private final FinanceService finance;
     private final com.complex.platform.notification.NotificationService notifications;
     private final com.complex.platform.merchantbilling.MerchantFeeNotificationRecipientResolver notificationRecipients;
+    // FS-021：已审批日历与整日故障判定抽到 finance.WorkingDayCalendar，与普通内部结算共用。
+    private final com.complex.platform.finance.WorkingDayCalendar calendar;
     public TicketPointsBillingService(JdbcTemplate jdbc,AuthorizationService auth,SupervisorReviewService reviews,
             IdempotencyService idem,AuditEventService audit,ObjectMapper json,FinanceService finance,
             com.complex.platform.notification.NotificationService notifications,
-            com.complex.platform.merchantbilling.MerchantFeeNotificationRecipientResolver notificationRecipients) {
+            com.complex.platform.merchantbilling.MerchantFeeNotificationRecipientResolver notificationRecipients,
+            com.complex.platform.finance.WorkingDayCalendar calendar) {
         this.jdbc=jdbc;this.auth=auth;this.reviews=reviews;this.idem=idem;this.audit=audit;this.json=json;this.finance=finance;
-        this.notifications=notifications;this.notificationRecipients=notificationRecipients;
+        this.notifications=notifications;this.notificationRecipients=notificationRecipients;this.calendar=calendar;
     }
 
     public List<Rule> rules(){national(VIEW);return jdbc.query("SELECT * FROM ticket_points_billing_rules ORDER BY effective_month DESC",this::rule);}
@@ -232,14 +235,8 @@ public class TicketPointsBillingService {
         },CaseReceipt.class);
     }
 
-    LocalDate deadline(LocalDate visible,int days,String project){LocalDate day=visible;int remaining=days;while(remaining>0){day=day.plusDays(1);Day facts=day(day);if(facts.workingDay()&&(project==null||!wholeDayOutage(project,day)))remaining--;}return day;}
-    LocalDate due(LocalDate deadline,List<Integer> payDays){LocalDate date=deadline;while(!payDays.contains(date.getDayOfMonth()))date=date.plusDays(1);while(!day(date).bankWorkingDay())date=date.plusDays(1);return date;}
-    private Day day(LocalDate day){return jdbc.query("SELECT * FROM ticket_points_calendar_days WHERE calendar_date=?",(rs,n)->new Day(day,rs.getBoolean("working_day"),rs.getBoolean("bank_working_day")),day).stream().findFirst().orElseThrow(()->invalid("缺少已审批的工作日／银行工作日记录："+day));}
-    private boolean wholeDayOutage(String project,LocalDate day){
-        Instant start=day.atStartOfDay(LocalZone.ID).toInstant(),end=day.plusDays(1).atStartOfDay(LocalZone.ID).toInstant();
-        List<Instant[]> spans=jdbc.query("SELECT unavailable_from,unavailable_to FROM ticket_points_portal_outages WHERE project_id=? AND status='approved' AND unavailable_from<? AND unavailable_to>? ORDER BY unavailable_from,unavailable_to",(rs,n)->new Instant[]{rs.getTimestamp(1).toInstant(),rs.getTimestamp(2).toInstant()},project,Timestamp.from(end),Timestamp.from(start));
-        Instant covered=start;for(Instant[] span:spans){if(span[0].isAfter(covered))return false;if(span[1].isAfter(covered))covered=span[1];if(!covered.isBefore(end))return true;}return false;
-    }
+    LocalDate deadline(LocalDate visible,int days,String project){return calendar.objectionDeadline(visible,days,project);}
+    LocalDate due(LocalDate deadline,List<Integer> payDays){LocalDate date=deadline;while(!payDays.contains(date.getDayOfMonth()))date=date.plusDays(1);return calendar.bankDayOnOrAfter(date);}
     private Rule effective(LocalDate month){return jdbc.query("SELECT * FROM ticket_points_billing_rules WHERE status='approved' AND effective_month<=? ORDER BY effective_month DESC LIMIT 1",this::rule,month).stream().findFirst().orElseThrow(()->invalid("缺少该账期已审批的全国积分账期版本"));}
     private boolean visible(Bill b){if(!auth.projectReach(auth.currentActor(),VIEW).covers(b.projectId()))return false;String m=auth.currentActor().merchantId();if(m!=null)return m.equals(b.sellerMerchantId());String org=auth.currentActor().organizationId();return b.sellerEntityId().equals(org)||b.receiverEntityId().equals(org)||auth.allowsPlatformScope(auth.currentActor(),VIEW);}
     private void requireVisible(Bill b){auth.requirePermission(VIEW);if(!visible(b))throw forbidden();}

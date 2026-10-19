@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.02
+
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +34,7 @@ import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.DividendRecords.ExpenseTypeSumRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
+import com.complex.platform.dividend.dto.DividendLegalConfirmationRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -68,9 +71,14 @@ class DividendServiceTests {
         final List<DividendStatementLineRecord> lines = new ArrayList<>();
         final Map<String, Long> barRevenue = new HashMap<>();
         final Map<String, Long> barRefund = new HashMap<>();
-        final Map<String, Long> ticketAllocated = new HashMap<>();
-        final Map<String, Long> ticketRefund = new HashMap<>();
         final Map<String, List<ExpenseTypeSumRecord>> expenses = new HashMap<>();
+        // FS-015：已确认月度分账结算额 / 未确认月份 / 单店门票综合服务费。
+        final Map<String, Long> ticketSettled = new HashMap<>();
+        List<String> unconfirmedTicketMonths = List.of();
+        final Map<String, Long> singleBarServiceFee = new HashMap<>();
+        // FS-014：依法核定（商户|期间）；legalDefault=true 时未登记的期间按「核定额足够大」处理（既有用例口径不变）。
+        final Map<String, DividendRecords.DividendLegalConfirmationRecord> legal = new HashMap<>();
+        boolean legalDefault = true;
         // V309 自定义扣除项按方案存（模拟子表）；读方案时装填回记录（镜像 jdbc mapPlan）。
         final Map<String, List<DividendRecords.DividendCustomDeductionRecord>> customDeductions = new HashMap<>();
 
@@ -221,7 +229,7 @@ class DividendServiceTests {
                     paidBy != null ? paidBy : s.paidBy(), s.paidAt(), s.createdAt(), s.updatedAt(),
                     s.lossCarryforwardEnabled(), s.lossCarryforwardInCent(), s.lossCarryforwardAppliedCent(),
                     s.lossCarryforwardAfterCent(), s.arrearsOffsetCent(), s.reserveWithheldCent(), s.payoutCent(),
-                    s.principalType(), s.customDeductionCent());
+                    s.principalType(), s.customDeductionCent(), s.legalDistributableCent());
         }
 
         @Override
@@ -265,13 +273,34 @@ class DividendServiceTests {
         }
 
         @Override
-        public long sumTicketAllocatedCent(String merchantId, Instant from, Instant to) {
-            return ticketAllocated.getOrDefault(merchantId, 0L);
+        public long sumTicketSettledCent(String merchantId, java.time.LocalDate start, java.time.LocalDate end) {
+            return ticketSettled.getOrDefault(merchantId, 0L);
         }
 
         @Override
-        public long sumTicketRefundCent(String merchantId, Instant from, Instant to) {
-            return ticketRefund.getOrDefault(merchantId, 0L);
+        public List<String> listUnconfirmedTicketSettlementMonths(List<String> months) {
+            return unconfirmedTicketMonths.stream().filter(months::contains).toList();
+        }
+
+        @Override
+        public long sumSingleBarServiceFeeCent(String merchantId, java.time.LocalDate start, java.time.LocalDate end) {
+            return singleBarServiceFee.getOrDefault(merchantId, 0L);
+        }
+
+        @Override
+        public Optional<DividendRecords.DividendLegalConfirmationRecord> findLegalConfirmation(
+                String merchantId, String periodLabel) {
+            DividendRecords.DividendLegalConfirmationRecord found = legal.get(merchantId + "|" + periodLabel);
+            if (found == null && legalDefault) {
+                found = new DividendRecords.DividendLegalConfirmationRecord("dlc_default", merchantId, periodLabel,
+                        1_000_000_000_000L, "测试默认财税核算", "测试默认分配决议", null, "usr_fin", Instant.EPOCH);
+            }
+            return Optional.ofNullable(found);
+        }
+
+        @Override
+        public void upsertLegalConfirmation(DividendRecords.DividendLegalConfirmationRecord c) {
+            legal.put(c.merchantId() + "|" + c.periodLabel(), c);
         }
 
         @Override
@@ -453,8 +482,7 @@ class DividendServiceTests {
         createDefaultPlan();
         repository.barRevenue.put(MERCHANT, 800_000L);
         repository.barRefund.put(MERCHANT, 50_000L);
-        repository.ticketAllocated.put(MERCHANT, 300_000L);
-        repository.ticketRefund.put(MERCHANT, 30_000L);
+        repository.ticketSettled.put(MERCHANT, 270_000L);
         // 2026-07-18 拍板：租金计入费用台账（auto_rent 自动挂接 rent_allocation），默认方案默认扣减。
         repository.expenses.put(MERCHANT, List.of(
                 new ExpenseTypeSumRecord("labor", 200_000L),
@@ -493,9 +521,9 @@ class DividendServiceTests {
         // 明细行：来源行合计 = 净利润（算式留痕数字恒等）。三扣除全关时不额外落扣除行。
         List<DividendStatementLineRecord> lines = repository.listLines(statement.id(), null);
         long sourceSum = lines.stream()
-                .filter(l -> !List.of("net_profit", "loss_carryforward", "platform_share", "principal_gross",
-                        "tax_withheld", "principal_net", "arrears_offset", "reserve_withheld", "payout")
-                        .contains(l.lineType()))
+                .filter(l -> !List.of("net_profit", "loss_carryforward", "legal_cap", "platform_share",
+                        "principal_gross", "tax_withheld", "principal_net", "arrears_offset", "reserve_withheld",
+                        "payout").contains(l.lineType()))
                 .mapToLong(DividendStatementLineRecord::amountCent).sum();
         assertThat(sourceSum).isEqualTo(statement.netProfitCent());
         assertThat(lines).noneMatch(l -> l.lineType().equals("loss_carryforward"));
@@ -506,6 +534,117 @@ class DividendServiceTests {
         assertThat(lines).anyMatch(l -> l.lineType().equals("cost_inventory") && l.detail().contains("无成本基准"));
     }
 
+    // ── V507 FS-014 依法可分配金额前置（BSM L1785、L1786；PRD §6；裁决 2026-10-19 第 1 条「取小、不补」）──
+
+    private static DividendLegalConfirmationRequest legalRequest(String key, long cent) {
+        return new DividendLegalConfirmationRequest(key, cent, "财税核算报告 TA-2026Q3-001", "股东会分配决议 R-2026-10-08", null);
+    }
+
+    @Test
+    void submitWithoutLegalConfirmationIsRejected() {
+        repository.legalDefault = false;
+        createDefaultPlan();
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord draft = computeOfficialQuarter();
+        assertThat(draft.legalDistributableCent()).isNull();
+        assertThatThrownBy(() -> service.submit(draft.id(), new DividendActionRequest("s-nolegal", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_LEGAL_AMOUNT_REQUIRED"));
+        assertThat(repository.findStatementById(draft.id()).orElseThrow().status()).isEqualTo("draft");
+    }
+
+    @Test
+    void legalConfirmationCapsDistributionAndSupersedesDraft() {
+        repository.legalDefault = false;
+        createDefaultPlan();
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord draft = computeOfficialQuarter();
+        DividendStatementRecord capped = service.confirmLegal(draft.id(), legalRequest("legal-1", 900_000L));
+        // 红字更正范式：旧草稿作废、按核定额取小出新草稿（经营 100 万、核定 90 万 → 本次分配 90 万）。
+        assertThat(capped.id()).isNotEqualTo(draft.id());
+        assertThat(repository.findStatementById(draft.id()).orElseThrow().status()).isEqualTo("voided");
+        assertThat(capped.status()).isEqualTo("draft");
+        assertThat(capped.netProfitCent()).isEqualTo(1_000_000L);
+        assertThat(capped.legalDistributableCent()).isEqualTo(900_000L);
+        assertThat(capped.distributableCent()).isEqualTo(900_000L);
+        assertThat(capped.platformShareCent()).isEqualTo(720_000L);
+        assertThat(capped.payoutCent()).isEqualTo(144_000L);
+        assertThat(repository.listLines(capped.id(), null)).anyMatch(l -> l.lineType().equals("legal_cap")
+                && l.amountCent() == 900_000L && l.detail().contains("TA-2026Q3-001") && l.detail().contains("R-2026-10-08"));
+        service.submit(capped.id(), new DividendActionRequest("s-legal", null));
+        actorId[0] = "usr_approver";
+        service.approve(capped.id(), new DividendActionRequest("a-legal", null));
+        verify(payoutPort).createDividendPayoutPayable("usr_principal", MERCHANT, 144_000L, capped.id());
+    }
+
+    @Test
+    void legalConfirmationOnlyOnOfficialDraftWithBasis() {
+        repository.legalDefault = false;
+        createDefaultPlan();
+        DividendStatementRecord preview = service.compute(
+                new DividendComputeRequest("legal-prev", "2026-07", "preview", null)).computed().get(0);
+        assertThatThrownBy(() -> service.confirmLegal(preview.id(), legalRequest("legal-p", 1L)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_PREVIEW_NOT_APPROVABLE"));
+        DividendStatementRecord draft = computeOfficialQuarter();
+        assertThatThrownBy(() -> service.confirmLegal(draft.id(), new DividendLegalConfirmationRequest(
+                "legal-nores", 1L, "财税核算报告", " ", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
+        assertThatThrownBy(() -> service.confirmLegal(draft.id(), legalRequest("legal-neg", -1L)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
+        repository.markSubmitted(draft.id(), "usr_admin", Instant.now());
+        assertThatThrownBy(() -> service.confirmLegal(draft.id(), legalRequest("legal-pr", 1L)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_STATE_INVALID"));
+        doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "platform scope required"))
+                .when(authorizationService).requirePlatformScope();
+        assertThatThrownBy(() -> service.confirmLegal(draft.id(), legalRequest("legal-scope", 1L)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+    }
+
+    @Test
+    void releaseRequiresOriginalLegalBasis() {
+        // 本批前已审批、有保护线留存但无核定的旧单：手动与定时释放都核原合法分配依据，缺失不释放。
+        repository.legalDefault = false;
+        service.createPlan(new DividendPlanRequest("plan-old-rel", MERCHANT, "usr_principal", null,
+                8000, 2000, "quarterly", List.of("bar"), false, List.of("labor"), null, null, null,
+                null, null, true, 1000, null, "next_period", null));
+        repository.barRevenue.put(MERCHANT, 1_000_000L);
+        DividendStatementRecord old = service.compute(
+                new DividendComputeRequest("old-rel-c", "2026-Q1", "official", MERCHANT)).computed().get(0);
+        repository.markSubmitted(old.id(), "usr_admin", Instant.now());
+        repository.markApproved(old.id(), "usr_approver", "arap_old", Instant.now());
+        assertThatThrownBy(() -> service.releaseReserve(old.id(), new DividendActionRequest("old-rel-k", null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_LEGAL_BASIS_MISSING"));
+        DividendReserveReleaseRunRecord run = service.runScheduledReserveRelease(java.time.LocalDate.parse("2026-04-15"));
+        assertThat(run.released()).isEmpty();
+        assertThat(run.skipped()).anyMatch(k -> k.reason().contains(old.id()));
+        verify(payoutPort, never()).releaseDividendReserveWithholding(anyString());
+    }
+
+    // ── FS-015 票务收入取已确认月度分账结算额（BSM L755、L1689）──
+
+    @Test
+    void unconfirmedTicketSettlementBlocksOfficialButPreviewCountsConfirmedOnly() {
+        createDefaultPlan();
+        repository.ticketSettled.put(MERCHANT, 200_000L);
+        repository.unconfirmedTicketMonths = List.of("2026-09");
+        assertThatThrownBy(this::computeOfficialQuarter)
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("TICKET_SETTLEMENT_PENDING"))
+                .hasMessageContaining("2026-09");
+        // 月度预览（1 日 02:00 早于月结 03:00）不拦：只计已确认月份，并写明未确认月份。
+        DividendStatementRecord preview = service.compute(
+                new DividendComputeRequest("prev-unconfirmed", "2026-09", "preview", null)).computed().get(0);
+        assertThat(preview.revenueCent()).isEqualTo(200_000L);
+        assertThat(repository.listLines(preview.id(), null)).anyMatch(l -> l.lineType().equals("revenue_ticket")
+                && l.detail().contains("2026-09"));
+    }
+
     @Test
     void computeRespectsBaseCompositionSwitches() {
         // 只计酒吧收入、不扣成本、只计人工费用。
@@ -513,7 +652,7 @@ class DividendServiceTests {
                 5000, 1000, "quarterly", List.of("bar"), false, List.of("labor"), null, null, null,
                 null, null, null, null, null));
         repository.barRevenue.put(MERCHANT, 500_000L);
-        repository.ticketAllocated.put(MERCHANT, 999_999L);
+        repository.ticketSettled.put(MERCHANT, 999_999L);
         repository.expenses.put(MERCHANT, List.of(
                 new ExpenseTypeSumRecord("labor", 100_000L),
                 new ExpenseTypeSumRecord("energy", 999_999L)));

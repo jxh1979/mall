@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -59,6 +59,7 @@ public class InventoryController {
     private final WarehouseService warehouseService;
     private final SupplierQualificationService supplierQualificationService;
     private final AuthorizationService authorizationService;
+    private final InventoryTransferFlowService transferFlow;
 
     public InventoryController(
             InventoryService service,
@@ -66,9 +67,11 @@ public class InventoryController {
             PurchaseRequestService purchaseRequestService,
             WarehouseService warehouseService,
             SupplierQualificationService supplierQualificationService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            InventoryTransferFlowService transferFlow
     ) {
         this.service = service;
+        this.transferFlow = transferFlow;
         this.supplyContractService = supplyContractService;
         this.purchaseRequestService = purchaseRequestService;
         this.warehouseService = warehouseService;
@@ -474,7 +477,79 @@ public class InventoryController {
         return ApiResponse.ok(service.receiveTransferOrder(orderId, request));
     }
 
-    // ── V277 借调归还 / 取消(AUD-002/003)：借用型收货后可归还翻回归属；created/shipped 可取消并冲销已挂应付。 ──
+    // ── FS-011 门店要货（供货调拨）九态：门店提交、草稿改单、供货主体审核、拣配、送达待签收（出库沿用 /ship，签收沿用 /receive）。 ──
+    @PostMapping("/transfer-orders/{order_id}/submit")
+    public ApiResponse<InventoryTransferOrderRecord> submitTransferOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.Step request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.submit(orderId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/lines")
+    public ApiResponse<InventoryTransferOrderRecord> editTransferOrderDraft(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.DraftLines request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.editDraft(orderId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/supplier-review")
+    public ApiResponse<InventoryTransferOrderRecord> supplierReviewTransferOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.SupplierReview request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.supplierReview(orderId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/pick")
+    public ApiResponse<InventoryTransferOrderRecord> pickTransferOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.Step request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.pick(orderId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/deliver")
+    public ApiResponse<InventoryTransferOrderRecord> deliverTransferOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.Step request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.deliver(orderId, request));
+    }
+
+    // ── FS-011 门店要货差异处理：签收结果与登记查询、凭交接证据登记（退回验收/损失/补发/货款调整）、财务复核。 ──
+    @GetMapping("/transfer-orders/{order_id}/dispositions")
+    public ApiResponse<java.util.Map<String, Object>> getTransferOrderFulfillment(@PathVariable("order_id") String orderId) {
+        authorizationService.requirePermission("inventory.transfer_order.view");
+        return ApiResponse.ok(transferFlow.fulfillment(orderId));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/dispositions")
+    public ApiResponse<java.util.Map<String, Object>> registerTransferDisposition(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.Disposition request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.registerDisposition(orderId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/dispositions/{disposition_id}/review")
+    public ApiResponse<java.util.Map<String, Object>> reviewTransferDisposition(
+            @PathVariable("order_id") String orderId,
+            @PathVariable("disposition_id") String dispositionId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.SupplierReview request) {
+        authorizationService.requirePermission(InventoryTransferFlowService.FINANCE_REVIEW);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.reviewDisposition(orderId, dispositionId, request));
+    }
+
+    // ── V277 借调归还 / 取消(AUD-002/003)：借用型收货后可归还翻回归属；新建的借调单可取消，已发货不能直接取消（FS-011）。 ──
     @PostMapping("/transfer-orders/{order_id}/return")
     public ApiResponse<InventoryTransferOrderRecord> returnTransferOrder(
             @PathVariable("order_id") String orderId,

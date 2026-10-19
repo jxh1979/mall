@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -105,6 +105,9 @@ public class SupervisorReviewService {
                     List.of("reason"), "active", "specific_role", "dealer.delivery_resolution.approve", List.of("finance_review")),
             new SupervisorReviewPolicyRecord("inventory_quarantine_disposition", "inventory.quarantine_disposition", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "inventory.quarantine.approve", List.of("finance_review")),
+            // FS-011（BSM L1212「未出库数量可经审批取消」）：门店要货已提交、未出库的取消，发起人上级审批。
+            new SupervisorReviewPolicyRecord("inventory_transfer_order_cancel", "inventory.transfer_order.cancel", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("ticket_reward_rule", "ticket.reward.rule", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "ticket.reward.rule.approve"),
             new SupervisorReviewPolicyRecord("ticket_reward_national", "ticket.reward.national", 0, 1, true,

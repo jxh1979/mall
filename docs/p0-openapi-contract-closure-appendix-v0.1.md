@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 973 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 377 | 人工权限矩阵正文未覆盖 276 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 1946 | 人工事件矩阵正文未覆盖 1905 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 973 | 人工任务映射正文未逐项覆盖 967 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 576 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 994 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 379 | 人工权限矩阵正文未覆盖 278 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 1988 | 人工事件矩阵正文未覆盖 1947 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 994 | 人工任务映射正文未逐项覆盖 988 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 592 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -220,12 +220,12 @@
 | `facility.work_order.manage` | staff-token | platform | 14 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, suspendFacilityWorkOrder, resumeFacilityWorkOrder, markFacilityWorkOrdersOverdue ... | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.view_assigned` | staff-token | platform | 1 | listWorkOrdersAssignedToMe | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
-| `finance.ar_ap.manage` | staff-token | platform, project-entity, project-merchant | 6 | createArApItem, generateContractRentBill, generateContractPeriodBills, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
-| `finance.ar_ap.view` | staff-token | platform, project-entity, project-order | 6 | listArApItems, listArApPayments, listFinanceRefunds, listArOverdueDebtors, getFinanceRefund, queryFinanceRefund | 已在权限矩阵正文出现 |
+| `finance.ar_ap.manage` | staff-token | platform, project, project-entity, project-merchant | 7 | createArApItem, reviewTransferDisposition, generateContractRentBill, generateContractPeriodBills, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
+| `finance.ar_ap.view` | staff-token | platform, project-entity, project-merchant, project-order | 7 | listArApItems, listArApPayments, getInternalPayableExecution, listFinanceRefunds, listArOverdueDebtors, getFinanceRefund, queryFinanceRefund | 已在权限矩阵正文出现 |
 | `finance.daily_close.lock` | staff-token | project-entity | 1 | createDailyClose | 已在权限矩阵正文出现 |
 | `finance.daily_close.manage` | staff-token | project-entity | 1 | listDailyCloseSummaries | OpenAPI 补充，以本附录为准 |
 | `finance.deposit.manage` | staff-token | platform | 1 | recordDepositAction | OpenAPI 补充，以本附录为准 |
-| `finance.dividend.manage` | staff-token | platform | 8 | createDividendPlan, updateDividendPlan, computeDividendStatements, submitDividendStatement, approveDividendStatement, rejectDividendStatement, markDividendStatementPaid, releaseDividendReserve | OpenAPI 补充，以本附录为准 |
+| `finance.dividend.manage` | staff-token | platform | 9 | createDividendPlan, updateDividendPlan, computeDividendStatements, confirmDividendLegalAmount, submitDividendStatement, approveDividendStatement, rejectDividendStatement, markDividendStatementPaid, releaseDividendReserve | OpenAPI 补充，以本附录为准 |
 | `finance.dividend.view` | staff-token | merchant | 4 | listDividendPlans, listDividendStatements, getDividendStatement, listDividendReserveReleases | OpenAPI 补充，以本附录为准 |
 | `finance.inventory_variance.post` | staff-token | platform | 1 | postInventoryVariance | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.approve` | staff-token | project-entity | 1 | approveArApAdjustment | OpenAPI 补充，以本附录为准 |
@@ -233,7 +233,7 @@
 | `finance.merchant_expense.manage` | staff-token | merchant, platform | 3 | createMerchantExpenseEntry, reverseMerchantExpenseEntry, syncMerchantExpenseAuto | OpenAPI 补充，以本附录为准 |
 | `finance.merchant_expense.view` | staff-token | merchant | 3 | listMerchantExpenses, summarizeMerchantExpenses, listMerchantExpensePeriodLocks | OpenAPI 补充，以本附录为准 |
 | `finance.payment_intent.create` | staff-token | project-bar-table, project-order | 3 | createBarBillPayIntent, createPaymentIntent, createTicketOrderPayIntent | 已在权限矩阵正文出现 |
-| `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-order | 4 | settleBarBill, createArApPayment, confirmOfflinePayment, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
+| `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-merchant, project-order | 7 | settleBarBill, createArApPayment, confirmOfflinePayment, initiateInternalPayment, recordInternalPaymentFailure, postponeInternalPaymentForFunds, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
 | `finance.payroll.payment.register` | staff-token | project-entity | 3 | preparePayrollBankPayment, submitPayrollBankPaymentFact, confirmPayrollBankPaymentResult | OpenAPI 补充，以本附录为准 |
 | `finance.payroll.view` | staff-token | project-entity | 1 | getPayrollBankPaymentContext | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
@@ -295,7 +295,8 @@
 | `inventory.trace_code.print` | staff-token | project | 1 | printInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.trace_code.register` | staff-token | project | 1 | registerInventoryTraceCode | OpenAPI 补充，以本附录为准 |
 | `inventory.trace_code.view` | staff-token | project | 2 | listInventoryTraceCodes, getInventoryTraceCode | OpenAPI 补充，以本附录为准 |
-| `inventory.transfer_order.manage` | staff-token | project | 2 | returnTransferOrder, cancelTransferOrder | OpenAPI 补充，以本附录为准 |
+| `inventory.transfer_order.manage` | staff-token | project | 9 | returnTransferOrder, cancelTransferOrder, submitTransferOrder, editTransferOrderDraft, supplierReviewTransferOrder, pickTransferOrder, deliverTransferOrder, receiveTransferOrder, registerTransferDisposition | OpenAPI 补充，以本附录为准 |
+| `inventory.transfer_order.view` | staff-token | project | 1 | getTransferOrderFulfillment | OpenAPI 补充，以本附录为准 |
 | `inventory.warehouse.manage` | staff-token | project-warehouse-bar, warehouse | 2 | listWarehouses, createWarehouse | OpenAPI 补充，以本附录为准 |
 | `leasing.brand.blacklist` | staff-token | platform | 1 | blacklistLeasingBrand | OpenAPI 补充，以本附录为准 |
 | `leasing.brand.manage` | staff-token | platform | 2 | listLeasingBrands, createLeasingBrand | OpenAPI 补充，以本附录为准 |
@@ -311,8 +312,9 @@
 | `merchant.billing.dunning.record` | staff-token | - | 1 | recordMerchantBillDunning | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.manage` | staff-token | - | 1 | createMerchantBill | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.view` | staff-token | project-merchant | 1 | listMerchantBills | OpenAPI 补充，以本附录为准 |
+| `merchant.portal.payee_account.approve` | staff-token | merchant | 1 | approveMerchantPortalPayeeAccountChange | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.dispute` | staff-token | merchant | 2 | submitMerchantPortalSettlementDispute, rejectMerchantPortalSettlementResolution | OpenAPI 补充，以本附录为准 |
-| `merchant.portal.settlement.view` | staff-token | merchant | 1 | listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
+| `merchant.portal.settlement.view` | staff-token | merchant | 2 | listMerchantPortalTicketSettlements, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.manage` | staff-token | project, project-merchant | 2 | createMerchant, updateMerchant | 已在权限矩阵正文出现 |
 | `merchant.profile.view` | staff-token | project-merchant | 1 | listMerchants | 已在权限矩阵正文出现 |
 | `merchant.service_work_order.assign` | staff-token | project-merchant | 1 | assignMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
@@ -344,8 +346,8 @@
 | `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.special_approve` | staff-token | platform | 1 | settlementSpecialApproveBill | OpenAPI 补充，以本附录为准 |
-| `settlement.config.manage` | staff-token | platform | 17 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
-| `settlement.config.view` | staff-token | platform | 2 | settlementConfigOverview, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
+| `settlement.config.manage` | staff-token | platform, project | 20 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
+| `settlement.config.view` | staff-token | platform, project | 4 | settlementConfigOverview, listInternalPayDayRules, getSettlementObjectionPeriod, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.view` | staff-token | platform | 2 | listSettlementInvoiceItems, settlementInvoiceSummary | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.punch` | staff-token | platform, self | 4 | punchStaffAttendance, issueStaffPhoneTimeAnchor, recordStaffPhoneReceipt, getCurrentStaffWorkPhoneContext | OpenAPI 补充，以本附录为准 |
@@ -1188,6 +1190,8 @@
 | `dividend.approved` | success | `approveDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/approve` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.compute_failed` | failure | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.computed` | success | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
+| `dividend.legal_confirm_failed` | failure | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
+| `dividend.legal_confirmed` | success | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.mark_paid_failed` | failure | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.paid_marked` | success | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.plan_create_failed` | failure | `createDividendPlan` | `POST` | `/api/v1/finance/dividends/plans` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
@@ -1414,6 +1418,12 @@
 | `finance.daily_close_summary.viewed` | success | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `finance.deposit.action_failed` | failure | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | FIN-财务台账 | `finance.deposit.manage` | 接口级事件，以本附录为准 |
 | `finance.deposit.action_recorded` | success | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | FIN-财务台账 | `finance.deposit.manage` | 接口级事件，以本附录为准 |
+| `finance.internal_payment.fail_record_failed` | failure | `recordInternalPaymentFailure` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts/{attempt_id}/failure` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `finance.internal_payment.failed` | success | `recordInternalPaymentFailure` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts/{attempt_id}/failure` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `finance.internal_payment.initiate_failed` | failure | `initiateInternalPayment` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `finance.internal_payment.initiated` | success | `initiateInternalPayment` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `finance.internal_payment.postpone_failed` | failure | `postponeInternalPaymentForFunds` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/funds-insufficient` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `finance.internal_payment.postponed` | success | `postponeInternalPaymentForFunds` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/funds-insufficient` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `finance.inventory_variance.post_failed` | failure | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | FIN-财务台账 | `finance.inventory_variance.post` | 接口级事件，以本附录为准 |
 | `finance.inventory_variance.posted` | success | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | FIN-财务台账 | `finance.inventory_variance.post` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_approved` | success | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | FIN-财务台账 | `finance.locked_backfill.approve` | 接口级事件，以本附录为准 |
@@ -1656,10 +1666,28 @@
 | `inventory.trace_code.registered` | success | `registerInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes` | INV-库存存酒 | `inventory.trace_code.register` | 接口级事件，以本附录为准 |
 | `inventory.trace_code.view_failed` | failure | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
 | `inventory.trace_code.viewed` | success | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | INV-库存存酒 | `inventory.trace_code.view` | 接口级事件，以本附录为准 |
+| `inventory.transfer_disposition_register_failed` | failure | `registerTransferDisposition` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_disposition_registered` | success | `registerTransferDisposition` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_disposition_review_failed` | failure | `reviewTransferDisposition` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/review` | INV-库存存酒 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_disposition_reviewed` | success | `reviewTransferDisposition` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/review` | INV-库存存酒 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_fulfillment_view_failed` | failure | `getTransferOrderFulfillment` | `GET` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | INV-库存存酒 | `inventory.transfer_order.view` | 接口级事件，以本附录为准 |
+| `inventory.transfer_fulfillment_viewed` | success | `getTransferOrderFulfillment` | `GET` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | INV-库存存酒 | `inventory.transfer_order.view` | 接口级事件，以本附录为准 |
 | `inventory.transfer_order_cancel_failed` | failure | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
 | `inventory.transfer_order_cancelled` | success | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_deliver_failed` | failure | `deliverTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/deliver` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_delivered` | success | `deliverTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/deliver` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_draft_edit_failed` | failure | `editTransferOrderDraft` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/lines` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_draft_edited` | success | `editTransferOrderDraft` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/lines` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_pick_failed` | failure | `pickTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/pick` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_picked` | success | `pickTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/pick` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_receive_failed` | failure | `receiveTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/receive` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_received` | success | `receiveTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/receive` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
 | `inventory.transfer_order_return_failed` | failure | `returnTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/return` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
 | `inventory.transfer_order_returned` | success | `returnTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/return` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_submit_failed` | failure | `submitTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/submit` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_submitted` | success | `submitTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/submit` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_supplier_review_failed` | failure | `supplierReviewTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/supplier-review` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
+| `inventory.transfer_order_supplier_reviewed` | success | `supplierReviewTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/supplier-review` | INV-库存存酒 | `inventory.transfer_order.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.create_failed` | failure | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.created` | success | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.list` | success | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
@@ -1727,6 +1755,8 @@
 | `merchant_expense.summary_viewed` | success | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.view_failed` | failure | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.viewed` | success | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
+| `merchant_portal.payee_account.approve_failed` | failure | `approveMerchantPortalPayeeAccountChange` | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | P0-待归类 | `merchant.portal.payee_account.approve` | 接口级事件，以本附录为准 |
+| `merchant_portal.payee_account.approved` | success | `approveMerchantPortalPayeeAccountChange` | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | P0-待归类 | `merchant.portal.payee_account.approve` | 接口级事件，以本附录为准 |
 | `merchant_portal.settlement.dispute_failed` | failure | `submitMerchantPortalSettlementDispute` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | P0-待归类 | `merchant.portal.settlement.dispute` | 接口级事件，以本附录为准 |
 | `merchant_portal.settlement.disputed` | success | `submitMerchantPortalSettlementDispute` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | P0-待归类 | `merchant.portal.settlement.dispute` | 接口级事件，以本附录为准 |
 | `merchant_portal.settlement.resolution_reject_failed` | failure | `rejectMerchantPortalSettlementResolution` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/reject-resolution` | P0-待归类 | `merchant.portal.settlement.dispute` | 接口级事件，以本附录为准 |
@@ -1762,6 +1792,14 @@
 | `not_applicable` | failure | `getContractDepositMonths` | `GET` | `/api/v1/contracts/deposit-months` | P0-待归类 | `contract.deposit_months.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | P0-待归类 | `contract.deposit_refund_wait.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | P0-待归类 | `contract.deposit_refund_wait.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | P0-待归类 | `dealer.return.refund.execute` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
@@ -1925,6 +1963,10 @@
 | `settlement.config.ticket_distribution_merchant_rates.updated` | success | `settlementConfigUpsertMerchantRate` | `POST` | `/api/v1/settlement/config/merchant-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.ticket_distribution_rank_tiers.update_failed` | failure | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.ticket_distribution_rank_tiers.updated` | success | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.internal_pay_day_rule.approved` | success | `decideInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules/{rule_id}/decision` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.internal_pay_day_rule.decision_failed` | failure | `decideInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules/{rule_id}/decision` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.internal_pay_day_rule.submit_failed` | failure | `submitInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.internal_pay_day_rule.submitted` | success | `submitInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.invoice.generate_failed` | failure | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
 | `settlement.invoice.generated` | success | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
 | `settlement.invoice.list` | success | `listSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
@@ -1933,6 +1975,8 @@
 | `settlement.invoice.status_changed` | success | `changeSettlementInvoiceItemStatus` | `POST` | `/api/v1/settlement/invoice-items/{id}/status` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
 | `settlement.invoice.summary` | success | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
 | `settlement.invoice.summary_failed` | failure | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
+| `settlement.objection_period.config_failed` | failure | `saveSettlementObjectionPeriod` | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.objection_period.configured` | success | `saveSettlementObjectionPeriod` | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `space_type.update_failed` | failure | `createSpaceType` | `POST` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space_type.updated` | success | `createSpaceType` | `POST` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space_type.view_failed` | failure | `listSpaceTypes` | `GET` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
@@ -2703,6 +2747,7 @@
 | FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | 正式关闭对账差异 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_closed` / `finance.reconciliation.difference_close_failed` | web | operation 级补充 |
 | FIN-财务台账 | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `finance.dividend.manage` | `dividend.computed` / `dividend.compute_failed` | web | operation 级补充 |
+| FIN-财务台账 | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | 财务登记依法可分配金额（仅正式草稿/已驳回单；本次分配取经营口径与核定额较小者并重算） | `finance.dividend.manage` | `dividend.legal_confirmed` / `dividend.legal_confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmFinanceRefundResult` | `POST` | `/api/v1/finance/refunds/{refund_id}/confirm` | 另一人核实已有执行记录的实际退款结果 | `finance.refund.create` | `finance_refund.confirmed` / `finance_refund.confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | 现金或 POS 线下收款确认 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmPayrollBankPaymentResult` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/result` | 核实工资银行付款实际结果 | `finance.payroll.payment.register` | `finance.payroll.result` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
@@ -2718,8 +2763,10 @@
 | FIN-财务台账 | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | 导出应收应付台账快照 | `finance.ar_ap.export` | `finance_ar_ap.exported` / `finance_ar_ap.export_failed` | web | operation 级补充 |
 | FIN-财务台账 | `getDividendStatement` | `GET` | `/api/v1/finance/dividends/statements/{id}` | 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账） | `finance.dividend.view` | `dividend.statement_viewed` / `dividend.statement_view_failed` | web, merchant_portal | operation 级补充 |
 | FIN-财务台账 | `getFinanceRefund` | `GET` | `/api/v1/finance/refunds/{refund_id}` | 读取退款详情和全部办理记录 | `finance.ar_ap.view` | `finance_refund.viewed` / `finance_refund.view_failed` | web | operation 级补充 |
+| FIN-财务台账 | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | 查普通内部结算往来的付款时点与执行状态 | `finance.ar_ap.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `getPayrollBankPaymentContext` | `GET` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | 读取工资银行记录与同日补差事项 | `finance.payroll.view` | `finance.payroll.attempts_viewed` / `finance.payroll.attempts_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | FIN-财务台账 | `getPointsRecoveryDetail` | `GET` | `/api/v1/finance/points-recoveries/{customerId}` | 查看会员全部积分追回及豁免记录 | `finance.points_recovery.view` | `points.recovery.viewed` / `points.recovery.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| FIN-财务台账 | `initiateInternalPayment` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts` | 登记内部应付已发起付款(银行在途) | `finance.payment.register` | `finance.internal_payment.initiated` / `finance.internal_payment.initiate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApPayments` | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | 读取所选台账原收付款流水 | `finance.ar_ap.view` | `ar_ap_payment.listed` / `ar_ap_payment.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | 查询日结六源汇总 | `finance.daily_close.manage` | `finance.daily_close_summary.viewed` / `finance.daily_close_summary.view_failed` | web, mobile_admin | operation 级补充 |
@@ -2736,10 +2783,12 @@
 | FIN-财务台账 | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | 查询退款自动放行规则配置 | `refund.authority.view` | `refund_auto_rule.viewed` / `refund_auto_rule.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程） | `finance.dividend.manage` | `dividend.paid_marked` / `dividend.mark_paid_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
+| FIN-财务台账 | `postponeInternalPaymentForFunds` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/funds-insufficient` | 资金不足顺延至下一个付账日 | `finance.payment.register` | `finance.internal_payment.postponed` / `finance.internal_payment.postpone_failed` | web | operation 级补充 |
 | FIN-财务台账 | `preparePayrollBankPayment` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | 准备工资银行付款 | `finance.payroll.payment.register` | `finance.payroll.prepare` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | FIN-财务台账 | `queryFinanceRefund` | `POST` | `/api/v1/finance/refunds/{refund_id}/query` | 查询原退款单的渠道权威结果 | `finance.ar_ap.view` | `finance_refund.queried` / `finance_refund.query_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | 押金台账动作（收取/退还/抵扣/没收） | `finance.deposit.manage` | `finance.deposit.action_recorded` / `finance.deposit.action_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordFinanceRefundExecution` | `POST` | `/api/v1/finance/refunds/{refund_id}/execution` | 实际支付经办人本人登记原路执行凭证 | `finance.refund.create` | `finance_refund.execution_recorded` / `finance_refund.execution_failed` | web | operation 级补充 |
+| FIN-财务台账 | `recordInternalPaymentFailure` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts/{attempt_id}/failure` | 登记内部应付付款明确失败(付款失败待处理) | `finance.payment.register` | `finance.internal_payment.failed` / `finance.internal_payment.fail_record_failed` | web | operation 级补充 |
 | FIN-财务台账 | `rejectDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/reject` | 驳回：pending_review → rejected（理由必填；驳回后可重算） | `finance.dividend.manage` | `dividend.rejected` / `dividend.reject_failed` | web | operation 级补充 |
 | FIN-财务台账 | `releaseDividendReserve` | `POST` | `/api/v1/finance/dividends/statements/{id}/release-reserve` | 手动释放该计算单的发放保护线留存（re-tag 待释放留存应付为已释放，使主理人可真正拿到该笔钱） | `finance.dividend.manage` | `dividend.reserve_released` / `dividend.reserve_release_failed` | web | operation 级补充 |
 | FIN-财务台账 | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | 锁定后补录审批申请 | `finance.locked_backfill.request` | `finance.locked_backfill_requested` / `finance.locked_backfill_request_failed` | web, mobile_admin | operation 级补充 |
@@ -2816,7 +2865,7 @@
 | INV-库存存酒 | `approveSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts/{id}/approve` | 提交供应合同主线及业务财务法务并行审批 | `inventory.supply_contract.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `arrivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/arrive` | 采购单到货(ordered/expected→arrived) | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `cancelSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废) | `bar.saved_bottle.manage` | `bar.saved_bottle.cancelled` / `bar.saved_bottle.cancel_failed` | tablet, web, staff_work_phone | operation 级补充 |
-| INV-库存存酒 | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | 取消借调单 | `inventory.transfer_order.manage` | `inventory.transfer_order_cancelled` / `inventory.transfer_order_cancel_failed` | web | operation 级补充 |
+| INV-库存存酒 | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | 取消调拨／要货单 | `inventory.transfer_order.manage` | `inventory.transfer_order_cancelled` / `inventory.transfer_order_cancel_failed` | web | operation 级补充 |
 | INV-库存存酒 | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | 存酒领取 | `bar.saved_bottle.manage` | `bar.saved_bottle_picked_up` / `bar.saved_bottle.pickup_failed` | tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `completeQuarantineDisposition` | `POST` | `/api/v1/inventory/quarantine/dispositions/{id}/complete` | 登记批准的实际隔离处置 | `inventory.stock.adjust` | `inventory.quarantine.disposition_completed` / `inventory.quarantine.disposition_complete_failed` | web | operation 级补充 |
 | INV-库存存酒 | `confirmPurchaseConsignmentSale` | `POST` | `/api/v1/inventory/purchase-consignment-sales/{id}/confirm` | 由不同人员独立核实寄售售出事实 | `inventory.purchase.approve` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
@@ -2836,13 +2885,16 @@
 | INV-库存存酒 | `createTraceHandover` | `POST` | `/api/v1/inventory/trace-handovers` | 创建扫码交接任务(五段链) | `inventory.handover.scan` | `inventory.handover_created` / `inventory.handover_create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `createTypedStockMovement` | `POST` | `/api/v1/inventory/stock-movements/{movement_type}` | 创建typed库存流水 | `inventory.stock.move` | `inventory.stock_movement.created` / `inventory.stock_movement.created_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createWarehouse` | `POST` | `/api/v1/inventory/warehouses` | 创建结构化库房(六类) | `inventory.warehouse.manage` | `inventory.warehouse.created` / `inventory.warehouse.create_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `deliverTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/deliver` | 门店要货送达待签收 | `inventory.transfer_order.manage` | `inventory.transfer_order_delivered` / `inventory.transfer_order_deliver_failed` | web | operation 级补充 |
 | INV-库存存酒 | `disputeSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/dispute` | 受理存酒争议 | `bar.saved_bottle.manage` | `bar.saved_bottle.dispute` / `bar.saved_bottle.dispute_failed` | tablet, web | operation 级补充 |
+| INV-库存存酒 | `editTransferOrderDraft` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/lines` | 门店要货草稿改单 | `inventory.transfer_order.manage` | `inventory.transfer_order_draft_edited` / `inventory.transfer_order_draft_edit_failed` | web | operation 级补充 |
 | INV-库存存酒 | `getInventoryCostSummary` | `GET` | `/api/v1/inventory/cost-summary` | 期间出库成本汇总（分红成本侧取数点） | `inventory.cost.view` | `inventory.cost_summary.viewed` / `inventory.cost_summary.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | INV-库存存酒 | `getInventoryStocktake` | `GET` | `/api/v1/inventory/stocktakes/{id}` | 查询库存盘点单详情（含差异明细） | `inventory.stocktake.view` | `inventory.stocktake.detail_viewed` / `inventory.stocktake.detail_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | 查询溯源码责任链（按 id 或 trace_code） | `inventory.trace_code.view` | `inventory.trace_code.viewed` / `inventory.trace_code.view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `getPurchaseWorkbenchOptions` | `GET` | `/api/v1/inventory/purchase-workbench-options` | 读取采购工作台可用目录（逐项目及货权过滤） | `inventory.purchase_request.view` | `inventory.purchase_workbench.viewed` / `inventory.purchase_workbench.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getPurchaseWorkflowDetail` | `GET` | `/api/v1/inventory/purchase-requests/{id}` | 读取采购数量、逐次验收及独立结算事实 | `inventory.purchase_request.view` | `inventory.purchase_request_viewed` / `inventory.purchase_request_view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getSupplyContractTerms` | `GET` | `/api/v1/inventory/supply-contracts/{id}/terms` | 读取供应合同条款及审批状态 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `getTransferOrderFulfillment` | `GET` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | 门店要货签收结果与差异处理 | `inventory.transfer_order.view` | `inventory.transfer_fulfillment_viewed` / `inventory.transfer_fulfillment_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `handoverPurchaseReturn` | `POST` | `/api/v1/inventory/purchase-returns/{id}/handover` | 登记批准退供的实际交接并出库 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listHighValueReviews` | `GET` | `/api/v1/inventory/high-value-reviews` | 查询库存域高价值复核单(报损/盘点差异/存酒作废) | `inventory.high_value.review` | `inventory.high_value_review.viewed` / `inventory.high_value_review.view_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventoryCostLedger` | `GET` | `/api/v1/inventory/cost-ledger` | 查询库存成本流水（移动加权） | `inventory.cost.view` | `inventory.cost_ledger.viewed` / `inventory.cost_ledger.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
@@ -2865,12 +2917,15 @@
 | INV-库存存酒 | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | 查询供应合同列表 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | 查询库房列表 | `inventory.warehouse.manage` | `inventory.warehouse.list` / `inventory.warehouse.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `orderPurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | 采购单下单(approved→ordered) | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `pickTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/pick` | 门店要货拣配完成 | `inventory.transfer_order.manage` | `inventory.transfer_order_picked` / `inventory.transfer_order_pick_failed` | web | operation 级补充 |
 | INV-库存存酒 | `postPurchasePrepaymentResolution` | `POST` | `/api/v1/inventory/purchase-prepayment-resolutions/{id}/post` | 完整批准后由财务过账预付余额处理 | `finance.ar_ap.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `printInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes/{id}/print` | 出库打印溯源码（registered→printed） | `inventory.trace_code.print` | `inventory.trace_code.printed` / `inventory.trace_code.print_failed` | web | operation 级补充 |
 | INV-库存存酒 | `receivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/receive` | 逐次登记实到、合格接收及拒收 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `receiveTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/receive` | 调拨收货／门店要货签收 | `inventory.transfer_order.manage` | `inventory.transfer_order_received` / `inventory.transfer_order_receive_failed` | web | operation 级补充 |
 | INV-库存存酒 | `recordInventoryStocktakeVariance` | `POST` | `/api/v1/inventory/stocktakes/{id}/variances` | 录入库存盘点差异行 | `inventory.stocktake.variance_record` | `inventory.stocktake.variance_recorded` / `inventory.stocktake.variance_record_failed` | web | operation 级补充 |
 | INV-库存存酒 | `registerInventoryTraceCode` | `POST` | `/api/v1/inventory/trace-codes` | 贴码登记溯源码（入库） | `inventory.trace_code.register` | `inventory.trace_code.registered` / `inventory.trace_code.register_failed` | web | operation 级补充 |
 | INV-库存存酒 | `registerPurchaseConsignmentSale` | `POST` | `/api/v1/inventory/purchase-requests/{id}/consignment-sales` | 提交合同指定的寄售售出事实 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `registerTransferDisposition` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | 登记门店要货差异处理 | `inventory.transfer_order.manage` | `inventory.transfer_disposition_registered` / `inventory.transfer_disposition_register_failed` | web | operation 级补充 |
 | INV-库存存酒 | `reportRobotSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | 机器人配送段上报(被动留痕,受第三方开关门控) | `inventory.handover.scan` | `inventory.handover_robot_reported` / `inventory.handover_robot_report_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `requestPurchasePrepaymentResolution` | `POST` | `/api/v1/inventory/purchase-requests/{id}/prepayment-resolutions` | 按合同申请退未用预付款或减未付预付义务 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `requestPurchaseReturn` | `POST` | `/api/v1/inventory/purchase-requests/{id}/returns` | 发起退供应商主线及财务审批 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
@@ -2881,10 +2936,13 @@
 | INV-库存存酒 | `reviewInventoryStocktakeVariance` | `POST` | `/api/v1/inventory/stocktakes/{id}/variances/{vid}/review` | 复核库存盘点差异（approved/rejected） | `inventory.stocktake.variance_review` | `inventory.stocktake.variance_reviewed` / `inventory.stocktake.variance_review_failed` | web | operation 级补充 |
 | INV-库存存酒 | `reviewPurchaseReturnFinance` | `POST` | `/api/v1/inventory/purchase-returns/{id}/finance-review` | 复核退供成本差额并冲应付或登记待回款 | `finance.ar_ap.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewTraceHandoverException` | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | 交接异常复核(缺口/重复/差异) | `inventory.handover.review` | `inventory.handover_exception_resolved` / `inventory.handover_exception_review_failed` | web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `reviewTransferDisposition` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/review` | 财务复核门店要货差异处理 | `finance.ar_ap.manage` | `inventory.transfer_disposition_reviewed` / `inventory.transfer_disposition_review_failed` | web | operation 级补充 |
 | INV-库存存酒 | `saveSupplyContractTerms` | `POST` | `/api/v1/inventory/supply-contracts/{id}/terms` | 登记待审批供应合同的明确执行条款 | `inventory.supply_contract.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `scanInventoryRiskAlerts` | `POST` | `/api/v1/inventory/risk-alerts/scan` | 触发库存风险扫描 | `inventory.risk.scan` | `inventory.risk.scan` / `inventory.risk.scan_failed` | web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | 物品追踪码扫码交接 | `inventory.handover.scan` | `operation_handover.created` / `operation_handover.failed` | staff_work_phone, tablet | operation 级补充 |
 | INV-库存存酒 | `scanTraceSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/scan-segment` | 员工扫码交接分段(主动留痕) | `inventory.handover.scan` | `inventory.handover_segment_scanned` / `inventory.handover_segment_scan_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `submitTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/submit` | 门店要货提交供货主体审核 | `inventory.transfer_order.manage` | `inventory.transfer_order_submitted` / `inventory.transfer_order_submit_failed` | web | operation 级补充 |
+| INV-库存存酒 | `supplierReviewTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/supplier-review` | 供货主体审核门店要货 | `inventory.transfer_order.manage` | `inventory.transfer_order_supplier_reviewed` / `inventory.transfer_order_supplier_review_failed` | web | operation 级补充 |
 | INV-库存存酒 | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | 调拨库存流水 | `inventory.stock.move` | `inventory.stock_transfer.created` / `inventory.stock_transfer.created_failed` | web | operation 级补充 |
 | OPEN-开放平台 | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | 回调处理结果查询 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
 | OPEN-开放平台 | `receiveOpenWebhook` | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | 第三方或供应商回调 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
@@ -2898,6 +2956,7 @@
 | P0-待归类 | `addContractAttachments` | `POST` | `/api/v1/contracts/{contract_id}/attachments` | 追加合同附件(电子签章扫描件归档) | `contract.draft.manage` | `contract.attachments_added` / `contract.attachments_add_failed` | web | operation 级补充 |
 | P0-待归类 | `addMerchantServiceWorkOrderAction` | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | Append merchant service work order action | `merchant.service_work_order.process` | `merchant_service.addMerchantServiceWorkOrderAction.succeeded` / `merchant_service.addMerchantServiceWorkOrderAction.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `advanceLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/advance` | 意向阶段推进(5 阶段) | `leasing.intent.manage` | `leasing.intent.advanced` / `leasing.intent.advance_failed` | web | operation 级补充 |
+| P0-待归类 | `approveMerchantPortalPayeeAccountChange` | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | 收款方财务负责人审批更换收款账户 | `merchant.portal.payee_account.approve` | `merchant_portal.payee_account.approved` / `merchant_portal.payee_account.approve_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `assignEnergyVerifier` | `POST` | `/api/v1/energy/readings/{reading_id}/assignment` | 已配置主管指派真实复抄人员 | `energy.reading.approve` | `energy.verifier_assigned` / `energy.verifier_assigned_failed` | web | operation 级补充 |
 | P0-待归类 | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | 工单派单 | `facility.work_order.manage` | `facility.work_order_assigned` / `facility.work_order_assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | 招商线索派单(主管手动指派) | `leasing.lead.manage` | `leasing.lead.assigned` / `leasing.lead.assign_failed` | web | operation 级补充 |
@@ -2967,6 +3026,7 @@
 | P0-待归类 | `decideDealerOrderCancel` | `POST` | `/api/v1/dealers/orders/{id}/cancel-decision` | 取消审批 | `dealer.order.review` | `dealer.order.cancel_decided` / `dealer.order.cancel_decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | 审批价格目录 | `dealer.price_catalog.approve` | `dealer.price_catalog.decided` / `dealer.price_catalog.decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideDealerReturn` | `POST` | `/api/v1/dealers/returns/{id}/decision` | 审批经销退货 | `dealer.return.review` | `dealer.return.decided` / `dealer.return.decide_failed` | web | operation 级补充 |
+| P0-待归类 | `decideInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules/{rule_id}/decision` | 审批付账日配置(提交人不得自审) | `settlement.config.manage` | `settlement.internal_pay_day_rule.approved` / `settlement.internal_pay_day_rule.decision_failed` | web | operation 级补充 |
 | P0-待归类 | `disablePartnerSubordinate` | `POST` | `/api/v1/partner/subordinates/{user_id}/disable` | 停用下属账号 | `partner.subordinate.manage` | `partner_subordinate.disabled` / `partner_subordinate.disable_failed` | web | operation 级补充 |
 | P0-待归类 | `editContractDraftRentTerms` | `POST` | `/api/v1/contracts/{contract_id}/rent-terms` | 草稿编辑补录租金条款(仅草拟中) | `contract.draft.manage` | `contract.draft_rent_terms_updated` / `contract.draft_rent_terms_update_failed` | web | operation 级补充 |
 | P0-待归类 | `energyMeterHistory` | `GET` | `/api/v1/energy/meters/{meter_id}/history` | 读取原始计量与核实处置事实 | `energy.meter.manage` | `energy.history_viewed` / `energy.history_viewed_failed` | web | operation 级补充 |
@@ -2995,6 +3055,7 @@
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getLeasingLeadContactPhone` | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | 查看某一条招商线索的完整联系人手机号 | `leasing.lead.manage` | `leasing.lead.contact_phone_viewed` / `leasing.lead.contact_phone_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | 公司统一收款码(下单出示用) | `service.order.create` | `service.pay_config.viewed` / `service.pay_config.view_failed` | staff_private_phone, web, tablet | operation 级补充 |
+| P0-待归类 | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | 查非积分商户账单异议期(按项目) | `settlement.config.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getSiteEntryReport` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}` | 查看单个进场报备单 | `facility.site_entry.view_assigned` | `facility.site_entry.viewed` / `facility.site_entry.view_failed` | web | operation 级补充 |
 | P0-待归类 | `getWecomCleanupPreview` | `GET` | `/api/v1/compliance/wecom/cleanup-previews/{id}` | 查看本人清理预览 | `wecom.retention.manage` | `wecom.cleanup_viewed` / `wecom.cleanup_view_failed` | web | operation 级补充 |
 | P0-待归类 | `initializeEnergyMeter` | `POST` | `/api/v1/energy/meters/{meter_id}/opening` | 登记真实启用初值 | `energy.meter.manage` | `energy.meter_initialized` / `energy.meter_initialized_failed` | web | operation 级补充 |
@@ -3040,6 +3101,7 @@
 | P0-待归类 | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | 查询平面图导入任务 | `floor_plan.import.view` | `floor_plan.import_viewed` / `floor_plan.import_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | 查询 P1/P2 商场平面图 | `floor_plan.view` | `floor_plan.viewed` / `floor_plan.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | 查询平面图正式区域 | `floor_plan.view` | `floor_plan.shape_viewed` / `floor_plan.shape_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | 查三个付账日与钱路指派规则(含待审与历史版本) | `settlement.config.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listLeasingBrands` | `GET` | `/api/v1/leasing/brands` | 招商品牌/客户库清单 | `leasing.brand.manage` | `leasing.brand.viewed` / `leasing.brand.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | 跟进记录(按 ref 查) | `leasing.lead.manage` | `leasing.follow_up.viewed` / `leasing.follow_up.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | 招商意向清单 | `leasing.intent.manage` | `leasing.intent.viewed` / `leasing.intent.view_failed` | web | operation 级补充 |
@@ -3048,6 +3110,7 @@
 | P0-待归类 | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | List merchant bills | `merchant.billing.view` | `merchant_billing.bill.viewed` / `merchant_billing.bill.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | 商户专区·我的合同(只读关键信息) | `contract.view` | `merchant_portal.contract.viewed` / `merchant_portal.contract.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalSettlements` | `GET` | `/api/v1/merchant-portal/settlements` | 商户专区·我的对账(结算单只读) | `merchant.portal.settlement.view` | `merchant_portal.settlement.viewed` / `merchant_portal.settlement.view_failed` | web, merchant_portal | operation 级补充 |
+| P0-待归类 | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMyServiceOrders` | `GET` | `/api/v1/services/orders/assigned-to-me` | 我的服务任务(履约人手机) | `service.order.perform` | `service.order.mine_viewed` / `service.order.mine_view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `listPartnerOrgs` | `GET` | `/api/v1/partner/orgs` | 外部协作机构列表 | `partner.org.view` | `partner_org.viewed` / `partner_org.view_failed` | web | operation 级补充 |
@@ -3119,6 +3182,7 @@
 | P0-待归类 | `saveContractDepositRefundWait` | `POST` | `/api/v1/contracts/deposit-refund-wait` | 配置押金退还等待期及上下限(按项目) | `contract.deposit_refund_wait.manage` | `contract.deposit_refund_wait_configured` / `contract.deposit_refund_wait_config_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFacilityWorkOrderPolicy` | `POST` | `/api/v1/facility/work-orders/policies` | 保存工单 SLA/验收策略 | `facility.work_order.manage` | `facility.work_order_policy_saved` / `facility.work_order_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | 保存平面图图形 | `floor_plan.manage` | `floor_plan.shape.save` / `floor_plan.shape.save_failed` | web | operation 级补充 |
+| P0-待归类 | `saveSettlementObjectionPeriod` | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | 配置非积分商户账单异议期及上下限(按项目) | `settlement.config.manage` | `settlement.objection_period.configured` / `settlement.objection_period.config_failed` | web | operation 级补充 |
 | P0-待归类 | `saveSpaceExpiryColorRule` | `POST` | `/api/v1/contracts/expiry-color-rules` | 配置到期着色分类(颜色+提前天数) | `contract.space.color.manage` | `contract.color_rule_saved` / `contract.color_rule_save_failed` | web | operation 级补充 |
 | P0-待归类 | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | 触发合规提醒扫描 | `compliance.reminder.scan` | `compliance.reminder.scan` / `compliance.reminder.scan_failed` | web | operation 级补充 |
 | P0-待归类 | `serviceOrderPaymentCode` | `GET` | `/api/v1/services/orders/{id}/payment-code` | 出示公司统一收款码(H批代收;个人码流程已废弃) | `service.order.create` | `service.payment_code.presented` / `service.payment_code.present_failed` | staff_work_phone, web, tablet, app | operation 级补充 |
@@ -3160,6 +3224,7 @@
 | P0-待归类 | `submitDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/submit` | 提交经销订单审核 | `dealer.order.manage` | `dealer.order.submitted` / `dealer.order.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/submit` | 提交价格目录审批 | `dealer.price_catalog.edit` | `dealer.price_catalog.submitted` / `dealer.price_catalog.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitFacilityInspectionRecord` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/records` | 提交巡检记录 | `facility.inspection.manage` | `facility.inspection_record_submitted` / `facility.inspection_record_submit_failed` | web | operation 级补充 |
+| P0-待归类 | `submitInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules` | 提交三个付账日或钱路指派规则(待另一人审批) | `settlement.config.manage` | `settlement.internal_pay_day_rule.submitted` / `settlement.internal_pay_day_rule.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | 提交账单争议 | `merchant.billing.dispute.submit` | `merchant.billing.dispute.submit` / `merchant.billing.dispute.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `submitMerchantPortalSettlementDispute` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | 商户专区·结算单异议留言 | `merchant.portal.settlement.dispute` | `merchant_portal.settlement.disputed` / `merchant_portal.settlement.dispute_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `submitSiteEntryReport` | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/submit` | 外包提交进场报备（进入物业审核） | `facility.site_entry.submit_assigned` | `facility.site_entry.submit_assigned` / `facility.site_entry.submit_failed` | web | operation 级补充 |

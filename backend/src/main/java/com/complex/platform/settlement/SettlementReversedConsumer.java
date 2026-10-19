@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import com.complex.platform.ticketing.VerificationReversedEvent;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -102,13 +104,20 @@ public class SettlementReversedConsumer {
                 original.giftCostConfigId()));
     }
 
-    /** 原核销所属月已过账 → 红冲落当月(now)；否则落原月(原核销时刻)由该月重算净掉。 */
+    /**
+     * 原核销所属月已过账 → 红冲落当月(now)；否则落原月(原核销时刻)由该月重算净掉。
+     * FS-021-R2：生产月结出的是平台单（project_id 为空、覆盖全部项目），交易行却带核销项目——项目单与平台单任一已过账即算已过账。
+     */
     private Instant reversalBusinessAt(String projectId, Instant originalBusinessAt) {
         YearMonth month = YearMonth.from(originalBusinessAt.atZone(ZoneOffset.UTC));
         LocalDate periodStart = month.atDay(1);
         LocalDate periodEnd = month.atEndOfMonth();
-        String status = billRepository.findBillStatusByPeriod(projectId, periodStart, periodEnd);
-        boolean posted = status != null && !STATUS_DRAFT.equals(status) && !"confirmed".equals(status);
+        boolean posted = posted(billRepository.findBillStatusByPeriod(projectId, periodStart, periodEnd))
+                || (projectId != null && posted(billRepository.findBillStatusByPeriod(null, periodStart, periodEnd)));
         return posted ? Instant.now() : originalBusinessAt;
+    }
+
+    private static boolean posted(String status) {
+        return status != null && !STATUS_DRAFT.equals(status) && !"confirmed".equals(status);
     }
 }

@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -302,7 +302,7 @@ class LeasingServiceTests {
                 "ctr_auto", "mch_auto", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
                 null, null, null, Instant.now(), Instant.now()));
-        when(platformService.createMerchant(any())).thenReturn(new MerchantRecord(
+        when(platformService.createMerchantOnLeasingSign(any())).thenReturn(new MerchantRecord(
                 "mch_auto", "钱七", "retail", "cs", "cs", "cs", "钱七", null, "钱七", null, null, null,
                 null, null, null, "leasing_auto", "active", Instant.now(), Instant.now()));
         LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
@@ -322,7 +322,7 @@ class LeasingServiceTests {
         org.mockito.ArgumentCaptor<MerchantProfileRequest> captor =
                 org.mockito.ArgumentCaptor.forClass(MerchantProfileRequest.class);
         var order = org.mockito.Mockito.inOrder(platformService);
-        order.verify(platformService).createMerchant(captor.capture());
+        order.verify(platformService).createMerchantOnLeasingSign(captor.capture());
         MerchantProfileRequest req = captor.getValue();
         assertThat(req.contactName()).isEqualTo("钱七");
         assertThat(req.contactPhone()).isEqualTo("13800001111");
@@ -342,6 +342,43 @@ class LeasingServiceTests {
         assertThat(binding.operationEntityId()).isEqualTo("cs");
         assertThat(binding.contractEntityId()).isEqualTo("cs");
         assertThat(binding.settlementEntityId()).isEqualTo("cs");
+    }
+
+    /**
+     * FS-024 复核：线索未定业态（null）或意向业态就是「其他」的签约起草走不触发主管公司必填的签约建档入口
+     * （PlatformService.createMerchantOnLeasingSign），商户业态落 other、主管公司与理由为空，签约不再 400。
+     */
+    @Test
+    void signIntentWithUndecidedOrOtherBusinessTypeAutoCreatesOtherMerchantWithoutSupervisingCompany() {
+        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+                "ctr_other", "mch_other", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
+                null, null, null, Instant.now(), Instant.now()));
+        MerchantRecord other = new MerchantRecord(
+                "mch_other", "孙八", "other", null, null, null, "孙八", null, "孙八", null, null, null,
+                null, null, null, null, "active", Instant.now(), Instant.now());
+        when(platformService.createMerchantOnLeasingSign(any())).thenReturn(other);
+        // 后台档案写口（createMerchant）对「其他」业态必填主管公司；签约建档不得走它（下面 never() 断言）。
+        when(platformService.createMerchant(any())).thenReturn(other);
+        int n = 0;
+        for (String businessType : java.util.Arrays.asList(null, "other")) {
+            n++;
+            LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                    "孙八", "13800002222", "online_inquiry", businessType, "sp_1", null, null, "k_other_lead_" + n));
+            LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), "sp_1", null, Map.of(), "k_other_intent_" + n));
+            service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "k_other_adv_" + n));
+            ContractRecord contract = service.signIntent(intent.id(), new LeasingSignRequest(
+                    null, "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k_other_sign_" + n));
+            assertThat(contract.id()).isEqualTo("ctr_other");
+        }
+        org.mockito.ArgumentCaptor<MerchantProfileRequest> captor = org.mockito.ArgumentCaptor.forClass(MerchantProfileRequest.class);
+        verify(platformService, org.mockito.Mockito.times(2)).createMerchantOnLeasingSign(captor.capture());
+        assertThat(captor.getAllValues()).allSatisfy(req -> {
+            assertThat(req.merchantType()).isEqualTo("other");
+            assertThat(req.supervisingCompanyId()).isNull();
+            assertThat(req.supervisingCompanyReason()).isNull();
+        });
+        verify(platformService, org.mockito.Mockito.never()).createMerchant(any());
     }
 
     @Test

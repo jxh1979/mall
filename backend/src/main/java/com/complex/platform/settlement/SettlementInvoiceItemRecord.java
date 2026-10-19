@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import java.time.LocalDate;
 
 /** 批 4b：开票清单条目（settlement_invoice_items 一行）。金额均整数分。 */
@@ -26,6 +28,11 @@ public record SettlementInvoiceItemRecord(
         long culturalFeeCent,
         String status,
         String remark,
-        String updatedBy
+        String updatedBy,
+        /** FS-022-R1：积分发行费月账单来源（与 billId 二选一）；结算单来源为 null。 */
+        String pointsBillId,
+        /** FS-022-R1：购方＝积分账单合同销售方（主体与单店商户）；结算单来源为 null。 */
+        String buyerEntityId,
+        String buyerMerchantId
 ) {
 }

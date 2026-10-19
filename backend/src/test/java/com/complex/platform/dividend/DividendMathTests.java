@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -438,6 +440,37 @@ class DividendMathTests {
                 }
             }
         }
+    }
+
+    // ── V507 FS-014 依法可分配金额（BSM L1785「本次分配不得超出该金额」；裁决 2026-10-19 第 1 条「取小、不补」）──
+
+    private static DividendMath.Distribution withLegalCap(long net, boolean lcf, long carryIn, Long cap) {
+        return DividendMath.compute(net, 8000, 2000, lcf, carryIn, false, 0L, new long[0], false, 0, 0L, cap);
+    }
+
+    @Test
+    void legalCapLowersDistributableAndKeepsConservation() {
+        DividendMath.Distribution d = withLegalCap(1_000_000L, false, 0L, 900_000L);
+        assertThat(d.distributableCent()).isEqualTo(900_000L);
+        assertThat(d.platformShareCent() + d.principalGrossCent()).isEqualTo(900_000L);
+        // 核定额高于经营候选额：仍按经营候选额（取小）。
+        assertThat(withLegalCap(1_000_000L, false, 0L, 1_200_000L).distributableCent()).isEqualTo(1_000_000L);
+    }
+
+    @Test
+    void legalCapAppliesEvenWhenLossCarryforwardSwitchOff() {
+        // 经营开关关闭（往期亏损不扣），法定弥亏已在核定额中体现 → 仍按核定额 700_000。
+        DividendMath.Distribution d = withLegalCap(1_000_000L, false, 300_000L, 700_000L);
+        assertThat(d.carryAppliedCent()).isZero();
+        assertThat(d.distributableCent()).isEqualTo(700_000L);
+    }
+
+    @Test
+    void legalCapDoesNotStackWithLossCarryforward() {
+        // 开关开：经营候选 = 1_000_000 − 300_000 = 700_000；核定 700_000 → 取小 700_000，不再叠扣成 400_000。
+        DividendMath.Distribution d = withLegalCap(1_000_000L, true, 300_000L, 700_000L);
+        assertThat(d.distributableCent()).isEqualTo(700_000L);
+        assertThat(d.carryAfterCent()).isZero();
     }
 
     /** 平台分成 HALF_UP 后不会超过可分配额（bps≤10000 上界），主理人毛额不会为负。 */

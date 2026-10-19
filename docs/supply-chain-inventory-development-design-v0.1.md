@@ -1,6 +1,6 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.20
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.21
 
-> 版本：V0.20 ｜ 最后更新：2026-10-17 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
+> 版本：V0.21 ｜ 最后更新：2026-10-19 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
 > **M09 现行口径（2026-09-03）：** 三份业务 HTML 是业务真源；本文细化但不得新增业务。迁移、Java、OpenAPI、页面和测试只证明当前实现事实，不得反向定义业务规则。下文带“建议”“任务”或未标已落地的结构/API 均为目标设计或缺口，不代表当前实现。R7/R5 横幅仅作历史留痕，现行实现以本轮逐项标注为准。
@@ -15,7 +15,7 @@
 > | 追溯码/交接 | V128 有码表和四个允许状态值；V074 有五段交接结构 | 运行路径只实现登记/打印；五段可乱序，补录证据、主管复核和并列不可覆盖记录未实现 |
 > | 跨主体流转 | V277 有流转单、收发和所有权历史 | 可消费品可借、任意单价、空 `lending_mode`、结算/改权时点分裂、无两侧库存流水，借用收货还错误改 owner |
 > | 高价值阈值 | V350 有默认配置；收货接口和采购流水支持实际单价但允许为空 | 判定仍读移动加权均价；项目/商户特例仍可覆盖全局；缺成本直接按高价值只是实现事实；手工标记缺治理闭环 |
-> | 冻结 HTML 的整块能力 | 基础存酒与礼品兑换路径已存在 | 智能采购、门店要货、外部经销和完整存酒生命周期尚未实现 |
+> | 冻结 HTML 的整块能力 | 基础存酒与礼品兑换路径已存在 | 智能采购、外部经销和完整存酒生命周期尚未实现（门店要货九态、签收与差异处理第八批已实现） |
 >
 > 2026-06-19 的 R7/R5 “零命中”或“全状态已落地”等横幅均是失效快照，本版不再把它们当现行结论；上述表和各节就地事实优先。
 
@@ -75,7 +75,7 @@
 | 进货查验 | 供货方资质、票据、批次合格证明绑入库批次（C9） |
 | 库存批次与流水 | 批次、保质期、库存变化及成本流水；按 HTML 十二类记录；冲正是原流水状态/反向处理，不新增第十三类 |
 | 优惠凭证与积分兑换履约 | 三类履约通道分流；店内实物/服务才进入对应库存/能力的预占、实扣和释放 |
-| 智能采购与门店要货 | 建议只生成数量和理由，经人工调整、审批后成单；要货九态全程留操作者和时间，当前未实现 |
+| 智能采购与门店要货 | 建议只生成数量和理由，经人工调整、审批后成单；要货九态全程留操作者和时间（第八批已实现，见门店要货聚合）；智能采购建议当前未实现 |
 | 外部经销供应链 | 经销准入、隔离门户、价格目录/询价、订单付款、库存预留、退货红冲、资金归属、职责分离，当前未实现 |
 | 五段交接与跨主体借调 | 严格顺序、证据补录；借只转保管、调才转所有权，当前实现差异见 §5 |
 
@@ -104,7 +104,7 @@
 | 进货查验聚合 | `PurchaseInspection` | 供货方资质/票据/合格证明绑入库批次（C9） |
 | 兑换扣减聚合 | `RedemptionStockDeduction` | 积分兑换/礼物领取的库存预占与扣减（pass-2） |
 | 主管复核聚合 | 当前技术载体 `InventoryHighValueReview` | HTML 只要求主管复核，不授权绕开治理队列；当前技术载体不得被升级为业务旁路规则 |
-| 门店要货聚合（目标） | `StoreRequisition`, `StoreRequisitionEvent` | 九态、操作者、时间、拣配、配送、签收和差异；当前未实现 |
+| 门店要货聚合 | `inventory_transfer_orders`（transfer_type=supply）、`inventory_transfer_order_events`、`inventory_transfer_receipts`、`inventory_transfer_dispositions`（V503/V504） | 九态、操作者、时间、拣配、配送、按行签收与差异处理；第八批已实现（`InventoryTransferFlowService`） |
 | 经销聚合 | `DealerRecord`, `DealerContractRecord`（含付款条款与运费模板版本）, `DealerPriceCatalogRecord`（+`Line`）, `DealerInquiryRecord`, `DealerExternalStockRecord`（CG-11a），`DealerOrderRecord`（+`Line` / `Payment` / `Refund` / `Overpayment`，CG-11b，`DealerOrderService` + `DealerOrderDeadlineJob`），`DealerReturnRecord`（+`Line`）、`DealerInvoiceRecord`（CG-11c，`DealerReturnService` + `JdbcDealerReturnRepository`），`DealerPortalAccountRecord`（CG-11d，`DealerPortalAccountService` 开通 / 停用撤权，`DealerPortalService` 门户闸：账号类型 → 终端 → 归属 → 停用 → 门户资格，再复用三条服务的共用实现） | 冻结经销全链；准入 / 合同 / 目录 / 询价 / 外显（V451）、订单 / 付款 / 预留 / 出库 / 取消退款 / 逾期 / 超收（V452）、退货 / 退款 / 红冲 / 开票（V453）与独立经销商门户（V454，第十一端 dealer_portal）已落地，不增加 HTML 外状态 |
 | 交接与跨主体流转聚合 | `TraceHandover`, `TransferOrder`, `CustodyHistory` | 五段交接、补录证据、所有权/保管主体、期限和扫码时间；当前仅部分实现 |
 
@@ -805,6 +805,7 @@ V112 已建立两张子表并提供正式 list/create API；供应商主表没�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-19 | 改 | §1、§3 聚合表 | 版本升 V0.21；FS-011 门店要货九态、签收与差异处理落地（V503/V504，`InventoryTransferFlowService`），聚合表改为实际表名 | BSM L1212–L1213；操作员裁决 2026-10-19 第 2 条 |
 | 2026-10-17 | 增 | §3 聚合表、§8 | 版本升 V0.19；CG-11d 独立经销商 Web 门户（V454：terminal_capability_switches / 灰度层 CHECK 加 dealer_portal、总开关行 tcs_term_dealer_portal、dealer_portal_accounts、role_dealer_portal 与 dealer_portal.* 权限、dealer.portal_account.manage；`/api/v1/dealer-portal/**` 15 操作 + 门户账号 2 操作 + 内部开通 1；SessionIssuer.revokeUserSessions 停用即作废会话；DeviceCredentialVerifier 对 dealer_portal 与 web 同口径按 Cookie 会话判证明） | BSM:1217-1218、1246；ENUM:181、233 |
 | 2026-10-17 | 增 | §3 聚合表、§8 | 版本升 V0.19；CG-11d 独立经销商 Web 门户（V454：terminal_capability_switches / 灰度层 CHECK 加 dealer_portal、总开关行 tcs_term_dealer_portal、dealer_portal_accounts、role_dealer_portal 与 dealer_portal.* 权限、dealer.portal_account.manage；`/api/v1/dealer-portal/**` 15 操作 + 内部门户账号 2 操作；SessionIssuer.revokeUserSessions 停用即作废会话；DeviceCredentialVerifier 对 dealer_portal 与 web 同口径按 Cookie 会话判证明） | BSM:1217-1218、1246；ENUM:181、233 |
 | 2026-10-17 | 增 | §3 聚合表、§4.5 | 版本升 V0.18；CG-11c 经销退货 / 退款 / 红冲 / 开票落地（V453：dealer_returns、dealer_return_lines、dealer_invoices；dealer_contracts.return_freight_bearer / first_leg_freight_refundable；dealer_orders.returned_amount_cent；dealer_order_lines.returned_quantity；权限 dealer.return.* / dealer.invoice.manage；`/api/v1/dealers/**` 新增 13 操作；可复售回库流水 dealer_return_restock、隔离流水 dealer_return_quarantine；应收冲减走 ar_ap_items 同单冲减） | BSM:1238-1251；ENUM:174、178-179、182 |

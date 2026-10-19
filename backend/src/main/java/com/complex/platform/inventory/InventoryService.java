@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -63,6 +63,7 @@ import static com.complex.platform.common.Strings.requireText;
 @Service
 public class InventoryService {
     @org.springframework.beans.factory.annotation.Autowired PurchaseWorkflowService purchaseWorkflow;
+    @org.springframework.beans.factory.annotation.Autowired InventoryTransferFlowService transferFlow;
 
     private static final Logger log = LoggerFactory.getLogger(InventoryService.class);
     private static final int DEFAULT_PAGE = 1;
@@ -1497,25 +1498,16 @@ public class InventoryService {
                     }
                     Instant now = Instant.now();
                     String orderId = "trf_" + slug(actual.idempotencyKey());
+                    // FS-011（BSM L1212/L1213）：门店要货（供货调拨）从草稿起步，门店提交后进待供货主体审核；借调沿用新建→发货。
+                    boolean requisition = "supply".equals(transferType);
                     InventoryTransferOrderRecord order = new InventoryTransferOrderRecord(orderId, transferType,
                             trimToNull(actual.lendingMode()), fromType, fromId, toType, toId,
                             trimToNull(actual.fromLocationId()), trimToNull(actual.toLocationId()),
-                            "created", trimToNull(actual.operatorNote()), null, now, now, List.of());
+                            requisition ? "draft" : "created", trimToNull(actual.operatorNote()), null, now, now, List.of());
                     repository.saveTransferOrder(order);
-                    int idx = 0;
-                    for (com.complex.platform.inventory.dto.TransferLineRequest lr : actual.lines()) {
-                        int qty = lr.quantity() == null ? 0 : lr.quantity();
-                        if (qty <= 0) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "明细数量必须大于 0");
-                        }
-                        long unitPrice = lr.unitPriceCent() == null ? 0L : lr.unitPriceCent();
-                        if (unitPrice < 0L) {
-                            throw ApiException.badRequest("VALIDATION_FAILED", "明细单价不能为负数");
-                        }
-                        repository.saveTransferLine(new InventoryTransferLineRecord(
-                                orderId + "_l" + (idx++), orderId, requireText(lr.itemId(), "item_id"), qty,
-                                lr.traceCodes() == null ? List.of() : lr.traceCodes(),
-                                unitPrice, now));
+                    InventoryTransferFlowService.saveLines(repository, orderId, actual.lines(), now);
+                    if (requisition) {
+                        transferFlow.recordEvent(orderId, null, "draft", trimToNull(actual.operatorNote()));
                     }
                     return order;
                 });
@@ -1529,10 +1521,13 @@ public class InventoryService {
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
                             ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
+                    // FS-011：门店要货的发货＝出库（待出库→配送中）；货款在接收方合格签收后形成，借调发货也不再挂账。
+                    if ("supply".equals(o.transferType())) {
+                        return transferFlow.outbound(o);
+                    }
                     if (!"created".equals(o.status())) {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "只有新建状态的调拨单才能发货");
                     }
-                    recordTransferSettlementOnShip(o, Instant.now());
                     return repository.saveTransferOrder(withTransferStatus(o, "shipped"));
                 });
     }
@@ -1545,6 +1540,10 @@ public class InventoryService {
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
                             ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
+                    // FS-011：门店要货在「待签收」按行签收。
+                    if ("supply".equals(o.transferType())) {
+                        return transferFlow.receive(o, request);
+                    }
                     if (!"shipped".equals(o.status())) {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_SHIPPED", "只有已发货的调拨单才能收货");
                     }
@@ -1578,7 +1577,8 @@ public class InventoryService {
                                 o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
                                 o.toOwnerType(), o.toOwnerId(), o.id(), now));
                     }
-                    // ponytail: P1 只做归属变更+台账;收货方库存入账/供货方库存扣减留 P2(供货主体库存需 warehouse owner 泛化,两侧同期做更一致)。
+                    // ponytail: 借调两侧库存流水未接（门店要货的合格入库见 InventoryTransferFlowService.receive）。
+                    recordLendingSettlementOnReceipt(o, now);
                     return repository.saveTransferOrder(withTransferStatus(o, "received"));
                 });
     }
@@ -1622,7 +1622,10 @@ public class InventoryService {
                 });
     }
 
-    /** 取消流转单(AUD-002/003)：created 直接取消;shipped 需冲销发货时挂的应付(未收款才可冲)。 */
+    /**
+     * 取消流转单(AUD-002/003)：新建的借调单直接取消；门店要货见 InventoryTransferFlowService.cancel。
+     * FS-011（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库」）：已发货一律不能直接取消。
+     */
     public InventoryTransferOrderRecord cancelTransferOrder(String orderId,
             com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
         String id = requireText(orderId, "order_id");
@@ -1632,29 +1635,19 @@ public class InventoryService {
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
                             ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
-                    if (!"created".equals(o.status()) && !"shipped".equals(o.status())) {
-                        throw ApiException.conflict("TRANSFER_ORDER_NOT_CANCELLABLE",
-                                "只有新建或已发货的调拨单才能取消");
+                    if ("shipped".equals(o.status())) {
+                        throw ApiException.conflict(InventoryTransferFlowService.SHIPPED_NOT_CANCELLABLE,
+                                "已出库的单不能直接取消，须实际退回验收或经复核完成损失处理");
                     }
-                    if ("shipped".equals(o.status()) && financeRepository != null) {
-                        reverseTransferSettlementOnCancel(o, Instant.now());
+                    // FS-011：门店要货草稿自行取消、已提交未出库经审批取消。
+                    if ("supply".equals(o.transferType())) {
+                        return transferFlow.cancel(o, request);
+                    }
+                    if (!"created".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_NOT_CANCELLABLE", "只有新建的借调单才能取消");
                     }
                     return repository.saveTransferOrder(withTransferStatus(o, "cancelled"));
                 });
-    }
-
-    /** 冲销发货时挂的应付:未收款才可冲(已收款需先退款);置 paid=0/unpaid=0/status=cancelled(金额留痕不改)。 */
-    private void reverseTransferSettlementOnCancel(InventoryTransferOrderRecord o, Instant now) {
-        financeRepository.findArApItemById("arap_trf_" + o.id()).ifPresent(item -> {
-            if (item.paidAmountCent() > 0L) {
-                throw ApiException.conflict("TRANSFER_PAYABLE_PARTIALLY_PAID",
-                        "调拨应付款已有付款记录，请先退款再取消");
-            }
-            financeRepository.updateArApItemLedger(new com.complex.platform.finance.ArApItemRecord(
-                    item.id(), item.itemNo(), item.direction(), item.counterpartyId(), item.sourceType(), item.sourceId(),
-                    item.amountCent(), 0L, 0L, item.currency(), item.dueDate(), item.accountingPeriod(),
-                    "cancelled", item.createdAt(), now, item.merchantId(), item.projectId()));
-        });
     }
 
     public InventoryTransferOrderRecord getTransferOrder(String orderId) {
@@ -1673,13 +1666,12 @@ public class InventoryService {
     }
 
     /**
-     * 发货即记结算(2026-07-08 用户拍板:发货时即生成应付·借调"借"默认不计占用费=不记)。并入现有应收应付台账。
-     * 供货调拨/借调买断→按货款(Σ 数量×单价)生成"收货方应付出让方"应付项;金额为0(免费供货/未定价)或借用型=不记。
+     * FS-011（台账 §25「调拨买断或正式供货销售在接收方验收后转移所有权，并同步生成应收应付」）：借调买断在接收方收货后
+     * 按货款(Σ 数量×单价)生成"收货方应付出让方"应付项（原为发货即挂）；借用型不计费、金额为 0 不记。
+     * 门店要货按合格数量形成货款，见 InventoryTransferFlowService。
      */
-    private void recordTransferSettlementOnShip(InventoryTransferOrderRecord o, Instant now) {
-        boolean billable = "supply".equals(o.transferType())
-                || ("lending".equals(o.transferType()) && "purchase".equals(o.lendingMode()));
-        if (!billable || financeRepository == null) {
+    private void recordLendingSettlementOnReceipt(InventoryTransferOrderRecord o, Instant now) {
+        if (!("lending".equals(o.transferType()) && "purchase".equals(o.lendingMode())) || financeRepository == null) {
             return;
         }
         long amountCent = 0L;
@@ -1690,7 +1682,7 @@ public class InventoryService {
             return;
         }
         String itemId = "arap_trf_" + o.id();
-        financeRepository.saveArApItem(new com.complex.platform.finance.ArApItemRecord(
+        financeRepository.appendArApItem(new com.complex.platform.finance.ArApItemRecord(
                 itemId, "ARAP-TRF-" + o.id(), "payable",
                 o.fromOwnerId(), "inventory_transfer", o.id(),
                 amountCent, 0L, amountCent, "CNY",

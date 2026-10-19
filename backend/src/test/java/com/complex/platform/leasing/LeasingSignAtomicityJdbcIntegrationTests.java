@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -133,6 +133,26 @@ class LeasingSignAtomicityJdbcIntegrationTests {
         assertThat(countMerchants()).isEqualTo(1);
     }
 
+    /**
+     * FS-024 复核（ENUM L195 的后果只是「未指定的不得开通任何结算与分账」）：线索阶段未定业态的签约自动建档落「其他」，
+     * 此时档案里没有主管公司可填，签约不得因主管公司必填而 400；商户以 other 建档、主管公司与理由为空，后果由结算/分账写口守住。
+     */
+    @Test
+    void signIntentWithUndecidedBusinessTypeCreatesOtherMerchantWithoutSupervisingCompany() {
+        String spaceId = "sp_other_" + newSuffix();
+        seedSpace(spaceId);
+        seed(spaceId, null);
+        ContractRecord contract = leasingService.signIntent(intentId, new LeasingSignRequest(
+                null, subject, null, null, LocalDate.parse("2026-08-01"), LocalDate.parse("2027-07-31"), "sign_" + suffix));
+        assertThat(jdbcTemplate.queryForMap(
+                "SELECT merchant_type, supervising_company_id, supervising_company_reason FROM merchants WHERE id = ?",
+                contract.merchantId()))
+                .containsEntry("merchant_type", "other").containsEntry("supervising_company_id", null)
+                .containsEntry("supervising_company_reason", null);
+        assertThat(countActiveBindings()).isEqualTo(1);
+        assertThat(countContracts()).isEqualTo(1);
+    }
+
     // ---- helpers ----
 
     private String newSuffix() {
@@ -146,6 +166,10 @@ class LeasingSignAtomicityJdbcIntegrationTests {
     }
 
     private void seed(String intendedSpaceId) {
+        seed(intendedSpaceId, "retail");
+    }
+
+    private void seed(String intendedSpaceId, String intendedBusinessType) {
         var actor = new com.complex.platform.access.AccessActor("usr_admin", "platform_admin_user", "platform_admin", projectId, null, "active");
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(actor, "token", java.util.List.of()));
@@ -155,7 +179,7 @@ class LeasingSignAtomicityJdbcIntegrationTests {
                 + "VALUES (?, ?, 'management_company', 'active', now(), now())", subject, "签约测试合同主体");
         jdbcTemplate.update("INSERT INTO business_entity_projects(business_entity_id,project_id) VALUES (?, ?)", subject, projectId);
         leasingRepository.saveLead(new LeasingLeadRecord(leadId, "签约测试联系人", "13800002222", "referral",
-                "retail", intendedSpaceId, null, null, "usr_sales", "negotiating", null, null, projectId, now, now));
+                intendedBusinessType, intendedSpaceId, null, null, "usr_sales", "negotiating", null, null, projectId, now, now));
         leasingRepository.saveIntent(new LeasingIntentRecord(intentId, leadId, "pending_signing", intendedSpaceId,
                 null, Map.of(), now, "usr_supervisor", projectId, now, now));
     }

@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -476,5 +476,57 @@ describe("M012-018：下钻提示只报告当前可见商户", () => {
     fireEvent.click(screen.getByTestId("organization-kpi-focus-clear"));
     await screen.findByTestId("organization-merchant-row-" + target);
     expect(screen.getByTestId("organization-merchant-focus").textContent).toContain("已从下钻定位到商户：" + target);
+  });
+});
+
+// FS-024（ENUM「商户业态」条：选“其他”的商户，必须在商户档案里指定一家主管公司并说明理由；操作员裁决 2026-10-19 第二轮第 7 条）
+describe("OrganizationMerchantPage 业态为其他的主管公司（FS-024）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/organizations");
+  });
+
+  it("选「其他」才出现主管公司下拉（只列在用的城市项目公司/域主管公司）与理由，两者必填并按蛇形键提交", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-create-open"));
+    fireEvent.change(screen.getByTestId("organization-merchant-type"), { target: { value: "bar" } });
+    expect(screen.queryByTestId("organization-merchant-supervising-company")).toBeNull();
+    fireEvent.change(screen.getByTestId("organization-merchant-type"), { target: { value: "other" } });
+    await waitFor(() => expect(screen.queryByTestId("organization-merchant-supervising-company")).not.toBeNull());
+    const options = screen.getByTestId("organization-merchant-supervising-company").textContent ?? "";
+    expect(options).toContain("平台经营主体");
+    expect(options).not.toContain("management_company");
+    // 未指定主管公司 → 「下一步」被拦；只选公司不写理由同样拦。
+    fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: "其他业态商户" } });
+    fireEvent.change(screen.getByTestId("organization-merchant-contact-phone"), { target: { value: "13912345678" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("主管公司");
+    fireEvent.change(screen.getByTestId("organization-merchant-supervising-company"), { target: { value: "org-1" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    expect(screen.getByTestId("organization-merchant-flow-error").textContent).toContain("主管公司");
+    fireEvent.change(screen.getByTestId("organization-merchant-supervising-reason"), { target: { value: "无对应经营域，由该公司主管" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    expect(screen.getByTestId("organization-merchant-flow-summary").textContent).toContain("平台经营主体");
+    fireEvent.click(screen.getByTestId("organization-merchant-create"));
+    await waitFor(() => expect(screen.queryByTestId("organization-merchant-flow")).toBeNull());
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    const body = String((postCall![1] as RequestInit).body);
+    expect(body).toContain('"supervising_company_id":"org-1"');
+    expect(body).toContain('"supervising_company_reason":"无对应经营域，由该公司主管"');
+  });
+
+  it("商户列表与详情显示主管公司名称与理由", async () => {
+    renderPage((url) => url.includes("/merchants")
+      ? envelope([{ id: "m-9", project_id: "p-1", merchant_name: "其他业态商户", merchant_type: "other", contact_name: "联系人九", status: "active", supervising_company_id: "org-1", supervising_company_reason: "无对应经营域，由该公司主管" }])
+      : undefined);
+    await waitFor(() => expect(screen.queryByTestId("organization-merchant-row-m-9")).not.toBeNull());
+    expect(screen.getByTestId("organization-merchant-row-m-9").textContent).toContain("平台经营主体");
+    fireEvent.click(screen.getByTestId("organization-merchant-row-m-9"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("主管公司");
+    expect(drawer.textContent).toContain("平台经营主体");
+    expect(drawer.textContent).toContain("无对应经营域，由该公司主管");
   });
 });

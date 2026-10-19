@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.support.TestSecurityActors;
@@ -66,6 +68,8 @@ class SettlementMonthlyJobPostingTests {
 
     @BeforeEach
     void setUp() {
+        // FS-021：过账到期日按财务指定付账日推算，缺规则/日历即拒绝——种已批钱路规则与工作日历。
+        com.complex.platform.support.InternalPayDayFixtures.seed(jdbcTemplate);
         // 🔴 P1(2026-07-21):【故意不再注入登录主体】——生产调度线程(SettlementMonthlyJob.scheduledSettle)
         //   跑在无主体上下文,过账走 FinanceService.createArApItem(@GuardedAction)靠 currentActor() 必抛 UNAUTHENTICATED。
         //   旧测试在此 setUp 注入 asPlatformAdmin() 掩盖了该生产缺陷(测试绿、生产必挂)。现去掉注入=让测试真实复现调度线程无主体,

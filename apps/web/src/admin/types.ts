@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.06
 export type AdminUser = {
   id: string;
   username: string;
@@ -1005,6 +1005,8 @@ export type DividendStatementRow = {
   arrearsOffsetCent?: number;
   reserveWithheldCent?: number;
   payoutCent?: number;
+  // FS-014 财务登记的依法可分配金额快照（未登记为空；正式单须先登记才可提交审阅）。
+  legalDistributableCent?: number | null;
 };
 
 export type DividendStatementLineRow = {
@@ -1152,6 +1154,9 @@ export type MerchantAdmissionRow = {
   // V259 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。
   archivedAt?: string | null;
   deleteStatus?: string;
+  // FS-024：业态为其他时的主管公司与指定理由（后端 supervising_company_id / supervising_company_reason）。
+  supervisingCompanyId?: string | null;
+  supervisingCompanyReason?: string | null;
 };
 
 export type SubjectBindingRow = {

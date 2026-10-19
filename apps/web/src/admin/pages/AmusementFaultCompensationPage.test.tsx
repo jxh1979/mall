@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,11 @@ const PENDING = [{ id: "b-1", fault_id: "f-1", project_id: "prj-1", status: "pen
 // TK18-R2-COMP（2026-10-18 操作员裁决补充第 3 条）：场次提前结束时已入场客人的补偿批次由系统生成（无发起岗位），
 // 发放前须游乐公司负责人与工程或安全岗位共同确认，沿用同一确认入口。
 const SESSION_BATCHES = [{ id: "sb-1", event_type: "session_early_end", ending_id: "end-1", session_id: "ses-9", project_id: "prj-1", status: "pending_confirmation", reason: "场次提前结束：设备临时停机", bearer_company_id: "be_amusement", validity_days: 365, window_from: "2026-10-17T20:00:00Z", window_to: "2026-10-17T22:00:00Z", item_count: 1, extend_count: 0, reissue_count: 1 }];
+// FS-012-R4（ENUM L148「发放记录须明确该公司的具体法律主体」）：承担主体从主体主数据选择，只列在用主体。
+const ENTITIES = [
+  { id: "be_amusement", entity_name: "游乐公司", status: "active" },
+  { id: "be_closed", entity_name: "已注销公司", status: "inactive" },
+];
 const ITEMS = [
   { id: "i-1", entitlement_id: "ent-a", parent_ticket_id: "tkt-1", slot_index: 1, customer_id: "cus-1", kind: "full_reissue", share_count: 1, original_session_id: "ses-1", status: "pending", compensation_entitlement_ids: [] },
   { id: "i-2", entitlement_id: "ent-b", parent_ticket_id: "tkt-1", slot_index: 2, customer_id: "cus-1", kind: "extend", share_count: 1, status: "pending", compensation_entitlement_ids: [] },
@@ -28,6 +33,7 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 function stubFetch(batches: unknown[], sessionBatches: unknown[] = []) {
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("/api/v1/platform/business-entities")) return Promise.resolve(listEnvelope(ENTITIES));
     if (url.includes("/compensation-policies/") && init?.method === "POST") return Promise.resolve(dataEnvelope({ project_id: "prj-1", validity_days: 400, min_days: 30, max_days: 730 }));
     if (url.includes("/compensation-policies/")) return Promise.resolve(dataEnvelope(POLICY));
     if (url.includes("/compensation-batches/") && url.endsWith("/confirm")) return Promise.resolve(dataEnvelope({ id: "b-1", status: "issued" }));
@@ -74,20 +80,23 @@ describe("AmusementFaultCompensationPage 全园故障补偿（CG-08b，ENUM「�
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ 确认岗位: "工程或安全岗位" })));
   });
 
-  it("无待确认批次：发起须填原因与承担主体，提交后按故障事件调后端", async () => {
+  it("无待确认批次：发起须填原因并从主体列表选择承担主体（只列在用主体），提交主体编号", async () => {
     const fetchMock = stubFetch([]);
     renderPage();
-    await waitFor(() => expect(screen.getByTestId("compensation-initiate")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("compensation-bearer").tagName).toBe("SELECT"));
+    const bearer = screen.getByTestId("compensation-bearer");
+    await waitFor(() => expect(within(bearer).getAllByRole("option").map((o) => o.textContent)).toContain("游乐公司"));
+    expect(within(bearer).getAllByRole("option").map((o) => o.textContent)).not.toContain("已注销公司");
     fireEvent.click(screen.getByTestId("compensation-initiate"));
     expect(screen.getByTestId("compensation-error").textContent).toContain("承担主体");
     fireEvent.change(screen.getByTestId("compensation-reason"), { target: { value: "供电故障补偿" } });
-    fireEvent.change(screen.getByTestId("compensation-bearer"), { target: { value: "ent-amu" } });
+    fireEvent.change(bearer, { target: { value: "be_amusement" } });
     fireEvent.click(screen.getByTestId("compensation-initiate"));
     await waitFor(() => expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/v1/amusement/park-wide-faults/f-1/compensation-batches") && (c[1] as RequestInit | undefined)?.method === "POST")).toBe(true));
-    const raw = String((fetchMock.mock.calls.find((c) => String(c[0]).includes("/f-1/compensation-batches") && (c[1] as RequestInit | undefined)?.method === "POST")?.[1] as RequestInit | undefined)?.body ?? "");
-    expect(raw).toContain("ent-amu");
-    expect(raw).toContain("供电故障补偿");
-    expect(raw).toContain("amusement_head");
+    const body = bodyOf(fetchMock, (url, init) => url.includes("/f-1/compensation-batches") && init?.method === "POST");
+    expect(body.bearer_company_id).toBe("be_amusement");
+    expect(body.reason).toBe("供电故障补偿");
+    expect(body.role).toBe("amusement_head");
   });
 
   it("补偿有效期只接受1至3650内整数，不向服务端提交越界上限", async () => {

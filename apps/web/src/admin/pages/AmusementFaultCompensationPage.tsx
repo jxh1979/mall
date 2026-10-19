@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -27,6 +27,8 @@ type ItemRow = {
   fulfilledAt?: string | null; fulfilledSettlementPriceCent?: number | null;
 };
 type PolicyRow = { projectId?: string; validityDays?: number; minDays?: number; maxDays?: number };
+// FS-012-R4（ENUM L148「发放记录须明确该公司的具体法律主体」）：承担主体从主体主数据选择，只列在用主体。
+type EntityRow = { id: string; entityName?: string; status?: string };
 
 const ROLE_HEAD = "amusement_head";
 const ROLE_ENGINEERING_SAFETY = "engineering_safety";
@@ -59,6 +61,7 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
   const canAct = canHead || canEngineering;
   const [faults, setFaults] = React.useState<FaultRow[]>([]);
   const [sessionBatches, setSessionBatches] = React.useState<BatchRow[]>([]);
+  const [entities, setEntities] = React.useState<EntityRow[]>([]);
   const [faultId, setFaultId] = React.useState("");
   const faultIdRef = React.useRef("");
   const [batches, setBatches] = React.useState<BatchRow[]>([]);
@@ -82,10 +85,12 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [faultList, sessionList] = await Promise.all([
+      const [faultList, sessionList, entityList] = await Promise.all([
         api.get<FaultRow[]>("/api/v1/amusement/park-wide-faults"),
         api.get<BatchRow[]>("/api/v1/amusement/compensation-batches?event_type=session_early_end"),
+        api.get<EntityRow[]>("/api/v1/platform/business-entities").catch(() => [] as EntityRow[]),
       ]);
+      setEntities((Array.isArray(entityList) ? entityList : []).filter((e) => e.status === "active"));
       const list = (Array.isArray(faultList) ? faultList : []).filter((f) => f.status !== "pending_activation");
       const sessions = Array.isArray(sessionList) ? sessionList : [];
       setFaults(list);
@@ -185,7 +190,12 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
       </div>
       <div className="admin-form-row" data-testid="compensation-editor">
         <label>发放原因<input aria-label="发放原因" data-testid="compensation-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
-        <label>承担主体（域主管公司法律主体）<input aria-label="承担主体" data-testid="compensation-bearer" value={bearer} onChange={(event) => setBearer(event.target.value)} /></label>
+        <label>承担主体（域主管公司法律主体）
+          <select aria-label="承担主体" data-testid="compensation-bearer" value={bearer} onChange={(event) => setBearer(event.target.value)}>
+            <option value="">请选择法律主体</option>
+            {entities.map((e) => <option key={e.id} value={e.id}>{e.entityName ?? e.id}</option>)}
+          </select>
+        </label>
         <label>确认说明<input aria-label="确认说明" data-testid="compensation-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
         {pendingBatch ? (
           <button type="button" data-testid="compensation-confirm" disabled={submitting || !canAct} onClick={() => confirm(pendingBatch)}>{pendingBatch.initiatedRole ? "第二岗位确认并发放" : "岗位确认（两岗位先后确认后发放）"}</button>

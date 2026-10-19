@@ -1,7 +1,8 @@
-// 文件版本：V0.06
+// 文件版本：V0.09
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
+import { FinanceInternalPayablePanel, INTERNAL_PAYABLE_ROUTES } from "./FinanceInternalPayablePanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -36,6 +37,10 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   purchase_inbound: "采购入库", purchase_prepayment: "采购预付款", purchase_consignment: "寄售结算",
   purchase_return_refund: "供应商退货退款", purchase_prepayment_refund: "采购未用预付款退款",
   deposit_adjustment: "变更押金补退差额",   // HP-C03：面积/位置变更子合同押金补缴应收／退还应付
+  compensation_fulfillment: "补偿新增履约结算",   // FS-012：补偿批次承担主体对实际提供方的补偿应付
+  compensation_fulfillment_recovery: "补偿应付已付追收",   // 裁决 2026-10-19 第二轮第 5 条：已付部分在核销撤销后对提供方的追收应收
+  single_bar_service_fee: "单店门票综合服务费",   // FS-013：按计费月汇总后单独挂酒吧应收；退款重算的应退同来源（应付）
+  ticket_distribution_recovery: "通票分账追收",   // FS-021-R1：负额结算明细单独挂向酒吧的追收应收，不与应付轧差
 };
 function sourceTypeLabel(v?: string): string {
   return v ? (SOURCE_TYPE_LABELS[v] ?? v) : "—";
@@ -207,6 +212,9 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
           <button type="button" data-testid="finance-export" disabled={exporting} onClick={() => void exportLedger()}>{exporting ? "导出中" : "导出台账"}</button>
         </div>
         {selected?.sourceType === "staff_payroll" ? <FinancePayrollPaymentPanel key={selected.id} api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} row={selected} onChanged={ledger.reload} /> : null}
+        {selected?.direction === "payable" && INTERNAL_PAYABLE_ROUTES.has(selected.sourceType ?? "")
+          ? <FinanceInternalPayablePanel key={selected.id} api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} row={selected} onChanged={ledger.reload} />
+          : null}
         {formError ? <div data-testid="finance-ledger-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-list-toolbar" data-testid="finance-ledger-filter">
           <input

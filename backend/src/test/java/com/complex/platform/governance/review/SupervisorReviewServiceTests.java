@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -57,7 +57,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(39); // 包括工资、绩效、酒吧分配及合同三类（HP-C01）审批。
+        assertThat(page.total()).isEqualTo(40); // 包括工资、绩效、酒吧分配、合同三类（HP-C01）及门店要货未出库取消（FS-011）审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
@@ -65,7 +65,8 @@ class SupervisorReviewServiceTests {
                         "staff.shift.publish", "staff.attendance.receipt.review", "staff.payroll.penalty_cap.adjust",
                         "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal",
                         "energy.reading_anomaly_confirm", "energy.review_settings", "amusement.business_day.configure",
-                        "inventory.purchase_request", "inventory.purchase_terminate", "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution");
+                        "inventory.purchase_request", "inventory.purchase_terminate", "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution",
+                        "inventory.transfer_order.cancel");
         assertThat(page.items())
                 .filteredOn(policy -> "contract_violation".equals(policy.actionType()))
                 .first()

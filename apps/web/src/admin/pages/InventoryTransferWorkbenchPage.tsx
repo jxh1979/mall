@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -15,9 +16,9 @@ import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
 // V277 库存跨主体流转（平台供货公司送货给商户＝调拨；商户 A 借/调给商户 B＝借调）后台工作台。
-// 后端建单/发货/收货/归还/取消 + 发货即挂应付已具备，此页补仓管与财务的可视与可点：
-// 「谁调给谁 → 调了什么多少 → 收没收到 → 这笔算多少钱 → 进没进应收应付台账」一行看全，
-// 断链（货已发、账没挂）单独立卡告警——货对不上账最容易出在这一段。
+// 后端建单/发货/收货/归还/取消已具备（FS-011 起门店要货走九态、按行签收合格后才挂应付、已出库差异经登记与财务复核处理），
+// 此页补仓管与财务的可视与可点：「谁调给谁 → 调了什么多少 → 收没收到 → 这笔算多少钱 → 进没进应收应付台账」一行看全，
+// 断链（已合格签收、账没挂）单独立卡告警——货对不上账最容易出在这一段。
 // 读权限 inventory.transfer_order.view 由路由 requiredPermissions 门控；写动作按钮用 manage 码。
 const MANAGE_PERMISSION = "inventory.transfer_order.manage";
 
@@ -48,6 +49,34 @@ type TransferOrder = {
 };
 
 type SupplyEntity = { id: string; name?: string; entityType?: string; status?: string };
+type Warehouse = { id: string; merchantId?: string; name?: string; status?: string };
+// FS-011 签收后逐行结果与差异处理（GET .../dispositions）。
+type FulfillmentLine = {
+  lineId: string;
+  itemId?: string;
+  quantity?: number;
+  unitPriceCent?: number;
+  acceptedQuantity?: number;
+  rejectedQuantity?: number;
+  shortQuantity?: number;
+  resolvedQuantity?: number;
+  unresolvedQuantity?: number;
+};
+type Disposition = {
+  id: string;
+  lineId?: string | null;
+  dispositionType?: string;
+  quantity?: number | null;
+  responsibleParty?: string | null;
+  amountCent?: number | null;
+  reason?: string;
+  status?: string;
+  requestedBy?: string;
+  reviewedBy?: string | null;
+  reviewReason?: string | null;
+  reshipOrderId?: string | null;
+};
+type Fulfillment = { payableItemId?: string | null; lines?: FulfillmentLine[]; dispositions?: Disposition[] };
 type MerchantLite = { id: string; displayName?: string; merchantName?: string; companyName?: string };
 type ItemLite = { id: string; itemName?: string; itemCode?: string; unit?: string };
 type ArApLite = {
@@ -67,7 +96,7 @@ const TEXT = {
   description:
     "平台供货公司送货给商户（调拨）、商户之间借/调（借调）的流转单在这里建单、发货、扫码收货、归还与取消；每一单的货值与应付挂账凭证同屏可查，可直接下钻应收应付台账。",
   evidence:
-    "接口证据：读取 /api/v1/inventory/transfer-orders、/api/v1/inventory/transfer-orders/{order_id}、/api/v1/inventory/supply-entities、/api/v1/inventory/items、/api/v1/platform/merchants、/api/v1/finance/ar-ap-items；写入 POST /api/v1/inventory/transfer-orders 及其 /ship、/receive、/return、/cancel。",
+    "接口证据：读取 /api/v1/inventory/transfer-orders、/api/v1/inventory/transfer-orders/{order_id}、/api/v1/inventory/transfer-orders/{order_id}/dispositions、/api/v1/inventory/supply-entities、/api/v1/inventory/items、/api/v1/inventory/warehouses、/api/v1/platform/merchants、/api/v1/finance/ar-ap-items；写入 POST /api/v1/inventory/transfer-orders 及其 /submit、/lines、/supplier-review、/pick、/ship、/deliver、/receive、/dispositions、/dispositions/{disposition_id}/review、/return、/cancel，上传 /api/v1/evidence/attachments/upload。",
   loadFailed: "跨主体流转单读取失败",
 };
 
@@ -82,8 +111,31 @@ const TRANSFER_STATUS_LABELS: Record<string, string> = {
   settled: "已结清",
   returned: "已归还",
   cancelled: "已取消",
+  // FS-011 门店要货（平台供货调拨）九态（BSM L1213、ENUM L169）。
+  draft: "草稿",
+  pending_supplier_review: "待供货主体审核",
+  pending_picking: "待拣配",
+  pending_outbound: "待出库",
+  in_delivery: "配送中",
+  pending_receipt: "待签收",
+  discrepancy: "差异处理中",
+  completed: "已完成",
 };
+/** 门店要货签收前的各态：货款在合格签收后才形成，此前没有应付是对的。 */
+const REQUISITION_BEFORE_RECEIPT = new Set(["draft", "pending_supplier_review", "pending_picking", "pending_outbound", "in_delivery", "pending_receipt"]);
+/** 门店要货签收后的两态：货款按签收形成的那笔应付（payable_item_id）对账。 */
+const REQUISITION_AFTER_RECEIPT = new Set(["discrepancy", "completed"]);
+/** 已提交、未出库：取消须经审批（BSM L1212「未出库数量可经审批取消」）。 */
+const REQUISITION_CANCEL_NEEDS_APPROVAL = new Set(["pending_supplier_review", "pending_picking", "pending_outbound"]);
 const OWNER_TYPE_LABELS: Record<string, string> = { supply_entity: "平台供货公司", merchant: "商户" };
+// 差异处理（BSM L1212「财务复核金额后办理补发、退回、货款调整或责任损失」）。
+const DISPOSITION_LABELS: Record<string, string> = { return_accepted: "退回验收", loss: "损失", reship: "补发", payment_adjustment: "货款调减" };
+const RESPONSIBLE_LABELS: Record<string, string> = { supplier: "供货主体", carrier: "配送保管方", receiver: "收货方（门店）" };
+const DISPOSITION_STATUS_LABELS: Record<string, string> = { pending_review: "待复核", approved: "已通过", rejected: "已驳回" };
+const FINANCE_REVIEW_PERMISSION = "finance.ar_ap.manage";
+type ReceiptInput = { arrived: string; accepted: string; rejected: string; codes: string };
+const EMPTY_RECEIPT_INPUT: ReceiptInput = { arrived: "", accepted: "", rejected: "", codes: "" };
+const EMPTY_DISPOSITION = { type: "return_accepted", lineId: "", quantity: "1", responsible: "supplier", amountYuan: "", codes: "", reason: "", reviewReason: "" };
 
 function label(table: Record<string, string>, code?: string | null): string {
   if (!code) return "—";
@@ -106,36 +158,47 @@ function orderQuantity(order: TransferOrder): number | null {
   return order.lines.reduce((sum, line) => sum + (line.quantity ?? 0), 0);
 }
 
-/** 借用（borrow）默认不计占用费＝不挂账；供货调拨与买断按货款挂应付（后端 recordTransferSettlementOnShip 同口径）。 */
+/** 借用（borrow）默认不计占用费＝不挂账；供货调拨与买断按货款挂应付（后端在接收方合格签收/收货后挂账）。 */
 function isBillable(order: TransferOrder): boolean {
   return order.transferType === "supply" || (order.transferType === "lending" && order.lendingMode === "purchase");
 }
 
 type PostingKind =
   | "posted" // 已挂应付，凭证可点
-  | "not_shipped" // 还没发货，按口径本就不该有账
-  | "free_of_charge" // 借用不计费 / 货值为 0 的免费供货
-  | "cancelled" // 单已取消（挂过的应付由后端冲销）
-  | "missing" // ⚠ 货已发出，账没挂上：货账断链
+  | "not_shipped" // 还没收货（借调在途、门店要货未签收），按口径本就不该有账
+  | "free_of_charge" // 借用不计费 / 货值为 0 的免费供货 / 一件都没合格接收
+  | "cancelled" // 单已取消（只有出库前能取消，本就没账）
+  | "missing" // ⚠ 已合格签收（或借调已收货），账没挂上：货账断链
   | "unknown"; // 财务台账没读到（无权限或接口降级），不下断言
 
 type Posting = { kind: PostingKind; arap?: ArApLite };
 
 const POSTING_LABELS: Record<PostingKind, string> = {
   posted: "已挂应付",
-  not_shipped: "未发货·暂不挂账",
+  not_shipped: "未收货·暂不挂账",
   free_of_charge: "不计货款",
-  cancelled: "已取消·应付已冲销",
-  missing: "⚠ 货已发·账未挂",
+  cancelled: "已取消·不挂账",
+  missing: "⚠ 已合格签收·账未挂",
   unknown: "无法核对（无财务台账查看权限）",
 };
 
-function postingOf(order: TransferOrder, arapBySource: Map<string, ArApLite> | null): Posting {
-  const arap = arapBySource?.get(order.id);
-  if (arap) return { kind: "posted", arap };
-  if (order.status === "cancelled") return { kind: "cancelled" };
-  if (order.status === "created") return { kind: "not_shipped" };
-  if (arapBySource === null) return { kind: "unknown" };
+type ArapIndex = { bySource: Map<string, ArApLite>; byId: Map<string, ArApLite> };
+
+function postingOf(order: TransferOrder, arapIndex: ArapIndex | null, fulfillment?: Fulfillment | null): Posting {
+  const legacy = arapIndex?.bySource.get(order.id);
+  if (legacy) return { kind: "posted", arap: legacy };
+  const status = order.status ?? "";
+  if (status === "cancelled") return { kind: "cancelled" };
+  // FS-011：出库、在途都不该挂账，货款在接收方合格签收（借调收货）后才形成。
+  if (status === "created" || status === "shipped" || REQUISITION_BEFORE_RECEIPT.has(status)) return { kind: "not_shipped" };
+  if (arapIndex === null) return { kind: "unknown" };
+  if (order.transferType === "supply" && REQUISITION_AFTER_RECEIPT.has(status)) {
+    if (!fulfillment) return { kind: "unknown" };
+    const posted = fulfillment.payableItemId ? arapIndex.byId.get(fulfillment.payableItemId) : undefined;
+    if (posted) return { kind: "posted", arap: posted };
+    const accepted = (fulfillment.lines ?? []).reduce((sum, line) => sum + (line.acceptedQuantity ?? 0) * (line.unitPriceCent ?? 0), 0);
+    return accepted === 0 ? { kind: "free_of_charge" } : { kind: "missing" };
+  }
   const amount = orderAmountCent(order);
   if (!isBillable(order) || amount === 0) return { kind: "free_of_charge" };
   if (amount === null) return { kind: "unknown" };
@@ -150,7 +213,7 @@ const KPI_FOCUS_TITLES: Record<KpiFocus, string> = {
   in_transit: "在途待收货",
   received: "已收货",
   posted: "已挂应付",
-  missing: "货已发·账未挂",
+  missing: "已合格签收·账未挂",
 };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
@@ -187,7 +250,10 @@ export function InventoryTransferWorkbenchPage({
   const [merchants, setMerchants] = React.useState<MerchantLite[]>([]);
   const [items, setItems] = React.useState<ItemLite[]>([]);
   // null＝财务台账没读到（无 finance.ar_ap.view 或接口降级）：此时不对“账挂没挂”下断言。
-  const [arapBySource, setArapBySource] = React.useState<Map<string, ArApLite> | null>(null);
+  const [arapIndex, setArapIndex] = React.useState<ArapIndex | null>(null);
+  // 门店要货签收后（差异处理中、已完成）的逐行结果与差异处理；读不到为 null。
+  const [fulfillments, setFulfillments] = React.useState<Map<string, Fulfillment | null>>(new Map());
+  const [warehouses, setWarehouses] = React.useState<Warehouse[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   const [formError, setFormError] = React.useState("");
@@ -195,6 +261,22 @@ export function InventoryTransferWorkbenchPage({
   const [createOpen, setCreateOpen] = React.useState(false);
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [scannedCodes, setScannedCodes] = React.useState("");
+  // FS-011：草稿改单复用建单表单；供货主体审核与未出库取消申请各一个弹窗。
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = React.useState(false);
+  const [reviewDecision, setReviewDecision] = React.useState("approved");
+  const [reviewReason, setReviewReason] = React.useState("");
+  const [cancelRequestOpen, setCancelRequestOpen] = React.useState(false);
+  const [cancelReason, setCancelReason] = React.useState("");
+  // FS-011 门店要货按行签收；差异处理登记与复核。
+  const [receiptOpen, setReceiptOpen] = React.useState(false);
+  const [receiptWarehouse, setReceiptWarehouse] = React.useState("");
+  const [receiptLocation, setReceiptLocation] = React.useState("");
+  const [receiptLines, setReceiptLines] = React.useState<Record<string, ReceiptInput>>({});
+  const [dispositionOpen, setDispositionOpen] = React.useState(false);
+  const [disposition, setDisposition] = React.useState(EMPTY_DISPOSITION);
+  const [proofs, setProofs] = React.useState<{ id: string; name: string }[]>([]);
+  const [uploading, setUploading] = React.useState(false);
   // 建单表单
   const [transferType, setTransferType] = React.useState("supply");
   const [lendingMode, setLendingMode] = React.useState("borrow");
@@ -214,7 +296,7 @@ export function InventoryTransferWorkbenchPage({
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [orderRows, entityRows, merchantRows, itemRows, arapRows] = await Promise.all([
+      const [orderRows, entityRows, merchantRows, itemRows, arapRows, warehouseRows] = await Promise.all([
         api.get<TransferOrder[]>("/api/v1/inventory/transfer-orders"),
         api.get<SupplyEntity[]>("/api/v1/inventory/supply-entities").catch(() => [] as SupplyEntity[]),
         api.get<MerchantLite[]>("/api/v1/platform/merchants").catch(() => [] as MerchantLite[]),
@@ -224,6 +306,8 @@ export function InventoryTransferWorkbenchPage({
         api
           .get<ArApLite[]>("/api/v1/finance/ar-ap-items?keyword=inventory_transfer&size=200")
           .catch(() => null),
+        // 签收选仓用；无库房权限时为空，签收弹窗改为手填仓库编号。
+        api.get<Warehouse[]>("/api/v1/inventory/warehouses").catch(() => [] as Warehouse[]),
       ]);
       // ponytail: 逐单取明细（列表接口不带 lines），开发库 14 单可接受；
       // 单量上百需后端 list 直接带 lines 或加一个货值汇总端点，别在前端 N+1。
@@ -232,18 +316,32 @@ export function InventoryTransferWorkbenchPage({
           api.get<TransferOrder>(`/api/v1/inventory/transfer-orders/${order.id}`).catch(() => order),
         ),
       );
+      // FS-011：门店要货的应付挂在签收（及差异处理）上，按签收结果里的 payable_item_id 对账。
+      const fulfillmentRows = await Promise.all(
+        withLines
+          .filter((order) => order.transferType === "supply" && REQUISITION_AFTER_RECEIPT.has(order.status ?? ""))
+          .map(async (order) => [
+            order.id,
+            await api.get<Fulfillment>(`/api/v1/inventory/transfer-orders/${order.id}/dispositions`).catch(() => null),
+          ] as const),
+      );
       setOrders(withLines);
       setSupplyEntities(entityRows);
       setMerchants(merchantRows);
       setItems(itemRows);
-      setArapBySource(
+      setWarehouses(warehouseRows);
+      setFulfillments(new Map(fulfillmentRows));
+      setArapIndex(
         arapRows === null
           ? null
-          : new Map(
-              arapRows
-                .filter((row) => row.sourceType === "inventory_transfer" && row.sourceId)
-                .map((row) => [row.sourceId as string, row]),
-            ),
+          : {
+              bySource: new Map(
+                arapRows
+                  .filter((row) => row.sourceType === "inventory_transfer" && row.sourceId)
+                  .map((row) => [row.sourceId as string, row]),
+              ),
+              byId: new Map(arapRows.map((row) => [row.id, row])),
+            },
       );
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
@@ -279,8 +377,8 @@ export function InventoryTransferWorkbenchPage({
   );
 
   const postings = React.useMemo(
-    () => new Map(orders.map((order) => [order.id, postingOf(order, arapBySource)])),
-    [orders, arapBySource],
+    () => new Map(orders.map((order) => [order.id, postingOf(order, arapIndex, fulfillments.get(order.id))])),
+    [orders, arapIndex, fulfillments],
   );
 
   const visibleOrders = React.useMemo(() => {
@@ -341,6 +439,10 @@ export function InventoryTransferWorkbenchPage({
       setActionResult({ action, path, result });
       setReceiveOpen(false);
       setCreateOpen(false);
+      setReviewOpen(false);
+      setCancelRequestOpen(false);
+      setReceiptOpen(false);
+      setDispositionOpen(false);
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : `${actionName}失败`;
@@ -353,9 +455,9 @@ export function InventoryTransferWorkbenchPage({
   }
 
   function createValidation(): string | null {
-    if (!fromOwnerId) return "请选择出让方。";
-    if (!toOwnerId) return "请选择接收方（商户）。";
-    if (transferType === "lending" && fromOwnerId === toOwnerId) return "借调的出让方与接收方不能是同一个商户。";
+    if (!editingId && !fromOwnerId) return "请选择出让方。";
+    if (!editingId && !toOwnerId) return "请选择接收方（商户）。";
+    if (!editingId && transferType === "lending" && fromOwnerId === toOwnerId) return "借调的出让方与接收方不能是同一个商户。";
     if (!itemId) return "请选择物料。";
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) return "数量必须大于 0。";
@@ -364,7 +466,32 @@ export function InventoryTransferWorkbenchPage({
     return null;
   }
 
+  function formLine() {
+    return {
+      itemId,
+      quantity: Number(quantity),
+      unitPriceCent: Math.round(Number(unitPriceYuan) * 100),
+      traceCodes: splitCodes(traceCodes),
+    };
+  }
+
+  function openEdit() {
+    const line = selected?.lines?.[0];
+    if (!selected || !line) return;
+    setFormError("");
+    setItemId(line.itemId ?? "");
+    setQuantity(String(line.quantity ?? 1));
+    setUnitPriceYuan(String((line.unitPriceCent ?? 0) / 100));
+    setTraceCodes((line.traceCodes ?? []).join(" "));
+    setEditingId(selected.id);
+    setCreateOpen(true);
+  }
+
   function submitCreate() {
+    if (editingId) {
+      void runAction("inventory_transfer_order_draft_edited", `/api/v1/inventory/transfer-orders/${editingId}/lines`, { lines: [formLine()] }, "改单");
+      return;
+    }
     void runAction(
       "inventory_transfer_order_created",
       "/api/v1/inventory/transfer-orders",
@@ -376,14 +503,7 @@ export function InventoryTransferWorkbenchPage({
         toOwnerType: "merchant",
         toOwnerId,
         operatorNote: operatorNote || null,
-        lines: [
-          {
-            itemId,
-            quantity: Number(quantity),
-            unitPriceCent: Math.round(Number(unitPriceYuan) * 100),
-            traceCodes: splitCodes(traceCodes),
-          },
-        ],
+        lines: [formLine()],
       },
       "建单",
     );
@@ -400,6 +520,145 @@ export function InventoryTransferWorkbenchPage({
       return `已录入 ${new Set(scanned).size} 个溯源码，与本单应扫的 ${selectedCodes.length} 个不一致，请核对实物后重扫。`;
     }
     return null;
+  }
+
+  const storeWarehouses = warehouses.filter((row) => row.merchantId === selected?.toOwnerId && (row.status ?? "active") === "active");
+  const selectedFulfillment = selected ? fulfillments.get(selected.id) : undefined;
+
+  /** 门店要货待签收走按行签收；借调仍扫码收货。 */
+  function openReceive() {
+    setFormError("");
+    if (selected?.status !== "pending_receipt") {
+      setScannedCodes("");
+      setReceiveOpen(true);
+      return;
+    }
+    setReceiptWarehouse(storeWarehouses[0]?.id ?? "");
+    setReceiptLocation(selected.toLocationId ?? "");
+    setReceiptLines(Object.fromEntries((selected.lines ?? []).map((line) => [
+      line.id,
+      { arrived: String(line.quantity ?? 0), accepted: String(line.quantity ?? 0), rejected: "0", codes: "" },
+    ])));
+    setReceiptOpen(true);
+  }
+
+  function setReceiptField(lineId: string, key: keyof ReceiptInput, value: string) {
+    setReceiptLines((current) => ({ ...current, [lineId]: { ...(current[lineId] ?? EMPTY_RECEIPT_INPUT), [key]: value } }));
+  }
+
+  // BSM L1212「签收分别记录实收、合格接收、拒收和短少数量」：实收＝合格＋拒收，不超过发货；短少＝发货－实收由后端算出。
+  function receiptValidation(): string | null {
+    if (!receiptWarehouse.trim()) return "请选择收货仓库。";
+    if (!receiptLocation.trim()) return "请填写收货库位。";
+    for (const line of selected?.lines ?? []) {
+      const input = receiptLines[line.id] ?? EMPTY_RECEIPT_INPUT;
+      const arrived = Number(input.arrived);
+      const accepted = Number(input.accepted);
+      const rejected = Number(input.rejected);
+      if (![input.arrived, input.accepted, input.rejected].every((raw) => raw.trim() !== "" && Number.isInteger(Number(raw)) && Number(raw) >= 0)) {
+        return `${itemName(line.itemId)}：实收、合格接收、拒收须为不小于 0 的整数。`;
+      }
+      if (accepted + rejected !== arrived) return `${itemName(line.itemId)}：实收须等于合格接收加拒收。`;
+      if (arrived > (line.quantity ?? 0)) return `${itemName(line.itemId)}：实收不能超过发货数量 ${line.quantity ?? 0}。`;
+      if ((line.traceCodes ?? []).length > 0 && new Set(splitCodes(input.codes)).size !== accepted) {
+        return `${itemName(line.itemId)}：合格接收 ${accepted} 件须逐件扫码录入溯源码。`;
+      }
+    }
+    return null;
+  }
+
+  function submitReceipt() {
+    void runAction("inventory_transfer_order_received", orderPath("receive"), {
+      warehouseId: receiptWarehouse.trim(),
+      locationId: receiptLocation.trim(),
+      lines: (selected?.lines ?? []).map((line) => {
+        const input = receiptLines[line.id] ?? EMPTY_RECEIPT_INPUT;
+        return {
+          lineId: line.id,
+          arrivedQuantity: Number(input.arrived),
+          acceptedQuantity: Number(input.accepted),
+          rejectedQuantity: Number(input.rejected),
+          acceptedTraceCodes: splitCodes(input.codes),
+        };
+      }),
+    }, "签收");
+  }
+
+  function openDisposition() {
+    setFormError("");
+    setProofs([]);
+    setDisposition({ ...EMPTY_DISPOSITION, lineId: selectedFulfillment?.lines?.[0]?.lineId ?? "" });
+    setDispositionOpen(true);
+  }
+
+  function setDispositionField(key: keyof typeof EMPTY_DISPOSITION) {
+    return (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const value = event.target.value;
+      setDisposition((current) => ({ ...current, [key]: value }));
+    };
+  }
+
+  // BSM L1212「供货、配送保管和收货方按交接证据确认差异」：证据先上传并绑定本要货单。
+  async function uploadProofs(files: FileList | null) {
+    if (!files?.length || !selected) return;
+    if (!api.postForm) {
+      setFormError("当前环境不支持上传交接证据。");
+      return;
+    }
+    setUploading(true);
+    setFormError("");
+    try {
+      for (const file of Array.from(files)) {
+        const data = new FormData();
+        data.append("file", file);
+        data.append("business_type", "inventory_transfer_order");
+        data.append("business_id", selected.id);
+        data.append("attachment_role", "other");
+        const result = await api.postForm<{ id: string }>("/api/v1/evidence/attachments/upload", data);
+        setProofs((current) => [...current, { id: result.id, name: file.name }]);
+      }
+    } catch (uploadError) {
+      setFormError(uploadError instanceof Error ? uploadError.message : "交接证据上传失败，已上传的文件已保留");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function dispositionValidation(): string | null {
+    if (disposition.type === "payment_adjustment") {
+      const amount = Number(disposition.amountYuan);
+      if (!Number.isFinite(amount) || amount <= 0) return "请填写大于 0 的调减金额。";
+    } else {
+      if (!disposition.lineId) return "请选择明细。";
+      const quantityValue = Number(disposition.quantity);
+      if (!Number.isInteger(quantityValue) || quantityValue <= 0) return "处理数量须为大于 0 的整数。";
+    }
+    if (!disposition.reason.trim()) return "请写明差异原因与处理依据。";
+    if (proofs.length === 0) return "须上传交接证据（交接单、照片等）后再登记。";
+    return null;
+  }
+
+  function submitDisposition() {
+    const body: Record<string, unknown> = { dispositionType: disposition.type };
+    if (disposition.type === "payment_adjustment") {
+      body.amountCent = Math.round(Number(disposition.amountYuan) * 100);
+    } else {
+      body.lineId = disposition.lineId;
+      body.quantity = Number(disposition.quantity);
+    }
+    if (disposition.type === "loss") body.responsibleParty = disposition.responsible;
+    if (disposition.type === "reship") body.traceCodes = splitCodes(disposition.codes);
+    body.reason = disposition.reason.trim();
+    body.evidenceAttachmentIds = proofs.map((proof) => proof.id);
+    void runAction("inventory_transfer_disposition_registered", orderPath("dispositions"), body, "登记差异处理");
+  }
+
+  function reviewDisposition(id: string, decision: "approved" | "rejected") {
+    if (!disposition.reviewReason.trim()) {
+      setFormError("请写明复核意见。");
+      return;
+    }
+    void runAction("inventory_transfer_disposition_reviewed", orderPath(`dispositions/${id}/review`), { decision, reason: disposition.reviewReason.trim() }, "复核");
   }
 
   function openDetail(order: TransferOrder) {
@@ -446,21 +705,29 @@ export function InventoryTransferWorkbenchPage({
           </TraceLink>
         ),
       });
-      // 单据已取消时后端会把这笔应付冲销（金额留痕、凭证状态改 cancelled），凭证状态必须同屏，
-      // 否则「已挂应付 + 一个凭证号」会被读成钱还欠着。
+      // 凭证状态与已付/未付必须同屏：付款是否结清另行显示（BSM L1212），不并入单据状态。
       fields.push({ label: "凭证状态", value: formatBusinessStatus(posting.arap.status) });
       fields.push({ label: "挂账金额", value: yuan(posting.arap.amountCent) });
       fields.push({ label: "已付 / 未付", value: `${yuan(posting.arap.paidAmountCent)} / ${yuan(posting.arap.unpaidAmountCent)}` });
-      fields.push({ label: "发货挂账时间", value: cnDate(posting.arap.createdAt) });
+      fields.push({ label: "挂账时间", value: cnDate(posting.arap.createdAt) });
     }
     setDetail({ title: `流转单明细 · ${order.id}`, fields });
   }
 
   const selectedPosting = selected ? postings.get(selected.id) : undefined;
-  const canShip = selected?.status === "created";
-  const canReceive = selected?.status === "shipped";
+  const isRequisition = selected?.transferType === "supply";
+  const canSubmit = isRequisition && selected?.status === "draft";
+  const canReview = isRequisition && selected?.status === "pending_supplier_review";
+  const canPick = isRequisition && selected?.status === "pending_picking";
+  const canShip = isRequisition ? selected?.status === "pending_outbound" : selected?.status === "created";
+  const canDeliver = isRequisition && selected?.status === "in_delivery";
+  const canReceive = selected?.status === "shipped" || (isRequisition && selected?.status === "pending_receipt");
   const canReturn = selected?.status === "received" && selected.transferType === "lending" && selected.lendingMode === "borrow";
-  const canCancel = selected?.status === "created" || selected?.status === "shipped";
+  // BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库」：只有出库前能直接取消。
+  const canCancel = ["created", "draft"].includes(selected?.status ?? "");
+  const canDispose = isRequisition && selected?.status === "discrepancy" && Boolean(selectedFulfillment);
+  const canRequestCancel = isRequisition && REQUISITION_CANCEL_NEEDS_APPROVAL.has(selected?.status ?? "");
+  const orderPath = (action: string) => `/api/v1/inventory/transfer-orders/${selected?.id}/${action}`;
 
   return (
     <section data-testid="inventory-transfer-page">
@@ -468,7 +735,7 @@ export function InventoryTransferWorkbenchPage({
       <TechDetails>
         <div className="admin-generic-evidence" data-testid="inventory-transfer-evidence">{TEXT.evidence}</div>
       </TechDetails>
-      <AuditTrailHint event="inventory.transfer_order_created / inventory.transfer_order_shipped / inventory.transfer_order_received / inventory.transfer_order_returned / inventory.transfer_order_cancelled" />
+      <AuditTrailHint event="inventory.transfer_order_created / inventory.transfer_order_submitted / inventory.transfer_order_supplier_reviewed / inventory.transfer_order_picked / inventory.transfer_order_shipped / inventory.transfer_order_delivered / inventory.transfer_order_received / inventory.transfer_disposition_registered / inventory.transfer_disposition_reviewed / inventory.transfer_order_returned / inventory.transfer_order_cancelled" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="inventory-transfer-kpi-focus-banner">
@@ -495,12 +762,12 @@ export function InventoryTransferWorkbenchPage({
             <div className="admin-kpi-card admin-kpi-card--clickable">
               <span>已挂应付金额</span>
               <button type="button" className="admin-kpi-value" data-testid="inventory-transfer-kpi-posted" onClick={() => enterKpiFocus("posted")}>{yuan(counts.postedCent)}</button>
-              <small>{arapBySource === null ? "无财务台账查看权限，未核对" : `${counts.postedCount} 笔已进应收应付台账`}</small>
+              <small>{arapIndex === null ? "无财务台账查看权限，未核对" : `${counts.postedCount} 笔已进应收应付台账`}</small>
             </div>
             <div className="admin-kpi-card admin-kpi-card--clickable">
-              <span>货已发·账未挂</span>
+              <span>已合格签收·账未挂</span>
               <button type="button" className="admin-kpi-value" data-testid="inventory-transfer-kpi-missing" onClick={() => enterKpiFocus("missing")}>{counts.missing}</button>
-              <small>该收钱却没挂应付，需财务核实</small>
+              <small>已合格签收（或借调已收货）却没挂应付，需财务核实</small>
             </div>
           </div>
         )}
@@ -510,13 +777,49 @@ export function InventoryTransferWorkbenchPage({
             permissionsState={effectivePermissions}
             permissions={[MANAGE_PERMISSION]}
             data-testid="inventory-transfer-create-open"
-            onClick={() => { setFormError(""); setCreateOpen(true); }}
+            onClick={() => { setFormError(""); setEditingId(null); setCreateOpen(true); }}
           >
             ＋ 新建流转单
           </PermissionButton>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
+            disabled={!canSubmit}
+            data-testid="inventory-transfer-edit-open"
+            onClick={openEdit}
+          >
+            修改草稿
+          </PermissionButton>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
+            disabled={submitting || !canSubmit}
+            data-testid="inventory-transfer-submit"
+            onClick={() => void runAction("inventory_transfer_order_submitted", orderPath("submit"), undefined, "提交")}
+          >
+            提交供货主体审核
+          </PermissionButton>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
+            disabled={!canReview}
+            data-testid="inventory-transfer-review-open"
+            onClick={() => { setFormError(""); setReviewDecision("approved"); setReviewReason(""); setReviewOpen(true); }}
+          >
+            供货主体审核
+          </PermissionButton>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
+            disabled={submitting || !canPick}
+            data-testid="inventory-transfer-pick"
+            onClick={() => void runAction("inventory_transfer_order_picked", orderPath("pick"), undefined, "拣配")}
+          >
+            拣配完成
+          </PermissionButton>
           <HighRiskConfirm
             label="发货"
-            impact="发货即按货款在应收应付台账挂出接收方应付出让方的款项（借用型不计费不挂账），并把单据推进到在途待收货。"
+            impact="货物出库，单据进入配送中（门店要货须先经供货主体审核和拣配）；货款在接收方签收合格后才挂应付，借用型不计费不挂账。"
             disabled={submitting || !canShip}
             permissionsState={effectivePermissions}
             permissions={[MANAGE_PERMISSION]}
@@ -526,11 +829,29 @@ export function InventoryTransferWorkbenchPage({
           <PermissionButton
             permissionsState={effectivePermissions}
             permissions={[MANAGE_PERMISSION]}
+            disabled={submitting || !canDeliver}
+            data-testid="inventory-transfer-deliver"
+            onClick={() => void runAction("inventory_transfer_order_delivered", orderPath("deliver"), undefined, "送达")}
+          >
+            送达待签收
+          </PermissionButton>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
             disabled={!canReceive}
             data-testid="inventory-transfer-receive-open"
-            onClick={() => { setFormError(""); setScannedCodes(""); setReceiveOpen(true); }}
+            onClick={openReceive}
           >
-            扫码收货
+            收货 / 签收
+          </PermissionButton>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
+            disabled={!canDispose}
+            data-testid="inventory-transfer-disposition-open"
+            onClick={openDisposition}
+          >
+            差异处理
           </PermissionButton>
           <HighRiskConfirm
             label="归还"
@@ -543,13 +864,22 @@ export function InventoryTransferWorkbenchPage({
           />
           <HighRiskConfirm
             label="取消单据"
-            impact="取消未收货的流转单；若已发货并挂了应付，会同步冲销该笔应付（已有收款的必须先退款才能取消）。"
+            impact="取消草稿或未发货的借调单；已提交未出库的门店要货单须走「申请取消」审批；已出库的不能直接取消，须经差异处理实际退回验收或复核完成损失处理。"
             disabled={submitting || !canCancel}
             permissionsState={effectivePermissions}
             permissions={[MANAGE_PERMISSION]}
             data-testid="inventory-transfer-cancel"
             onConfirm={() => selected && void runAction("inventory_transfer_order_cancelled", `/api/v1/inventory/transfer-orders/${selected.id}/cancel`, undefined, "取消")}
           />
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
+            disabled={!canRequestCancel}
+            data-testid="inventory-transfer-cancel-request-open"
+            onClick={() => { setFormError(""); setCancelReason(""); setCancelRequestOpen(true); }}
+          >
+            申请取消（须审批）
+          </PermissionButton>
           <span className="admin-muted-action" data-testid="inventory-transfer-hint">
             {selected
               ? `已选中 ${selected.id}（${label(TRANSFER_STATUS_LABELS, selected.status)}·${POSTING_LABELS[selectedPosting?.kind ?? "unknown"]}）`
@@ -560,17 +890,21 @@ export function InventoryTransferWorkbenchPage({
 
         <FormModal
           open={createOpen}
-          title="新建跨主体流转单"
-          description="平台供货公司送货给商户选「平台供货调拨」；商户之间的货选「商户间借调」，并区分借用（约定归还）还是买断。一张单先录一条明细，发货后按货款挂应付。"
+          title={editingId ? "修改要货草稿" : "新建跨主体流转单"}
+          description={editingId
+            ? "供货主体退回或尚未提交的要货草稿，改好后再提交供货主体审核。"
+            : "平台供货公司送货给门店选「平台供货调拨」（门店要货，建单为草稿，提交后经供货主体审核、拣配、出库、配送、签收）；商户之间的货选「商户间借调」，并区分借用（约定归还）还是买断。一张单先录一条明细，签收后按货款挂应付。"}
           testId="inventory-transfer-create"
           submitTestId="inventory-transfer-create-submit"
-          submitLabel="建单"
+          submitLabel={editingId ? "保存草稿" : "建单"}
           submitting={submitting}
           error={formError || undefined}
           validate={createValidation}
           onClose={() => setCreateOpen(false)}
           onSubmit={submitCreate}
         >
+          {editingId ? null : (
+          <>
           <label>流转类型
             <select data-testid="inventory-transfer-create-type" value={transferType} onChange={(event) => { setTransferType(event.target.value); setFromOwnerId(""); }}>
               <option value="supply">平台供货调拨（平台供货公司 → 商户）</option>
@@ -600,6 +934,8 @@ export function InventoryTransferWorkbenchPage({
               {merchants.map((row) => <option key={row.id} value={row.id}>{merchantName(row.id)}</option>)}
             </select>
           </label>
+          </>
+          )}
           <label>物料
             <select data-testid="inventory-transfer-create-item" value={itemId} onChange={(event) => setItemId(event.target.value)}>
               <option value="">请选择</option>
@@ -637,6 +973,168 @@ export function InventoryTransferWorkbenchPage({
           <label>扫描到的溯源码（多个用空格或逗号分隔）
             <input data-testid="inventory-transfer-receive-codes" value={scannedCodes} onChange={(event) => setScannedCodes(event.target.value)} />
           </label>
+        </FormModal>
+
+        <FormModal
+          open={receiptOpen}
+          title="门店要货签收"
+          description="逐行登记实收、合格接收、拒收；短少＝发货－实收。合格部分转入本门店货权与库存，并按锁定内部结算价形成货款；拒收与短少的件签收后经差异处理退回验收或复核损失。"
+          testId="inventory-transfer-receipt"
+          submitTestId="inventory-transfer-receipt-submit"
+          submitLabel="确认签收"
+          submitting={submitting}
+          error={formError || undefined}
+          validate={receiptValidation}
+          onClose={() => setReceiptOpen(false)}
+          onSubmit={submitReceipt}
+        >
+          <label>收货仓库
+            {storeWarehouses.length > 0 ? (
+              <select data-testid="inventory-transfer-receipt-warehouse" value={receiptWarehouse} onChange={(event) => setReceiptWarehouse(event.target.value)}>
+                {storeWarehouses.map((row) => <option key={row.id} value={row.id}>{row.name ?? row.id}</option>)}
+              </select>
+            ) : (
+              <input data-testid="inventory-transfer-receipt-warehouse" placeholder="本门店仓库编号" value={receiptWarehouse} onChange={(event) => setReceiptWarehouse(event.target.value)} />
+            )}
+          </label>
+          <label>收货库位<input data-testid="inventory-transfer-receipt-location" value={receiptLocation} onChange={(event) => setReceiptLocation(event.target.value)} /></label>
+          {(selected?.lines ?? []).map((line) => {
+            const input = receiptLines[line.id] ?? EMPTY_RECEIPT_INPUT;
+            return (
+              <fieldset key={line.id} data-testid={`inventory-transfer-receipt-line-${line.id}`}>
+                <legend>{itemName(line.itemId)} · 发货 {line.quantity ?? 0}</legend>
+                <label>实收<input data-testid={`inventory-transfer-receipt-arrived-${line.id}`} type="number" min="0" value={input.arrived} onChange={(event) => setReceiptField(line.id, "arrived", event.target.value)} /></label>
+                <label>合格接收<input data-testid={`inventory-transfer-receipt-accepted-${line.id}`} type="number" min="0" value={input.accepted} onChange={(event) => setReceiptField(line.id, "accepted", event.target.value)} /></label>
+                <label>拒收<input data-testid={`inventory-transfer-receipt-rejected-${line.id}`} type="number" min="0" value={input.rejected} onChange={(event) => setReceiptField(line.id, "rejected", event.target.value)} /></label>
+                <span>短少 <b data-testid={`inventory-transfer-receipt-short-${line.id}`}>{Math.max(0, (line.quantity ?? 0) - (Number(input.arrived) || 0))}</b></span>
+                {(line.traceCodes ?? []).length > 0 ? (
+                  <label>合格件溯源码（逐件扫码，空格或逗号分隔）
+                    <input data-testid={`inventory-transfer-receipt-codes-${line.id}`} value={input.codes} onChange={(event) => setReceiptField(line.id, "codes", event.target.value)} />
+                  </label>
+                ) : null}
+              </fieldset>
+            );
+          })}
+        </FormModal>
+
+        <FormModal
+          open={dispositionOpen}
+          title="差异处理"
+          description="拒收与短少的每一件须经退回验收或复核损失有了结果，要货单才完成；补发另开关联要货单照常出库签收；货款调减按原账冲正重述、不改原账。每项登记须附交接证据，由财务复核（登记人不能自审）后生效。"
+          testId="inventory-transfer-disposition"
+          submitTestId="inventory-transfer-disposition-submit"
+          submitLabel="登记，提交财务复核"
+          submitting={submitting || uploading}
+          error={formError || undefined}
+          validate={dispositionValidation}
+          onClose={() => setDispositionOpen(false)}
+          onSubmit={submitDisposition}
+        >
+          <table className="admin-table" data-testid="inventory-transfer-disposition-lines">
+            <thead><tr><th>物料</th><th>发货</th><th>合格</th><th>拒收</th><th>短少</th><th>已有结果</th><th>待处理</th></tr></thead>
+            <tbody>
+              {(selectedFulfillment?.lines ?? []).map((line) => (
+                <tr key={line.lineId}>
+                  <td>{itemName(line.itemId)}</td>
+                  <td>{line.quantity ?? 0}</td>
+                  <td>{line.acceptedQuantity ?? 0}</td>
+                  <td>{line.rejectedQuantity ?? 0}</td>
+                  <td>{line.shortQuantity ?? 0}</td>
+                  <td>{line.resolvedQuantity ?? 0}</td>
+                  <td data-testid={`inventory-transfer-disposition-unresolved-${line.lineId}`}>{line.unresolvedQuantity ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <ul data-testid="inventory-transfer-disposition-list">
+            {(selectedFulfillment?.dispositions ?? []).map((row) => (
+              <li key={row.id} data-testid={`inventory-transfer-disposition-row-${row.id}`}>
+                {label(DISPOSITION_LABELS, row.dispositionType)}
+                {row.quantity ? ` ${row.quantity} 件` : ""}
+                {row.responsibleParty ? ` · 责任方：${label(RESPONSIBLE_LABELS, row.responsibleParty)}` : ""}
+                {row.amountCent ? ` · ${yuan(row.amountCent)}` : ""}
+                {` · ${row.reason ?? ""} · ${label(DISPOSITION_STATUS_LABELS, row.status)}`}
+                {row.reshipOrderId ? ` · 补发单 ${row.reshipOrderId}` : ""}
+                {row.status === "pending_review" ? (
+                  <>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={[FINANCE_REVIEW_PERMISSION]} disabled={submitting} data-testid={`inventory-transfer-disposition-approve-${row.id}`} onClick={() => reviewDisposition(row.id, "approved")}>复核通过</PermissionButton>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={[FINANCE_REVIEW_PERMISSION]} disabled={submitting} data-testid={`inventory-transfer-disposition-reject-${row.id}`} onClick={() => reviewDisposition(row.id, "rejected")}>驳回</PermissionButton>
+                  </>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <label>复核意见（财务复核待复核项时填写）<input data-testid="inventory-transfer-disposition-review-reason" value={disposition.reviewReason} onChange={setDispositionField("reviewReason")} /></label>
+          <label>处理方式
+            <select data-testid="inventory-transfer-disposition-type" value={disposition.type} onChange={setDispositionField("type")}>
+              {Object.entries(DISPOSITION_LABELS).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+            </select>
+          </label>
+          {disposition.type === "payment_adjustment" ? (
+            <label>调减金额（元）<input data-testid="inventory-transfer-disposition-amount" type="number" min="0" step="0.01" value={disposition.amountYuan} onChange={setDispositionField("amountYuan")} /></label>
+          ) : (
+            <>
+              <label>明细
+                <select data-testid="inventory-transfer-disposition-line" value={disposition.lineId} onChange={setDispositionField("lineId")}>
+                  {(selectedFulfillment?.lines ?? []).map((line) => <option key={line.lineId} value={line.lineId}>{itemName(line.itemId)}</option>)}
+                </select>
+              </label>
+              <label>数量<input data-testid="inventory-transfer-disposition-quantity" type="number" min="1" value={disposition.quantity} onChange={setDispositionField("quantity")} /></label>
+            </>
+          )}
+          {disposition.type === "loss" ? (
+            <label>责任方
+              <select data-testid="inventory-transfer-disposition-responsible" value={disposition.responsible} onChange={setDispositionField("responsible")}>
+                {Object.entries(RESPONSIBLE_LABELS).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+              </select>
+            </label>
+          ) : null}
+          {disposition.type === "reship" ? (
+            <label>补发货随货溯源码（可留空）<input data-testid="inventory-transfer-disposition-codes" value={disposition.codes} onChange={setDispositionField("codes")} /></label>
+          ) : null}
+          <label>差异原因与处理依据<input data-testid="inventory-transfer-disposition-reason" value={disposition.reason} onChange={setDispositionField("reason")} /></label>
+          <label>交接证据（交接单、照片等）
+            <input data-testid="inventory-transfer-disposition-evidence" type="file" multiple disabled={uploading} onChange={(event) => { void uploadProofs(event.target.files); event.target.value = ""; }} />
+          </label>
+          <ul>{proofs.map((proof) => <li key={proof.id}>{proof.name}（已上传）</li>)}</ul>
+        </FormModal>
+
+        <FormModal
+          open={reviewOpen}
+          title="供货主体审核"
+          description="同意后进入待拣配；不同意退回草稿，门店按原因改单后可重新提交。"
+          testId="inventory-transfer-review"
+          submitTestId="inventory-transfer-review-submit"
+          submitLabel="提交审核结论"
+          submitting={submitting}
+          error={formError || undefined}
+          validate={() => (reviewDecision === "rejected" && !reviewReason.trim() ? "不同意须写明原因，门店据此改单。" : null)}
+          onClose={() => setReviewOpen(false)}
+          onSubmit={() => void runAction("inventory_transfer_order_supplier_reviewed", orderPath("supplier-review"), { decision: reviewDecision, reason: reviewReason.trim() }, "审核")}
+        >
+          <label>审核结论
+            <select data-testid="inventory-transfer-review-decision" value={reviewDecision} onChange={(event) => setReviewDecision(event.target.value)}>
+              <option value="approved">同意，进入待拣配</option>
+              <option value="rejected">不同意，退回草稿</option>
+            </select>
+          </label>
+          <label>原因<input data-testid="inventory-transfer-review-reason" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></label>
+        </FormModal>
+
+        <FormModal
+          open={cancelRequestOpen}
+          title="申请取消要货单"
+          description="已提交、还没出库的要货单取消须经审批：提交后由上级审批，批准后才取消；审批期间单据不再往下流转。"
+          testId="inventory-transfer-cancel-request"
+          submitTestId="inventory-transfer-cancel-request-submit"
+          submitLabel="提交取消申请"
+          submitting={submitting}
+          error={formError || undefined}
+          validate={() => (cancelReason.trim() ? null : "请写明取消原因。")}
+          onClose={() => setCancelRequestOpen(false)}
+          onSubmit={() => void runAction("inventory_transfer_order_cancel_requested", orderPath("cancel"), { operatorNote: cancelReason.trim() }, "申请取消")}
+        >
+          <label>取消原因<input data-testid="inventory-transfer-cancel-request-reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></label>
         </FormModal>
 
         <div className="admin-table-scroll">

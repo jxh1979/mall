@@ -1,3 +1,4 @@
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -71,8 +72,8 @@ const EXPENSE_TYPE_LABELS: Record<string, string> = {
 export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   revenue_bar: "酒吧实收",
   revenue_bar_refund: "酒吧退款",
-  revenue_ticket: "售票分量",
-  revenue_ticket_refund: "售票退款",
+  revenue_ticket: "已核销门票结算收入",
+  revenue_ticket_refund: "售票退款（历史单）",
   cost_inventory: "销货成本",
   expense_rent_allocation: "费用·房租分摊",
   expense_energy: "费用·能耗",
@@ -80,8 +81,10 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   expense_labor: "费用·人工",
   expense_amortization: "费用·摊销",
   expense_other: "费用·其他",
+  expense_ticket_service_fee: "费用·门票综合服务费（单店门票）",
   net_profit: "净利润",
   loss_carryforward: "亏损结转（往期未弥补亏损）",
+  legal_cap: "依法可分配金额（核定）",
   platform_share: "平台分成",
   principal_gross: "主理人应得",
   tax_withheld: "代扣个税",
@@ -107,6 +110,9 @@ const TEXT = {
   reasonRequired: "驳回理由必填（进入审计留痕）。",
   floorPercentInvalid: "留存比例须在 0~100 之间。",
   floorFixedInvalid: "留存固定额须为不小于 0 的金额（元）。",
+  legalAmountInvalid: "依法可分配金额须为不小于 0 的金额（元）。",
+  legalTaxRefRequired: "请填写专业财税核算结果依据。",
+  legalResolutionRequired: "请填写公司有效分配决议。",
 };
 
 function centToYuan(cent: number | undefined | null): string {
@@ -198,6 +204,10 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
   // 驳回理由弹窗
   const [rejectTarget, setRejectTarget] = React.useState<DividendStatementRow | null>(null);
   const [rejectReason, setRejectReason] = React.useState("");
+
+  // FS-014 依法可分配金额登记弹窗（BSM L1785：由财务依据财税核算结果及有效分配决议确认）
+  const [legalTarget, setLegalTarget] = React.useState<DividendStatementRow | null>(null);
+  const [legalForm, setLegalForm] = React.useState({ amountYuan: "", taxAccountingRef: "", resolutionRef: "", note: "" });
 
   const merchantsResource = useAdminResource(
     async () => {
@@ -411,6 +421,31 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
+  function validateLegal(): string | null {
+    if (fixedYuanToCent(legalForm.amountYuan) === null || !legalForm.amountYuan.trim()) return TEXT.legalAmountInvalid;
+    if (!legalForm.taxAccountingRef.trim()) return TEXT.legalTaxRefRequired;
+    if (!legalForm.resolutionRef.trim()) return TEXT.legalResolutionRequired;
+    return null;
+  }
+
+  async function submitLegal() {
+    if (!legalTarget) return;
+    const invalid = validateLegal();
+    if (invalid) return setFormError(invalid);
+    const request = {
+      idempotencyKey: nextKey("dividend-legal"),
+      legalDistributableCent: fixedYuanToCent(legalForm.amountYuan),
+      taxAccountingRef: legalForm.taxAccountingRef.trim(),
+      resolutionRef: legalForm.resolutionRef.trim(),
+      note: legalForm.note.trim() || null,
+    };
+    const ok = await runAction("dividend_legal_confirmed", request, () =>
+      api.post(`/api/v1/finance/dividends/statements/${encodeURIComponent(legalTarget.id)}/legal-confirmation`, request));
+    if (ok) {
+      setLegalTarget(null);
+    }
+  }
+
   // ── 明细抽屉 ─────────────────────────────────────────────
 
   async function openDetail(row: DividendStatementRow) {
@@ -448,7 +483,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
   return (
     <section data-testid="finance-dividends-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="dividend.plan_created / dividend.computed / dividend.approved / dividend.paid_marked" />
+      <AuditTrailHint event="dividend.plan_created / dividend.computed / dividend.legal_confirmed / dividend.approved / dividend.paid_marked" />
 
       {/* ── 分红方案配置 ─────────────────────────────────────── */}
       <h3>分红方案</h3>
@@ -565,8 +600,16 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                     <button type="button" className="admin-row-detail-btn" aria-label="查看分红计算单明细" onClick={(event) => { event.stopPropagation(); void openDetail(row); }}>查看详情</button>
                     {row.status === "draft" ? (
                       <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE_PERMS}
+                        data-testid={`dividend-legal-open-${row.id}`}
+                        onClick={() => { setFormError(""); setLegalForm({ amountYuan: "", taxAccountingRef: "", resolutionRef: "", note: "" }); setLegalTarget(row); }}>登记依法可分配金额</PermissionButton>
+                    ) : null}
+                    {row.status === "draft" && row.legalDistributableCent != null ? (
+                      <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE_PERMS}
                         data-testid={`dividend-submit-${row.id}`}
                         onClick={() => void runTransition(row, "dividend_submitted", "submit")}>提交审阅</PermissionButton>
+                    ) : null}
+                    {row.status === "draft" && row.legalDistributableCent == null ? (
+                      <span className="admin-muted-action">须先登记依法可分配金额</span>
                     ) : null}
                     {row.status === "pending_review" ? (
                       <>
@@ -631,7 +674,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         </div>
       </AdminDataState>
 
-      {formError && !planModalOpen && !rejectTarget ? (
+      {formError && !planModalOpen && !rejectTarget && !legalTarget ? (
         <div className="admin-form-error" data-testid="dividend-form-error">{formError}</div>
       ) : null}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
@@ -766,6 +809,41 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
             ].filter(Boolean).join("、") || "全关（按税后应得全额发放）",
           },
           ...(editingPlan ? [{ label: "方案状态", value: planForm.status === "ended" ? "停用" : "生效中" }] : []),
+        ]}
+      />
+
+      {/* ── 依法可分配金额登记（FS-014）────────────────────────── */}
+      <GuidedFlowModal
+        open={legalTarget !== null}
+        title={`登记依法可分配金额 · ${legalTarget?.periodLabel ?? ""}`}
+        testId="dividend-legal-guided"
+        submitTestId="dividend-legal-save"
+        submitLabel="确认登记"
+        submitting={busyAction === "dividend_legal_confirmed"}
+        error={formError || undefined}
+        onClose={() => setLegalTarget(null)}
+        onSubmit={submitLegal}
+        steps={[
+          {
+            title: "依法可分配金额与依据",
+            description: "依据专业财税核算结果及公司有效分配决议登记。本次分配取「经营算出的可分配额」与本金额中较小者，被压下的部分留在公司、以后不单独补分；登记后本单作废并按核定额重算出新草稿。",
+            validate: validateLegal,
+            content: (
+              <>
+                <label>依法可分配金额（元）<input data-testid="dividend-legal-amount" type="number" step="0.01" min="0" value={legalForm.amountYuan} onChange={(event) => setLegalForm({ ...legalForm, amountYuan: event.target.value })} /></label>
+                <label>财税核算依据<input data-testid="dividend-legal-tax-ref" type="text" value={legalForm.taxAccountingRef} onChange={(event) => setLegalForm({ ...legalForm, taxAccountingRef: event.target.value })} placeholder="如：财税核算报告编号" /></label>
+                <label>公司分配决议<input data-testid="dividend-legal-resolution-ref" type="text" value={legalForm.resolutionRef} onChange={(event) => setLegalForm({ ...legalForm, resolutionRef: event.target.value })} placeholder="如：股东会决议编号 / 日期" /></label>
+                <label>说明（选填）<textarea data-testid="dividend-legal-note" value={legalForm.note} onChange={(event) => setLegalForm({ ...legalForm, note: event.target.value })} placeholder="如：已弥补亏损、已提取法定公积" /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "计算单", value: legalTarget ? `${legalTarget.periodLabel}（${legalTarget.id}）` : "—" },
+          { label: "经营口径净利润", value: `¥${centToYuan(legalTarget?.netProfitCent)}` },
+          { label: "依法可分配金额", value: legalForm.amountYuan ? `¥${legalForm.amountYuan}` : "未填写" },
+          { label: "财税核算依据", value: legalForm.taxAccountingRef.trim() || "未填写" },
+          { label: "分配决议", value: legalForm.resolutionRef.trim() || "未填写" },
         ]}
       />
 

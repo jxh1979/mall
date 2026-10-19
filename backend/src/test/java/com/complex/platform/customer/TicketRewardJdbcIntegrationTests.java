@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,7 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties={"spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test","spring.datasource.username=complex","spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"})
 @Transactional
+@org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 class TicketRewardJdbcIntegrationTests {
+    @Autowired com.complex.platform.settlement.SettlementInvoiceService invoices;
+    @Autowired org.springframework.test.web.servlet.MockMvc mockMvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired TicketRewardService rewards;
     @Autowired TicketRewardConfigService configs;
@@ -244,7 +247,7 @@ class TicketRewardJdbcIntegrationTests {
         jdbc.update("INSERT INTO ticket_points_billing_rules(id,version,effective_month,statement_day,objection_working_days,minimum_days,maximum_days,pay_days,status,created_by,created_at) VALUES(?,'V0.01',?,1,10,1,30,'{5,15,25}','rejected','reviewed-requester',now())",rejected,month);
         String calendar="calendar_"+UUID.randomUUID();
         jdbc.update("INSERT INTO ticket_points_calendar_cases(id,days,source_note,status,created_by,created_at) VALUES(?,'[]','本测试明确给定每日事实','approved','calendar-reviewer',now())",calendar);
-        for(var day=month.plusMonths(1);day.isBefore(month.plusMonths(3));day=day.plusDays(1))jdbc.update("INSERT INTO ticket_points_calendar_days(calendar_date,working_day,bank_working_day,case_id) VALUES(?,true,true,?)",day,calendar);
+        for(var day=month.plusMonths(1);day.isBefore(month.plusMonths(3));day=day.plusDays(1))jdbc.update("INSERT INTO ticket_points_calendar_days(calendar_date,working_day,bank_working_day,case_id) VALUES(?,true,true,?) ON CONFLICT (calendar_date) DO NOTHING",day,calendar);
         var pending=billing.submitRule(new TicketPointsBilling.RuleRequest("resubmit-"+UUID.randomUUID(),month,1,10,1,30,"修正驳回原因后重新审批",approver));
         assertThat(pending.status()).isEqualTo("pending_review");
         assertThat(pending.id()).isNotEqualTo(rejected);
@@ -336,6 +339,91 @@ class TicketRewardJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT sum(amount_cent) FROM ticket_points_monthly_bills WHERE project_id=?",Long.class,f.project())).isEqualTo(100);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_points_monthly_bill_items i JOIN ticket_points_monthly_bills b ON b.id=i.bill_id WHERE b.project_id=?",Integer.class,f.project())).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT confirmed_at FROM ticket_points_issuance_fees WHERE reward_id=?",Timestamp.class,reward).toInstant()).isEqualTo(Instant.parse("2026-02-01T08:00:00Z"));
+    }
+
+    // ─── FS-022-R1：积分发行费月账单接入统一开票清单 ───────────────────────────
+    // ENUM L84「商户应收的兑换补偿与平台应收的积分发行费各自全额挂账、各自开票……不得轧差」；BSM L1750「开票金额≤已收−已退−已开……
+    // 本系统不自建开票引擎，只做状态对接与留痕」；BSM L1803「平台内部各主体之间的往来需要开具发票」；CG 第 64 项人工登记真实开票结果。
+
+    @Test void pointsBillInvoiceLineAppearsOnlyAfterCollectionForCollectedAmount() throws Exception {
+        Fixture f=seed();seedBilling(f);String receiver=receiverEntity();
+        String bill=receivablePointsBill(f,receiver,100L);
+        assertThat(invoices.generateForPointsBill(bill,"system")).as("未收款不开票").isZero();
+        assertThat(pointsLines(f,bill)).isEmpty();
+        pay(f,"arap_"+bill,60L);
+        assertThat(invoices.pointsBillsToInvoice()).contains(bill);
+        assertThat(invoices.generateForPointsBill(bill,"system")).isEqualTo(1);
+        var lines=pointsLines(f,bill);
+        assertThat(lines).hasSize(1);
+        var line=lines.getFirst();
+        assertThat(line.amountCent()).as("按已收额开").isEqualTo(60L);
+        assertThat(line.status()).isEqualTo("pending");
+        assertThat(line.incomeType()).isEqualTo("points_issuance");
+        assertThat(line.invoiceItemName()).isEqualTo("积分发行费");
+        assertThat(line.subjectEntityId()).as("开票主体＝收款方").isEqualTo(receiver);
+        assertThat(line.buyerEntityId()).as("购方＝合同销售方").isEqualTo(f.entity());
+        assertThat(line.buyerName()).isEqualTo("奖励测试销售公司");
+        assertThat(line.billId()).isNull();
+    }
+
+    @Test void pointsBillInvoiceIsIdempotentAndSecondCollectionAddsOnlyRemainder() throws Exception {
+        Fixture f=seed();seedBilling(f);String receiver=receiverEntity();
+        String bill=receivablePointsBill(f,receiver,100L);
+        pay(f,"arap_"+bill,60L);
+        assertThat(invoices.generateForPointsBill(bill,"system")).isEqualTo(1);
+        assertThat(invoices.generateForPointsBill(bill,"system")).as("重跑不增行").isZero();
+        assertThat(invoices.pointsBillsToInvoice()).doesNotContain(bill);
+        pay(f,"arap_"+bill,40L);
+        assertThat(invoices.generateForPointsBill(bill,"system")).isEqualTo(1);
+        assertThat(pointsLines(f,bill)).extracting(l->l.amountCent()).containsExactlyInAnyOrder(60L,40L);
+    }
+
+    @Test void pointsInvoiceListAndIssuedRegistrationUseFrontendRequestShape() throws Exception {
+        Fixture f=seed();seedBilling(f);String receiver=receiverEntity();
+        String bill=receivablePointsBill(f,receiver,100L);
+        pay(f,"arap_"+bill,100L);
+        invoices.generateForPointsBill(bill,"system");
+        String user=actor(f.entity(),List.of("settlement.invoice.view","settlement.invoice.manage"));
+        var who=org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(user,user,"platform_admin",f.entity(),null,"active"),null,
+                        List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+        String body=mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/settlement/invoice-items")
+                        .param("projectId",f.project()).param("periodStart","2026-01-01").header("X-Terminal-Type","web").with(who))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        var items=json.readTree(body).path("data").path("items");
+        assertThat(items).as("积分发行费行进入开票清单").hasSize(1);
+        var node=items.get(0);
+        assertThat(node.path("points_bill_id").asText()).isEqualTo(bill);
+        assertThat(node.path("buyer_name").asText()).isEqualTo("奖励测试销售公司");
+        assertThat(node.path("income_type").asText()).isEqualTo("points_issuance");
+        String item=node.path("id").asText();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/settlement/invoice-items/"+item+"/status")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"issued\",\"invoice_no\":\"FP-POINTS-001\",\"remark\":\"第三方平台已开具\"}")
+                        .header("X-Terminal-Type","web").with(who))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+        assertThat(jdbc.queryForObject("SELECT status||'|'||invoice_no FROM settlement_invoice_items WHERE id=?",String.class,item)).isEqualTo("issued|FP-POINTS-001");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='settlement.invoice.status_changed' AND business_id=?",Integer.class,item)).isEqualTo(1);
+    }
+
+    private String receiverEntity(){String id="be_center_"+UUID.randomUUID().toString().replace("-","");
+        jdbc.update("INSERT INTO business_entities(id,entity_name,entity_role,status,created_at,updated_at) VALUES(?,'全国积分结算中心','platform','active',now(),now())",id);return id;}
+    /** 收款方≠合同销售方的已公布积分月账单，经真实 finalizeDue 形成正式应收（arap_+账单号）。 */
+    private String receivablePointsBill(Fixture f,String receiver,long amount){
+        String rule=jdbc.queryForObject("SELECT id FROM ticket_points_billing_rules WHERE effective_month='2026-01-01'",String.class),bill="tpmb_inv_"+UUID.randomUUID().toString().replace("-","");
+        jdbc.update("INSERT INTO ticket_points_monthly_bills(id,billing_month,billing_rule_id,seller_entity_id,receiver_entity_id,project_id,amount_cent,created_at,visible_at) VALUES(?,'2026-01-01',?,?,?,?,?,now(),'2026-02-01T08:00:00Z')",bill,rule,f.entity(),receiver,f.project(),amount);
+        assertThat(billing.finalizeDue(bill,Instant.parse("2026-02-13T08:00:00Z"))).isTrue();
+        return bill;
+    }
+    private void pay(Fixture f,String arap,long amount){
+        authenticate(actor(f.entity(),List.of("finance.payment.register","ticket.points.billing.view")),f.entity());
+        finance.registerArApPayment(arap,new com.complex.platform.finance.dto.ArApPaymentRequest("paid-"+UUID.randomUUID(),"已收到积分发行费",List.of(),amount,"bank_transfer",Instant.parse("2026-02-16T08:00:00Z"),"真实已核验回款"));
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+    private List<com.complex.platform.settlement.JdbcSettlementInvoiceRepository.SettlementInvoiceItemView> pointsLines(Fixture f,String bill){
+        return invoices.list(f.project(),java.time.LocalDate.parse("2026-01-01"),null,null,1,50).items().stream().filter(i->bill.equals(i.pointsBillId())).toList();
     }
 
     private void seedBilling(Fixture f) {

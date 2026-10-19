@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.02
+
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApItemRequest;
@@ -21,10 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>过账口径（照 bar 域 createPayableForGiftSettlement 范式）：
  * <ul>
  *   <li>仅对 status='confirmed' 的结算单过账（draft=超总池待特批，拒绝并说明）；</li>
- *   <li>遍历 settlement_items（status='draft' 且 final_amount_cent&gt;0）→ 生成
+ *   <li>遍历 settlement_items（status='draft' 且 final_amount_cent≠0）→ 正额生成
  *       ar_ap_items（direction='payable'、source_type='ticket_distribution'、source_id=明细 id、
- *       counterparty_id=酒吧 merchant、amount=final_amount_cent）→ 回写 ar_ap_item_id + status='posted'；
- *       final=0 天然跳过（不取入待过账集）；</li>
+ *       counterparty_id=酒吧 merchant、amount=final_amount_cent）；FS-021-R1 负额生成该酒吧的单独追收应收
+ *       （direction='receivable'、source_type='ticket_distribution_recovery'、amount=|final|，不与应付轧差）
+ *       → 回写 ar_ap_item_id + status='posted'；final=0 天然跳过（不取入待过账集）；</li>
+ *   <li>FS-021-R4：每条往来的到期日按该钱路财务指定付账日、异议期与银行工作日推算并固化（internal_payable_schedules），
+ *       规则或日历缺失即拒绝过账、账单保持 confirmed；付款时点的项目（异议期按项目、收款方专区可见、换账户审批）取往来对方
+ *       所属项目——生产月结出平台单（project_id 为空），明细取商户所属项目、服务费取计费月项目；</li>
  *   <li>全部明细 posted 后 → 结算单 status='settled'、settled_at=now；</li>
  *   <li>幂等：明细 status='posted' 已过即跳过；ar_ap 唯一索引 (direction,source_type,source_id) +
  *       PK=arap_&lt;明细 id&gt; 双保险，重复过账不产生第二条应付。</li>
@@ -50,16 +56,27 @@ public class SettlementPostingService {
             TicketDistributionSettlementService.METHOD_EXCLUSIVE_FULL;
     private static final String SOURCE_TICKET_DISTRIBUTION = "ticket_distribution";
     private static final String SOURCE_PLATFORM_INCENTIVE_SUBSIDY = "platform_incentive_subsidy";
+    /** FS-021-R1：负额明细（向商户追回）过账为该商户的单独追收应收。 */
+    static final String SOURCE_TICKET_DISTRIBUTION_RECOVERY = "ticket_distribution_recovery";
+    /** 池分账三种方式（越池两段拆只对它们；专属直付与 R2 追收明细不拆）。 */
+    private static final java.util.Set<String> POOL_METHODS = java.util.Set.of(
+            TicketDistributionSettlementService.METHOD_BY_RANK_TIER, TicketDistributionSettlementService.METHOD_BY_VENUE_PER_GUEST,
+            TicketDistributionSettlementService.METHOD_BY_FIXED_AMOUNT);
 
     private final JdbcSettlementBillRepository repository;
     private final FinanceService financeService;
     private final com.complex.platform.evidence.AuditEventService auditEventService;
+    private final SingleBarServiceFeeService singleBarServiceFees;
+    private final InternalPayDayService payDays;
 
     public SettlementPostingService(JdbcSettlementBillRepository repository, FinanceService financeService,
-                                    com.complex.platform.evidence.AuditEventService auditEventService) {
+                                    com.complex.platform.evidence.AuditEventService auditEventService,
+                                    SingleBarServiceFeeService singleBarServiceFees, InternalPayDayService payDays) {
         this.repository = repository;
         this.financeService = financeService;
         this.auditEventService = auditEventService;
+        this.singleBarServiceFees = singleBarServiceFees;
+        this.payDays = payDays;
     }
 
     /**
@@ -150,54 +167,65 @@ public class SettlementPostingService {
                             + "请重新结算该月后由平台负责人重新特批");
         }
 
-        // S4/R-3 负额守卫(fail-loud,钱不许丢):放开带符号后冲正月明细可为负(向商户追回)。
-        //   「负额挂应收」的过账口径属过账激活批次另行拍板;在那之前对含负额明细的单直接拒绝过账——
-        //   否则负额行被「final>0」过滤静默跳过、整单却被标 settled,追回的钱就从账上消失了。
-        if (repository.hasNegativeDraftItems(billId)) {
-            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_NEGATIVE_ITEMS_UNPOSTABLE",
-                    "该结算单存在负额分账明细(冲正月向商户追回),负额过账口径(挂应收)尚未启用,拒绝过账以防丢账;"
-                            + "请留在待过账状态,待负额过账批次上线后处理");
-        }
-
         boolean overPool = ctx.overPool();
         long availablePool = ctx.availablePoolCent();
-        // 除法安全:两段拆的除法只对「final>0 的池明细」执行,该明细存在 ⇒ poolDistributed ≥ 该明细 final > 0
-        //   (上面负额守卫已排除负额明细,poolDistributed 不会被负行拉低)。
+        // 除法安全:两段拆只对「final>0 的池明细」执行,该明细存在 ⇒ poolDistributed ≥ 该明细 final > 0。
         long poolDistributed = ctx.pooledDistributedCent();
 
+        // FS-021-R4（BSM L1673/L1683；DEC-R8-56/57/58）：每条钱路按财务指定付账日、异议期与银行工作日推算到期日并固化；
+        //   规则或日历缺失即拒绝过账（账单保持 confirmed），不再填「今天+30 天」。同一账单同一钱路只推算一次。
+        java.time.Instant now = java.time.Instant.now();
+        java.util.Map<String, InternalPayDayService.Schedule> schedules = new java.util.HashMap<>();
+        java.util.function.BiFunction<String, String, InternalPayDayService.Schedule> schedule = (route, project) ->
+                schedules.computeIfAbsent(route + "|" + project, k -> payDays.schedule(route, project, ctx.periodStart(), now));
+
         List<JdbcSettlementBillRepository.PostableItem> items = repository.findPostableItems(billId);
-        LocalDate dueDate = LocalDate.now().plusDays(30);
         int posted = 0;
         for (var item : items) {
             String primaryArApId;
-            if (overPool && !METHOD_EXCLUSIVE_FULL.equals(item.distributionMethod())) {
+            long a = item.finalAmountCent();
+            if (a < 0) {
+                // FS-021-R1（BSM L755「一律按总额收付、收支两条线，不得轧差」）：负额＝向该商户追回，单独挂追收应收，不从任何应付里扣。
+                primaryArApId = post("receivable", item.itemId(), item.merchantId(), -a,
+                        SOURCE_TICKET_DISTRIBUTION_RECOVERY, "settle-tdr-", ctx.projectId(), item.payeeProjectId(), schedule);
+            } else if (overPool && POOL_METHODS.contains(item.distributionMethod())) {
                 // 超额 C 口径两段拆：pool_i(项目公司承担) + excess_i(L3 平台承担)，pool_i+excess_i=a_i 精确。
-                long a = item.finalAmountCent();
-                // 溢出护栏(对抗复核 risk1):a×availablePool 可超 Long.MAX(大场馆高营业月单笔×池),long 直乘会反转
-                //   → poolI 负、excessI 灌爆。用 BigInteger 中间乘;结果 ⌊a·availablePool/poolDistributed⌋ ≤ a 恒在 long 内(longValueExact 兜底)。
+                // 溢出护栏(对抗复核 risk1):a×availablePool 可超 Long.MAX,用 BigInteger 中间乘;结果 ≤ a 恒在 long 内。
                 long poolI = java.math.BigInteger.valueOf(a)
                         .multiply(java.math.BigInteger.valueOf(availablePool))
                         .divide(java.math.BigInteger.valueOf(poolDistributed))
                         .longValueExact();
                 long excessI = a - poolI;
                 String tdId = poolI > 0
-                        ? createPayable(item.itemId(), item.merchantId(), poolI, dueDate,
-                                SOURCE_TICKET_DISTRIBUTION, "settle-td-", ctx.projectId())
+                        ? createPayable(item.itemId(), item.merchantId(), poolI, SOURCE_TICKET_DISTRIBUTION, "settle-td-",
+                                ctx.projectId(), item.payeeProjectId(), schedule)
                         : null;
                 String pisId = excessI > 0
-                        ? createPayable(item.itemId(), item.merchantId(), excessI, dueDate,
-                                SOURCE_PLATFORM_INCENTIVE_SUBSIDY, "settle-pis-", ctx.projectId())
+                        ? createPayable(item.itemId(), item.merchantId(), excessI, SOURCE_PLATFORM_INCENTIVE_SUBSIDY,
+                                "settle-pis-", ctx.projectId(), item.payeeProjectId(), schedule)
                         : null;
                 // 明细一列 ar_ap_item_id 回写以池内行为主键；availablePool=0 全超额时回写补贴行（tdId=null）。
                 primaryArApId = tdId != null ? tdId : pisId;
             } else {
-                // 未超池 or 专属直付：完全现状，单条 ticket_distribution 全额。
-                primaryArApId = createPayable(item.itemId(), item.merchantId(), item.finalAmountCent(), dueDate,
-                        SOURCE_TICKET_DISTRIBUTION, "settle-td-", ctx.projectId());
+                // 未超池 or 专属直付 or 追收明细中的正额：单条 ticket_distribution 全额。
+                primaryArApId = createPayable(item.itemId(), item.merchantId(), a, SOURCE_TICKET_DISTRIBUTION, "settle-td-",
+                        ctx.projectId(), item.payeeProjectId(), schedule);
             }
             // 回写仅当仍 draft（并发下另一过账已置 posted 则 0 行，跳过，不重复）。
             repository.markItemPosted(item.itemId(), primaryArApId);
             posted++;
+        }
+
+        // FS-013（BSM L755「单店门票综合服务费按前述计费月汇总后的应收总额另行收取，同样走三个付账日……平台内部各主体之间的
+        //   应收应付，一律按总额收付、收支两条线，不得轧差」）：本单所属项目×月份的单店服务费计费月，按 min(Σ未退票逐票费, 锁定封顶)
+        //   各挂一笔酒吧应收，与上面的票款应付分别收付；0 元不挂。台账与付款时点的项目取计费月锁定的售票项目（平台单不丢项目）。
+        for (var month : singleBarServiceFees.lockUnpostedMonths(billId)) {
+            long total = singleBarServiceFees.monthTotal(month.id());
+            if (total > 0L) {
+                String receivable = post("receivable", month.id(), month.barMerchantId(), total,
+                        SingleBarServiceFeeService.SOURCE_TYPE, "settle-sbf-", month.projectId(), month.projectId(), schedule);
+                singleBarServiceFees.markPosted(month.id(), receivable);
+            }
         }
 
         // 全部待过账明细清零 → 置 settled（幂等：markBillSettled 仅当仍 confirmed 生效）。
@@ -216,26 +244,34 @@ public class SettlementPostingService {
      * <p>D7 两 source_type 各用<b>独立前缀</b>（{@code settle-td-} / {@code settle-pis-}）→ 同一明细 id
      * 的池内行与补贴行哈希 slug 互不相撞，各自独立幂等；同 source_type 重复过账哈希相同 → 幂等命中不重复插。
      */
-    String createPayable(String settlementItemId, String merchantId, long amountCent, LocalDate dueDate,
-                         String sourceType, String idempotencyPrefix, String billProjectId) {
-        String note = SOURCE_PLATFORM_INCENTIVE_SUBSIDY.equals(sourceType)
-                ? "platform incentive subsidy (over-pool special approval): item " + settlementItemId
-                : "ticket distribution settlement payable: item " + settlementItemId;
+    private String createPayable(String settlementItemId, String merchantId, long amountCent, String sourceType,
+                                 String idempotencyPrefix, String billProjectId, String payeeProjectId,
+                                 java.util.function.BiFunction<String, String, InternalPayDayService.Schedule> schedule) {
         // 🔴 P2:显式项目归属——platform_incentive_subsidy 恒平台域 NULL(不进项目公司聚合)、ticket_distribution 取 bill.projectId;
         //   不继承过账人 token 项目域(防项目域管理员经网关过账错打项目)。
         String explicitProjectId = SOURCE_PLATFORM_INCENTIVE_SUBSIDY.equals(sourceType) ? null : billProjectId;
+        return post("payable", settlementItemId, merchantId, amountCent, sourceType, idempotencyPrefix, explicitProjectId,
+                payeeProjectId, schedule);
+    }
+
+    /** 挂一笔普通内部结算往来并按往来对方所属项目固化其付款时点（到期日＝该钱路推算出的有效付账日）。 */
+    private String post(String direction, String sourceId, String counterpartyId, long amountCent, String sourceType,
+                        String idempotencyPrefix, String projectId, String payeeProjectId,
+                        java.util.function.BiFunction<String, String, InternalPayDayService.Schedule> schedule) {
+        InternalPayDayService.Schedule s = schedule.apply(sourceType, payeeProjectId);
         ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
-                idempotencyKey(idempotencyPrefix, settlementItemId),
-                note,
+                idempotencyKey(idempotencyPrefix, sourceId),
+                sourceType + " " + direction + ": " + sourceId,
                 List.of(),
-                "payable",
-                merchantId,
+                direction,
+                counterpartyId,
                 sourceType,
-                settlementItemId,
+                sourceId,
                 amountCent,
-                dueDate,
-                YearMonth.from(dueDate).toString()
-        ), explicitProjectId);
+                s.dueDate(),
+                YearMonth.from(s.dueDate()).toString()
+        ), projectId);
+        payDays.record(item, s, payeeProjectId);
         return item.id();
     }
 
