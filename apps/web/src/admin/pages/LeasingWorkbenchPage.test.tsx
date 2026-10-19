@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -284,5 +284,48 @@ describe("LeasingWorkbenchPage 查看完整号码", () => {
     await waitFor(() => expect(screen.getByTestId("leasing-lead-phone-error").textContent).toBe("当前账号无权进行此操作"));
     expect(screen.getByTestId("leasing-lead-phone-value").textContent).toBe("138****0001");
     expect(setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+});
+
+// 第三轮裁决第 1 条「纯提成合同的押金由招商按合同约定金额直接录入，不走月数公式，但不得为零」：选中纯提成意向（rent_terms.rentBillingMode=turnover_only）
+// 时招商签约表单才出「押金（元）」，未填或为零拦下不发签约，填后随签约提交约定押金（分）。
+describe("LeasingWorkbenchPage 纯提成签约押金", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("选中纯提成意向才出「押金（元）」，未填拦下不签，填后随签约提交 deposit_cent", async () => {
+    const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const intents = [
+      { id: "in-fix", lead_id: "l-1", stage: "pending_signing", rent_terms: { rentBillingMode: "fixed_only", baseRentCent: 100000 } },
+      { id: "in-tov", lead_id: "l-1", stage: "pending_signing", rent_terms: { rentBillingMode: "turnover_only" } },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) as Record<string, unknown> });
+        return Promise.resolve(envelope([]));
+      }
+      if (url.includes("/leasing/leads")) return Promise.resolve(envelope(LEADS));
+      if (url.includes("/leasing/intents")) return Promise.resolve(envelope(intents));
+      if (url.includes("/platform/merchants")) return Promise.resolve(envelope([{ id: "mch-1", display_name: "测试商户" }]));
+      if (url.includes("/platform/business-entities")) return Promise.resolve(envelope([{ id: "ent-1", entity_name: "测试主体" }]));
+      return Promise.resolve(envelope([]));
+    }));
+    render(<LeasingWorkbenchPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.queryByTestId("leasing-intent-select-in-tov")).not.toBeNull());
+    expect(screen.queryByTestId("leasing-sign-deposit")).toBeNull();
+    fireEvent.click(screen.getByTestId("leasing-intent-select-in-tov"));
+    await waitFor(() => expect(screen.queryByTestId("leasing-sign-deposit")).not.toBeNull());
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试商户/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试主体/ })).toBeTruthy());
+    fireEvent.change(screen.getByTestId("leasing-sign-merchant"), { target: { value: "mch-1" } });
+    fireEvent.change(screen.getByTestId("leasing-sign-subject"), { target: { value: "ent-1" } });
+    fireEvent.click(screen.getByTestId("leasing-intent-sign"));
+    await waitFor(() => expect(screen.getByTestId("leasing-error").textContent).toContain("押金"));
+    expect(posts.some((p) => p.url.includes("/sign"))).toBe(false);
+    fireEvent.change(screen.getByTestId("leasing-sign-deposit"), { target: { value: "5000" } });
+    fireEvent.click(screen.getByTestId("leasing-intent-sign"));
+    await waitFor(() => expect(posts.some((p) => p.url.includes("/leasing/intents/in-tov/sign"))).toBe(true));
+    expect(posts.find((p) => p.url.includes("/leasing/intents/in-tov/sign"))!.body.deposit_cent).toBe(500000);
   });
 });

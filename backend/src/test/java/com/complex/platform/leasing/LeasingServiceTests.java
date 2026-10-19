@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -220,6 +220,30 @@ class LeasingServiceTests {
         // AUD-003 边界：带既有 merchant_id 签约不新建绑定（其绑定由治理域管理），只有自动建商户路径才建。
         org.mockito.Mockito.verify(platformService, org.mockito.Mockito.never())
                 .createBusinessEntityBinding(org.mockito.ArgumentMatchers.any());
+    }
+
+    /**
+     * 第三轮裁决第 1 条「纯提成合同的押金由招商按合同约定金额直接录入」：纯提成意向（rent_terms.rentBillingMode=turnover_only）签约时
+     * 招商签约表单录入的约定押金随签约喂入合同草稿（不得为零等校验在合同域 createDraft，另测）。
+     */
+    @Test
+    void signPassesEnteredAgreedDepositIntoContractDraft() {
+        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+                "ctr_tov", "mch_1", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
+                Map.of("rentBillingMode", "turnover_only"), null, "none", 500000L, Map.of(), List.of(), null, null, List.of(),
+                "drafting", null, null, null, null, Instant.now(), Instant.now()));
+        LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                "周九", null, "online_inquiry", null, null, null, null, "tov1"));
+        LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), null, null,
+                Map.of("rentBillingMode", "turnover_only"), "tov2"));
+        service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "tov3"));
+        service.signIntent(intent.id(), new LeasingSignRequest(
+                "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "tov4", 500000L));
+        org.mockito.ArgumentCaptor<com.complex.platform.contract.dto.ContractDraftRequest> draft =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.contract.dto.ContractDraftRequest.class);
+        verify(contractService).createDraft(draft.capture());
+        assertThat(draft.getValue().depositCent()).isEqualTo(500000L);
+        assertThat(draft.getValue().rentTerms()).containsEntry("rentBillingMode", "turnover_only");
     }
 
     /** CG-01：合同生效 → 来源线索置已签约，留痕一次；重复生效回调（重放）不二次改写、不二次留痕。 */

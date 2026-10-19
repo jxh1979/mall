@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiRequests;
 import com.complex.platform.common.api.ApiResponse;
@@ -51,5 +51,15 @@ public class MerchantPortalController {
         // M020-004:幂等键校验走共享助手(VALIDATION_FAILED),与全仓其它控制器一致。
         ApiRequests.requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submitSettlementDispute(settlementId, request));
+    }
+
+    /** HP-C04（2026-10-18 裁决第 6 条）：主管裁决后商户「不接受裁决」→ 结算单进「有争议，诉讼/仲裁」挂起。 */
+    @PostMapping("/settlements/{settlement_id}/reject-resolution")
+    public ApiResponse<ContractSettlementRecord> rejectSettlementResolution(
+            @PathVariable("settlement_id") String settlementId,
+            @RequestBody @jakarta.validation.Valid MerchantSettlementDisputeRequest request
+    ) {
+        ApiRequests.requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.rejectSettlementResolution(settlementId, request));
     }
 }

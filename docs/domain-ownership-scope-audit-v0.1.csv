@@ -102,10 +102,11 @@ complex_operating_params,direct,project_id,project_id column on complex_operatin
 compliance_expiry_items,direct,merchant_id,merchant_id column on compliance_expiry_items,ready for project/merchant scoped query enforcement,V0.07,covered
 compliance_reminders,direct,merchant_id,merchant_id column on compliance_reminders,ready for project/merchant scoped query enforcement,V0.07,covered
 comprehensive_service_fee_configs,direct,project_id,project_id column on comprehensive_service_fee_configs,ready for project/merchant scoped query enforcement,V0.07,covered
-contract_approval_flow_steps,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 contract_approval_flows,direct,project_id,project_id column on contract_approval_flows,ready for project/merchant scoped query enforcement,V0.07,covered
 contract_approvals,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 contract_changes,direct,project_id,project_id column on contract_changes,ready for project/merchant scoped query enforcement,V0.07,covered
+contract_deposit_policy,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+contract_deposit_refund_wait_policy,direct,project_id,project_id column on contract_deposit_refund_wait_policy,ready for project/merchant scoped query enforcement,V0.07,covered
 contract_key_dates,direct,merchant_id,merchant_id column on contract_key_dates,ready for project/merchant scoped query enforcement,V0.07,covered
 contract_rent_bills,direct,project_id,project_id column on contract_rent_bills,ready for project/merchant scoped query enforcement,V0.07,covered
 contract_settlements,direct,project_id,project_id column on contract_settlements,ready for project/merchant scoped query enforcement,V0.07,covered

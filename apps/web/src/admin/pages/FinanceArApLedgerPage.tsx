@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -35,6 +35,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   dispatch_commission_transfer: "派驻提成月结拨付", bar_payroll_transfer: "酒吧报酬月结拨付", staff_payroll: "员工工资",
   purchase_inbound: "采购入库", purchase_prepayment: "采购预付款", purchase_consignment: "寄售结算",
   purchase_return_refund: "供应商退货退款", purchase_prepayment_refund: "采购未用预付款退款",
+  deposit_adjustment: "变更押金补退差额",   // HP-C03：面积/位置变更子合同押金补缴应收／退还应付
 };
 function sourceTypeLabel(v?: string): string {
   return v ? (SOURCE_TYPE_LABELS[v] ?? v) : "—";

@@ -3296,6 +3296,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
         "409":
@@ -3303,7 +3305,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。
+      description: 按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。押金退还应付(source_type=deposit_refund)：所在地今天或所登记 payment_time 的所在地日期早于应付到期日(＝max(算账完成日, 最后审批完成日＋等待期))时 409 DEPOSIT_REFUND_NOT_DUE，不受三个付账日与账单异议期约束；变更押金补退差额(source_type=deposit_adjustment)每笔实收/实付写押金流水并更新已收押金余额，退还超过当前已收押金余额时 400 DEPOSIT_INSUFFICIENT。已有冲正/重述行回指的原台账项（合同租金/物业费账单因面积/位置变更作废追加冲正行、补录红冲原行）不再是有效款项，409 AR_AP_ITEM_REVERSED。
     get:
       tags:
         - finance
@@ -17980,7 +17982,7 @@ paths:
       tags:
         - contract
       operationId: submitContract
-      summary: 提交进审批链(→待确认)
+      summary: 提交进统一审批(→待确认)
       x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -17989,7 +17991,7 @@ paths:
       x-audit-event-success: contract.submitted
       x-audit-event-failure: contract.submit_failed
       x-auth-context: staff-token
-      description: 按所属综合体生效链物化第一并行阶段。链未配则拒。
+      description: 按所属综合体「新建」类审批流程模板开统一审批复核单(主线最终审批人默认模板配置,模板各平行线须逐线指定最终审批人),审批人在 approveSupervisorReview 逐节点裁决,全部通过→待生效,任一驳回→退回起草。模板未配则拒。第四轮裁决第 4 条：非纯提成合同月租为 0 或缺(每平米计租看单价)→ 400 CONTRACT_RENT_REQUIRED「请先在草稿上补录月租」(先经 editContractDraftRentTerms 补录)；纯提成合同约定押金缺或为 0 → 400 VALIDATION_FAILED。
       parameters:
         - name: contract_id
           in: path
@@ -18010,73 +18012,6 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/contracts/{contract_id}/approve:
-    post:
-      tags:
-        - contract
-      operationId: approveContractStage
-      summary: 审批当前阶段并行槽(会签)
-      x-permission: contract.approve.business
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: contract.approved_slot
-      x-audit-event-failure: contract.approve_failed
-      x-auth-context: staff-token
-      description: 分组并行：实际权限按 body.approver_permission_code 动态校验(业务/财务/法务/总经理…)。当前阶段全过进下一阶段，任一驳回整单退回起草。
-      parameters:
-        - name: contract_id
-          in: path
-          required: true
-          description: 合同 id。
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        $ref: "#/components/requestBodies/ContractApproveRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/contracts/{contract_id}/approvals:
-    get:
-      tags:
-        - contract
-      operationId: listContractApprovals
-      summary: 合同审批留痕(按阶段)
-      x-permission: contract.draft.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: contract.approvals_viewed
-      x-audit-event-failure: contract.approvals_view_failed
-      x-auth-context: staff-token
-      parameters:
-        - name: contract_id
-          in: path
-          required: true
-          description: 合同 id。
-          schema:
-            type: string
-            maxLength: 64
-      responses:
-        "200":
-          $ref: "#/components/responses/Page"
-        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -18160,7 +18095,7 @@ paths:
       x-audit-event-success: contract.change_raised
       x-audit-event-failure: contract.change_raise_failed
       x-auth-context: staff-token
-      description: 6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。
+      description: 6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。按「变更」类模板开统一审批复核单(final_approver_id/parallel_lines 同 submitContract)。
       parameters:
         - name: contract_id
           in: path
@@ -18189,7 +18124,7 @@ paths:
       tags:
         - contract
       operationId: requestContractScopeGrant
-      summary: 超范围下单经营申请(拦下后可申请,走既有审批链)
+      summary: 超范围下单经营申请(拦下后可申请,走统一审批)
       x-permission: contract.scope_request.raise
       x-data-scope: platform
       x-terminal-allowed:
@@ -18199,7 +18134,7 @@ paths:
       x-audit-event-failure: contract.scope_request_raise_failed
       x-auth-context: staff-token
       description: 下单被合同经营范围拦下后,就某品类提交申请(须填原因),进 contract_changes(type=scope_grant)
-        走既有分组并行会签链;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。
+        按「变更」类模板开统一审批复核单;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。
       parameters:
         - name: contract_id
           in: path
@@ -18239,6 +18174,29 @@ paths:
                   format: date
                   nullable: true
                   description: 临时许可有效期至(grant_type=temporary 必填,须将来)。
+                final_approver_id:
+                  type: string
+                  nullable: true
+                  description: 主线最终审批人(空=该类合同模板配置的默认最终审批人即总经理;两者皆空拒绝 CONTRACT_FINAL_APPROVER_REQUIRED)。
+                  maxLength: 64
+                parallel_lines:
+                  type: array
+                  description: 模板要求的各平行相关部门线(业务/财务/法务审核)的最终审批人,须逐线给齐;模板外的线拒绝。
+                  items:
+                    type: object
+                    properties:
+                      line_code:
+                        type: string
+                        minLength: 1
+                        description: 平行审批线代码
+                      final_approver_id:
+                        type: string
+                        minLength: 1
+                        description: 该线最终审批人
+                    required:
+                      - line_code
+                      - final_approver_id
+                    additionalProperties: false
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -18282,44 +18240,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/contracts/changes/{change_id}/approve:
-    post:
-      tags:
-        - contract
-      operationId: approveContractChange
-      summary: 变更审批(走同一并行链,全过即应用+新版本快照)
-      x-permission: contract.approve.business
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: contract.change_approved
-      x-audit-event-failure: contract.change_approve_failed
-      x-auth-context: staff-token
-      description: 变更走与新签同一可配分组并行链；实际权限按 body.approver_permission_code 动态校验。全阶段通过即应用变更，任一驳回整变更退回。
-      parameters:
-        - name: change_id
-          in: path
-          required: true
-          description: 变更 id。
-          schema:
-            type: string
-            maxLength: 64
-      requestBody:
-        $ref: "#/components/requestBodies/ContractChangeApproveRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
   /api/v1/contracts/{contract_id}/settle:
     post:
       tags:
@@ -18334,7 +18254,7 @@ paths:
       x-audit-event-success: contract.settled
       x-audit-event-failure: contract.settle_failed
       x-auth-context: staff-token
-      description: 按合同 settlement_rules 逐例算；带 dispute_reason 则挂起「有争议」等主管裁决。结清→合同终止/到期。
+      description: 按合同 settlement_rules 逐例算、只开单不落账；带 dispute_reason 则挂起「有争议」等主管裁决。HP-C02（BSM「退租、提前终止、合同到期等各种终止结算，都要经过多级审批」「审批全部通过后，系统按算好的结算清单自动落账，不再单设手动确认入口」）：trigger_type=expiry 开账即按「到期终止」类模板开统一审批复核单（final_approver_id/parallel_lines 同变更入参，缺项 400）并把 review_id 挂在结算单上；复核单全部通过→过齐单核对与非争议闸（未核对或缺单 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE、争议挂起 409 CONTRACT_SETTLEMENT_DISPUTED，随终审整笔回滚）后自动落账、合同到期，结算单按押金够不够分流：押金抵扣全部欠费后有余额要退→押金抵扣中（押金退还应付付清后已结清），押金不足抵扣→欠费追缴中（差额收齐后已结清），正好抵完→已结清；任一节点驳回→结算单作废。退租/提前终止的审批挂在退租变更上，终审通过自动落账。
       parameters:
         - name: contract_id
           in: path
@@ -18401,7 +18321,7 @@ paths:
       x-audit-event-success: contract.dispute_resolved
       x-audit-event-failure: contract.dispute_resolve_failed
       x-auth-context: staff-token
-      description: 有争议 → 待结算（逐例备齐，合同仍生效），待 complete 结清。
+      description: 主管裁决：有争议 → 写裁决结论；有争议，诉讼/仲裁 → 录入诉讼/仲裁结果。resolution_note 必填（结论追加落 dispute_resolution，记裁决人/时），按既有口径重算清单回待结算（合同仍生效），退租变更或到期终止复核单的最后审批随之可继续；非两种争议态 409 CONTRACT_SETTLEMENT_NOT_DISPUTED。
       parameters:
         - name: settlement_id
           in: path
@@ -18430,7 +18350,7 @@ paths:
       tags:
         - contract
       operationId: listContractApprovalFlow
-      summary: 查审批链(生效链：项目覆盖优先)
+      summary: 查审批流程模板(新建/到期终止/变更三类；项目覆盖优先，缺 contract_type 返回三类)
       x-permission: contract.approval.flow.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -18444,6 +18364,138 @@ paths:
           in: query
           required: false
           description: 综合体 id(空=平台默认)。
+          schema:
+            type: string
+            maxLength: 64
+        - name: contract_type
+          in: query
+          required: false
+          description: 合同类型(空=返回三类各自生效模板)。
+          schema:
+            type: string
+            enum:
+              - new
+              - expiry_termination
+              - change
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - contract
+      operationId: saveContractApprovalFlow
+      summary: 配置审批流程模板(按合同类型,按综合体覆盖)
+      x-permission: contract.approval.flow.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.approval_flow_saved
+      x-audit-event-failure: contract.approval_flow_save_failed
+      x-auth-context: staff-token
+      description: 按 (project_id, contract_type) 落为该组合唯一的生效模板；project_id 空=改平台默认模板。required_line_codes 须在 approval_lines 且 active；default_final_approver_id 可空(发起时指定)、非空须为 active 用户。min_main_levels/max_main_levels 为主线自动补全后层级数的上下限(HP-C01-R5)：都不填=不校验；填则两者同时填写且 1≤最少≤最多，否则 400 VALIDATION_FAILED；发起时补全后层级数不在上下限内拒绝 400 CONTRACT_APPROVAL_LEVELS_OUT_OF_RANGE。
+      requestBody:
+        $ref: "#/components/requestBodies/ContractApprovalFlowRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/deposit-months:
+    get:
+      tags:
+        - contract
+      operationId: getContractDepositMonths
+      summary: 查押金收取月数(全平台统一)
+      description: BSM L1347「商户押金的收取月数全平台统一（业务参数，全平台统一可配，出厂默认三个月，须同时配置上下限）」：读全平台押金收取月数；未配置上下限时 min_value/max_value 为空（出厂 3 个月）。仅平台范围可读。
+      x-permission: contract.deposit_months.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - contract
+      operationId: saveContractDepositMonths
+      summary: 配置押金收取月数及上下限(全平台统一)
+      description: BSM L1347「须同时配置上下限；下限不得低于三个月，配置校验拒绝更低的值，不允许零押金或负押金」：值与上下限须同时填写，下限 ≥ 3，值在上下限闭区间内，否则 400 VALIDATION_FAILED。仅平台范围可改。生效合同押金＝收取月数×签约月租（月数随合同快照固化，变更子合同沿用原合同快照月数）。
+      x-permission: contract.deposit_months.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: contract.deposit_months_configured
+      x-audit-event-failure: contract.deposit_months_config_failed
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/DepositMonthsSettingRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/contracts/deposit-refund-wait:
+    get:
+      tags:
+        - contract
+      operationId: getContractDepositRefundWait
+      summary: 查押金退还等待期(按项目)
+      description: BSM L1352／ENUM L252「等待期自最后一个审批完成之日起算，业务参数，按项目可配，出厂默认 30 日，须同时配置上下限」：读该项目生效的押金退还等待期；项目未配置时返回出厂行(project_id=__global__、30 日、min_value/max_value 为空)。项目范围账号缺省取本项目、不得读别的项目(403 CROSS_PROJECT_FORBIDDEN)；无项目范围须传 project_id。
+      x-permission: contract.deposit_refund_wait.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          description: 综合体项目 id(项目范围账号可空＝本项目)。
           schema:
             type: string
             maxLength: 64
@@ -18463,19 +18515,19 @@ paths:
     post:
       tags:
         - contract
-      operationId: saveContractApprovalFlow
-      summary: 配置审批链(分组并行,按综合体覆盖)
-      x-permission: contract.approval.flow.manage
-      x-data-scope: platform
+      operationId: saveContractDepositRefundWait
+      summary: 配置押金退还等待期及上下限(按项目)
+      description: BSM L1352／ENUM L252「须同时配置上下限」：日数与上下限须同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限，否则 400 VALIDATION_FAILED；只作用于该项目，项目范围账号只能改本项目(403 CROSS_PROJECT_FORBIDDEN)。退租/提前终止/到期结算落账时押金退还应付到期日＝max(算账完成日, 最后审批完成日＋等待期)(所在地日期)，到期日前登记付款 409 DEPOSIT_REFUND_NOT_DUE。
+      x-permission: contract.deposit_refund_wait.manage
+      x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: contract.approval_flow_saved
-      x-audit-event-failure: contract.approval_flow_save_failed
+      x-audit-event-success: contract.deposit_refund_wait_configured
+      x-audit-event-failure: contract.deposit_refund_wait_config_failed
       x-auth-context: staff-token
-      description: 同 stage_seq 多步 = 一个并行会签阶段；阶段间串行。project_id 空=改平台默认链。
       requestBody:
-        $ref: "#/components/requestBodies/ContractApprovalFlowRequest"
+        $ref: "#/components/requestBodies/DepositRefundWaitSettingRequest"
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -18558,7 +18610,7 @@ paths:
         - contract
       operationId: listSpaceRentalStatus
       summary: 铺位平面图着色数据源(可租/已租/即将到期)
-      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在未结清的退租结算单——结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已结清结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已结清或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。
+      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在落账前的退租结算单——待结算/有争议/有争议，诉讼/仲裁，结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已落账结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已落账——押金抵扣中/欠费追缴中/已结清，铺位于终审落账时转空置——或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。
       x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -18628,21 +18680,21 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/contracts/settlements/{settlement_id}/complete:
+  /api/v1/contracts/settlements/{settlement_id}/documents-check:
     post:
       tags:
         - contract
-      operationId: completeContractSettlement
-      summary: 结清退租结算→已结清+终止合同
+      operationId: checkContractSettlementDocuments
+      summary: 退租结算齐单核对（缺单保持待处理）
       x-permission: contract.settlement.manage
       x-data-scope: platform
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: contract.settlement_completed
-      x-audit-event-failure: contract.settlement_complete_failed
+      x-audit-event-success: contract.settlement_documents_checked
+      x-audit-event-failure: contract.settlement_documents_check_failed
       x-auth-context: staff-token
-      description: 待结算/押金抵扣中/欠费追缴中 → 已结清(直推)，并终止(退租/提前终止)或到期(到期)合同。退租结算 5 态对齐业务 HTML。
+      description: HP-C02（BSM「退租对应期间的全部相关单据收齐并核对完成后，才允许退租结算最后审批通过；缺单时保持待处理」、裁决 Q16A）：生效月→截止月（HP-C02-R6：退租/提前终止＝在审变更退租日所在月，到期＝到期日所在月；尚未发起退租变更则 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE 保持待处理）逐月核相关单据（租金、物业费按合同应收而无账单即缺；energy_fee_basis=by_contract 且商户有计量表时，该月每只表实际能源费须已登记并已出账）。缺项返回 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE 并在 message 列明细（yyyy-MM:fee_type），结算单保持原态；齐全则在结算单记核对人/时间/备注（resolutionNote）。仅待结算（落账前）可核对；落账后（押金抵扣中/欠费追缴中/已结清）及其他状态 409 CONTRACT_SETTLEMENT_NOT_OPEN。先锁合同行再重读结算单状态，与商户异议、主管裁决、终审落账串行。
       parameters:
         - name: settlement_id
           in: path
@@ -18704,31 +18756,31 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/contracts/settlements/{settlement_id}/advance:
+  /api/v1/contracts/{contract_id}/rent-terms:
     post:
       tags:
         - contract
-      operationId: advanceContractSettlement
-      summary: 逐相推进退租结算
-      x-permission: contract.settlement.manage
+      operationId: editContractDraftRentTerms
+      summary: 草稿编辑补录租金条款(仅草拟中)
+      x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: contract.settlement_advanced
-      x-audit-event-failure: contract.settlement_advance_failed
+      x-audit-event-success: contract.draft_rent_terms_updated
+      x-audit-event-failure: contract.draft_rent_terms_update_failed
       x-auth-context: staff-token
-      description: 待结算→押金抵扣中→欠费追缴中→已结清，逐相推进(让中间态成真实驻留态);到已结清即终止/到期合同。
+      description: 第四轮裁决第 4 条「合同草稿可编辑补录」：只开放租金条款与纯提成合同约定押金。rent_terms 顶层蛇形键归一为驼峰后并入草稿 rent_terms(经营范围 businessScope/allowedCategories/scopeGrants 与变更链系统维护键 parentContractId/amendmentType/increaseFrom/depositAdjustment 不在此修改，带了 400 VALIDATION_FAILED；固定能源费同起草 400)；有月租的合同押金按「收取月数×月租」重算(每平米计租待生效按铺位面积固化月租后再算)，deposit_cent 可不填，填了须与公式一致(否则 400 CONTRACT_DEPOSIT_FORMULA_MISMATCH)；纯提成合同(rentBillingMode=turnover_only)必填约定押金且大于 0(否则 400 VALIDATION_FAILED)，不走月数公式。仅草拟中(含驳回退回起草)可编辑，否则 409 CONTRACT_NOT_DRAFTING。权限同起草：contract.draft.manage、商户账号 403 PLATFORM_SCOPE_REQUIRED、草稿所属项目不在本人可触及范围 403 CROSS_PROJECT_FORBIDDEN(范围校验在幂等之前)。
       parameters:
-        - name: settlement_id
+        - name: contract_id
           in: path
           required: true
-          description: 结算 id。
+          description: 合同 id。
           schema:
             type: string
             maxLength: 64
       requestBody:
-        $ref: "#/components/requestBodies/ContractResolveDisputeRequest"
+        $ref: "#/components/requestBodies/ContractDraftRentTermsRequest"
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -21641,8 +21693,7 @@ paths:
         - merchant-portal
       operationId: submitMerchantPortalSettlementDispute
       summary: 商户专区·结算单异议留言
-      description: 商户对未结清结算单提交异议,结算单挂起为「有争议」; 平台按既有裁决流(contract.settlement.dispute.resolve)闭环,资金权威流程不变。
-        跨商户拒绝(CROSS_MERCHANT_FORBIDDEN),已结清/已有争议拒绝(SETTLEMENT_NOT_DISPUTABLE)。
+      description: 商户对落账前的待结算单提交异议,结算单挂起为「有争议」(结算清单保留),退租变更与到期终止复核单最后审批 409 CONTRACT_SETTLEMENT_DISPUTED,待主管裁决(contract.settlement.dispute.resolve)后回待结算。跨商户拒绝(CROSS_MERCHANT_FORBIDDEN),已落账(押金抵扣中/欠费追缴中/已结清)/已作废/已有争议/已录入诉讼/仲裁结果拒绝(SETTLEMENT_NOT_DISPUTABLE)。先锁合同行再读结算单状态,与主管裁决、终审落账串行。
       x-auth-context: staff-token
       x-permission: merchant.portal.settlement.dispute
       x-data-scope: merchant
@@ -21681,6 +21732,61 @@ paths:
                 reason:
                   type: string
                   description: 异议理由(商户留言)。
+                  maxLength: 2000
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/settlements/{settlement_id}/reject-resolution:
+    post:
+      tags:
+        - merchant-portal
+      operationId: rejectMerchantPortalSettlementResolution
+      summary: 商户专区·不接受主管裁决
+      description: 主管裁决后结算单回到待结算(resolved_at 非空)、且尚未录入诉讼/仲裁结果时,商户对本商户结算单提出不接受裁决(理由必填,追加留痕),结算单进「有争议，诉讼/仲裁」无限期挂起,退租变更与到期终止最后审批 409;诉讼/仲裁有结果后由主管经 resolve-dispute 录入结果回待结算。无裁决 409 SETTLEMENT_RESOLUTION_REQUIRED;已落账(押金抵扣中/欠费追缴中/已结清)/已作废/有争议(新异议待裁决)/已在诉讼仲裁、或已录入诉讼/仲裁结果 409 SETTLEMENT_NOT_REJECTABLE;跨商户 CROSS_MERCHANT_FORBIDDEN。
+      x-auth-context: staff-token
+      x-permission: merchant.portal.settlement.dispute
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: true
+      x-audit-event-success: merchant_portal.settlement.resolution_rejected
+      x-audit-event-failure: merchant_portal.settlement.resolution_reject_failed
+      parameters:
+        - name: settlement_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注。
+                  maxLength: 1000
+                reason:
+                  type: string
+                  description: 不接受裁决的理由。
                   maxLength: 2000
       responses:
         "200":
@@ -44379,12 +44485,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ContractSubmitRequest"
-    ContractApproveRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ContractApproveRequest"
     ContractActivateRequest:
       required: true
       content:
@@ -44397,12 +44497,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ContractChangeRequest"
-    ContractChangeApproveRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ContractChangeApproveRequest"
     ContractSettleRequest:
       required: true
       content:
@@ -44421,6 +44515,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ContractApprovalFlowRequest"
+    DepositMonthsSettingRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DepositMonthsSettingRequest"
+    DepositRefundWaitSettingRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DepositRefundWaitSettingRequest"
     SpaceExpiryColorRuleRequest:
       required: true
       content:
@@ -44439,6 +44545,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ContractAttachmentRequest"
+    ContractDraftRentTermsRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ContractDraftRentTermsRequest"
     FacilityEquipmentRequest:
       required: true
       content:
@@ -45654,7 +45766,7 @@ components:
           description: 到期日期。
         rent_terms:
           type: object
-          description: 租金条款：基础租金/递增/免租/物业费(自由结构)。
+          description: 租金条款：基础租金/递增/免租/物业费(自由结构)；不得带变更链系统键 parent_contract_id/amendment_type/deposit_adjustment(驼峰同)，400 VALIDATION_FAILED。
           additionalProperties: true
         commission_mode:
           type: string
@@ -45675,7 +45787,7 @@ components:
         deposit_cent:
           type: integer
           format: int64
-          description: 押金(分)。
+          description: 押金(分)。有月租的合同按「收取月数×签约月租」由系统计算，可不填，填了须与公式一致(否则 400 CONTRACT_DEPOSIT_FORMULA_MISMATCH)；纯提成合同(rent_terms.rentBillingMode=turnover_only，没有月租)必填合同约定押金且大于 0(缺、0 或负 400 VALIDATION_FAILED)，不走月数公式。
           minimum: 0
         penalty_terms:
           type: object
@@ -52189,6 +52301,11 @@ components:
           type: string
           format: date
           description: 到期日期。
+        deposit_cent:
+          type: integer
+          format: int64
+          description: 纯提成意向(rent_terms.rentBillingMode=turnover_only)签约录入的合同约定押金(分)，随签约喂入合同草稿，校验同 ContractDraftRequest.deposit_cent；有月租的合同不填(押金按公式)。
+          minimum: 0
     LeasingBrandRequest:
       type: object
       description: 请求载荷 LeasingBrandRequest（V161 品牌库 4 类）。
@@ -52272,39 +52389,41 @@ components:
           description: 下次跟进计划时间。
     ContractSubmitRequest:
       type: object
-      description: 请求载荷 ContractSubmitRequest（提交进审批链）。
+      description: 请求载荷 ContractSubmitRequest（提交进统一审批：按「新建」类模板开复核单）。
       additionalProperties: false
       properties:
         idempotency_key:
           type: string
           description: 操作幂等键。
           maxLength: 128
-    ContractApproveRequest:
-      type: object
-      description: 请求载荷 ContractApproveRequest（审批当前阶段并行槽）。
-      additionalProperties: false
-      required:
-        - approver_permission_code
-        - decision
-      properties:
-        idempotency_key:
+        final_approver_id:
           type: string
-          description: 操作幂等键。
-          maxLength: 128
-        approver_permission_code:
+          nullable: true
+          description: 主线最终审批人(空=该类合同模板配置的默认最终审批人即总经理;两者皆空拒绝 CONTRACT_FINAL_APPROVER_REQUIRED)。
+          maxLength: 64
+        parallel_lines:
+          type: array
+          description: 模板要求的各平行相关部门线(业务/财务/法务审核)的最终审批人,须逐线给齐;模板外的线拒绝。
+          items:
+            type: object
+            properties:
+              line_code:
+                type: string
+                minLength: 1
+                description: 平行审批线代码
+              final_approver_id:
+                type: string
+                minLength: 1
+                description: 该线最终审批人
+            required:
+              - line_code
+              - final_approver_id
+            additionalProperties: false
+        reason:
           type: string
-          description: 审批岗位权限码(定位并行槽)。
-          maxLength: 120
-        decision:
-          type: string
-          description: 决议。
-          enum:
-            - approve
-            - reject
-        comment:
-          type: string
-          description: 审批意见。
-          maxLength: 1000
+          nullable: true
+          description: 申请说明(留痕)。
+          maxLength: 500
     ContractActivateRequest:
       type: object
       description: 请求载荷 ContractActivateRequest（生效+绑铺位）。
@@ -52324,7 +52443,7 @@ components:
             maxLength: 64
     ContractChangeRequest:
       type: object
-      description: 请求载荷 ContractChangeRequest（发起变更 6 类）。
+      description: 请求载荷 ContractChangeRequest（发起变更 6 类；按「变更」类模板开统一审批复核单）。
       additionalProperties: false
       required:
         - change_type
@@ -52345,37 +52464,39 @@ components:
             - early_termination
         payload:
           type: object
-          description: 变更载荷(改对应条款细节)。
+          description: 变更载荷(改对应条款细节)；move_out/early_termination 必填 move_out_date(退租日 yyyy-MM-dd，缺失或不可解析 400 VALIDATION_FAILED，归一存为 moveOutDate；齐单核对、缺单判定、欠费口径截止于退租日所在月)；area_change/location_change 必填 deposit_deadline(押金补退办理期限 yyyy-MM-dd)，非每平米计租必填 base_rent_cent(变更后月租，分，大于 0)，location_change 可给 space_ids(新铺位)；拒收手工 new_deposit_cent(400 VALIDATION_FAILED)，目标押金＝原合同快照押金月数×变更后月租，原合同快照缺押金月数 409 CONTRACT_DEPOSIT_MONTHS_MISSING(HP-C03)；子合同租金递增以变更后月租为基数、自变更终审当日起重新计期(rent_terms.increaseFrom)。renewal 必填 new_expiry_date(续租后到期日 yyyy-MM-dd，须晚于现到期日)与 deposit_deadline，每平米计租合同必填 per_sqm_rent_cent(续租后每平米单价，分，大于 0)、否则必填 base_rent_cent(续租后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即同一合同延期：延长到期日、换月租、重固化快照(押金月数沿用原合同快照)、回生效、自原到期月起按续租后条款补排延长期账单(已出账期间不重复)，租金递增以续租后月租为基数、自原到期日次日起重新计期(rent_terms.increaseFrom)；延长期铺位已被别的生效合同占用 409 CONTRACT_SPACE_CONFLICT、按原合同押金月数×续租后月租登记押金差额(应收/应退，到期日＝办理期限)；驳回不改条款。纯提成合同(rent_terms.rentBillingMode=turnover_only，没有月租)押金为约定金额：面积/位置变更与续租不要求 deposit_deadline 与变更/续租后月租，不按公式重算押金、不登记押金差额。rent_change 非纯提成合同必填调整后月租：每平米计租合同 per_sqm_rent_cent(调整后每平米单价，分，大于 0；终审按合同铺位面积算月租)、否则 base_rent_cent(调整后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即作废本合同(及变更链)自终审当月起整笔未收的预排租金应收(留痕；日结锁定的照常作废，冲正行不继承锁、业务日期取作废当日，该期重排应收同记作废当日)，按调整后月租在同一合同重排剩余租期(已部分收款的账期不作废、不重排；物业费不动)，租金递增以调整后月租为基数、自终审当日起重新计期(rent_terms.increaseFrom)；纯提成合同不重排租金。rent_change/business_scope_change 载荷不得带变更链系统键(parent_contract_id/amendment_type/increase_from/deposit_adjustment/scope_grants，驼峰同)，400 VALIDATION_FAILED。终审应用时合同已非生效中(同一合同另一面积/位置变更或退租已先终审)：退租/提前终止以外的变更 409 CONTRACT_NOT_EFFECTIVE，终审整笔回滚、由审批人驳回。
           additionalProperties: true
-    ContractChangeApproveRequest:
-      type: object
-      description: 请求载荷 ContractChangeApproveRequest（变更审批，走与新签同一并行链）。
-      additionalProperties: false
-      required:
-        - approver_permission_code
-        - decision
-      properties:
-        idempotency_key:
+        final_approver_id:
           type: string
-          description: 操作幂等键。
-          maxLength: 128
-        approver_permission_code:
+          nullable: true
+          description: 主线最终审批人(空=该类合同模板配置的默认最终审批人即总经理;两者皆空拒绝 CONTRACT_FINAL_APPROVER_REQUIRED)。
+          maxLength: 64
+        parallel_lines:
+          type: array
+          description: 模板要求的各平行相关部门线(业务/财务/法务审核)的最终审批人,须逐线给齐;模板外的线拒绝。
+          items:
+            type: object
+            properties:
+              line_code:
+                type: string
+                minLength: 1
+                description: 平行审批线代码
+              final_approver_id:
+                type: string
+                minLength: 1
+                description: 该线最终审批人
+            required:
+              - line_code
+              - final_approver_id
+            additionalProperties: false
+        reason:
           type: string
-          description: 审批岗位权限码(定位当前阶段并行槽)。
-          maxLength: 120
-        decision:
-          type: string
-          description: 决议。
-          enum:
-            - approve
-            - reject
-        comment:
-          type: string
-          description: 审批意见。
-          maxLength: 1000
+          nullable: true
+          description: 申请说明(留痕)。
+          maxLength: 500
     ContractSettleRequest:
       type: object
-      description: 请求载荷 ContractSettleRequest（退租/到期结算）。
+      description: 请求载荷 ContractSettleRequest（退租/到期结算；到期结算按「到期终止」类模板开统一审批复核单）。
       additionalProperties: false
       required:
         - trigger_type
@@ -52395,6 +52516,34 @@ components:
           type: string
           description: 争议原因(填则挂起有争议)。
           maxLength: 500
+        final_approver_id:
+          type: string
+          nullable: true
+          description: 主线最终审批人(空=该类合同模板配置的默认最终审批人即总经理;两者皆空拒绝 CONTRACT_FINAL_APPROVER_REQUIRED)。
+          maxLength: 64
+        parallel_lines:
+          type: array
+          description: 模板要求的各平行相关部门线(业务/财务/法务审核)的最终审批人,须逐线给齐;模板外的线拒绝。
+          items:
+            type: object
+            properties:
+              line_code:
+                type: string
+                minLength: 1
+                description: 平行审批线代码
+              final_approver_id:
+                type: string
+                minLength: 1
+                description: 该线最终审批人
+            required:
+              - line_code
+              - final_approver_id
+            additionalProperties: false
+        reason:
+          type: string
+          nullable: true
+          description: 申请说明(留痕)。
+          maxLength: 500
     ContractResolveDisputeRequest:
       type: object
       description: 请求载荷 ContractResolveDisputeRequest（裁决退租争议）。
@@ -52410,10 +52559,10 @@ components:
           maxLength: 500
     ContractApprovalFlowRequest:
       type: object
-      description: 请求载荷 ContractApprovalFlowRequest（配置审批链，分组并行）。
+      description: 请求载荷 ContractApprovalFlowRequest（配置合同审批流程模板：新建/到期终止/变更三类，按综合体覆盖）。
       additionalProperties: false
       required:
-        - steps
+        - contract_type
       properties:
         idempotency_key:
           type: string
@@ -52421,34 +52570,101 @@ components:
           maxLength: 128
         project_id:
           type: string
-          description: 综合体 id(空=平台默认链)。
+          description: 综合体 id(空=平台默认模板)。
           maxLength: 64
+        contract_type:
+          type: string
+          description: 合同类型：新建/到期终止/变更。
+          enum:
+            - new
+            - expiry_termination
+            - change
         name:
           type: string
-          description: 链名。
+          description: 模板名。
           maxLength: 160
-        steps:
+        required_line_codes:
           type: array
-          description: 步骤；同 stage_seq = 一个并行会签阶段。
+          description: 平行相关部门审批线码(approval_lines.line_code，须 active)。
           items:
-            type: object
-            additionalProperties: false
-            required:
-              - stage_seq
-              - stage_name
-              - approver_permission_code
-            properties:
-              stage_seq:
-                type: integer
-                description: 阶段序(升序串行)。
-              stage_name:
-                type: string
-                description: 阶段名。
-                maxLength: 80
-              approver_permission_code:
-                type: string
-                description: 审批岗位权限码。
-                maxLength: 120
+            type: string
+            maxLength: 64
+        default_final_approver_id:
+          type: string
+          description: 主线默认最终审批人用户 id(空=发起时指定)。
+          maxLength: 64
+        min_main_levels:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: 最少主线层级(主线自动补全后层级数下限；与 max_main_levels 同时填写，都空=不校验)。
+        max_main_levels:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: 最多主线层级(主线自动补全后层级数上限；不小于 min_main_levels)。
+    DepositMonthsSettingRequest:
+      type: object
+      description: 请求载荷 DepositMonthsSettingRequest（配置押金收取月数，全平台统一；值与上下限同时填写）。
+      additionalProperties: false
+      required:
+        - value
+        - min_value
+        - max_value
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        value:
+          type: integer
+          minimum: 3
+          description: 押金收取月数(须在上下限内)。
+        min_value:
+          type: integer
+          minimum: 3
+          description: 下限(不得低于 3 个月)。
+        max_value:
+          type: integer
+          minimum: 3
+          description: 上限(不小于下限)。
+        reason:
+          type: string
+          description: 改动缘由(留痕)。
+          maxLength: 500
+    DepositRefundWaitSettingRequest:
+      type: object
+      description: 请求载荷 DepositRefundWaitSettingRequest（配置押金退还等待期，按项目；日数与上下限同时填写）。
+      additionalProperties: false
+      required:
+        - value
+        - min_value
+        - max_value
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        project_id:
+          type: string
+          description: 综合体项目 id(项目范围账号可空＝本项目)。
+          maxLength: 64
+        value:
+          type: integer
+          minimum: 0
+          description: 等待期日数(自最后一个审批完成之日起算；须在上下限内)。
+        min_value:
+          type: integer
+          minimum: 0
+          description: 下限(日，不小于 0)。
+        max_value:
+          type: integer
+          minimum: 0
+          description: 上限(日，不小于下限)。
+        reason:
+          type: string
+          description: 改动缘由(留痕)。
+          maxLength: 500
     SpaceExpiryColorRuleRequest:
       type: object
       description: 请求载荷 SpaceExpiryColorRuleRequest（配置到期着色分类）。
@@ -52513,6 +52729,24 @@ components:
           items:
             type: string
             maxLength: 64
+    ContractDraftRentTermsRequest:
+      type: object
+      description: 请求载荷 ContractDraftRentTermsRequest（第四轮裁决第 4 条 合同草稿编辑补录租金条款）。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键。
+          maxLength: 128
+        rent_terms:
+          type: object
+          description: 补录/修改的租金条款(租金口径 rent_mode、收租方式 rent_billing_mode、月租 base_rent_cent 或每平米单价 per_sqm_rent_cent 等，并入草稿 rent_terms)。
+          additionalProperties: true
+        deposit_cent:
+          type: integer
+          format: int64
+          description: 押金(分)。纯提成合同必填约定押金且大于 0；有月租的合同由系统按「收取月数×月租」重算，可不填，填了须与公式一致。
+          minimum: 0
     FacilityEquipmentRequest:
       type: object
       description: 设备台账新建/更新请求。创建时 name 必填；更新可沿用原名称。

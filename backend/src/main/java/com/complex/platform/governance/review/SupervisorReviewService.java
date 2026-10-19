@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.17
+// 文件版本：V0.19
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -88,6 +88,15 @@ public class SupervisorReviewService {
                     List.of("reason"), "active", "specific_role", "inventory.purchase.approve", List.of("finance_review")),
             new SupervisorReviewPolicyRecord("inventory_purchase_prepayment_resolution", "inventory.purchase_prepayment_resolution", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "inventory.purchase.approve", List.of("finance_review")),
+            // HP-C01（BSM L1349「合同的新建、到期终止、变更分别使用各自配置的审批流程模板，三类均遵守同一全平台审批模型」／PGM L536「三类各走各自的审批流程模板，模板分别可配」）：
+            // 三类合同事项各一条恒阻断策略；平行线由合同模板（contract_approval_flows.required_line_codes）决定、策略不固定线，
+            // 主线档位 one_level_up 只作下限——发起时指定最终审批人（默认模板配置的总经理）即沿直接上级链补全到该人。
+            new SupervisorReviewPolicyRecord("contract_new", "contract.new", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up", null, List.of()),
+            new SupervisorReviewPolicyRecord("contract_expiry_termination", "contract.expiry_termination", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up", null, List.of()),
+            new SupervisorReviewPolicyRecord("contract_change", "contract.change", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up", null, List.of()),
             new SupervisorReviewPolicyRecord("energy_reading_anomaly", "energy.reading_anomaly_confirm", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "energy.reading.approve"),
             new SupervisorReviewPolicyRecord("energy_review_settings", "energy.review_settings", 0, 1, true,

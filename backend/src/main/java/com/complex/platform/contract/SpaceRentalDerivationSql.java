@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 /**
  * CG-09 铺位租赁状态推导共用 SQL 片段（PGM「合同运营细则」：「铺位租赁状态随意向与合同自动联动并在平面图着色（洽谈中、已租、即将到期等），
  * 退租结算完成即转空置，不可租人工标注」；BSM「铺位看板」/ ENUM「铺位租赁状态」：「空置、洽谈中、已租、即将到期、已退租、不可租」）。
@@ -10,11 +12,12 @@ package com.complex.platform.contract;
  * 以该铺「最近一份已进入租期的合同」为准（{@code contract_spaces} 绑定、排除起草/待确认/待生效及生效日在 as_of 之后的合同，
  * 按 effective_date、created_at 取最新一份）：
  * <ul>
- *   <li>已退租：该合同存在未结清的退租结算单（{@code contract_settlements.status ∉ settled/voided}，含 move_out / expiry /
- *       early_termination 三种触发，不论合同是否仍 effective），或该合同已不在生效租期内（expired / terminated / 过期未扫）而没有已结清的结算单；</li>
+ *   <li>已退租：该合同存在落账前的退租结算单（{@code contract_settlements.status ∈ 待结算/有争议/有争议，诉讼仲裁}，含 move_out / expiry /
+ *       early_termination 三种触发，不论合同是否仍 effective），或该合同已不在生效租期内（expired / terminated / 过期未扫）而没有已落账的结算单；</li>
  *   <li>已租：该合同 effective 且 as_of 未过 expiry_date 且无未结清结算单（即将到期由 service 按着色分类再判）；</li>
  *   <li>洽谈中：铺位有招商意向；</li>
- *   <li>空置：结算单已结清（settled）或从未绑约；只有已签约未生效合同的铺位不算已退租。</li>
+ *   <li>空置：结算单已落账（押金抵扣中/欠费追缴中/已结清——第三轮控制席约定「铺位转空置……保持在终审落账时，不随新状态推迟」）或从未绑约；
+ *       只有已签约未生效合同的铺位不算已退租。</li>
  * </ul>
  */
 public final class SpaceRentalDerivationSql {
@@ -29,9 +32,11 @@ public final class SpaceRentalDerivationSql {
     public static final String LATEST_CONTRACT_LATERAL = """
             SELECT c.id AS contract_id, c.lifecycle_status, c.effective_date, c.expiry_date,
                    EXISTS (SELECT 1 FROM contract_settlements st
-                            WHERE st.contract_id = c.id AND st.status NOT IN ('settled', 'voided')) AS settlement_open,
+                            WHERE st.contract_id = c.id
+                              AND st.status IN ('pending_settlement', 'disputed', 'disputed_litigation')) AS settlement_open,
                    EXISTS (SELECT 1 FROM contract_settlements st
-                            WHERE st.contract_id = c.id AND st.status = 'settled') AS settlement_settled
+                            WHERE st.contract_id = c.id
+                              AND st.status IN ('deposit_offsetting', 'arrears_collecting', 'settled')) AS settlement_settled
               FROM contract_spaces cs JOIN contracts c ON c.id = cs.contract_id
              WHERE cs.space_id = s.id
                AND c.lifecycle_status NOT IN ('drafting', 'pending_confirmation', 'pending_effective')

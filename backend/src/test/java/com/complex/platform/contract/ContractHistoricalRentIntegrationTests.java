@@ -1,8 +1,9 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
@@ -70,6 +71,30 @@ class ContractHistoricalRentIntegrationTests {
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM contract_rent_bills WHERE contract_id = 'contract_history'", Integer.class))
                 .isZero();
+    }
+
+    /**
+     * 「保底加抽成叠加」合同面积/位置变更后的子合同出账（第四轮裁决第 2 条「按子合同新月租和重新计期的递增重排剩余租期」；BSM L1347 列明该模式）——真库口径：
+     * 抽成规则按 contract_id 精确匹配、只挂在父合同；子合同（rent_terms.parentContractId 指向同商户父合同）沿变更链取父合同该期规则出账，
+     * 叠加＝子合同月租 8000＋父合同规则保底 10000，账单固化父合同规则 id。
+     */
+    @Test
+    void amendmentChildBillsWithParentTurnoverRuleAlongChain() {
+        contract("sum");
+        rule("contract_history_rule", "2026-01-01", "active", 10000);
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+        repository.saveContract(new ContractRecord("contract_history_child", "rent_history_merchant", "subj_1", null, "subj_1",
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2027-12-31"),
+                Map.of("baseRentCent", 8000, "rentBillingMode", "sum", "parentContractId", "contract_history"),
+                "fixed_ratio", "none", 0L, Map.of(), List.of(), null, null, List.of(), "effective",
+                "proj_1", null, null, null, now, now));
+        ContractRentBillRecord[] bill = new ContractRentBillRecord[1];
+        assertThatCode(() -> bill[0] = service().generateRentBill("contract_history_child",
+                new ContractRentBillRequest("child_rule_bill", "2026-08"))).doesNotThrowAnyException();
+        assertThat(bill[0].amountCent()).isEqualTo(18000);
+        assertThat(jdbc.queryForObject(
+                "SELECT turnover_rule_id FROM contract_rent_bills WHERE id = ?", String.class, bill[0].id()))
+                .isEqualTo("contract_history_rule");
     }
 
     @Test

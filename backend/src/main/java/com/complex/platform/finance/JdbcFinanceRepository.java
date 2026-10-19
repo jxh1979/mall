@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -213,6 +213,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE id = :id
                    FOR UPDATE
                 """, Map.of("id", id), this::mapArApItem).stream().findFirst();
+    }
+
+    @Override
+    public boolean hasCorrectionItems(String itemId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM ar_ap_items WHERE origin_item_id = :id)", Map.of("id", itemId), Boolean.class));
     }
 
     @Override

@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
@@ -307,6 +307,7 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
                     actual.effectiveDate());
         }
         // 3.13：签约草稿带意向空间 → 起草即校验存在性+与生效合同冲突（早反馈，不等生效）。
+        // 第三轮裁决第 1 条：纯提成意向签约录入的约定押金随草稿喂入（校验在 ContractService.createDraft）。
         List<String> intendedSpaces = intent.intendedSpaceId() != null
                 ? List.of(intent.intendedSpaceId()) : List.of();
         ContractRecord contract = contractService.createDraft(new ContractDraftRequest(
@@ -315,7 +316,7 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
                 operationSubjectId != null ? operationSubjectId : contractSubjectId,
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
                 actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(),
-                null, null, null, null, null, List.of(), intent.projectId(), null, intendedSpaces));
+                null, null, actual.depositCent(), null, null, List.of(), intent.projectId(), null, intendedSpaces));
         // CG-01：把起草的合同绑到来源意向（V442 leasing_intents.contract_id），合同生效后据此反查线索置已签约；
         // 线索状态此处不动（合同未经审批、未生效，不是已签约）。
         repository.bindIntentContract(intent.id(), contract.id());

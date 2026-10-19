@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -1687,6 +1687,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     @Override
     public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf) {
         Map<String, Map<String, BigDecimal>> result = new LinkedHashMap<>();
+        // 逐行取未收额的应收读者（本方法、逾期欠款商户榜、逾期应收明细与 90 天以上明细）统一排除已有派生行回指的原行（合同账单作废冲正、V344 补录红冲）：
+        // 冲正行未收额为负被「未收>0」滤掉、抵不掉原行，原行须直接排除（第四轮裁决第 2 条「作废……（留痕）」，与合同域 listUnpaidArIdsForContract 同口径）。
         jdbcTemplate.query("""
                 SELECT CASE WHEN (:as_of - due_date) <= 30 THEN 'a0_30'
                             WHEN (:as_of - due_date) <= 60 THEN 'a31_60'
@@ -1697,6 +1699,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE direction = 'receivable'
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = ar_ap_items.id)
                    AND due_date < :as_of
                  GROUP BY 1, COALESCE(merchant_id, counterparty_id)
                 """, new MapSqlParameterSource().addValue("as_of", asOf),
@@ -1755,6 +1758,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE i.direction = 'receivable'
                    AND i.status <> 'closed'
                    AND i.unpaid_amount_cent > 0
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = i.id)
                    AND i.due_date < :as_of
                    AND (:all_projects OR i.project_id IN (:project_ids))
                  GROUP BY COALESCE(i.merchant_id, i.counterparty_id), m.merchant_name
@@ -2273,6 +2277,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE direction = 'receivable'
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = ar_ap_items.id)
                    AND due_date < :as_of
                    AND (:all_projects OR project_id IN (:project_ids))
                  ORDER BY due_date, id
@@ -2293,6 +2298,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE direction = 'receivable'
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = ar_ap_items.id)
                    AND due_date < :as_of
                    AND (:all_projects OR project_id IN (:project_ids))
                 """, params));
@@ -2643,6 +2649,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE direction = 'receivable'
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = ar_ap_items.id)
                    AND due_date < :as_of
                    AND (:as_of - due_date) > 90
                    AND (:all_projects OR project_id IN (:project_ids))
@@ -2655,6 +2662,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                  WHERE direction = 'receivable'
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = ar_ap_items.id)
                    AND due_date < :as_of
                    AND (:as_of - due_date) > 90
                    AND (:all_projects OR project_id IN (:project_ids))

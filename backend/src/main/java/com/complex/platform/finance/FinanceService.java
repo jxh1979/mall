@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.08
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -68,7 +68,9 @@ public class FinanceService implements TerminationSettlementPort {
             "dispatch_commission_transfer",
             // 第六批：酒吧小费/服务费月结分配跨主体拨付（BSM「派驻人员的成本与报酬」：应付本人的提成、服务费等报酬由该酒吧按月拨付给人员所属主体；
             //   BarPayrollAllocationService 月结按 allocation 逐条写入，正额应付/负额应收）。
-            "bar_payroll_transfer");
+            "bar_payroll_transfer",
+            // HP-C03：面积/位置变更子合同押金补退差额（BSM L1353「批准生效后登记应收或应退」）。
+            "deposit_adjustment");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -78,6 +80,8 @@ public class FinanceService implements TerminationSettlementPort {
     private static final String DEFAULT_REFUND_DIRECTION = "original";
     private static final Set<String> DAILY_CLOSE_SCOPES = Set.of("project", "merchant", "bar", "ticketing", "amusement");
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
+    // 第四轮裁决第 3 条：退租结算押金抵扣销账的收款方式（财务结算 PRD L945 押金动作「抵扣（offset）」；同 dividend_offset 范式）。
+    private static final String DEPOSIT_OFFSET_METHOD = "deposit_offset";
     // R5 T7：六源（与 finance_daily_close_summaries.chk_fdcs_source 一致）。
     private static final List<String> DAILY_CLOSE_SOURCES = List.of(
             "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow");
@@ -109,7 +113,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("ticket_points_issuance", "门票积分发行月结"),
             Map.entry("staff_payroll", "员工工资"),
             Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"),
-            Map.entry("bar_payroll_transfer", "酒吧报酬月结拨付"));
+            Map.entry("bar_payroll_transfer", "酒吧报酬月结拨付"),
+            Map.entry("deposit_adjustment", "变更押金补退差额"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
@@ -167,6 +172,9 @@ public class FinanceService implements TerminationSettlementPort {
     // （finance 已先引用 terminal.TerminalDeviceRepository 为证；terminal 不引用 finance）。
     // 可为 null=门控未接（旧构造/兼容路径）。
     private final com.complex.platform.terminal.MdmService mdmService;
+    // 第三轮裁决第 4 条：登记收付款后回调合同域推进「押金抵扣中」「欠费追缴中」结算单（合同域实现）。构造器 @Lazy 注入防初始化环
+    // （与合同域注入 TerminationSettlementPort 同范式）；旧构造传 null＝不回调（不接合同域的单测）。
+    private final TerminationSettlementProgressPort settlementProgress;
 
     // Stage B（审计 A2，适用所有退款）：退款分级授权引擎 + 功能标志（默认关）。用字段注入以免改既有多处构造点；
     // 可为 null（旧构造/单测未注入）；包私有便于单测置位。开标志后超额财务退款须复核（见 requireRefundTierAuthorized）。
@@ -199,7 +207,8 @@ public class FinanceService implements TerminationSettlementPort {
             AuthorizationService authorizationService,
             com.complex.platform.common.BusinessDayResolver businessDayResolver,
             com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
-            com.complex.platform.terminal.MdmService mdmService
+            com.complex.platform.terminal.MdmService mdmService,
+            @org.springframework.context.annotation.Lazy TerminationSettlementProgressPort settlementProgress
     ) {
         this.repository = repository;
         this.operations = operations;
@@ -208,6 +217,21 @@ public class FinanceService implements TerminationSettlementPort {
         this.businessDayResolver = businessDayResolver;
         this.paymentGateway = paymentGateway;
         this.mdmService = mdmService;
+        this.settlementProgress = settlementProgress;
+    }
+
+    /** 兼容构造（第三轮前的七参形）：不接合同域回调。 */
+    public FinanceService(
+            FinanceRepository repository,
+            AuditedOperationExecutor operations,
+            AuditEventService auditEventService,
+            AuthorizationService authorizationService,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver,
+            com.complex.platform.finance.gateway.PaymentGatewayRouter paymentGateway,
+            com.complex.platform.terminal.MdmService mdmService
+    ) {
+        this(repository, operations, auditEventService, authorizationService, businessDayResolver, paymentGateway,
+                mdmService, null);
     }
 
     /**
@@ -1215,8 +1239,14 @@ public class FinanceService implements TerminationSettlementPort {
             repository.appendArApItem(correctionItem(item, adjustment, now, true,
                     -item.amountCent(), -item.paidAmountCent(), -item.unpaidAmountCent()));
             // ② 重述行：补录后的应有金额；已收付部分原样承接，未收付部分随之重算。
-            repository.appendArApItem(correctionItem(item, adjustment, now, false,
-                    restatedAmountCent, item.paidAmountCent(), restatedUnpaidCent));
+            ArApItemRecord restated = correctionItem(item, adjustment, now, false,
+                    restatedAmountCent, item.paidAmountCent(), restatedUnpaidCent);
+            repository.appendArApItem(restated);
+            // 第三轮裁决第 4 条「差额收齐后→「已结清」」：红冲＋重述同样改了未清额（如 BSM L1322 账单异议「异议成立后多退少补」），
+            // 与登记收付款同一事务回调合同域复核退租结算单（回调入参＝重述行）。
+            if (settlementProgress != null) {
+                settlementProgress.onArApItemPaid(restated);
+            }
         }
         // reject：不改账，只标状态。
         return repository.updateArApAdjustment(new ArApAdjustmentRecord(
@@ -1369,16 +1399,28 @@ public class FinanceService implements TerminationSettlementPort {
     /**
      * ar_ap 台账结算回写公共逻辑（FOR UPDATE 行锁防并发双扣 + 跨商户校验 + 锁定日拦截 + 登记 payment + 回写 paid/unpaid/status）。
      * 供 registerPayment（在线/后台登记收付款）与 F1 confirmOffline（线下确认收款关联应收）共用，保证回款口径一致。
+     * permission 为 null 仅限系统按结算清单自动落账（退租押金抵扣销账），不按操作人权限范围复核，也不受日结锁定拦截（见下）。
      */
     private ArApPaymentResponse settleArApItem(
             String arApItemId, long amountCent, String paymentMethod,
             Instant paymentTime, String bankFlowRef, String idempotencyKey, String permission) {
         ArApItemRecord current = repository.findArApItemByIdForUpdate(arApItemId)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
-        requireArApScope(current, permission);
+        if (permission != null) {
+            requireArApScope(current, permission);
+        }
         requireCurrentPurchasePayable(current);
-        // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。
-        requireNotLocked(current.id());
+        // R5 T7 硬拦截：已锁定台账禁止直接登记收付款，必须走补录审批。系统按终止结算清单自动落账（permission 为 null）不在此限：
+        // BSM L2023「日结锁定后不能直接补录影响金额，必须上级审批通过后补录」——终止结算多级审批全部通过即该上级审批，财务结算 PRD L957
+        // 「系统按清单自动落账……不另设独立抵扣审批或手动确认入口」；被押金覆盖的欠费正是到期日已日结的账单，拦下即终审整笔回滚。
+        if (permission != null) {
+            requireNotLocked(current.id());
+        }
+        // 第四轮裁决第 2 条「作废……尚未收款的预排租金/物业费应收（留痕）」：已有冲正/重述行回指的原行不再是有效款项，不可再登记收付
+        // （所有登记入口经此统一回写点：登记收付款、线下确认、押金抵扣、分红抵扣）。
+        if (repository.hasCorrectionItems(current.id())) {
+            throw ApiException.conflict("AR_AP_ITEM_REVERSED", "该应收应付已被冲正作废，请使用当前有效款项");
+        }
         if ("ticket_points_issuance".equals(current.sourceType())) {
             // 月结异议可能在正式台账生成后、当日付款前提出；来源账单仍须保留付款拦截。
             var bill=ticketPointsJdbc.queryForMap("SELECT id,project_id,due_date,visible_at FROM ticket_points_monthly_bills WHERE id=? FOR UPDATE",current.sourceId());
@@ -1390,6 +1432,18 @@ public class FinanceService implements TerminationSettlementPort {
                     || ticketPointsJdbc.queryForObject("SELECT count(*) FROM ticket_points_portal_outages WHERE project_id=? AND status='pending_review' AND unavailable_to>?",Integer.class,bill.get("project_id"),bill.get("visible_at"))>0)
                 throw ApiException.conflict("POINTS_BILL_REVIEW_PENDING","积分账单有未结异议或门户不可用事实待复核，暂不可登记付款");
         }
+        // HP-C06（BSM L1352／ENUM L252「以退租结算算账完成为准执行支付，且不早于等待期届满」「押金退还支付不受三个付账日与账单异议期约束」）：
+        // 到期日＝合同域算好的 max(算账完成日, 最后审批完成日＋等待期)；所在地今天、或所登记的付款时间（缺省 now，换所在地日期；第三轮控制席约定，
+        // 照 POINTS_BILL_NOT_DUE）早于到期日均拒绝登记付款，不另挂付账日/异议期闸。
+        if ("deposit_refund".equals(current.sourceType())) {
+            LocalDate paymentDay = (paymentTime == null ? Instant.now() : paymentTime)
+                    .atZone(com.complex.platform.common.LocalZone.ID).toLocalDate();
+            if (paymentDay.isBefore(current.dueDate())
+                    || LocalDate.now(com.complex.platform.common.LocalZone.ID).isBefore(current.dueDate())) {
+                throw ApiException.conflict("DEPOSIT_REFUND_NOT_DUE", "押金退还不早于 " + current.dueDate()
+                        + " 支付（等待期届满或退租结算算账完成之日），届时方可登记付款");
+            }
+        }
         // V304 硬拦截：分红发放保护线留存（待释放）应付未释放前禁止付款——「待释放」是真锁不是标签，
         // 须先经释放（re-tag 为 dividend_reserve_released）才可发放给主理人，否则绕过释放规则提前发放留存。
         if ("dividend_reserve_withheld".equals(current.sourceType())) {
@@ -1400,9 +1454,15 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.badRequest("VALIDATION_FAILED", "支付金额超过未付金额");
         }
         Instant now = Instant.now();
+        String paymentId = "arap_pay_" + stableToken("ar_ap_payment", arApItemId + ":" + idempotencyKey);
+        // HP-C03-2（BSM L1353「实际收款或退款成功后才更新已收押金余额……不将未来应收视为到账」）：变更押金补退差额按每笔实收/实付
+        // 写 deposit_ledger collect/refund 行并更新已收押金余额；退还超余额拒绝（与押金四动作同一校验）。
+        if ("deposit_adjustment".equals(current.sourceType())) {
+            recordDepositAdjustmentLedger(current, amountCent, paymentId, now);
+        }
         // 主键纳入 arApItemId，同一幂等键用于不同台账项产生不同 paymentId，避免 ON CONFLICT 覆盖。
         ArApPaymentRecord payment = repository.saveArApPayment(new ArApPaymentRecord(
-                "arap_pay_" + stableToken("ar_ap_payment", arApItemId + ":" + idempotencyKey),
+                paymentId,
                 current.id(),
                 amountCent,
                 paymentMethod,
@@ -1434,7 +1494,23 @@ public class FinanceService implements TerminationSettlementPort {
                 current.originItemId(),
                 current.adjustmentId()
         ));
+        // 第三轮裁决第 4 条：同一事务内回调合同域推进「押金抵扣中」「欠费追缴中」的退租结算单。
+        if (settlementProgress != null) {
+            settlementProgress.onArApItemPaid(updated);
+        }
         return new ArApPaymentResponse(payment, updated);
+    }
+
+    private void recordDepositAdjustmentLedger(ArApItemRecord item, long amountCent, String paymentId, Instant now) {
+        String merchantId = item.counterpartyId();
+        long balance = repository.currentDepositBalanceForUpdate(merchantId);
+        boolean collect = "receivable".equals(item.direction());
+        if (!collect && amountCent > balance) {
+            throw ApiException.badRequest("DEPOSIT_INSUFFICIENT", "押金退还 " + amountCent + " 超过余额 " + balance);
+        }
+        repository.saveDepositLedger(new DepositLedgerRecord("deposit_adj_" + stableToken("deposit_adjustment", paymentId),
+                merchantId, collect ? "collect" : "refund", amountCent, collect ? balance + amountCent : balance - amountCent,
+                item.id(), "变更押金补退差额", now));
     }
 
     private DailyCloseRecord lockDailyClose(DailyCloseRequest request) {
@@ -2312,8 +2388,12 @@ public class FinanceService implements TerminationSettlementPort {
      * 供分红计算单冻结欠款抵扣额与逐项留痕（只读，不改台账）。
      */
     public List<DividendArrearsItem> listOutstandingReceivables(String merchantId) {
-        return repository.listArApItemsByMerchant(merchantId).stream()
-                .filter(i -> "receivable".equals(i.direction()) && i.unpaidAmountCent() > 0)
+        List<ArApItemRecord> items = repository.listArApItemsByMerchant(merchantId);
+        // 已被冲正/重述的原行（第四轮裁决第 2 条作废的预排账单、V344 补录红冲原行）不是有效欠款：派生行沿用原行商户，同一列表内即可排除。
+        Set<String> corrected = items.stream().map(ArApItemRecord::originItemId).filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        return items.stream()
+                .filter(i -> "receivable".equals(i.direction()) && i.unpaidAmountCent() > 0 && !corrected.contains(i.id()))
                 .sorted(java.util.Comparator.comparing(ArApItemRecord::createdAt)
                         .thenComparing(ArApItemRecord::id))
                 .map(i -> new DividendArrearsItem(i.id(), i.itemNo(), i.unpaidAmountCent()))
@@ -2375,14 +2455,14 @@ public class FinanceService implements TerminationSettlementPort {
      * 幂等键=结算单 id；返回实退值（≤ 请求净额）。
      */
     @Override
-    public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId) {
+    public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate) {
         long lockedBalance = repository.currentDepositBalanceForUpdate(merchantId);
         long effectiveRefund = Math.min(Math.max(0L, netRefundCent), Math.max(0L, lockedBalance));
         if (effectiveRefund <= 0) {
             return 0L;   // 余额已被其它合同退租消费殆尽：不挂应付、不写台账
         }
         ArApItemRecord item = persistDerivedArApItem(
-                "payable", merchantId, "deposit_refund", settlementId, effectiveRefund, settlementId, merchantId);
+                "payable", merchantId, "deposit_refund", settlementId, effectiveRefund, settlementId, merchantId, null, dueDate);
         repository.saveDepositLedger(new DepositLedgerRecord(
                 "deposit_refund_" + slug(settlementId), merchantId, "refund", effectiveRefund,
                 lockedBalance - effectiveRefund, item.id(), "退租应退押金结算", Instant.now()));
@@ -2395,6 +2475,48 @@ public class FinanceService implements TerminationSettlementPort {
         ArApItemRecord item = persistDerivedArApItem(
                 "receivable", merchantId, "termination_penalty", settlementId, penaltyCent, settlementId, merchantId);
         return item.id();
+    }
+
+    /**
+     * HP-C03-2：变更押金补退差额登记（差额&gt;0 应收补缴、&lt;0 应付退还，取绝对值；到期日＝办理期限；幂等键＝变更 id）。
+     * 只挂台账、不写 deposit_ledger——已收押金余额等实际收退（settleArApItem）才更新。
+     */
+    @Override
+    public ArApItemRecord registerDepositAdjustment(String merchantId, String childContractId, String changeId,
+            long deltaCent, LocalDate deadline) {
+        return persistDerivedArApItem(deltaCent > 0 ? "receivable" : "payable", merchantId, "deposit_adjustment",
+                childContractId, Math.abs(deltaCent), changeId, merchantId, null, deadline);
+    }
+
+    /**
+     * 第四轮裁决第 3 条退租结算押金抵扣销账（见端口说明）：锁押金余额（与退还/补退串行）→ 逐笔锁台账项按未收额经 settleArApItem 以 deposit_offset 销账 →
+     * 一条 deduct 行（id 由结算单 id 派生）。系统按结算清单自动落账（财务结算 PRD L957「不另设独立抵扣审批或手动确认入口」），不按当前操作人权限范围复核；
+     * 销账同样回调合同域（此刻结算单仍在「待结算」，状态由终审落账按押金够不够分流，回调不推进）。
+     */
+    @Override
+    public List<DepositOffset> offsetReceivablesWithDeposit(String merchantId, String settlementId, List<String> arApItemIds,
+            long offsetCent) {
+        long balance = repository.currentDepositBalanceForUpdate(merchantId);
+        long remaining = Math.min(offsetCent, balance);
+        Instant now = Instant.now();
+        List<DepositOffset> offsets = new java.util.ArrayList<>();
+        for (String id : arApItemIds) {
+            if (remaining <= 0) {
+                break;
+            }
+            long apply = Math.min(remaining, repository.findArApItemByIdForUpdate(id).orElseThrow().unpaidAmountCent());
+            if (apply > 0) {
+                settleArApItem(id, apply, DEPOSIT_OFFSET_METHOD, now, settlementId, settlementId, null);
+                offsets.add(new DepositOffset(id, apply));
+                remaining -= apply;
+            }
+        }
+        long total = offsets.stream().mapToLong(DepositOffset::amountCent).sum();
+        if (total > 0) {
+            repository.saveDepositLedger(new DepositLedgerRecord("deposit_offset_" + slug(settlementId), merchantId, "deduct", total,
+                    balance - total, null, "退租结算押金抵扣（结算单 " + settlementId + "）", now));
+        }
+        return offsets;
     }
 
     /** 应退押金封顶=min(合同固化额, 该商户押金台账实收余额)。只读余额（无锁），无台账=0。 */
@@ -2548,12 +2670,27 @@ public class FinanceService implements TerminationSettlementPort {
             String idempotencyKey,
             String merchantId,
             String accountingPeriod) {
-        LocalDate dueDate = LocalDate.now();
+        return persistDerivedArApItem(direction, counterpartyId, sourceType, sourceId, amountCent, idempotencyKey, merchantId,
+                accountingPeriod, LocalDate.now());
+    }
+
+    /** dueDate：台账到期日（默认当日经营日落账；HP-C03 押金补退差额＝办理期限）。锁定判定按落账当日。 */
+    private ArApItemRecord persistDerivedArApItem(
+            String direction,
+            String counterpartyId,
+            String sourceType,
+            String sourceId,
+            long amountCent,
+            String idempotencyKey,
+            String merchantId,
+            String accountingPeriod,
+            LocalDate dueDate) {
+        LocalDate today = LocalDate.now();
         // F-OPS-09：派生台账按本条目归属 merchantId 判锁（与下方 ArApItemRecord.merchantId 同口径）；
         // merchantId 为空（平台口径派生）则受任一封账约束。
-        if (repository.lockedDailyCloseExistsForDate(dueDate, merchantId)) {
+        if (repository.lockedDailyCloseExistsForDate(today, merchantId)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "营业日 " + dueDate + " 已锁定，请走补录调整流程");
+                    "营业日 " + today + " 已锁定，请走补录调整流程");
         }
         Instant now = Instant.now();
         String slug = boundedArApSlug(slug(sourceType + "_" + idempotencyKey));

@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
@@ -57,6 +59,26 @@ class TerminationSettlementMathTests {
         assertThat(r.penaltyCent()).isEqualTo(200000L);
         Map<String, Object> pen = itemOf(r, "termination_penalty");
         assertThat(pen).containsEntry("direction", "receivable").containsEntry("reason", "提前退租违约");
+    }
+
+    /** BSM L1347「只有清退时押金才能抵扣欠费与违约金」：提前终止违约金并入押金抵扣基数——先抵未清与违约金，余额才退，不足即商户仍欠。 */
+    @Test
+    void earlyTerminationDepositOffsetsUnpaidAndPenaltyBeforeRefund() {
+        TerminationSettlementMath.Result r =
+                TerminationSettlementMath.compute("early_termination", 500000L, 300000L, 300000L, "合同条款违约金");
+        assertThat(r.offsetCent()).isEqualTo(500000L);
+        assertThat(r.depositRefundCent()).isZero();
+        assertThat(r.merchantStillOwesCent()).isEqualTo(100000L);
+        assertThat(itemOf(r, "deposit_disposal")).containsEntry("status", "listed_only")
+                .containsEntry("merchantStillOwesCent", 100000L);
+        TerminationSettlementMath.Result rest =
+                TerminationSettlementMath.compute("early_termination", 500000L, 100000L, 200000L, null);
+        assertThat(rest.offsetCent()).isEqualTo(300000L);
+        assertThat(rest.depositRefundCent()).isEqualTo(200000L);
+        assertThat(rest.merchantStillOwesCent()).isZero();
+        TerminationSettlementMath.Result none =
+                TerminationSettlementMath.compute("early_termination", 0L, 0L, 200000L, null);
+        assertThat(none.merchantStillOwesCent()).isEqualTo(200000L);
     }
 
     @Test

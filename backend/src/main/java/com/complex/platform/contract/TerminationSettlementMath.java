@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -7,8 +9,8 @@ import java.util.Map;
 
 /**
  * 退租结算算法（纯函数，无副作用、无 IO）：未清应收清算 + 押金处置 + 提前退租违约金，
- * 产出结算清单快照（逐项留痕）+ 落台账净额。抵扣规则：应退押金先抵未清应收，
- * 净额&gt;0 挂应付给商户，净额≤0=商户仍欠差额（不挂应付、只列示，未清应收本已在应收台账不重复挂）。
+ * 产出结算清单快照（逐项留痕）+ 落台账净额。抵扣规则（BSM L1347「只有清退时押金才能抵扣欠费与违约金」）：应退押金先抵未清应收与违约金，
+ * 净额&gt;0 挂应付给商户，净额≤0=商户仍欠差额（不挂应付、只列示，未清应收本已在应收台账不重复挂，违约金另挂应收）。
  * 违约金仅 early_termination 计入；move_out 不计违约金。
  */
 final class TerminationSettlementMath {
@@ -19,9 +21,9 @@ final class TerminationSettlementMath {
     record Result(
             long depositCent,
             long unpaidCent,
-            long offsetCent,              // 押金抵未清的实际抵扣额 = min(deposit, unpaid)
-            long depositRefundCent,       // 应退押金净额 = max(0, deposit - unpaid)，>0 才挂应付
-            long merchantStillOwesCent,   // = max(0, unpaid - deposit)，>0 只列示不挂
+            long offsetCent,              // 押金抵未清与违约金的实际抵扣额 = min(deposit, unpaid + penalty)
+            long depositRefundCent,       // 应退押金净额 = max(0, deposit - unpaid - penalty)，>0 才挂应付
+            long merchantStillOwesCent,   // = max(0, unpaid + penalty - deposit)，>0 只列示不挂
             long penaltyCent,             // 生效违约金（move_out 恒 0）
             List<Map<String, Object>> items) {
     }
@@ -32,9 +34,10 @@ final class TerminationSettlementMath {
         long unpaid = Math.max(0L, unpaidCent);
         boolean early = "early_termination".equals(trigger);
         long penalty = early ? Math.max(0L, penaltyCent) : 0L;
-        long offset = Math.min(deposit, unpaid);
-        long depositRefund = Math.max(0L, deposit - unpaid);
-        long stillOwes = Math.max(0L, unpaid - deposit);
+        long owed = unpaid + penalty;
+        long offset = Math.min(deposit, owed);
+        long depositRefund = Math.max(0L, deposit - owed);
+        long stillOwes = Math.max(0L, owed - deposit);
 
         List<Map<String, Object>> items = new ArrayList<>();
         // ① 未清应收清算（只读汇总，不重复挂账——这些应收本就在应收台账）
@@ -56,8 +59,8 @@ final class TerminationSettlementMath {
             dep.put("direction", depositRefund > 0 ? "payable" : "none");
             dep.put("status", depositRefund > 0 ? "payable_posted" : "listed_only");
             dep.put("note", depositRefund > 0
-                    ? "应退押金净额（押金抵未清后）挂应付给商户"
-                    : "押金不足抵未清应收，商户仍欠差额（不挂应付、列示）");
+                    ? "应退押金净额（押金抵未清应收与违约金后）挂应付给商户"
+                    : "押金不足抵未清应收与违约金，商户仍欠差额（不挂应付、列示）");
             items.add(dep);
         }
         // ③ 提前退租违约金

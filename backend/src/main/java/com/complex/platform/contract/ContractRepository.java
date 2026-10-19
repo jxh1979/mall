@@ -1,8 +1,14 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** 合同域仓储（V162 重建）。 */
 public interface ContractRepository {
@@ -25,20 +31,8 @@ public interface ContractRepository {
     /** #31 变更子合同：rent_terms.parentContractId 指向该父合同的子合同。 */
     List<ContractRecord> listChildContracts(String parentContractId);
 
-    // 审批（分组并行链实例）
-    ContractApprovalRecord saveApproval(ContractApprovalRecord approval);
 
-    /** 新签合同审批（change_id IS NULL）。 */
-    List<ContractApprovalRecord> listApprovalsByContract(String contractId);
-
-    void clearApprovals(String contractId);
-
-    /** 某合同变更的审批（同一套并行链）。 */
-    List<ContractApprovalRecord> listApprovalsByChange(String changeId);
-
-    void clearApprovalsByChange(String changeId);
-
-    // 变更
+    // HP-C01：审批实例改走统一审批模型（supervisor_review_nodes），contracts/contract_changes.review_id 挂复核单号。
     ContractChangeRecord saveChange(ContractChangeRecord change);
 
     Optional<ContractChangeRecord> findChangeById(String id);
@@ -74,12 +68,32 @@ public interface ContractRepository {
         return com.complex.platform.common.api.PageResponse.of(all, page, size);
     }
 
-    // 可配审批链：引擎读「该综合体生效链」（项目覆盖优先、否则平台默认）
-    List<ContractApprovalFlowStepRecord> listActiveFlowSteps(String projectId);
+    // 审批流程模板（V494，HP-C01）：按 (综合体, 合同类型) 取生效模板（项目覆盖优先、否则平台默认）
+    Optional<ContractApprovalTemplateRecord> findActiveTemplate(String projectId, String contractType);
 
-    List<ContractApprovalFlowStepRecord> listFlowStepsByProject(String projectId);
+    /** 该综合体三类各自的生效模板（项目覆盖优先、否则平台默认）。 */
+    List<ContractApprovalTemplateRecord> listTemplates(String projectId);
 
-    void saveFlowConfig(String projectId, String name, List<ContractApprovalFlowStepRecord> steps);
+    /** 按 (projectId, contractType) 落为该组合唯一的生效模板（已有则改写）。 */
+    ContractApprovalTemplateRecord saveTemplate(ContractApprovalTemplateRecord template);
+
+    /** 模板校验：审批线在 approval_lines 且 active。 */
+    boolean approvalLineActive(String lineCode);
+
+    /** 模板校验：用户存在且 active。 */
+    boolean userActive(String userId);
+
+    /** HP-C03（BSM L1347）押金收取月数（全平台统一）：读 'global' 行（出厂值 3、上下限未配置为 null）；无行 fail-closed。 */
+    DepositMonthsSettingRecord depositMonthsSetting();
+
+    /** HP-C03 写押金收取月数（值与上下限同时落库）。 */
+    void saveDepositMonthsSetting(DepositMonthsSettingRecord setting, String actorId);
+
+    /** HP-C06（BSM L1352）押金退还等待期（按项目）：项目行 → '__global__' 出厂回落行（30 日、上下限 null）；均无 fail-closed。 */
+    DepositRefundWaitSettingRecord depositRefundWaitSetting(String projectId);
+
+    /** HP-C06 写项目押金退还等待期（日数与上下限同时落库）。 */
+    void saveDepositRefundWaitSetting(DepositRefundWaitSettingRecord setting, String actorId);
 
     // 可配到期着色
     SpaceExpiryColorRuleRecord saveColorRule(SpaceExpiryColorRuleRecord rule);
@@ -107,15 +121,68 @@ public interface ContractRepository {
      */
     List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf);
 
-    /** 该 (合同,期,费目) 是否已挂账（幂等依据）。 */
+    /** 该 (合同,期,费目) 是否已挂账（幂等依据）；已作废（V501 voided_at 非空）的账单不算已挂账。 */
     boolean rentBillExists(String contractId, String period, String feeType);
+
+    /**
+     * 第四轮裁决第 2 条「变更生效时重排」：作废 contractIds 上账期不早于 fromPeriod、费目在 feeTypes 内、整笔未收（台账行已收额为 0）的预排账单——
+     * 应收台账沿用 V344 红冲追加严格取反的冲正行（原行不动），账单记作废时刻与原因；已部分收款的不动。返回被作废的账单 id。
+     * 第五轮：租金调整终审同样调用（只作废租金）；日结锁定的原行照常作废，冲正行不继承锁、业务日期取作废当日（金额归入当期、不改原日结金额），
+     * 替代它的重排应收同记作废当日（见 {@link #insertRentBill}）。
+     */
+    List<String> voidUnpaidRentBills(List<String> contractIds, String fromPeriod, List<String> feeTypes, String reason);
 
     /**
      * 逐期挂账：联动建 ar_ap_items 应收(direction=receivable/status=pending_collection/source=contract_rent)
      * + ar_ap_item_sources + contract_rent_bills。原子。
+     * 重排替代变更链上同期同费目已作废的账单时，到期日取该作废账单冲正行的到期日（锁定原行＝作废当日、未锁＝原到期日），与冲正行同日相抵；否则用 dueDate。
      */
     ContractRentBillRecord insertRentBill(ContractRentBillRecord bill, LocalDate dueDate);
 
-    /** 该合同未付应收合计（退租欠费追缴依据）：ar_ap_items 中 source_id 以 contractId 起头的 receivable 未付额。 */
-    long sumUnpaidArForContract(String contractId);
+    /**
+     * 该合同未付应收合计（退租欠费追缴依据）：ar_ap_items 中 source_id 以 contractId 起头的 receivable 未付额。
+     * HP-C02-R6：through 非空只计账期（accounting_period／能源实际费用 period）不晚于该截止月的应收（裁决第 2 条「欠费口径都按这个截止月」）；
+     * null＝退租日未定（手动开账、尚未发起退租变更）不截止。
+     */
+    long sumUnpaidArForContract(String contractId, YearMonth through);
+
+    /**
+     * 该退租结算单挂出的提前终止违约金应收未收额（ar_ap_items：direction=receivable、source_type='termination_penalty'、source_id＝结算单 id，
+     * 含补录调整的冲正／重述行）。违约金并入押金抵扣（BSM L1347「只有清退时押金才能抵扣欠费与违约金」），欠费追缴中的收齐判定计入此额。
+     */
+    long sumUnpaidTerminationPenalty(String settlementId);
+
+    /**
+     * 第四轮裁决第 3 条（押金抵扣逐笔销账）：与 {@link #sumUnpaidArForContract} 同口径的未清应收逐笔 id（未收额&gt;0），先到期先抵（到期日、id 升序）；
+     * 已被补录红冲的原行不列（其未清额由冲正行抵消、重述行承接）。
+     */
+    List<String> listUnpaidArIdsForContract(String contractId, YearMonth through);
+
+    /**
+     * 变更子合同链 id 集：[自身, 父, 祖父...]（沿 rent_terms.parentContractId 上溯，带环守卫）。账单查重/未清汇总/齐单核对/作废重排/押金抵扣共用。
+     * 只沿同商户父合同上溯（合法子合同由变更终审复制父合同商户）：指向别的商户合同的 parentContractId 不入链，沿链写路径不跨商户。
+     */
+    // ponytail: 每次调用现走链(findContractById 逐代)——子合同罕见且链短(通常≤2)，root 合同 0 额外查询；
+    //   若链变深或计费成热点，缓存链 id 或改 recursive CTE。
+    default List<String> contractChainIds(ContractRecord c) {
+        List<String> ids = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        ContractRecord cur = c;
+        while (cur != null && seen.add(cur.id())) {
+            ids.add(cur.id());
+            Object parentId = cur.rentTerms() == null ? null : cur.rentTerms().get("parentContractId");
+            String merchantId = cur.merchantId();
+            cur = parentId == null ? null : findContractById(String.valueOf(parentId))
+                    .filter(p -> java.util.Objects.equals(p.merchantId(), merchantId)).orElse(null);
+        }
+        return ids;
+    }
+
+    /**
+     * HP-C02（BSM L1352「退租对应期间的全部相关单据收齐并核对完成」）：生效月→through 逐月核「相关单据」，返回缺项「yyyy-MM:fee_type」。
+     * 相关单据按 ENUM L256 租金/账单类型取合同期内按月出账的三类：rent（ContractRentMath 当期应收&gt;0 而无账单）、
+     * property_fee（propertyFeeCent&gt;0 而无账单）、energy_fee（energy_fee_basis=by_contract 且商户有计量表时，该月每只表的实际费用须已登记并已出账）。
+     * 账单查重沿变更子合同链（与 rentBillExists 同口径）。违约金由结算自身生成、押金抵扣按台账余额算，不属「收齐」。
+     */
+    List<String> listMissingTerminationDocuments(ContractRecord contract, YearMonth through);
 }

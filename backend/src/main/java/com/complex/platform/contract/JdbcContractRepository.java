@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.18
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -20,7 +20,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/** 合同域仓储 JDBC 实现（V162 重建）。写演进的 contracts 表 + 新审批/变更/结算/配置表。 */
+/** 合同域仓储 JDBC 实现（V162 重建）。写演进的 contracts 表 + 变更/结算/模板配置表（审批实例 HP-C01 起走统一审批模型）。 */
 @Repository
 class JdbcContractRepository implements ContractRepository {
 
@@ -37,7 +37,7 @@ class JdbcContractRepository implements ContractRepository {
             deposit_cent, penalty_terms::text AS penalty_terms, settlement_rules::text AS settlement_rules,
             snapshot::text AS snapshot, shareholder_ratio_for_report, attachment_ids::text AS attachment_ids,
             lifecycle_status, project_id, terminated_at, termination_reason, renewed_from_contract_id,
-            created_at, updated_at
+            created_at, updated_at, review_id
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -57,14 +57,14 @@ class JdbcContractRepository implements ContractRepository {
                     effective_date, expiry_date, rent_terms, commission_mode, energy_fee_basis, deposit_cent,
                     penalty_terms, settlement_rules, snapshot, shareholder_ratio_for_report, attachment_ids,
                     lifecycle_status, project_id, terminated_at, termination_reason, renewed_from_contract_id,
-                    created_at, updated_at)
+                    created_at, updated_at, review_id)
                 VALUES (
                     :id, :merchant_id, :contract_subject_id, :operation_subject_id, :settlement_subject_id,
                     :effective_date, :expiry_date, CAST(:rent_terms AS jsonb), :commission_mode, :energy_fee_basis,
                     :deposit_cent, CAST(:penalty_terms AS jsonb), CAST(:settlement_rules AS jsonb),
                     CAST(:snapshot AS jsonb), :shareholder_ratio_for_report, CAST(:attachment_ids AS jsonb),
                     :lifecycle_status, :project_id, :terminated_at, :termination_reason, :renewed_from_contract_id,
-                    :created_at, :updated_at)
+                    :created_at, :updated_at, :review_id)
                 ON CONFLICT (id) DO UPDATE SET
                     merchant_id = EXCLUDED.merchant_id, contract_subject_id = EXCLUDED.contract_subject_id,
                     operation_subject_id = EXCLUDED.operation_subject_id,
@@ -77,7 +77,8 @@ class JdbcContractRepository implements ContractRepository {
                     attachment_ids = EXCLUDED.attachment_ids, lifecycle_status = EXCLUDED.lifecycle_status,
                     project_id = EXCLUDED.project_id, terminated_at = EXCLUDED.terminated_at,
                     termination_reason = EXCLUDED.termination_reason,
-                    renewed_from_contract_id = EXCLUDED.renewed_from_contract_id, updated_at = EXCLUDED.updated_at
+                    renewed_from_contract_id = EXCLUDED.renewed_from_contract_id, updated_at = EXCLUDED.updated_at,
+                    review_id = EXCLUDED.review_id
                 """, new MapSqlParameterSource()
                 .addValue("id", c.id())
                 .addValue("merchant_id", c.merchantId())
@@ -101,7 +102,8 @@ class JdbcContractRepository implements ContractRepository {
                 .addValue("termination_reason", c.terminationReason())
                 .addValue("renewed_from_contract_id", c.renewedFromContractId())
                 .addValue("created_at", timestampWithTimeZone(c.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(c.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(c.updatedAt()))
+                .addValue("review_id", c.reviewId()));
         return c;
     }
 
@@ -142,72 +144,18 @@ class JdbcContractRepository implements ContractRepository {
                 new MapSqlParameterSource().addValue("pid", parentContractId), this::mapContract);
     }
 
-    // ---------- approvals ----------
-    private static final String APPROVAL_COLS =
-            "id, contract_id, change_id, stage_seq, approver_permission_code, approver_user_id, decision, "
-            + "comment, decided_at, created_at";
-
-    @Override
-    public ContractApprovalRecord saveApproval(ContractApprovalRecord a) {
-        jdbcTemplate.update("""
-                INSERT INTO contract_approvals (id, contract_id, change_id, stage_seq, approver_permission_code,
-                        approver_user_id, decision, comment, decided_at, created_at)
-                VALUES (:id, :contract_id, :change_id, :stage_seq, :approver_permission_code, :approver_user_id,
-                        :decision, :comment, :decided_at, :created_at)
-                ON CONFLICT (id) DO UPDATE SET
-                    approver_user_id = EXCLUDED.approver_user_id, decision = EXCLUDED.decision,
-                    comment = EXCLUDED.comment, decided_at = EXCLUDED.decided_at
-                """, new MapSqlParameterSource()
-                .addValue("id", a.id())
-                .addValue("contract_id", a.contractId())
-                .addValue("change_id", a.changeId())
-                .addValue("stage_seq", a.stageSeq())
-                .addValue("approver_permission_code", a.approverPermissionCode())
-                .addValue("approver_user_id", a.approverUserId())
-                .addValue("decision", a.decision())
-                .addValue("comment", a.comment())
-                .addValue("decided_at", timestampWithTimeZone(a.decidedAt()))
-                .addValue("created_at", timestampWithTimeZone(a.createdAt())));
-        return a;
-    }
-
-    @Override
-    public List<ContractApprovalRecord> listApprovalsByContract(String contractId) {
-        return jdbcTemplate.query("SELECT " + APPROVAL_COLS
-                + " FROM contract_approvals WHERE contract_id = :cid AND change_id IS NULL ORDER BY stage_seq, id",
-                Map.of("cid", contractId), this::mapApproval);
-    }
-
-    @Override
-    public void clearApprovals(String contractId) {
-        jdbcTemplate.update("DELETE FROM contract_approvals WHERE contract_id = :cid AND change_id IS NULL",
-                Map.of("cid", contractId));
-    }
-
-    @Override
-    public List<ContractApprovalRecord> listApprovalsByChange(String changeId) {
-        return jdbcTemplate.query("SELECT " + APPROVAL_COLS
-                + " FROM contract_approvals WHERE change_id = :chid ORDER BY stage_seq, id",
-                Map.of("chid", changeId), this::mapApproval);
-    }
-
-    @Override
-    public void clearApprovalsByChange(String changeId) {
-        jdbcTemplate.update("DELETE FROM contract_approvals WHERE change_id = :chid", Map.of("chid", changeId));
-    }
-
     // ---------- changes ----------
     @Override
     public ContractChangeRecord saveChange(ContractChangeRecord ch) {
         jdbcTemplate.update("""
                 INSERT INTO contract_changes (id, contract_id, change_type, payload, approval_status,
-                        new_snapshot, project_id, created_at, updated_at)
+                        new_snapshot, project_id, created_at, updated_at, review_id)
                 VALUES (:id, :contract_id, :change_type, CAST(:payload AS jsonb), :approval_status,
-                        CAST(:new_snapshot AS jsonb), :project_id, :created_at, :updated_at)
+                        CAST(:new_snapshot AS jsonb), :project_id, :created_at, :updated_at, :review_id)
                 ON CONFLICT (id) DO UPDATE SET
                     change_type = EXCLUDED.change_type, payload = EXCLUDED.payload,
                     approval_status = EXCLUDED.approval_status, new_snapshot = EXCLUDED.new_snapshot,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at, review_id = EXCLUDED.review_id
                 """, new MapSqlParameterSource()
                 .addValue("id", ch.id())
                 .addValue("contract_id", ch.contractId())
@@ -217,7 +165,8 @@ class JdbcContractRepository implements ContractRepository {
                 .addValue("new_snapshot", ch.newSnapshot() == null ? null : writeJson(ch.newSnapshot()))
                 .addValue("project_id", ch.projectId())
                 .addValue("created_at", timestampWithTimeZone(ch.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(ch.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(ch.updatedAt()))
+                .addValue("review_id", ch.reviewId()));
         return ch;
     }
 
@@ -225,7 +174,7 @@ class JdbcContractRepository implements ContractRepository {
     public Optional<ContractChangeRecord> findChangeById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, contract_id, change_type, payload::text AS payload, approval_status,
-                       new_snapshot::text AS new_snapshot, project_id, created_at, updated_at
+                       new_snapshot::text AS new_snapshot, project_id, created_at, updated_at, review_id
                   FROM contract_changes WHERE id = :id
                 """, Map.of("id", id), this::mapChange).stream().findFirst();
     }
@@ -234,7 +183,7 @@ class JdbcContractRepository implements ContractRepository {
     public List<ContractChangeRecord> listChangesByContract(String contractId) {
         return jdbcTemplate.query("""
                 SELECT id, contract_id, change_type, payload::text AS payload, approval_status,
-                       new_snapshot::text AS new_snapshot, project_id, created_at, updated_at
+                       new_snapshot::text AS new_snapshot, project_id, created_at, updated_at, review_id
                   FROM contract_changes WHERE contract_id = :cid ORDER BY created_at DESC, id
                 """, Map.of("cid", contractId), this::mapChange);
     }
@@ -244,13 +193,19 @@ class JdbcContractRepository implements ContractRepository {
     public ContractSettlementRecord saveSettlement(ContractSettlementRecord s) {
         jdbcTemplate.update("""
                 INSERT INTO contract_settlements (id, contract_id, trigger_type, status, settlement_items,
-                        dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at)
+                        dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at,
+                        documents_checked_by, documents_checked_at, documents_check_note, dispute_resolution, review_id)
                 VALUES (:id, :contract_id, :trigger_type, :status, CAST(:settlement_items AS jsonb),
-                        :dispute_reason, :resolved_by, :resolved_at, :project_id, :created_at, :updated_at)
+                        :dispute_reason, :resolved_by, :resolved_at, :project_id, :created_at, :updated_at,
+                        :documents_checked_by, :documents_checked_at, :documents_check_note, :dispute_resolution, :review_id)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status, settlement_items = EXCLUDED.settlement_items,
                     dispute_reason = EXCLUDED.dispute_reason, resolved_by = EXCLUDED.resolved_by,
-                    resolved_at = EXCLUDED.resolved_at, updated_at = EXCLUDED.updated_at
+                    resolved_at = EXCLUDED.resolved_at, updated_at = EXCLUDED.updated_at,
+                    documents_checked_by = EXCLUDED.documents_checked_by,
+                    documents_checked_at = EXCLUDED.documents_checked_at,
+                    documents_check_note = EXCLUDED.documents_check_note,
+                    dispute_resolution = EXCLUDED.dispute_resolution, review_id = EXCLUDED.review_id
                 """, new MapSqlParameterSource()
                 .addValue("id", s.id())
                 .addValue("contract_id", s.contractId())
@@ -262,7 +217,12 @@ class JdbcContractRepository implements ContractRepository {
                 .addValue("resolved_at", timestampWithTimeZone(s.resolvedAt()))
                 .addValue("project_id", s.projectId())
                 .addValue("created_at", timestampWithTimeZone(s.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(s.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(s.updatedAt()))
+                .addValue("documents_checked_by", s.documentsCheckedBy())
+                .addValue("documents_checked_at", timestampWithTimeZone(s.documentsCheckedAt()))
+                .addValue("documents_check_note", s.documentsCheckNote())
+                .addValue("dispute_resolution", s.disputeResolution())
+                .addValue("review_id", s.reviewId()));
         return s;
     }
 
@@ -270,7 +230,8 @@ class JdbcContractRepository implements ContractRepository {
     public Optional<ContractSettlementRecord> findSettlementById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, contract_id, trigger_type, status, settlement_items::text AS settlement_items,
-                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at
+                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at,
+                       documents_checked_by, documents_checked_at, documents_check_note, dispute_resolution, review_id
                   FROM contract_settlements WHERE id = :id
                 """, Map.of("id", id), this::mapSettlement).stream().findFirst();
     }
@@ -279,7 +240,8 @@ class JdbcContractRepository implements ContractRepository {
     public List<ContractSettlementRecord> listSettlementsByContract(String contractId) {
         return jdbcTemplate.query("""
                 SELECT id, contract_id, trigger_type, status, settlement_items::text AS settlement_items,
-                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at
+                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at,
+                       documents_checked_by, documents_checked_at, documents_check_note, dispute_resolution, review_id
                   FROM contract_settlements WHERE contract_id = :cid ORDER BY created_at DESC, id
                 """, Map.of("cid", contractId), this::mapSettlement);
     }
@@ -296,7 +258,8 @@ class JdbcContractRepository implements ContractRepository {
         return jdbcTemplate.query("""
                 SELECT s.id, s.contract_id, s.trigger_type, s.status,
                        s.settlement_items::text AS settlement_items,
-                       s.dispute_reason, s.resolved_by, s.resolved_at, s.project_id, s.created_at, s.updated_at
+                       s.dispute_reason, s.resolved_by, s.resolved_at, s.project_id, s.created_at, s.updated_at,
+                       s.documents_checked_by, s.documents_checked_at, s.documents_check_note, s.dispute_resolution, s.review_id
                   FROM contract_settlements s
                   JOIN contracts c ON c.id = s.contract_id
                  WHERE c.merchant_id = :mid
@@ -314,58 +277,123 @@ class JdbcContractRepository implements ContractRepository {
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<ContractSettlementRecord> items = jdbcTemplate.query("""
                 SELECT id, contract_id, trigger_type, status, settlement_items::text AS settlement_items,
-                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at
+                       dispute_reason, resolved_by, resolved_at, project_id, created_at, updated_at,
+                       documents_checked_by, documents_checked_at, documents_check_note, dispute_resolution, review_id
                   FROM contract_settlements ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset
                 """, params, this::mapSettlement);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
-    // ---------- approval flow config ----------
+    // ---------- approval flow templates (V494) ----------
+    private static final String TEMPLATE_COLS = """
+            id, project_id, contract_type, name, required_line_codes::text AS required_line_codes,
+            default_final_approver_id, active, min_main_levels, max_main_levels""";
+
     @Override
-    public List<ContractApprovalFlowStepRecord> listActiveFlowSteps(String projectId) {
-        // 项目覆盖优先、否则平台默认链（project_id IS NULL）
-        return jdbcTemplate.query("""
-                SELECT s.id, s.flow_id, f.project_id, s.stage_seq, s.stage_name, s.approver_permission_code, s.active
-                  FROM contract_approval_flow_steps s
-                  JOIN contract_approval_flows f ON f.id = s.flow_id
-                 WHERE s.active AND f.active AND f.id = (
-                       SELECT id FROM contract_approval_flows
-                        WHERE active AND (project_id = :pid OR project_id IS NULL)
-                        ORDER BY (project_id IS NULL) LIMIT 1)
-                 ORDER BY s.stage_seq, s.id
-                """, new MapSqlParameterSource().addValue("pid", projectId), this::mapFlowStep);
+    public Optional<ContractApprovalTemplateRecord> findActiveTemplate(String projectId, String contractType) {
+        // 项目覆盖优先、否则平台默认（project_id IS NULL）
+        return jdbcTemplate.query("SELECT " + TEMPLATE_COLS + """
+                  FROM contract_approval_flows
+                 WHERE active AND contract_type = :type AND (project_id = :pid OR project_id IS NULL)
+                 ORDER BY (project_id IS NULL) LIMIT 1
+                """, new MapSqlParameterSource().addValue("pid", projectId).addValue("type", contractType),
+                this::mapTemplate).stream().findFirst();
     }
 
     @Override
-    public List<ContractApprovalFlowStepRecord> listFlowStepsByProject(String projectId) {
-        return listActiveFlowSteps(projectId);
+    public List<ContractApprovalTemplateRecord> listTemplates(String projectId) {
+        return jdbcTemplate.query("SELECT DISTINCT ON (contract_type) " + TEMPLATE_COLS + """
+                  FROM contract_approval_flows
+                 WHERE active AND (project_id = :pid OR project_id IS NULL)
+                 ORDER BY contract_type, (project_id IS NULL)
+                """, new MapSqlParameterSource().addValue("pid", projectId), this::mapTemplate);
     }
 
     @Override
-    public void saveFlowConfig(String projectId, String name, List<ContractApprovalFlowStepRecord> steps) {
-        String flowId = projectId == null ? "caf_default" : "caf_" + projectId;
+    public ContractApprovalTemplateRecord saveTemplate(ContractApprovalTemplateRecord t) {
         Instant now = Instant.now();
         jdbcTemplate.update("""
-                INSERT INTO contract_approval_flows (id, project_id, name, active, created_at, updated_at)
-                VALUES (:id, :project_id, :name, TRUE, :now, :now)
-                ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = TRUE, updated_at = EXCLUDED.updated_at
+                INSERT INTO contract_approval_flows (id, project_id, contract_type, name, required_line_codes,
+                        default_final_approver_id, active, min_main_levels, max_main_levels, created_at, updated_at)
+                VALUES (:id, :project_id, :type, :name, CAST(:lines AS jsonb), :approver, TRUE, :min_levels, :max_levels, :now, :now)
+                ON CONFLICT ((COALESCE(project_id, '__default__')), contract_type) WHERE active
+                DO UPDATE SET name = EXCLUDED.name, required_line_codes = EXCLUDED.required_line_codes,
+                              default_final_approver_id = EXCLUDED.default_final_approver_id,
+                              min_main_levels = EXCLUDED.min_main_levels, max_main_levels = EXCLUDED.max_main_levels,
+                              updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
-                .addValue("id", flowId).addValue("project_id", projectId)
-                .addValue("name", name == null ? "合同审批链" : name)
+                .addValue("id", t.id() == null ? "caf_" + UUID.randomUUID() : t.id())
+                .addValue("project_id", t.projectId()).addValue("type", t.contractType())
+                .addValue("name", t.name()).addValue("lines", writeJson(t.requiredLineCodes()))
+                .addValue("approver", t.defaultFinalApproverId())
+                .addValue("min_levels", t.minMainLevels()).addValue("max_levels", t.maxMainLevels())
                 .addValue("now", timestampWithTimeZone(now)));
-        jdbcTemplate.update("DELETE FROM contract_approval_flow_steps WHERE flow_id = :fid", Map.of("fid", flowId));
-        for (ContractApprovalFlowStepRecord step : steps) {
-            jdbcTemplate.update("""
-                    INSERT INTO contract_approval_flow_steps (id, flow_id, stage_seq, stage_name,
-                            approver_permission_code, active)
-                    VALUES (:id, :flow_id, :stage_seq, :stage_name, :code, TRUE)
-                    """, new MapSqlParameterSource()
-                    .addValue("id", "cafs_" + UUID.randomUUID())
-                    .addValue("flow_id", flowId)
-                    .addValue("stage_seq", step.stageSeq())
-                    .addValue("stage_name", step.stageName())
-                    .addValue("code", step.approverPermissionCode()));
-        }
+        return findActiveTemplate(t.projectId(), t.contractType()).orElseThrow();
+    }
+
+    @Override
+    public boolean approvalLineActive(String lineCode) {
+        Integer n = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM approval_lines WHERE line_code = :code AND status = 'active'",
+                Map.of("code", lineCode), Integer.class);
+        return n != null && n > 0;
+    }
+
+    @Override
+    public boolean userActive(String userId) {
+        Integer n = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM access_users WHERE id = :id AND status = 'active'",
+                Map.of("id", userId), Integer.class);
+        return n != null && n > 0;
+    }
+
+    // ---------- HP-C03 押金收取月数（V497 contract_deposit_policy，全平台 'global' 一行） ----------
+    @Override
+    public DepositMonthsSettingRecord depositMonthsSetting() {
+        return jdbcTemplate.query("""
+                SELECT deposit_months, min_months, max_months FROM contract_deposit_policy WHERE scope_id = 'global'
+                """, Map.of(), (rs, n) -> new DepositMonthsSettingRecord(rs.getInt("deposit_months"),
+                        rs.getObject("min_months", Integer.class), rs.getObject("max_months", Integer.class)))
+                .stream().findFirst()
+                .orElseThrow(() -> com.complex.platform.common.api.ApiException.conflict("POLICY_NOT_CONFIGURED",
+                        "押金收取月数未配置出厂行，不得上线使用"));
+    }
+
+    @Override
+    public void saveDepositMonthsSetting(DepositMonthsSettingRecord s, String actorId) {
+        jdbcTemplate.update("""
+                INSERT INTO contract_deposit_policy (scope_id, deposit_months, min_months, max_months, updated_by, updated_at)
+                VALUES ('global', :value, :min, :max, :actor, now())
+                ON CONFLICT (scope_id) DO UPDATE SET deposit_months = EXCLUDED.deposit_months, min_months = EXCLUDED.min_months,
+                    max_months = EXCLUDED.max_months, updated_by = EXCLUDED.updated_by, updated_at = now()
+                """, new MapSqlParameterSource().addValue("value", s.value()).addValue("min", s.minValue())
+                .addValue("max", s.maxValue()).addValue("actor", actorId));
+    }
+
+    // ---------- HP-C06 押金退还等待期（V499 contract_deposit_refund_wait_policy，项目行优先、'__global__' 出厂回落） ----------
+    @Override
+    public DepositRefundWaitSettingRecord depositRefundWaitSetting(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT project_id, wait_days, min_days, max_days FROM contract_deposit_refund_wait_policy
+                 WHERE project_id = :pid OR project_id = '__global__'
+                 ORDER BY (project_id = '__global__') LIMIT 1
+                """, new MapSqlParameterSource().addValue("pid", projectId, java.sql.Types.VARCHAR),
+                (rs, n) -> new DepositRefundWaitSettingRecord(rs.getString("project_id"), rs.getInt("wait_days"),
+                        rs.getObject("min_days", Integer.class), rs.getObject("max_days", Integer.class)))
+                .stream().findFirst()
+                .orElseThrow(() -> com.complex.platform.common.api.ApiException.conflict("POLICY_NOT_CONFIGURED",
+                        "押金退还等待期未配置出厂行，不得上线使用"));
+    }
+
+    @Override
+    public void saveDepositRefundWaitSetting(DepositRefundWaitSettingRecord s, String actorId) {
+        jdbcTemplate.update("""
+                INSERT INTO contract_deposit_refund_wait_policy (project_id, wait_days, min_days, max_days, updated_by, updated_at)
+                VALUES (:pid, :value, :min, :max, :actor, now())
+                ON CONFLICT (project_id) DO UPDATE SET wait_days = EXCLUDED.wait_days, min_days = EXCLUDED.min_days,
+                    max_days = EXCLUDED.max_days, updated_by = EXCLUDED.updated_by, updated_at = now()
+                """, new MapSqlParameterSource().addValue("pid", s.projectId()).addValue("value", s.value())
+                .addValue("min", s.minValue()).addValue("max", s.maxValue()).addValue("actor", actorId));
     }
 
     // ---------- expiry color rules ----------
@@ -420,11 +448,20 @@ class JdbcContractRepository implements ContractRepository {
                 """, batch);
     }
 
+    /**
+     * 到期批转：期满的生效合同 → 已到期。
+     * HP-C02（BSM L1352「退租、提前终止、合同到期等各种终止结算，都要经过多级审批」；ENUM L255「到期不得无审批自动终止」）：期满时仍有退租/提前终止变更在审的
+     * 不批转、保持生效待终审——终审通过照常过齐单/争议闸后落账并终止，驳回后下次作业照常批转。
+     */
     @Override
     public int markContractsExpired(LocalDate asOf) {
         return jdbcTemplate.update("""
-                UPDATE contracts SET lifecycle_status = 'expired', updated_at = now()
-                 WHERE lifecycle_status = 'effective' AND expiry_date < :as_of
+                UPDATE contracts c SET lifecycle_status = 'expired', updated_at = now()
+                 WHERE c.lifecycle_status = 'effective' AND c.expiry_date < :as_of
+                   AND NOT EXISTS (
+                        SELECT 1 FROM contract_changes ch
+                         WHERE ch.contract_id = c.id AND ch.change_type IN ('move_out', 'early_termination')
+                           AND ch.approval_status = 'pending')
                 """, new MapSqlParameterSource().addValue("as_of", asOf));
     }
 
@@ -507,17 +544,74 @@ class JdbcContractRepository implements ContractRepository {
     public boolean rentBillExists(String contractId, String period, String feeType) {
         Boolean exists = jdbcTemplate.queryForObject(
                 "SELECT EXISTS (SELECT 1 FROM contract_rent_bills WHERE contract_id = :cid AND period = :p "
-                        + "AND fee_type = :ft)",
+                        + "AND fee_type = :ft AND voided_at IS NULL)",
                 new MapSqlParameterSource().addValue("cid", contractId).addValue("p", period).addValue("ft", feeType),
                 Boolean.class);
         return Boolean.TRUE.equals(exists);
+    }
+
+    /**
+     * 第四轮裁决第 2 条：锁定待作废账单与其台账行（并发登记收款等锁、锁后重判已收额），逐张追加冲正行（V344 红冲同形：金额三列严格取反、状态 reversed、
+     * origin_item_id 回指原行，原行不动；id 由账单 id 确定性派生，重放 DO NOTHING）并记作废时刻与原因。已有派生行回指的台账行（已走补录红冲）不再冲正。
+     * 第五轮裁决第 1 条「变更的审批全部通过即视同上级审批，系统对已锁定应收照常……作废，金额归入当期、不改原日结金额」（ENUM L190「补录金额归入当期」）：
+     * 日结锁定的原行照常作废；冲正行不继承原行锁（locked_day_close_id 不复制），其业务日期（到期日，日结按到期日锁台账）取作废当日（所在地日期）而非已锁定的
+     * 原营业日，原营业日经 origin_item_id 回指原行可查；原行与日结记录、汇总一律不动。未锁原行的冲正行沿用原到期日；重排账单与冲正行同日相抵（insertRentBill）。
+     */
+    @Override
+    public List<String> voidUnpaidRentBills(List<String> contractIds, String fromPeriod, List<String> feeTypes, String reason) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT b.id AS bill_id, a.id AS item_id
+                  FROM contract_rent_bills b JOIN ar_ap_items a ON a.id = b.ar_ap_item_id
+                 WHERE b.contract_id IN (:ids) AND b.period >= :from AND b.fee_type IN (:fee_types)
+                   AND b.voided_at IS NULL AND a.paid_amount_cent = 0
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = a.id)
+                 ORDER BY b.contract_id, b.period, b.fee_type
+                   FOR UPDATE OF b, a
+                """, new MapSqlParameterSource().addValue("ids", contractIds).addValue("from", fromPeriod)
+                .addValue("fee_types", feeTypes));
+        List<String> voided = new java.util.ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String billId = (String) row.get("bill_id");
+            MapSqlParameterSource params = new MapSqlParameterSource().addValue("bill", billId)
+                    .addValue("item", row.get("item_id")).addValue("reason", reason)
+                    .addValue("today", LocalDate.now(com.complex.platform.common.LocalZone.ID));
+            jdbcTemplate.update("""
+                    INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
+                            amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
+                            status, created_at, updated_at, merchant_id, project_id, origin_item_id)
+                    SELECT 'arap_void_' || :bill, 'CZ-' || :bill, direction, counterparty_id, source_type, source_id,
+                           -amount_cent, 0, -unpaid_amount_cent, currency,
+                           CASE WHEN locked_day_close_id IS NULL THEN due_date ELSE CAST(:today AS DATE) END, accounting_period,
+                           'reversed', now(), now(), merchant_id, project_id, id
+                      FROM ar_ap_items WHERE id = :item
+                    ON CONFLICT (id) DO NOTHING
+                    """, params);
+            jdbcTemplate.update("UPDATE contract_rent_bills SET voided_at = now(), void_reason = :reason WHERE id = :bill", params);
+            voided.add(billId);
+        }
+        return voided;
     }
 
     @Override
     public ContractRentBillRecord insertRentBill(ContractRentBillRecord b, LocalDate dueDate) {
         Instant now = Instant.now();
         String sourceType = "contract_" + b.feeType();          // contract_rent / contract_property_fee / contract_energy_fee
-        String sourceId = b.contractId() + "|" + b.period();    // 同 sourceType 内按期唯一
+        // 第五轮裁决第 2 条：租金调整在同一合同上重排——该 (合同,期,费目) 已有作废账单时，新应收的来源单号/单据号带重排序号，避开被作废原行仍占着的
+        // 「一个来源单据一条台账」唯一键（V344 uq_ar_ap_items_direction_source）与单据号唯一键；来源单号仍以「合同 id|」起头（未清应收按前缀汇总）。
+        Integer rebill = jdbcTemplate.queryForObject("SELECT count(*) FROM contract_rent_bills WHERE contract_id = :cid AND period = :p"
+                + " AND fee_type = :ft AND voided_at IS NOT NULL", new MapSqlParameterSource().addValue("cid", b.contractId())
+                .addValue("p", b.period()).addValue("ft", b.feeType()), Integer.class);
+        String rebillTag = rebill == null || rebill == 0 ? "" : "|r" + rebill;
+        // 第五轮裁决第 1 条「金额归入当期、不改原日结金额」（ENUM L190「补录金额归入当期」）：重排替代变更链上同期同费目刚作废的账单时，新应收的业务日期（到期日）
+        // 与其冲正行同日——锁定原行的冲正行记作废当日，重排应收同记作废当日，不落到已日结锁定的原营业日；未锁原行的冲正行沿用原到期日，重排应收同记该日。
+        List<String> chain = findContractById(b.contractId()).map(this::contractChainIds).orElse(List.of(b.contractId()));
+        LocalDate replacedDue = jdbcTemplate.query("""
+                SELECT r.due_date FROM contract_rent_bills v JOIN ar_ap_items r ON r.id = 'arap_void_' || v.id
+                 WHERE v.contract_id IN (:chain) AND v.period = :p AND v.fee_type = :ft AND v.voided_at IS NOT NULL
+                 ORDER BY v.voided_at DESC, r.due_date DESC LIMIT 1
+                """, new MapSqlParameterSource().addValue("chain", chain).addValue("p", b.period()).addValue("ft", b.feeType()),
+                rs -> rs.next() ? rs.getObject(1, LocalDate.class) : null);
+        String sourceId = b.contractId() + "|" + b.period() + rebillTag;    // 同 sourceType 内按期唯一
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
                         amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
@@ -527,12 +621,13 @@ class JdbcContractRepository implements ContractRepository {
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", b.arApItemId())
-                .addValue("item_no", b.feeType().toUpperCase() + "-" + b.contractId() + "-" + b.period())
+                .addValue("item_no", b.feeType().toUpperCase() + "-" + b.contractId() + "-" + b.period()
+                        + (rebillTag.isEmpty() ? "" : "-R" + rebill))
                 .addValue("merchant_id", b.merchantId())
                 .addValue("source_type", sourceType)
                 .addValue("source_id", sourceId)
                 .addValue("amount", b.amountCent())
-                .addValue("due_date", dueDate)
+                .addValue("due_date", replacedDue == null ? dueDate : replacedDue)
                 .addValue("period", b.period())
                 .addValue("now", timestampWithTimeZone(now)));
         jdbcTemplate.update("""
@@ -551,7 +646,7 @@ class JdbcContractRepository implements ContractRepository {
                         amount_cent, ar_ap_item_id, created_at, turnover_rule_id)
                 VALUES (:id, :contract_id, :merchant_id, :project_id, :period, :fee_type, :amount, :ar_item, :now,
                         :turnover_rule_id)
-                ON CONFLICT (contract_id, period, fee_type) DO NOTHING
+                ON CONFLICT (contract_id, period, fee_type) WHERE voided_at IS NULL DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", b.id())
                 .addValue("contract_id", b.contractId())
@@ -566,12 +661,91 @@ class JdbcContractRepository implements ContractRepository {
         return b;
     }
 
+    // ---------- HP-C02 齐单核对：缺单判定（BSM L1352／ENUM L252、L256） ----------
     @Override
-    public long sumUnpaidArForContract(String contractId) {
+    public List<String> listMissingTerminationDocuments(ContractRecord c, java.time.YearMonth through) {
+        List<String> chain = contractChainIds(c);
+        Map<String, Object> rt = c.rentTerms() == null ? Map.of() : c.rentTerms();
+        long propertyFee = rt.get("propertyFeeCent") instanceof Number n ? n.longValue() : 0L;
+        boolean energyByContract = "by_contract".equals(c.energyFeeBasis());
+        List<String> missing = new java.util.ArrayList<>();
+        for (java.time.YearMonth ym = java.time.YearMonth.from(c.effectiveDate()); !ym.isAfter(through); ym = ym.plusMonths(1)) {
+            String period = ym.toString();
+            if (ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period) > 0 && !billExistsInChain(chain, period, "rent")) {
+                missing.add(period + ":rent");
+            }
+            if (propertyFee > 0 && !billExistsInChain(chain, period, "property_fee")) {
+                missing.add(period + ":property_fee");
+            }
+            if (energyByContract && merchantEnergyChargeUnbilled(c.merchantId(), c.projectId(), period)) {
+                missing.add(period + ":energy_fee");
+            }
+        }
+        return missing;
+    }
+
+    private boolean billExistsInChain(List<String> chainIds, String period, String feeType) {
+        for (String id : chainIds) {
+            if (rentBillExists(id, period, feeType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 该商户在该综合体的活跃计量表中，任一表该月实际能源费未登记或未出账（ar_ap_item_id 空）即缺（无计量表=不缺）。 */
+    private boolean merchantEnergyChargeUnbilled(String merchantId, String projectId, String period) {
+        Boolean exists = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM energy_meters m
+                     WHERE m.gather_object = 'merchant' AND m.merchant_id = :mid AND m.project_id = :pid AND m.active
+                       AND NOT EXISTS (SELECT 1 FROM energy_actual_charges ch
+                                        WHERE ch.meter_id = m.id AND ch.period = :p AND ch.ar_ap_item_id IS NOT NULL))
+                """, new MapSqlParameterSource().addValue("mid", merchantId).addValue("pid", projectId).addValue("p", period),
+                Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    /**
+     * 未清应收合计（HP-C02-R4，BSM L1347「只有清退时押金才能抵扣欠费与违约金」「到期未缴款项…包括房租、物业费、水电能源费等各类账单」）：
+     * 合同出账（source_id 以「合同 id|」为前缀）＋能耗域出账（source_type='energy_fee'，经 energy_actual_charges.ar_ap_item_id 归属本合同）。
+     * HP-C02-R6：through 非空只计 accounting_period（合同出账＝账期、能耗出账＝实际费用 period，均 yyyy-MM）不晚于截止月的应收。
+     */
+    @Override
+    public long sumUnpaidArForContract(String contractId, java.time.YearMonth through) {
         Long sum = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(unpaid_amount_cent), 0) FROM ar_ap_items
-                 WHERE direction = 'receivable' AND source_id LIKE :prefix
-                """, new MapSqlParameterSource().addValue("prefix", contractId + "|%"), Long.class);
+                 WHERE direction = 'receivable'
+                   AND (source_id LIKE :prefix
+                        OR id IN (SELECT ar_ap_item_id FROM energy_actual_charges
+                                   WHERE contract_id = :cid AND ar_ap_item_id IS NOT NULL))
+                   AND (CAST(:through AS VARCHAR) IS NULL OR accounting_period <= CAST(:through AS VARCHAR))
+                """, new MapSqlParameterSource().addValue("prefix", contractId + "|%").addValue("cid", contractId)
+                .addValue("through", through == null ? null : through.toString()), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    @Override
+    public List<String> listUnpaidArIdsForContract(String contractId, java.time.YearMonth through) {
+        return jdbcTemplate.queryForList("""
+                SELECT i.id FROM ar_ap_items i
+                 WHERE i.direction = 'receivable' AND i.unpaid_amount_cent > 0
+                   AND (i.source_id LIKE :prefix
+                        OR i.id IN (SELECT ar_ap_item_id FROM energy_actual_charges
+                                     WHERE contract_id = :cid AND ar_ap_item_id IS NOT NULL))
+                   AND (CAST(:through AS VARCHAR) IS NULL OR i.accounting_period <= CAST(:through AS VARCHAR))
+                   AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = i.id)
+                 ORDER BY i.due_date, i.id
+                """, new MapSqlParameterSource().addValue("prefix", contractId + "|%").addValue("cid", contractId)
+                .addValue("through", through == null ? null : through.toString()), String.class);
+    }
+
+    @Override
+    public long sumUnpaidTerminationPenalty(String settlementId) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(unpaid_amount_cent), 0) FROM ar_ap_items
+                 WHERE direction = 'receivable' AND source_type = 'termination_penalty' AND source_id = :sid
+                """, Map.of("sid", settlementId), Long.class);
         return sum == null ? 0L : sum;
     }
 
@@ -588,14 +762,7 @@ class JdbcContractRepository implements ContractRepository {
                 readStringList(rs.getString("attachment_ids")), rs.getString("lifecycle_status"),
                 rs.getString("project_id"), nullableInstant(rs, "terminated_at"), rs.getString("termination_reason"),
                 rs.getString("renewed_from_contract_id"), nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
-    }
-
-    private ContractApprovalRecord mapApproval(ResultSet rs, int n) throws SQLException {
-        return new ContractApprovalRecord(
-                rs.getString("id"), rs.getString("contract_id"), rs.getString("change_id"), rs.getInt("stage_seq"),
-                rs.getString("approver_permission_code"), rs.getString("approver_user_id"), rs.getString("decision"),
-                rs.getString("comment"), nullableInstant(rs, "decided_at"), nullableInstant(rs, "created_at"));
+                nullableInstant(rs, "updated_at"), rs.getString("review_id"));
     }
 
     private ContractChangeRecord mapChange(ResultSet rs, int n) throws SQLException {
@@ -603,7 +770,7 @@ class JdbcContractRepository implements ContractRepository {
                 rs.getString("id"), rs.getString("contract_id"), rs.getString("change_type"),
                 readMap(rs.getString("payload")), rs.getString("approval_status"),
                 readMapNullable(rs.getString("new_snapshot")), rs.getString("project_id"),
-                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"), rs.getString("review_id"));
     }
 
     private ContractSettlementRecord mapSettlement(ResultSet rs, int n) throws SQLException {
@@ -611,13 +778,16 @@ class JdbcContractRepository implements ContractRepository {
                 rs.getString("id"), rs.getString("contract_id"), rs.getString("trigger_type"), rs.getString("status"),
                 readList(rs.getString("settlement_items")), rs.getString("dispute_reason"), rs.getString("resolved_by"),
                 nullableInstant(rs, "resolved_at"), rs.getString("project_id"), nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "updated_at"), rs.getString("documents_checked_by"),
+                nullableInstant(rs, "documents_checked_at"), rs.getString("documents_check_note"),
+                rs.getString("dispute_resolution"), rs.getString("review_id"));
     }
 
-    private ContractApprovalFlowStepRecord mapFlowStep(ResultSet rs, int n) throws SQLException {
-        return new ContractApprovalFlowStepRecord(
-                rs.getString("id"), rs.getString("flow_id"), rs.getString("project_id"), rs.getInt("stage_seq"),
-                rs.getString("stage_name"), rs.getString("approver_permission_code"), rs.getBoolean("active"));
+    private ContractApprovalTemplateRecord mapTemplate(ResultSet rs, int n) throws SQLException {
+        return new ContractApprovalTemplateRecord(
+                rs.getString("id"), rs.getString("project_id"), rs.getString("contract_type"), rs.getString("name"),
+                readStringList(rs.getString("required_line_codes")), rs.getString("default_final_approver_id"),
+                rs.getBoolean("active"), rs.getObject("min_main_levels", Integer.class), rs.getObject("max_main_levels", Integer.class));
     }
 
     private SpaceExpiryColorRuleRecord mapColorRule(ResultSet rs, int n) throws SQLException {

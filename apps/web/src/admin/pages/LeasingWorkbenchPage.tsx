@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -38,6 +38,7 @@ interface LeasingIntentRow {
   stage?: string;
   intendedSpaceId?: string;
   lastStageChangeAt?: string;
+  rentTerms?: { rentBillingMode?: string } | null;
 }
 interface LeasingBrandRow {
   id: string;
@@ -155,6 +156,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [salesUsers, setSalesUsers] = React.useState<AccessUserRow[]>([]);
   const [signEffectiveDate, setSignEffectiveDate] = React.useState("2026-07-01");
   const [signExpiryDate, setSignExpiryDate] = React.useState("2027-06-30");
+  // 第三轮裁决第 1 条「纯提成合同的押金由招商按合同约定金额直接录入」：选中纯提成意向时签约表单录入约定押金（元）。
+  const [signDepositYuan, setSignDepositYuan] = React.useState("");
   // 品牌表单
   const [brandName, setBrandName] = React.useState("");
   const [brandType, setBrandType] = React.useState("intentional");
@@ -422,6 +425,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
     await runAction("leasing_intent_advanced", request, () => api.post(`/api/v1/leasing/intents/${intent.selected!.id}/advance`, request));
   }
 
+  const signTurnoverOnly = intent.selected?.rentTerms?.rentBillingMode === "turnover_only";
   async function signIntent() {
     if (!intent.selected) {
       setFormError(TEXT.noIntent);
@@ -429,6 +433,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
     }
     if (!signMerchantId) { setFormError("请选择签约商户。"); return; }
     if (!signSubjectId) { setFormError("请选择合同主体（经营主体），不能用商户 id 顶替。"); return; }
+    if (signTurnoverOnly && !(Number(signDepositYuan) > 0)) { setFormError("纯提成合同须填写合同约定押金（元），不得为零。"); return; }
     const request = {
       idempotencyKey: nextKey("leasing-intent-sign"),
       merchantId: signMerchantId,
@@ -437,6 +442,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       settlementSubjectId: signSubjectId,
       effectiveDate: signEffectiveDate,
       expiryDate: signExpiryDate,
+      depositCent: signTurnoverOnly ? Math.round(Number(signDepositYuan) * 100) : undefined,
     };
     await runAction("leasing_intent_signed", request, () => api.post(`/api/v1/leasing/intents/${intent.selected!.id}/sign`, request));
   }
@@ -613,6 +619,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <label>合同主体<select data-testid="leasing-sign-subject" value={signSubjectId} onChange={(e) => setSignSubjectId(e.target.value)}><option value="">请选择经营主体</option>{entities.map((x) => <option key={x.id} value={x.id}>{(x.entityName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>合同生效日<CnDatePicker data-testid="leasing-sign-effective-date" value={signEffectiveDate} onChange={setSignEffectiveDate} /></label>
               <label>合同到期日<CnDatePicker data-testid="leasing-sign-expiry-date" value={signExpiryDate} onChange={setSignExpiryDate} /></label>
+              {signTurnoverOnly ? <label>押金（元）<input data-testid="leasing-sign-deposit" type="number" min="0" placeholder="纯提成合同约定押金（元）" value={signDepositYuan} onChange={(e) => setSignDepositYuan(e.target.value)} /></label> : null}
             </div>
             <div className="admin-form-row" data-testid="leasing-intent-actions">
               <button type="button" data-testid="leasing-intent-create" disabled={busyAction !== "" || lead.selected?.status === "signed"} title={lead.selected?.status === "signed" ? "已签约的线索不能再次创建意向" : undefined} onClick={() => void createIntent()}>从线索建意向</button>

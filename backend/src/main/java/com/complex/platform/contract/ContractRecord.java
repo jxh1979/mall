@@ -1,5 +1,7 @@
 package com.complex.platform.contract;
 
+// 文件版本：V0.01
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -9,6 +11,7 @@ import java.util.Map;
 /**
  * 合同（V162 重建，对齐 contracts 演进表 + HTML §九 8 业务态）。
  * rentTerms 承载 基础租金/递增/免租/物业费；snapshot=生效固化收益快照（4项，NULL=未生效）。
+ * reviewId（V494 contracts.review_id，HP-C01）=提交审批时开的统一审批复核单，终态回写合同状态；空=未提交或未接审批。
  */
 public record ContractRecord(
         String id,
@@ -33,6 +36,20 @@ public record ContractRecord(
         String terminationReason,
         String renewedFromContractId,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String reviewId
 ) {
+    /** 兼容构造（无复核单）：起草/测试夹具沿用，reviewId 为空。 */
+    public ContractRecord(
+            String id, String merchantId, String contractSubjectId, String operationSubjectId, String settlementSubjectId,
+            LocalDate effectiveDate, LocalDate expiryDate, Map<String, Object> rentTerms, String commissionMode,
+            String energyFeeBasis, Long depositCent, Map<String, Object> penaltyTerms,
+            List<Map<String, Object>> settlementRules, Map<String, Object> snapshot, BigDecimal shareholderRatioForReport,
+            List<String> attachmentIds, String lifecycleStatus, String projectId, Instant terminatedAt,
+            String terminationReason, String renewedFromContractId, Instant createdAt, Instant updatedAt) {
+        this(id, merchantId, contractSubjectId, operationSubjectId, settlementSubjectId, effectiveDate, expiryDate, rentTerms,
+                commissionMode, energyFeeBasis, depositCent, penaltyTerms, settlementRules, snapshot, shareholderRatioForReport,
+                attachmentIds, lifecycleStatus, projectId, terminatedAt, terminationReason, renewedFromContractId, createdAt,
+                updatedAt, null);
+    }
 }
