@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
@@ -105,7 +107,7 @@ class SavedBottleNotificationIntegrationTest {
                 List.of(),
                 List.of(Map.of("quantity", 1)),
                 CLAIM_PHONE,
-                "LABEL-001",
+                "000000",
                 "LABEL-001",
                 "Guest A"
         ));
@@ -197,7 +199,7 @@ class SavedBottleNotificationIntegrationTest {
                 expireAt,
                 "LABEL-001",
                 "Guest A",
-                null,
+                DEPOSIT_PHONE,
                 List.of("registration-photo"),
                 null
         );

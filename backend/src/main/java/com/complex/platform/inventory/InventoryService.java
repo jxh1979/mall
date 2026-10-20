@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -8,7 +8,9 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.customer.CustomerRecord;
+import com.complex.platform.customer.CustomerOtpVerifier;
 import com.complex.platform.customer.CustomerRepository;
+import com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.RiskAlertService;
 import com.complex.platform.evidence.TraceabilityProcessInstanceRecord;
@@ -24,6 +26,14 @@ import com.complex.platform.inventory.dto.PurchaseRequestCreate;
 import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
+import com.complex.platform.inventory.dto.SavedBottleExitNoticeRequest;
+import com.complex.platform.inventory.dto.SavedBottleHandoverRequest;
+import com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest;
+import com.complex.platform.inventory.dto.SavedBottleRemedyRequest;
+import com.complex.platform.inventory.dto.SavedBottleManualPickupDispenseRequest;
+import com.complex.platform.inventory.dto.SavedBottleManualPickupRequest;
+import com.complex.platform.inventory.dto.SavedBottleRenewalRequest;
+import com.complex.platform.inventory.dto.SavedBottleVerificationCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleTransferRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
@@ -43,6 +53,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -61,9 +72,58 @@ import com.complex.platform.common.Strings;
 import static com.complex.platform.common.Strings.requireText;
 
 @Service
-public class InventoryService {
+public class InventoryService implements com.complex.platform.finance.SavedBottleRemedyRecoveryPort {
     @org.springframework.beans.factory.annotation.Autowired PurchaseWorkflowService purchaseWorkflow;
     @org.springframework.beans.factory.annotation.Autowired InventoryTransferFlowService transferFlow;
+
+    // FS-016（BSM L1073/L1198）：客人短信验证码端口 + 按手机号限速（与 CustomerService.enforceOtpRateLimit 同口径）。
+    // 字段注入：不改 13 参构造器与各单测；单测直接置桩。未注入 = 短信服务不可用，核验 fail-closed。
+    @org.springframework.beans.factory.annotation.Autowired(required = false) CustomerOtpVerifier otpVerifier;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.ratelimit.RateLimiter rateLimiter;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.ratelimit.RateLimitProperties rateLimitProperties;
+    // 动态取酒码有效窗口 = 全场统一刷新间隔（ticket_qr_refresh_config，BSM L585「这个刷新间隔全场用同一套统一设置、不写死」）。
+    java.util.function.IntSupplier pickupCodeWindowSeconds;
+    java.time.Clock clock = java.time.Clock.systemUTC();
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setTicketingRepository(com.complex.platform.ticketing.TicketingRepository ticketingRepository) {
+        this.pickupCodeWindowSeconds = ticketingRepository::findQrRefreshIntervalSeconds;
+    }
+
+    // FS-017（BSM L1072 ①②③④）：补存/赔付经营损失与垫付追收走 FinanceService 统一回写点（@Lazy 防初始化环；单测置桩）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.finance.FinanceService financeService;
+    /** 内部结算价（分）：bottle → 目录生效价；未配价为空（对客补存不因此阻断，损失留财务按 R6-D08 补计）。 */
+    java.util.function.Function<SavedBottleRecord, Optional<Long>> settlementPriceResolver = bottle -> Optional.empty();
+    /** 项目 → 酒吧域归属的娱乐平台公司主体（revenue_stream_attribution，all_pass_ticket 流，与 SettlementExpiryJob 同口径）。 */
+    java.util.function.Function<String, String> managementEntityResolver = projectId -> null;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSettlementPriceResolver(com.complex.platform.ticketing.InternalSettlementPriceResolver resolver) {
+        this.settlementPriceResolver = bottle -> resolver.resolve(bottle.itemId(), bottle.merchantId(), null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAttributionRepository(com.complex.platform.settlement.RevenueStreamAttributionRepository attribution) {
+        this.managementEntityResolver = projectId -> projectId == null ? null
+                : attribution.resolveManagementEntity(projectId, PLATFORM_ENTITY_STREAM);
+    }
+
+    private static final String PLATFORM_ENTITY_STREAM = "all_pass_ticket";
+    private static final String STORED_WINE_EXIT_NOTICE_TEMPLATE = "sms.stored_wine.exit_notice";
+    private static final String STORED_WINE_HANDOVER_TEMPLATE = "sms.stored_wine.handover";
+    /** 赔付方案审批：门店主管用高价值复核码，财务用既有应收应付管理码（BSM L1072「经门店主管和财务审批后支付」）。 */
+    static final String REMEDY_SUPERVISOR_APPROVE = "inventory.high_value.review";
+    static final String REMEDY_FINANCE_APPROVE = "finance.ar_ap.manage";
+    private static final Set<String> HANDOVER_CONDITIONS = Set.of("intact", "damaged", "short");
+    private static final String PICKUP_CODE_PREFIX = "swp_";
+    private static final String OTP_SCENE_PREFIX = "inventory.saved_bottle.";
+    static final String MANUAL_PICKUP_INITIATE = "bar.saved_bottle.manual_pickup.initiate";
+    static final String MANUAL_PICKUP_REVIEW = "bar.saved_bottle.manual_pickup.review";
+    static final String MANUAL_PICKUP_CONFIRM_MARKETING = "bar.saved_bottle.manual_pickup.confirm_marketing";
 
     private static final Logger log = LoggerFactory.getLogger(InventoryService.class);
     private static final int DEFAULT_PAGE = 1;
@@ -196,7 +256,8 @@ public class InventoryService {
                             now,
                             now,
                             merchantId,
-                            Boolean.TRUE.equals(actual.manualHighValue())
+                            Boolean.TRUE.equals(actual.manualHighValue()),
+                            Boolean.TRUE.equals(actual.nonConsumable())
                     );
                     return repository.saveInventoryItem(item);
                 }
@@ -220,13 +281,29 @@ public class InventoryService {
     }
 
     public PageResponse<SavedBottleRecord> listSavedBottles() {
+        return listSavedBottles(null);
+    }
+
+    /**
+     * FS-016 顺带：检索存酒记录只能输入手机号（BSM L1073 / PGM L878），phone 非空时按手机哈希精确匹配；
+     * 这是一次按手机号查客人的动作，审计留痕记下查的哪个手机号（哈希）、谁查的（PGM L878「查了谁、谁查的都留痕」）。
+     */
+    public PageResponse<SavedBottleRecord> listSavedBottles(String phone) {
+        String number = trimToNull(phone);
+        String actor = currentActorId();
+        Map<String, Object> lookup = number == null ? Map.of()
+                : Map.of("phone_hash", phoneHash(number), "queried_by", actor == null ? "unknown" : actor);
         return readPage(
                 "bar.saved_bottle.viewed",
                 "bar.saved_bottle.view_failed",
                 "bar.saved_bottle.manage",
                 "saved_bottle",
+                lookup,
                 () -> {
                     Optional<String> scope = authorizationService.currentMerchantScope();
+                    if (number != null) {
+                        return repository.listSavedBottlesByPhoneHash(phoneHash(number), scope.orElse(null));
+                    }
                     return scope.map(repository::listSavedBottlesByMerchant)
                                 .orElseGet(repository::listSavedBottles);
                 }
@@ -257,6 +334,8 @@ public class InventoryService {
                     String customerId = trimToNull(actual.customerId());
                     String nameOrNickname = requireText(actual.customerNameOrNickname(), "customer_name_or_nickname");
                     String bottleLabelValue = requireText(actual.bottleLabelValue(), "bottle_label_value");
+                    // FS-016：登记手机号必填（BSM L1072「记手机号」；取酒/转让按当前持有人手机短信核验，无手机号即无法核验）。
+                    String customerPhone = requireText(actual.customerPhone(), "customer_phone");
                     List<String> registrationPhotoRefs = safeList(actual.registrationPhotoRefs());
                     if (registrationPhotoRefs.isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "registration_photo_refs is required");
@@ -284,8 +363,8 @@ public class InventoryService {
                             registrationDecision.thresholdCent(),
                             bottleLabelValue,
                             nameOrNickname,
-                            trimToNull(actual.customerPhone()),
-                            phoneHash(actual.customerPhone()),
+                            customerPhone,
+                            phoneHash(customerPhone),
                             registrationPhotoRefs,
                             trimToNull(actual.manualNote()),
                             null,
@@ -325,7 +404,8 @@ public class InventoryService {
                 b.createdAt(), updatedAt, b.merchantId(), b.isHighValue(), b.highValueThresholdCents(),
                 b.bottleLabelValue(), b.customerNameOrNickname(), b.customerPhone(), b.customerPhoneHash(),
                 b.registrationPhotoRefs(), b.manualNote(),
-                b.transferredAt(), b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash());
+                b.transferredAt(), b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash(),
+                b.remedyOfSavedBottleId(), b.custodianEntityId(), b.pickupLocation(), b.handedOverAt(), b.handoverId());
     }
 
     public void processSavedBottleNotifications(Instant now, int expiringNoticeDays) {
@@ -434,20 +514,20 @@ public class InventoryService {
             return null;
         }
         String customerId = trimToNull(bottle.customerId());
-        if (customerId != null) {
-            if (customerRepository == null) {
-                return null;
-            }
+        if (customerId != null && customerRepository != null) {
             try {
-                return customerRepository.findCustomerById(customerId)
+                String phone = customerRepository.findCustomerById(customerId)
                         .map(CustomerRecord::phone)
                         .map(Strings::trimToNull)
                         .orElse(null);
+                if (phone != null) {
+                    return phone;
+                }
             } catch (RuntimeException exception) {
                 log.warn("failed to resolve saved bottle customer phone: customer_id={}", customerId, exception);
-                return null;
             }
         }
+        // 会员档案查不到手机时回退登记/受让时记录的手机号（散客与转让后的受让人只有这一处）。
         return trimToNull(bottle.customerPhone());
     }
 
@@ -462,6 +542,7 @@ public class InventoryService {
             putIfNotNull(params, "expireAt", bottle.expireAt() == null ? null
                     : EXPIRE_DATE_TEXT.format(bottle.expireAt().atZone(LocalZone.ID)));
             putIfNotNull(params, "remaining_quantity", bottle.remainingQuantity());
+            putIfNotNull(params, "pickup_location", bottle.pickupLocation());
         }
         if (claim != null) {
             putIfNotNull(params, "claim_id", claim.id());
@@ -483,6 +564,11 @@ public class InventoryService {
         return bottle.expireAt().atZone(ZoneOffset.UTC).toLocalDate().toString();
     }
 
+    /**
+     * FS-016 存酒转让（BSM L1198）：转让须经出让人（当前持有人）手机短信验证码确认，验证成功即完成客户权益人变更
+     * （customer_id/姓名昵称/手机号+哈希整体换成受让人，不设等待领取）；单个标签对应的酒瓶是最小转让单位，不拆分；
+     * 完整记录转让前后客户、时间与操作来源；原持有人手里的动态取酒码立即全部作废（BSM L585）。
+     */
     @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_claim", objectType = "saved_bottle")
     @Transactional
     public SavedBottleTransferRecord transferSavedBottle(String savedBottleId, SavedBottleTransferRequest request) {
@@ -499,46 +585,52 @@ public class InventoryService {
                 () -> {
                     SavedBottleTransferRequest actual = requireRequest(request);
                     String toName = requireText(actual.toNameOrNickname(), "to_name_or_nickname");
-                    // 转让须经出让人(原持有人)手机短信验证码确认(用户 2026-07-08 裁决)。当前校验验证码必填;
-                    // 与客人 OTP 的"发码+核验"绑定为后续(依赖短信服务商,同客人登录环境约束)。
-                    requireText(actual.verificationCode(), "verification_code");
+                    // 受让人手机号必填：受让人此后按其本人手机短信验证码或动态取酒码取酒（BSM L1198）。
+                    String toPhone = requireText(actual.toPhone(), "to_phone");
+                    String code = requireText(actual.verificationCode(), "verification_code");
                     SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    if (scope.isPresent() && !scope.get().equals(bottle.merchantId())) {
-                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "该存酒记录不属于当前商户");
-                    }
+                    requireCustody(bottle);
                     if (!"stored".equals(bottle.status())) {
                         throw ApiException.conflict("SAVED_BOTTLE_NOT_TRANSFERABLE", "该存酒不可转赠");
                     }
-                    if (bottle.expireAt() != null && bottle.expireAt().isBefore(Instant.now())) {
+                    if (bottle.expireAt() != null && bottle.expireAt().isBefore(clock.instant())) {
                         throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "该存酒已过期");
                     }
-                    int qty = actual.transferQuantity() == null ? bottle.remainingQuantity() : actual.transferQuantity();
-                    if (qty <= 0 || qty > bottle.remainingQuantity()) {
-                        throw ApiException.badRequest("VALIDATION_FAILED",
-                                "转赠数量不能超过剩余数量");
+                    // 整瓶转让：缺省即全部剩余量；传了数量必须等于剩余量（同一酒瓶的剩余酒量不得拆分给多个客户）。
+                    if (actual.transferQuantity() != null && actual.transferQuantity() != bottle.remainingQuantity()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "同一酒瓶的剩余酒量不得拆分，须整瓶转让");
                     }
-                    Instant now = Instant.now();
-                    String toPhone = trimToNull(actual.toPhone());
+                    int qty = bottle.remainingQuantity();
+                    String holderPhone = verifyHolderSms(bottle, code, "transfer");
+                    Instant now = clock.instant();
                     String toPhoneHash = phoneHash(toPhone);
-                    // 记录转让目标到存酒(供后续新持有人取酒核身)。
+                    String toCustomerId = findCustomerIdByPhone(toPhone);
+                    // 验证成功即完成客户权益人变更：持有人三件套整体换成受让人；到期日/剩余量/标签/状态不变。
                     repository.saveSavedBottle(new SavedBottleRecord(
-                            bottle.id(), bottle.customerId(), bottle.barProjectId(), bottle.itemId(), bottle.bottleName(),
+                            bottle.id(), toCustomerId, bottle.barProjectId(), bottle.itemId(), bottle.bottleName(),
                             bottle.initialQuantity(), bottle.remainingQuantity(), bottle.unit(), bottle.expireAt(),
                             bottle.status(), bottle.evidenceAttachmentIds(), bottle.createdAt(), now, bottle.merchantId(),
                             bottle.isHighValue(), bottle.highValueThresholdCents(), bottle.bottleLabelValue(),
-                            bottle.customerNameOrNickname(), bottle.customerPhone(), bottle.customerPhoneHash(),
-                            bottle.registrationPhotoRefs(), bottle.manualNote(), now, toName, toPhone, toPhoneHash));
+                            toName, toPhone, toPhoneHash,
+                            bottle.registrationPhotoRefs(), bottle.manualNote(), now, toName, toPhone, toPhoneHash,
+                            bottle.remedyOfSavedBottleId(), bottle.custodianEntityId(), bottle.pickupLocation(),
+                            bottle.handedOverAt(), bottle.handoverId()));
+                    // 权益转赠一经完成，原持有人手里的码立即全部作废（BSM L585）。
+                    repository.revokeActiveSavedBottlePickupCodes(bottle.id());
                     return repository.saveSavedBottleTransfer(new SavedBottleTransferRecord(
                             "transfer_" + slug(actual.idempotencyKey()),
                             bottle.id(), bottle.customerId(), bottle.customerNameOrNickname(),
-                            toName, toPhone, toPhoneHash, qty, null, "transferred",
-                            safeList(actual.evidenceAttachmentIds()), now));
+                            toName, toPhone, toPhoneHash, qty, currentActorId(), "transferred",
+                            safeList(actual.evidenceAttachmentIds()), now,
+                            operationSource(), phoneHash(holderPhone), toCustomerId));
                 });
     }
 
+    /**
+     * FS-016 取酒（BSM L1073）：必须核验当前客户的短信验证码（verification_code）或官方动态取酒码（swp_ 开头）；
+     * 核验在标签/姓名比对之前，核验失败即拒、不建复核行、数量不变；手机号/姓名不单独作为放酒凭证。
+     */
     public SavedBottleClaimRecord claimSavedBottle(String savedBottleId, SavedBottleClaimRequest request) {
         String id = requireText(savedBottleId, "saved_bottle_id");
         return executeWrite(
@@ -552,81 +644,778 @@ public class InventoryService {
                 "saved_bottle_claim",
                 () -> {
                     SavedBottleClaimRequest actual = requireRequest(request);
-                    // P1-3: verificationCode 必须提供，不可绕过
-                    requireText(actual.verificationCode(), "verification_code");
+                    String code = requireText(actual.verificationCode(), "verification_code");
                     // P0-2: SELECT FOR UPDATE 防止并发超领
                     SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
-                    // P0-2: 跨商户越权检查
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    if (scope.isPresent() && !scope.get().equals(savedBottle.merchantId())) {
-                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "该存酒记录不属于当前商户");
+                    requireCustody(savedBottle);
+                    requireClaimable(savedBottle);
+                    String method;
+                    String verifiedPhoneHash;
+                    SavedBottlePickupCodeRecord pickupCode = null;
+                    if (code.startsWith(PICKUP_CODE_PREFIX)) {
+                        pickupCode = requireActivePickupCode(savedBottle, code);
+                        method = "pickup_code";
+                        verifiedPhoneHash = savedBottle.customerPhoneHash();
+                    } else {
+                        method = "sms";
+                        verifiedPhoneHash = phoneHash(verifyHolderSms(savedBottle, code, "claim"));
                     }
-                    if (!"stored".equals(savedBottle.status())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_NOT_CLAIMABLE", "该存酒当前不可取用");
-                    }
-                    if (savedBottle.expireAt() != null && savedBottle.expireAt().isBefore(Instant.now())) {
-                        throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "该存酒已过期");
-                    }
-                    // 取酒核身（REQ-30 + P0#4 F4/F7）：登记了瓶底标签值/姓名昵称时，取酒必须比对一致；
-                    // 任一不符进入人工复核（不出酒）。比对项（取请求显式核身字段，缺省回退 verificationCode 兼容旧端）：
-                    //   1) 瓶底标签值 bottleLabelValue（缺省回退 verificationCode）必须 == 登记标签值；
-                    //   2) 姓名/昵称 customerNameOrNickname 必须 == 登记姓名/昵称（登记了才校验）。
-                    Instant nowReview = Instant.now();
-                    String claimLabel = trimToNull(actual.bottleLabelValue());
-                    if (claimLabel == null) {
-                        claimLabel = actual.verificationCode().trim();
-                    }
-                    String claimName = trimToNull(actual.customerNameOrNickname());
-                    boolean labelMismatch = savedBottle.bottleLabelValue() != null
-                            && !savedBottle.bottleLabelValue().equals(claimLabel);
-                    boolean nameMismatch = savedBottle.customerNameOrNickname() != null
-                            && !savedBottle.customerNameOrNickname().equals(claimName);
-                    if (labelMismatch || nameMismatch) {
-                        repository.saveSavedBottle(savedBottleWith(
-                                savedBottle, "pending_identity_review", savedBottle.remainingQuantity(), nowReview));
-                        return repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
-                                "claim_" + slug(actual.idempotencyKey()),
-                                savedBottle.id(),
-                                0,
-                                trimToNull(actual.claimByPhone()),
-                                "staff_work_phone",
-                                null,
-                                "pending_identity_review",
-                                safeList(actual.evidenceAttachmentIds()),
-                                nowReview
-                        ));
-                    }
-                    Map<String, Object> claimItem = firstItem(actual.claimItems(), "claim_items");
-                    int quantity = requirePositiveItemQuantity(claimItem, "quantity");
-                    if (quantity > savedBottle.remainingQuantity()) {
-                        throw ApiException.conflict("SAVED_BOTTLE_INSUFFICIENT", "存酒剩余数量不足");
-                    }
-                    int remaining = savedBottle.remainingQuantity() - quantity;
-                    Instant now = Instant.now();
-                    SavedBottleRecord updatedBottle = repository.saveSavedBottle(savedBottleWith(
-                            savedBottle, remaining == 0 ? "claimed" : "stored", remaining, now));
-                    SavedBottleClaimRecord claim = repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
-                            "claim_" + slug(actual.idempotencyKey()),
-                            savedBottle.id(),
-                            quantity,
-                            trimToNull(actual.claimByPhone()),
-                            "staff_work_phone",
-                            null,
-                            "picked_up",
-                            safeList(actual.evidenceAttachmentIds()),
-                            now
-                    ));
-                    notifySavedBottleAfterCommit(
-                            updatedBottle,
-                            "claim",
-                            STORED_WINE_CLAIM_TEMPLATE,
-                            "swclaim:" + claim.id(),
-                            claim);
-                    return claim;
+                    return dispenseSavedBottle(savedBottle, actual.idempotencyKey(), actual.claimItems(),
+                            actual.bottleLabelValue(), actual.customerNameOrNickname(), actual.evidenceAttachmentIds(),
+                            method, verifiedPhoneHash, pickupCode);
                 }
         );
+    }
+
+    /**
+     * 核验通过后的出酒：标签值/姓名昵称比对（登记了才比，不再把验证码当标签值回退），不符进 pending_identity_review 不出酒；
+     * 留痕操作员工=当前操作者、终端来源、取用前后剩余量、核验方式与被核验手机哈希（BSM L1073）。
+     */
+    private SavedBottleClaimRecord dispenseSavedBottle(
+            SavedBottleRecord savedBottle,
+            String idempotencyKey,
+            List<Map<String, Object>> claimItems,
+            String bottleLabelValue,
+            String customerNameOrNickname,
+            List<String> evidenceAttachmentIds,
+            String verificationMethod,
+            String verifiedPhoneHash,
+            SavedBottlePickupCodeRecord pickupCode
+    ) {
+        Instant now = clock.instant();
+        String staffId = currentActorId();
+        String terminal = operationSource();
+        int before = savedBottle.remainingQuantity();
+        String claimLabel = trimToNull(bottleLabelValue);
+        String claimName = trimToNull(customerNameOrNickname);
+        boolean labelMismatch = savedBottle.bottleLabelValue() != null
+                && !savedBottle.bottleLabelValue().equals(claimLabel);
+        boolean nameMismatch = savedBottle.customerNameOrNickname() != null
+                && !savedBottle.customerNameOrNickname().equals(claimName);
+        if (labelMismatch || nameMismatch) {
+            repository.saveSavedBottle(savedBottleWith(savedBottle, "pending_identity_review", before, now));
+            SavedBottleClaimRecord review = repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
+                    "claim_" + slug(idempotencyKey), savedBottle.id(), 0, staffId, terminal, null,
+                    "pending_identity_review", safeList(evidenceAttachmentIds), now,
+                    before, before, verificationMethod, verifiedPhoneHash, savedBottle.pickupLocation()));
+            consumePickupCode(pickupCode, review.id());
+            return review;
+        }
+        Map<String, Object> claimItem = firstItem(claimItems, "claim_items");
+        int quantity = requirePositiveItemQuantity(claimItem, "quantity");
+        if (quantity > before) {
+            throw ApiException.conflict("SAVED_BOTTLE_INSUFFICIENT", "存酒剩余数量不足");
+        }
+        int remaining = before - quantity;
+        SavedBottleRecord updatedBottle = repository.saveSavedBottle(savedBottleWith(
+                savedBottle, remaining == 0 ? "claimed" : "stored", remaining, now));
+        SavedBottleClaimRecord claim = repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
+                "claim_" + slug(idempotencyKey), savedBottle.id(), quantity, staffId, terminal, null,
+                "picked_up", safeList(evidenceAttachmentIds), now,
+                before, remaining, verificationMethod, verifiedPhoneHash, savedBottle.pickupLocation()));
+        // 取酒成功后该瓶已出示的动态码一律作废（本次用掉的记 consumed）。
+        repository.revokeActiveSavedBottlePickupCodes(savedBottle.id());
+        consumePickupCode(pickupCode, claim.id());
+        notifySavedBottleAfterCommit(
+                updatedBottle,
+                "claim",
+                STORED_WINE_CLAIM_TEMPLATE,
+                "swclaim:" + claim.id(),
+                claim);
+        return claim;
+    }
+
+    /** FS-016/FS-025：员工侧向当前持有人手机发送短信验证码（scene ∈ transfer | claim | renew），按手机号限速。 */
+    @Transactional
+    public SavedBottleVerificationCodeReceipt requestSavedBottleVerificationCode(
+            String savedBottleId, SavedBottleVerificationCodeRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return executeWrite(
+                "requestSavedBottleVerificationCode:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleVerificationCodeReceipt.class,
+                "bar.saved_bottle.verification_code_requested",
+                "bar.saved_bottle.verification_code_request_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle",
+                () -> {
+                    SavedBottleVerificationCodeRequest actual = requireRequest(request);
+                    String scene = requireText(actual.scene(), "scene").trim().toLowerCase(Locale.ROOT);
+                    if (!Set.of("transfer", "claim", RENEWAL_SCENE).contains(scene)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "scene 只能是 transfer、claim 或 renew");
+                    }
+                    SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+                    requireCustody(bottle);
+                    String holderPhone = requireHolderPhone(bottle);
+                    if (otpVerifier == null) {
+                        throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信服务未配置，请联系管理员");
+                    }
+                    enforceOtpRateLimit(holderPhone);
+                    otpVerifier.requestCode(holderPhone, OTP_SCENE_PREFIX + scene);
+                    return new SavedBottleVerificationCodeReceipt(bottle.id(), scene, clock.instant());
+                });
+    }
+
+    /**
+     * FS-016 客人端签发官方动态取酒码（BSM L867/L1073）：只对当前持有人签发（customer_id 本人，或登记/受让手机哈希为本人手机）；
+     * 窗口 = 全场统一刷新间隔；一瓶同时只一枚有效码，签发前旧码作废；明文只回给客人，库里只存 SHA-256。
+     */
+    @Transactional
+    public SavedBottlePickupCodeResponse issueSavedBottlePickupCode(String savedBottleId, String customerId, String customerPhone) {
+        try {
+            return issuePickupCodeInternal(savedBottleId, customerId, customerPhone);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("bar.saved_bottle.pickup_code_issue_failed", "not_applicable", "saved_bottle",
+                    savedBottleId == null ? "unknown" : savedBottleId, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private SavedBottlePickupCodeResponse issuePickupCodeInternal(String savedBottleId, String customerId, String customerPhone) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        String customer = requireText(customerId, "customer_id");
+        SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
+                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+        if (!isHolder(bottle, customer, customerPhone)) {
+            throw ApiException.forbidden("SAVED_BOTTLE_NOT_HOLDER", "该存酒当前不属于本人");
+        }
+        requireClaimable(bottle);
+        if (pickupCodeWindowSeconds == null) {
+            throw ApiException.conflict("SAVED_BOTTLE_PICKUP_CODE_UNAVAILABLE", "动态取酒码刷新间隔未配置");
+        }
+        int window = pickupCodeWindowSeconds.getAsInt();
+        Instant now = clock.instant();
+        repository.revokeActiveSavedBottlePickupCodes(bottle.id());
+        byte[] random = new byte[16];
+        new java.security.SecureRandom().nextBytes(random);
+        String code = PICKUP_CODE_PREFIX + HexFormat.of().formatHex(random);
+        repository.saveSavedBottlePickupCode(new SavedBottlePickupCodeRecord(
+                "swpc_" + java.util.UUID.randomUUID().toString().replace("-", ""),
+                bottle.id(), customer, sha256Hex(code), now, now.plusSeconds(window), window, "active", null, now));
+        auditEventService.recordSuccess("bar.saved_bottle.pickup_code_issued", "not_applicable", "saved_bottle",
+                bottle.id(), null, null, Map.of("customer_id", customer, "refresh_interval_seconds", window));
+        return new SavedBottlePickupCodeResponse(bottle.id(), code, now.plusSeconds(window), window);
+    }
+
+    /** FS-016 客人端「我的存酒」：本人名下全部 stored 存酒，跨店汇总（每行自带 barProjectId=所属酒吧）。 */
+    public List<SavedBottleRecord> listSavedBottlesForCustomer(String customerId, String customerPhone) {
+        return repository.listStoredSavedBottlesByHolder(requireText(customerId, "customer_id"), phoneHash(customerPhone));
+    }
+
+    // ===== FS-025 存酒转存（延期）：ENUM L120 / BSM L1072 =====
+    // 「每份存酒的转存次数不得超过后台配置的上限（按项目可配，出厂默认 2 次），只能在当前到期日前办理；每次从当前到期日起顺延该酒吧
+    // 当前配置的期限（按酒吧可配，出厂默认 30 天）；每次转存固化当时的配置版本、顺延天数、新到期日与累计转存次数。转让不消耗转存
+    // 次数、不改变到期日；受让人继承剩余有效期与已用转存次数。转存须客人本人短信验证码确认（与转让同款）；员工代办转存的另须当班
+    // 营销主管复核。转存留痕……加记经办人与客人确认方式。转存次数达到上限后不再受理转存……不设例外通道。」
+
+    static final String RENEWAL_REVIEW = "bar.saved_bottle.renewal.review";
+    private static final String RENEWAL_SCENE = "renew";
+    private static final String RENEWAL_POLICY_LIMIT = "max_renewals";
+    private static final String RENEWAL_POLICY_DAYS = "extension_days";
+
+    /** 员工代办转存：客人本人短信验证码确认 → pending_review；到期日在营销主管复核通过时才顺延。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_claim", objectType = "saved_bottle")
+    @Transactional
+    public SavedBottleRenewalRecord renewSavedBottle(String savedBottleId, SavedBottleRenewalRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return executeWrite(
+                "renewSavedBottle:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleRenewalRecord.class,
+                "bar.saved_bottle.renewal_requested",
+                "bar.saved_bottle.renewal_request_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle_renewal",
+                () -> {
+                    SavedBottleRenewalRequest actual = requireRequest(request);
+                    String code = requireText(actual.verificationCode(), "verification_code");
+                    SavedBottleRecord bottle = lockSavedBottle(id);
+                    requireCustody(bottle);
+                    RenewalTerms terms = renewalTerms(bottle);
+                    String holderPhone = verifyHolderSms(bottle, code, RENEWAL_SCENE);
+                    return repository.saveSavedBottleRenewal(newRenewal("rnw_" + slug(actual.idempotencyKey()), bottle, terms,
+                            phoneHash(holderPhone), currentActorId(), operationSource(), "pending_review", clock.instant()));
+                });
+    }
+
+    /**
+     * 当班营销主管复核员工代办转存：复核人不得是经办人；decision=approve 仍须在当前到期日前、通过即从当前到期日顺延；
+     * decision=reject 须填 reason，记录置 rejected、复核人/时间/原因留痕，到期日不动且不计入累计转存次数（ENUM L120「复核」含否决）。
+     */
+    @Transactional
+    public SavedBottleRenewalRecord reviewSavedBottleRenewal(String renewalId, SavedBottleRenewalRequest request) {
+        String id = requireText(renewalId, "renewal_id");
+        return executeWrite(
+                "reviewSavedBottleRenewal:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleRenewalRecord.class,
+                "bar.saved_bottle.renewal_reviewed",
+                "bar.saved_bottle.renewal_review_failed",
+                RENEWAL_REVIEW,
+                "saved_bottle_renewal",
+                () -> {
+                    SavedBottleRenewalRequest actual = requireRequest(request);
+                    String decision = requireText(actual.decision(), "decision").trim().toLowerCase(Locale.ROOT);
+                    if (!"approve".equals(decision) && !"reject".equals(decision)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "decision 只能是 approve（通过）或 reject（驳回）");
+                    }
+                    SavedBottleRenewalRecord current = repository.findSavedBottleRenewalByIdForUpdate(id)
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_RENEWAL_NOT_FOUND", "转存记录不存在"));
+                    if (!"pending_review".equals(current.status())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_RENEWAL_NOT_PENDING", "该转存不在待复核状态");
+                    }
+                    String actor = currentActorId();
+                    if (actor == null || actor.equals(current.operatorId())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_RENEWAL_SELF_REVIEW", "员工代办转存须由当班营销主管复核，经办人不得自审");
+                    }
+                    SavedBottleRecord bottle = lockSavedBottle(current.savedBottleId());
+                    requireCustody(bottle);
+                    Instant now = clock.instant();
+                    if ("reject".equals(decision)) {
+                        String reason = requireText(actual.reason(), "reason");
+                        return repository.saveSavedBottleRenewal(new SavedBottleRenewalRecord(
+                                current.id(), current.savedBottleId(), current.merchantId(), current.projectId(), current.customerId(),
+                                current.phoneHash(), current.extensionDays(), current.previousExpireAt(), current.newExpireAt(),
+                                current.renewalCount(), current.maxRenewals(), current.limitConfigVersion(), current.daysConfigVersion(),
+                                current.operatorId(), current.operationSource(), current.confirmationMethod(), actor, now, reason,
+                                "rejected", current.createdAt(), now));
+                    }
+                    requireRenewable(bottle);
+                    Instant newExpireAt = bottle.expireAt().plus(Duration.ofDays(current.extensionDays()));
+                    repository.saveSavedBottle(savedBottleWithExpireAt(bottle, newExpireAt, now));
+                    return repository.saveSavedBottleRenewal(new SavedBottleRenewalRecord(
+                            current.id(), current.savedBottleId(), current.merchantId(), current.projectId(), current.customerId(),
+                            current.phoneHash(), current.extensionDays(), bottle.expireAt(), newExpireAt, current.renewalCount(),
+                            current.maxRenewals(), current.limitConfigVersion(), current.daysConfigVersion(), current.operatorId(),
+                            current.operationSource(), current.confirmationMethod(), actor, now, null, "effective", current.createdAt(), now));
+                });
+    }
+
+    /** 该瓶转存流水（含待复核），供后台展示与营销主管复核入口。 */
+    public PageResponse<SavedBottleRenewalRecord> listSavedBottleRenewals(String savedBottleId) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return readPage(
+                "bar.saved_bottle.renewal_viewed",
+                "bar.saved_bottle.renewal_view_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle_renewal",
+                () -> {
+                    requireOwnMerchant(lockSavedBottle(id));
+                    return repository.listSavedBottleRenewals(id);
+                });
+    }
+
+    /** 客人端本人转存：持有人本人 + 本人短信验证码，验证成功即从当前到期日顺延（无需复核）。 */
+    @Transactional
+    public SavedBottleRenewalRecord renewSavedBottleByCustomer(
+            String savedBottleId, String customerId, String customerPhone, CustomerSavedBottleRenewRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        String customer = requireText(customerId, "customer_id");
+        return executeWrite(
+                "renewSavedBottleByCustomer:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleRenewalRecord.class,
+                "bar.saved_bottle.renewed",
+                "bar.saved_bottle.renew_failed",
+                "not_applicable",
+                "saved_bottle_renewal",
+                () -> {
+                    CustomerSavedBottleRenewRequest actual = requireRequest(request);
+                    String code = requireText(actual.smsCode(), "sms_code");
+                    SavedBottleRecord bottle = lockSavedBottle(id);
+                    requireCurrentHolder(bottle, customer, customerPhone);
+                    RenewalTerms terms = renewalTerms(bottle);
+                    String holderPhone = verifyHolderSms(bottle, code, RENEWAL_SCENE);
+                    Instant now = clock.instant();
+                    repository.saveSavedBottle(savedBottleWithExpireAt(bottle, terms.newExpireAt(), now));
+                    return repository.saveSavedBottleRenewal(newRenewal("rnw_" + slug(actual.idempotencyKey()), bottle, terms,
+                            phoneHash(holderPhone), customer, "customer_self", "effective", now));
+                });
+    }
+
+    /** 客人端本人转存发码：只对当前持有人本人发到本人手机（scene=renew），按手机号限速。 */
+    @Transactional
+    public SavedBottleVerificationCodeReceipt requestSavedBottleRenewalCodeByCustomer(
+            String savedBottleId, String customerId, String customerPhone) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        try {
+            SavedBottleRecord bottle = lockSavedBottle(id);
+            requireCurrentHolder(bottle, requireText(customerId, "customer_id"), customerPhone);
+            requireRenewable(bottle);
+            String holderPhone = requireHolderPhone(bottle);
+            if (otpVerifier == null) {
+                throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信服务未配置，请联系管理员");
+            }
+            enforceOtpRateLimit(holderPhone);
+            otpVerifier.requestCode(holderPhone, OTP_SCENE_PREFIX + RENEWAL_SCENE);
+            auditEventService.recordSuccess("bar.saved_bottle.verification_code_requested", "not_applicable", "saved_bottle",
+                    bottle.id(), null, null, Map.of("scene", RENEWAL_SCENE, "customer_id", customerId));
+            return new SavedBottleVerificationCodeReceipt(bottle.id(), RENEWAL_SCENE, clock.instant());
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("bar.saved_bottle.verification_code_request_failed", "not_applicable", "saved_bottle",
+                    id, null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private record RenewalTerms(String projectId, SavedBottleRenewalPolicyRecord limit, SavedBottleRenewalPolicyRecord days,
+                                int count, Instant newExpireAt) {
+    }
+
+    /** 转存前置：stored 且在当前到期日前；读项目上限/酒吧顺延期限（缺行回落 global）；无待复核；累计次数（不含被驳回的代办）未达上限。 */
+    private RenewalTerms renewalTerms(SavedBottleRecord bottle) {
+        requireRenewable(bottle);
+        String projectId = repository.findBarProjectId(bottle.barProjectId()).orElse(null);
+        SavedBottleRenewalPolicyRecord limit = renewalPolicy(RENEWAL_POLICY_LIMIT, projectId == null ? null : "project:" + projectId);
+        SavedBottleRenewalPolicyRecord days = renewalPolicy(RENEWAL_POLICY_DAYS, "bar:" + bottle.barProjectId());
+        List<SavedBottleRenewalRecord> history = repository.listSavedBottleRenewals(bottle.id()).stream()
+                .filter(r -> !"rejected".equals(r.status())).toList();
+        if (history.stream().anyMatch(r -> "pending_review".equals(r.status()))) {
+            throw ApiException.conflict("SAVED_BOTTLE_RENEWAL_PENDING", "该存酒已有一笔员工代办转存待营销主管复核");
+        }
+        if (history.size() >= limit.numericValue()) {
+            throw ApiException.conflict("SAVED_BOTTLE_RENEWAL_LIMIT_REACHED",
+                    "转存次数已达上限（" + limit.numericValue() + " 次），不再受理转存");
+        }
+        return new RenewalTerms(projectId, limit, days, history.size() + 1,
+                bottle.expireAt().plus(Duration.ofDays(days.numericValue())));
+    }
+
+    // ===== 业务参数配置：BSM L1073 人工例外消费历史条件（按项目，最高权限审批并留痕）/ ENUM L120 转存次数上限（按项目）与顺延期限（按酒吧） =====
+
+    static final String MANUAL_PICKUP_POLICY_MANAGE = "bar.saved_bottle.manual_pickup_policy.manage";
+    static final String RENEWAL_POLICY_MANAGE = "bar.saved_bottle.renewal_policy.manage";
+
+    /**
+     * 配置人工例外取酒消费历史条件（BSM L1073「安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限」）：
+     * 三个条件值与上下限须同时填写且各条件值落在上下限内；按仓内最高权限审批范式（FacilityEquipmentService.approveDelete，
+     * BSM 第 577 行同款）由最高权限本人办理，否则 403 MASTER_APPROVAL_REQUIRED；留痕 updated_by/updated_at 与审计事件。
+     */
+    @Transactional
+    public SavedBottleManualPickupPolicyRecord configureManualPickupPolicy(
+            com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest request) {
+        return executeWrite("configureSavedBottleManualPickupPolicy", request == null ? null : request.idempotencyKey(), request,
+                SavedBottleManualPickupPolicyRecord.class, "bar.saved_bottle.manual_pickup_policy_configured",
+                "bar.saved_bottle.manual_pickup_policy_config_failed", MANUAL_PICKUP_POLICY_MANAGE,
+                "saved_bottle_manual_pickup_policy", () -> {
+                    com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest actual = requireRequest(request);
+                    if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "人工例外取酒消费历史条件的调整须由最高权限本人审批");
+                    }
+                    String projectId = requireText(actual.projectId(), "project_id");
+                    Integer m1 = actual.ordersWithin1m();
+                    Integer m3 = actual.ordersWithin3m();
+                    Integer total = actual.ordersTotal();
+                    Integer min = actual.minOrders();
+                    Integer max = actual.maxOrders();
+                    if (m1 == null || m3 == null || total == null || min == null || max == null || min < 1 || min > max
+                            || m1 < min || m1 > max || m3 < min || m3 > max || total < min || total > max) {
+                        throw ApiException.badRequest("VALIDATION_FAILED",
+                                "消费历史条件须同时填写三个条件值与上下限，下限不低于 1，各条件值须在上下限内");
+                    }
+                    SavedBottleManualPickupPolicyRecord policy =
+                            new SavedBottleManualPickupPolicyRecord(projectId, m1, m3, total, min, max);
+                    repository.saveSavedBottleManualPickupPolicy(policy, currentActorId());
+                    return policy;
+                });
+    }
+
+    /**
+     * 配置转存业务参数（ENUM L120）：max_renewals 按项目（scope_id=global|project:&lt;id&gt;），extension_days 按酒吧
+     * （scope_id=global|bar:&lt;id&gt;）；值与上下限须同时填写、值在上下限内（顺延期限至少 1 天）；每次保存 version+1、留痕 updated_by。
+     * 带商户 scope 的操作者只能配置本酒吧的顺延期限。
+     */
+    @Transactional
+    public SavedBottleRenewalPolicyRecord configureRenewalPolicy(com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest request) {
+        return executeWrite("configureSavedBottleRenewalPolicy", request == null ? null : request.idempotencyKey(), request,
+                SavedBottleRenewalPolicyRecord.class, "bar.saved_bottle.renewal_policy_configured",
+                "bar.saved_bottle.renewal_policy_config_failed", RENEWAL_POLICY_MANAGE, "saved_bottle_renewal_policy", () -> {
+                    com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest actual = requireRequest(request);
+                    String key = requireText(actual.policyKey(), "policy_key");
+                    String scope = requireText(actual.scopeId(), "scope_id");
+                    boolean keyOk = RENEWAL_POLICY_LIMIT.equals(key) || RENEWAL_POLICY_DAYS.equals(key);
+                    boolean scopeOk = "global".equals(scope)
+                            || (RENEWAL_POLICY_LIMIT.equals(key) && scope.startsWith("project:"))
+                            || (RENEWAL_POLICY_DAYS.equals(key) && scope.startsWith("bar:"));
+                    if (!keyOk || !scopeOk) {
+                        throw ApiException.badRequest("VALIDATION_FAILED",
+                                "policy_key 须为 max_renewals（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）");
+                    }
+                    Optional<String> merchantScope = authorizationService.currentMerchantScope();
+                    if (merchantScope.isPresent() && !scope.equals("bar:" + merchantScope.get())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "只能配置本酒吧的转存顺延期限");
+                    }
+                    Integer value = actual.value();
+                    Integer min = actual.minValue();
+                    Integer max = actual.maxValue();
+                    int floor = RENEWAL_POLICY_DAYS.equals(key) ? 1 : 0;
+                    if (value == null || min == null || max == null || min < floor || value < min || value > max) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "转存业务参数须同时填写参数值及上下限，参数值须在上下限内");
+                    }
+                    return repository.saveSavedBottleRenewalPolicy(
+                            new SavedBottleRenewalPolicyRecord(key, scope, value, min, max, 0), currentActorId());
+                });
+    }
+
+    private SavedBottleRenewalPolicyRecord renewalPolicy(String key, String scopeId) {
+        Optional<SavedBottleRenewalPolicyRecord> scoped = scopeId == null
+                ? Optional.empty() : repository.findSavedBottleRenewalPolicy(key, scopeId);
+        return scoped.or(() -> repository.findSavedBottleRenewalPolicy(key, "global"))
+                .orElseThrow(() -> ApiException.conflict("SAVED_BOTTLE_RENEWAL_POLICY_UNSET", "转存业务参数未配置：" + key));
+    }
+
+    /** 只能在当前到期日前办理（stored 且未过期；未登记到期日的不可转存）。 */
+    private void requireRenewable(SavedBottleRecord bottle) {
+        requireClaimable(bottle);
+        if (bottle.expireAt() == null) {
+            throw ApiException.conflict("SAVED_BOTTLE_EXPIRE_AT_MISSING", "该存酒未登记到期日，不可转存");
+        }
+    }
+
+    private SavedBottleRenewalRecord newRenewal(String id, SavedBottleRecord bottle, RenewalTerms terms, String phoneHash,
+                                                String operatorId, String operationSource, String status, Instant now) {
+        return new SavedBottleRenewalRecord(id, bottle.id(), bottle.merchantId(), terms.projectId(), bottle.customerId(), phoneHash,
+                terms.days().numericValue(), bottle.expireAt(), terms.newExpireAt(), terms.count(), terms.limit().numericValue(),
+                terms.limit().configVersion(), terms.days().configVersion(), operatorId, operationSource, "sms", null, null, null,
+                status, now, now);
+    }
+
+    private SavedBottleRecord lockSavedBottle(String id) {
+        return repository.findSavedBottleByIdForUpdate(id)
+                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+    }
+
+    private void requireCurrentHolder(SavedBottleRecord bottle, String customerId, String customerPhone) {
+        if (!isHolder(bottle, customerId, customerPhone)) {
+            throw ApiException.forbidden("SAVED_BOTTLE_NOT_HOLDER", "该存酒当前不属于本人");
+        }
+    }
+
+    /** 重建存酒记录，仅改到期日/updatedAt（转存顺延）。 */
+    private SavedBottleRecord savedBottleWithExpireAt(SavedBottleRecord b, Instant expireAt, Instant updatedAt) {
+        return new SavedBottleRecord(b.id(), b.customerId(), b.barProjectId(), b.itemId(), b.bottleName(),
+                b.initialQuantity(), b.remainingQuantity(), b.unit(), expireAt, b.status(), b.evidenceAttachmentIds(),
+                b.createdAt(), updatedAt, b.merchantId(), b.isHighValue(), b.highValueThresholdCents(),
+                b.bottleLabelValue(), b.customerNameOrNickname(), b.customerPhone(), b.customerPhoneHash(),
+                b.registrationPhotoRefs(), b.manualNote(),
+                b.transferredAt(), b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash(),
+                b.remedyOfSavedBottleId(), b.custodianEntityId(), b.pickupLocation(), b.handedOverAt(), b.handoverId());
+    }
+
+    // ===== FS-016 人工例外取酒（BSM L1073 四项，线性：店长发起 → 另一主管复核 → 营销确认 → 本人到场放酒） =====
+
+    /**
+     * ① 店长发起：客户手机号须在本项目内满足后台配置的任一消费历史条件（条件未配置即拒）；这段消费历史查询走客人查询专门通道
+     * （发起店长本人鉴权 customer.account.manage，留痕谁查、查哪个手机号、何时、为哪笔申请查）。
+     */
+    @Transactional
+    public SavedBottleManualPickupRecord initiateManualPickup(String savedBottleId, SavedBottleManualPickupRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return executeWrite(
+                "initiateSavedBottleManualPickup:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleManualPickupRecord.class,
+                "bar.saved_bottle.manual_pickup_initiated",
+                "bar.saved_bottle.manual_pickup_initiate_failed",
+                MANUAL_PICKUP_INITIATE,
+                "saved_bottle_manual_pickup",
+                () -> {
+                    SavedBottleManualPickupRequest actual = requireRequest(request);
+                    String reason = requireText(actual.reason(), "reason");
+                    SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+                    requireCustody(bottle);
+                    requireClaimable(bottle);
+                    String holderPhone = requireHolderPhone(bottle);
+                    String projectId = repository.findBarProjectId(bottle.barProjectId())
+                            .orElseThrow(() -> ApiException.conflict("SAVED_BOTTLE_PROJECT_UNKNOWN", "存酒所在酒吧未归属项目，无法核对消费历史"));
+                    SavedBottleManualPickupPolicyRecord policy = repository.findSavedBottleManualPickupPolicy(projectId)
+                            .orElseThrow(() -> ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_POLICY_UNSET",
+                                    "本项目尚未配置人工例外取酒的消费历史条件"));
+                    // 客人查询专门通道：店长本人鉴权后按手机号查客人，留痕。
+                    authorizationService.requirePermission("customer.account.manage");
+                    String requestId = "mpk_" + slug(actual.idempotencyKey());
+                    String customerId = trimToNull(bottle.customerId()) != null ? bottle.customerId() : findCustomerIdByPhone(holderPhone);
+                    String actor = currentActorId();
+                    Map<String, Object> lookup = new LinkedHashMap<>();
+                    lookup.put("purpose", "saved_bottle_manual_pickup");
+                    lookup.put("manual_pickup_id", requestId);
+                    lookup.put("phone_hash", phoneHash(holderPhone));
+                    lookup.put("queried_by", actor == null ? "unknown" : actor);
+                    lookup.put("matched", customerId != null);
+                    auditEventService.recordSuccess("customer.account.viewed", "customer.account.manage", "customer",
+                            customerId == null ? "not_found" : customerId, requestId, actual.idempotencyKey(), lookup);
+                    Instant now = clock.instant();
+                    String condition = customerId == null ? null : metHistoryCondition(customerId, projectId, policy, now);
+                    if (condition == null) {
+                        throw ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_HISTORY_NOT_MET",
+                                "该手机号在本项目内不满足任一消费历史条件，不得人工例外取酒");
+                    }
+                    return repository.saveSavedBottleManualPickup(new SavedBottleManualPickupRecord(
+                            requestId, bottle.id(), bottle.merchantId(), projectId, customerId, phoneHash(holderPhone),
+                            reason, condition, actor, now, null, null, null, null, null, null, null, null,
+                            "initiated", safeList(actual.evidenceAttachmentIds()), now, now));
+                });
+    }
+
+    /** ② 另一名主管复核：复核人不得是发起人（普通员工不得单独放酒）。 */
+    @Transactional
+    public SavedBottleManualPickupRecord reviewManualPickup(String manualPickupId, SavedBottleManualPickupRequest request) {
+        String id = requireText(manualPickupId, "manual_pickup_id");
+        return executeWrite(
+                "reviewSavedBottleManualPickup:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleManualPickupRecord.class,
+                "bar.saved_bottle.manual_pickup_reviewed",
+                "bar.saved_bottle.manual_pickup_review_failed",
+                MANUAL_PICKUP_REVIEW,
+                "saved_bottle_manual_pickup",
+                () -> {
+                    requireRequest(request);
+                    SavedBottleManualPickupRecord current = requireManualPickup(id, "initiated");
+                    String actor = currentActorId();
+                    if (actor != null && actor.equals(current.initiatedBy())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_SELF_REVIEW", "人工例外取酒须由另一名主管复核");
+                    }
+                    Instant now = clock.instant();
+                    return repository.saveSavedBottleManualPickup(new SavedBottleManualPickupRecord(
+                            current.id(), current.savedBottleId(), current.merchantId(), current.projectId(), current.customerId(),
+                            current.phoneHash(), current.reason(), current.historyCondition(), current.initiatedBy(), current.initiatedAt(),
+                            actor, now, null, null, null, null, null, null, "reviewed", current.evidenceAttachmentIds(),
+                            current.createdAt(), now));
+                });
+    }
+
+    /**
+     * ③ 营销确认（BSM L1073）：客户在本项目有在职归属营销的，须由该营销本人确认（attributed_marketer）；营销已离职的由其主管确认
+     * ——取该营销的直接上级（org_hierarchy），要求确认人即该上级（marketer_supervisor），未维护上级即「找不到可承担确认责任的营销主管，
+     * 流程不得通过」；历史订单无归属营销的由存酒所在酒吧当班营销主管确认（on_duty_marketing_supervisor：持营销确认权限码且商户范围
+     * 为存酒所在酒吧，见 requireManualPickup）。
+     */
+    @Transactional
+    public SavedBottleManualPickupRecord confirmManualPickupMarketing(String manualPickupId, SavedBottleManualPickupRequest request) {
+        String id = requireText(manualPickupId, "manual_pickup_id");
+        return executeWrite(
+                "confirmSavedBottleManualPickupMarketing:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleManualPickupRecord.class,
+                "bar.saved_bottle.manual_pickup_marketing_confirmed",
+                "bar.saved_bottle.manual_pickup_marketing_confirm_failed",
+                MANUAL_PICKUP_CONFIRM_MARKETING,
+                "saved_bottle_manual_pickup",
+                () -> {
+                    requireRequest(request);
+                    SavedBottleManualPickupRecord current = requireManualPickup(id, "reviewed");
+                    String actor = currentActorId();
+                    Optional<InventoryRepository.AttributedMarketer> marketer = current.customerId() == null
+                            ? Optional.empty()
+                            : repository.findAttributedMarketer(current.customerId(), current.projectId());
+                    String basis;
+                    if (marketer.isPresent() && marketer.get().active()) {
+                        if (actor == null || !actor.equals(marketer.get().userId())) {
+                            throw ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_MARKETER_MISMATCH",
+                                    "须由该客户对应的营销人员本人确认");
+                        }
+                        basis = "attributed_marketer";
+                    } else if (marketer.isPresent()) {
+                        String superior = repository.findDirectSuperior(marketer.get().userId())
+                                .orElseThrow(() -> ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_SUPERVISOR_UNRESOLVED",
+                                        "该客户对应的营销人员已离职且未维护直接上级，找不到可承担确认责任的营销主管，流程不得通过"));
+                        if (actor == null || !actor.equals(superior)) {
+                            throw ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_MARKETER_SUPERVISOR_MISMATCH",
+                                    "营销已离职的须由其主管（直接上级）本人确认");
+                        }
+                        basis = "marketer_supervisor";
+                    } else {
+                        basis = "on_duty_marketing_supervisor";
+                    }
+                    Instant now = clock.instant();
+                    return repository.saveSavedBottleManualPickup(new SavedBottleManualPickupRecord(
+                            current.id(), current.savedBottleId(), current.merchantId(), current.projectId(), current.customerId(),
+                            current.phoneHash(), current.reason(), current.historyCondition(), current.initiatedBy(), current.initiatedAt(),
+                            current.reviewedBy(), current.reviewedAt(), actor, basis, now, null, null, null, "marketing_confirmed",
+                            current.evidenceAttachmentIds(), current.createdAt(), now));
+                });
+    }
+
+    /** ④ 本人到场放酒：present_in_person 须为 true（不允许他人代领）；取酒流水 verification_method=manual_exception。 */
+    @Transactional
+    public SavedBottleManualPickupRecord dispenseManualPickup(String manualPickupId, SavedBottleManualPickupDispenseRequest request) {
+        String id = requireText(manualPickupId, "manual_pickup_id");
+        return executeWrite(
+                "dispenseSavedBottleManualPickup:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleManualPickupRecord.class,
+                "bar.saved_bottle_picked_up",
+                "bar.saved_bottle.pickup_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle_manual_pickup",
+                () -> {
+                    SavedBottleManualPickupDispenseRequest actual = requireRequest(request);
+                    if (!Boolean.TRUE.equals(actual.presentInPerson())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_NOT_IN_PERSON",
+                                "人工例外取酒只允许存酒客户本人到场办理，不允许他人代领");
+                    }
+                    SavedBottleManualPickupRecord current = requireManualPickup(id, "marketing_confirmed");
+                    SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(current.savedBottleId())
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+                    requireCustody(bottle);
+                    requireClaimable(bottle);
+                    // 持有人身份已由营销确认：按登记标签/姓名出酒，核验方式记 manual_exception、被核验手机=申请时持有人手机哈希。
+                    SavedBottleClaimRecord claim = dispenseSavedBottle(bottle, actual.idempotencyKey(), actual.claimItems(),
+                            bottle.bottleLabelValue(), bottle.customerNameOrNickname(), actual.evidenceAttachmentIds(),
+                            "manual_exception", current.phoneHash(), null);
+                    Instant now = clock.instant();
+                    return repository.saveSavedBottleManualPickup(new SavedBottleManualPickupRecord(
+                            current.id(), current.savedBottleId(), current.merchantId(), current.projectId(), current.customerId(),
+                            current.phoneHash(), current.reason(), current.historyCondition(), current.initiatedBy(), current.initiatedAt(),
+                            current.reviewedBy(), current.reviewedAt(), current.marketingConfirmedBy(), current.marketingConfirmBasis(),
+                            current.marketingConfirmedAt(), currentActorId(), now, claim.id(), "dispensed",
+                            current.evidenceAttachmentIds(), current.createdAt(), now));
+                });
+    }
+
+    // ===== FS-016 helpers =====
+
+    private SavedBottleManualPickupRecord requireManualPickup(String id, String expectedStatus) {
+        SavedBottleManualPickupRecord current = repository.findSavedBottleManualPickupByIdForUpdate(id)
+                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_MANUAL_PICKUP_NOT_FOUND", "人工例外取酒申请不存在"));
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(current.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该人工例外取酒申请不属于当前商户");
+        }
+        if (!expectedStatus.equals(current.status())) {
+            throw ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_NOT_" + expectedStatus.toUpperCase(Locale.ROOT),
+                    "人工例外取酒申请当前状态不允许本步骤");
+        }
+        return current;
+    }
+
+    /** 任一满足即可，按 BSM L1073 原句顺序；都不满足返回 null。 */
+    private String metHistoryCondition(String customerId, String projectId, SavedBottleManualPickupPolicyRecord policy, Instant now) {
+        if (repository.countValidTableOrders(customerId, projectId, now.minus(Duration.ofDays(30))) >= policy.ordersWithin1m()) {
+            return "orders_within_1m";
+        }
+        if (repository.countValidTableOrders(customerId, projectId, now.minus(Duration.ofDays(90))) >= policy.ordersWithin3m()) {
+            return "orders_within_3m";
+        }
+        if (repository.countValidTableOrders(customerId, projectId, null) >= policy.ordersTotal()) {
+            return "orders_total";
+        }
+        return null;
+    }
+
+    private void requireOwnMerchant(SavedBottleRecord bottle) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(bottle.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该存酒记录不属于当前商户");
+        }
+    }
+
+    private void requireClaimable(SavedBottleRecord bottle) {
+        if (!"stored".equals(bottle.status())) {
+            throw ApiException.conflict("SAVED_BOTTLE_NOT_CLAIMABLE", "该存酒当前不可取用");
+        }
+        if (bottle.expireAt() != null && bottle.expireAt().isBefore(clock.instant())) {
+            throw ApiException.conflict("SAVED_BOTTLE_EXPIRED", "该存酒已过期");
+        }
+    }
+
+    private String requireHolderPhone(SavedBottleRecord bottle) {
+        String holderPhone = resolveSavedBottleRecipient(bottle);
+        if (holderPhone == null) {
+            throw ApiException.conflict("SAVED_BOTTLE_HOLDER_PHONE_MISSING", "该存酒无当前持有人手机号，无法核验");
+        }
+        return holderPhone;
+    }
+
+    /** 当前持有人短信核验（fail-closed：无短信端口即拒）；返回被核验的持有人手机号。 */
+    private String verifyHolderSms(SavedBottleRecord bottle, String code, String scene) {
+        String holderPhone = requireHolderPhone(bottle);
+        if (otpVerifier == null) {
+            throw ApiException.unauthorized("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信服务未配置，请联系管理员");
+        }
+        enforceOtpRateLimit(holderPhone);
+        otpVerifier.verify(holderPhone, code, OTP_SCENE_PREFIX + scene);
+        return holderPhone;
+    }
+
+    private SavedBottlePickupCodeRecord requireActivePickupCode(SavedBottleRecord bottle, String code) {
+        String hash = sha256Hex(code);
+        return repository.findActiveSavedBottlePickupCode(bottle.id())
+                .filter(active -> hash.equals(active.codeHash()))
+                .filter(active -> active.expiresAt().isAfter(clock.instant()))
+                .orElseThrow(() -> ApiException.conflict("SAVED_BOTTLE_PICKUP_CODE_INVALID", "动态取酒码无效或已过期，请客人刷新后重新出示"));
+    }
+
+    private void consumePickupCode(SavedBottlePickupCodeRecord code, String claimId) {
+        if (code != null) {
+            repository.saveSavedBottlePickupCode(code.withStatus("consumed", claimId));
+        }
+    }
+
+    private boolean isHolder(SavedBottleRecord bottle, String customerId, String customerPhone) {
+        if (customerId.equals(bottle.customerId())) {
+            return true;
+        }
+        String hash = phoneHash(customerPhone);
+        return hash != null && hash.equals(bottle.customerPhoneHash());
+    }
+
+    private String findCustomerIdByPhone(String phone) {
+        if (customerRepository == null || phone == null) {
+            return null;
+        }
+        try {
+            return customerRepository.findCustomerByPhone(phone).map(CustomerRecord::id).orElse(null);
+        } catch (RuntimeException exception) {
+            log.warn("failed to look up customer by phone for saved bottle", exception);
+            return null;
+        }
+    }
+
+    private void enforceOtpRateLimit(String phone) {
+        if (rateLimiter == null || rateLimitProperties == null || !rateLimitProperties.isEnabled()) {
+            return;
+        }
+        com.complex.platform.common.ratelimit.RateLimitProperties.Rule rule = rateLimitProperties.getOtpPhone();
+        com.complex.platform.common.ratelimit.RateLimiter.Decision decision =
+                rateLimiter.tryAcquire("otp:phone:" + phone, rule.getLimit(), rule.getWindow());
+        if (!decision.allowed()) {
+            throw ApiException.tooManyRequests("CUSTOMER_OTP_RATE_LIMITED", "验证尝试次数过多，请稍后再试",
+                    decision.retryAfterSeconds());
+        }
+    }
+
+    private String currentActorId() {
+        com.complex.platform.access.AccessActor actor = authorizationService.currentActor();
+        return actor == null ? null : actor.id();
+    }
+
+    /** 操作来源：设备凭证派生的可信终端类型，无请求上下文/未自报时记 web。 */
+    private static String operationSource() {
+        String terminal = com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(null);
+        return terminal == null || terminal.isBlank() || "*".equals(terminal) ? "web" : terminal;
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 unavailable", exception);
+        }
     }
 
     /**
@@ -669,24 +1458,32 @@ public class InventoryService {
                     if (!List.of("stored", "pending_identity_review").contains(savedBottle.status())) {
                         throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLABLE", "该存酒当前不可作废");
                     }
-                    // V350 归一：作废当刻**重新判定**（不看登记快照，也不看前端传值）——
-                    // 阈值未配置 / 进货价未知 / 手工标记 / 进货价高于阈值，四者任一即高价值，一律拦下走复核。
-                    if (highValueDecisionService.decide(savedBottle.itemId(), savedBottle.merchantId()).highValue()) {
-                        // 高价值：双证据（照片+视频各非空）→ 建 pending 复核单 + 存酒置中间态 disputed_frozen（不直接作废）。
-                        highValueReviewService.createPending(
-                                actual.idempotencyKey(),
-                                InventoryHighValueReviewService.SUBJECT_SAVED_BOTTLE_VOID,
-                                savedBottle.id(),
-                                actual.photoAttachmentIds(),
-                                actual.videoAttachmentIds());
-                        return repository.saveSavedBottle(
-                                savedBottleWith(savedBottle, "disputed_frozen", savedBottle.remainingQuantity(), Instant.now()));
-                    }
-                    // 非高价值：直接 cancel（向后兼容）。
-                    return repository.saveSavedBottle(
-                            savedBottleWith(savedBottle, "cancelled", savedBottle.remainingQuantity(), Instant.now()));
+                    return applyCancel(savedBottle, actual.idempotencyKey(), actual.photoAttachmentIds(), actual.videoAttachmentIds());
                 }
         );
+    }
+
+    /**
+     * 作废收口（cancelSavedBottle 与 FS-017 交接毁损/短少共用）。V350 归一：作废当刻**重新判定**（不看登记快照，也不看前端传值）——
+     * 阈值未配置 / 进货价未知 / 手工标记 / 进货价高于阈值，四者任一即高价值，一律拦下走复核：双证据（照片+视频各非空）→ 建 pending
+     * 复核单 + 存酒置中间态 disputed_frozen（不直接作废）；非高价值直接 cancel（向后兼容）。
+     */
+    private SavedBottleRecord applyCancel(SavedBottleRecord savedBottle, String idempotencySeed,
+                                          List<String> photoAttachmentIds, List<String> videoAttachmentIds) {
+        if (highValueDecisionService.decide(savedBottle.itemId(), savedBottle.merchantId()).highValue()) {
+            highValueReviewService.createPending(
+                    idempotencySeed,
+                    InventoryHighValueReviewService.SUBJECT_SAVED_BOTTLE_VOID,
+                    savedBottle.id(),
+                    photoAttachmentIds,
+                    videoAttachmentIds);
+            repository.revokeActiveSavedBottlePickupCodes(savedBottle.id());
+            return repository.saveSavedBottle(
+                    savedBottleWith(savedBottle, "disputed_frozen", savedBottle.remainingQuantity(), Instant.now()));
+        }
+        repository.revokeActiveSavedBottlePickupCodes(savedBottle.id());
+        return repository.saveSavedBottle(
+                savedBottleWith(savedBottle, "cancelled", savedBottle.remainingQuantity(), Instant.now()));
     }
 
     /**
@@ -719,10 +1516,517 @@ public class InventoryService {
                     if (!List.of("stored", "pending_identity_review").contains(savedBottle.status())) {
                         throw ApiException.conflict("SAVED_BOTTLE_NOT_DISPUTABLE", "该存酒当前不可发起异议");
                     }
+                    repository.revokeActiveSavedBottlePickupCodes(savedBottle.id());
                     return repository.saveSavedBottle(savedBottleWith(
                             savedBottle, "disputed", savedBottle.remainingQuantity(), Instant.now()));
                 }
         );
+    }
+
+    // ===== FS-017 存酒作废后对客补存/赔付、门店退出交接、责任归属与内部追收（BSM L1072 ①②③④） =====
+
+    /**
+     * 作废后对客补存/赔付登记（BSM L1072 ②「存酒作废的，由该酒吧为客人以同品、同等剩余量补存，到期日不变，补酒成本计入该酒吧的经营损失」
+     * ③「无法交还的，优先以同品、同等剩余量替代；无法替代的，双方确认赔付方案……实物或赔款实际交付后才结案」）。
+     * replacement：按原瓶复制新建存酒（同品、同等剩余量、到期日不变、持有人不变）、从该酒吧库存同品同量出库、补酒成本按内部结算价×数量
+     * 记经营损失（解析不到不阻断、留财务补计），登记即实物已交付存酒区 → closed；compensation：金额必填，待门店主管+财务审批。
+     * 承担方：未交平台或接收时已毁损/短少 → 原门店；接收后毁损 → 娱乐平台公司（④）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleRemedyRecord registerSavedBottleRemedy(String savedBottleId, SavedBottleRemedyRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return executeWrite(
+                "registerSavedBottleRemedy:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleRemedyRecord.class,
+                "bar.saved_bottle.remedy_registered",
+                "bar.saved_bottle.remedy_register_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle_remedy",
+                () -> {
+                    SavedBottleRemedyRequest actual = requireRequest(request);
+                    String type = requireText(actual.remedyType(), "remedy_type");
+                    if (!"replacement".equals(type) && !"compensation".equals(type)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "remedy_type 须为 replacement（同品同量补存）或 compensation（赔付）");
+                    }
+                    SavedBottleRecord bottle = repository.findSavedBottleByIdForUpdate(id)
+                            .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+                    requireCustody(bottle);
+                    if (!"cancelled".equals(bottle.status()) && handoverShortfall(bottle) == 0) {
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLED", "存酒须先作废（高价值经主管复核通过）或交平台时登记短少后才能登记补存/赔付");
+                    }
+                    boolean open = repository.listSavedBottleRemedies(bottle.id()).stream()
+                            .anyMatch(r -> !"closed".equals(r.customerDeliveryStatus()));
+                    if (open) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_EXISTS", "该存酒已有未结案的补存/赔付记录");
+                    }
+                    Instant now = clock.instant();
+                    String remedyId = "sbr_" + slug(actual.idempotencyKey());
+                    String projectId = repository.findBarProjectId(bottle.merchantId()).orElse(null);
+                    String[] bearer = remedyBearer(bottle);
+                    String actor = currentActorId();
+                    String reason = trimToNull(actual.reason());
+                    if ("compensation".equals(type)) {
+                        if (actual.amountCent() == null || actual.amountCent() <= 0) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent 须大于 0");
+                        }
+                        return repository.saveSavedBottleRemedy(new SavedBottleRemedyRecord(remedyId, bottle.id(),
+                                bottle.merchantId(), projectId, type, null, actual.amountCent(), null, null, bearer[0], bearer[1],
+                                null, null, null, null, "pending_approval", null, List.of(), reason, "none", null, null, "none",
+                                null, null, null, List.of(), actor, now, now));
+                    }
+                    // 同品、同等剩余量补存：新瓶照 createSavedBottle 口径登记（新标签值 + 登记照片必填），持有人/到期日复制原瓶。
+                    List<String> photos = safeList(actual.registrationPhotoRefs());
+                    if (photos.isEmpty()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "registration_photo_refs is required");
+                    }
+                    String label = requireText(actual.bottleLabelValue(), "bottle_label_value");
+                    String locationId = requireText(actual.locationId(), "location_id");
+                    int qty = remedyQuantity(bottle);
+                    // 存酒是客户资产、不算可售库存（BSM L1198）：补存瓶从该酒吧库存出库同品同量（outbound 流水，reference=remedy）。
+                    if (repository.atomicDecreaseStockBalance(bottle.itemId(), locationId, qty,
+                            authorizationService.currentMerchantScope().orElse(null)) == 0) {
+                        throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足，无法同品同量补存");
+                    }
+                    consumeBatchesFefo(bottle.itemId(), locationId, qty);
+                    repository.saveStockMovement(new StockMovementRecord(
+                            "movement_" + slug(remedyId + ":outbound"), "outbound", bottle.itemId(), locationId, null, qty,
+                            null, null, "saved_bottle_remedy", remedyId, null, actor, List.of(), "completed", now,
+                            bottle.merchantId()), authorizationService.currentProjectScopeQuietly().orElse(null));
+                    HighValueDecisionService.HighValueDecision decision =
+                            highValueDecisionService.decide(bottle.itemId(), bottle.merchantId());
+                    SavedBottleRecord replacement = repository.saveSavedBottle(new SavedBottleRecord(
+                            "saved_" + slug(actual.idempotencyKey() + ":replacement"), bottle.customerId(), bottle.barProjectId(),
+                            bottle.itemId(), bottle.bottleName(), qty, qty, bottle.unit(), bottle.expireAt(), "stored", List.of(),
+                            now, now, bottle.merchantId(), decision.highValue(), decision.thresholdCent(), label,
+                            bottle.customerNameOrNickname(), bottle.customerPhone(), bottle.customerPhoneHash(), photos,
+                            trimToNull(actual.operatorNote()), null, null, null, null,
+                            bottle.id(), bottle.custodianEntityId(), bottle.pickupLocation(), bottle.handedOverAt(), bottle.handoverId()));
+                    Long loss = settlementPriceResolver.apply(bottle).map(price -> price * qty).orElse(null);
+                    String lossItemId = postRemedyLoss(remedyId, bearer, bottle.merchantId(), loss, actual.idempotencyKey());
+                    notifySavedBottleAfterCommit(replacement, "deposit", STORED_WINE_DEPOSIT_TEMPLATE,
+                            "swdeposit:" + replacement.id(), null);
+                    return repository.saveSavedBottleRemedy(new SavedBottleRemedyRecord(remedyId, bottle.id(),
+                            bottle.merchantId(), projectId, type, replacement.id(), null, loss, lossItemId, bearer[0], bearer[1],
+                            null, null, null, null, "closed", now, photos, reason, "none", null, null, "none",
+                            null, null, null, List.of(), actor, now, now));
+                });
+    }
+
+    public PageResponse<SavedBottleRemedyRecord> listSavedBottleRemedies(String savedBottleId) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return readPage("bar.saved_bottle.remedy_viewed", "bar.saved_bottle.remedy_view_failed", "bar.saved_bottle.manage",
+                "saved_bottle_remedy", () -> {
+                    repository.findSavedBottleByIdForUpdate(id).ifPresent(this::requireOwnMerchant);
+                    return repository.listSavedBottleRemedies(id);
+                });
+    }
+
+    /** 赔付方案审批（BSM L1072 ③「经门店主管和财务审批后支付」）：role=supervisor|finance 各核一次权限码；审批人不得是登记人、两道审批不得同一人；两方齐 → approved。 */
+    @Transactional
+    public SavedBottleRemedyRecord approveSavedBottleRemedy(String remedyId, SavedBottleRemedyActionRequest request) {
+        String id = requireText(remedyId, "remedy_id");
+        return executeWrite("approveSavedBottleRemedy:" + id, request == null ? null : request.idempotencyKey(), request,
+                SavedBottleRemedyRecord.class, "bar.saved_bottle.remedy_approved", "bar.saved_bottle.remedy_approve_failed",
+                "bar.saved_bottle.manage", "saved_bottle_remedy", () -> {
+                    SavedBottleRemedyActionRequest actual = requireRequest(request);
+                    String role = requireText(actual.role(), "role");
+                    if (!"supervisor".equals(role) && !"finance".equals(role)) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "role 须为 supervisor（门店主管）或 finance（财务）");
+                    }
+                    authorizationService.requirePermission("supervisor".equals(role) ? REMEDY_SUPERVISOR_APPROVE : REMEDY_FINANCE_APPROVE);
+                    SavedBottleRemedyRecord remedy = requireRemedy(id);
+                    requireCustody(bottleOf(remedy));
+                    if (!"pending_approval".equals(remedy.customerDeliveryStatus())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_NOT_PENDING", "该补存/赔付不在待审批状态");
+                    }
+                    String approver = currentActorId();
+                    if (approver != null && approver.equals(remedy.createdBy())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_SELF_APPROVAL", "审批人不得是登记人");
+                    }
+                    String otherRoleApprover = "supervisor".equals(role) ? remedy.financeApprovedBy() : remedy.supervisorApprovedBy();
+                    if (approver != null && approver.equals(otherRoleApprover)) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_SAME_APPROVER", "门店主管审批与财务审批不得由同一人完成");
+                    }
+                    return repository.saveSavedBottleRemedy(remedy.withApproval(role, approver, clock.instant()));
+                });
+    }
+
+    /** 对客结案（BSM L1072 ③「实物或赔款实际交付后才结案」）：仅 approved 可结；记交付/支付凭证与时间，赔付金额此时记经营损失。不读任何追收字段。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleRemedyRecord settleSavedBottleRemedy(String remedyId, SavedBottleRemedyActionRequest request) {
+        String id = requireText(remedyId, "remedy_id");
+        return executeWrite("settleSavedBottleRemedy:" + id, request == null ? null : request.idempotencyKey(), request,
+                SavedBottleRemedyRecord.class, "bar.saved_bottle.remedy_settled", "bar.saved_bottle.remedy_settle_failed",
+                "bar.saved_bottle.manage", "saved_bottle_remedy", () -> {
+                    SavedBottleRemedyActionRequest actual = requireRequest(request);
+                    SavedBottleRemedyRecord remedy = requireRemedy(id);
+                    requireCustody(bottleOf(remedy));
+                    if (!"approved".equals(remedy.customerDeliveryStatus())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_NOT_APPROVED", "赔付方案须经门店主管和财务审批后才能支付结案");
+                    }
+                    Instant now = clock.instant();
+                    String lossItemId = postRemedyLoss(remedy.id(), new String[] {remedy.bearerType(), remedy.bearerId()},
+                            remedy.merchantId(), remedy.amountCent(), actual.idempotencyKey());
+                    SavedBottleRemedyRecord closed = remedy.withDelivery(now, safeList(actual.evidenceIds()), remedy.amountCent(), lossItemId);
+                    if (closed.advanceApprovedAt() != null) {
+                        closed = postRecovery(closed, actual.idempotencyKey(), now);
+                    }
+                    return repository.saveSavedBottleRemedy(closed);
+                });
+    }
+
+    /**
+     * 平台垫付（BSM L1072 ④「原店应承担的替代赔付费用，仍由原门店承担，该娱乐平台公司可经审批先垫付并向原门店追收」）：
+     * 仅原瓶已交平台且承担方为原门店的记录可用；平台操作者审批；对客流程照常，损失金额定下后向原门店挂追收应收。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleRemedyRecord advanceSavedBottleRemedyByPlatform(String remedyId, SavedBottleRemedyActionRequest request) {
+        String id = requireText(remedyId, "remedy_id");
+        return executeWrite("advanceSavedBottleRemedy:" + id, request == null ? null : request.idempotencyKey(), request,
+                SavedBottleRemedyRecord.class, "bar.saved_bottle.remedy_advanced", "bar.saved_bottle.remedy_advance_failed",
+                "bar.saved_bottle.manage", "saved_bottle_remedy", () -> {
+                    SavedBottleRemedyActionRequest actual = requireRequest(request);
+                    if (authorizationService.currentMerchantScope().isPresent()) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "垫付须由娱乐平台公司审批");
+                    }
+                    SavedBottleRemedyRecord remedy = requireRemedy(id);
+                    SavedBottleRecord bottle = bottleOf(remedy);
+                    if (bottle.custodianEntityId() == null || !"original_merchant".equals(remedy.bearerType())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_NOT_ADVANCEABLE",
+                                "仅退出门店交平台后、由原门店承担的补存/赔付可由平台垫付追收");
+                    }
+                    if (remedy.advanceApprovedAt() != null) {
+                        return remedy;
+                    }
+                    Instant now = clock.instant();
+                    SavedBottleRemedyRecord advanced = remedy.withAdvance(currentActorId(), now);
+                    if ("closed".equals(advanced.customerDeliveryStatus())) {
+                        advanced = postRecovery(advanced, actual.idempotencyKey(), now);
+                    }
+                    return repository.saveSavedBottleRemedy(advanced);
+                });
+    }
+
+    /** 复核认定责任员工（BSM L1072 ①「属员工损坏店内物品、照价赔偿」）：金额由服务端照内部结算价×数量计，不收前端金额；不改对客状态。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleRemedyRecord assignSavedBottleRemedyStaffLiability(String remedyId, SavedBottleRemedyActionRequest request) {
+        String id = requireText(remedyId, "remedy_id");
+        return executeWrite("assignSavedBottleRemedyStaffLiability:" + id, request == null ? null : request.idempotencyKey(), request,
+                SavedBottleRemedyRecord.class, "bar.saved_bottle.remedy_staff_liability_assigned",
+                "bar.saved_bottle.remedy_staff_liability_assign_failed", "bar.saved_bottle.manage", "saved_bottle_remedy", () -> {
+                    SavedBottleRemedyActionRequest actual = requireRequest(request);
+                    String staff = requireText(actual.staffUserId(), "staff_user_id");
+                    SavedBottleRemedyRecord remedy = requireRemedy(id);
+                    SavedBottleRecord bottle = bottleOf(remedy);
+                    requireCustody(bottle);
+                    if (!"none".equals(remedy.recoveryPartyType())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_RECOVERY_EXISTS", "该记录已有追收/赔偿对象");
+                    }
+                    Long amount = settlementPriceResolver.apply(bottle).map(price -> price * remedyQuantity(bottle))
+                            .orElse(remedy.lossCostCent() != null ? remedy.lossCostCent() : remedy.amountCent());
+                    if (amount == null) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_PRICE_UNRESOLVED", "该酒品未配置内部结算价，无法照价确定员工赔偿金额");
+                    }
+                    return repository.saveSavedBottleRemedy(remedy.withRecovery("staff", staff, amount, "pending", null,
+                            safeList(actual.evidenceIds()), clock.instant()));
+                });
+    }
+
+    /** 员工赔偿收回登记（向原门店的追收由应收台账结清自动回写，不走此入口）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleRemedyRecord settleSavedBottleRemedyRecovery(String remedyId, SavedBottleRemedyActionRequest request) {
+        String id = requireText(remedyId, "remedy_id");
+        return executeWrite("settleSavedBottleRemedyRecovery:" + id, request == null ? null : request.idempotencyKey(), request,
+                SavedBottleRemedyRecord.class, "bar.saved_bottle.remedy_recovery_settled",
+                "bar.saved_bottle.remedy_recovery_settle_failed", "bar.saved_bottle.manage", "saved_bottle_remedy", () -> {
+                    SavedBottleRemedyActionRequest actual = requireRequest(request);
+                    SavedBottleRemedyRecord remedy = requireRemedy(id);
+                    requireCustody(bottleOf(remedy));
+                    if (!"staff".equals(remedy.recoveryPartyType()) || !"pending".equals(remedy.recoveryStatus())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_REMEDY_RECOVERY_NOT_PENDING",
+                                "无待收回的员工赔偿（向原门店的追收经应收台账结清自动回写）");
+                    }
+                    List<String> evidence = new ArrayList<>(safeList(remedy.recoveryEvidenceIds()));
+                    evidence.addAll(safeList(actual.evidenceIds()));
+                    return repository.saveSavedBottleRemedy(remedy.withRecovery(remedy.recoveryPartyType(), remedy.recoveryPartyId(),
+                            remedy.recoveryAmountCent(), "recovered", remedy.recoveryArApItemId(), evidence, clock.instant()));
+                });
+    }
+
+    /** FinanceService 统一回写点回调：追收应收结清 → recovered（不改对客交付状态）。 */
+    @Override
+    public void onRecoverySettled(com.complex.platform.finance.ArApItemRecord item) {
+        if (item == null || item.id() == null) {
+            return;
+        }
+        repository.findSavedBottleRemedyByRecoveryArApItemId(item.id())
+                .filter(r -> "pending".equals(r.recoveryStatus()))
+                .ifPresent(r -> repository.saveSavedBottleRemedy(r.withRecovery(r.recoveryPartyType(), r.recoveryPartyId(),
+                        r.recoveryAmountCent(), "recovered", r.recoveryArApItemId(), r.recoveryEvidenceIds(), clock.instant())));
+    }
+
+    /** 退出前清点并通知客人在原店取回（BSM L1072 ③）：该门店 stored 且未过期、尚未交平台的存酒逐瓶短信；返回按瓶/按物品清点数。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleExitNoticeResult noticeSavedBottleExit(SavedBottleExitNoticeRequest request) {
+        return executeWrite("noticeSavedBottleExit", request == null ? null : request.idempotencyKey(), request,
+                SavedBottleExitNoticeResult.class, "bar.saved_bottle.exit_noticed", "bar.saved_bottle.exit_notice_failed",
+                "bar.saved_bottle.manage", "saved_bottle", () -> {
+                    SavedBottleExitNoticeRequest actual = requireRequest(request);
+                    String merchantId = requireText(actual.merchantId(), "merchant_id");
+                    requireMerchantScope(merchantId);
+                    List<SavedBottleRecord> bottles = pendingHandoverBottles(merchantId);
+                    Map<String, Integer> byItem = new LinkedHashMap<>();
+                    int notified = 0;
+                    for (SavedBottleRecord bottle : bottles) {
+                        byItem.merge(bottle.itemId(), bottle.remainingQuantity(), Integer::sum);
+                        if (notificationService != null) {
+                            notifySavedBottleNow(bottle, "exit_notice", STORED_WINE_EXIT_NOTICE_TEMPLATE, "swexit:" + bottle.id(), null);
+                            notified++;
+                        }
+                    }
+                    return new SavedBottleExitNoticeResult(merchantId, bottles.size(), notified, byItem);
+                });
+    }
+
+    /**
+     * 门店退出存酒交平台（BSM L1072 ④「酒吧退出后，所属娱乐平台公司接收仍在保管有效期内的未结存酒实物和存酒记录，并指定领取地点，
+     * 继续按原门店的保管规则和原有效期处理」）：由平台方（无商户 scope）办理；接收主体＝酒吧域归属的娱乐平台公司；该门店全部有效期内未结存酒
+     * 必须全部清点（缺项 409）；intact 只记保管主体/领取地点/交接时间，到期日、状态、客户、验证方式全不动；damaged 与实收为 0 的 short 走作废路径
+     * （「接收时已存在的毁损、短少……仍由原门店承担」→ 补存/赔付登记时承担方按交接明细判）；已交接过的瓶幂等跳过。
+     * 2026-10-20 操作员裁决「按差额」：short 且实收量>0 时不作废，剩余量改为实收量、继续以原瓶由平台保管、客人照常取，
+     * 补存/损失/员工赔偿数量＝登记剩余量−实收量（记 shortfall_quantity）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleHandoverRecord handoverSavedBottlesToPlatform(SavedBottleHandoverRequest request) {
+        return executeWrite("handoverSavedBottlesToPlatform", request == null ? null : request.idempotencyKey(), request,
+                SavedBottleHandoverRecord.class, "bar.saved_bottle.handed_over", "bar.saved_bottle.handover_failed",
+                "bar.saved_bottle.manage", "saved_bottle_handover", () -> {
+                    SavedBottleHandoverRequest actual = requireRequest(request);
+                    String merchantId = requireText(actual.merchantId(), "merchant_id");
+                    String location = requireText(actual.pickupLocation(), "pickup_location");
+                    if (authorizationService.currentMerchantScope().isPresent()) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "存酒交接须由所属娱乐平台公司接收，门店不得自行办理");
+                    }
+                    String projectId = repository.findBarProjectId(merchantId).orElse(null);
+                    String entityId = managementEntityResolver.apply(projectId);
+                    if (entityId == null) {
+                        throw ApiException.conflict("REVENUE_STREAM_ATTRIBUTION_MISSING", "酒吧域归属的娱乐平台公司未配置，无法接收存酒");
+                    }
+                    Map<String, SavedBottleRecord> eligible = new LinkedHashMap<>();
+                    for (SavedBottleRecord bottle : pendingHandoverBottles(merchantId)) {
+                        eligible.put(bottle.id(), bottle);
+                    }
+                    Map<String, String[]> wanted = new LinkedHashMap<>();
+                    for (Map<String, Object> item : actual.items() == null ? List.<Map<String, Object>>of() : actual.items()) {
+                        String bottleId = requireItemText(item, "saved_bottle_id");
+                        String condition = trimToDefault(textFromItem(item, "condition"), "intact");
+                        if (!HANDOVER_CONDITIONS.contains(condition)) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "condition 须为 intact、damaged 或 short");
+                        }
+                        wanted.put(bottleId, new String[] {trimToNull(textFromItem(item, "received_quantity")), condition});
+                    }
+                    List<String> missing = eligible.keySet().stream().filter(bottleId -> !wanted.containsKey(bottleId)).toList();
+                    if (!missing.isEmpty()) {
+                        throw ApiException.conflict("SAVED_BOTTLE_HANDOVER_INCOMPLETE",
+                                "该门店有效期内未结存酒须全部清点交接，缺：" + String.join(",", missing));
+                    }
+                    Instant now = clock.instant();
+                    String handoverId = "sbh_" + slug(actual.idempotencyKey());
+                    String actor = currentActorId();
+                    List<SavedBottleHandoverRecord.SavedBottleHandoverItemRecord> items = new ArrayList<>();
+                    List<SavedBottleRecord> toNotify = new ArrayList<>();
+                    int intact = 0;
+                    int damaged = 0;
+                    for (Map.Entry<String, String[]> entry : wanted.entrySet()) {
+                        SavedBottleRecord bottle = eligible.get(entry.getKey());
+                        if (bottle == null) {
+                            SavedBottleRecord other = repository.findSavedBottleByIdForUpdate(entry.getKey())
+                                    .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+                            if (other.custodianEntityId() != null) {
+                                continue;
+                            }
+                            throw ApiException.conflict("SAVED_BOTTLE_NOT_HANDOVERABLE",
+                                    "存酒「" + entry.getKey() + "」不在有效期内未结状态或不属于该门店，不纳入本次交接");
+                        }
+                        bottle = repository.findSavedBottleByIdForUpdate(bottle.id()).orElseThrow();
+                        int received = entry.getValue()[0] == null ? bottle.remainingQuantity() : parseQuantity(entry.getValue()[0]);
+                        String condition = entry.getValue()[1];
+                        int shortfall = "short".equals(condition) ? bottle.remainingQuantity() - received : 0;
+                        if ("short".equals(condition) && shortfall <= 0) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "短少须实收量小于登记剩余量");
+                        }
+                        SavedBottleRecord held;
+                        if (shortfall > 0 && received > 0) {
+                            // 按差额：实收部分不作废，剩余量改为实收量、原瓶继续由平台保管；差额由补存/赔付按 shortfall 处理。
+                            held = repository.saveSavedBottle(savedBottleWithCustody(
+                                    savedBottleWith(bottle, bottle.status(), received, now), entityId, location, now, handoverId));
+                            damaged++;
+                            toNotify.add(held);
+                        } else {
+                            held = repository.saveSavedBottle(savedBottleWithCustody(bottle, entityId, location, now, handoverId));
+                            if ("intact".equals(condition)) {
+                                intact++;
+                                toNotify.add(held);
+                            } else {
+                                damaged++;
+                                applyCancel(held, actual.idempotencyKey() + ":" + held.id(), actual.photoAttachmentIds(), actual.videoAttachmentIds());
+                            }
+                        }
+                        items.add(new SavedBottleHandoverRecord.SavedBottleHandoverItemRecord(held.id(), received, condition, shortfall));
+                    }
+                    SavedBottleHandoverRecord handover = repository.saveSavedBottleHandover(new SavedBottleHandoverRecord(
+                            handoverId, merchantId, projectId, entityId, location, items.size(), intact, damaged,
+                            safeList(actual.photoAttachmentIds()), safeList(actual.videoAttachmentIds()), items, actor, now));
+                    for (SavedBottleRecord bottle : toNotify) {
+                        notifySavedBottleAfterCommit(bottle, "handover", STORED_WINE_HANDOVER_TEMPLATE, "swhandover:" + bottle.id(), null);
+                    }
+                    return handover;
+                });
+    }
+
+    public PageResponse<SavedBottleHandoverRecord> listSavedBottleHandovers() {
+        return readPage("bar.saved_bottle.handover_viewed", "bar.saved_bottle.handover_view_failed", "bar.saved_bottle.manage",
+                "saved_bottle_handover", () -> {
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return repository.listSavedBottleHandovers().stream()
+                            .filter(h -> scope.isEmpty() || scope.get().equals(h.merchantId()))
+                            .toList();
+                });
+    }
+
+    private SavedBottleRemedyRecord requireRemedy(String remedyId) {
+        return repository.findSavedBottleRemedyByIdForUpdate(requireText(remedyId, "remedy_id"))
+                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_REMEDY_NOT_FOUND", "补存/赔付记录不存在"));
+    }
+
+    private SavedBottleRecord bottleOf(SavedBottleRemedyRecord remedy) {
+        return repository.findSavedBottleByIdForUpdate(remedy.savedBottleId())
+                .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
+    }
+
+    /** 商户范围闸 + 交平台后门店不得再办理（BSM L867「此例外不开放正常营业门店的跨店取酒」）。 */
+    private void requireCustody(SavedBottleRecord bottle) {
+        requireOwnMerchant(bottle);
+        if (bottle.custodianEntityId() != null && authorizationService.currentMerchantScope().isPresent()) {
+            throw ApiException.conflict("SAVED_BOTTLE_HANDED_OVER", "该存酒已交所属娱乐平台公司接收，须到指定领取地点办理");
+        }
+    }
+
+    private void requireMerchantScope(String merchantId) {
+        Optional<String> scope = authorizationService.currentMerchantScope();
+        if (scope.isPresent() && !scope.get().equals(merchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不得为其他商户办理");
+        }
+    }
+
+    /** 承担方：未交平台或接收时已毁损/短少 → 原门店；交平台后接收完好再毁损 → 娱乐平台公司（BSM L1072 ④）。 */
+    private String[] remedyBearer(SavedBottleRecord bottle) {
+        if (bottle.custodianEntityId() == null) {
+            return new String[] {"original_merchant", bottle.merchantId()};
+        }
+        String condition = repository.findSavedBottleHandoverItem(bottle.handoverId(), bottle.id())
+                .map(SavedBottleHandoverRecord.SavedBottleHandoverItemRecord::condition).orElse("intact");
+        return "intact".equals(condition)
+                ? new String[] {"platform_company", bottle.custodianEntityId()}
+                : new String[] {"original_merchant", bottle.merchantId()};
+    }
+
+    /** 交平台时登记的短少量（登记剩余量−实收量；操作员裁决「按差额」）；非 short 或未交平台为 0。 */
+    private int handoverShortfall(SavedBottleRecord bottle) {
+        return repository.findSavedBottleHandoverItem(bottle.handoverId(), bottle.id())
+                .filter(item -> "short".equals(item.condition()))
+                .map(SavedBottleHandoverRecord.SavedBottleHandoverItemRecord::shortfallQuantity)
+                .orElse(0);
+    }
+
+    /** 补存/损失/员工赔偿数量：交平台短少按差额，否则＝作废时的剩余量。 */
+    private int remedyQuantity(SavedBottleRecord bottle) {
+        int shortfall = handoverShortfall(bottle);
+        return shortfall > 0 ? shortfall : bottle.remainingQuantity();
+    }
+
+    /** 经营损失落账；无金额（内部结算价未配置）或未接财务时不阻断对客处理，记审计事件供财务按 R6-D08 补计。 */
+    private String postRemedyLoss(String remedyId, String[] bearer, String originalMerchantId, Long amountCent, String idempotencyKey) {
+        if (amountCent == null || amountCent <= 0 || financeService == null) {
+            auditEventService.recordSuccess("bar.saved_bottle.remedy_loss_unpriced", "bar.saved_bottle.manage",
+                    "saved_bottle_remedy", remedyId, null, idempotencyKey,
+                    Map.of("bearer_type", bearer[0], "bearer_id", String.valueOf(bearer[1]),
+                            "reason", amountCent == null ? "settlement_price_unresolved" : "finance_unavailable"));
+            return null;
+        }
+        String ledgerMerchant = "original_merchant".equals(bearer[0]) ? originalMerchantId : null;
+        return financeService.postSavedBottleRemedyLoss(remedyId, bearer[1], ledgerMerchant, amountCent, idempotencyKey).id();
+    }
+
+    /** 平台垫付后向原门店挂追收应收（source_type=saved_bottle_remedy_recovery，幂等）；对客状态不变。 */
+    private SavedBottleRemedyRecord postRecovery(SavedBottleRemedyRecord remedy, String idempotencyKey, Instant now) {
+        if (remedy.recoveryArApItemId() != null) {
+            return remedy;
+        }
+        Long amount = remedy.lossCostCent();
+        if (amount == null) {
+            throw ApiException.conflict("SAVED_BOTTLE_REMEDY_PRICE_UNRESOLVED", "该酒品未配置内部结算价，垫付金额未定，无法向原门店追收");
+        }
+        if (financeService == null) {
+            throw ApiException.conflict("FINANCE_UNAVAILABLE", "财务台账不可用，无法挂追收应收");
+        }
+        com.complex.platform.finance.ArApItemRecord item = financeService.postSavedBottleRemedyRecovery(
+                remedy.id(), remedy.merchantId(), amount, idempotencyKey + ":recovery");
+        return remedy.withRecovery("original_merchant", remedy.merchantId(), amount, "pending", item.id(),
+                remedy.recoveryEvidenceIds(), now);
+    }
+
+    private List<SavedBottleRecord> pendingHandoverBottles(String merchantId) {
+        Instant now = clock.instant();
+        return repository.listSavedBottlesByMerchant(merchantId).stream()
+                .filter(b -> "stored".equals(b.status()))
+                .filter(b -> b.expireAt() == null || b.expireAt().isAfter(now))
+                .filter(b -> b.custodianEntityId() == null)
+                .toList();
+    }
+
+    private SavedBottleRecord savedBottleWithCustody(SavedBottleRecord b, String entityId, String location, Instant at, String handoverId) {
+        return new SavedBottleRecord(b.id(), b.customerId(), b.barProjectId(), b.itemId(), b.bottleName(),
+                b.initialQuantity(), b.remainingQuantity(), b.unit(), b.expireAt(), b.status(), b.evidenceAttachmentIds(),
+                b.createdAt(), at, b.merchantId(), b.isHighValue(), b.highValueThresholdCents(),
+                b.bottleLabelValue(), b.customerNameOrNickname(), b.customerPhone(), b.customerPhoneHash(),
+                b.registrationPhotoRefs(), b.manualNote(),
+                b.transferredAt(), b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash(),
+                b.remedyOfSavedBottleId(), entityId, location, at, handoverId);
+    }
+
+    private void consumeBatchesFefo(String itemId, String locationId, int quantity) {
+        int remaining = quantity;
+        for (InventoryStockBatchRecord batch : repository.listActiveBatchesForConsumption(itemId, locationId)) {
+            if (remaining <= 0) {
+                break;
+            }
+            int take = Math.min(remaining, batch.quantity());
+            if (repository.atomicDecreaseBatchQuantity(batch.id(), take) > 0) {
+                remaining -= take;
+            }
+        }
+    }
+
+    private static int parseQuantity(String value) {
+        try {
+            int parsed = Integer.parseInt(value.trim());
+            if (parsed < 0) {
+                throw new NumberFormatException();
+            }
+            return parsed;
+        } catch (NumberFormatException exception) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "received_quantity 须为不小于 0 的整数");
+        }
     }
 
     /** 暴露给 Controller：列高价值复核单 + approve/reject。 */
@@ -1496,6 +2800,22 @@ public class InventoryService {
                     if (actual.lines() == null || actual.lines().isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "调拨单至少需要一行明细");
                     }
+                    // FS-019（BSM L1201「不可消费物品（设备、器具等）的借用必须约定归还时间」「可消费物品的借用实质是调，交付时所有权随之转移」）：
+                    // 借用只收不可消费物品且必须约定归还时间；可消费物品只能按内部结算价买断。
+                    boolean borrow = "lending".equals(transferType) && "borrow".equals(trimToNull(actual.lendingMode()));
+                    if (borrow) {
+                        if (actual.returnDueAt() == null) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "借用必须约定归还时间（return_due_at）");
+                        }
+                        for (com.complex.platform.inventory.dto.TransferLineRequest lr : actual.lines()) {
+                            InventoryItemRecord item = repository.findInventoryItemById(requireText(lr.itemId(), "item_id")).orElseThrow(() ->
+                                    ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
+                            if (!item.nonConsumable()) {
+                                throw ApiException.badRequest("VALIDATION_FAILED",
+                                        "可消费物品不存在保留所有权的借用，只能按内部结算价买断（调）：" + item.itemName());
+                            }
+                        }
+                    }
                     Instant now = Instant.now();
                     String orderId = "trf_" + slug(actual.idempotencyKey());
                     // FS-011（BSM L1212/L1213）：门店要货（供货调拨）从草稿起步，门店提交后进待供货主体审核；借调沿用新建→发货。
@@ -1503,7 +2823,8 @@ public class InventoryService {
                     InventoryTransferOrderRecord order = new InventoryTransferOrderRecord(orderId, transferType,
                             trimToNull(actual.lendingMode()), fromType, fromId, toType, toId,
                             trimToNull(actual.fromLocationId()), trimToNull(actual.toLocationId()),
-                            requisition ? "draft" : "created", trimToNull(actual.operatorNote()), null, now, now, List.of());
+                            requisition ? "draft" : "created", trimToNull(actual.operatorNote()), null, now, now,
+                            borrow ? actual.returnDueAt() : null, List.of());
                     repository.saveTransferOrder(order);
                     InventoryTransferFlowService.saveLines(repository, orderId, actual.lines(), now);
                     if (requisition) {
@@ -1514,6 +2835,14 @@ public class InventoryService {
     }
 
     public InventoryTransferOrderRecord shipTransferOrder(String orderId) {
+        return shipTransferOrder(orderId, null);
+    }
+
+    /**
+     * 发货。FS-019（BSM L1201「借出时间取借出方交货扫码的时刻」「每一步都必须扫码」）：借用单有随货溯源码时，借出方交货须逐码扫齐
+     * （扫描集与本单码集一致），每码记一行保管台账（借出时间）；提交编号仍为单号（M724-F06）。
+     */
+    public InventoryTransferOrderRecord shipTransferOrder(String orderId, com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
         String id = requireText(orderId, "order_id");
         return executeWrite("shipTransferOrder:" + id, id, id,
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_shipped", "inventory.transfer_order_ship_failed",
@@ -1528,8 +2857,41 @@ public class InventoryService {
                     if (!"created".equals(o.status())) {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "只有新建状态的调拨单才能发货");
                     }
+                    if (isBorrow(o)) {
+                        Instant now = Instant.now();
+                        java.util.LinkedHashSet<String> orderCodes = requireScannedAll(o, request == null ? null : request.scannedTraceCodes());
+                        int seq = 0;
+                        for (String code : orderCodes) {
+                            repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
+                                    o.id() + "_s" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
+                                    o.fromOwnerType(), o.fromOwnerId(), o.id(), now, InventoryTraceOwnershipHistoryRecord.CUSTODY));
+                        }
+                    }
                     return repository.saveTransferOrder(withTransferStatus(o, "shipped"));
                 });
+    }
+
+    private static boolean isBorrow(InventoryTransferOrderRecord o) {
+        return "lending".equals(o.transferType()) && "borrow".equals(o.lendingMode());
+    }
+
+    /** 本单随货溯源码集；有码时扫描集须与之完全一致（空扫/漏扫/非本单码拒绝，防调包）。 */
+    private java.util.LinkedHashSet<String> requireScannedAll(InventoryTransferOrderRecord o, List<String> scannedCodes) {
+        java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
+        for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
+            orderCodes.addAll(l.traceCodes());
+        }
+        List<String> scanned = scannedCodes == null ? List.of() : scannedCodes;
+        for (String code : scanned) {
+            if (!orderCodes.contains(code)) {
+                throw ApiException.badRequest("TRACE_CODE_MISMATCH", "扫描的溯源码不属于本次调拨：" + code);
+            }
+        }
+        if (!orderCodes.isEmpty() && !new java.util.HashSet<>(scanned).equals(new java.util.HashSet<>(orderCodes))) {
+            throw ApiException.badRequest("TRACE_CODE_INCOMPLETE",
+                    "扫描的溯源码必须与本次调拨的码完全一致，应为 " + orderCodes.size() + " 个");
+        }
+        return orderCodes;
     }
 
     public InventoryTransferOrderRecord receiveTransferOrder(String orderId, com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
@@ -1548,34 +2910,26 @@ public class InventoryService {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_SHIPPED", "只有已发货的调拨单才能收货");
                     }
                     Instant now = Instant.now();
-                    java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
-                    for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
-                        orderCodes.addAll(l.traceCodes());
-                    }
-                    List<String> scanned = request == null || request.scannedTraceCodes() == null ? List.of() : request.scannedTraceCodes();
-                    for (String code : scanned) {
-                        if (!orderCodes.contains(code)) {
-                            throw ApiException.badRequest("TRACE_CODE_MISMATCH", "扫描的溯源码不属于本次调拨：" + code);
-                        }
-                    }
                     // 防调包:本单有随货溯源码时,收货必须逐码扫齐(空扫/漏扫拒绝),扫描集须与本单集完全一致。
-                    if (!orderCodes.isEmpty() && !new java.util.HashSet<>(scanned).equals(new java.util.HashSet<>(orderCodes))) {
-                        throw ApiException.badRequest("TRACE_CODE_INCOMPLETE",
-                                "扫描的溯源码必须与本次调拨的码完全一致，应为 " + orderCodes.size() + " 个");
-                    }
-                    // 溯源归属 from->to:写归属变更台账(防调包+对账)+尽力更新溯源码归属(存在则更新)。
+                    java.util.LinkedHashSet<String> orderCodes = requireScannedAll(o, request == null ? null : request.scannedTraceCodes());
+                    boolean borrow = isBorrow(o);
                     int seq = 0;
                     for (String code : orderCodes) {
                         // 防调包(原子):CAS 只在归属=出让方或无主时翻转;命中0行且码已存在=归属第三方(或并发被改走)→拒并回滚。
                         // 命中0行且码不存在=P1 随货新码(归属登记泛化待 P2)→放行。CAS 结果即业务判定,消除 check-then-act 竞态。
-                        int affected = repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
+                        // FS-019（BSM L1201「「借」只转移保管责任、不转移所有权……借用期间保管人变更为借入方并在溯源码上登记」）：
+                        // 借用型只改当前保管主体与在借单，所有权仍是借出方；买断型才翻转所有权。
+                        int affected = borrow
+                                ? repository.updateTraceCodeCustodianIfOwnedBy(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), o.id(), now)
+                                : repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
                         if (affected == 0 && repository.traceCodeExists(code)) {
                             throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
                                     "溯源码属于其他主体，不能收货：" + code);
                         }
                         repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
                                 o.id() + "_h" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
-                                o.toOwnerType(), o.toOwnerId(), o.id(), now));
+                                o.toOwnerType(), o.toOwnerId(), o.id(), now,
+                                borrow ? InventoryTraceOwnershipHistoryRecord.CUSTODY : InventoryTraceOwnershipHistoryRecord.OWNERSHIP));
                     }
                     // ponytail: 借调两侧库存流水未接（门店要货的合格入库见 InventoryTransferFlowService.receive）。
                     recordLendingSettlementOnReceipt(o, now);
@@ -1583,9 +2937,15 @@ public class InventoryService {
                 });
     }
 
-    /** 借调归还(AUD-002/003)：借用型(lending+borrow)收货后归还,溯源码归属翻回出让方并置 returned。 */
+    /**
+     * 借用归还（AUD-002/003 → FS-019）。BSM L1201「不得伪造归还扫码或实际归还时间」「实际归还时间取借出方收货扫码的时刻」
+     * 「结束对应数量的原物归还事项」；台账 §25「归还后，保管责任回到出借方并关闭借用关系」：
+     * 只由借出方商户账号（平台管理员除外）在收货扫码时按行登记归还数量与码，可分多次；有码行逐件扫码且只能是本行借出、尚未归还、
+     * 未登记无法归还的码；每码保管主体翻回借出方、在借单置空并记一行保管台账（changedAt 即实际归还时间）；
+     * 全部数量都已归还或实物处置完成才置 returned，否则保持 received。所有权始终不动。
+     */
     public InventoryTransferOrderRecord returnTransferOrder(String orderId,
-            com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+            com.complex.platform.inventory.dto.ReturnTransferRequest request) {
         String id = requireText(orderId, "order_id");
         return executeWrite("returnTransferOrder:" + id, request == null ? null : request.idempotencyKey(), request,
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_returned",
@@ -1593,32 +2953,75 @@ public class InventoryService {
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
                             ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
-                    if (!("lending".equals(o.transferType()) && "borrow".equals(o.lendingMode()))) {
+                    if (!isBorrow(o)) {
                         throw ApiException.badRequest("TRANSFER_NOT_RETURNABLE",
                                 "只有已借出的借调单才能归还");
                     }
                     if (!"received".equals(o.status())) {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_RECEIVED", "只有已收货的调拨单才能退回");
                     }
-                    Instant now = Instant.now();
-                    java.util.LinkedHashSet<String> orderCodes = new java.util.LinkedHashSet<>();
+                    String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
+                    if (merchant == null ? !authorizationService.isPlatformAdmin(authorizationService.currentActor()) : !merchant.equals(o.fromOwnerId())) {
+                        throw ApiException.forbidden("LENDER_RETURN_ONLY", "归还须由借出方实际收货扫码登记");
+                    }
+                    com.complex.platform.inventory.dto.ReturnTransferRequest actual = requireRequest(request);
+                    List<com.complex.platform.inventory.dto.ReturnTransferRequest.ReturnTransferLineRequest> lines =
+                            actual.lines() == null ? List.of() : actual.lines();
+                    if (lines.stream().noneMatch(l -> l.returnedQuantity() != null && l.returnedQuantity() > 0)) {
+                        throw ApiException.badRequest("TRANSFER_RETURN_REQUIRES_SCAN", "归还须按实物扫码/数量登记");
+                    }
+                    Map<String, InventoryTransferLineRecord> byId = new java.util.LinkedHashMap<>();
                     for (InventoryTransferLineRecord l : repository.listTransferLinesByOrder(o.id())) {
-                        orderCodes.addAll(l.traceCodes());
+                        byId.put(l.id(), l);
                     }
-                    // 归属翻回 to->from:CAS 只在归属=借入方时翻回出让方;命中0且码存在=已被改走→拒并回滚。
+                    InventoryLendingFacts facts = repository.lendingFacts(o.id());
+                    Instant now = Instant.now();
+                    String actor = authorizationService.currentActor().id();
+                    String returnNo = "trt_" + com.complex.platform.common.Hashing.idempotencyCode(
+                            o.id() + ":" + requireText(actual.idempotencyKey(), "idempotency_key"));
+                    Map<String, Integer> returnedNow = new java.util.HashMap<>();
                     int seq = 0;
-                    for (String code : orderCodes) {
-                        int affected = repository.updateTraceCodeOwnerIfExists(
-                                code, o.toOwnerId(), o.fromOwnerType(), o.fromOwnerId(), now);
-                        if (affected == 0 && repository.traceCodeExists(code)) {
-                            throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
-                                    "溯源码已不属于借入方，不能归还：" + code);
+                    for (com.complex.platform.inventory.dto.ReturnTransferRequest.ReturnTransferLineRequest in : lines) {
+                        InventoryTransferLineRecord line = byId.get(in.lineId());
+                        if (line == null) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "line_id 须为本单明细");
                         }
-                        repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
-                                o.id() + "_r" + (seq++), code, o.toOwnerType(), o.toOwnerId(),
-                                o.fromOwnerType(), o.fromOwnerId(), o.id(), now));
+                        int qty = in.returnedQuantity() == null ? 0 : in.returnedQuantity();
+                        if (qty <= 0) {
+                            throw ApiException.badRequest("VALIDATION_FAILED", "归还数量须大于 0");
+                        }
+                        if (qty > facts.outstanding(line) - returnedNow.getOrDefault(line.id(), 0)) {
+                            throw ApiException.conflict("TRANSFER_RETURN_EXCEEDS_OUTSTANDING", "归还数量超过该行尚未归还的数量");
+                        }
+                        List<String> codes = in.traceCodes() == null ? List.of() : in.traceCodes();
+                        boolean codesOk = line.traceCodes().isEmpty()
+                                ? codes.isEmpty()
+                                : codes.size() == qty && new java.util.HashSet<>(codes).size() == codes.size()
+                                        && line.traceCodes().containsAll(codes)
+                                        && codes.stream().noneMatch(c -> facts.returnedCodes().contains(c) || facts.claimedCodes().contains(c));
+                        if (!codesOk) {
+                            throw ApiException.badRequest("TRACE_CODE_MISMATCH", "归还须逐件扫码，且只能是本行借出、尚未归还的溯源码");
+                        }
+                        for (String code : codes) {
+                            // 保管主体翻回借出方、在借单置空；所有权始终是借出方（CAS 命中 0 且码存在＝所有权已不是借出方→拒并回滚）。
+                            int affected = repository.updateTraceCodeCustodianIfOwnedBy(code, o.fromOwnerId(), o.fromOwnerType(), o.fromOwnerId(), null, now);
+                            if (affected == 0 && repository.traceCodeExists(code)) {
+                                throw ApiException.badRequest("TRACE_OWNER_MISMATCH", "溯源码所有权已不是借出方，不能归还：" + code);
+                            }
+                            repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
+                                    returnNo + "_h" + (seq++), code, o.toOwnerType(), o.toOwnerId(),
+                                    o.fromOwnerType(), o.fromOwnerId(), o.id(), now, InventoryTraceOwnershipHistoryRecord.CUSTODY));
+                        }
+                        repository.saveTransferReturn(new InventoryTransferReturnRecord(returnNo + "_" + line.id(), returnNo, o.id(),
+                                line.id(), qty, codes, actor, now));
+                        returnedNow.merge(line.id(), qty, Integer::sum);
                     }
-                    return repository.saveTransferOrder(withTransferStatus(o, "returned"));
+                    boolean complete = byId.values().stream().allMatch(line ->
+                            facts.returned(line.id()) + returnedNow.getOrDefault(line.id(), 0) + facts.closed(line.id()) >= line.quantity());
+                    if (complete) {
+                        transferFlow.recordEvent(o.id(), "received", "returned", trimToNull(actual.operatorNote()));
+                    }
+                    return repository.saveTransferOrder(withTransferStatus(o, complete ? "returned" : "received"));
                 });
     }
 
@@ -1656,7 +3059,7 @@ public class InventoryService {
                 ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
-                o.createdBy(), o.createdAt(), o.updatedAt(), repository.listTransferLinesByOrder(o.id()));
+                o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), repository.listTransferLinesByOrder(o.id()));
     }
 
     public PageResponse<InventoryTransferOrderRecord> listTransferOrders() {
@@ -1695,7 +3098,7 @@ public class InventoryService {
     private InventoryTransferOrderRecord withTransferStatus(InventoryTransferOrderRecord o, String status) {
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), status, o.operatorNote(),
-                o.createdBy(), o.createdAt(), Instant.now(), o.lines());
+                o.createdBy(), o.createdAt(), Instant.now(), o.returnDueAt(), o.lines());
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.manage")
@@ -2352,8 +3755,22 @@ public class InventoryService {
             String businessType,
             Supplier<List<T>> supplier
     ) {
+        return readPage(successEvent, failureEvent, permissionCode, businessType, Map.of(), supplier);
+    }
+
+    /** details：除 count 外要留痕的查询要素（如按手机号检索时的 phone_hash / queried_by）。 */
+    private <T> PageResponse<T> readPage(
+            String successEvent,
+            String failureEvent,
+            String permissionCode,
+            String businessType,
+            Map<String, Object> details,
+            Supplier<List<T>> supplier
+    ) {
         try {
             List<T> items = supplier.get();
+            Map<String, Object> metadata = new LinkedHashMap<>(details);
+            metadata.put("count", items.size());
             auditEventService.recordSuccess(
                     successEvent,
                     permissionCode,
@@ -2361,7 +3778,7 @@ public class InventoryService {
                     "all",
                     null,
                     null,
-                    Map.of("count", items.size())
+                    metadata
             );
             return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
         } catch (RuntimeException exception) {
@@ -2438,6 +3855,27 @@ public class InventoryService {
         }
         if (response instanceof SavedBottleClaimRecord record) {
             return record.id();
+        }
+        if (response instanceof SavedBottleRenewalRecord record) {
+            return record.id();
+        }
+        if (response instanceof SavedBottleTransferRecord record) {
+            return record.id();
+        }
+        if (response instanceof SavedBottleRemedyRecord record) {
+            return record.id();
+        }
+        if (response instanceof SavedBottleHandoverRecord record) {
+            return record.id();
+        }
+        if (response instanceof SavedBottleExitNoticeResult result) {
+            return result.merchantId();
+        }
+        if (response instanceof SavedBottleManualPickupRecord record) {
+            return record.id();
+        }
+        if (response instanceof SavedBottleVerificationCodeReceipt record) {
+            return record.savedBottleId();
         }
         if (response instanceof StockMovementRecord record) {
             return record.id();

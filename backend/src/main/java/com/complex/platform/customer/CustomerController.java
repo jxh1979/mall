@@ -1,4 +1,6 @@
 package com.complex.platform.customer;
+
+// 文件版本：V0.03
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.bar.BarOrderRecord;
@@ -310,6 +312,52 @@ public class CustomerController {
                 requireCustomerToken(customerToken, authorization),
                 reservationId
         ));
+    }
+
+    /** FS-016（BSM L867）：我的存酒——本人名下全部存酒、到期日，跨店汇总（每条带所属酒吧）；只下发客人可见字段。 */
+    @GetMapping("/my-saved-bottles")
+    public ApiResponse<PageResponse<com.complex.platform.customer.dto.CustomerSavedBottleResponse>> listMySavedBottles(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.listMySavedBottles(requireCustomerToken(customerToken, authorization)));
+    }
+
+    /** FS-016（BSM L1073/L585）：官方动态取酒码，按当前持有人签发，窗口=全场统一刷新间隔。 */
+    @GetMapping("/saved-bottles/{saved_bottle_id}/pickup-code")
+    public ApiResponse<com.complex.platform.inventory.SavedBottlePickupCodeResponse> getSavedBottlePickupCode(
+            @PathVariable("saved_bottle_id") String savedBottleId,
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.getSavedBottlePickupCode(requireCustomerToken(customerToken, authorization), savedBottleId));
+    }
+
+    /** FS-025（ENUM L120）：客人本人转存发码（scene=renew，发到本人手机）。 */
+    @PostMapping("/saved-bottles/{saved_bottle_id}/renewal-code")
+    public ApiResponse<com.complex.platform.inventory.SavedBottleVerificationCodeReceipt> requestMySavedBottleRenewalCode(
+            @PathVariable("saved_bottle_id") String savedBottleId,
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.requestMySavedBottleRenewalCode(requireCustomerToken(customerToken, authorization), savedBottleId));
+    }
+
+    /** FS-025（ENUM L120「转存须客人本人短信验证码确认（与转让同款）」）：客人本人转存，验证成功即从当前到期日顺延。 */
+    @PostMapping("/saved-bottles/{saved_bottle_id}/renew")
+    public ApiResponse<com.complex.platform.inventory.SavedBottleRenewalRecord> renewMySavedBottle(
+            @PathVariable("saved_bottle_id") String savedBottleId,
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest request
+    ) {
+        String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
+        requireIdempotencyKey(key);
+        return ApiResponse.ok(service.renewMySavedBottle(
+                requireCustomerToken(customerToken, authorization),
+                savedBottleId,
+                new com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest(key, request == null ? null : request.smsCode())));
     }
 
     @GetMapping("/my-tickets")

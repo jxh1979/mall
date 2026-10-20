@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V511**，发现 **214** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V516**，发现 **219** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -214,6 +214,11 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `revenue_stream_attribution` | `project_id` | direct | V319 | `V319__revenue_stream_attribution.sql` |
 | `risk_alerts` | `merchant_id` + `project_id` | direct | V103 | `V103__unified_risk_alerts.sql` |
 | `roles` | `organization_id` | direct | V048 | `V048__access_role_organization_isolation.sql` |
+| `saved_bottle_handovers` | `merchant_id` + `project_id` | direct | V514 | `V514__saved_bottle_remedy_and_handover.sql` |
+| `saved_bottle_manual_pickup_policy` | `project_id` | direct | V512 | `V512__saved_bottle_holder_verification.sql` |
+| `saved_bottle_manual_pickups` | `merchant_id` + `project_id` | direct | V512 | `V512__saved_bottle_holder_verification.sql` |
+| `saved_bottle_remedies` | `merchant_id` + `project_id` | direct | V514 | `V514__saved_bottle_remedy_and_handover.sql` |
+| `saved_bottle_renewals` | `merchant_id` + `project_id` | direct | V513 | `V513__saved_bottle_renewal.sql` |
 | `saved_bottles` | `merchant_id` | direct | V046 | `V046__inventory_security_fixes.sql` |
 | `service_orders` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `service_responsibility_records` | `merchant_id` | direct | V059 | `V059__operation_traceability_three_layer.sql` |

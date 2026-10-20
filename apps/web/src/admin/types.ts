@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 export type AdminUser = {
   id: string;
   username: string;
@@ -395,6 +395,8 @@ export type BarComboRow = {
 export type StoredWineRow = {
   id: string;
   savedNo?: string;
+  /** 所属酒吧（登记时的 bar_id，即该酒吧商户 id；SavedBottleRecord.barProjectId）。 */
+  barProjectId?: string;
   customerId?: string;
   customerName?: string;
   itemId?: string;
@@ -403,6 +405,31 @@ export type StoredWineRow = {
   remainingQuantity?: number;
   quantity?: number;
   status?: string;
+  createdAt?: string;
+  expireAt?: string;
+  /** FS-017：门店退出交平台后的保管主体/指定领取地点/交接时间；补存瓶回指原作废瓶。 */
+  custodianEntityId?: string;
+  pickupLocation?: string;
+  handedOverAt?: string;
+  remedyOfSavedBottleId?: string;
+};
+
+/** FS-017 存酒补存/赔付记录（GET /saved-bottles/{id}/remedies；对客交付状态与内部追收状态分别记录）。 */
+export type StoredWineRemedyRow = {
+  id: string;
+  savedBottleId?: string;
+  remedyType?: string;
+  amountCent?: number;
+  lossCostCent?: number;
+  bearerType?: string;
+  bearerId?: string;
+  customerDeliveryStatus?: string;
+  deliveredAt?: string;
+  recoveryPartyType?: string;
+  recoveryPartyId?: string;
+  recoveryAmountCent?: number;
+  recoveryStatus?: string;
+  advanceApprovedAt?: string;
   createdAt?: string;
 };
 

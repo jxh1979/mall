@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.util.List;
@@ -30,6 +30,11 @@ public interface InventoryRepository {
     default List<InventoryTransferLineRecord> listTransferLinesByOrder(String orderId) { return java.util.List.of(); }
     default void saveTraceOwnershipHistory(InventoryTraceOwnershipHistoryRecord history) { }
     default int updateTraceCodeOwnerIfExists(String traceCode, String fromOwnerId, String ownerType, String ownerId, java.time.Instant now) { return 0; }
+    // FS-019 借用只转保管责任：所有权（owner）不动，只改当前保管主体与在借单（CAS：所有权须为 ownerId；所有权未登记的按借出方登记）。
+    default int updateTraceCodeCustodianIfOwnedBy(String traceCode, String ownerId, String custodianType, String custodianId,
+            String lendingOrderId, java.time.Instant now) { return 0; }
+    default void saveTransferReturn(InventoryTransferReturnRecord returned) { }
+    default InventoryLendingFacts lendingFacts(String orderId) { return InventoryLendingFacts.EMPTY; }
     default boolean traceCodeExists(String traceCode) { return false; }
 
     PurchaseRequestRecord savePurchaseRequest(PurchaseRequestRecord request);
@@ -153,6 +158,144 @@ public interface InventoryRepository {
 
     // P0#4 存酒转赠留痕。
     SavedBottleTransferRecord saveSavedBottleTransfer(SavedBottleTransferRecord transfer);
+
+    // ===== FS-016 存酒持有人核验（default 实现只为不改动 NYI 桩仓；Jdbc 与单测内存仓各自实现） =====
+
+    /** 客人端「我的存酒」：持有人 = customer_id 等于本人，或登记/受让手机哈希等于本人手机哈希；跨店汇总、仅 stored。 */
+    default List<SavedBottleRecord> listStoredSavedBottlesByHolder(String customerId, String phoneHash) {
+        return listSavedBottles().stream()
+                .filter(bottle -> "stored".equals(bottle.status()))
+                .filter(bottle -> (customerId != null && customerId.equals(bottle.customerId()))
+                        || (phoneHash != null && phoneHash.equals(bottle.customerPhoneHash())))
+                .toList();
+    }
+
+    /** 后台按手机号检索存酒（PGM L878：只能按手机号定位客人）。 */
+    default List<SavedBottleRecord> listSavedBottlesByPhoneHash(String phoneHash, String merchantId) {
+        return listSavedBottles().stream()
+                .filter(bottle -> phoneHash.equals(bottle.customerPhoneHash()))
+                .filter(bottle -> merchantId == null || merchantId.equals(bottle.merchantId()))
+                .toList();
+    }
+
+    default SavedBottlePickupCodeRecord saveSavedBottlePickupCode(SavedBottlePickupCodeRecord code) {
+        throw new UnsupportedOperationException("saved bottle pickup codes not supported");
+    }
+
+    default Optional<SavedBottlePickupCodeRecord> findActiveSavedBottlePickupCode(String savedBottleId) {
+        throw new UnsupportedOperationException("saved bottle pickup codes not supported");
+    }
+
+    /** 该瓶全部 active 码置 revoked（转让/取酒成功/作废/争议；BSM L585「原持有人手里的码立即全部作废」）。 */
+    default void revokeActiveSavedBottlePickupCodes(String savedBottleId) {
+        throw new UnsupportedOperationException("saved bottle pickup codes not supported");
+    }
+
+    default SavedBottleManualPickupRecord saveSavedBottleManualPickup(SavedBottleManualPickupRecord request) {
+        throw new UnsupportedOperationException("saved bottle manual pickups not supported");
+    }
+
+    default Optional<SavedBottleManualPickupRecord> findSavedBottleManualPickupByIdForUpdate(String id) {
+        throw new UnsupportedOperationException("saved bottle manual pickups not supported");
+    }
+
+    /** 存酒所在酒吧的项目 id（酒吧＝商户，merchants.project_id，V267）；无归属返回空。 */
+    default Optional<String> findBarProjectId(String barId) {
+        return Optional.empty();
+    }
+
+    /** 人工例外消费历史条件（按项目）；未配置返回空 → 人工例外一律拒绝。 */
+    default Optional<SavedBottleManualPickupPolicyRecord> findSavedBottleManualPickupPolicy(String projectId) {
+        return Optional.empty();
+    }
+
+    /** 配置人工例外消费历史条件（按项目 upsert，留痕 updated_by/updated_at；BSM L1073「调整须最高权限审批并留痕」）。 */
+    default void saveSavedBottleManualPickupPolicy(SavedBottleManualPickupPolicyRecord policy, String actorId) {
+        throw new UnsupportedOperationException("saved bottle manual pickup policy not supported");
+    }
+
+    /** 有效卡座消费订单数（已支付且未全额退款）；since 为空=历史累计。 */
+    default int countValidTableOrders(String customerId, String projectId, Instant since) {
+        return 0;
+    }
+
+    /** 该客户在本项目最近一笔有效卡座订单归属的营销人员及其在职状态。 */
+    record AttributedMarketer(String userId, boolean active) {
+    }
+
+    /** 最近一笔有效卡座订单归属的营销人员（含已离职）；历史订单无归属营销返回空。 */
+    default Optional<AttributedMarketer> findAttributedMarketer(String customerId, String projectId) {
+        return Optional.empty();
+    }
+
+    /** 该客户在本项目最近一笔有效卡座订单归属的、仍在职的营销人员 user_id；离职或无归属返回空。 */
+    default Optional<String> findActiveAttributedMarketer(String customerId, String projectId) {
+        return findAttributedMarketer(customerId, projectId).filter(AttributedMarketer::active).map(AttributedMarketer::userId);
+    }
+
+    /** 员工的直接上级（org_hierarchy，同 SupervisorReviewRepository.findDirectSuperior）；未维护为空。 */
+    default Optional<String> findDirectSuperior(String userId) {
+        return Optional.empty();
+    }
+
+    // ===== FS-025 存酒转存（延期） =====
+
+    default SavedBottleRenewalRecord saveSavedBottleRenewal(SavedBottleRenewalRecord renewal) {
+        throw new UnsupportedOperationException("saved bottle renewals not supported");
+    }
+
+    default Optional<SavedBottleRenewalRecord> findSavedBottleRenewalByIdForUpdate(String id) {
+        throw new UnsupportedOperationException("saved bottle renewals not supported");
+    }
+
+    /** 该瓶全部转存流水（含待复核），按创建时间升序；累计转存次数据此计数。 */
+    default List<SavedBottleRenewalRecord> listSavedBottleRenewals(String savedBottleId) {
+        throw new UnsupportedOperationException("saved bottle renewals not supported");
+    }
+
+    /** 转存业务参数：policyKey ∈ max_renewals | extension_days，scopeId 为 project:/bar:/global；未配置返回空。 */
+    default Optional<SavedBottleRenewalPolicyRecord> findSavedBottleRenewalPolicy(String policyKey, String scopeId) {
+        return Optional.empty();
+    }
+
+    /** 配置转存业务参数（upsert；已有行 version+1，留痕 updated_by/updated_at）；返回落库后的行（含新 version）。 */
+    default SavedBottleRenewalPolicyRecord saveSavedBottleRenewalPolicy(SavedBottleRenewalPolicyRecord policy, String actorId) {
+        throw new UnsupportedOperationException("saved bottle renewal policy not supported");
+    }
+
+    // ===== FS-017 存酒作废后补存/赔付、门店退出交接（default 实现只为不改动 NYI 桩仓；Jdbc 与单测内存仓各自实现） =====
+
+    default SavedBottleRemedyRecord saveSavedBottleRemedy(SavedBottleRemedyRecord remedy) {
+        throw new UnsupportedOperationException("saved bottle remedies not supported");
+    }
+
+    default Optional<SavedBottleRemedyRecord> findSavedBottleRemedyByIdForUpdate(String id) {
+        throw new UnsupportedOperationException("saved bottle remedies not supported");
+    }
+
+    /** 该瓶全部补存/赔付记录，按创建时间升序。 */
+    default List<SavedBottleRemedyRecord> listSavedBottleRemedies(String savedBottleId) {
+        throw new UnsupportedOperationException("saved bottle remedies not supported");
+    }
+
+    /** 按追收应收台账行回查补存/赔付记录（FinanceService 结清回写用）。 */
+    default Optional<SavedBottleRemedyRecord> findSavedBottleRemedyByRecoveryArApItemId(String arApItemId) {
+        throw new UnsupportedOperationException("saved bottle remedies not supported");
+    }
+
+    default SavedBottleHandoverRecord saveSavedBottleHandover(SavedBottleHandoverRecord handover) {
+        throw new UnsupportedOperationException("saved bottle handovers not supported");
+    }
+
+    default List<SavedBottleHandoverRecord> listSavedBottleHandovers() {
+        throw new UnsupportedOperationException("saved bottle handovers not supported");
+    }
+
+    /** 交接明细（接收时状态 intact|damaged|short），供补存/赔付判承担方。 */
+    default Optional<SavedBottleHandoverRecord.SavedBottleHandoverItemRecord> findSavedBottleHandoverItem(
+            String handoverId, String savedBottleId) {
+        throw new UnsupportedOperationException("saved bottle handovers not supported");
+    }
 
     TraceHandoverRecord saveTraceHandover(TraceHandoverRecord handover);
 

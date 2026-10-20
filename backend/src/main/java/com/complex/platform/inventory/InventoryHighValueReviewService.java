@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -236,13 +236,16 @@ public class InventoryHighValueReviewService {
     private void applyDecisionEffect(InventoryHighValueReviewRecord resolved) {
         if (SUBJECT_SAVED_BOTTLE_VOID.equals(resolved.subjectType())) {
             SavedBottleRecord bottle = loadSavedBottleScoped(resolved.subjectId());
+            SavedBottleRecord b = bottle;
             repository.saveSavedBottle(new SavedBottleRecord(
-                    bottle.id(), bottle.customerId(), bottle.barProjectId(), bottle.itemId(), bottle.bottleName(),
-                    bottle.initialQuantity(), bottle.remainingQuantity(), bottle.unit(), bottle.expireAt(),
-                    "cancelled", bottle.evidenceAttachmentIds(), bottle.createdAt(), Instant.now(),
-                    bottle.merchantId(), bottle.isHighValue(), bottle.highValueThresholdCents(),
-                    bottle.bottleLabelValue(), bottle.customerNameOrNickname(),
-                    bottle.customerPhone(), bottle.customerPhoneHash()));
+                    b.id(), b.customerId(), b.barProjectId(), b.itemId(), b.bottleName(),
+                    b.initialQuantity(), b.remainingQuantity(), b.unit(), b.expireAt(),
+                    "cancelled", b.evidenceAttachmentIds(), b.createdAt(), Instant.now(),
+                    b.merchantId(), b.isHighValue(), b.highValueThresholdCents(),
+                    b.bottleLabelValue(), b.customerNameOrNickname(),
+                    b.customerPhone(), b.customerPhoneHash(), b.registrationPhotoRefs(), b.manualNote(),
+                    b.transferredAt(), b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash(),
+                    b.remedyOfSavedBottleId(), b.custodianEntityId(), b.pickupLocation(), b.handedOverAt(), b.handoverId()));
         } else if (SUBJECT_DAMAGE_REPORT.equals(resolved.subjectType())
                 || SUBJECT_STOCK_VARIANCE.equals(resolved.subjectType())) {
             StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());

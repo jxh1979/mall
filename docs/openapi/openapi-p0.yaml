@@ -5524,6 +5524,386 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/inventory/saved-bottles/lookup:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "lookupSavedBottlesByPhone"
+      summary: "按手机号检索存酒（检索只能输入手机号，姓名与昵称不得用于检索；手机号走请求体不进 URL）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.viewed"
+      x-audit-event-failure: "bar.saved_bottle.view_failed"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleLookupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/{id}/transfer:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "transferSavedBottle"
+      summary: "存酒转让（出让人短信验证码确认，验证成功即换持有人、整瓶转让、原持有人动态取酒码作废）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle_transferred"
+      x-audit-event-failure: "bar.saved_bottle.transfer_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleTransferRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/{id}/verification-code:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "requestSavedBottleVerificationCode"
+      summary: "向当前持有人手机发送存酒短信验证码（scene=transfer|claim|renew）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.verification_code_requested"
+      x-audit-event-failure: "bar.saved_bottle.verification_code_request_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleVerificationCodeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/{id}/manual-pickups:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "initiateSavedBottleManualPickup"
+      summary: "人工例外取酒①店长发起（消费历史条件按项目配置，走客人查询专门通道留痕）"
+      x-permission: "bar.saved_bottle.manual_pickup.initiate"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.manual_pickup_initiated"
+      x-audit-event-failure: "bar.saved_bottle.manual_pickup_initiate_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleManualPickupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/manual-pickups/{id}/review:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "reviewSavedBottleManualPickup"
+      summary: "人工例外取酒②另一名主管复核（复核人不得是发起人）"
+      x-permission: "bar.saved_bottle.manual_pickup.review"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.manual_pickup_reviewed"
+      x-audit-event-failure: "bar.saved_bottle.manual_pickup_review_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleManualPickupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/manual-pickups/{id}/confirm-marketing:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "confirmSavedBottleManualPickupMarketing"
+      summary: "人工例外取酒③营销确认（归属营销本人；离职/无归属由营销主管）"
+      x-permission: "bar.saved_bottle.manual_pickup.confirm_marketing"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.manual_pickup_marketing_confirmed"
+      x-audit-event-failure: "bar.saved_bottle.manual_pickup_marketing_confirm_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleManualPickupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/manual-pickups/{id}/dispense:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "dispenseSavedBottleManualPickup"
+      summary: "人工例外取酒④本人到场放酒（取酒流水 verification_method=manual_exception）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle_picked_up"
+      x-audit-event-failure: "bar.saved_bottle.pickup_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleManualPickupDispenseRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/{id}/renewals:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "renewSavedBottle"
+      summary: "员工代办存酒转存（延期）：客人本人短信验证码确认后待当班营销主管复核（ENUM L120 / BSM L1072）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.renewal_requested"
+      x-audit-event-failure: "bar.saved_bottle.renewal_request_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRenewalRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+    get:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "listSavedBottleRenewals"
+      summary: "存酒转存记录（含待复核；固化配置版本、顺延天数、新到期日、累计转存次数、经办人与客人确认方式）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.renewal_viewed"
+      x-audit-event-failure: "bar.saved_bottle.renewal_view_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/renewals/{id}/review:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "reviewSavedBottleRenewal"
+      summary: "当班营销主管复核员工代办转存（复核人不得是经办人；decision=approve 从当前到期日顺延，decision=reject 驳回：到期日不动、不计转存次数、须带 reason）"
+      x-permission: "bar.saved_bottle.renewal.review"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+        - "tablet"
+        - "staff_work_phone"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.renewal_reviewed"
+      x-audit-event-failure: "bar.saved_bottle.renewal_review_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRenewalRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/manual-pickup-policy:
+    put:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "configureSavedBottleManualPickupPolicy"
+      summary: "配置人工例外取酒消费历史条件（按项目；最高权限本人办理并留痕；须同时配置上下限）"
+      description: "BSM L1073 ②「申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）」：orders_within_1m / orders_within_3m / orders_total 与 min_orders / max_orders 须同时填写，下限 ≥ 1、各条件值在上下限内，否则 400 VALIDATION_FAILED；非最高权限本人 403 MASTER_APPROVAL_REQUIRED（范式同设施设备删除审批）；落 saved_bottle_manual_pickup_policy 并留痕 updated_by/updated_at。未配置的项目人工例外发起一律 409 SAVED_BOTTLE_MANUAL_PICKUP_POLICY_UNSET。"
+      x-permission: "bar.saved_bottle.manual_pickup_policy.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.manual_pickup_policy_configured"
+      x-audit-event-failure: "bar.saved_bottle.manual_pickup_policy_config_failed"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleManualPickupPolicyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/renewal-policy:
+    put:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "configureSavedBottleRenewalPolicy"
+      summary: "配置存酒转存次数上限（按项目）与顺延期限（按酒吧）（须同时配置上下限；每次保存 version+1 并留痕）"
+      description: "ENUM L120 / BSM L1072「转存次数……按项目可配，出厂默认 2 次，须同时配置上下限」「顺延……该酒吧当前配置的期限，按酒吧可配，出厂默认 30 天，须同时配置上下限」：policy_key=max_renewals（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）；value 与 min_value/max_value 须同时填写、value 在上下限内（顺延期限 ≥ 1 天），否则 400 VALIDATION_FAILED；带商户范围的操作者只能配置本酒吧的顺延期限（403 CROSS_MERCHANT_FORBIDDEN）；落 saved_bottle_renewal_policy，已有行 version+1、留痕 updated_by/updated_at，转存流水固化当时的配置版本。"
+      x-permission: "bar.saved_bottle.renewal_policy.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.renewal_policy_configured"
+      x-audit-event-failure: "bar.saved_bottle.renewal_policy_config_failed"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRenewalPolicyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
   /api/v1/inventory/saved-bottles/{id}/cancel:
     post:
       tags:
@@ -5601,6 +5981,349 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/inventory/saved-bottles/{id}/remedy:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "registerSavedBottleRemedy"
+      summary: "存酒作废后对客补存/赔付登记（replacement=同品同量补存、到期日不变、库存同量出库、补酒成本按内部结算价计经营损失、登记即结案；compensation=赔付待门店主管+财务审批）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.remedy_registered"
+      x-audit-event-failure: "bar.saved_bottle.remedy_register_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRemedyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/{id}/remedies:
+    get:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "listSavedBottleRemedies"
+      summary: "该存酒的补存/赔付记录（对客交付状态与内部追收状态分别记录）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.remedy_viewed"
+      x-audit-event-failure: "bar.saved_bottle.remedy_view_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/remedies/{id}/approve:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "approveSavedBottleRemedy"
+      summary: "赔付方案审批：role=supervisor 核 inventory.high_value.review（门店主管），role=finance 核 finance.ar_ap.manage（财务）；审批人不得是登记人；两方齐备才可支付结案"
+      x-permission: "inventory.high_value.review"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.remedy_approved"
+      x-audit-event-failure: "bar.saved_bottle.remedy_approve_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRemedyActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/remedies/{id}/settle:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "settleSavedBottleRemedy"
+      summary: "赔款实际交付后结案（记交付/支付凭证与时间，赔付金额此时记经营损失；不读任何内部追收字段）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.remedy_settled"
+      x-audit-event-failure: "bar.saved_bottle.remedy_settle_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRemedyActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/remedies/{id}/advance:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "advanceSavedBottleRemedyByPlatform"
+      summary: "门店退出交平台后、原门店承担的补存/赔付由娱乐平台公司审批先垫付，对客结案后向原门店挂追收应收"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.remedy_advanced"
+      x-audit-event-failure: "bar.saved_bottle.remedy_advance_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRemedyActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/remedies/{id}/staff-liability:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "assignSavedBottleRemedyStaffLiability"
+      summary: "复核认定责任员工照价赔偿登记（金额由服务端按内部结算价×数量计，不收前端金额；不改对客状态）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.remedy_staff_liability_assigned"
+      x-audit-event-failure: "bar.saved_bottle.remedy_staff_liability_assign_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRemedyActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/remedies/{id}/recovery/settle:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "settleSavedBottleRemedyRecovery"
+      summary: "员工赔偿收回登记（向原门店的追收经应收台账结清自动回写）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.remedy_recovery_settled"
+      x-audit-event-failure: "bar.saved_bottle.remedy_recovery_settle_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+          description: "id 参数；必须按 OpenAPI 类型、枚举和必填规则校验。"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleRemedyActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/exit-notice:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "noticeSavedBottleExit"
+      summary: "门店退出前清点有效期内未结存酒并逐瓶短信通知客人在原店取回"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.exit_noticed"
+      x-audit-event-failure: "bar.saved_bottle.exit_notice_failed"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleExitNoticeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/handover:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "handoverSavedBottlesToPlatform"
+      summary: "门店退出存酒交所属娱乐平台公司（平台操作者办理；该门店有效期内未结存酒须全部清点；指定领取地点、原有效期与原取酒规则不变；毁损与实收为 0 的短少走作废路径，部分短少按差额）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.handed_over"
+      x-audit-event-failure: "bar.saved_bottle.handover_failed"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleHandoverRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/handovers:
+    get:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "listSavedBottleHandovers"
+      summary: "存酒交接单列表（商户 scope 只看本店）"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "tablet"
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.handover_viewed"
+      x-audit-event-failure: "bar.saved_bottle.handover_view_failed"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
   /api/v1/inventory/high-value-reviews:
     get:
       tags:
@@ -5845,38 +6568,162 @@ paths:
         $ref: "#/components/requestBodies/StockMovementRequest"
       x-failure-codes:
         - STOCK_MOVEMENT_REPLAY_MISMATCH
-  /api/v1/inventory/transfer-orders/{order_id}/return:
+  /api/v1/inventory/transfer-orders:
     post:
       tags:
-        - inventory
-      operationId: returnTransferOrder
-      summary: 借调归还
-      description: 借用型（lending/borrow）借调收货后归还，溯源码归属翻回出让方并置 returned。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      - inventory
+      operationId: createTransferOrder
+      summary: 新建跨主体流转单
+      description: V277 调拨（supply：平台供货主体→商户）与借调（lending：商户→商户，lending_mode 为 borrow 借用或 purchase 买断）建单。FS-019（BSM L1201「「借」只转移保管责任、不转移所有权（仅适用于不可消费物品；可消费物品的借用实质是调，交付时所有权随之转移）」「不可消费物品（设备、器具等）的借用必须约定归还时间」）：借用须带 return_due_at（应归还期限），否则 400 VALIDATION_FAILED；借用明细物料须为不可消费物品（inventory_items.non_consumable），可消费物品只能买断，否则 400 VALIDATION_FAILED。门店要货建单为草稿（draft），借调为 created。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
       x-permission: inventory.transfer_order.manage
       x-data-scope: project
       x-terminal-allowed:
-        - web
+      - web
       x-idempotency-required: true
-      x-audit-event-success: inventory.transfer_order_returned
-      x-audit-event-failure: inventory.transfer_order_return_failed
-      parameters:
-        - name: order_id
-          in: path
-          required: true
-          schema:
-            type: string
-          description: 借调流转单 ID 路径参数。
+      x-audit-event-success: inventory.transfer_order_created
+      x-audit-event-failure: inventory.transfer_order_create_failed
       responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - idempotency_key
+              - transfer_type
+              - from_owner_type
+              - from_owner_id
+              - to_owner_type
+              - to_owner_id
+              - lines
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 幂等键（X-Idempotency-Key 请求体镜像）。
+                transfer_type:
+                  type: string
+                  enum:
+                  - supply
+                  - lending
+                  description: supply 平台供货调拨；lending 商户间借调。
+                lending_mode:
+                  type: string
+                  enum:
+                  - borrow
+                  - purchase
+                  description: 借调方式：borrow 借用（约定归还、不转所有权）；purchase 买断（收货时转所有权并形成应付）。
+                from_owner_type:
+                  type: string
+                  enum:
+                  - supply_entity
+                  - merchant
+                  description: 出让方类型。
+                from_owner_id:
+                  type: string
+                  maxLength: 64
+                  description: 出让方 ID。
+                to_owner_type:
+                  type: string
+                  enum:
+                  - merchant
+                  description: 接收方类型（只能是商户）。
+                to_owner_id:
+                  type: string
+                  maxLength: 64
+                  description: 接收方商户 ID。
+                from_location_id:
+                  type: string
+                  maxLength: 64
+                  description: 出货库位（可空）。
+                to_location_id:
+                  type: string
+                  maxLength: 64
+                  description: 收货库位（可空）。
+                operator_note:
+                  type: string
+                  maxLength: 500
+                  description: 操作备注。
+                return_due_at:
+                  type: string
+                  format: date-time
+                  description: 借用（lending+borrow）必填：约定归还时间。
+                lines:
+                  type: array
+                  minItems: 1
+                  description: 明细。
+                  items:
+                    type: object
+                    required:
+                    - item_id
+                    - quantity
+                    properties:
+                      item_id:
+                        type: string
+                        description: 物料 ID。
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        description: 数量。
+                      unit_price_cent:
+                        type: integer
+                        minimum: 0
+                        description: 内部结算单价（分）。
+                      trace_codes:
+                        type: array
+                        items:
+                          type: string
+                        description: 随货溯源码。
+      x-failure-codes:
+      - VALIDATION_FAILED
+      - SUPPLY_ENTITY_NOT_FOUND
+      - INVENTORY_ITEM_NOT_FOUND
+  /api/v1/inventory/transfer-orders/{order_id}/ship:
+    post:
+      tags:
+      - inventory
+      operationId: shipTransferOrder
+      summary: 调拨发货／借用交货扫码
+      description: 门店要货（supply）：待出库→配送中（供货侧办理，商户账号 403 SUPPLY_SIDE_ONLY）。借调：created→shipped。FS-019（BSM L1201「借出时间取借出方交货扫码的时刻」「每一步都必须扫码」）：借用单有随货溯源码时 scanned_trace_codes 须与本单码集完全一致（漏扫 400 TRACE_CODE_INCOMPLETE、非本单码 400 TRACE_CODE_MISMATCH），每码记一行保管台账（change_kind=custody，changed_at 即借出时间）。提交编号为路径单号（M724-F06），重复提交返回第一次的结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      x-permission: inventory.transfer_order.manage
+      x-data-scope: project
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.transfer_order_shipped
+      x-audit-event-failure: inventory.transfer_order_ship_failed
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 借调（借用）单 ID 路径参数。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
       x-auth-context: staff-token
       requestBody:
         required: false
@@ -5884,6 +6731,7 @@ paths:
           application/json:
             schema:
               type: object
+              required: []
               properties:
                 idempotency_key:
                   type: string
@@ -5893,11 +6741,104 @@ paths:
                   type: array
                   items:
                     type: string
-                  description: 随货溯源码清单（高价值必扫核对，防调包）。
+                  description: 借用单借出方交货扫到的随货溯源码（须扫齐）。
                 operator_note:
                   type: string
                   maxLength: 500
                   description: 操作备注。
+      x-failure-codes:
+      - TRANSFER_ORDER_NOT_FOUND
+      - TRANSFER_ORDER_NOT_CREATED
+      - TRANSFER_ORDER_STATUS_CONFLICT
+      - SUPPLY_SIDE_ONLY
+      - TRACE_CODE_MISMATCH
+      - TRACE_CODE_INCOMPLETE
+      - TRANSFER_CANCEL_PENDING
+  /api/v1/inventory/transfer-orders/{order_id}/return:
+    post:
+      tags:
+      - inventory
+      operationId: returnTransferOrder
+      summary: 借用归还（借出方收货扫码）
+      description: FS-019 借用归还（BSM L1201「不得伪造归还扫码或实际归还时间」「实际归还时间取借出方收货扫码的时刻」「结束对应数量的原物归还事项」；台账 §25「归还后，保管责任回到出借方并关闭借用关系」）：只对借用型（lending/borrow）已收货（received）的单；只由借出方（from_owner_id）商户账号办理（平台管理员除外，否则 403 LENDER_RETURN_ONLY）；lines 按行登记归还数量（可分多次），没有数量大于 0 的行 400 TRANSFER_RETURN_REQUIRES_SCAN；有随货码的行 trace_codes 须逐件扫码：个数＝returned_quantity、只能是本行借出且尚未归还、未登记无法归还的码，否则 400 TRACE_CODE_MISMATCH；数量超过尚未归还数 409 TRANSFER_RETURN_EXCEEDS_OUTSTANDING。每码保管主体翻回借出方、在借单置空并记保管台账（changed_at 即实际归还时间），所有权始终不动；写 inventory_transfer_returns；全部数量都已归还或实物处置完成才置 returned 并留痕，否则保持 received。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      x-permission: inventory.transfer_order.manage
+      x-data-scope: project
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.transfer_order_returned
+      x-audit-event-failure: inventory.transfer_order_return_failed
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 借调流转单 ID 路径参数。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - idempotency_key
+              - lines
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 幂等键（X-Idempotency-Key 请求体镜像）。
+                operator_note:
+                  type: string
+                  maxLength: 500
+                  description: 操作备注。
+                lines:
+                  type: array
+                  minItems: 1
+                  description: 借出方收货按行登记。
+                  items:
+                    type: object
+                    required:
+                    - line_id
+                    - returned_quantity
+                    properties:
+                      line_id:
+                        type: string
+                        description: 借用明细 ID。
+                      returned_quantity:
+                        type: integer
+                        minimum: 1
+                        description: 本次归还数量。
+                      trace_codes:
+                        type: array
+                        items:
+                          type: string
+                        description: 本次归还件的溯源码（有随货码的行逐件扫码）。
+      x-failure-codes:
+      - TRANSFER_NOT_RETURNABLE
+      - TRANSFER_ORDER_NOT_RECEIVED
+      - LENDER_RETURN_ONLY
+      - TRANSFER_RETURN_REQUIRES_SCAN
+      - TRANSFER_RETURN_EXCEEDS_OUTSTANDING
+      - TRACE_CODE_MISMATCH
+      - TRACE_OWNER_MISMATCH
+      - VALIDATION_FAILED
+      - TRANSFER_ORDER_NOT_FOUND
   /api/v1/inventory/transfer-orders/{order_id}/cancel:
     post:
       tags:
@@ -6278,7 +7219,7 @@ paths:
         - "inventory"
       operationId: "receiveTransferOrder"
       summary: "调拨收货／门店要货签收"
-      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写入库流水（business_type=inventory_transfer）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写入库流水（business_type=inventory_transfer）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: "inventory.transfer_order.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -6382,7 +7323,7 @@ paths:
         - "inventory"
       operationId: "getTransferOrderFulfillment"
       summary: "门店要货签收结果与差异处理"
-      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量……全部数量处理完且库存、款项记录齐全后完成要货单，付款是否结清另行显示」）：返回 lines（逐行 quantity 发货、accepted_quantity 合格、rejected_quantity 拒收、short_quantity 短少、resolved_quantity 已通过复核的退回验收与损失、claimed_quantity 未驳回的退回验收与损失、reshipped_quantity 未驳回的补发、unresolved_quantity 待处理＝发货－合格－已通过的退回验收与损失）、payable_item_id（当前有效的签收货款应付：货款调减通过后为重述行，全额调减后为空）与 dispositions（全部差异处理登记）。商户账号只能查看本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非门店要货单 400 TRANSFER_NOT_REQUISITION。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量……全部数量处理完且库存、款项记录齐全后完成要货单，付款是否结清另行显示」）：返回 lines（逐行 quantity 发货、accepted_quantity 合格、rejected_quantity 拒收、short_quantity 短少、resolved_quantity 已通过复核的退回验收与损失、claimed_quantity 未驳回的退回验收与损失、reshipped_quantity 未驳回的补发、unresolved_quantity 待处理＝发货－合格－已通过的退回验收与损失）、payable_item_id（当前有效的签收货款应付：货款调减通过后为重述行，全额调减后为空）与 dispositions（全部差异处理登记）。商户账号只能查看本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非门店要货单 400 TRANSFER_NOT_REQUISITION。FS-019：借用型（lending/borrow）已收货/已归还的单也可查（借出方与借入方商户账号都可），返回 return_due_at、lines（quantity、returned_quantity 已归还、unreturnable_claimed_quantity 无法归还登记中、unreturnable_closed_quantity 实物处置已完成、outstanding_quantity 尚未归还）、returns（归还登记）与 dispositions（无法归还登记，状态 pending_counterparty/pending_supervisor/pending_review/approved/rejected/disposal_completed）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: "inventory.transfer_order.view"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -6523,7 +7464,7 @@ paths:
         - "inventory"
       operationId: "reviewTransferDisposition"
       summary: "财务复核门店要货差异处理"
-      description: "FS-011（BSM L1212「财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款。全部数量处理完且库存、款项记录齐全后完成要货单」）：复核人须为持 finance.ar_ap.manage、能触及门店所属项目的非商户财务（商户账号含门店本店同事 403 FINANCE_REVIEW_ONLY，他项目 403 CROSS_PROJECT_FORBIDDEN）且不是登记人（403 SELF_REVIEW_FORBIDDEN），decision 为 approved 通过或 rejected 驳回，reason 必填。通过才生效：收货方担责的损失按该行锁定单价追加一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），供货主体或配送保管方担责只登记责任与金额、不形成应收应付；补发另开一张同供货主体、门店、物料与锁定单价的关联要货单（reship_order_id），从待拣配（pending_picking）起照常出库、配送、签收；货款调减按 V344 原应付行不动，追加严格取反的冲正行（reversal_item_id）与调减后的重述行（payable_item_id，全额调减则无）。拒收与短少的每一件都经通过的退回验收或损失有了结果、且无待复核项时，要货单 discrepancy→completed（写留痕）。已复核 409 TRANSFER_DISPOSITION_ALREADY_REVIEWED；商户账号只能办理本商户的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款。全部数量处理完且库存、款项记录齐全后完成要货单」）：复核人须为持 finance.ar_ap.manage、能触及门店所属项目的非商户财务（商户账号含门店本店同事 403 FINANCE_REVIEW_ONLY，他项目 403 CROSS_PROJECT_FORBIDDEN）且不是登记人（403 SELF_REVIEW_FORBIDDEN），decision 为 approved 通过或 rejected 驳回，reason 必填。通过才生效：收货方担责的损失按该行锁定单价追加一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），供货主体或配送保管方担责只登记责任与金额、不形成应收应付；补发另开一张同供货主体、门店、物料与锁定单价的关联要货单（reship_order_id），从待拣配（pending_picking）起照常出库、配送、签收；货款调减按 V344 原应付行不动，追加严格取反的冲正行（reversal_item_id）与调减后的重述行（payable_item_id，全额调减则无）。拒收与短少的每一件都经通过的退回验收或损失有了结果、且无待复核项时，要货单 discrepancy→completed（写留痕）。已复核 409 TRANSFER_DISPOSITION_ALREADY_REVIEWED；商户账号只能办理本商户的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN。FS-019：借用物无法归还登记（disposition_type=unreturnable）经对方确认与主管复核后在此由财务复核；通过后一律按登记的赔偿金额（不低于数量×建单锁定内部结算价）形成借入方（to_owner_id）对借出方（from_owner_id）的应付（payable_item_id），之后在应收应付台账独立跟进直到清偿；借用单不在此完成，须借出方登记实物处置完成。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: "finance.ar_ap.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -6594,13 +7535,242 @@ paths:
         - "VALIDATION_FAILED"
         - "FINANCE_REVIEW_ONLY"
         - "CROSS_PROJECT_FORBIDDEN"
+  /api/v1/inventory/transfer-orders/{order_id}/unreturnable:
+    post:
+      tags:
+      - inventory
+      operationId: registerTransferUnreturnable
+      summary: 登记借用物无法归还
+      description: FS-019（BSM L1201「不可消费借用物无法归还时，关联原借用记录，由借出所有权方与借入保管方确认原因、数量和实物处置，并经主管及财务复核；赔偿按已有约定及现行跨商户结算规则形成借入方对借出方的应付」；DEC-R3-38 跨商户借调一律按内部结算价）：借用型已收货单由借出方或借入方商户账号（或能触及借入方项目的非商户账号）登记：line_id 的 quantity 件（不超过尚未归还数，超出 409 TRANSFER_DISPOSITION_EXCEEDS_DISCREPANCY；有随货码的行 trace_codes 逐件列出，否则 400 TRACE_CODE_MISMATCH）、reason、disposal_note 实物处置方式、amount_cent 赔偿（缺省＝数量×建单锁定内部结算价；不得低于该值，低于（含 0）400 VALIDATION_FAILED「赔偿不得低于内部结算价」，已有约定只能往高约定）、evidence_attachment_ids 证据（须已上传并绑定本单：400 EVIDENCE_REQUIRED / EVIDENCE_BINDING_MISMATCH）。登记后状态 pending_counterparty，待另一方确认。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      x-permission: inventory.transfer_order.manage
+      x-data-scope: project
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.transfer_unreturnable_registered
+      x-audit-event-failure: inventory.transfer_unreturnable_register_failed
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 借调（借用）单 ID 路径参数。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - idempotency_key
+              - line_id
+              - quantity
+              - reason
+              - evidence_attachment_ids
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 幂等键（X-Idempotency-Key 请求体镜像）。
+                line_id:
+                  type: string
+                  description: 借用明细 ID。
+                quantity:
+                  type: integer
+                  minimum: 1
+                  description: 无法归还的件数。
+                trace_codes:
+                  type: array
+                  items:
+                    type: string
+                  description: 无法归还件的溯源码（有随货码的行逐件列出）。
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: 损坏/丢失原因与经过。
+                amount_cent:
+                  type: integer
+                  minimum: 0
+                  description: 赔偿金额（分）；不填按数量×建单锁定内部结算价，不得低于该值（含 0）。
+                disposal_note:
+                  type: string
+                  maxLength: 500
+                  description: 双方约定的实物处置方式。
+                evidence_attachment_ids:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
+                  description: 证据附件 ID（照片、录像等）。
+      x-failure-codes:
+      - TRANSFER_NOT_BORROW
+      - TRANSFER_ORDER_STATUS_CONFLICT
+      - CROSS_MERCHANT_FORBIDDEN
+      - CROSS_PROJECT_FORBIDDEN
+      - TRANSFER_DISPOSITION_EXCEEDS_DISCREPANCY
+      - TRACE_CODE_MISMATCH
+      - EVIDENCE_REQUIRED
+      - EVIDENCE_ATTACHMENT_NOT_FOUND
+      - EVIDENCE_BINDING_MISMATCH
+      - EVIDENCE_NOT_UPLOADED
+      - VALIDATION_FAILED
+      - TRANSFER_ORDER_NOT_FOUND
+  /api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/confirm:
+    post:
+      tags:
+      - inventory
+      operationId: confirmTransferUnreturnable
+      summary: 对方确认借用物无法归还并提交主管复核
+      description: FS-019（BSM L1201「由借出所有权方与借入保管方确认原因、数量和实物处置，并经主管及财务复核」）：登记方之外的另一方（借出方或借入方）商户账号确认，否则 403 COUNTERPARTY_CONFIRM_ONLY；确认后挂主管复核（action_type=inventory.transfer_order.unreturnable，确认人上级审批），状态 pending_supervisor；主管通过→pending_review（财务按 /dispositions/{disposition_id}/review 复核），驳回→rejected。非待对方确认 409 TRANSFER_DISPOSITION_STATUS_CONFLICT。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      x-permission: inventory.transfer_order.manage
+      x-data-scope: project
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.transfer_unreturnable_confirmed
+      x-audit-event-failure: inventory.transfer_unreturnable_confirm_failed
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 借调（借用）单 ID 路径参数。
+      - name: disposition_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 无法归还登记 ID 路径参数。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 幂等键（X-Idempotency-Key 请求体镜像）。
+                operator_note:
+                  type: string
+                  maxLength: 500
+                  description: 操作备注。
+      x-failure-codes:
+      - TRANSFER_NOT_BORROW
+      - TRANSFER_DISPOSITION_NOT_FOUND
+      - TRANSFER_DISPOSITION_STATUS_CONFLICT
+      - COUNTERPARTY_CONFIRM_ONLY
+      - TRANSFER_UNRETURNABLE_REVIEW_REQUIRED
+      - VALIDATION_FAILED
+      - TRANSFER_ORDER_NOT_FOUND
+  /api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/disposal-completed:
+    post:
+      tags:
+      - inventory
+      operationId: completeTransferDisposal
+      summary: 借出方登记实物处置完成
+      description: FS-019（BSM L1201「双方确认的实物处置实际完成后，结束对应数量的原物归还事项；未付赔偿款单独跟进直到实际清偿。借入方单方报废不构成归还」；台账 §25「不得无记录地直接改变所有权」）：只对财务复核通过（approved）的无法归还登记，由借出方（所有权方）商户账号办理（平台管理员除外，否则 403 LENDER_DISPOSAL_ONLY）。该登记列出的码保管主体回到借出方、在借单置空并记保管台账，所有权不动；状态 disposal_completed，该数量的归还事项结束；全部数量归还或处置完成后借用单 received→returned 并留痕。赔偿应付在应收应付台账独立跟进，不以清偿为前提。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      x-permission: inventory.transfer_order.manage
+      x-data-scope: project
+      x-terminal-allowed:
+      - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.transfer_disposal_completed
+      x-audit-event-failure: inventory.transfer_disposal_complete_failed
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 借调（借用）单 ID 路径参数。
+      - name: disposition_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 无法归还登记 ID 路径参数。
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      x-auth-context: staff-token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 幂等键（X-Idempotency-Key 请求体镜像）。
+                operator_note:
+                  type: string
+                  maxLength: 500
+                  description: 实物处置实际完成的说明（回填 disposal_note）。
+      x-failure-codes:
+      - TRANSFER_NOT_BORROW
+      - TRANSFER_DISPOSITION_NOT_FOUND
+      - TRANSFER_DISPOSITION_STATUS_CONFLICT
+      - LENDER_DISPOSAL_ONLY
+      - TRACE_OWNER_MISMATCH
+      - VALIDATION_FAILED
+      - TRANSFER_ORDER_NOT_FOUND
   /api/v1/inventory/stock-movements/{movement_type}:
     post:
       tags:
         - inventory
       operationId: createTypedStockMovement
       summary: 创建typed库存流水
-      description: 用于创建typed库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于创建typed库存流水（movement_type=outbound）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。FS-018：movement_type
+        为 damage/loss/waste（报损族）的请求不走本操作的直接扣减，而是转入库存调整契约——见独立声明的 /stock-movements/damage、/stock-movements/loss、/stock-movements/waste
+        （与 /stock-adjustments 同一实现，审计 inventory.counted / inventory.adjustment_failed）。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -6627,11 +7797,107 @@ paths:
           schema:
             type: string
             maxLength: 64
-          description: 库存流水类型路径参数，允许 inbound、outbound、damage。
+          description: 库存流水类型路径参数，本操作对应 outbound；damage/loss/waste 见各自独立声明的路径（转入库存调整契约）；inbound 不允许（须走入库流程）。
       requestBody:
         $ref: "#/components/requestBodies/StockMovementRequest"
       x-failure-codes:
         - STOCK_MOVEMENT_REPLAY_MISMATCH
+  /api/v1/inventory/stock-movements/damage:
+    post:
+      tags:
+        - inventory
+      operationId: createDamageStockAdjustment
+      summary: 报损（damage）转库存调整
+      description: FS-018：POST /stock-movements/damage 与 /stock-adjustments 同一实现（InventoryStockMovementService.createStockAdjustment）：adjustment_type=damage、reason
+        取 operator_note（必填）、库位取 from_location_id、照片/视频证据透传；命中高价值（最近一次实际到货价 ≥ 阈值、手工标记、阈值未配置或到货价未知）须
+        photo_attachment_ids+video_attachment_ids 双证据，返回 pending_review 调整单并建高价值复核单，主管经 high-value-reviews/{id}/review approve 后才扣减、reject 不扣；非高价值即时调整并补流水。
+        审计按该实现如实声明（成功 inventory.counted / 失败 inventory.adjustment_failed）；入口权限为 inventory.stock.move，实现上的 @GuardedAction(capability=inventory.stock.adjust)
+        只是终端能力开关，不是权限校验。
+      x-permission: inventory.stock.move
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.counted
+      x-audit-event-failure: inventory.adjustment_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/StockMovementRequest"
+  /api/v1/inventory/stock-movements/loss:
+    post:
+      tags:
+        - inventory
+      operationId: createLossStockAdjustment
+      summary: 报损失（loss）转库存调整
+      description: FS-018：POST /stock-movements/loss 与 /stock-adjustments 同一实现（InventoryStockMovementService.createStockAdjustment）：adjustment_type=loss、reason
+        取 operator_note（必填）、库位取 from_location_id、照片/视频证据透传；命中高价值（最近一次实际到货价 ≥ 阈值、手工标记、阈值未配置或到货价未知）须
+        photo_attachment_ids+video_attachment_ids 双证据，返回 pending_review 调整单并建高价值复核单，主管经 high-value-reviews/{id}/review approve 后才扣减、reject 不扣；非高价值即时调整并补流水。
+        审计按该实现如实声明（成功 inventory.counted / 失败 inventory.adjustment_failed）；入口权限为 inventory.stock.move，实现上的 @GuardedAction(capability=inventory.stock.adjust)
+        只是终端能力开关，不是权限校验。
+      x-permission: inventory.stock.move
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.counted
+      x-audit-event-failure: inventory.adjustment_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/StockMovementRequest"
+  /api/v1/inventory/stock-movements/waste:
+    post:
+      tags:
+        - inventory
+      operationId: createWasteStockAdjustment
+      summary: 报废（waste）转库存调整
+      description: FS-018：POST /stock-movements/waste 与 /stock-adjustments 同一实现（InventoryStockMovementService.createStockAdjustment）：adjustment_type=waste、reason
+        取 operator_note（必填）、库位取 from_location_id、照片/视频证据透传；命中高价值（最近一次实际到货价 ≥ 阈值、手工标记、阈值未配置或到货价未知）须
+        photo_attachment_ids+video_attachment_ids 双证据，返回 pending_review 调整单并建高价值复核单，主管经 high-value-reviews/{id}/review approve 后才扣减、reject 不扣；非高价值即时调整并补流水。
+        审计按该实现如实声明（成功 inventory.counted / 失败 inventory.adjustment_failed）；入口权限为 inventory.stock.move，实现上的 @GuardedAction(capability=inventory.stock.adjust)
+        只是终端能力开关，不是权限校验。
+      x-permission: inventory.stock.move
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.counted
+      x-audit-event-failure: inventory.adjustment_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      requestBody:
+        $ref: "#/components/requestBodies/StockMovementRequest"
   /api/v1/inventory/suppliers:
     get:
       tags:
@@ -26014,6 +27280,155 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+  /api/v1/customer/my-saved-bottles:
+    get:
+      tags:
+        - "customer"
+      operationId: "listMyCustomerSavedBottles"
+      summary: "我的存酒（本人名下全部存酒与到期日，跨店汇总，每条标明所属酒吧）"
+      description: "BSM L867「我的存酒：查看本人名下全部存酒、到期日与动态取酒码……跨店汇总展示，每条记录标明所属酒吧」：每条只下发客人可见字段 id、bar_project_id（所属酒吧）、bottle_name、remaining_quantity、unit、expire_at、status、bottle_label_value、pickup_location、handed_over_to_platform（CustomerSavedBottleResponse）；不含员工备注、高价值标记与阈值、登记照片、保管主体与交接单等员工内部字段。"
+      x-permission: "not_applicable"
+      x-data-scope: "customer"
+      x-terminal-allowed:
+        - "web"
+        - "miniapp"
+        - "app"
+      x-idempotency-required: false
+      x-audit-event-success: "customer.my_saved_bottles_viewed"
+      x-audit-event-failure: "customer.my_saved_bottles_view_failed"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "customer-token"
+  /api/v1/customer/saved-bottles/{saved_bottle_id}/pickup-code:
+    get:
+      tags:
+        - "customer"
+      operationId: "getCustomerSavedBottlePickupCode"
+      summary: "官方动态取酒码（按当前持有人签发，窗口=全场统一刷新间隔，转让后原持有人码作废）"
+      x-permission: "not_applicable"
+      x-data-scope: "customer"
+      x-terminal-allowed:
+        - "web"
+        - "miniapp"
+        - "app"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.pickup_code_issued"
+      x-audit-event-failure: "bar.saved_bottle.pickup_code_issue_failed"
+      parameters:
+        - name: "saved_bottle_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            maxLength: 64
+          description: "存酒记录唯一标识；必须是本人名下的存酒。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "customer-token"
+  /api/v1/customer/saved-bottles/{saved_bottle_id}/renewal-code:
+    post:
+      tags:
+        - "customer"
+      operationId: "requestCustomerSavedBottleRenewalCode"
+      summary: "客人本人转存发码（只对当前持有人本人，发到本人手机）"
+      x-permission: "not_applicable"
+      x-data-scope: "customer"
+      x-terminal-allowed:
+        - "web"
+        - "miniapp"
+        - "app"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.verification_code_requested"
+      x-audit-event-failure: "bar.saved_bottle.verification_code_request_failed"
+      parameters:
+        - name: "saved_bottle_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            maxLength: 64
+          description: "存酒记录唯一标识；必须是本人名下的存酒。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "customer-token"
+  /api/v1/customer/saved-bottles/{saved_bottle_id}/renew:
+    post:
+      tags:
+        - "customer"
+      operationId: "renewCustomerSavedBottle"
+      summary: "客人本人转存（延期）：短信验证码确认即从当前到期日顺延（转存次数不超上限、只能在到期日前办理）"
+      x-permission: "not_applicable"
+      x-data-scope: "customer"
+      x-terminal-allowed:
+        - "web"
+        - "miniapp"
+        - "app"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.renewed"
+      x-audit-event-failure: "bar.saved_bottle.renew_failed"
+      parameters:
+        - name: "saved_bottle_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            maxLength: 64
+          description: "存酒记录唯一标识；必须是本人名下的存酒。"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              additionalProperties: false
+              required:
+                - "sms_code"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+                  maxLength: 128
+                sms_code:
+                  type: "string"
+                  description: "客人本人手机收到的短信验证码；由 /renewal-code 发送（scene=renew）。"
+                  maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "customer-token"
   /api/v1/customer/ticket-transfers:
     post:
       tags:
@@ -44913,6 +46328,78 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/SavedBottleClaimRequest"
+    SavedBottleLookupRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleLookupRequest"
+    SavedBottleTransferRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleTransferRequest"
+    SavedBottleVerificationCodeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleVerificationCodeRequest"
+    SavedBottleManualPickupRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleManualPickupRequest"
+    SavedBottleManualPickupDispenseRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleManualPickupDispenseRequest"
+    SavedBottleRenewalRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleRenewalRequest"
+    SavedBottleManualPickupPolicyRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleManualPickupPolicyRequest"
+    SavedBottleRenewalPolicyRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleRenewalPolicyRequest"
+    SavedBottleRemedyRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleRemedyRequest"
+    SavedBottleRemedyActionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleRemedyActionRequest"
+    SavedBottleExitNoticeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleExitNoticeRequest"
+    SavedBottleHandoverRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleHandoverRequest"
     StockAdjustmentRequest:
       required: true
       content:
@@ -48885,6 +50372,20 @@ components:
           type: string
           description: StockMovementRequest.trace_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
+        photo_attachment_ids:
+          type: array
+          description: 照片证据 ID 列表；movement_type 为 damage/loss/waste 且命中高价值时需照片+视频双证据各非空。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        video_attachment_ids:
+          type: array
+          description: 视频证据 ID 列表；movement_type 为 damage/loss/waste 且命中高价值时需照片+视频双证据各非空。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
     SavedBottleRequest:
       type: object
       description: 请求载荷 `SavedBottleRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)：customer_id
@@ -48896,6 +50397,7 @@ components:
         - bottle_label_value
         - registration_photo_refs
         - customer_name_or_nickname
+        - customer_phone
       properties:
         idempotency_key:
           type: string
@@ -48951,7 +50453,7 @@ components:
           maxLength: 1000
         customer_phone:
           type: string
-          description: 客户手机号；散客核身主键之一，保存和展示必须遵守脱敏规则。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          description: 客户手机号；登记必填（BSM L1072 记手机号），取酒/转让按当前持有人手机短信核验；保存和展示必须遵守脱敏规则。
           maxLength: 20
           pattern: ^\+?[0-9]{6,20}$
     SavedBottleClaimRequest:
@@ -48960,6 +50462,7 @@ components:
       additionalProperties: false
       required:
         - claim_items
+        - verification_code
       properties:
         idempotency_key:
           type: string
@@ -48984,12 +50487,12 @@ components:
           maxItems: 200
         claim_by_phone:
           type: string
-          description: 手机号字段；用于客人或员工身份匹配，保存和展示必须遵守脱敏规则。
+          description: 手机号字段（可空，仅留痕）；取酒核验对象固定为存酒当前持有人手机，不以本字段为准。
           maxLength: 20
           pattern: ^\+?[0-9]{6,20}$
         verification_code:
           type: string
-          description: SavedBottleClaimRequest.verification_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: 当前持有人手机短信验证码（由 /verification-code scene=claim 发送），或客人端出示的 swp_ 开头官方动态取酒码；手机号与姓名不得单独作为放酒凭证（BSM L1073）。
           maxLength: 128
         bottle_label_value:
           type: string
@@ -48999,6 +50502,391 @@ components:
           type: string
           description: 姓名/昵称比对项；取酒核身必须比对本值（与 bottle_label_value 同时通过），不止手机号+验证码。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
           maxLength: 128
+    SavedBottleLookupRequest:
+      type: "object"
+      description: "按手机号检索存酒；检索只能输入手机号（BSM L1073 / PGM L878）。"
+      additionalProperties: false
+      required:
+        - "phone"
+      properties:
+        phone:
+          type: "string"
+          maxLength: 20
+          pattern: "^\\+?[0-9]{6,20}$"
+          description: "客户手机号；唯一检索路径，保存和展示必须遵守脱敏规则。"
+    SavedBottleTransferRequest:
+      type: "object"
+      description: "存酒转让请求（BSM L1198）：转让须经出让人（当前持有人）手机短信验证码确认，验证成功即完成客户权益人变更；单个标签对应的酒瓶是最小转让单位，不拆分。"
+      additionalProperties: false
+      required:
+        - "to_name_or_nickname"
+        - "to_phone"
+        - "verification_code"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: "array"
+          description: "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。"
+          items:
+            type: "string"
+            maxLength: 64
+          maxItems: 50
+        to_name_or_nickname:
+          type: "string"
+          description: "受让人姓名或昵称；转让后成为存酒登记姓名昵称（取酒核身比对项）。"
+          maxLength: 128
+        to_phone:
+          type: "string"
+          maxLength: 20
+          pattern: "^\\+?[0-9]{6,20}$"
+          description: "受让人手机号；受让人此后按其本人手机短信验证码或动态取酒码取酒。"
+        transfer_quantity:
+          type: "integer"
+          description: "转让数量；可省略（整瓶转让）；传值必须等于剩余量，不得拆分。"
+          minimum: 1
+        reason:
+          type: "string"
+          description: "转让事由。"
+          maxLength: 500
+        verification_code:
+          type: "string"
+          description: "出让人（当前持有人）手机收到的短信验证码；由 /verification-code（scene=transfer）发送。"
+          maxLength: 128
+    SavedBottleVerificationCodeRequest:
+      type: "object"
+      description: "向当前持有人手机发送存酒短信验证码。"
+      additionalProperties: false
+      required:
+        - "scene"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        scene:
+          type: "string"
+          description: "用途：transfer=转让确认（出让人），claim=取酒核验（当前客户），renew=转存确认（客人本人）。"
+          enum:
+            - "transfer"
+            - "claim"
+            - "renew"
+    SavedBottleManualPickupRequest:
+      type: "object"
+      description: "人工例外取酒（BSM L1073 四项）：店长发起 / 另一主管复核 / 营销确认 共用请求体；发起时 reason 必填。"
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: "array"
+          description: "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。"
+          items:
+            type: "string"
+            maxLength: 64
+          maxItems: 50
+        reason:
+          type: "string"
+          description: "例外事由（客户手机遗失、停机等无法获取验证码或动态取酒码）。"
+          maxLength: 500
+    SavedBottleManualPickupDispenseRequest:
+      type: "object"
+      description: "人工例外取酒④本人到场放酒；present_in_person 必须为 true（只允许存酒客户本人到场办理，不允许他人代领）。"
+      additionalProperties: false
+      required:
+        - "claim_items"
+        - "present_in_person"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: "array"
+          description: "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。"
+          items:
+            type: "string"
+            maxLength: 64
+          maxItems: 50
+        claim_items:
+          type: "array"
+          description: "取用明细；每项 quantity 为本次取用数量。"
+          items:
+            type: "object"
+          maxItems: 200
+        present_in_person:
+          type: "boolean"
+          description: "存酒客户本人到场；false 即拒绝放酒。"
+    SavedBottleRenewalRequest:
+      type: "object"
+      description: "存酒转存（延期）请求（ENUM L120 / BSM L1072）：员工代办时 verification_code 为客人本人短信验证码（与转让同款）；营销主管复核时忽略 verification_code，decision 必填（approve|reject），reject 时 reason 必填。"
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        verification_code:
+          type: "string"
+          description: "客人本人手机收到的短信验证码；由 /verification-code（scene=renew）发送；员工代办转存时必填。"
+          maxLength: 128
+        decision:
+          type: "string"
+          description: "营销主管复核决定（仅 renewals/{id}/review）：approve=通过并从当前到期日顺延；reject=驳回，记录置 rejected、到期日不动、不计入累计转存次数，客人本人仍可再转存。"
+          enum:
+            - "approve"
+            - "reject"
+        reason:
+          type: "string"
+          description: "驳回原因；decision=reject 时必填，落 saved_bottle_renewals.review_reason。"
+          maxLength: 500
+    SavedBottleManualPickupPolicyRequest:
+      type: "object"
+      description: "人工例外取酒消费历史条件配置（BSM L1073 ②）：三个条件值与上下限须同时填写，下限 ≥ 1，各条件值在上下限内。"
+      additionalProperties: false
+      required:
+        - "project_id"
+        - "orders_within_1m"
+        - "orders_within_3m"
+        - "orders_total"
+        - "min_orders"
+        - "max_orders"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果。"
+          maxLength: 128
+        project_id:
+          type: "string"
+          description: "项目 id（条件按项目配置）。"
+          maxLength: 64
+        orders_within_1m:
+          type: "integer"
+          description: "近 1 个月内至少 N 笔有效卡座消费订单（出厂默认 2）。"
+          minimum: 1
+        orders_within_3m:
+          type: "integer"
+          description: "近 3 个月内至少 N 笔有效卡座消费订单（出厂默认 3）。"
+          minimum: 1
+        orders_total:
+          type: "integer"
+          description: "历史累计至少 N 笔有效卡座消费订单（出厂默认 5）。"
+          minimum: 1
+        min_orders:
+          type: "integer"
+          description: "条件值下限（须同时配置上下限）。"
+          minimum: 1
+        max_orders:
+          type: "integer"
+          description: "条件值上限（须同时配置上下限）。"
+          minimum: 1
+        reason:
+          type: "string"
+          description: "调整原因，进入审计留痕。"
+          maxLength: 500
+    SavedBottleRenewalPolicyRequest:
+      type: "object"
+      description: "存酒转存业务参数配置（ENUM L120）：policy_key=max_renewals（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）；value 与上下限须同时填写。"
+      additionalProperties: false
+      required:
+        - "policy_key"
+        - "scope_id"
+        - "value"
+        - "min_value"
+        - "max_value"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果。"
+          maxLength: 128
+        policy_key:
+          type: "string"
+          description: "max_renewals=转存次数上限（按项目）；extension_days=每次顺延天数（按酒吧）。"
+          enum:
+            - "max_renewals"
+            - "extension_days"
+        scope_id:
+          type: "string"
+          description: "global，或 project:<项目 id>（仅 max_renewals）、bar:<酒吧商户 id>（仅 extension_days）。"
+          maxLength: 128
+        value:
+          type: "integer"
+          description: "参数值（次数 ≥ 0；天数 ≥ 1）。"
+          minimum: 0
+        min_value:
+          type: "integer"
+          description: "下限（须同时配置上下限）。"
+          minimum: 0
+        max_value:
+          type: "integer"
+          description: "上限（须同时配置上下限）。"
+          minimum: 0
+        reason:
+          type: "string"
+          description: "调整原因，进入审计留痕。"
+          maxLength: 500
+    SavedBottleRemedyRequest:
+      type: "object"
+      description: "存酒作废后对客补存/赔付登记（BSM L1072）：replacement 须带新瓶底标签值、登记照片与出库库位；compensation 须带 amount_cent。"
+      additionalProperties: false
+      required:
+        - "remedy_type"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        remedy_type:
+          type: "string"
+          description: "replacement=同品、同等剩余量补存（到期日不变）；compensation=赔付。"
+          enum:
+            - "replacement"
+            - "compensation"
+        amount_cent:
+          type: "integer"
+          description: "赔付金额（分）；compensation 必填且大于 0。"
+          minimum: 1
+        reason:
+          type: "string"
+          description: "补存/赔付事由。"
+          maxLength: 500
+        registration_photo_refs:
+          type: "array"
+          description: "补存瓶登记照片证据 id 列表；replacement 必填且非空。"
+          items:
+            type: "string"
+            maxLength: 64
+          maxItems: 50
+        bottle_label_value:
+          type: "string"
+          description: "补存瓶的瓶底标签数值；replacement 必填（新瓶新标签，取酒核身比对项）。"
+          maxLength: 128
+        location_id:
+          type: "string"
+          description: "补存瓶出库库位；replacement 必填，从该酒吧库存同品同量出库。"
+          maxLength: 64
+    SavedBottleRemedyActionRequest:
+      type: "object"
+      description: "补存/赔付后续动作共用请求体：审批（role）、结案（evidence_ids=交付/支付凭证）、平台垫付、认定员工责任（staff_user_id）、员工赔偿收回。"
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        role:
+          type: "string"
+          description: "审批角色：supervisor=门店主管，finance=财务；仅 /approve 使用。"
+          enum:
+            - "supervisor"
+            - "finance"
+        reason:
+          type: "string"
+          description: "审批/处置说明。"
+          maxLength: 500
+        evidence_ids:
+          type: "array"
+          description: "凭证附件 id 列表：结案时为实物/赔款交付凭证，追收时为收回凭证。"
+          items:
+            type: "string"
+            maxLength: 64
+          maxItems: 50
+        staff_user_id:
+          type: "string"
+          description: "复核认定的责任员工 user_id；仅 /staff-liability 使用。"
+          maxLength: 128
+    SavedBottleExitNoticeRequest:
+      type: "object"
+      description: "门店退出前清点并通知客人在原店取回。"
+      additionalProperties: false
+      required:
+        - "merchant_id"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        merchant_id:
+          type: "string"
+          description: "退出门店（商户）id；商户 scope 操作者只能为本店办理。"
+          maxLength: 64
+    SavedBottleHandoverRequest:
+      type: "object"
+      description: "门店退出存酒交平台：items 须覆盖该门店全部有效期内未结存酒；毁损与实收为 0 的短少走作废路径（高价值须 photo/video 双证据）；short 且实收量>0 按差额：剩余量改为实收量、原瓶继续由平台保管、客人照常取，补存/损失/员工赔偿数量＝登记剩余量−实收量（items[].shortfall_quantity），实收量不小于登记剩余量 400 VALIDATION_FAILED。"
+      additionalProperties: false
+      required:
+        - "merchant_id"
+        - "pickup_location"
+        - "items"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
+          maxLength: 128
+        operator_note:
+          type: "string"
+          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
+          maxLength: 1000
+        merchant_id:
+          type: "string"
+          description: "退出门店（商户）id。"
+          maxLength: 64
+        pickup_location:
+          type: "string"
+          description: "娱乐平台公司指定的领取地点。"
+          maxLength: 255
+        photo_attachment_ids:
+          type: "array"
+          description: "交接现场照片证据 id 列表（毁损/短少的高价值存酒作废必填）。"
+          items:
+            type: "string"
+            maxLength: 64
+          maxItems: 50
+        video_attachment_ids:
+          type: "array"
+          description: "交接现场视频证据 id 列表（毁损/短少的高价值存酒作废必填）。"
+          items:
+            type: "string"
+            maxLength: 64
+          maxItems: 50
+        items:
+          type: "array"
+          description: "逐瓶清点明细：saved_bottle_id、received_quantity（缺省=剩余量）、condition（intact|damaged|short，缺省 intact）。"
+          items:
+            type: "object"
+          maxItems: 500
     StockAdjustmentRequest:
       type: object
       description: 请求载荷 `StockAdjustmentRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -50150,6 +52038,12 @@ components:
             - active
             - disabled
           description: 库存物品.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+        manual_high_value:
+          type: boolean
+          description: 库存物品.manual_high_value 字段：手工标记为高价值。
+        non_consumable:
+          type: boolean
+          description: 库存物品.non_consumable 字段：不可消费物品（设备、器具等），FS-019 只有不可消费物品才能借用（BSM L1201）。
     DeviceReturnRequest:
       type: object
       description: 设备请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。

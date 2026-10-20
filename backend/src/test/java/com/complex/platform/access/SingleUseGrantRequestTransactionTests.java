@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -696,12 +696,13 @@ class SingleUseGrantRequestTransactionTests {
 
     // M724-F06 夹具：一张新建状态的借调单（借用型，发货不记结算，不需要明细行）；标记区分同一用例里的多张单。
     // 返回单号——接口路径里的 order_id，也是服务层交给幂等层的提交编号。
+    // FS-019（BSM L1201「不可消费物品……的借用必须约定归还时间」，V515 chk_transfer_borrow_return_due）：借用单必须带归还期限。
     private String createdTransferOrder(String tag) {
         String order = "xmj-trf-" + tag + suffix;
         jdbcTemplate.update("""
                 INSERT INTO inventory_transfer_orders (id, transfer_type, lending_mode, from_owner_type, from_owner_id,
-                    to_owner_type, to_owner_id, status, created_at, updated_at)
-                VALUES (?, 'lending', 'borrow', 'merchant', ?, 'merchant', ?, 'created', now(), now())
+                    to_owner_type, to_owner_id, status, return_due_at, created_at, updated_at)
+                VALUES (?, 'lending', 'borrow', 'merchant', ?, 'merchant', ?, 'created', now() + interval '7 days', now(), now())
                 """, order, merchantId, "mch_xmjb_" + suffix);
         return order;
     }

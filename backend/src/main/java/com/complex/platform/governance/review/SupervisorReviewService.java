@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -107,6 +107,10 @@ public class SupervisorReviewService {
                     List.of("reason"), "active", "specific_role", "inventory.quarantine.approve", List.of("finance_review")),
             // FS-011（BSM L1212「未出库数量可经审批取消」）：门店要货已提交、未出库的取消，发起人上级审批。
             new SupervisorReviewPolicyRecord("inventory_transfer_order_cancel", "inventory.transfer_order.cancel", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // FS-019（BSM L1201「不可消费借用物无法归还时……由借出所有权方与借入保管方确认原因、数量和实物处置，并经主管及财务复核」）：
+            // 双方确认后，确认人上级主管复核；通过后进财务复核。
+            new SupervisorReviewPolicyRecord("inventory_transfer_unreturnable", "inventory.transfer_order.unreturnable", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("ticket_reward_rule", "ticket.reward.rule", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "ticket.reward.rule.approve"),

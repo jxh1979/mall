@@ -1,12 +1,13 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.06
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -33,7 +34,15 @@ import com.complex.platform.inventory.dto.PurchaseRequestCreate;
 import com.complex.platform.inventory.dto.RegisterTraceCodeRequest;
 import com.complex.platform.inventory.dto.SavedBottleCancelRequest;
 import com.complex.platform.inventory.dto.SavedBottleClaimRequest;
+import com.complex.platform.inventory.dto.SavedBottleExitNoticeRequest;
+import com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest;
+import com.complex.platform.inventory.dto.SavedBottleRemedyRequest;
+import com.complex.platform.inventory.dto.SavedBottleManualPickupDispenseRequest;
+import com.complex.platform.inventory.dto.SavedBottleManualPickupRequest;
 import com.complex.platform.inventory.dto.SavedBottleRequest;
+import com.complex.platform.inventory.dto.SavedBottleTransferRequest;
+import com.complex.platform.inventory.dto.SavedBottleRenewalRequest;
+import com.complex.platform.inventory.dto.SavedBottleVerificationCodeRequest;
 import com.complex.platform.inventory.dto.StockAdjustmentRequest;
 import com.complex.platform.inventory.dto.StockInRequest;
 import com.complex.platform.inventory.dto.StockMovementRequest;
@@ -63,6 +72,11 @@ class InventoryServiceTests {
     private InMemoryTraceabilityRepository traceabilityRepository;
     private com.complex.platform.evidence.RiskAlertService riskAlertService;
     private InventoryService service;
+    // FS-016：短信端口桩——记录 (phone, code, scene)；缺省宽松（任何码都过），单测按需换成只认 000000 的严格桩。
+    private final List<String[]> otpCalls = new ArrayList<>();
+    private final List<String[]> otpRequests = new ArrayList<>();
+    private static final String HOLDER_PHONE = "13800138000";
+    private static final String OTHER_PHONE = "13900139000";
 
     private static final AccessActor ADMIN_ACTOR =
             new AccessActor("usr_admin", "admin", "platform_admin", "org_platform", null, "active");
@@ -109,6 +123,648 @@ class InventoryServiceTests {
                 highValueDecisionService,
                 evidenceAttachmentValidator()
         );
+        service.otpVerifier = lenientOtp();
+        service.pickupCodeWindowSeconds = () -> 20;
+    }
+
+    private com.complex.platform.customer.CustomerOtpVerifier lenientOtp() {
+        return new com.complex.platform.customer.CustomerOtpVerifier() {
+            @Override
+            public void verify(String phone, String smsCode, String scene) {
+                otpCalls.add(new String[] {phone, smsCode, scene});
+            }
+
+            @Override
+            public void requestCode(String phone, String scene) {
+                otpRequests.add(new String[] {phone, scene});
+            }
+        };
+    }
+
+    /** 严格桩：只认 000000（与 test profile 的 FixedCustomerOtpVerifier 同口径）。 */
+    private com.complex.platform.customer.CustomerOtpVerifier strictOtp() {
+        return (phone, smsCode, scene) -> {
+            otpCalls.add(new String[] {phone, smsCode, scene});
+            if (!"000000".equals(smsCode)) {
+                throw ApiException.unauthorized("CUSTOMER_OTP_INVALID", "短信验证码不正确或已过期");
+            }
+        };
+    }
+
+    private static String sha256(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private SavedBottleRecord registerBottle(String key, String customerId, String barId, String phone, String name, String label, int qty) {
+        InventoryItemRecord item = createItem("item-" + key);
+        return service.createSavedBottle(new SavedBottleRequest(
+                key, null, List.of(), customerId, barId,
+                List.of(Map.of("item_id", item.id(), "quantity", qty, "bottle_name", "Whisky", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), label, name, phone, List.of("reg_photo"), null));
+    }
+
+    private SavedBottleTransferRequest transferTo(String key, String toName, String toPhone, Integer qty, String code) {
+        return new SavedBottleTransferRequest(key, null, List.of(), toName, toPhone, qty, "转让", code);
+    }
+
+    private SavedBottleClaimRequest claimOne(String key, String code, String label, String name) {
+        return new SavedBottleClaimRequest(key, null, List.of(), List.of(Map.of("quantity", 1)), OTHER_PHONE, code, label, name);
+    }
+
+    // ===== FS-016-R1 转让：当前持有人短信核验 + 整瓶换人 + 留痕 =====
+
+    @Test
+    void transferSavedBottleVerifiesOtpAgainstCurrentHolderPhone() {
+        SavedBottleRecord bottle = registerBottle("tr-otp", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        service.transferSavedBottle(bottle.id(), transferTo("tr-otp-1", "乙", OTHER_PHONE, null, "000000"));
+        assertThat(otpCalls).hasSize(1);
+        assertThat(otpCalls.get(0)[0]).isEqualTo(HOLDER_PHONE);
+        assertThat(otpCalls.get(0)[2]).isEqualTo("inventory.saved_bottle.transfer");
+    }
+
+    @Test
+    void transferSavedBottleRejectsInvalidOtp() {
+        service.otpVerifier = strictOtp();
+        SavedBottleRecord bottle = registerBottle("tr-bad", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        assertThatThrownBy(() -> service.transferSavedBottle(bottle.id(), transferTo("tr-bad-1", "乙", OTHER_PHONE, null, "999999")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CUSTOMER_OTP_INVALID");
+        SavedBottleRecord after = inventoryRepository.savedBottleById(bottle.id()).orElseThrow();
+        assertThat(after.customerNameOrNickname()).isEqualTo("甲");
+        assertThat(after.customerPhoneHash()).isEqualTo(sha256(HOLDER_PHONE));
+        assertThat(inventoryRepository.savedBottleTransfers).isEmpty();
+    }
+
+    @Test
+    void transferSavedBottleSwitchesHolderToTransferee() {
+        SavedBottleRecord bottle = registerBottle("tr-switch", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        service.transferSavedBottle(bottle.id(), transferTo("tr-switch-1", "乙", OTHER_PHONE, null, "000000"));
+        SavedBottleRecord after = inventoryRepository.savedBottleById(bottle.id()).orElseThrow();
+        assertThat(after.customerNameOrNickname()).isEqualTo("乙");
+        assertThat(after.customerPhoneHash()).isEqualTo(sha256(OTHER_PHONE));
+        assertThat(after.customerId()).isNull();
+        assertThat(after.remainingQuantity()).isEqualTo(2);
+        assertThat(after.expireAt()).isEqualTo(bottle.expireAt());
+        assertThat(after.status()).isEqualTo("stored");
+        // 第二次转让由当时的客户（乙）完成短信验证。
+        otpCalls.clear();
+        service.transferSavedBottle(bottle.id(), transferTo("tr-switch-2", "丙", "13700137000", null, "000000"));
+        assertThat(otpCalls.get(0)[0]).isEqualTo(OTHER_PHONE);
+    }
+
+    @Test
+    void transferSavedBottleRejectsPartialQuantity() {
+        SavedBottleRecord bottle = registerBottle("tr-part", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        assertThatThrownBy(() -> service.transferSavedBottle(bottle.id(), transferTo("tr-part-1", "乙", OTHER_PHONE, 1, "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void transferSavedBottleRequiresToPhone() {
+        SavedBottleRecord bottle = registerBottle("tr-phone", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        assertThatThrownBy(() -> service.transferSavedBottle(bottle.id(), transferTo("tr-phone-1", "乙", null, null, "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    @Test
+    void transferSavedBottleRecordsOperatorAndSource() {
+        SavedBottleRecord bottle = registerBottle("tr-op", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        SavedBottleTransferRecord transfer = service.transferSavedBottle(bottle.id(), transferTo("tr-op-1", "乙", OTHER_PHONE, null, "000000"));
+        assertThat(transfer.operatorId()).isEqualTo("usr_admin");
+        assertThat(transfer.operationSource()).isNotBlank();
+        assertThat(transfer.fromPhoneHash()).isEqualTo(sha256(HOLDER_PHONE));
+        assertThat(transfer.transferQuantity()).isEqualTo(1);
+    }
+
+    // ===== FS-025 转存（延期）：ENUM L120 / BSM L1072 =====
+
+    private static final AccessActor SUPERVISOR_ACTOR =
+            new AccessActor("usr_marketing_sup", "marketing_sup", "staff", "org_platform", null, "active");
+
+    private void seedRenewalPolicy(String key, String scope, int value, int version) {
+        inventoryRepository.renewalPolicies.put(key + "|" + scope,
+                new SavedBottleRenewalPolicyRecord(key, scope, value, null, null, version));
+    }
+
+    /** 出厂默认（ENUM L120：上限 2 次、每次顺延 30 天）。 */
+    private void seedFactoryRenewalPolicy() {
+        seedRenewalPolicy("max_renewals", "global", 2, 1);
+        seedRenewalPolicy("extension_days", "global", 30, 1);
+    }
+
+    private com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest customerRenew(String key, String code) {
+        return new com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest(key, code);
+    }
+
+    private SavedBottleRenewalRequest staffRenew(String key, String code) {
+        return new SavedBottleRenewalRequest(key, "代办转存", code);
+    }
+
+    private SavedBottleRenewalRequest review(String key, String decision, String reason) {
+        return new SavedBottleRenewalRequest(key, "复核", null, decision, reason);
+    }
+
+    @Test
+    void customerRenewalVerifiesHolderSmsExtendsFromCurrentExpireAtAndFreezesSnapshot() {
+        seedFactoryRenewalPolicy();
+        SavedBottleRecord bottle = registerBottle("rn-self", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        SavedBottleRenewalRecord renewal = service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-self-1", "000000"));
+        assertThat(otpCalls).hasSize(1);
+        assertThat(otpCalls.get(0)[0]).isEqualTo(HOLDER_PHONE);
+        assertThat(otpCalls.get(0)[2]).isEqualTo("inventory.saved_bottle.renew");
+        SavedBottleRecord after = inventoryRepository.savedBottleById(bottle.id()).orElseThrow();
+        // 每次从当前到期日起顺延该酒吧当前配置的期限（出厂默认 30 天）。
+        assertThat(after.expireAt()).isEqualTo(bottle.expireAt().plus(java.time.Duration.ofDays(30)));
+        assertThat(after.status()).isEqualTo("stored");
+        assertThat(renewal.status()).isEqualTo("effective");
+        assertThat(renewal.previousExpireAt()).isEqualTo(bottle.expireAt());
+        assertThat(renewal.newExpireAt()).isEqualTo(after.expireAt());
+        assertThat(renewal.extensionDays()).isEqualTo(30);
+        assertThat(renewal.renewalCount()).isEqualTo(1);
+        assertThat(renewal.maxRenewals()).isEqualTo(2);
+        assertThat(renewal.limitConfigVersion()).isEqualTo("global:v1");
+        assertThat(renewal.daysConfigVersion()).isEqualTo("global:v1");
+        assertThat(renewal.operatorId()).isEqualTo("cust_1");
+        assertThat(renewal.operationSource()).isEqualTo("customer_self");
+        assertThat(renewal.confirmationMethod()).isEqualTo("sms");
+        assertThat(renewal.phoneHash()).isEqualTo(sha256(HOLDER_PHONE));
+        assertThat(renewal.reviewedBy()).isNull();
+    }
+
+    @Test
+    void customerRenewalRejectsNonHolderAndInvalidOtpWithoutChangingExpiry() {
+        seedFactoryRenewalPolicy();
+        SavedBottleRecord bottle = registerBottle("rn-nh", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(bottle.id(), "cust_2", OTHER_PHONE, customerRenew("rn-nh-1", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_HOLDER");
+        service.otpVerifier = strictOtp();
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-nh-2", "999999")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CUSTOMER_OTP_INVALID");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt()).isEqualTo(bottle.expireAt());
+        assertThat(inventoryRepository.renewals).isEmpty();
+    }
+
+    @Test
+    void renewalStopsAtConfiguredLimitAndRejectsAfterExpiry() {
+        seedFactoryRenewalPolicy();
+        SavedBottleRecord bottle = registerBottle("rn-lim", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-lim-1", "000000"));
+        SavedBottleRenewalRecord second = service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-lim-2", "000000"));
+        assertThat(second.renewalCount()).isEqualTo(2);
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt())
+                .isEqualTo(bottle.expireAt().plus(java.time.Duration.ofDays(60)));
+        // 转存次数达到上限后不再受理转存，不设例外通道。
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-lim-3", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_LIMIT_REACHED");
+        // 只能在当前到期日前办理。
+        SavedBottleRecord fresh = registerBottle("rn-exp", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-2", 1);
+        service.clock = java.time.Clock.offset(java.time.Clock.systemUTC(), java.time.Duration.ofHours(2));
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(fresh.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-exp-1", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_EXPIRED");
+    }
+
+    @Test
+    void staffRenewalNeedsCustomerSmsAndMarketingSupervisorReviewByAnotherPerson() {
+        seedFactoryRenewalPolicy();
+        SavedBottleRecord bottle = registerBottle("rn-staff", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        SavedBottleRenewalRecord pending = service.renewSavedBottle(bottle.id(), staffRenew("rn-staff-1", "000000"));
+        assertThat(otpCalls.get(0)[0]).isEqualTo(HOLDER_PHONE);
+        assertThat(otpCalls.get(0)[2]).isEqualTo("inventory.saved_bottle.renew");
+        assertThat(pending.status()).isEqualTo("pending_review");
+        assertThat(pending.operatorId()).isEqualTo("usr_admin");
+        assertThat(pending.confirmationMethod()).isEqualTo("sms");
+        // 复核前到期日不变；同一瓶不得再起第二笔待复核转存。
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt()).isEqualTo(bottle.expireAt());
+        assertThatThrownBy(() -> service.renewSavedBottle(bottle.id(), staffRenew("rn-staff-2", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_PENDING");
+        // 经办人不得自审。
+        assertThatThrownBy(() -> service.reviewSavedBottleRenewal(pending.id(), review("rn-staff-rv0", "approve", null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_SELF_REVIEW");
+        when(authorizationService.currentActor()).thenReturn(SUPERVISOR_ACTOR);
+        SavedBottleRenewalRecord effective = service.reviewSavedBottleRenewal(pending.id(), review("rn-staff-rv1", "approve", null));
+        assertThat(effective.status()).isEqualTo("effective");
+        assertThat(effective.reviewedBy()).isEqualTo("usr_marketing_sup");
+        assertThat(effective.reviewedAt()).isNotNull();
+        assertThat(effective.operatorId()).isEqualTo("usr_admin");
+        assertThat(effective.renewalCount()).isEqualTo(1);
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt())
+                .isEqualTo(bottle.expireAt().plus(java.time.Duration.ofDays(30)));
+        assertThat(service.listSavedBottleRenewals(bottle.id()).items()).hasSize(1);
+    }
+
+    /** 复核含否决（ENUM L120「员工代办转存的另须当班营销主管复核」）：驳回后到期日不动、记录 rejected 留原因；客人本人可再转存且被驳回的代办不占次数。 */
+    @Test
+    void staffRenewalRejectionKeepsExpiryAndDoesNotConsumeRenewalCount() {
+        seedFactoryRenewalPolicy();
+        SavedBottleRecord bottle = registerBottle("rn-rej", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        SavedBottleRenewalRecord pending = service.renewSavedBottle(bottle.id(), staffRenew("rn-rej-1", "000000"));
+        when(authorizationService.currentActor()).thenReturn(SUPERVISOR_ACTOR);
+        assertThatThrownBy(() -> service.reviewSavedBottleRenewal(pending.id(), review("rn-rej-x", "maybe", null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        assertThatThrownBy(() -> service.reviewSavedBottleRenewal(pending.id(), review("rn-rej-y", "reject", null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        SavedBottleRenewalRecord rejected = service.reviewSavedBottleRenewal(pending.id(), review("rn-rej-2", "reject", "营销主管不认可"));
+        assertThat(rejected.status()).isEqualTo("rejected");
+        assertThat(rejected.reviewedBy()).isEqualTo("usr_marketing_sup");
+        assertThat(rejected.reviewReason()).isEqualTo("营销主管不认可");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt()).isEqualTo(bottle.expireAt());
+        // 驳回后客人本人可再转存，且次数从 1 起算（被驳回的代办不计）；上限 2 次照常。
+        SavedBottleRenewalRecord self = service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-rej-3", "000000"));
+        assertThat(self.renewalCount()).isEqualTo(1);
+        assertThat(service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-rej-4", "000000")).renewalCount())
+                .isEqualTo(2);
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-rej-5", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_LIMIT_REACHED");
+        // 已驳回的记录不能再复核。
+        assertThatThrownBy(() -> service.reviewSavedBottleRenewal(pending.id(), review("rn-rej-6", "approve", null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_NOT_PENDING");
+    }
+
+    @Test
+    void transferDoesNotConsumeRenewalCountAndTransfereeInheritsUsedCount() {
+        seedFactoryRenewalPolicy();
+        SavedBottleRecord bottle = registerBottle("rn-tr", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-tr-1", "000000"));
+        Instant renewedExpireAt = inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt();
+        service.transferSavedBottle(bottle.id(), transferTo("rn-tr-x", "乙", OTHER_PHONE, null, "000000"));
+        // 转让只变更权益人，不消耗转存次数、不改变到期日。
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt()).isEqualTo(renewedExpireAt);
+        assertThat(inventoryRepository.renewals).hasSize(1);
+        // 受让人继承剩余有效期与已用转存次数：乙还能转存 1 次，第 2 次到上限。
+        SavedBottleRenewalRecord byTransferee = service.renewSavedBottleByCustomer(bottle.id(), "cust_2", OTHER_PHONE, customerRenew("rn-tr-2", "000000"));
+        assertThat(byTransferee.renewalCount()).isEqualTo(2);
+        assertThat(byTransferee.previousExpireAt()).isEqualTo(renewedExpireAt);
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(bottle.id(), "cust_2", OTHER_PHONE, customerRenew("rn-tr-3", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_LIMIT_REACHED");
+    }
+
+    @Test
+    void renewalUsesProjectLimitAndBarExtensionOverGlobalAndRejectsWhenUnconfigured() {
+        SavedBottleRecord bottle = registerBottle("rn-pol", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-pol-0", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_POLICY_UNSET");
+        seedFactoryRenewalPolicy();
+        inventoryRepository.barProjects.put("bar_1", "project_1");
+        seedRenewalPolicy("max_renewals", "project:project_1", 1, 3);
+        seedRenewalPolicy("extension_days", "bar:bar_1", 10, 2);
+        SavedBottleRenewalRecord renewal = service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-pol-1", "000000"));
+        assertThat(renewal.extensionDays()).isEqualTo(10);
+        assertThat(renewal.maxRenewals()).isEqualTo(1);
+        assertThat(renewal.projectId()).isEqualTo("project_1");
+        assertThat(renewal.limitConfigVersion()).isEqualTo("project:project_1:v3");
+        assertThat(renewal.daysConfigVersion()).isEqualTo("bar:bar_1:v2");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().expireAt())
+                .isEqualTo(bottle.expireAt().plus(java.time.Duration.ofDays(10)));
+        assertThatThrownBy(() -> service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rn-pol-2", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_RENEWAL_LIMIT_REACHED");
+    }
+
+    @Test
+    void renewalCodeIsSentToCurrentHolderFromCustomerAndStaffEntrances() {
+        SavedBottleRecord bottle = registerBottle("rn-code", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        service.requestSavedBottleRenewalCodeByCustomer(bottle.id(), "cust_1", HOLDER_PHONE);
+        assertThat(otpRequests).hasSize(1);
+        assertThat(otpRequests.get(0)[0]).isEqualTo(HOLDER_PHONE);
+        assertThat(otpRequests.get(0)[1]).isEqualTo("inventory.saved_bottle.renew");
+        assertThatThrownBy(() -> service.requestSavedBottleRenewalCodeByCustomer(bottle.id(), "cust_2", OTHER_PHONE))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_HOLDER");
+        service.requestSavedBottleVerificationCode(bottle.id(), new SavedBottleVerificationCodeRequest("rn-code-s", "renew"));
+        assertThat(otpRequests).hasSize(2);
+        assertThat(otpRequests.get(1)[1]).isEqualTo("inventory.saved_bottle.renew");
+    }
+
+    // ===== FS-016-R2 取酒：核验当前持有人短信 =====
+
+    @Test
+    void claimSavedBottleRejectsInvalidSmsCode() {
+        service.otpVerifier = strictOtp();
+        SavedBottleRecord bottle = registerBottle("cl-bad", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        assertThatThrownBy(() -> service.claimSavedBottle(bottle.id(), claimOne("cl-bad-1", "WRONG", "LBL-1", "甲")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CUSTOMER_OTP_INVALID");
+        assertThat(inventoryRepository.savedBottleClaims).isEmpty();
+        SavedBottleRecord after = inventoryRepository.savedBottleById(bottle.id()).orElseThrow();
+        assertThat(after.remainingQuantity()).isEqualTo(2);
+        assertThat(after.status()).isEqualTo("stored");
+    }
+
+    @Test
+    void claimSavedBottleVerifiesSmsAgainstHolderPhoneNotClaimByPhone() {
+        SavedBottleRecord bottle = registerBottle("cl-holder", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        service.claimSavedBottle(bottle.id(), claimOne("cl-holder-1", "000000", "LBL-1", "甲"));
+        assertThat(otpCalls).hasSize(1);
+        assertThat(otpCalls.get(0)[0]).isEqualTo(HOLDER_PHONE);
+        assertThat(otpCalls.get(0)[2]).isEqualTo("inventory.saved_bottle.claim");
+    }
+
+    @Test
+    void claimSavedBottleNoLongerAcceptsVerificationCodeAsLabel() {
+        service.otpVerifier = strictOtp();
+        SavedBottleRecord bottle = registerBottle("cl-label", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        assertThatThrownBy(() -> service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
+                "cl-label-1", null, List.of(), List.of(Map.of("quantity", 1)), OTHER_PHONE, "LBL-1", null, "甲")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CUSTOMER_OTP_INVALID");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("stored");
+    }
+
+    // ===== FS-016-R4 留痕 + 登记手机号必填 =====
+
+    @Test
+    void claimRecordsOperatorTerminalAndRemainingBeforeAfter() {
+        SavedBottleRecord bottle = registerBottle("cl-trace", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        SavedBottleClaimRecord claim = service.claimSavedBottle(bottle.id(), claimOne("cl-trace-1", "000000", "LBL-1", "甲"));
+        assertThat(claim.claimStaffId()).isEqualTo("usr_admin");
+        assertThat(claim.claimTerminalType()).isNotBlank();
+        assertThat(claim.remainingBefore()).isEqualTo(2);
+        assertThat(claim.remainingAfter()).isEqualTo(1);
+        assertThat(claim.verificationMethod()).isEqualTo("sms");
+        assertThat(claim.verifiedPhoneHash()).isEqualTo(sha256(HOLDER_PHONE));
+    }
+
+    @Test
+    void createSavedBottleRequiresCustomerPhone() {
+        InventoryItemRecord item = createItem("no-phone");
+        assertThatThrownBy(() -> service.createSavedBottle(new SavedBottleRequest(
+                "saved-no-phone", null, List.of(), null, "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
+                Instant.now().plusSeconds(3600), "LBL", "散客张", null, List.of("reg_photo"), null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+    }
+
+    // ===== FS-016-R5 最小口径：转让后人工复核行记当前持有人 =====
+
+    @Test
+    void identityReviewAfterTransferRecordsCurrentHolder() {
+        SavedBottleRecord bottle = registerBottle("rv-holder", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        service.transferSavedBottle(bottle.id(), transferTo("rv-holder-1", "乙", OTHER_PHONE, null, "000000"));
+        SavedBottleClaimRecord review = service.claimSavedBottle(bottle.id(), claimOne("rv-holder-2", "000000", "LBL-1", "错名"));
+        assertThat(review.status()).isEqualTo("pending_identity_review");
+        assertThat(review.verifiedPhoneHash()).isEqualTo(sha256(OTHER_PHONE));
+    }
+
+
+    // ===== FS-016-R3 客人端动态取酒码 + 我的存酒 =====
+
+    @Test
+    void issuePickupCodeOnlyForCurrentHolderWithConfiguredWindow() {
+        SavedBottleRecord bottle = registerBottle("pc-holder", "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        SavedBottlePickupCodeResponse code = service.issueSavedBottlePickupCode(bottle.id(), "customer_1", HOLDER_PHONE);
+        assertThat(code.code()).startsWith("swp_");
+        assertThat(code.refreshIntervalSeconds()).isEqualTo(20);
+        assertThat(code.expiresAt()).isAfter(Instant.now().plusSeconds(15));
+        assertThatThrownBy(() -> service.issueSavedBottlePickupCode(bottle.id(), "customer_2", OTHER_PHONE))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_HOLDER");
+    }
+
+    @Test
+    void issuePickupCodeRevokesPreviousActiveCode() {
+        SavedBottleRecord bottle = registerBottle("pc-revoke", "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+        SavedBottlePickupCodeResponse first = service.issueSavedBottlePickupCode(bottle.id(), "customer_1", HOLDER_PHONE);
+        SavedBottlePickupCodeResponse second = service.issueSavedBottlePickupCode(bottle.id(), "customer_1", HOLDER_PHONE);
+        assertThatThrownBy(() -> service.claimSavedBottle(bottle.id(), claimOne("pc-revoke-1", first.code(), "LBL-1", "甲")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_PICKUP_CODE_INVALID");
+        SavedBottleClaimRecord claim = service.claimSavedBottle(bottle.id(), claimOne("pc-revoke-2", second.code(), "LBL-1", "甲"));
+        assertThat(claim.status()).isEqualTo("picked_up");
+        assertThat(claim.verificationMethod()).isEqualTo("pickup_code");
+        assertThat(otpCalls).isEmpty();
+    }
+
+    @Test
+    void claimSavedBottleAcceptsValidPickupCodeOnce() {
+        SavedBottleRecord bottle = registerBottle("pc-once", "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 3);
+        SavedBottlePickupCodeResponse code = service.issueSavedBottlePickupCode(bottle.id(), "customer_1", HOLDER_PHONE);
+        assertThat(service.claimSavedBottle(bottle.id(), claimOne("pc-once-1", code.code(), "LBL-1", "甲")).status()).isEqualTo("picked_up");
+        assertThatThrownBy(() -> service.claimSavedBottle(bottle.id(), claimOne("pc-once-2", code.code(), "LBL-1", "甲")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_PICKUP_CODE_INVALID");
+        // 过窗口：时钟前进 refreshInterval+1s 后新码也失效。
+        SavedBottlePickupCodeResponse fresh = service.issueSavedBottlePickupCode(bottle.id(), "customer_1", HOLDER_PHONE);
+        service.clock = java.time.Clock.offset(java.time.Clock.systemUTC(), java.time.Duration.ofSeconds(21));
+        assertThatThrownBy(() -> service.claimSavedBottle(bottle.id(), claimOne("pc-once-3", fresh.code(), "LBL-1", "甲")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_PICKUP_CODE_INVALID");
+    }
+
+    @Test
+    void transferRevokesTransferorPickupCodes() {
+        SavedBottleRecord bottle = registerBottle("pc-transfer", "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        SavedBottlePickupCodeResponse codeA = service.issueSavedBottlePickupCode(bottle.id(), "customer_1", HOLDER_PHONE);
+        service.transferSavedBottle(bottle.id(), transferTo("pc-transfer-1", "乙", OTHER_PHONE, null, "000000"));
+        assertThatThrownBy(() -> service.claimSavedBottle(bottle.id(), claimOne("pc-transfer-2", codeA.code(), "LBL-1", "乙")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_PICKUP_CODE_INVALID");
+        assertThatThrownBy(() -> service.issueSavedBottlePickupCode(bottle.id(), "customer_1", HOLDER_PHONE))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_HOLDER");
+        // 受让人（散客，按手机哈希判持有人）取码可取酒。
+        SavedBottlePickupCodeResponse codeB = service.issueSavedBottlePickupCode(bottle.id(), "customer_2", OTHER_PHONE);
+        assertThat(service.claimSavedBottle(bottle.id(), claimOne("pc-transfer-3", codeB.code(), "LBL-1", "乙")).status()).isEqualTo("picked_up");
+    }
+
+    @Test
+    void listSavedBottlesForCustomerReturnsHolderBottlesAcrossBars() {
+        SavedBottleRecord a1 = registerBottle("my-a1", "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-A1", 1);
+        registerBottle("my-a2", "customer_1", "bar_2", HOLDER_PHONE, "甲", "LBL-A2", 1);
+        registerBottle("my-b1", "customer_2", "bar_1", OTHER_PHONE, "乙", "LBL-B1", 1);
+        List<SavedBottleRecord> mine = service.listSavedBottlesForCustomer("customer_1", HOLDER_PHONE);
+        assertThat(mine).extracting(SavedBottleRecord::barProjectId).containsExactlyInAnyOrder("bar_1", "bar_2");
+        service.transferSavedBottle(a1.id(), transferTo("my-tr", "乙", OTHER_PHONE, null, "000000"));
+        assertThat(service.listSavedBottlesForCustomer("customer_1", HOLDER_PHONE)).hasSize(1);
+        assertThat(service.listSavedBottlesForCustomer("customer_2", OTHER_PHONE)).hasSize(2);
+    }
+
+    @Test
+    void requestSavedBottleVerificationCodeSendsToHolder() {
+        SavedBottleRecord bottle = registerBottle("vc-send", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        service.requestSavedBottleVerificationCode(bottle.id(), new SavedBottleVerificationCodeRequest("vc-send-1", "claim"));
+        assertThat(otpRequests).hasSize(1);
+        assertThat(otpRequests.get(0)[0]).isEqualTo(HOLDER_PHONE);
+        assertThat(otpRequests.get(0)[1]).isEqualTo("inventory.saved_bottle.claim");
+    }
+
+    /** PGM L878 / BSM L1073：按手机号检索存酒是一次按手机号查客人的动作，留痕查的哪个手机号（哈希）、谁查的。 */
+    @Test
+    void lookupSavedBottlesByPhoneLeavesPhoneHashAndQuerierInAudit() {
+        registerBottle("lk-1", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        assertThat(service.listSavedBottles(HOLDER_PHONE).items()).hasSize(1);
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "bar.saved_bottle.viewed".equals(event.eventName()))
+                .anySatisfy(event -> {
+                    assertThat(event.metadata()).containsEntry("phone_hash", sha256(HOLDER_PHONE));
+                    assertThat(event.metadata()).containsEntry("queried_by", "usr_admin");
+                    assertThat(event.metadata()).containsEntry("count", 1);
+                });
+    }
+
+    // ===== FS-016-R5 人工例外取酒四项 =====
+
+    private SavedBottleManualPickupRequest manualStep(String key) {
+        return new SavedBottleManualPickupRequest(key, null, List.of(), "客人手机遗失");
+    }
+
+    private SavedBottleRecord manualBottle(String key) {
+        inventoryRepository.barProjects.put("bar_1", "project_1");
+        inventoryRepository.manualPickupPolicies.put("project_1", new SavedBottleManualPickupPolicyRecord("project_1", 2, 3, 5, 1, 10));
+        inventoryRepository.validOrderCounts.put("customer_1", new int[] {0, 0, 5});
+        return registerBottle(key, "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
+    }
+
+    @Test
+    void manualPickupRejectsWhenPolicyUnsetOrHistoryNotMet() {
+        inventoryRepository.barProjects.put("bar_1", "project_1");
+        SavedBottleRecord bottle = registerBottle("mp-policy", "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        assertThatThrownBy(() -> service.initiateManualPickup(bottle.id(), manualStep("mp-policy-1")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_POLICY_UNSET");
+        inventoryRepository.manualPickupPolicies.put("project_1", new SavedBottleManualPickupPolicyRecord("project_1", 2, 3, 5, 1, 10));
+        inventoryRepository.validOrderCounts.put("customer_1", new int[] {1, 2, 4});
+        assertThatThrownBy(() -> service.initiateManualPickup(bottle.id(), manualStep("mp-policy-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_HISTORY_NOT_MET");
+        assertThat(inventoryRepository.manualPickups).isEmpty();
+    }
+
+    @Test
+    void manualPickupInitiateGoesThroughCustomerLookupChannelWithAudit() {
+        SavedBottleRecord bottle = manualBottle("mp-audit");
+        SavedBottleManualPickupRecord request = service.initiateManualPickup(bottle.id(), manualStep("mp-audit-1"));
+        assertThat(request.status()).isEqualTo("initiated");
+        assertThat(request.historyCondition()).isEqualTo("orders_total");
+        assertThat(request.initiatedBy()).isEqualTo("usr_admin");
+        verify(authorizationService).requirePermission("customer.account.manage");
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "customer.account.viewed".equals(event.eventName()))
+                .anySatisfy(event -> {
+                    assertThat(event.metadata()).containsEntry("purpose", "saved_bottle_manual_pickup");
+                    assertThat(event.metadata()).containsEntry("manual_pickup_id", request.id());
+                    assertThat(event.metadata()).containsEntry("phone_hash", sha256(HOLDER_PHONE));
+                });
+    }
+
+    @Test
+    void manualPickupReviewRejectsInitiatorAndMarketingRequiresAttributedMarketer() {
+        SavedBottleRecord bottle = manualBottle("mp-review");
+        SavedBottleManualPickupRecord request = service.initiateManualPickup(bottle.id(), manualStep("mp-review-1"));
+        assertThatThrownBy(() -> service.reviewManualPickup(request.id(), manualStep("mp-review-2")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_SELF_REVIEW");
+        AccessActor supervisor = new AccessActor("usr_sup", "sup", "staff", "org_platform", null, "active");
+        when(authorizationService.currentActor()).thenReturn(supervisor);
+        assertThat(service.reviewManualPickup(request.id(), manualStep("mp-review-3")).status()).isEqualTo("reviewed");
+        inventoryRepository.attributedMarketers.put("customer_1", "usr_marketer");
+        assertThatThrownBy(() -> service.confirmManualPickupMarketing(request.id(), manualStep("mp-review-4")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_MARKETER_MISMATCH");
+        when(authorizationService.currentActor()).thenReturn(new AccessActor("usr_marketer", "mk", "staff", "org_platform", null, "active"));
+        SavedBottleManualPickupRecord confirmed = service.confirmManualPickupMarketing(request.id(), manualStep("mp-review-5"));
+        assertThat(confirmed.status()).isEqualTo("marketing_confirmed");
+        assertThat(confirmed.marketingConfirmBasis()).isEqualTo("attributed_marketer");
+    }
+
+    /** BSM L1073 ③「营销已离职的由其主管确认……找不到可承担确认责任的营销主管时流程不得通过」：直接上级本人确认，未维护上级即 409。 */
+    @Test
+    void manualPickupMarketingConfirmByDepartedMarketerFallsToDirectSuperior() {
+        SavedBottleRecord bottle = manualBottle("mp-left");
+        SavedBottleManualPickupRecord request = service.initiateManualPickup(bottle.id(), manualStep("mp-left-1"));
+        when(authorizationService.currentActor()).thenReturn(new AccessActor("usr_sup", "sup", "staff", "org_platform", null, "active"));
+        service.reviewManualPickup(request.id(), manualStep("mp-left-2"));
+        inventoryRepository.departedMarketers.put("customer_1", "usr_marketer_left");
+        assertThatThrownBy(() -> service.confirmManualPickupMarketing(request.id(), manualStep("mp-left-3")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_SUPERVISOR_UNRESOLVED");
+        inventoryRepository.directSuperiors.put("usr_marketer_left", "usr_mk_lead");
+        assertThatThrownBy(() -> service.confirmManualPickupMarketing(request.id(), manualStep("mp-left-4")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_MARKETER_SUPERVISOR_MISMATCH");
+        when(authorizationService.currentActor()).thenReturn(new AccessActor("usr_mk_lead", "lead", "staff", "org_platform", null, "active"));
+        SavedBottleManualPickupRecord confirmed = service.confirmManualPickupMarketing(request.id(), manualStep("mp-left-5"));
+        assertThat(confirmed.status()).isEqualTo("marketing_confirmed");
+        assertThat(confirmed.marketingConfirmedBy()).isEqualTo("usr_mk_lead");
+        assertThat(confirmed.marketingConfirmBasis()).isEqualTo("marketer_supervisor");
+    }
+
+    /** BSM L1073 ②：消费历史条件按项目可配、调整须最高权限审批并留痕、须同时配置上下限；配置后人工例外才可发起。 */
+    @Test
+    void manualPickupPolicyConfigNeedsMasterAuthorityAndBoundsThenUnblocksInitiate() {
+        inventoryRepository.barProjects.put("bar_1", "project_1");
+        inventoryRepository.validOrderCounts.put("customer_1", new int[] {0, 0, 5});
+        SavedBottleRecord bottle = registerBottle("mp-cfg", "customer_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest valid =
+                new com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest("mp-cfg-1", "project_1", 2, 3, 5, 1, 10, "首次配置");
+        assertThatThrownBy(() -> service.configureManualPickupPolicy(valid))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("MASTER_APPROVAL_REQUIRED");
+        when(authorizationService.isMasterAuthority(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        assertThatThrownBy(() -> service.configureManualPickupPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest("mp-cfg-2", "project_1", 2, 3, 5, 1, null, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        assertThatThrownBy(() -> service.configureManualPickupPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest("mp-cfg-3", "project_1", 2, 3, 50, 1, 10, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        assertThat(inventoryRepository.manualPickupPolicies).isEmpty();
+        assertThatThrownBy(() -> service.initiateManualPickup(bottle.id(), manualStep("mp-cfg-4")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_POLICY_UNSET");
+        SavedBottleManualPickupPolicyRecord saved = service.configureManualPickupPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest("mp-cfg-6", "project_1", 2, 3, 5, 1, 10, "首次配置"));
+        assertThat(saved).isEqualTo(new SavedBottleManualPickupPolicyRecord("project_1", 2, 3, 5, 1, 10));
+        assertThat(inventoryRepository.policyUpdatedBy).containsEntry("manual_pickup:project_1", "usr_admin");
+        assertThat(auditEventRepository.events)
+                .anySatisfy(event -> assertThat(event.eventName()).isEqualTo("bar.saved_bottle.manual_pickup_policy_configured"));
+        assertThat(service.initiateManualPickup(bottle.id(), manualStep("mp-cfg-5")).historyCondition()).isEqualTo("orders_total");
+    }
+
+    /** ENUM L120：转存次数上限按项目、顺延期限按酒吧可配，须同时配置上下限；每次保存 version+1 并固化到转存流水。 */
+    @Test
+    void renewalPolicyConfigValidatesKeyScopeBoundsAndBumpsVersion() {
+        assertThatThrownBy(() -> service.configureRenewalPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest("rp-1", "max_renewals", "bar:bar_1", 2, 1, 5, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        assertThatThrownBy(() -> service.configureRenewalPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest("rp-2", "extension_days", "global", 30, null, 60, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
+        SavedBottleRenewalPolicyRecord limit = service.configureRenewalPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest("rp-3", "max_renewals", "global", 2, 1, 5, "出厂值补上下限"));
+        assertThat(limit.version()).isEqualTo(1);
+        assertThat(limit.minValue()).isEqualTo(1);
+        assertThat(limit.maxValue()).isEqualTo(5);
+        SavedBottleRenewalPolicyRecord days = service.configureRenewalPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest("rp-4", "extension_days", "bar:bar_1", 10, 7, 60, null));
+        SavedBottleRenewalPolicyRecord daysAgain = service.configureRenewalPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest("rp-5", "extension_days", "bar:bar_1", 15, 7, 60, null));
+        assertThat(days.version()).isEqualTo(1);
+        assertThat(daysAgain.version()).isEqualTo(2);
+        assertThat(inventoryRepository.policyUpdatedBy).containsEntry("renewal:extension_days|bar:bar_1", "usr_admin");
+        // 带商户 scope 只能配本酒吧的顺延期限。
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("bar_2"));
+        assertThatThrownBy(() -> service.configureRenewalPolicy(
+                new com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest("rp-6", "extension_days", "bar:bar_1", 15, 7, 60, null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        // 转存流水固化当时的配置版本（bar:bar_1:v2）与顺延天数。
+        SavedBottleRecord bottle = registerBottle("rp-use", "cust_1", "bar_1", HOLDER_PHONE, "甲", "LBL-1", 1);
+        SavedBottleRenewalRecord renewal = service.renewSavedBottleByCustomer(bottle.id(), "cust_1", HOLDER_PHONE, customerRenew("rp-use-1", "000000"));
+        assertThat(renewal.daysConfigVersion()).isEqualTo("bar:bar_1:v2");
+        assertThat(renewal.extensionDays()).isEqualTo(15);
+    }
+
+    @Test
+    void manualPickupDispenseRequiresInPersonAndRecordsManualException() {
+        SavedBottleRecord bottle = manualBottle("mp-dispense");
+        SavedBottleManualPickupRecord request = service.initiateManualPickup(bottle.id(), manualStep("mp-dispense-1"));
+        when(authorizationService.currentActor()).thenReturn(new AccessActor("usr_sup", "sup", "staff", "org_platform", null, "active"));
+        service.reviewManualPickup(request.id(), manualStep("mp-dispense-2"));
+        // 无归属营销 → 营销主管确认。
+        SavedBottleManualPickupRecord confirmed = service.confirmManualPickupMarketing(request.id(), manualStep("mp-dispense-3"));
+        assertThat(confirmed.marketingConfirmBasis()).isEqualTo("on_duty_marketing_supervisor");
+        assertThatThrownBy(() -> service.dispenseManualPickup(request.id(), new SavedBottleManualPickupDispenseRequest(
+                "mp-dispense-4", null, List.of(), List.of(Map.of("quantity", 1)), false)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_NOT_IN_PERSON");
+        SavedBottleManualPickupRecord done = service.dispenseManualPickup(request.id(), new SavedBottleManualPickupDispenseRequest(
+                "mp-dispense-5", null, List.of(), List.of(Map.of("quantity", 1)), true));
+        assertThat(done.status()).isEqualTo("dispensed");
+        SavedBottleClaimRecord claim = inventoryRepository.savedBottleClaims.get(inventoryRepository.savedBottleClaims.size() - 1);
+        assertThat(claim.id()).isEqualTo(done.claimId());
+        assertThat(claim.status()).isEqualTo("picked_up");
+        assertThat(claim.verificationMethod()).isEqualTo("manual_exception");
+        assertThat(claim.verifiedPhoneHash()).isEqualTo(sha256(HOLDER_PHONE));
+        assertThat(otpCalls).isEmpty();
+        // 四步未走完不能放酒：重新发起一笔只到复核就放酒 → 409。
+        SavedBottleManualPickupRecord second = service.initiateManualPickup(bottle.id(), manualStep("mp-dispense-6"));
+        assertThatThrownBy(() -> service.dispenseManualPickup(second.id(), new SavedBottleManualPickupDispenseRequest(
+                "mp-dispense-7", null, List.of(), List.of(Map.of("quantity", 1)), true)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_NOT_MARKETING_CONFIRMED");
     }
 
     /**
@@ -310,7 +966,7 @@ class InventoryServiceTests {
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "123456", "客人甲", null,
+                "123456", "客人甲", "13800138000",
                 List.of("reg_photo"), null
         ));
 
@@ -339,7 +995,7 @@ class InventoryServiceTests {
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Vodka", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "123456", "客人甲", null,
+                "123456", "客人甲", "13800138000",
                 List.of("reg_photo"), null
         ));
         SavedBottleClaimRequest firstClaim = new SavedBottleClaimRequest(
@@ -701,7 +1357,7 @@ class InventoryServiceTests {
                 "saved-dispute", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Brandy", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "LBL-DP", "客", null, List.of("reg_photo"), null));
+                "LBL-DP", "客", "13800138000", List.of("reg_photo"), null));
 
         SavedBottleRecord disputed = service.disputeSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "dispute-1", null, List.of(), "客人质疑酒量", List.of(), List.of()));
@@ -715,7 +1371,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HV", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-HV", "客", "13800138000",
                 List.of("reg_photo"), null));
 
         // 仅照片、缺视频 → 拒。
@@ -742,7 +1398,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-wording", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVW", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-HVW", "客", "13800138000",
                 List.of("reg_photo"), null));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -761,7 +1417,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-approve", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVA", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-HVA", "客", "13800138000",
                 List.of("reg_photo"), null));
 
         SavedBottleRecord frozen = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -783,7 +1439,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-lost", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-LOST", "客", null, List.of("reg_photo"), null));
+                Instant.now().plusSeconds(3600), "LBL-LOST", "客", "13800138000", List.of("reg_photo"), null));
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-lost", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
@@ -802,7 +1458,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-reject", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVR", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-HVR", "客", "13800138000",
                 List.of("reg_photo"), null));
 
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -824,7 +1480,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-fakeatt", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-FAKE", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-FAKE", "客", "13800138000",
                 List.of("reg_photo"), null));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -843,7 +1499,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-kind", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-KIND", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-KIND", "客", "13800138000",
                 List.of("reg_photo"), null));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -860,7 +1516,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-non-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "House", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-NHV", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-NHV", "客", "13800138000",
                 List.of("reg_photo"), null));
 
         SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -1090,7 +1746,7 @@ class InventoryServiceTests {
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
                 Instant.now().plusSeconds(3600),
-                "VERIFY-XYZ", "客人甲", null,
+                "VERIFY-XYZ", "客人甲", "13800138000",
                 List.of("reg_photo"), null
         ));
 
@@ -1189,6 +1845,27 @@ class InventoryServiceTests {
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("INVALID_MOVEMENT_TYPE");
+    }
+
+    // FS-018 R1：typed stock-movements 的报损族（damage/loss/waste）不再有直接扣减分支——
+    // 该族一律转入 stock-adjustments 契约（高价值判定 + 照片/视频双证据 + 主管复核批准后才扣库存）。
+    // BSM L1183「高价值酒水报损、盘点差异、存酒作废必须拍照和视频留证，并主管复核」；L1196「阈值未配置时一律按高价值处理、拦下走审批，不得静默放行」。
+    @Test
+    void typedDamageFamilyNoLongerDeductsDirectly() {
+        for (String type : List.of("damage", "loss", "waste")) {
+            InventoryItemRecord item = createHighValueItem("hv-typed-" + type);
+            seedStock(item.id(), "warehouse_1", 10);
+
+            assertThatThrownBy(() -> service.createTypedStockMovement(type, new StockMovementRequest(
+                    "typed-" + type, "broken", List.of(), "warehouse_1", null,
+                    List.of(Map.of("item_id", item.id(), "quantity", 5)), null)))
+                    .isInstanceOfSatisfying(ApiException.class,
+                            e -> assertThat(e.code()).as(type).isEqualTo("INVALID_MOVEMENT_TYPE"));
+
+            assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
+                    .as(type).isEqualTo(10);
+            assertThat(inventoryRepository.listHighValueReviews()).isEmpty();
+        }
     }
 
     // P1-4: adjustmentType 白名单校验
@@ -1513,7 +2190,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-xm", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVXM", "客", null,
+                Instant.now().plusSeconds(3600), "LBL-HVXM", "客", "13800138000",
                 List.of("reg_photo"), null));
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-xm", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
@@ -1941,6 +2618,620 @@ class InventoryServiceTests {
         ));
     }
 
+    // ===== FS-017 存酒作废后对客补存/赔付、门店退出交接、责任归属与内部追收（BSM L1072 ①②③④） =====
+
+    private final List<Object[]> lossPosts = new ArrayList<>();
+    private final List<Object[]> recoveryPosts = new ArrayList<>();
+    private static final AccessActor MERCHANT_A_MANAGER =
+            new AccessActor("usr_mgr_a", "mgr_a", "staff", "org_a", "m_a", "active");
+    private static final AccessActor MERCHANT_A_FINANCE =
+            new AccessActor("usr_fin_a", "fin_a", "staff", "org_a", "m_a", "active");
+
+    private static com.complex.platform.finance.ArApItemRecord arap(String id, String direction, String counterparty,
+                                                                     String sourceType, String sourceId, long amount, String merchantId) {
+        Instant now = Instant.now();
+        return new com.complex.platform.finance.ArApItemRecord(id, "ARAP-" + id, direction, counterparty, sourceType, sourceId,
+                amount, "internal_accounting".equals(direction) ? amount : 0L, "internal_accounting".equals(direction) ? 0L : amount,
+                "CNY", LocalDate.now(), null, "internal_accounting".equals(direction) ? "settled" : "pending_collection",
+                now, now, merchantId, null, null, null);
+    }
+
+    private void wireFinanceStub() {
+        com.complex.platform.finance.FinanceService finance = mock(com.complex.platform.finance.FinanceService.class);
+        when(finance.postSavedBottleRemedyLoss(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), any())).thenAnswer(call -> {
+            lossPosts.add(new Object[] {call.getArgument(0), call.getArgument(1), call.getArgument(2), call.getArgument(3), call.getArgument(4)});
+            return arap("arap_loss_" + lossPosts.size(), "internal_accounting", call.getArgument(1), "saved_bottle_remedy",
+                    call.getArgument(0), call.getArgument(3), call.getArgument(2));
+        });
+        when(finance.postSavedBottleRemedyRecovery(any(), any(), org.mockito.ArgumentMatchers.anyLong(), any())).thenAnswer(call -> {
+            recoveryPosts.add(new Object[] {call.getArgument(0), call.getArgument(1), call.getArgument(2), call.getArgument(3)});
+            return arap("arap_rec_" + recoveryPosts.size(), "receivable", call.getArgument(1), "saved_bottle_remedy_recovery",
+                    call.getArgument(0), call.getArgument(2), call.getArgument(1));
+        });
+        service.financeService = finance;
+    }
+
+    private void asMerchantA() {
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
+    }
+
+    private void asPlatform() {
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
+    }
+
+    private SavedBottleRecord storedBottle(String key, InventoryItemRecord item, int qty, Instant expireAt) {
+        return service.createSavedBottle(new SavedBottleRequest("saved-" + key, null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", qty, "bottle_name", "Vodka", "unit", "bottle")),
+                expireAt, "LBL-" + key, "甲", HOLDER_PHONE, List.of("reg_photo"), null));
+    }
+
+    /** 非高价值瓶直接作废 → cancelled（补存/赔付登记前置状态）。 */
+    private SavedBottleRecord cancelledBottle(String key, InventoryItemRecord item, int qty) {
+        SavedBottleRecord bottle = storedBottle(key, item, qty, Instant.now().plusSeconds(7 * 86400));
+        SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-" + key, null, List.of(), "broken", List.of(), List.of()));
+        assertThat(cancelled.status()).isEqualTo("cancelled");
+        return cancelled;
+    }
+
+    private static SavedBottleRemedyActionRequest action(String key, String role, List<String> evidence) {
+        return new SavedBottleRemedyActionRequest(key, null, role, "ok", evidence, null);
+    }
+
+    private static SavedBottleRemedyRequest replacement(String key, String location) {
+        return new SavedBottleRemedyRequest(key, null, "replacement", null, "同品补存", List.of("reg_photo_2"), "LBL-NEW-" + key, location);
+    }
+
+    private static SavedBottleRemedyRequest compensation(String key, long amountCent) {
+        return new SavedBottleRemedyRequest(key, null, "compensation", amountCent, "无法替代", List.of(), null, null);
+    }
+
+    private SavedBottleHandoverRecord handoverIntact(String key, SavedBottleRecord... bottles) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (SavedBottleRecord b : bottles) {
+            items.add(Map.of("saved_bottle_id", b.id(), "received_quantity", b.remainingQuantity(), "condition", "intact"));
+        }
+        return service.handoverSavedBottlesToPlatform(new com.complex.platform.inventory.dto.SavedBottleHandoverRequest(
+                key, null, "m_a", "平台仓 A 区", List.of(), List.of(), items));
+    }
+
+    private void wirePlatformEntity() {
+        inventoryRepository.barProjects.put("m_a", "project_1");
+        service.managementEntityResolver = projectId -> "project_1".equals(projectId) ? "ent_platform" : null;
+    }
+
+    private InventoryService withNotifications(com.complex.platform.notification.NotificationService notifications) {
+        InventoryService built = new InventoryService(
+                inventoryRepository,
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                new AuditEventService(auditEventRepository),
+                authorizationService,
+                new com.complex.platform.gate.TerminalSwitchGuard(terminalDeviceRepository, new AuditEventService(auditEventRepository)),
+                new com.complex.platform.evidence.TraceabilityService(traceabilityRepository, authorizationService),
+                riskAlertService,
+                notifications,
+                null,
+                null,
+                null,
+                highValueDecisionService,
+                evidenceAttachmentValidator()
+        );
+        built.otpVerifier = lenientOtp();
+        built.pickupCodeWindowSeconds = () -> 20;
+        return built;
+    }
+
+    // R1：高价值作废 approve 后同品同量补存——新瓶 item/剩余量/到期日/持有人同原瓶、回指原瓶、库存同量出库、登记即结案。
+    @Test
+    void voidApprovedReplacementBottleKeepsItemQuantityAndExpiry() {
+        wireFinanceStub();
+        asMerchantA();
+        service.settlementPriceResolver = bottle -> Optional.of(60_000L);
+        InventoryItemRecord item = createHighValueItem("hv-remedy");
+        seedStock(item.id(), "store_1", 5);
+        Instant expireAt = Instant.now().plusSeconds(7 * 86400);
+        SavedBottleRecord bottle = storedBottle("hv-remedy", item, 2, expireAt);
+        service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-hv-remedy", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_MANAGER);
+        service.reviewHighValue(reviewId, new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                "review-hv-remedy", "approved", "confirmed"));
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("cancelled");
+        int before = inventoryRepository.findStockBalance(item.id(), "store_1").orElseThrow().availableQuantity();
+
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), replacement("remedy-hv", "store_1"));
+
+        assertThat(remedy.customerDeliveryStatus()).isEqualTo("closed");
+        assertThat(remedy.deliveredAt()).isNotNull();
+        assertThat(remedy.bearerType()).isEqualTo("original_merchant");
+        assertThat(remedy.bearerId()).isEqualTo("m_a");
+        SavedBottleRecord replacementBottle = inventoryRepository.savedBottleById(remedy.replacementSavedBottleId()).orElseThrow();
+        assertThat(replacementBottle.itemId()).isEqualTo(item.id());
+        assertThat(replacementBottle.remainingQuantity()).isEqualTo(2);
+        assertThat(replacementBottle.expireAt()).isEqualTo(expireAt);
+        assertThat(replacementBottle.customerId()).isEqualTo("customer_1");
+        assertThat(replacementBottle.customerPhoneHash()).isEqualTo(bottle.customerPhoneHash());
+        assertThat(replacementBottle.status()).isEqualTo("stored");
+        assertThat(replacementBottle.remedyOfSavedBottleId()).isEqualTo(bottle.id());
+        assertThat(inventoryRepository.findStockBalance(item.id(), "store_1").orElseThrow().availableQuantity()).isEqualTo(before - 2);
+        assertThat(inventoryRepository.stockMovements).anySatisfy(movement -> {
+            assertThat(movement.movementType()).isEqualTo("outbound");
+            assertThat(movement.businessId()).isEqualTo(remedy.id());
+            assertThat(movement.quantity()).isEqualTo(2);
+        });
+    }
+
+    // R1：补酒成本＝内部结算价×数量记 internal_accounting（counterparty=原门店）；无价不落行、不抛、仍结案。
+    @Test
+    void replacementPostsInternalAccountingLossAtSettlementPrice() {
+        wireFinanceStub();
+        asMerchantA();
+        service.settlementPriceResolver = bottle -> Optional.of(50_000L);
+        InventoryItemRecord item = createItem("rp-loss");
+        seedStock(item.id(), "store_1", 5);
+        SavedBottleRecord bottle = cancelledBottle("rp-loss", item, 2);
+
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), replacement("remedy-rp-loss", "store_1"));
+
+        assertThat(remedy.lossCostCent()).isEqualTo(100_000L);
+        assertThat(remedy.lossArApItemId()).isEqualTo("arap_loss_1");
+        assertThat(lossPosts).hasSize(1);
+        Object[] post = lossPosts.getFirst();
+        assertThat(post[0]).isEqualTo(remedy.id());
+        assertThat(post[1]).isEqualTo("m_a");
+        assertThat(post[2]).isEqualTo("m_a");
+        assertThat(post[3]).isEqualTo(100_000L);
+
+        service.settlementPriceResolver = bottleRecord -> Optional.empty();
+        SavedBottleRecord unpriced = cancelledBottle("rp-loss-2", item, 1);
+        SavedBottleRemedyRecord remedy2 = service.registerSavedBottleRemedy(unpriced.id(), replacement("remedy-rp-loss-2", "store_1"));
+        assertThat(remedy2.lossCostCent()).isNull();
+        assertThat(remedy2.lossArApItemId()).isNull();
+        assertThat(remedy2.customerDeliveryStatus()).isEqualTo("closed");
+        assertThat(lossPosts).hasSize(1);
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("bar.saved_bottle.remedy_loss_unpriced");
+    }
+
+    // R1：赔付须门店主管 + 财务两方审批后才能结案；审批人≠登记人；结案才记损失行。
+    @Test
+    void compensationRemedyClosesOnlyAfterBothApprovalsAndSettle() {
+        wireFinanceStub();
+        asMerchantA();
+        SavedBottleRecord bottle = cancelledBottle("comp", createItem("comp"), 1);
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), compensation("remedy-comp", 12_000L));
+        assertThat(remedy.customerDeliveryStatus()).isEqualTo("pending_approval");
+        assertThat(remedy.createdBy()).isEqualTo("usr_staff_a");
+
+        assertThatThrownBy(() -> service.approveSavedBottleRemedy(remedy.id(), action("appr-self", "supervisor", List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_REMEDY_SELF_APPROVAL");
+
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_MANAGER);
+        SavedBottleRemedyRecord supervised = service.approveSavedBottleRemedy(remedy.id(), action("appr-sup", "supervisor", List.of()));
+        assertThat(supervised.customerDeliveryStatus()).isEqualTo("pending_approval");
+        assertThat(supervised.supervisorApprovedBy()).isEqualTo("usr_mgr_a");
+        verify(authorizationService, org.mockito.Mockito.atLeastOnce()).requirePermission("inventory.high_value.review");
+        // 门店主管与财务两道审批不得由同一人完成（BSM L1072 ③「经门店主管和财务审批后支付」）。
+        assertThatThrownBy(() -> service.approveSavedBottleRemedy(remedy.id(), action("appr-same", "finance", List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_REMEDY_SAME_APPROVER");
+        assertThat(inventoryRepository.remedies.get(remedy.id()).customerDeliveryStatus()).isEqualTo("pending_approval");
+        assertThatThrownBy(() -> service.settleSavedBottleRemedy(remedy.id(), action("settle-early", null, List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_REMEDY_NOT_APPROVED");
+
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_FINANCE);
+        SavedBottleRemedyRecord approved = service.approveSavedBottleRemedy(remedy.id(), action("appr-fin", "finance", List.of()));
+        assertThat(approved.customerDeliveryStatus()).isEqualTo("approved");
+        verify(authorizationService, org.mockito.Mockito.atLeastOnce()).requirePermission("finance.ar_ap.manage");
+        assertThat(lossPosts).isEmpty();
+
+        SavedBottleRemedyRecord closed = service.settleSavedBottleRemedy(remedy.id(), action("settle", null, List.of("pay_voucher")));
+        assertThat(closed.customerDeliveryStatus()).isEqualTo("closed");
+        assertThat(closed.deliveredAt()).isNotNull();
+        assertThat(closed.deliveryEvidenceIds()).containsExactly("pay_voucher");
+        assertThat(closed.lossCostCent()).isEqualTo(12_000L);
+        assertThat(lossPosts).hasSize(1);
+        assertThat(lossPosts.getFirst()[3]).isEqualTo(12_000L);
+    }
+
+    @Test
+    void remedyRejectsWhenBottleNotCancelled() {
+        wireFinanceStub();
+        asMerchantA();
+        SavedBottleRecord stored = storedBottle("not-cancelled", createItem("not-cancelled"), 1, Instant.now().plusSeconds(86400));
+        assertThatThrownBy(() -> service.registerSavedBottleRemedy(stored.id(), compensation("remedy-nc", 1_000L)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_CANCELLED");
+
+        InventoryItemRecord hv = createHighValueItem("hv-frozen");
+        SavedBottleRecord frozen = storedBottle("hv-frozen", hv, 1, Instant.now().plusSeconds(86400));
+        service.cancelSavedBottle(frozen.id(), new SavedBottleCancelRequest(
+                "cancel-hv-frozen", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
+        assertThat(inventoryRepository.savedBottleById(frozen.id()).orElseThrow().status()).isEqualTo("disputed_frozen");
+        assertThatThrownBy(() -> service.registerSavedBottleRemedy(frozen.id(), compensation("remedy-frozen", 1_000L)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_NOT_CANCELLED");
+    }
+
+    @Test
+    void remedyRejectsCrossMerchant() {
+        wireFinanceStub();
+        asMerchantA();
+        SavedBottleRecord bottle = cancelledBottle("cross", createItem("cross"), 1);
+        when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
+        assertThatThrownBy(() -> service.registerSavedBottleRemedy(bottle.id(), compensation("remedy-cross", 1_000L)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+    }
+
+    // R2：交接只覆盖有效期内 stored 瓶；保管主体/领取地点/交接时间落瓶，到期日/状态/客户不动；已过期瓶未动。
+    @Test
+    void handoverMovesStoredBottlesToPlatformKeepingExpiryAndCustomer() {
+        asMerchantA();
+        InventoryItemRecord item = createItem("ho");
+        SavedBottleRecord fresh = storedBottle("ho-fresh", item, 1, Instant.now().plusSeconds(7 * 86400));
+        SavedBottleRecord expired = storedBottle("ho-expired", item, 1, Instant.now().minusSeconds(86400));
+        asPlatform();
+        wirePlatformEntity();
+
+        SavedBottleHandoverRecord handover = handoverIntact("ho-1", fresh);
+
+        assertThat(handover.platformEntityId()).isEqualTo("ent_platform");
+        assertThat(handover.pickupLocation()).isEqualTo("平台仓 A 区");
+        assertThat(handover.countedTotal()).isEqualTo(1);
+        assertThat(handover.receivedIntact()).isEqualTo(1);
+        assertThat(handover.items()).extracting(SavedBottleHandoverRecord.SavedBottleHandoverItemRecord::condition).containsExactly("intact");
+        SavedBottleRecord held = inventoryRepository.savedBottleById(fresh.id()).orElseThrow();
+        assertThat(held.custodianEntityId()).isEqualTo("ent_platform");
+        assertThat(held.pickupLocation()).isEqualTo("平台仓 A 区");
+        assertThat(held.handedOverAt()).isNotNull();
+        assertThat(held.handoverId()).isEqualTo(handover.id());
+        assertThat(held.expireAt()).isEqualTo(fresh.expireAt());
+        assertThat(held.status()).isEqualTo("stored");
+        assertThat(held.customerId()).isEqualTo("customer_1");
+        assertThat(held.customerPhoneHash()).isEqualTo(fresh.customerPhoneHash());
+        assertThat(inventoryRepository.savedBottleById(expired.id()).orElseThrow().custodianEntityId()).isNull();
+    }
+
+    @Test
+    void handoverRejectsMissingBottlesAndMerchantScopedActor() {
+        asMerchantA();
+        InventoryItemRecord item = createItem("ho-miss");
+        SavedBottleRecord first = storedBottle("ho-miss-1", item, 1, Instant.now().plusSeconds(86400));
+        SavedBottleRecord second = storedBottle("ho-miss-2", item, 1, Instant.now().plusSeconds(86400));
+        assertThatThrownBy(() -> handoverIntact("ho-miss-scope", first, second))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
+        asPlatform();
+        wirePlatformEntity();
+        assertThatThrownBy(() -> handoverIntact("ho-miss-incomplete", first))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining(second.id())
+                .extracting("code").isEqualTo("SAVED_BOTTLE_HANDOVER_INCOMPLETE");
+        assertThat(inventoryRepository.savedBottleById(first.id()).orElseThrow().custodianEntityId()).isNull();
+    }
+
+    // 2026-10-20 操作员裁决「按差额」：登记 500 实收 300 → 原瓶剩余量改为 300、仍由平台保管、客人照常取；
+    // 补存/损失/员工赔偿数量＝登记剩余量−实收量＝200。
+    @Test
+    void handoverShortByDifferenceKeepsReceivedPartAndRemediesShortfall() {
+        wireFinanceStub();
+        asMerchantA();
+        service.settlementPriceResolver = bottle -> Optional.of(100L);
+        InventoryItemRecord item = createItem("ho-short");
+        seedStock(item.id(), "store_1", 500);
+        SavedBottleRecord bottle = storedBottle("ho-short", item, 500, Instant.now().plusSeconds(7 * 86400));
+        asPlatform();
+        wirePlatformEntity();
+
+        SavedBottleHandoverRecord handover = service.handoverSavedBottlesToPlatform(
+                new com.complex.platform.inventory.dto.SavedBottleHandoverRequest("ho-short", null, "m_a", "平台仓 A 区",
+                        List.of("att_photo"), List.of("att_video"),
+                        List.of(Map.of("saved_bottle_id", bottle.id(), "received_quantity", 300, "condition", "short"))));
+
+        assertThat(handover.damagedOrShort()).isEqualTo(1);
+        assertThat(handover.items().getFirst().shortfallQuantity()).isEqualTo(200);
+        SavedBottleRecord held = inventoryRepository.savedBottleById(bottle.id()).orElseThrow();
+        assertThat(held.status()).isEqualTo("stored");
+        assertThat(held.remainingQuantity()).isEqualTo(300);
+        assertThat(held.custodianEntityId()).isEqualTo("ent_platform");
+        assertThat(held.expireAt()).isEqualTo(bottle.expireAt());
+        // 客人照常取（平台在指定领取地点办理）。
+        SavedBottleClaimRecord claim = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest("claim-ho-short", null, List.of(),
+                List.of(Map.of("quantity", 1)), null, "000000", "LBL-ho-short", "甲"));
+        assertThat(claim.status()).isEqualTo("picked_up");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().remainingQuantity()).isEqualTo(299);
+
+        // 补存按差额 200：新瓶 200、出库 200、经营损失 200×内部结算价，承担方＝原门店。
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), replacement("remedy-ho-short", "store_1"));
+        assertThat(remedy.bearerType()).isEqualTo("original_merchant");
+        assertThat(inventoryRepository.savedBottleById(remedy.replacementSavedBottleId()).orElseThrow().remainingQuantity()).isEqualTo(200);
+        assertThat(inventoryRepository.findStockBalance(item.id(), "store_1").orElseThrow().availableQuantity()).isEqualTo(300);
+        assertThat(remedy.lossCostCent()).isEqualTo(20_000L);
+        // 员工赔偿按差额 200×内部结算价。
+        SavedBottleRemedyRecord liable = service.assignSavedBottleRemedyStaffLiability(remedy.id(),
+                new SavedBottleRemedyActionRequest("ho-short-staff", null, null, "复核认定", List.of(), "usr_staff_x"));
+        assertThat(liable.recoveryAmountCent()).isEqualTo(20_000L);
+        // 原瓶实收部分不作废：仍 stored、剩余 299。
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("stored");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().remainingQuantity()).isEqualTo(299);
+    }
+
+    // 「按差额」：实收为 0 的照旧整瓶作废，补存数量＝全量。
+    @Test
+    void handoverShortWithNothingReceivedCancelsWholeBottle() {
+        wireFinanceStub();
+        asMerchantA();
+        service.settlementPriceResolver = bottle -> Optional.of(100L);
+        InventoryItemRecord item = createItem("ho-short0");
+        seedStock(item.id(), "store_1", 500);
+        SavedBottleRecord bottle = storedBottle("ho-short0", item, 500, Instant.now().plusSeconds(7 * 86400));
+        asPlatform();
+        wirePlatformEntity();
+
+        SavedBottleHandoverRecord handover = service.handoverSavedBottlesToPlatform(
+                new com.complex.platform.inventory.dto.SavedBottleHandoverRequest("ho-short0", null, "m_a", "平台仓 A 区",
+                        List.of("att_photo"), List.of("att_video"),
+                        List.of(Map.of("saved_bottle_id", bottle.id(), "received_quantity", 0, "condition", "short"))));
+
+        assertThat(handover.items().getFirst().shortfallQuantity()).isEqualTo(500);
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("cancelled");
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), replacement("remedy-ho-short0", "store_1"));
+        assertThat(inventoryRepository.savedBottleById(remedy.replacementSavedBottleId()).orElseThrow().remainingQuantity()).isEqualTo(500);
+        assertThat(remedy.lossCostCent()).isEqualTo(50_000L);
+        assertThat(inventoryRepository.findStockBalance(item.id(), "store_1").orElseThrow().availableQuantity()).isZero();
+    }
+
+    // R2/R3：接收时已毁损（高价值）→ 走双证据复核；approve 后登记补存/赔付，承担方＝原门店。
+    @Test
+    void handoverDamagedBottleBearsOriginalMerchant() {
+        wireFinanceStub();
+        asMerchantA();
+        InventoryItemRecord hv = createHighValueItem("ho-dmg");
+        SavedBottleRecord bottle = storedBottle("ho-dmg", hv, 1, Instant.now().plusSeconds(86400));
+        asPlatform();
+        wirePlatformEntity();
+
+        SavedBottleHandoverRecord handover = service.handoverSavedBottlesToPlatform(
+                new com.complex.platform.inventory.dto.SavedBottleHandoverRequest("ho-dmg", null, "m_a", "平台仓 A 区",
+                        List.of("att_photo"), List.of("att_video"),
+                        List.of(Map.of("saved_bottle_id", bottle.id(), "received_quantity", 0, "condition", "damaged"))));
+        assertThat(handover.damagedOrShort()).isEqualTo(1);
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("disputed_frozen");
+        String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
+        service.reviewHighValue(reviewId, new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+                "review-ho-dmg", "approved", "confirmed"));
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("cancelled");
+
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), compensation("remedy-ho-dmg", 30_000L));
+        assertThat(remedy.bearerType()).isEqualTo("original_merchant");
+        assertThat(remedy.bearerId()).isEqualTo("m_a");
+    }
+
+    // R2：交平台后原门店 scope 取酒 409；平台取酒照常核验且取酒流水记领取地点，到期日不变。
+    @Test
+    void claimAfterHandoverRejectsOriginalMerchantScopeAndAllowsPlatform() {
+        asMerchantA();
+        SavedBottleRecord bottle = storedBottle("ho-claim", createItem("ho-claim"), 2, Instant.now().plusSeconds(7 * 86400));
+        asPlatform();
+        wirePlatformEntity();
+        handoverIntact("ho-claim", bottle);
+
+        asMerchantA();
+        assertThatThrownBy(() -> service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest("claim-ho-a", null, List.of(),
+                List.of(Map.of("quantity", 1)), null, "000000", "LBL-ho-claim", "甲")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_HANDED_OVER");
+
+        asPlatform();
+        SavedBottleClaimRecord claim = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest("claim-ho-p", null, List.of(),
+                List.of(Map.of("quantity", 1)), null, "000000", "LBL-ho-claim", "甲"));
+        assertThat(claim.status()).isEqualTo("picked_up");
+        assertThat(claim.pickupLocation()).isEqualTo("平台仓 A 区");
+        SavedBottleRecord after = inventoryRepository.savedBottleById(bottle.id()).orElseThrow();
+        assertThat(after.remainingQuantity()).isEqualTo(1);
+        assertThat(after.expireAt()).isEqualTo(bottle.expireAt());
+        assertThat(after.custodianEntityId()).isEqualTo("ent_platform");
+    }
+
+    // 交平台后的门店闸逐入口：转让 / 发码 / 代办转存 / 人工例外发起与放酒由原门店账号 → 409 SAVED_BOTTLE_HANDED_OVER（BSM L867 / L1072 ④）；平台方照常。
+    @Test
+    void handedOverBottleRejectsOriginalMerchantOnTransferCodeRenewalAndManualPickup() {
+        seedFactoryRenewalPolicy();
+        inventoryRepository.barProjects.put("bar_1", "project_1");
+        inventoryRepository.manualPickupPolicies.put("project_1", new SavedBottleManualPickupPolicyRecord("project_1", 2, 3, 5, 1, 10));
+        inventoryRepository.validOrderCounts.put("customer_1", new int[] {0, 0, 5});
+        asMerchantA();
+        SavedBottleRecord bottle = storedBottle("ho-gate", createItem("ho-gate"), 2, Instant.now().plusSeconds(7 * 86400));
+        SavedBottleManualPickupRecord pickup = service.initiateManualPickup(bottle.id(), manualStep("ho-gate-mp1"));
+        when(authorizationService.currentActor()).thenReturn(new AccessActor("usr_sup_a", "sup_a", "staff", "org_a", "m_a", "active"));
+        service.reviewManualPickup(pickup.id(), manualStep("ho-gate-mp2"));
+        service.confirmManualPickupMarketing(pickup.id(), manualStep("ho-gate-mp3"));
+        asPlatform();
+        wirePlatformEntity();
+        handoverIntact("ho-gate", bottle);
+
+        asMerchantA();
+        assertThatThrownBy(() -> service.transferSavedBottle(bottle.id(), transferTo("ho-gate-tr", "乙", OTHER_PHONE, null, "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_HANDED_OVER");
+        assertThatThrownBy(() -> service.requestSavedBottleVerificationCode(bottle.id(), new SavedBottleVerificationCodeRequest("ho-gate-vc", "claim")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_HANDED_OVER");
+        assertThatThrownBy(() -> service.renewSavedBottle(bottle.id(), staffRenew("ho-gate-rn", "000000")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_HANDED_OVER");
+        assertThatThrownBy(() -> service.initiateManualPickup(bottle.id(), manualStep("ho-gate-mp4")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_HANDED_OVER");
+        assertThatThrownBy(() -> service.dispenseManualPickup(pickup.id(), new SavedBottleManualPickupDispenseRequest(
+                "ho-gate-mp5", null, List.of(), List.of(Map.of("quantity", 1)), true)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_HANDED_OVER");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().remainingQuantity()).isEqualTo(2);
+        assertThat(otpRequests).isEmpty();
+        assertThat(inventoryRepository.renewals).isEmpty();
+        // 平台方照常在指定领取地点办理放酒。
+        asPlatform();
+        assertThat(service.dispenseManualPickup(pickup.id(), new SavedBottleManualPickupDispenseRequest(
+                "ho-gate-mp6", null, List.of(), List.of(Map.of("quantity", 1)), true)).status()).isEqualTo("dispensed");
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().remainingQuantity()).isEqualTo(1);
+    }
+
+    // R2：退出前清点通知——stored 且未过期各通知一次（模板 exit_notice、幂等键 swexit:<id>），重放不重发。
+    @Test
+    void exitNoticeNotifiesEveryStoredBottleHolderOnce() {
+        com.complex.platform.notification.NotificationService notifications =
+                mock(com.complex.platform.notification.NotificationService.class);
+        service = withNotifications(notifications);
+        asMerchantA();
+        InventoryItemRecord item = createItem("exit");
+        SavedBottleRecord one = storedBottle("exit-1", item, 2, Instant.now().plusSeconds(86400));
+        SavedBottleRecord two = storedBottle("exit-2", item, 1, Instant.now().plusSeconds(86400));
+        storedBottle("exit-expired", item, 1, Instant.now().minusSeconds(86400));
+        org.mockito.Mockito.clearInvocations(notifications);
+
+        SavedBottleExitNoticeRequest request = new SavedBottleExitNoticeRequest("exit-notice-1", null, "m_a");
+        SavedBottleExitNoticeResult result = service.noticeSavedBottleExit(request);
+
+        assertThat(result.bottleCount()).isEqualTo(2);
+        assertThat(result.notifiedCount()).isEqualTo(2);
+        assertThat(result.quantityByItem()).containsEntry(item.id(), 3);
+        org.mockito.ArgumentCaptor<String> keys = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(notifications, org.mockito.Mockito.times(2)).notify(eq("stored_wine"), eq("exit_notice"), eq(HOLDER_PHONE),
+                eq("sms.stored_wine.exit_notice"), any(), keys.capture());
+        assertThat(keys.getAllValues()).containsExactlyInAnyOrder("swexit:" + one.id(), "swexit:" + two.id());
+
+        service.noticeSavedBottleExit(request);
+        verify(notifications, org.mockito.Mockito.times(2)).notify(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void handoverNotifiesPickupLocation() {
+        com.complex.platform.notification.NotificationService notifications =
+                mock(com.complex.platform.notification.NotificationService.class);
+        service = withNotifications(notifications);
+        asMerchantA();
+        SavedBottleRecord bottle = storedBottle("ho-notify", createItem("ho-notify"), 1, Instant.now().plusSeconds(86400));
+        asPlatform();
+        wirePlatformEntity();
+        org.mockito.Mockito.clearInvocations(notifications);
+
+        handoverIntact("ho-notify", bottle);
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> params = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(notifications).notify(eq("stored_wine"), eq("handover"), eq(HOLDER_PHONE), eq("sms.stored_wine.handover"),
+                params.capture(), eq("swhandover:" + bottle.id()));
+        assertThat(params.getValue()).containsEntry("pickup_location", "平台仓 A 区");
+        assertThat(params.getValue()).containsKey("expireAt");
+    }
+
+    // R3：对客结案不等追收；对客 closed 后仍可登记员工赔偿收回，且对客状态不变。
+    @Test
+    void customerCloseDoesNotWaitForRecovery() {
+        wireFinanceStub();
+        asMerchantA();
+        SavedBottleRecord bottle = cancelledBottle("rec", createItem("rec"), 1);
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), compensation("remedy-rec", 8_000L));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_MANAGER);
+        service.approveSavedBottleRemedy(remedy.id(), action("rec-sup", "supervisor", List.of()));
+        when(authorizationService.currentActor()).thenReturn(MERCHANT_A_FINANCE);
+        service.approveSavedBottleRemedy(remedy.id(), action("rec-fin", "finance", List.of()));
+        SavedBottleRemedyRecord liable = service.assignSavedBottleRemedyStaffLiability(remedy.id(),
+                new SavedBottleRemedyActionRequest("rec-staff", null, null, "复核认定", List.of("att_rev"), "usr_staff_x"));
+        assertThat(liable.recoveryPartyType()).isEqualTo("staff");
+        assertThat(liable.recoveryStatus()).isEqualTo("pending");
+        assertThat(liable.customerDeliveryStatus()).isEqualTo("approved");
+
+        SavedBottleRemedyRecord closed = service.settleSavedBottleRemedy(remedy.id(), action("rec-settle", null, List.of("pay")));
+        assertThat(closed.customerDeliveryStatus()).isEqualTo("closed");
+        assertThat(closed.recoveryStatus()).isEqualTo("pending");
+
+        SavedBottleRemedyRecord recovered = service.settleSavedBottleRemedyRecovery(remedy.id(), action("rec-recovered", null, List.of("receipt")));
+        assertThat(recovered.recoveryStatus()).isEqualTo("recovered");
+        assertThat(recovered.recoveryEvidenceIds()).containsExactly("att_rev", "receipt");
+        assertThat(recovered.customerDeliveryStatus()).isEqualTo("closed");
+        assertThat(recovered.deliveredAt()).isEqualTo(closed.deliveredAt());
+    }
+
+    // R3：交平台后、接收时已毁损 → 原门店承担；平台垫付审批 → 对客结案时向原门店挂追收应收（幂等不双挂）；应收结清回写 recovered。
+    @Test
+    void platformAdvanceCreatesReceivableFromOriginalMerchant() {
+        wireFinanceStub();
+        asMerchantA();
+        SavedBottleRecord bottle = storedBottle("adv", createItem("adv"), 1, Instant.now().plusSeconds(86400));
+        asPlatform();
+        wirePlatformEntity();
+        service.handoverSavedBottlesToPlatform(new com.complex.platform.inventory.dto.SavedBottleHandoverRequest(
+                "ho-adv", null, "m_a", "平台仓 A 区", List.of(), List.of(),
+                List.of(Map.of("saved_bottle_id", bottle.id(), "received_quantity", 0, "condition", "short"))));
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("cancelled");
+
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), compensation("remedy-adv", 20_000L));
+        assertThat(remedy.bearerType()).isEqualTo("original_merchant");
+        SavedBottleRemedyRecord advanced = service.advanceSavedBottleRemedyByPlatform(remedy.id(), action("adv-ok", null, List.of()));
+        assertThat(advanced.advanceApprovedAt()).isNotNull();
+        assertThat(advanced.customerDeliveryStatus()).isEqualTo("pending_approval");
+        when(authorizationService.currentActor()).thenReturn(new AccessActor("usr_plat_mgr", "plat_mgr", "platform_admin", "org_platform", null, "active"));
+        service.approveSavedBottleRemedy(remedy.id(), action("adv-sup", "supervisor", List.of()));
+        when(authorizationService.currentActor()).thenReturn(new AccessActor("usr_plat_fin", "plat_fin", "platform_admin", "org_platform", null, "active"));
+        service.approveSavedBottleRemedy(remedy.id(), action("adv-fin", "finance", List.of()));
+
+        SavedBottleRemedyRecord closed = service.settleSavedBottleRemedy(remedy.id(), action("adv-settle", null, List.of("pay")));
+        assertThat(closed.customerDeliveryStatus()).isEqualTo("closed");
+        assertThat(closed.recoveryPartyType()).isEqualTo("original_merchant");
+        assertThat(closed.recoveryPartyId()).isEqualTo("m_a");
+        assertThat(closed.recoveryStatus()).isEqualTo("pending");
+        assertThat(closed.recoveryAmountCent()).isEqualTo(20_000L);
+        assertThat(closed.recoveryArApItemId()).isEqualTo("arap_rec_1");
+        assertThat(recoveryPosts).hasSize(1);
+        assertThat(recoveryPosts.getFirst()[1]).isEqualTo("m_a");
+        assertThat(recoveryPosts.getFirst()[2]).isEqualTo(20_000L);
+        assertThat(lossPosts.getFirst()[1]).isEqualTo("m_a");
+
+        service.settleSavedBottleRemedy(remedy.id(), action("adv-settle", null, List.of("pay")));
+        assertThat(recoveryPosts).hasSize(1);
+
+        service.onRecoverySettled(arap("arap_rec_1", "receivable", "m_a", "saved_bottle_remedy_recovery", remedy.id(), 20_000L, "m_a"));
+        SavedBottleRemedyRecord recovered = inventoryRepository.findSavedBottleRemedyByIdForUpdate(remedy.id()).orElseThrow();
+        assertThat(recovered.recoveryStatus()).isEqualTo("recovered");
+        assertThat(recovered.customerDeliveryStatus()).isEqualTo("closed");
+    }
+
+    @Test
+    void postHandoverDamageBearsPlatformAndNoRecovery() {
+        wireFinanceStub();
+        asMerchantA();
+        SavedBottleRecord bottle = storedBottle("plat-dmg", createItem("plat-dmg"), 1, Instant.now().plusSeconds(86400));
+        asPlatform();
+        wirePlatformEntity();
+        handoverIntact("ho-plat-dmg", bottle);
+        SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-plat-dmg", null, List.of(), "平台保管期间破损", List.of(), List.of()));
+        assertThat(cancelled.status()).isEqualTo("cancelled");
+
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), compensation("remedy-plat-dmg", 5_000L));
+        assertThat(remedy.bearerType()).isEqualTo("platform_company");
+        assertThat(remedy.bearerId()).isEqualTo("ent_platform");
+        assertThat(remedy.recoveryPartyType()).isEqualTo("none");
+        assertThatThrownBy(() -> service.advanceSavedBottleRemedyByPlatform(remedy.id(), action("adv-plat", null, List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_REMEDY_NOT_ADVANCEABLE");
+    }
+
+    @Test
+    void staffLiabilityUsesSettlementPriceNotRequestAmount() {
+        wireFinanceStub();
+        asMerchantA();
+        service.settlementPriceResolver = bottle -> Optional.of(50_000L);
+        InventoryItemRecord item = createItem("staff-price");
+        seedStock(item.id(), "store_1", 5);
+        SavedBottleRecord bottle = cancelledBottle("staff-price", item, 2);
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), replacement("remedy-staff-price", "store_1"));
+
+        SavedBottleRemedyRecord liable = service.assignSavedBottleRemedyStaffLiability(remedy.id(),
+                new SavedBottleRemedyActionRequest("staff-price-assign", "员工自报 1 元", null, "复核认定", List.of(), "usr_staff_x"));
+
+        assertThat(liable.recoveryPartyType()).isEqualTo("staff");
+        assertThat(liable.recoveryPartyId()).isEqualTo("usr_staff_x");
+        assertThat(liable.recoveryAmountCent()).isEqualTo(100_000L);
+        assertThat(liable.recoveryStatus()).isEqualTo("pending");
+        assertThat(liable.customerDeliveryStatus()).isEqualTo("closed");
+    }
+
     private static final class InMemoryInventoryRepository implements InventoryRepository {
         private final Map<String, InventoryItemRecord> inventoryItems = new LinkedHashMap<>();
         private final Map<String, InventorySupplierRecord> suppliers = new LinkedHashMap<>();
@@ -2339,6 +3630,173 @@ class InventoryServiceTests {
             savedBottleTransfers.removeIf(t -> t.id().equals(transfer.id()));
             savedBottleTransfers.add(transfer);
             return transfer;
+        }
+
+        // ===== FS-016 =====
+        final Map<String, SavedBottlePickupCodeRecord> pickupCodes = new LinkedHashMap<>();
+        final Map<String, SavedBottleManualPickupRecord> manualPickups = new LinkedHashMap<>();
+        final Map<String, String> barProjects = new HashMap<>();
+        final Map<String, SavedBottleManualPickupPolicyRecord> manualPickupPolicies = new HashMap<>();
+        /** customerId -> {近1月, 近3月, 累计} 有效卡座订单数。 */
+        final Map<String, int[]> validOrderCounts = new HashMap<>();
+        final Map<String, String> attributedMarketers = new HashMap<>();
+        /** customerId -> 已离职的归属营销 user_id（attributedMarketers 没有时才查）。 */
+        final Map<String, String> departedMarketers = new HashMap<>();
+        final Map<String, String> directSuperiors = new HashMap<>();
+        /** 业务参数留痕：manual_pickup:<project> / renewal:<key>|<scope> -> updated_by。 */
+        final Map<String, String> policyUpdatedBy = new HashMap<>();
+
+        @Override
+        public SavedBottlePickupCodeRecord saveSavedBottlePickupCode(SavedBottlePickupCodeRecord code) {
+            pickupCodes.put(code.id(), code);
+            return code;
+        }
+
+        @Override
+        public Optional<SavedBottlePickupCodeRecord> findActiveSavedBottlePickupCode(String savedBottleId) {
+            return pickupCodes.values().stream()
+                    .filter(c -> c.savedBottleId().equals(savedBottleId) && "active".equals(c.status()))
+                    .max(java.util.Comparator.comparing(SavedBottlePickupCodeRecord::issuedAt));
+        }
+
+        @Override
+        public void revokeActiveSavedBottlePickupCodes(String savedBottleId) {
+            for (SavedBottlePickupCodeRecord c : new ArrayList<>(pickupCodes.values())) {
+                if (c.savedBottleId().equals(savedBottleId) && "active".equals(c.status())) {
+                    pickupCodes.put(c.id(), c.withStatus("revoked", null));
+                }
+            }
+        }
+
+        @Override
+        public SavedBottleManualPickupRecord saveSavedBottleManualPickup(SavedBottleManualPickupRecord request) {
+            manualPickups.put(request.id(), request);
+            return request;
+        }
+
+        @Override
+        public Optional<SavedBottleManualPickupRecord> findSavedBottleManualPickupByIdForUpdate(String id) {
+            return Optional.ofNullable(manualPickups.get(id));
+        }
+
+        @Override
+        public Optional<String> findBarProjectId(String barId) {
+            return Optional.ofNullable(barProjects.get(barId));
+        }
+
+        @Override
+        public Optional<SavedBottleManualPickupPolicyRecord> findSavedBottleManualPickupPolicy(String projectId) {
+            return Optional.ofNullable(manualPickupPolicies.get(projectId));
+        }
+
+        @Override
+        public int countValidTableOrders(String customerId, String projectId, Instant since) {
+            int[] counts = validOrderCounts.getOrDefault(customerId, new int[] {0, 0, 0});
+            if (since == null) {
+                return counts[2];
+            }
+            return since.isAfter(Instant.now().minusSeconds(60L * 86400)) ? counts[0] : counts[1];
+        }
+
+        @Override
+        public Optional<AttributedMarketer> findAttributedMarketer(String customerId, String projectId) {
+            if (attributedMarketers.containsKey(customerId)) {
+                return Optional.of(new AttributedMarketer(attributedMarketers.get(customerId), true));
+            }
+            return Optional.ofNullable(departedMarketers.get(customerId)).map(id -> new AttributedMarketer(id, false));
+        }
+
+        @Override
+        public Optional<String> findDirectSuperior(String userId) {
+            return Optional.ofNullable(directSuperiors.get(userId));
+        }
+
+        @Override
+        public void saveSavedBottleManualPickupPolicy(SavedBottleManualPickupPolicyRecord policy, String actorId) {
+            manualPickupPolicies.put(policy.projectId(), policy);
+            policyUpdatedBy.put("manual_pickup:" + policy.projectId(), actorId);
+        }
+
+        // ===== FS-017 =====
+        final Map<String, SavedBottleRemedyRecord> remedies = new LinkedHashMap<>();
+        final Map<String, SavedBottleHandoverRecord> handovers = new LinkedHashMap<>();
+
+        @Override
+        public SavedBottleRemedyRecord saveSavedBottleRemedy(SavedBottleRemedyRecord remedy) {
+            remedies.put(remedy.id(), remedy);
+            return remedy;
+        }
+
+        @Override
+        public Optional<SavedBottleRemedyRecord> findSavedBottleRemedyByIdForUpdate(String id) {
+            return Optional.ofNullable(remedies.get(id));
+        }
+
+        @Override
+        public List<SavedBottleRemedyRecord> listSavedBottleRemedies(String savedBottleId) {
+            return remedies.values().stream().filter(r -> r.savedBottleId().equals(savedBottleId)).toList();
+        }
+
+        @Override
+        public Optional<SavedBottleRemedyRecord> findSavedBottleRemedyByRecoveryArApItemId(String arApItemId) {
+            return remedies.values().stream().filter(r -> arApItemId.equals(r.recoveryArApItemId())).findFirst();
+        }
+
+        @Override
+        public SavedBottleHandoverRecord saveSavedBottleHandover(SavedBottleHandoverRecord handover) {
+            handovers.put(handover.id(), handover);
+            return handover;
+        }
+
+        @Override
+        public List<SavedBottleHandoverRecord> listSavedBottleHandovers() {
+            return new ArrayList<>(handovers.values());
+        }
+
+        @Override
+        public Optional<SavedBottleHandoverRecord.SavedBottleHandoverItemRecord> findSavedBottleHandoverItem(
+                String handoverId, String savedBottleId) {
+            SavedBottleHandoverRecord handover = handovers.get(handoverId);
+            if (handover == null) {
+                return Optional.empty();
+            }
+            return handover.items().stream().filter(i -> i.savedBottleId().equals(savedBottleId)).findFirst();
+        }
+
+        // ===== FS-025 =====
+        final Map<String, SavedBottleRenewalRecord> renewals = new LinkedHashMap<>();
+        final Map<String, SavedBottleRenewalPolicyRecord> renewalPolicies = new HashMap<>();
+
+        @Override
+        public SavedBottleRenewalRecord saveSavedBottleRenewal(SavedBottleRenewalRecord renewal) {
+            renewals.put(renewal.id(), renewal);
+            return renewal;
+        }
+
+        @Override
+        public Optional<SavedBottleRenewalRecord> findSavedBottleRenewalByIdForUpdate(String id) {
+            return Optional.ofNullable(renewals.get(id));
+        }
+
+        @Override
+        public List<SavedBottleRenewalRecord> listSavedBottleRenewals(String savedBottleId) {
+            return renewals.values().stream().filter(r -> r.savedBottleId().equals(savedBottleId)).toList();
+        }
+
+        @Override
+        public Optional<SavedBottleRenewalPolicyRecord> findSavedBottleRenewalPolicy(String policyKey, String scopeId) {
+            return Optional.ofNullable(renewalPolicies.get(policyKey + "|" + scopeId));
+        }
+
+        @Override
+        public SavedBottleRenewalPolicyRecord saveSavedBottleRenewalPolicy(SavedBottleRenewalPolicyRecord policy, String actorId) {
+            String key = policy.policyKey() + "|" + policy.scopeId();
+            int version = renewalPolicies.containsKey(key) ? renewalPolicies.get(key).version() + 1 : 1;
+            SavedBottleRenewalPolicyRecord saved = new SavedBottleRenewalPolicyRecord(policy.policyKey(), policy.scopeId(),
+                    policy.numericValue(), policy.minValue(), policy.maxValue(), version);
+            renewalPolicies.put(key, saved);
+            policyUpdatedBy.put("renewal:" + key, actorId);
+            return saved;
         }
 
         @Override

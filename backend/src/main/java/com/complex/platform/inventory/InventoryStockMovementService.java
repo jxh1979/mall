@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.02
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -25,8 +27,12 @@ final class InventoryStockMovementService {
 
     // P1-2: movementType 白名单，明确拒绝 "inbound" 绕过入库审计
     // R3 P0-7: 新增 redeem_consume（积分兑换扣减），替代此前误用的 "loss" 调整
+    // FS-018 R1: 报损族（damage/loss/waste）移出直接扣减白名单——该族由 Controller 转入 createStockAdjustment
+    //（高价值判定 + 照片/视频双证据 + 主管复核批准后才扣库存），服务层不再有先扣库存的直接路径。
     private static final Set<String> ALLOWED_TYPED_MOVEMENT_TYPES =
-            Set.of("outbound", "damage", "waste", "loss", "redeem_consume");
+            Set.of("outbound", "redeem_consume");
+
+    static final Set<String> TYPED_DAMAGE_FAMILY = Set.of("damage", "loss", "waste");
 
     // R5 T6-4：报损/盘点差异高价值判定——调整类型到复核 subject_type 的映射。
     // 报损族（loss/damage/waste）→ damage_report；盘点差异（count_correction）→ stock_variance；

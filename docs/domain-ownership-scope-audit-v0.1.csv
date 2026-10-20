@@ -254,6 +254,7 @@ inventory_transfer_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex
 inventory_transfer_order_events,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_transfer_orders,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_transfer_receipts,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+inventory_transfer_returns,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 inventory_variance,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 invoice_subject_rules,direct,project_id,project_id column on invoice_subject_rules,ready for project/merchant scoped query enforcement,V0.07,covered
 issued_entitlements,direct,venue_id,venue_id column on issued_entitlements,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -324,6 +325,14 @@ role_viewable_project_holds,inherited,user_id/role_id,user_id/role_id -> access_
 role_viewable_projects,inherited,role_id,role_id -> roles -> organization scope; viewable_id 是勾选的可查看目标，不是行归属,must join through scope path before multi-complex rollout,V0.07,covered
 roles,direct,organization_id,organization_id column on roles,ready for project/merchant scoped query enforcement,V0.07,covered
 saved_bottle_claims,inherited,saved_bottle_id,saved_bottle_id -> saved_bottles -> merchant/customer scope,must join through scope path before multi-complex rollout,V0.07,covered
+saved_bottle_handover_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+saved_bottle_handovers,direct,project_id,project_id column on saved_bottle_handovers,ready for project/merchant scoped query enforcement,V0.07,covered
+saved_bottle_manual_pickup_policy,direct,project_id,project_id column on saved_bottle_manual_pickup_policy,ready for project/merchant scoped query enforcement,V0.07,covered
+saved_bottle_manual_pickups,direct,project_id,project_id column on saved_bottle_manual_pickups,ready for project/merchant scoped query enforcement,V0.07,covered
+saved_bottle_pickup_codes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+saved_bottle_remedies,direct,project_id,project_id column on saved_bottle_remedies,ready for project/merchant scoped query enforcement,V0.07,covered
+saved_bottle_renewal_policy,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+saved_bottle_renewals,direct,project_id,project_id column on saved_bottle_renewals,ready for project/merchant scoped query enforcement,V0.07,covered
 saved_bottle_transfers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 saved_bottles,direct,merchant_id,merchant_id column on saved_bottles,ready for project/merchant scoped query enforcement,V0.07,covered
 service_catalog_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered

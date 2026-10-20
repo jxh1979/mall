@@ -1,6 +1,6 @@
 package com.complex.platform.inventory.dto;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 
@@ -26,8 +26,10 @@ public final class TransferFlowRequests {
     /**
      * 差异处理登记（须附交接证据，财务复核后生效）：return_accepted 退回验收、loss 损失（responsibleParty 为 supplier/carrier/receiver）、
      * reship 补发（traceCodes 为补发货随货溯源码）针对 lineId 的 quantity 件；payment_adjustment 为货款调减 amountCent 分。
+     * FS-019 借用物无法归还登记（POST /unreturnable）复用本体：lineId 的 quantity 件（traceCodes 为其中的码）、reason 原因、
+     * amountCent 赔偿（空＝数量×建单锁定内部结算价）、disposalNote 实物处置方式、evidenceAttachmentIds 证据。
      */
     public record Disposition(String idempotencyKey, String dispositionType, String lineId, Integer quantity, String responsibleParty,
-            Long amountCent, List<String> traceCodes, String reason, List<String> evidenceAttachmentIds) {
+            Long amountCent, List<String> traceCodes, String reason, List<String> evidenceAttachmentIds, String disposalNote) {
     }
 }

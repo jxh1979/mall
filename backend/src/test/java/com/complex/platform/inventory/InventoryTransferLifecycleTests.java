@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,6 +23,8 @@ import com.complex.platform.evidence.TraceabilityService;
 import com.complex.platform.finance.FinanceRepository;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import com.complex.platform.inventory.dto.ReceiveTransferRequest;
+import com.complex.platform.inventory.dto.ReturnTransferRequest;
+import com.complex.platform.inventory.dto.ReturnTransferRequest.ReturnTransferLineRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -35,10 +37,11 @@ import org.junit.jupiter.api.Test;
 
 /**
  * AUD-002/003：借调归还生命周期（return/cancel）单测。
- * 借用型(lending+borrow)收货后归还→溯源码归属翻回出让方+状态 returned；
+ * FS-019（BSM L1201「「借」只转移保管责任、不转移所有权」「不得伪造归还扫码或实际归还时间」）：借用型(lending+borrow)收货只改保管主体、
+ * 所有权始终是借出方；归还须借出方按行扫码/数量登记，保管主体翻回借出方、全部数量归还才 returned；
  * 已发货的单不能直接取消（FS-011：须实际退回验收或经复核完成损失处理），只有新建的借调单可直接取消。
  *
- * <p>InventoryRepository 用 Mockito mock + 有状态 Answer(orders/lines/traceOwners 三张内存表),
+ * <p>InventoryRepository 用 Mockito mock + 有状态 Answer(orders/lines/traceOwners/custodians 四张内存表),
  * 只桩流转/溯源相关方法,避免手写上百个接口方法。
  */
 class InventoryTransferLifecycleTests {
@@ -46,6 +49,7 @@ class InventoryTransferLifecycleTests {
     private final Map<String, InventoryTransferOrderRecord> orders = new LinkedHashMap<>();
     private final Map<String, List<InventoryTransferLineRecord>> lines = new LinkedHashMap<>();
     private final Map<String, String> traceOwners = new LinkedHashMap<>();
+    private final Map<String, String> custodians = new LinkedHashMap<>();
 
     private InventoryRepository repository;
     private FinanceRepository financeRepository;
@@ -56,6 +60,7 @@ class InventoryTransferLifecycleTests {
         orders.clear();
         lines.clear();
         traceOwners.clear();
+        custodians.clear();
         repository = mock(InventoryRepository.class);
         when(repository.findTransferOrderById(anyString()))
                 .thenAnswer(inv -> Optional.ofNullable(orders.get(inv.<String>getArgument(0))));
@@ -82,9 +87,24 @@ class InventoryTransferLifecycleTests {
                     traceOwners.put(code, newOwnerId);
                     return 1;
                 });
+        // FS-019：保管主体 CAS——所有权须为 ownerId，只改保管人，所有权不动。
+        when(repository.updateTraceCodeCustodianIfOwnedBy(anyString(), anyString(), anyString(), anyString(), any(), any()))
+                .thenAnswer(inv -> {
+                    String code = inv.getArgument(0);
+                    if (!traceOwners.containsKey(code) || !Objects.equals(traceOwners.get(code), inv.<String>getArgument(1))) {
+                        return 0;
+                    }
+                    custodians.put(code, inv.getArgument(3));
+                    return 1;
+                });
+        when(repository.lendingFacts(anyString())).thenReturn(InventoryLendingFacts.EMPTY);
 
         financeRepository = mock(FinanceRepository.class);
         AuthorizationService authorizationService = mock(AuthorizationService.class);
+        // 归还由借出方 m_a 的商户账号登记。
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentActor()).thenReturn(new com.complex.platform.access.AccessActor(
+                "usr_lender", "usr_lender", "staff", "prj_a", "m_a", "active"));
         service = new InventoryService(
                 repository,
                 new IdempotencyService(new FakeIdempotencyRepository(), new ObjectMapper()),
@@ -96,23 +116,60 @@ class InventoryTransferLifecycleTests {
                 null,
                 null,
                 financeRepository, null, null, null);
+        service.transferFlow = mock(InventoryTransferFlowService.class);
     }
 
+    // FS-019 R2（BSM L1201「实际归还时间取借出方收货扫码的时刻」）：借出方扫齐两码归还 → 保管主体翻回 m_a、所有权始终 m_a、置 returned。
     @Test
-    void returnBorrowedOrderFlipsOwnershipBackToLenderAndMarksReturned() {
-        // A(出让方 m_a) 借给 B(借入方 m_b)，收货时归属已翻到 m_b。归还应翻回 m_a 并置 returned。
+    void returnBorrowedOrderFlipsCustodyBackToLenderAndMarksReturned() {
         seedOrder(order("to_borrow", "lending", "borrow", "m_a", "m_b", "received"));
         seedLine("to_borrow", List.of("TRACE-1", "TRACE-2"));
-        traceOwners.put("TRACE-1", "m_b");
-        traceOwners.put("TRACE-2", "m_b");
+        traceOwners.put("TRACE-1", "m_a");
+        traceOwners.put("TRACE-2", "m_a");
+        custodians.put("TRACE-1", "m_b");
+        custodians.put("TRACE-2", "m_b");
 
-        InventoryTransferOrderRecord returned = service.returnTransferOrder(
-                "to_borrow", new ReceiveTransferRequest("idem-return-1", null, null));
+        InventoryTransferOrderRecord returned = service.returnTransferOrder("to_borrow", new ReturnTransferRequest("idem-return-1", null,
+                List.of(new ReturnTransferLineRequest("to_borrow_l0", 2, List.of("TRACE-1", "TRACE-2")))));
 
         assertThat(returned.status()).isEqualTo("returned");
+        assertThat(custodians.get("TRACE-1")).isEqualTo("m_a");
+        assertThat(custodians.get("TRACE-2")).isEqualTo("m_a");
         assertThat(traceOwners.get("TRACE-1")).isEqualTo("m_a");
         assertThat(traceOwners.get("TRACE-2")).isEqualTo("m_a");
+        verify(repository, never()).updateTraceCodeOwnerIfExists(anyString(), anyString(), anyString(), anyString(), any());
         verify(financeRepository, never()).updateArApItemLedger(any());
+    }
+
+    // FS-019 R2（BSM L1201「不得伪造归还扫码或实际归还时间」）：不带扫码/数量的归还请求被拒，单据不动。
+    @Test
+    void returnWithoutScannedLinesIsRejected() {
+        seedOrder(order("to_borrow_noscan", "lending", "borrow", "m_a", "m_b", "received"));
+        seedLine("to_borrow_noscan", List.of("TRACE-9"));
+        traceOwners.put("TRACE-9", "m_a");
+        custodians.put("TRACE-9", "m_b");
+
+        assertThatThrownBy(() -> service.returnTransferOrder("to_borrow_noscan", new ReturnTransferRequest("idem-return-noscan", null, null)))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("TRANSFER_RETURN_REQUIRES_SCAN"));
+        assertThat(orders.get("to_borrow_noscan").status()).isEqualTo("received");
+        assertThat(custodians.get("TRACE-9")).isEqualTo("m_b");
+    }
+
+    // FS-019 R1（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用收货只改保管主体。
+    @Test
+    void receiveBorrowKeepsOwnerAndSetsCustodian() {
+        seedOrder(order("to_borrow_recv", "lending", "borrow", "m_a", "m_b", "shipped"));
+        seedLine("to_borrow_recv", List.of("TRACE-5"));
+        traceOwners.put("TRACE-5", "m_a");
+
+        InventoryTransferOrderRecord received = service.receiveTransferOrder("to_borrow_recv",
+                new ReceiveTransferRequest("idem-recv-borrow", List.of("TRACE-5"), null));
+
+        assertThat(received.status()).isEqualTo("received");
+        assertThat(traceOwners.get("TRACE-5")).isEqualTo("m_a");
+        assertThat(custodians.get("TRACE-5")).isEqualTo("m_b");
+        verify(repository, never()).updateTraceCodeOwnerIfExists(anyString(), anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -120,7 +177,7 @@ class InventoryTransferLifecycleTests {
         seedOrder(order("to_supply", "supply", null, "supply_1", "m_b", "received"));
 
         assertThatThrownBy(() -> service.returnTransferOrder(
-                "to_supply", new ReceiveTransferRequest("idem-return-2", null, null)))
+                "to_supply", new ReturnTransferRequest("idem-return-2", null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("TRANSFER_NOT_RETURNABLE"));
     }
@@ -130,7 +187,7 @@ class InventoryTransferLifecycleTests {
         seedOrder(order("to_borrow2", "lending", "borrow", "m_a", "m_b", "shipped"));
 
         assertThatThrownBy(() -> service.returnTransferOrder(
-                "to_borrow2", new ReceiveTransferRequest("idem-return-3", null, null)))
+                "to_borrow2", new ReturnTransferRequest("idem-return-3", null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("TRANSFER_ORDER_NOT_RECEIVED"));
     }
