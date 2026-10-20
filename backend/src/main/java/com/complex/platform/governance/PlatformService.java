@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -390,6 +390,41 @@ public class PlatformService {
                         throw ApiException.conflict("MERCHANT_PROJECT_ALREADY_ASSIGNED", "商户已有明确项目归属，不能迁移");
                     }
                     return findMerchant(id);
+                });
+    }
+
+    /** 第十批 TK-27（BSM L1058）：读酒吧（商户）待清台提醒时限；未配置返回出厂 15。 */
+    public MerchantPendingClearAlertRecord getPendingClearAlert(String merchantId) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        requireMerchant(id);
+        MerchantPendingClearAlertRecord result = repository.findPendingClearAlert(id);
+        auditEventService.recordSuccess("merchant.viewed", "merchant.profile.view", "merchant", id, null, null,
+                Map.of("entry", "/api/v1/platform/merchants/{merchant_id}/pending-clear-alert"));
+        return result;
+    }
+
+    /**
+     * 第十批 TK-27（BSM L1058「业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限」；按仓库「值与上下限同配」范式，
+     * 同 StoredValueService.configureBonusPolicy）：值、下限、上限三者同填且值在闭区间内，否则 400；不另设硬上下限。
+     */
+    public MerchantPendingClearAlertRecord configurePendingClearAlert(String merchantId,
+                                                                      com.complex.platform.governance.dto.MerchantPendingClearAlertRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        return executeWrite("configurePendingClearAlert:" + id, request == null ? null : request.idempotencyKey(),
+                request, MerchantPendingClearAlertRecord.class, "merchant.pending_clear_alert_configured",
+                "merchant.pending_clear_alert_config_failed", "merchant.profile.manage", "merchant", () -> {
+                    requireMerchant(id);
+                    Integer value = request == null ? null : request.valueMinutes();
+                    Integer min = request == null ? null : request.minMinutes();
+                    Integer max = request == null ? null : request.maxMinutes();
+                    if (value == null || min == null || max == null || min < 0 || min > value || value > max) {
+                        throw ApiException.badRequest("VALIDATION_FAILED",
+                                "须同时填写待清台提醒时限及其上下限（分钟，不小于 0），时限须在上下限内");
+                    }
+                    repository.savePendingClearAlert(id, value, min, max);
+                    return repository.findPendingClearAlert(id);
                 });
     }
 
@@ -1250,6 +1285,9 @@ public class PlatformService {
         }
         if (value instanceof MerchantRecord record) {
             return record.id();
+        }
+        if (value instanceof MerchantPendingClearAlertRecord record) {
+            return record.merchantId();
         }
         if (value instanceof ProjectRecord record) {
             return record.id();

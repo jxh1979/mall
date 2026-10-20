@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.util.List;
 
@@ -25,13 +27,15 @@ public record BarOrderView(
         Instant updatedAt,
         String orderType,
         Instant paidAt,
-        List<BarBillSummary> bills
+        List<BarBillSummary> bills,
+        // 第十批 TK-26-R2（BSM L1025「分别标注已上菜与未上菜」）：明细随单带出，后台按明细勾选送达。
+        List<BarOrderItemRecord> items
 ) {
-    static BarOrderView of(BarOrderRecord order, List<BarBillSummary> bills) {
+    static BarOrderView of(BarOrderRecord order, List<BarBillSummary> bills, List<BarOrderItemRecord> items) {
         return new BarOrderView(
                 order.id(), order.barId(), order.merchantId(), order.tableId(), order.reservationId(),
                 order.customerId(), order.orderSource(), order.status(), order.totalAmountCent(), order.currency(),
                 order.createdTerminal(), order.deviceId(), order.salesStaffId(), order.createdAt(), order.updatedAt(),
-                order.orderType(), order.paidAt(), bills);
+                order.orderType(), order.paidAt(), bills, items);
     }
 }

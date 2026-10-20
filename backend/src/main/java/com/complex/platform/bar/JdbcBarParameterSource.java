@@ -1,4 +1,7 @@
 package com.complex.platform.bar;
+
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -66,7 +69,9 @@ final class JdbcBarParameterSource {
                 .addValue("delete_status", reservation.deleteStatus() == null ? "none" : reservation.deleteStatus())
                 .addValue("delete_requested_by", reservation.deleteRequestedBy())
                 .addValue("delete_requested_at", timestampWithTimeZone(reservation.deleteRequestedAt()))
-                .addValue("delete_reason", reservation.deleteReason());
+                .addValue("delete_reason", reservation.deleteReason())
+                .addValue("deposit_channel", reservation.depositChannel())
+                .addValue("deposit_settled_at", timestampWithTimeZone(reservation.depositSettledAt()));
     }
 
     MapSqlParameterSource invitationMemberParameters(BarReservationInvitationMemberRecord member) {

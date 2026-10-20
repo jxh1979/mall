@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +33,9 @@ class ServiceOrderScopeTests {
         // 幂等封装直接执行 action(不测幂等,只测 scope 守卫)。
         when(idem.execute(any(), any(), any(), any(), any()))
                 .thenAnswer(i -> ((Supplier<?>) i.getArgument(3)).get());
-        return new ServiceOrderService(repo, audit, authz, staffRepo, idem);
+        return new ServiceOrderService(repo, audit, authz, staffRepo, idem,
+                new com.complex.platform.common.BusinessDayResolver(6),
+                mock(com.complex.platform.notification.NotificationService.class));
     }
 
     private ServiceOrderRecord orderFor(String performer, String status) {

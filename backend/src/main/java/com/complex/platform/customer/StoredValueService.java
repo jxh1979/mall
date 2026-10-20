@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -52,11 +52,16 @@ public class StoredValueService {
     private static final String EVENT_CONSUME = "stored_value.consume";
     private static final String EVENT_REFUND = "stored_value.refund";
     private static final String EVENT_COUNTER_REFUND = "stored_value.counter_refund";
+    private static final String EVENT_CONSUME_REVERSAL = "stored_value.consume_reversal";
     private static final String NOTIFICATION_DOMAIN = "stored_value";
     private static final String NOTIFICATION_EVENT_TOPUP = "topup";
     private static final String NOTIFICATION_EVENT_CONSUME = "consume";
     private static final String STORED_VALUE_TOPUP_TEMPLATE = "sms.stored_value.topup";
     private static final String STORED_VALUE_CONSUME_TEMPLATE = "sms.stored_value.consume";
+    // TK-21-R1：账户关闭/注销时商户卡应退本金事项 → 通知发卡商户联系人。
+    private static final String NOTIFICATION_EVENT_PENDING_REFUND = "pending_refund";
+    private static final String STORED_VALUE_PENDING_REFUND_TEMPLATE = "sms.stored_value.pending_refund";
+    private static final String ACCOUNT_CLOSE_KEY_PREFIX = "svclose_";
 
     /** 商户卡充值资金归属：merchant_prepaid=发卡商户预收（默认）；platform_collect=平台代收、消费时结算给商户。 */
     static final String FUND_MERCHANT_PREPAID = "merchant_prepaid";
@@ -67,7 +72,7 @@ public class StoredValueService {
     // svcr_ = 柜台退款命名空间（复核发现：与线上退款共享命名空间时，跨路径同键重放会把线上退款流水
     // 错当柜台退款成功返回——不落柜台审计/凭证还可能引发双重兑付）。
     private static final String[] RESERVED_IDEMPOTENCY_PREFIXES = {
-            "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_", "svcr_", "ticketsv_"};
+            "sv_settle_", "sv_topup_", "svtop_", "barsv_", "svtxn_", "svacc_", "svcr_", "ticketsv_", "ticketrev_", "barsvrev_"};
     private static final String COUNTER_REFUND_KEY_PREFIX = "svcr_";
 
     private final CustomerRepository repository;
@@ -85,6 +90,11 @@ public class StoredValueService {
     @org.springframework.beans.factory.annotation.Autowired
     @org.springframework.context.annotation.Lazy
     private com.complex.platform.ticketing.TicketOrderService ticketOrderService;
+    // 复核 html m11：待退本金事项通知的收件人筛选（在职账号 + 权限码 + 员工档案手机号）；字段注入免改构造点，单测未注入则不发。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate recipientJdbc;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
@@ -282,6 +292,15 @@ public class StoredValueService {
             detail.put("merchant_id", account.merchantId());
             // AUD-059 商户卡资金归属：用开卡时定格在卡上的 fund_ownership（非全局默认）；旧卡未定格按商户预收兜底显示。
             detail.put("fund_ownership", effectiveFundOwnership(account));
+        } else {
+            // TK-19-R1（ENUM「储值卡类型与收款主体」：「通用卡的每笔充值分别保留当前剩余本金、支付通路和支付成功时固化费率，同一通路不同费率的
+            // 充值分批保存，不得用新费率覆盖旧批次」「通道费以每笔充值支付成功时平台与该支付通路的生效合同费率为准，随该笔充值一并固化」；
+            // DEC-P1A-04）：按 (项目, 支付通路) 取此刻生效费率钉进批次；未配置 = 0，不拒绝入账。批次 id = 充值流水 id。
+            int feeBps = repository.findStoredValueChannelFeeBps(account.projectId(), intent.channel());
+            repository.saveStoredValueTopupBatch(new StoredValueTopupBatchRecord(txn.id(), account.id(), customerId,
+                    account.projectId(), intent.channel(), feeBps, intent.amountCent(), intent.amountCent(), now));
+            detail.put("payment_channel", intent.channel());
+            detail.put("channel_fee_bps", feeBps);
         }
         auditEventService.recordSuccess(EVENT_TOPUP, "customer.stored_value.topup",
                 "customer_stored_value", account.id(), null, null, detail);
@@ -402,6 +421,12 @@ public class StoredValueService {
         consumeDetail.put("bonus_cent", parts[1]);
         consumeDetail.put("principal_after_cent", principalAfter);
         consumeDetail.put("bonus_after_cent", bonusAfter);
+        // TK-19-R2（ENUM「储值卡类型与收款主体」：「每次消费需扣本金时，按消费前各批次剩余本金占总剩余本金的比例分摊本次本金扣减，
+        // 并逐批按其原固化费率计算对应通路费；本金已耗尽的批次不参与。本金扣减为零的消费不运行本金批次分摊」）：仅通用卡、仅本金扣减 > 0。
+        // 存量无批次的本金（V517 前充值，铁律 8 不回填）不分摊；分摊总额以各批剩余之和封顶。
+        if (account.merchantId() == null && parts[0] > 0) {
+            allocateConsumeAcrossBatches(account, txn.id(), parts[0], consumeDetail, now);
+        }
         auditEventService.recordSuccess(EVENT_CONSUME, "customer.stored_value.consume",
                 "customer_stored_value", account.id(), null, null, consumeDetail);
         // AUD-059 平台代收(platform_collect)：消费即时逐笔生成一条「平台应付商户」台账（逐笔可追溯，结算给发卡商户）。
@@ -412,6 +437,268 @@ public class StoredValueService {
         notifyStoredValueAfterCommit(txn, account, NOTIFICATION_EVENT_CONSUME, STORED_VALUE_CONSUME_TEMPLATE,
                 "svconsume:" + txn.id(), amountCent, balanceAfter);
         return txn;
+    }
+
+    // ============================================================
+    // TK-20-R1 消费退款回原卡（酒吧账单退款/退品、票务退款等已过各自审批的域内部调用；不开控制器入口）
+    // ============================================================
+
+    /**
+     * CG-06a / Q34（ENUM「储值卡类型与收款主体」：「综合体通用卡和商户级卡的消费退款均退回原消费卡余额，固定先回冲该笔消费中已扣且尚未回冲的
+     * 赠送金，该笔消费已扣赠送金全部回冲完毕后，才回冲该笔消费中已扣且尚未回冲的本金；分次退款每次均按此顺序继续回冲，赠送金与本金各自累计
+     * 回冲金额不得超过该笔消费中各自的原扣款金额，不因原消费扣款顺序不同或后续消费配置变更而改变」）。
+     *
+     * <p>锁原消费流水与卡；写 consume_reversal 流水（两段正向、original_txn_id 回指原消费）。卡已关闭（账户关闭/注销）时不复活：
+     * 本金部分按 BSM「储值」「账户关闭的，储值本金退还本人」登记待退，赠送金作废留 adjust。通用卡回本金后按 TK-19-R3 恢复原充值批次；
+     * platform_collect 商户卡同时冲正原「平台应付商户」。幂等：同键重放核对指纹后返回第一次的流水。
+     */
+    @Transactional
+    public CustomerStoredValueTransactionRecord refundConsumption(String consumeTxnId, long amountCent, String reason,
+                                                                  String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "idempotency_key is required");
+        }
+        if (amountCent <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "金额必须大于 0");
+        }
+        Instant now = now();
+        CustomerStoredValueTransactionRecord original = repository
+                .findStoredValueTransactionByIdForUpdate(Strings.requireText(consumeTxnId, "consume_txn_id"))
+                .filter(txn -> "consume".equals(txn.txnType()))
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_CONSUME_NOT_FOUND", "原储值消费流水不存在"));
+        CustomerStoredValueTransactionRecord existing = idempotentTxn(idempotencyKey);
+        if (existing != null) {
+            boolean same = "consume_reversal".equals(existing.txnType())
+                    && existing.amountCent() == amountCent
+                    && existing.accountId().equals(original.accountId())
+                    && java.util.Objects.equals(trimToNull(reason), trimToNull(existing.reason()));
+            if (!same) {
+                throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "该幂等键已被其他操作使用");
+            }
+            return existing;
+        }
+        CustomerStoredValueAccountRecord card = repository.listStoredValueAccountsByCustomer(original.customerId()).stream()
+                .filter(a -> a.id().equals(original.accountId())).findFirst()
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除"));
+        CustomerStoredValueAccountRecord account = requireAccountForUpdate(card.customerId(), card.projectId(), card.merchantId());
+        long[] reversed = repository.sumStoredValueReversals(original.id());
+        long bonusOpen = -original.bonusCent() - reversed[1];
+        long principalOpen = -original.principalCent() - reversed[0];
+        if (amountCent > bonusOpen + principalOpen) {
+            throw ApiException.conflict("STORED_VALUE_REVERSAL_EXCEEDS_ORIGINAL",
+                    "回冲金额超过该笔消费尚未回冲的扣款");
+        }
+        long bonusBack = Math.min(amountCent, bonusOpen);
+        long principalBack = amountCent - bonusBack;
+        // 复核 money m2：商户卡账户关闭 / 注销待退（svclose_ 事项仍待结清、卡冻结）期间收到消费退款，按已关闭卡处理——不把本金加回冻结卡，
+        // 否则柜台退卡金额与待退事项永远对不上。
+        boolean closed = "closed".equals(account.status())
+                || (account.merchantId() != null && "frozen".equals(account.status())
+                    && financeService.findStoredValuePayoutRefund(ACCOUNT_CLOSE_KEY_PREFIX + account.id())
+                        .filter(item -> "requested".equals(item.status()) || "processing".equals(item.status())).isPresent());
+        long principalAfter = account.principalCent() + (closed ? 0L : principalBack);
+        long bonusAfter = account.bonusCent() + (closed ? 0L : bonusBack);
+        long balanceAfter = principalAfter + bonusAfter;
+        if (!closed) {
+            repository.saveStoredValueAccount(withSplit(account, principalAfter, bonusAfter, account.status(), now));
+        }
+        CustomerStoredValueTransactionRecord txn = repository.saveStoredValueReversalTransaction(
+                new CustomerStoredValueTransactionRecord(
+                        "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
+                        account.id(), account.customerId(), "consume_reversal", amountCent, balanceAfter,
+                        null, reason, idempotencyKey, now, null, principalBack, bonusBack), original.id());
+        Map<String, Object> detail = consumeRefundDetail(account, amountCent, balanceAfter);
+        detail.put("original_txn_id", original.id());
+        detail.put("principal_cent", principalBack);
+        detail.put("bonus_cent", bonusBack);
+        detail.put("principal_after_cent", principalAfter);
+        detail.put("bonus_after_cent", bonusAfter);
+        detail.put("closed", closed);
+        if (closed) {
+            // 卡已关闭（BSM「储值」：「账户关闭的，储值本金退还本人」；ENUM：「销户时……赠送金清零」）：本金登记待退、赠送金作废，不复活卡。
+            if (principalBack > 0) {
+                String payoutRefundId = financeService.recordStoredValuePayoutRefund(account.id(), principalBack,
+                        "消费退款回冲：账户已关闭，本金退还本人", account.merchantId(), account.projectId(),
+                        idempotencyKey + "|closed_payout");
+                detail.put("payout_status", "requested");
+                detail.put("payout_refund_id", payoutRefundId);
+            }
+            if (bonusBack > 0) {
+                repository.saveStoredValueTransaction(new CustomerStoredValueTransactionRecord(
+                        "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
+                        account.id(), account.customerId(), "adjust", -bonusBack, balanceAfter,
+                        null, "消费退款回冲：账户已关闭，赠送金作废（不退现）", idempotencyKey + "|bonus_void", now, null,
+                        0L, -bonusBack));
+                detail.put("bonus_voided_cent", bonusBack);
+            }
+        }
+        // 复核 money m1：卡已关闭时本金登记待退本人，不再恢复到原充值批次。
+        if (!closed && account.merchantId() == null && principalBack > 0) {
+            restorePrincipalToBatches(original.id(), txn.id(), principalBack, detail, now);
+        }
+        if (FUND_PLATFORM_COLLECT.equals(account.fundOwnership()) && account.merchantId() != null) {
+            var reversal = financeService.recordStoredValueMerchantPayableReversal(account.merchantId(), original.id(),
+                    txn.id(), amountCent);
+            if (reversal != null) {
+                detail.put("payable_reversal_item_id", reversal.id());
+            }
+        }
+        auditEventService.recordSuccess(EVENT_CONSUME_REVERSAL, "customer.stored_value.refund",
+                "customer_stored_value", account.id(), null, idempotencyKey, detail);
+        return txn;
+    }
+
+    /**
+     * 复核 money I3：撤回一笔消费退款回冲（酒吧退品驳回）——按该回冲流水的本金 / 赠送金原额从原卡扣回，写一条回指原消费的负向
+     * consume_reversal（原消费已回冲累计随之净额扣减，之后再退款可再回冲）；通用卡同时撤回该次对原充值批次的恢复，
+     * platform_collect 商户卡把冲正掉的「平台应付商户」按扣回额重新挂上。卡非可用 / 余额不足按既有守卫拒绝（驳回整笔回滚）。
+     * 幂等：同键返回第一次的流水。仅供已授权域内部调用。
+     */
+    @Transactional
+    public CustomerStoredValueTransactionRecord undoConsumptionRefund(String reversalTxnId, String reason, String idempotencyKey) {
+        CustomerStoredValueTransactionRecord existing = idempotentTxn(Strings.requireText(idempotencyKey, "idempotency_key"));
+        if (existing != null) {
+            return existing;
+        }
+        Instant now = now();
+        CustomerStoredValueTransactionRecord reversal = repository.findStoredValueTransactionByIdForUpdate(reversalTxnId)
+                .filter(txn -> "consume_reversal".equals(txn.txnType()) && txn.amountCent() > 0)
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_REVERSAL_NOT_FOUND", "原消费退款回冲流水不存在"));
+        String originalId = repository.findStoredValueOriginalTxnId(reversal.id())
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_CONSUME_NOT_FOUND", "原储值消费流水不存在"));
+        CustomerStoredValueAccountRecord card = repository.listStoredValueAccountsByCustomer(reversal.customerId()).stream()
+                .filter(a -> a.id().equals(reversal.accountId())).findFirst()
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除"));
+        CustomerStoredValueAccountRecord account = requireAccountForUpdate(card.customerId(), card.projectId(), card.merchantId());
+        requireActive(account);
+        if (account.principalCent() < reversal.principalCent() || account.bonusCent() < reversal.bonusCent()) {
+            throw ApiException.conflict("STORED_VALUE_INSUFFICIENT", "储值余额不足，无法扣回已回冲金额");
+        }
+        long principalAfter = account.principalCent() - reversal.principalCent();
+        long bonusAfter = account.bonusCent() - reversal.bonusCent();
+        repository.saveStoredValueAccount(withSplit(account, principalAfter, bonusAfter, account.status(), now));
+        CustomerStoredValueTransactionRecord txn = repository.saveStoredValueReversalTransaction(
+                new CustomerStoredValueTransactionRecord(
+                        "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
+                        account.id(), account.customerId(), "consume_reversal", -reversal.amountCent(), principalAfter + bonusAfter,
+                        null, reason, idempotencyKey, now, null, -reversal.principalCent(), -reversal.bonusCent()), originalId);
+        if (account.merchantId() == null && reversal.principalCent() > 0) {
+            repository.undoStoredValueRestorations(reversal.id());
+        }
+        if (FUND_PLATFORM_COLLECT.equals(account.fundOwnership()) && account.merchantId() != null) {
+            financeService.recordStoredValueMerchantPayable(account.merchantId(), txn.id(), reversal.amountCent(), idempotencyKey);
+        }
+        Map<String, Object> detail = consumeRefundDetail(account, reversal.amountCent(), principalAfter + bonusAfter);
+        detail.put("original_txn_id", originalId);
+        detail.put("undo_of_reversal_txn_id", reversal.id());
+        detail.put("principal_cent", -reversal.principalCent());
+        detail.put("bonus_cent", -reversal.bonusCent());
+        auditEventService.recordSuccess(EVENT_CONSUME_REVERSAL, "customer.stored_value.refund",
+                "customer_stored_value", account.id(), null, idempotencyKey, detail);
+        return txn;
+    }
+
+    /**
+     * TK-19-R2：按消费前各批次剩余本金的比例分摊本次本金扣减（最大余数法到分，总和恒等），逐批按其原固化费率算通路费并留原消费分摊记录。
+     * 本次消费对应的通路费合计写入审计明细（channel_fee_cent），供商户结算「扣除该笔消费所对应的通路费」取数。
+     */
+    private void allocateConsumeAcrossBatches(CustomerStoredValueAccountRecord account, String consumeTxnId,
+                                              long principalDeducted, Map<String, Object> detail, Instant now) {
+        java.util.List<StoredValueTopupBatchRecord> batches = repository.listOpenStoredValueTopupBatchesForUpdate(account.id());
+        if (batches.isEmpty()) {
+            return;
+        }
+        long[] weights = batches.stream().mapToLong(StoredValueTopupBatchRecord::remainingPrincipalCent).toArray();
+        long totalRemaining = java.util.Arrays.stream(weights).sum();
+        long[] shares = allocateProRata(Math.min(principalDeducted, totalRemaining), weights);
+        java.util.List<Map<String, Object>> allocations = new java.util.ArrayList<>();
+        long feeTotal = 0L;
+        for (int i = 0; i < batches.size(); i++) {
+            if (shares[i] <= 0) {
+                continue;
+            }
+            StoredValueTopupBatchRecord batch = batches.get(i);
+            long fee = MoneyRounding.bpsOf(shares[i], batch.feeBps());
+            repository.saveStoredValueConsumeAllocation(new StoredValueConsumeAllocationRecord(
+                    "svalloc_" + UUID.randomUUID().toString().replace("-", ""), consumeTxnId, batch.id(),
+                    shares[i], 0L, batch.feeBps(), fee, now));
+            repository.addStoredValueTopupBatchRemaining(batch.id(), -shares[i]);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("batch_id", batch.id());
+            row.put("payment_channel", batch.paymentChannel());
+            row.put("fee_bps", batch.feeBps());
+            row.put("principal_cent", shares[i]);
+            row.put("fee_cent", fee);
+            allocations.add(row);
+            feeTotal += fee;
+        }
+        detail.put("batch_allocations", allocations);
+        detail.put("channel_fee_cent", feeTotal);
+    }
+
+    /**
+     * TK-19-R3（ENUM：「该本金按原消费各充值批次已扣且尚未回冲本金的比例恢复到原批次，保留原支付通路和原固化费率，各批次累计恢复金额不得
+     * 超过该消费原扣该批次的本金。原消费未使用的批次（包括后续充值批次）不参与本次恢复。相应消费结算的通路费调整关联原消费批次及原费率依据，
+     * 不按退款时的新费率重算；原消费、退款恢复及调整记录分别保留」；Q35A）。无分摊记录的存量消费不恢复。
+     */
+    private void restorePrincipalToBatches(String consumeTxnId, String reversalTxnId, long principalBack,
+                                           Map<String, Object> detail, Instant now) {
+        java.util.List<StoredValueConsumeAllocationRecord> allocations =
+                repository.listStoredValueConsumeAllocationsForUpdate(consumeTxnId);
+        if (allocations.isEmpty()) {
+            return;
+        }
+        long[] open = allocations.stream().mapToLong(a -> a.principalCent() - a.restoredPrincipalCent()).toArray();
+        long totalOpen = java.util.Arrays.stream(open).sum();
+        long[] shares = allocateProRata(Math.min(principalBack, totalOpen), open);
+        java.util.List<Map<String, Object>> restorations = new java.util.ArrayList<>();
+        for (int i = 0; i < allocations.size(); i++) {
+            if (shares[i] <= 0) {
+                continue;
+            }
+            StoredValueConsumeAllocationRecord allocation = allocations.get(i);
+            long feeAdjust = -MoneyRounding.bpsOf(shares[i], allocation.feeBps());
+            repository.addStoredValueAllocationRestored(allocation.id(), shares[i]);
+            repository.addStoredValueTopupBatchRemaining(allocation.batchId(), shares[i]);
+            repository.saveStoredValueConsumeRestoration("svrest_" + UUID.randomUUID().toString().replace("-", ""),
+                    reversalTxnId, allocation.id(), shares[i], allocation.feeBps(), feeAdjust, now);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("batch_id", allocation.batchId());
+            row.put("fee_bps", allocation.feeBps());
+            row.put("principal_cent", shares[i]);
+            row.put("fee_adjust_cent", feeAdjust);
+            restorations.add(row);
+        }
+        detail.put("batch_restorations", restorations);
+    }
+
+    /** 最大余数法：按 weights 比例把 total 拆到分，各份之和恒等于 total（weights 全 0 或 total ≤ 0 时全 0）。 */
+    static long[] allocateProRata(long total, long[] weights) {
+        long[] shares = new long[weights.length];
+        long sumWeights = java.util.Arrays.stream(weights).sum();
+        if (total <= 0 || sumWeights <= 0) {
+            return shares;
+        }
+        java.math.BigDecimal[] fractions = new java.math.BigDecimal[weights.length];
+        long allocated = 0L;
+        for (int i = 0; i < weights.length; i++) {
+            java.math.BigDecimal exact = MoneyRounding.exactProrate(total, weights[i], sumWeights);
+            shares[i] = exact.setScale(0, java.math.RoundingMode.FLOOR).longValueExact();
+            fractions[i] = exact.subtract(java.math.BigDecimal.valueOf(shares[i]));
+            allocated += shares[i];
+        }
+        Integer[] order = new Integer[weights.length];
+        for (int i = 0; i < order.length; i++) {
+            order[i] = i;
+        }
+        java.util.Arrays.sort(order, (a, b) -> fractions[b].compareTo(fractions[a]));
+        for (int k = 0; allocated < total && k < order.length; k++) {
+            if (weights[order[k]] > 0) {
+                shares[order[k]]++;
+                allocated++;
+            }
+        }
+        return shares;
     }
 
     // ============================================================
@@ -504,6 +791,12 @@ public class StoredValueService {
             throw ApiException.conflict("STORED_VALUE_PRINCIPAL_INSUFFICIENT",
                     "退款金额超过未消费本金；赠送金不退现");
         }
+        // 操作员裁决 2026-10-20 第三轮第 7 条「退卡即全退并关卡」：通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭；不支持只退一部分。
+        boolean generalCard = account.merchantId() == null;
+        if (generalCard && amountCent != account.principalCent()) {
+            throw ApiException.badRequest("STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY",
+                    "综合体通用卡退卡须一次退还全部剩余本金（" + account.principalCent() + " 分），不支持只退一部分");
+        }
         // B1d⑤ phase3 商户级卡退款规则：仅对商户卡（merchantId 非空）应用发卡商户自设规则。
         //   refund_allowed=false → 拒退；退款比例=实际退回客户的比例，余下为商户留存（手续费/违约金）。
         //   综合体通用卡（merchantId 空）无规则=全额退（payout=amountCent），沿用既有行为。
@@ -525,9 +818,20 @@ public class StoredValueService {
             payoutCent = MoneyRounding.bpsOf(amountCent, rule.refundRatioBps());
         }
         long principalAfter = account.principalCent() - amountCent;
+        // TK-21-R2（BSM「储值」：「沿原退款审批和原收款路径执行；实际退款成功才结清」）：账户关闭/注销登记的商户卡待退事项，
+        // 由发卡商户柜台退卡（原收款路径＝到店）这一个口结清：实退额须等于事项金额且本金退清，否则 409；成功后事项置 success、卡销户。
+        com.complex.platform.finance.FinanceRefundRecord pendingItem = counterMode
+                ? financeService.findStoredValuePayoutRefund(ACCOUNT_CLOSE_KEY_PREFIX + account.id())
+                        .filter(item -> "requested".equals(item.status()) || "processing".equals(item.status()))
+                        .orElse(null)
+                : null;
+        if (pendingItem != null && (payoutCent != pendingItem.refundAmountCent() || principalAfter != 0)) {
+            throw ApiException.conflict("STORED_VALUE_PENDING_REFUND_AMOUNT_MISMATCH",
+                    "柜台退卡金额须等于账户关闭登记的待退本金事项金额");
+        }
         // CG-06a（ENUM「储值卡类型与收款主体」：「销户时……再退剩余本金，赠送金清零」；BSM「储值」：
         // 「赠送金不退现、未使用部分按活动规则作废或收回」）：销户（本金退清）时未使用赠送金作废，单独留一条 adjust 流水。
-        boolean closing = closeAccount && principalAfter == 0;
+        boolean closing = (closeAccount || pendingItem != null || generalCard) && principalAfter == 0;
         long bonusVoidCent = closing ? account.bonusCent() : 0L;
         long bonusAfter = account.bonusCent() - bonusVoidCent;
         long balanceAfter = principalAfter + bonusAfter;
@@ -556,6 +860,11 @@ public class StoredValueService {
             counterDetail.put("payout_status", "counter_settled");
             counterDetail.put("redemption_voucher_no", redemptionVoucherNo);
             counterDetail.put("close_account", closeAccount);
+            if (pendingItem != null) {
+                financeService.settleStoredValuePayoutRefundAtCounter(pendingItem, redemptionVoucherNo);
+                counterDetail.put("pending_refund_id", pendingItem.id());
+                counterDetail.put("pending_refund_status", "success");
+            }
             auditEventService.recordSuccess(EVENT_COUNTER_REFUND, "customer.stored_value.refund",
                     "customer_stored_value", account.id(), null, idempotencyKey, counterDetail);
             return txn;
@@ -583,63 +892,136 @@ public class StoredValueService {
     }
 
     // ============================================================
-    // CG-06b 关闭客人账户（列入黑名单）：通用卡未消费本金退还本人、赠送金作废、卡置 closed；商户级卡不动
+    // CG-06b 关闭客人账户（拉黑 / 注销）：通用卡未消费本金退还本人、赠送金作废、卡置 closed；
+    // TK-21-R1 商户级卡按发卡商户规则登记应退本金事项并通知发卡商户，钱在商户处、柜台退卡才结清
     // ============================================================
 
     /**
      * CG-06b（BSM「核销单位」：「关闭该客人账户、该账号作废，并将其列入黑名单不允许再进入；关闭后该账户名下的储值本金退还本人」；
-     * BSM「储值」：「账户关闭的，储值本金退还本人」「综合体通用卡的未消费本金默认全额可退，赠送金不退现、未使用部分按活动规则作废或收回」；
-     * ENUM「储值卡类型与收款主体」：「商户级卡是否可退、退多少比例由发卡商户自设规则」）。
+     * BSM「储值」：「账户关闭的，储值本金退还本人」「综合体通用卡的未消费本金默认全额可退，赠送金不退现、未使用部分按活动规则作废或收回」
+     * 「对需要退还本金的注销或拉黑事项，系统自动生成应退本金事项并通知发卡主体获授权人员，沿原退款审批和原收款路径执行；实际退款成功才结清。
+     * 商户卡仍由发卡商户直接收款和退款，生成待退事项不代表平台已经付款或客人已经到账」；
+     * ENUM「储值卡类型与收款主体」：「商户级卡是否可退、退多少比例由发卡商户自设规则」「销户时……赠送金清零」）。
      *
-     * <p>系统路径：由账户关闭动作（已过 customer.account.manage 闸）在同一事务内触发，不再过 customer.stored_value.refund 权限闸，
-     * 也不受客人黑名单闸拦截（该闸只拦客人本人动作）。只处理综合体通用卡（merchant_id 为空）且未销户的卡：
-     * 未消费本金全额沿既有线上退款出账路径退还（退款打款登记到 finance_refunds，退款执行主体＝长沙项目公司），
-     * 未使用赠送金作废留 adjust 流水，卡置 closed。商户级卡不动，由发卡商户按自设退卡规则到店办理（柜台退卡路径保持可用）。
-     * 重复关闭：已销户的卡跳过，不重复退。
+     * <p>系统路径：由账户关闭/注销动作在同一事务内触发，不再过 customer.stored_value.refund 权限闸，也不受客人黑名单闸拦截。
+     * 通用卡（merchant_id 为空）：未消费本金全额沿既有线上退款出账路径退还（登记到 finance_refunds，退款执行主体＝长沙项目公司），
+     * 赠送金作废留 adjust 流水，卡置 closed。商户级卡：赠送金作废；本金按发卡商户规则——不可退则不生成事项、卡 closed；
+     * 可退则按比例登记发卡商户名下待退事项（卡余额不动，钱在商户处，实际柜台退卡时再扣、见 doRefund），卡置 frozen 防消费，
+     * 提交后短信通知发卡商户联系人。重复关闭：已销户的卡、已登记待退事项的商户卡跳过，不重复退/登记。
      */
     @Transactional
-    public void closeGeneralCardsOnAccountClosure(String customerId, String reason) {
+    public void closeCardsOnAccountClosure(String customerId, String reason) {
         Instant now = now();
         for (CustomerStoredValueAccountRecord card : repository.listStoredValueAccountsByCustomer(customerId)) {
-            if (card.merchantId() != null || "closed".equals(card.status())) {
+            if ("closed".equals(card.status())) {
                 continue;
             }
             CustomerStoredValueAccountRecord account = repository
-                    .findStoredValueAccountForUpdate(customerId, card.projectId(), null).orElse(null);
+                    .findStoredValueAccountForUpdate(customerId, card.projectId(), card.merchantId()).orElse(null);
             if (account == null || "closed".equals(account.status())) {
+                continue;
+            }
+            String key = ACCOUNT_CLOSE_KEY_PREFIX + account.id();
+            if (account.merchantId() != null && financeService.findStoredValuePayoutRefund(key).isPresent()) {
                 continue;
             }
             long principal = account.principalCent();
             long bonus = account.bonusCent();
-            String key = "svclose_" + account.id();
-            repository.saveStoredValueAccount(withSplit(account, 0L, 0L, "closed", now));
             Map<String, Object> detail = new LinkedHashMap<>();
             detail.put("reason", reason == null ? "" : reason);
-            detail.put("principal_refund_cent", principal);
             detail.put("bonus_voided_cent", bonus);
-            if (principal > 0) {
+            boolean merchantCard = account.merchantId() != null;
+            StoredValueMerchantRefundRuleRecord rule = merchantCard
+                    ? repository.findStoredValueMerchantRefundRule(account.merchantId())
+                            .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(account.merchantId()))
+                    : null;
+            long payoutCent = merchantCard
+                    ? (rule.refundAllowed() ? MoneyRounding.bpsOf(principal, rule.refundRatioBps()) : 0L)
+                    : principal;
+            boolean pendingAtMerchant = merchantCard && payoutCent > 0;
+            String newStatus = pendingAtMerchant ? "frozen" : "closed";
+            long principalAfter = pendingAtMerchant ? principal : (merchantCard ? principal : 0L);
+            repository.saveStoredValueAccount(withSplit(account, principalAfter, 0L, newStatus, now));
+            if (!merchantCard && principal > 0) {
                 repository.saveStoredValueTransaction(new CustomerStoredValueTransactionRecord(
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
                         account.id(), customerId, "refund", -principal, bonus,
                         null, "账户关闭：未消费本金退还本人", key, now, null, -principal, 0L));
-                boolean payoutSettled = false;
-                String payoutRefundId = financeService.recordStoredValuePayoutRefund(account.id(), principal,
-                        "账户关闭：储值本金退还本人", account.merchantId(), account.projectId(), key);
+            }
+            if (payoutCent > 0) {
+                String payoutRefundId = financeService.recordStoredValuePayoutRefund(account.id(), payoutCent,
+                        merchantCard ? "账户关闭：商户卡本金待退" : "账户关闭：储值本金退还本人",
+                        account.merchantId(), account.projectId(), key);
+                detail.put("principal_refund_cent", payoutCent);
                 detail.put("payout_gateway_status", "NOT_DISPATCHED");
-                detail.put("payout_status", payoutSettled ? "settled" : "requested");
+                detail.put("payout_status", "requested");
                 if (payoutRefundId != null) {
                     detail.put("payout_refund_id", payoutRefundId);
+                }
+            } else {
+                detail.put("principal_refund_cent", 0L);
+            }
+            if (merchantCard) {
+                detail.put("merchant_id", account.merchantId());
+                detail.put("refund_allowed", rule.refundAllowed());
+                detail.put("refund_ratio_bps", rule.refundRatioBps());
+                if (!rule.refundAllowed()) {
+                    detail.put("principal_retained_by_merchant_cent", principal);
+                    detail.put("note", "按发卡商户规则不可退，不生成待退事项");
                 }
             }
             if (bonus > 0) {
                 repository.saveStoredValueTransaction(new CustomerStoredValueTransactionRecord(
                         "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
-                        account.id(), customerId, "adjust", -bonus, 0L,
+                        account.id(), customerId, "adjust", -bonus, principalAfter,
                         null, "账户关闭：未使用赠送金作废（不退现）", key + "|bonus_void", now, null, 0L, -bonus));
             }
             detail.put("card_scope", account.cardScope());
-            detail.put("closed", true);
+            detail.put("status", newStatus);
+            detail.put("closed", "closed".equals(newStatus));
             auditEventService.recordSuccess("stored_value.closed_on_account_closure", "customer.account.manage",
+                    "customer_stored_value", account.id(), null, key, detail);
+            if (payoutCent > 0) {
+                notifyPendingRefundAfterCommit(account, payoutCent);
+            }
+        }
+    }
+
+    /**
+     * TK-21-R3（BSM「账户注销」：「客人可以选择……放弃余额，径行注销；放弃的储值卡余额归发卡主体（通用卡归长沙项目公司，
+     * 商户级卡归发卡商户）」）：客人明确确认放弃余额——各卡本金与赠送金作废留 adjust 流水、卡置 closed，不生成任何待退事项。
+     */
+    @Transactional
+    public void waiveBalancesOnDeregistration(String customerId) {
+        Instant now = now();
+        for (CustomerStoredValueAccountRecord card : repository.listStoredValueAccountsByCustomer(customerId)) {
+            if ("closed".equals(card.status())) {
+                continue;
+            }
+            CustomerStoredValueAccountRecord account = repository
+                    .findStoredValueAccountForUpdate(customerId, card.projectId(), card.merchantId()).orElse(null);
+            if (account == null || "closed".equals(account.status())) {
+                continue;
+            }
+            long principal = account.principalCent();
+            long bonus = account.bonusCent();
+            String key = "svwaive_" + account.id();
+            repository.saveStoredValueAccount(withSplit(account, 0L, 0L, "closed", now));
+            if (principal + bonus > 0) {
+                repository.saveStoredValueTransaction(new CustomerStoredValueTransactionRecord(
+                        "svtxn_" + UUID.randomUUID().toString().replace("-", ""),
+                        account.id(), customerId, "adjust", -(principal + bonus), 0L,
+                        null, "注销：客人放弃余额归发卡主体", key, now, null, -principal, -bonus));
+            }
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("principal_waived_cent", principal);
+            detail.put("bonus_waived_cent", bonus);
+            detail.put("card_scope", account.cardScope());
+            if (account.merchantId() != null) {
+                detail.put("merchant_id", account.merchantId());
+            }
+            detail.put("closed", true);
+            auditEventService.recordSuccess("stored_value.waived_on_deregistration", "not_applicable",
                     "customer_stored_value", account.id(), null, key, detail);
         }
     }
@@ -870,8 +1252,69 @@ public class StoredValueService {
         if (notificationService == null) {
             return;
         }
-        Runnable notify = () -> notifyStoredValueNow(txn, account, event, templateCode,
-                idempotencyKey, amountCent, balanceAfterCent);
+        runAfterCommit(event, idempotencyKey, () -> notifyStoredValueNow(txn, account, event, templateCode,
+                idempotencyKey, amountCent, balanceAfterCent));
+    }
+
+    /**
+     * TK-21-R1（BSM「储值」：「系统自动生成应退本金事项并通知发卡主体获授权人员」）：商户卡待退事项提交后短信通知发卡商户联系人
+     * （商户档案主联系电话）；通用卡待退已进长沙项目公司财务退款列表，无短信收件人来源，不发。联系人缺失则只记日志。
+     */
+    /**
+     * 复核 html m11（BSM L833「系统自动生成应退本金事项并通知发卡主体获授权人员」）：商户卡发给该发卡商户内持
+     * customer.stored_value.refund 权限的在职员工；通用卡发给发卡主体（长沙项目公司＝卡所属项目、无商户归属）持财务退款执行权限
+     * finance.refund.create 的在职员工。收件人筛选沿用 TK-27 待清台提醒范式（在职账号 + 有效权限码 + 员工档案手机号，无手机号不发）。
+     */
+    private void notifyPendingRefundAfterCommit(CustomerStoredValueAccountRecord account, long payoutCent) {
+        if (notificationService == null || recipientJdbc == null || staffRepository == null) {
+            return;
+        }
+        String key = "svpend:" + account.id();
+        runAfterCommit(NOTIFICATION_EVENT_PENDING_REFUND, key, () -> {
+            try {
+                Map<String, Object> params = new LinkedHashMap<>();
+                params.put("account_id", account.id());
+                params.put("merchant_id", account.merchantId() == null ? "" : account.merchantId());
+                params.put("customer_phone", repository.findCustomerById(account.customerId())
+                        .map(CustomerRecord::maskedPhone).orElse(""));
+                params.put("payout_cent", payoutCent);
+                for (Map.Entry<String, String> recipient : pendingRefundRecipients(account).entrySet()) {
+                    notificationService.notify(NOTIFICATION_DOMAIN, NOTIFICATION_EVENT_PENDING_REFUND, recipient.getValue(),
+                            STORED_VALUE_PENDING_REFUND_TEMPLATE, params, key + ":" + recipient.getKey());
+                }
+            } catch (RuntimeException exception) {
+                log.warn("stored value pending refund notification failed: account_id={}", account.id(), exception);
+            }
+        });
+    }
+
+    /** 发卡主体获授权人员 → 手机号（userId 有序）。 */
+    private Map<String, String> pendingRefundRecipients(CustomerStoredValueAccountRecord account) {
+        boolean merchantCard = account.merchantId() != null;
+        if (!merchantCard && account.projectId() == null) {
+            return Map.of();
+        }
+        String scopeSql = merchantCard ? "u.merchant_id = :scope" : "u.merchant_id IS NULL AND u.organization_id = :scope";
+        String permission = merchantCard ? "customer.stored_value.refund" : "finance.refund.create";
+        Map<String, String> recipients = new LinkedHashMap<>();
+        recipientJdbc.query("SELECT u.id, u.username, u.account_type, u.organization_id, u.merchant_id, u.status FROM access_users u"
+                        + " WHERE u.status = 'active' AND " + scopeSql + " ORDER BY u.id",
+                Map.of("scope", merchantCard ? account.merchantId() : account.projectId()),
+                (rs, n) -> new com.complex.platform.access.AccessActor(rs.getString("id"), rs.getString("username"),
+                        rs.getString("account_type"), rs.getString("organization_id"), rs.getString("merchant_id"), rs.getString("status")))
+                .forEach(actor -> {
+                    if (!authorizationService.hasEffectivePermission(actor, permission)) {
+                        return;
+                    }
+                    staffRepository.findProfileByUserId(actor.id())
+                            .map(com.complex.platform.access.staff.StaffProfileRecord::phone)
+                            .map(Strings::trimToNull)
+                            .ifPresent(phone -> recipients.put(actor.id(), phone));
+                });
+        return recipients;
+    }
+
+    private void runAfterCommit(String event, String idempotencyKey, Runnable notify) {
         try {
             if (TransactionSynchronizationManager.isSynchronizationActive()
                     && TransactionSynchronizationManager.isActualTransactionActive()) {

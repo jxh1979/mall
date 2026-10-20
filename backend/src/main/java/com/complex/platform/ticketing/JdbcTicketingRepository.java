@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -1064,6 +1064,14 @@ class JdbcTicketingRepository implements TicketingRepository {
     public Optional<TicketPaymentIntentRecord> findTicketPaymentIntentById(String id) {
         return jdbcTemplate.query(JdbcTicketingSql.ticketPaymentIntentSelect() + " WHERE id = :id",
                 Map.of("id", id), rowMapper::mapTicketPaymentIntent).stream().findFirst();
+    }
+
+    @Override
+    public Optional<TicketPaymentIntentRecord> findSucceededTicketPaymentIntentByOrder(String orderId) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketPaymentIntentSelect()
+                        + " WHERE business_order_type = 'ticket_order' AND business_order_id = :order_id AND status = 'succeeded'"
+                        + " ORDER BY created_at DESC, id LIMIT 1",
+                Map.of("order_id", orderId), rowMapper::mapTicketPaymentIntent).stream().findFirst();
     }
 
     @Override

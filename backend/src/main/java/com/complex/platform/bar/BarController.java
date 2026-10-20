@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -566,6 +566,17 @@ public class BarController {
         return ApiResponse.ok(service.openTable(tableId, request));
     }
 
+    /** 第十批 TK-27-R2：清台登记恢复空闲（BSM L1058）。 */
+    @PostMapping("/tables/{table_id}/clear")
+    public ApiResponse<BarTableRecord> clearTable(
+            @PathVariable("table_id") String tableId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableClearRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.open_close");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.clearTable(tableId, request));
+    }
+
     @GetMapping("/table-sessions")
     public ApiResponse<PageResponse<BarTableSessionRecord>> listTableSessions() {
         authorizationService.requirePermission("bar.table_session.view");
@@ -597,6 +608,17 @@ public class BarController {
         authorizationService.requirePermission("bar.table_session.merge");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.mergeTableSessions(sessionId, request));
+    }
+
+    /** 第十批 TK-27-R3：拆台（BSM L1079）。 */
+    @PostMapping("/table-sessions/{session_id}/split")
+    public ApiResponse<BarTableSessionAdjustmentRecord> splitTableSessions(
+            @PathVariable("session_id") String sessionId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableSplitRequest request
+    ) {
+        authorizationService.requirePermission("bar.table_session.split");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.splitTableSessions(sessionId, request));
     }
 
     @PostMapping("/table-sessions/{session_id}/renew")

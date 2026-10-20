@@ -266,6 +266,9 @@ mall_floor_plans,direct,project_id,project_id column on mall_floor_plans,ready f
 mdm_app_whitelist,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 mdm_policy_violations,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 mdm_site_whitelist,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+media_performance_fulfillments,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+media_performance_settlements,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+media_performance_shows,direct,project_id,project_id column on media_performance_shows,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_bill_disputes,direct,merchant_id,merchant_id column on merchant_bill_disputes,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_bill_dunning_records,direct,merchant_id,merchant_id column on merchant_bill_dunning_records,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_bill_lines,inherited,bill_id,bill_id -> merchant_bills -> merchant_id,must join through scope path before multi-complex rollout,V0.07,covered
@@ -398,7 +401,10 @@ staff_work_phone_contexts,single_complex_default,P0_SINGLE_COMPLEX,single-comple
 staff_work_phone_events,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 stocktake,direct,merchant_id,merchant_id column on stocktake,ready for project/merchant scoped query enforcement,V0.07,covered
 stored_value_bonus_policies,direct,project_id,project_id column on stored_value_bonus_policies,ready for project/merchant scoped query enforcement,V0.07,covered
+stored_value_consume_allocations,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+stored_value_consume_restorations,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 stored_value_merchant_refund_rules,direct,merchant_id,merchant_id column on stored_value_merchant_refund_rules,ready for project/merchant scoped query enforcement,V0.07,covered
+stored_value_topup_batches,direct,project_id,project_id column on stored_value_topup_batches,ready for project/merchant scoped query enforcement,V0.07,covered
 stored_value_topup_intents,direct,project_id,project_id column on stored_value_topup_intents,ready for project/merchant scoped query enforcement,V0.07,covered
 supervisor_review_decisions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 supervisor_review_nodes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered

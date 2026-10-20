@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { TechDetails } from "../components/TechDetails";
@@ -8,7 +8,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
-import type { AdminPageProps, BarBillRow, BarOrderItemVoidRow, BarOrderRow } from "../types";
+import type { AdminPageProps, BarBillRow, BarOrderItemRow, BarOrderItemVoidRow, BarOrderRow } from "../types";
 import { commissionRateLabel, isSalesOrder, latestBill, salesRoleLabel } from "./barSalesRole";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
@@ -44,7 +44,7 @@ const TEXT = {
   selectedOrder: "\u9009\u4e2d\u8ba2\u5355",
   noTable: "\u672a\u9009\u62e9\u5361\u5ea7",
   createBill: "\u751f\u6210\u8d26\u5355",
-  deliver: "\u6807\u8bb0\u51fa\u54c1",
+  deliver: "登记送达（已选明细）",
   settle: "\u7ed3\u7b97\u8d26\u5355",
   posBoundary: "\u62c6\u5355 / \u5408\u5355 / \u6302\u8d26 / \u4f4e\u6d88\u8865\u9f50\uff1aP1 \u589e\u5f3a POS\uff0c\u5f53\u524d\u9875\u4fdd\u7559\u8d26\u5355\u95ed\u73af\u5165\u53e3",
   select: "\u9009\u62e9",
@@ -130,6 +130,16 @@ function voidLabel(map: Record<string, string>, value: string | undefined) {
   return map[value] ?? value;
 }
 
+// 第十批 TK-26-R2：明细送达标注（BSM L1025「分别标注已上菜与未上菜」）。
+function isUndelivered(item: BarOrderItemRow) {
+  return item.deliveryStatus !== "delivered" && item.deliveryStatus !== "voided";
+}
+function deliveryLabel(item: BarOrderItemRow) {
+  if (item.deliveryStatus === "delivered") return "已上菜";
+  if (item.deliveryStatus === "voided") return "已撤单";
+  return "未上菜";
+}
+
 export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
@@ -147,6 +157,9 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
   const [paymentPhone, setPaymentPhone] = React.useState("");
   const [paymentSmsCode, setPaymentSmsCode] = React.useState("");
+  // 第十批 TK-28（ENUM L81「商户折扣券——到对应商户抵扣」；操作员裁决「一次结账一张」）：结账带一张折扣券码；结账后回显账单折扣合计。
+  const [voucherCode, setVoucherCode] = React.useState("");
+  const [voucherDiscountCent, setVoucherDiscountCent] = React.useState<number | null>(null);
   // 行明细抽屉：整行可点 → 该订单完整字段（状态/提成口径中文·金额¥·下单/支付时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // V345（BAR-VOID-A1）退酒申请 + 待审队列。
@@ -164,6 +177,12 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   // 双证据闭环：证据附件由真上传产生（不再手打 ID）。这里存已上传附件的 id + 文件名。
   const [voidEvidence, setVoidEvidence] = React.useState<{ id: string; fileName: string }[]>([]);
   const [uploading, setUploading] = React.useState(false);
+  // 第十批 TK-26-R2（BSM L1025「分别标注已上菜与未上菜」）：按明细勾选本次送达，默认勾选全部未上菜明细；
+  // 只记操作人取消勾选的明细（按订单归零），换订单即恢复默认全选。
+  const [deliverSkip, setDeliverSkip] = React.useState<{ orderId: string; ids: string[] }>({ orderId: "", ids: [] });
+  const orderItems: BarOrderItemRow[] = selectedOrder?.items ?? [];
+  const skippedItemIds = deliverSkip.orderId === (selectedOrder?.id ?? "") ? deliverSkip.ids : [];
+  const isDeliverChecked = (item: BarOrderItemRow) => isUndelivered(item) && !skippedItemIds.includes(item.id);
 
   function openOrderDetail(order: BarOrderRow) {
     const bill = firstBill(order);
@@ -268,9 +287,15 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   }
 
   async function markDelivered() {
+    const selectedItems = orderItems.filter(isDeliverChecked);
+    if (selectedItems.length === 0) {
+      setFormError("请先勾选本次实际送达的未上菜明细。");
+      return;
+    }
     await runOrderAction("bar_order_delivered", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/deliver`, {
       operatorNote: TEXT.deliverNote,
       deliveryPhotoAttachmentIds: ["att-admin-delivery-1"],
+      deliveredItems: selectedItems.map((item) => ({ orderItemId: item.id, quantity: item.quantity ?? 1 })),
     }));
   }
 
@@ -335,13 +360,16 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       paymentChannel,
       cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
+      ...(voucherCode.trim() ? { voucherCode: voucherCode.trim() } : {}),
       operatorNote: "按本次真实收款凭据登记，多渠道累计足额后完成账单",
     };
     const serialized = JSON.stringify({ billId, ...body });
     if (paymentRetry.current?.body !== serialized) paymentRetry.current = { body: serialized, key: crypto.randomUUID() };
     await runOrderAction("bar_bill_settled", async () => {
-      const result = await api.post(`/api/v1/bar/bills/${billId}/settle`, { ...body, idempotencyKey: paymentRetry.current!.key });
-      paymentRetry.current = null; setPaymentAmount(""); setPaymentReference(""); return result;
+      const result = await api.post<{ discountAmountCent?: number }>(`/api/v1/bar/bills/${billId}/settle`, { ...body, idempotencyKey: paymentRetry.current!.key });
+      paymentRetry.current = null; setPaymentAmount(""); setPaymentReference("");
+      if (voucherCode.trim()) { setVoucherDiscountCent(result?.discountAmountCent ?? null); setVoucherCode(""); }
+      return result;
     });
   }
 
@@ -517,6 +545,9 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           {paymentChannel === "pos" ? (
             <label>POS 流水号<input data-testid="bar-settle-pos-no" value={posTransactionNo} onChange={(e) => setPosTransactionNo(e.target.value)} placeholder="POS 交易流水号" /></label>
           ) : null}
+          <label>折扣券码（选填，一次结账一张）<input data-testid="bar-settle-voucher-code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} placeholder="本商户折扣券核销码" /></label>
+          <p>折扣券按面值抵扣本次应付，面值超出部分不找零；多张券请分次结账各带一张。</p>
+          {voucherDiscountCent !== null ? <p data-testid="bar-settle-voucher-result">折扣券已抵扣，账单折扣合计 {formatAmount(voucherDiscountCent)}</p> : null}
         </div>
         <div className="admin-form-row" data-testid="bar-order-actions">
           <PermissionButton permissionsState={effectivePermissions} permissions={["bar.order.create"]} data-testid="bar-order-create-bill" disabled={busyAction !== ""} onClick={() => void createBill()}>{TEXT.createBill}</PermissionButton>
@@ -532,6 +563,22 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
             data-testid="bar-order-settle"
           />
           <span className="admin-muted-action" data-testid="bar-order-pos-boundary">{TEXT.posBoundary}</span>
+        </div>
+        <div className="admin-table-scroll" data-testid="bar-order-items">
+          <table className="admin-table">
+            <thead><tr><th>本次送达</th><th>物品</th><th>数量</th><th>金额</th><th>上菜状态</th></tr></thead>
+            <tbody>{orderItems.length === 0 ? (
+              <tr><td colSpan={5} className="admin-muted-action">选中订单没有明细</td></tr>
+            ) : orderItems.map((item) => (
+              <tr key={item.id} data-testid={`bar-order-item-row-${item.id}`}>
+                <td>{isUndelivered(item) ? <input type="checkbox" aria-label={`本次送达 ${item.productName ?? item.id}`} data-testid={`bar-order-item-check-${item.id}`} checked={isDeliverChecked(item)} onChange={(e) => setDeliverSkip({ orderId: selectedOrder?.id ?? "", ids: e.target.checked ? skippedItemIds.filter((id) => id !== item.id) : [...skippedItemIds, item.id] })} /> : null}</td>
+                <td>{item.productName ?? item.id}</td>
+                <td>{item.quantity ?? "—"}</td>
+                <td>{formatAmount(item.amountCent)}</td>
+                <td>{deliveryLabel(item)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
         </div>
         <BarRefundBreakdownPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} billId={firstBillId(selectedOrder)} onChanged={reload} />
         {formError ? <div data-testid="bar-orders-error" className="admin-inline-error">{formError}</div> : null}

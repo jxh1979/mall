@@ -1,4 +1,4 @@
-# 文件版本：V0.01
+# 文件版本：V0.02
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -55,3 +55,4 @@ access.device_credential.enforcement.web: enforce
 # 同 AUD-033 先例 prod 开启;两作业均为薄 @Scheduled 包装,业务规则在服务层,默认间隔 60s / 300s):
 amusement.concurrent-reset.scheduled.enabled: true           # 场次结束自动清空该场次与项目并发维、营业日结束自动清零在玩人数(留痕 amusement_concurrent_reset_log)
 dealer.order.deadline.scheduled.enabled: true                # E-13 首付款截止未达门槛自动取消并释放预留、已收款进既有退款审批;尾款逾期标记与暂停账期订单
+bar.pending-clear-alert.scheduled.enabled: true              # TK-27 待清台超时提醒本酒吧此刻有排班且持 bar.table.open_close 的员工(每台位每次待清台只发一次,默认 60s 一轮)

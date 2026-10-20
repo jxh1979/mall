@@ -1,5 +1,7 @@
 package com.complex.platform.serviceorder;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -17,6 +19,12 @@ class JdbcServiceOrderRepository {
     JdbcServiceOrderRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
+
+    private static final String SELECT_ITEM = """
+            SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at,
+                   archived_at, archived_by, archive_reason, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                   fee_version, next_mgmt_fee_mode, next_mgmt_fee_value, next_effective_from, next_requested_by, next_approved_by
+              FROM service_catalog_items""";
 
     public ServiceCatalogItemRecord upsertCatalogItem(ServiceCatalogItemRecord item) {
         jdbcTemplate.update("""
@@ -38,14 +46,12 @@ class JdbcServiceOrderRepository {
                 .addValue("fee_mode", item.mgmtFeeMode()).addValue("fee_value", item.mgmtFeeValue())
                 .addValue("updated_by", item.updatedBy())
                 .addValue("now", java.sql.Timestamp.from(item.updatedAt())));
-        return item;
+        return findCatalogItem(item.id()).orElse(item);
     }
 
     public List<ServiceCatalogItemRecord> listCatalog(boolean activeOnly, boolean includeArchived) {
-        return jdbcTemplate.query("""
-                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at,
-                       archived_at, archived_by, archive_reason, delete_status, delete_requested_by, delete_requested_at, delete_reason
-                  FROM service_catalog_items
+        return jdbcTemplate.query(SELECT_ITEM + """
+
                  WHERE delete_status <> 'approved'
                    AND (:active_only = FALSE OR active = TRUE)
                    AND (:include_archived = TRUE OR archived_at IS NULL)
@@ -80,23 +86,80 @@ class JdbcServiceOrderRepository {
     }
 
     public Optional<ServiceCatalogItemRecord> findCatalogItem(String id) {
+        return jdbcTemplate.query(SELECT_ITEM + " WHERE id = :id AND delete_status <> 'approved'",
+                new MapSqlParameterSource().addValue("id", id), this::mapItem).stream().findFirst();
+    }
+
+    /** TK-23-R3:落管理费草案(覆盖未转正的旧草案;复核人清空,须重新差人复核)。 */
+    public void saveFeeDraft(String id, String feeMode, long feeValue, LocalDate effectiveFrom, String actorId, Instant now) {
+        jdbcTemplate.update("""
+                UPDATE service_catalog_items
+                   SET next_mgmt_fee_mode = :mode, next_mgmt_fee_value = :value, next_effective_from = :from,
+                       next_requested_by = :by, next_requested_at = :now, next_approved_by = NULL, updated_at = :now
+                 WHERE id = :id AND delete_status <> 'approved'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("mode", feeMode).addValue("value", feeValue)
+                .addValue("from", java.sql.Date.valueOf(effectiveFrom)).addValue("by", actorId)
+                .addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    /** TK-23-R3:差人复核通过,只标记复核人;生效日到了由下单路径翻为现行版本。 */
+    public void approveFeeDraft(String id, String approverId) {
+        jdbcTemplate.update("""
+                UPDATE service_catalog_items SET next_approved_by = :by, updated_at = now()
+                 WHERE id = :id AND next_requested_by IS NOT NULL
+                """, new MapSqlParameterSource().addValue("id", id).addValue("by", approverId));
+    }
+
+    /** TK-23-R3:已复核草案在生效营业日(含)起翻为现行:fee_version+1、清空草案。WHERE 条件使并发下单只翻一次。 */
+    public int promoteApprovedFeeDraft(String id, LocalDate businessDate) {
+        return jdbcTemplate.update("""
+                UPDATE service_catalog_items
+                   SET mgmt_fee_mode = next_mgmt_fee_mode, mgmt_fee_value = next_mgmt_fee_value,
+                       fee_version = fee_version + 1, updated_by = next_approved_by, updated_at = now(),
+                       next_mgmt_fee_mode = NULL, next_mgmt_fee_value = NULL, next_effective_from = NULL,
+                       next_requested_by = NULL, next_requested_at = NULL, next_approved_by = NULL
+                 WHERE id = :id AND next_approved_by IS NOT NULL AND next_effective_from <= :today
+                """, new MapSqlParameterSource().addValue("id", id).addValue("today", java.sql.Date.valueOf(businessDate)));
+    }
+
+    /** 管理费通告候选:在职员工(账号 active 且员工档案 active);project 非空时只取该项目员工档案。权限码由服务层逐个核。 */
+    public List<com.complex.platform.access.AccessActor> listActiveStaffActors(String project) {
         return jdbcTemplate.query("""
-                SELECT id, name, price_cent, duration_minutes, active, mgmt_fee_mode, mgmt_fee_value, updated_by, updated_at,
-                       archived_at, archived_by, archive_reason, delete_status, delete_requested_by, delete_requested_at, delete_reason
-                  FROM service_catalog_items WHERE id = :id AND delete_status <> 'approved'
-                """, new MapSqlParameterSource().addValue("id", id), this::mapItem).stream().findFirst();
+                SELECT DISTINCT u.id, u.username, u.account_type, u.organization_id, u.merchant_id, u.status
+                  FROM access_users u
+                  JOIN staff_profiles sp ON sp.user_id = u.id
+                 WHERE u.status = 'active' AND sp.status = 'active'
+                   AND (CAST(:project AS VARCHAR) IS NULL OR sp.project_id = :project)
+                 ORDER BY u.id
+                """, new MapSqlParameterSource().addValue("project", project),
+                (rs, n) -> new com.complex.platform.access.AccessActor(rs.getString("id"), rs.getString("username"),
+                        rs.getString("account_type"), rs.getString("organization_id"), rs.getString("merchant_id"), rs.getString("status")));
+    }
+
+    /** 该目录项服务单发生过的酒吧的主理人:各酒吧当前有效分红方案(status='active',每商户至多一条)的 principal_user_id。 */
+    public List<String> listBarPrincipalUserIds(String catalogItemId) {
+        return jdbcTemplate.query("""
+                SELECT DISTINCT dp.principal_user_id
+                  FROM service_orders o
+                  JOIN dividend_plans dp ON dp.merchant_id = o.bar_id AND dp.status = 'active'
+                 WHERE o.catalog_item_id = :item
+                """, new MapSqlParameterSource().addValue("item", catalogItemId),
+                (rs, n) -> rs.getString("principal_user_id"));
     }
 
     private ServiceCatalogItemRecord mapItem(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         java.sql.Timestamp arch = rs.getTimestamp("archived_at");
         java.sql.Timestamp delReq = rs.getTimestamp("delete_requested_at");
+        java.sql.Date nextFrom = rs.getDate("next_effective_from");
         return new ServiceCatalogItemRecord(rs.getString("id"), rs.getString("name"), rs.getLong("price_cent"),
                 (Integer) rs.getObject("duration_minutes"), rs.getBoolean("active"),
                 rs.getString("mgmt_fee_mode"), rs.getLong("mgmt_fee_value"), rs.getString("updated_by"),
                 rs.getTimestamp("updated_at").toInstant(),
                 arch == null ? null : arch.toInstant(), rs.getString("archived_by"), rs.getString("archive_reason"),
                 rs.getString("delete_status"), rs.getString("delete_requested_by"),
-                delReq == null ? null : delReq.toInstant(), rs.getString("delete_reason"));
+                delReq == null ? null : delReq.toInstant(), rs.getString("delete_reason"),
+                rs.getInt("fee_version"), rs.getString("next_mgmt_fee_mode"), (Long) rs.getObject("next_mgmt_fee_value"),
+                nextFrom == null ? null : nextFrom.toLocalDate(), rs.getString("next_requested_by"), rs.getString("next_approved_by"));
     }
 
     public void upsertPaymentCode(String userId, String qrContent, Instant now) {
@@ -119,11 +182,11 @@ class JdbcServiceOrderRepository {
                 INSERT INTO service_orders (id, catalog_item_id, item_name, price_cent, bar_id, table_id,
                         performer_user_id, ordered_by, customer_note, status, cancel_reason,
                         paid_at, paid_by, pay_method, refund_note, mgmt_fee_cent, dancer_share_cent,
-                        created_at, updated_at, completed_at, snap_mgmt_fee_mode, snap_mgmt_fee_value, project_id)
+                        created_at, updated_at, completed_at, snap_mgmt_fee_mode, snap_mgmt_fee_value, snap_fee_version, project_id)
                 VALUES (:id, :catalog_item_id, :item_name, :price, :bar_id, :table_id,
                         :performer, :ordered_by, :note, :status, :cancel_reason,
                         :paid_at, :paid_by, :pay_method, :refund_note, :mgmt_fee, :dancer_share,
-                        :created_at, :updated_at, :completed_at, :snap_fee_mode, :snap_fee_value,
+                        :created_at, :updated_at, :completed_at, :snap_fee_mode, :snap_fee_value, :snap_fee_version,
                         (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = :performer
                           ORDER BY p.created_at DESC LIMIT 1))
                 ON CONFLICT (id) DO UPDATE SET
@@ -152,7 +215,8 @@ class JdbcServiceOrderRepository {
                 .addValue("updated_at", java.sql.Timestamp.from(order.updatedAt()))
                 .addValue("completed_at", order.completedAt() == null ? null : java.sql.Timestamp.from(order.completedAt()))
                 .addValue("snap_fee_mode", order.snapMgmtFeeMode())
-                .addValue("snap_fee_value", order.snapMgmtFeeValue()));
+                .addValue("snap_fee_value", order.snapMgmtFeeValue())
+                .addValue("snap_fee_version", order.snapFeeVersion()));
         return order;
     }
 
@@ -174,7 +238,8 @@ class JdbcServiceOrderRepository {
                 .addValue("now", java.sql.Timestamp.from(now)));
     }
 
-    public boolean insertReceivableForOrder(String orderId, long amountCent, Instant now) {
+    /** TK-23-R2:应收行 due_date/accounting_period 按收款时点所在 bar 营业日(调用方用 BusinessDayResolver 算),不按 UTC。 */
+    public boolean insertReceivableForOrder(String orderId, long amountCent, LocalDate businessDate, Instant now) {
         // P1 收款对账:复用 ar_ap_items 应收台账。source 唯一索引保证一单一条(幂等)。
         // V344(P0-B 红冲):该部分唯一索引的谓词加了 origin_item_id IS NULL(排除补录派生的冲正/重述行),
         //   ON CONFLICT 推断须与索引谓词逐字一致,否则 PG 报"no unique or exclusion constraint matching"。
@@ -192,10 +257,8 @@ class JdbcServiceOrderRepository {
                 .addValue("id", "arap_svo_" + orderId)
                 .addValue("item_no", "SVO-" + orderId)
                 .addValue("order_id", orderId).addValue("amount", amountCent)
-                .addValue("due_date", java.sql.Date.valueOf(
-                        java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)))
-                .addValue("period", java.time.YearMonth.from(
-                        java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString())
+                .addValue("due_date", java.sql.Date.valueOf(businessDate))
+                .addValue("period", java.time.YearMonth.from(businessDate).toString())
                 .addValue("now", java.sql.Timestamp.from(now)));
         return rows == 1;
     }
@@ -204,7 +267,7 @@ class JdbcServiceOrderRepository {
             SELECT id, catalog_item_id, item_name, price_cent, bar_id, table_id, performer_user_id,
                    ordered_by, customer_note, status, cancel_reason, paid_at, paid_by, pay_method,
                    refund_note, mgmt_fee_cent, dancer_share_cent, created_at, updated_at, completed_at,
-                   snap_mgmt_fee_mode, snap_mgmt_fee_value
+                   snap_mgmt_fee_mode, snap_mgmt_fee_value, snap_fee_version
               FROM service_orders""";
 
     public List<ServiceOrderRecord> listOrdersForPerformer(String performerUserId) {
@@ -227,12 +290,13 @@ class JdbcServiceOrderRepository {
                 .addValue("project_scope", projectScope), this::mapOrder);
     }
 
+    /** TK-23-R2:履约人月度统计与薪资月结同源——按 staff_commission_ledger(user_id, service_order, month) 计数/求和,
+     * month 为完成时点所在 bar 营业日的年月(不再 to_char(completed_at) 按库会话时区)。 */
     public long[] performerMonthlyStats(String performerUserId, String month) {
         return jdbcTemplate.queryForObject("""
-                SELECT COUNT(*) AS cnt, COALESCE(SUM(dancer_share_cent), 0) AS total
-                  FROM service_orders
-                 WHERE performer_user_id = :performer AND status = 'completed'
-                   AND to_char(completed_at, 'YYYY-MM') = :month
+                SELECT COUNT(*) AS cnt, COALESCE(SUM(amount_cent), 0) AS total
+                  FROM staff_commission_ledger
+                 WHERE user_id = :performer AND source_type = 'service_order' AND month = :month
                 """, new MapSqlParameterSource().addValue("performer", performerUserId).addValue("month", month),
                 (rs, n) -> new long[] {rs.getLong("cnt"), rs.getLong("total")});
     }
@@ -263,6 +327,7 @@ class JdbcServiceOrderRepository {
                 rs.getString("refund_note"), rs.getLong("mgmt_fee_cent"), rs.getLong("dancer_share_cent"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant(),
                 completed == null ? null : completed.toInstant(),
-                rs.getString("snap_mgmt_fee_mode"), (Long) rs.getObject("snap_mgmt_fee_value"));
+                rs.getString("snap_mgmt_fee_mode"), (Long) rs.getObject("snap_mgmt_fee_value"),
+                (Integer) rs.getObject("snap_fee_version"));
     }
 }

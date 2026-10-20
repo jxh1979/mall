@@ -1,11 +1,14 @@
 package com.complex.platform.serviceorder;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,25 +22,36 @@ import static com.complex.platform.common.Strings.trimToNull;
  *   完成履约时分账:管理费归公司,履约人应得写提成台账,月结进薪资并按劳务报酬税表代扣个税;
  * ⑤ 履约前可取消(已收款后取消记退款备注,公司线下退),完成后不可退;
  * ⑥ 不进酒吧桌台账单,仅关联桌台记录来源。
+ * TK-23:固定管理费越界保存即拒绝(不静默封顶);归属月按完成时点所在 bar 营业日;管理费变更比照销售提成——草案→差人复核转正→指定生效日形成新版本、下单按生效版本锁定。
  */
 @Service
 public class ServiceOrderService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ServiceOrderService.class);
+    /** 营业日域:服务点单发生在酒吧现场,沿用 business_day_cutoff_config.bar(V201)。 */
+    private static final String BUSINESS_DAY_DOMAIN = "bar";
 
     private final JdbcServiceOrderRepository repository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
     private final com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
+    private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
+    private final com.complex.platform.notification.NotificationService notificationService;
 
     public ServiceOrderService(JdbcServiceOrderRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService,
             com.complex.platform.access.staff.JdbcStaffRepository staffRepository,
-            com.complex.platform.common.idempotency.IdempotencyService idempotencyService) {
+            com.complex.platform.common.idempotency.IdempotencyService idempotencyService,
+            com.complex.platform.common.BusinessDayResolver businessDayResolver,
+            com.complex.platform.notification.NotificationService notificationService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.staffRepository = staffRepository;
         this.idempotencyService = idempotencyService;
+        this.businessDayResolver = businessDayResolver;
+        this.notificationService = notificationService;
     }
 
     /** openapi-p0 契约:失败路径落 x-audit-event-failure 事件后再抛(审计闭合,2026-07-03 P1)。 */
@@ -61,6 +75,19 @@ public class ServiceOrderService {
                 () -> doUpsertCatalogItem(request));
     }
 
+    /** ENUM L291 / BSM L1127:按比例 0%..100%(含边界)、固定金额 0..服务售价(含边界);任一越界值在保存时直接拒绝,不得静默截断、封顶或改写。 */
+    private static void validateFee(String feeMode, long feeValue, long priceCent) {
+        if (!java.util.Set.of("none", "percent", "fixed").contains(feeMode)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "管理费模式（mgmt_fee_mode）必须为 none/percent/fixed");
+        }
+        if (feeValue < 0 || (feeMode.equals("percent") && feeValue > 10000)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "管理费数值（mgmt_fee_value）不正确：百分比模式使用基点，不得超过 10000");
+        }
+        if (feeMode.equals("fixed") && feeValue > priceCent) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "固定管理费不得超过服务售价（含边界）");
+        }
+    }
+
     private ServiceCatalogItemRecord doUpsertCatalogItem(com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest request) {
         authorizationService.requirePermission("service.catalog.manage");
         if (request == null || request.name() == null || request.name().isBlank()
@@ -70,13 +97,16 @@ public class ServiceOrderService {
         var actor = authorizationService.currentActor();
         String id = request.id() == null || request.id().isBlank() ? "svc_" + UUID.randomUUID() : request.id().trim();
         String feeMode = request.mgmtFeeMode() == null ? "none" : request.mgmtFeeMode();
-        if (!java.util.Set.of("none", "percent", "fixed").contains(feeMode)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "管理费模式（mgmt_fee_mode）必须为 none/percent/fixed");
-        }
         long feeValue = request.mgmtFeeValue() == null ? 0 : request.mgmtFeeValue();
-        if (feeValue < 0 || (feeMode.equals("percent") && feeValue > 10000)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "管理费数值（mgmt_fee_value）不正确：百分比模式使用基点，不得超过 10000");
-        }
+        validateFee(feeMode, feeValue, request.priceCent());
+        // TK-23-R3(ENUM L291「变更版本化与指定生效日……比照销售提成」):已有目录项不再直改管理费,须走草案→差人复核→生效日版本;
+        // 首次新建仍可直接写管理费(出厂值=V1)。
+        repository.findCatalogItem(id).ifPresent(existing -> {
+            if (!existing.mgmtFeeMode().equals(feeMode) || existing.mgmtFeeValue() != feeValue) {
+                throw ApiException.badRequest("FEE_CHANGE_REQUIRES_DRAFT",
+                        "已有目录项的管理费变更须提交草案并由他人复核转正（指定生效日），不能直接保存生效");
+            }
+        });
         ServiceCatalogItemRecord saved = repository.upsertCatalogItem(new ServiceCatalogItemRecord(
                 id, request.name().trim(), request.priceCent(), request.durationMinutes(),
                 request.active() == null || request.active(), feeMode, feeValue,
@@ -85,6 +115,105 @@ public class ServiceOrderService {
                 "service_catalog_item", saved.id(), null, request.idempotencyKey(),
                 Map.of("name", saved.name(), "price_cent", saved.priceCent()));
         return saved;
+    }
+
+    /** TK-23-R3:管理费变更草案(拟改模式/数值 + 指定生效日 ≥ 当日 bar 营业日);区间校验同保存;起草人留痕,待他人复核。
+     *  复核 authz M4(PGM L303):草案写入走 IdempotencyService——同号同体重放返回第一次结果,不得把已有复核人抹成 NULL。 */
+    public ServiceCatalogItemRecord draftFeeChange(String id, com.complex.platform.serviceorder.dto.ServiceCatalogFeeDraftRequest request) {
+        return withFailureAudit("service.catalog.fee_draft_failed", "service.catalog.manage", "service_catalog_item", id,
+                request == null ? null : request.idempotencyKey(), () -> {
+            authorizationService.requirePermission("service.catalog.manage");
+            return idempotencyService.execute("draftServiceCatalogFee:" + id, request == null ? null : request.idempotencyKey(),
+                    request, () -> doDraftFeeChange(id, request), ServiceCatalogItemRecord.class);
+        });
+    }
+
+    private ServiceCatalogItemRecord doDraftFeeChange(String id, com.complex.platform.serviceorder.dto.ServiceCatalogFeeDraftRequest request) {
+        var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "服务目录项不存在或已被删除"));
+        if (request == null || request.effectiveFrom() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定生效日（effective_from）");
+        }
+        String feeMode = request.mgmtFeeMode() == null ? "none" : request.mgmtFeeMode();
+        long feeValue = request.mgmtFeeValue() == null ? 0 : request.mgmtFeeValue();
+        validateFee(feeMode, feeValue, item.priceCent());
+        Instant now = Instant.now();
+        if (request.effectiveFrom().isBefore(businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now))) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "生效日不得早于当日营业日");
+        }
+        var actor = authorizationService.currentActor();
+        repository.saveFeeDraft(id, feeMode, feeValue, request.effectiveFrom(), actor == null ? null : actor.id(), now);
+        auditEventService.recordSuccess("service.catalog.fee_drafted", "service.catalog.manage",
+                "service_catalog_item", id, null, request.idempotencyKey(),
+                Map.of("mgmt_fee_mode", feeMode, "mgmt_fee_value", feeValue, "effective_from", request.effectiveFrom().toString()));
+        return repository.findCatalogItem(id).orElseThrow();
+    }
+
+    /** TK-23-R3:草案差人复核转正(比照 activateDraft 的 requireDifferentActor);只标记复核人,生效日起由下单路径翻为新版本;
+     * 转正即向受影响方通告(ENUM L291「变更前向受影响方通告」)。 */
+    public ServiceCatalogItemRecord activateFeeDraft(String id, String idempotencyKey) {
+        return withFailureAudit("service.catalog.fee_activate_failed", "service.catalog.approve", "service_catalog_item", id,
+                idempotencyKey, () -> {
+            authorizationService.requirePermission("service.catalog.approve");
+            var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "服务目录项不存在或已被删除"));
+            if (item.nextRequestedBy() == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "该项无待复核的管理费草案");
+            }
+            if (item.nextApprovedBy() != null) {
+                return item;
+            }
+            var actor = authorizationService.currentActor();
+            if (actor != null && actor.id() != null && actor.id().equals(item.nextRequestedBy())) {
+                throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN", "管理费草案须由起草人以外的人复核转正");
+            }
+            repository.approveFeeDraft(id, actor == null ? null : actor.id());
+            auditEventService.recordSuccess("service.catalog.fee_activated", "service.catalog.approve",
+                    "service_catalog_item", id, null, idempotencyKey,
+                    Map.of("mgmt_fee_mode", item.nextMgmtFeeMode(), "mgmt_fee_value", item.nextMgmtFeeValue(),
+                            "effective_from", item.nextEffectiveFrom().toString(), "fee_version_next", item.feeVersion() + 1));
+            notifyFeeChange(item);
+            return repository.findCatalogItem(id).orElseThrow();
+        });
+    }
+
+    /** 通告受影响方(复用 notification 现有发送口),留痕 fee_change_notified。操作员裁决 2026-10-20 第三轮第 8 条「可接该服务的履约人
+     *  +所属酒吧」、不设 90 天窗口;收件人口径按第十批 blocked_questions 裁决(B10-BRIEF 第 10 条):①本项目在职、持
+     *  service.order.perform 权限的员工;②该目录项服务单发生过的酒吧的主理人(该酒吧当前有效分红方案 principal_user_id)。
+     *  均按员工档案手机号发,无手机号不发;不发商户档案联系电话。本项目＝转正操作者的项目范围(平台账号无项目范围时不按项目筛)。 */
+    private void notifyFeeChange(ServiceCatalogItemRecord item) {
+        java.util.Map<String, String> recipients = new java.util.LinkedHashMap<>();
+        String project = authorizationService.currentProjectScopeQuietly().orElse(null);
+        java.util.List<String> userIds = new java.util.ArrayList<>();
+        for (var actor : repository.listActiveStaffActors(project)) {
+            if (authorizationService.hasEffectivePermission(actor, "service.order.perform")) {
+                userIds.add(actor.id());
+            }
+        }
+        userIds.addAll(repository.listBarPrincipalUserIds(item.id()));
+        for (String userId : userIds) {
+            staffRepository.findProfileByUserId(userId)
+                    .map(com.complex.platform.access.staff.StaffProfileRecord::phone)
+                    .map(com.complex.platform.common.Strings::trimToNull)
+                    .ifPresent(phone -> recipients.putIfAbsent(userId, phone));
+        }
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("item_name", item.name());
+        params.put("mgmt_fee_mode", item.nextMgmtFeeMode());
+        params.put("mgmt_fee_value", item.nextMgmtFeeValue());
+        params.put("effective_from", String.valueOf(item.nextEffectiveFrom()));
+        int sent = 0;
+        for (var recipient : recipients.entrySet()) {
+            String phone = recipient.getValue();
+            try {
+                notificationService.notify("service", "catalog_fee_changed", phone, "sms.service.catalog_fee_changed", params,
+                        "svcfee_" + UUID.nameUUIDFromBytes((item.id() + "|" + (item.feeVersion() + 1) + "|" + recipient.getKey())
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-", ""));
+                sent++;
+            } catch (RuntimeException exception) {
+                log.warn("service catalog fee change notification failed: item_id={}", item.id(), exception);
+            }
+        }
+        auditEventService.recordSuccess("service.catalog.fee_change_notified", "service.catalog.approve",
+                "service_catalog_item", item.id(), null, null, Map.of("recipients", recipients.size(), "sent", sent));
     }
 
     public PageResponse<ServiceCatalogItemRecord> listCatalog() {
@@ -184,17 +313,24 @@ public class ServiceOrderService {
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ITEM_NOT_FOUND", "服务项不存在或已停用"));
         var actor = authorizationService.currentActor();
         Instant now = Instant.now();
+        // TK-23-R3(BSM L1070「费率变更形成新版本并指定生效日期,只对生效日之后发生的单据有效;每笔提成在下单时锁定当时的费率版本」):
+        // 已复核草案到了生效营业日 → 先翻为现行版本(fee_version+1、清空草案)再快照;WHERE 条件保证并发下单只翻一次。
+        if (item.nextApprovedBy() != null && item.nextEffectiveFrom() != null
+                && !item.nextEffectiveFrom().isAfter(businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now))) {
+            repository.promoteApprovedFeeDraft(item.id(), businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now));
+            item = repository.findCatalogItem(item.id()).orElse(item);
+        }
         // H批(2026-07-02 最终拍板):公司统一账户代收——下单即出示公司收款码,服务员现场确认收款。
         ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
                 "svo_" + UUID.randomUUID(), item.id(), item.name(), item.priceCent(),
                 trimToNull(request.barId()), trimToNull(request.tableId()), request.performerUserId().trim(),
                 actor == null ? null : actor.id(), trimToNull(request.customerNote()),
                 "created", null, null, null, null, null, 0, 0, now, now, null,
-                item.mgmtFeeMode(), item.mgmtFeeValue()));
+                item.mgmtFeeMode(), item.mgmtFeeValue(), item.feeVersion()));
         auditEventService.recordSuccess("service.order.created", "service.order.create",
                 "service_order", saved.id(), null, request.idempotencyKey(),
                 Map.of("item", saved.itemName(), "performer", saved.performerUserId(),
-                        "price_cent_company_collect", saved.priceCent()));
+                        "price_cent_company_collect", saved.priceCent(), "snap_fee_version", item.feeVersion()));
         return saved;
     }
 
@@ -255,9 +391,11 @@ public class ServiceOrderService {
                 current.createdAt(), now, current.completedAt(),
                 current.snapMgmtFeeMode(), current.snapMgmtFeeValue()));
         // P1 收款对账:落一条公司应收/已收流水到复用的 ar_ap_items(带订单号+金额+时间;确认人=paid_by)。
+        // TK-23-R2:应收行 due_date/accounting_period 按收款时点所在 bar 营业日(ENUM L187 钱账统一按营业日归集)。
         // ponytail: 价为 0 的单不生成应收行(ar_ap_items.amount_cent>0 CHECK);正价单幂等一单一条。
         if (saved.priceCent() > 0) {
-            repository.insertReceivableForOrder(saved.id(), saved.priceCent(), now);
+            repository.insertReceivableForOrder(saved.id(), saved.priceCent(),
+                    businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now), now);
         }
         auditEventService.recordSuccess("service.order.paid", "service.order.create",
                 "service_order", saved.id(), null,
@@ -299,7 +437,8 @@ public class ServiceOrderService {
         long mgmtFee = switch (feeMode) {
             // R-7:管理费按比例取额四舍五入到分(旧整除截断,平台恒少收);dancerShare 取补数 → 两侧和恒 = 价,无尾差。
             case "percent" -> MoneyRounding.bpsOf(current.priceCent(), feeValueFinal);
-            case "fixed" -> Math.min(feeValueFinal, current.priceCent());
+            // TK-23-R1(ENUM L291「不得静默截断、封顶或改写」):固定额直接取快照(保存时已校验 0..售价,不再封顶)。
+            case "fixed" -> feeValueFinal;
             default -> 0L;
         };
         long dancerShare = current.priceCent() - mgmtFee;
@@ -311,7 +450,8 @@ public class ServiceOrderService {
                     "服务订单已完成或已不可支付：状态已被并发变更");
         }
         // 赢得 CAS 后再入提成(部分唯一索引 + ON CONFLICT DO NOTHING,双保险幂等);再落审计。
-        String month = java.time.YearMonth.from(java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC)).toString();
+        // TK-23-R2(ENUM L291 / BSM L1138):归属月按完成时点所在 bar 营业日,不按 UTC 自然月。
+        String month = settlementMonth(businessDayResolver, now);
         staffRepository.insertCommission("cml_" + UUID.randomUUID(), current.performerUserId(), month,
                 "service_order", current.id(), dancerShare, current.itemName(), now);
         ServiceOrderRecord saved = new ServiceOrderRecord(
@@ -320,12 +460,18 @@ public class ServiceOrderService {
                 current.customerNote(), "completed", current.cancelReason(),
                 current.paidAt(), current.paidBy(), current.payMethod(), current.refundNote(),
                 mgmtFee, dancerShare, current.createdAt(), now, now,
-                current.snapMgmtFeeMode(), current.snapMgmtFeeValue());
+                current.snapMgmtFeeMode(), current.snapMgmtFeeValue(), current.snapFeeVersion());
         auditEventService.recordSuccess("service.order.completed", "service.order.create",
                 "service_order", saved.id(), null,
                 request == null ? null : request.idempotencyKey(),
-                Map.of("mgmt_fee_cent", mgmtFee, "dancer_share_cent", dancerShare));
+                Map.of("mgmt_fee_cent", mgmtFee, "dancer_share_cent", dancerShare, "settlement_month", month));
         return saved;
+    }
+
+    /** 服务单份额/管理费归属月(YYYY-MM)= 时点所在 bar 营业日(Asia/Shanghai + business_day_cutoff_config.bar 切日)的年月。
+     * ENUM L291 / BSM L1138「按服务完成时点所在营业日确定」;DEC-R6-10 禁止服务器默认时区/UTC。 */
+    static String settlementMonth(com.complex.platform.common.BusinessDayResolver resolver, Instant instant) {
+        return java.time.YearMonth.from(resolver.businessDate(BUSINESS_DAY_DOMAIN, instant)).toString();
     }
 
     private ServiceOrderRecord require(String id) {
@@ -443,7 +589,7 @@ public class ServiceOrderService {
                 authorizationService.currentProjectScopeQuietly().orElse(null)));
     }
 
-    /** H批:履约人当月完成次数+分账应得(公司代收,月结进薪资提成并代扣个税)。 */
+    /** H批:履约人当月完成次数+分账应得(公司代收,月结进薪资提成并代扣个税)。TK-23-R2:与薪资月结同源(提成台账 month=营业日年月)。 */
     public Map<String, Object> myStats(String month) {
         authorizationService.requirePermission("service.order.perform");
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {

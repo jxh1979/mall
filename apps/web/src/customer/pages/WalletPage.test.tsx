@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -122,6 +122,22 @@ describe("WalletPage", () => {
     expect(screen.getByText("本金 ¥-50.00 · 赠送金 ¥-2.00")).toBeInTheDocument();
     expect(screen.getByText("调整 · ¥-3.00")).toBeInTheDocument();
     expect(screen.getByText("本金 ¥0.00 · 赠送金 ¥-3.00 · 销户：未使用赠送金作废（不退现）")).toBeInTheDocument();
+  });
+
+  // TK-20-R4（BSM「我的余额」：每笔退款与回冲（含回冲顺序结果））：消费退款回原卡的流水显示「退款回冲」，两段金额=先赠送金后本金的回冲结果。
+  it("renders consume reversal row with bonus-first split", async () => {
+    const service = {
+      getStoredValueAccounts: vi.fn().mockResolvedValue([projectCard]),
+      topupStoredValue: vi.fn(),
+      getStoredValueTransactions: vi.fn().mockResolvedValue([
+        { id: "t1", accountId: "svacc_prj", customerId: "c-1", txnType: "consume", amountCent: -12000, balanceAfterCent: 3000, principalCent: -10000, bonusCent: -2000, reason: null, createdAt: "2026-10-17T00:00:00Z" },
+        { id: "t2", accountId: "svacc_prj", customerId: "c-1", txnType: "consume_reversal", amountCent: 3000, balanceAfterCent: 6000, principalCent: 1000, bonusCent: 2000, reason: "酒吧账单退款", createdAt: "2026-10-17T01:00:00Z" },
+      ]),
+    } as unknown as CustomerService;
+
+    render(<WalletPage service={service} />);
+    await waitFor(() => expect(screen.getByText("退款回冲 · ¥30.00")).toBeInTheDocument());
+    expect(screen.getByText("本金 ¥10.00 · 赠送金 ¥20.00 · 酒吧账单退款")).toBeInTheDocument();
   });
 
   it("shows empty state when the customer has no stored-value cards", async () => {

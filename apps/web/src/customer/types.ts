@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 客人端响应类型（对齐后端 customer 域 record，camelCase 化后口径）
 
 export type TicketProduct = {
@@ -277,4 +277,13 @@ export type VoucherTransfer = {
   voidReason?: string | null;
   createdAt: string | null;
   claimedAt?: string | null;
+};
+
+// TK-21-R3（BSM「账户注销」：注销前提醒名下储值卡余额）：注销预览每张卡的本金/赠送金（后端 CustomerDeregisterPreviewResponse）。
+export type DeregisterPreviewCard = {
+  accountId: string;
+  cardScope: string; // project=综合体通用卡 | merchant=商户级卡
+  merchantId: string | null;
+  principalCent: number;
+  bonusCent: number;
 };

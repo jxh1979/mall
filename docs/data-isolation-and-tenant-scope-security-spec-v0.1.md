@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V516**，发现 **219** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V523**，发现 **221** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -190,6 +190,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `leasing_intents` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `leasing_leads` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `mall_floor_plans` | `merchant_id` + `project_id` | direct | V023, V052 | `V023__p1_floor_plan_polygons.sql`<br>`V052__floorplan_merchant_isolation.sql` |
+| `media_performance_shows` | `project_id` | direct | V523 | `V523__media_performance_shows.sql` |
 | `merchant_bill_disputes` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bill_dunning_records` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bills` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
@@ -253,6 +254,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `stocktake` | `merchant_id` | direct | V108 | `V108__inventory_variance_to_ap.sql` |
 | `stored_value_bonus_policies` | `project_id` | direct | V444 | `V444__stored_value_principal_bonus_split.sql` |
 | `stored_value_merchant_refund_rules` | `merchant_id` | direct | V176 | `V176__stored_value_merchant_refund_rules.sql` |
+| `stored_value_topup_batches` | `project_id` | direct | V517 | `V517__stored_value_topup_batches_and_consume_reversal.sql` |
 | `stored_value_topup_intents` | `merchant_id` + `project_id` | direct | V284 | `V284__stored_value_topup_intents.sql` |
 | `supplier_qualifications` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |
 | `supplier_settlement_methods` | `merchant_id` | direct | V112 | `V112__supplier_qualification_settlement.sql` |

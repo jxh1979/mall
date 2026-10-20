@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FinanceArApLedgerPage } from "./FinanceArApLedgerPage";
@@ -187,8 +187,17 @@ describe("财务退款完整操作", () => {
     fireEvent.click(screen.getByRole("button", { name: "核实退款结果" }));
     expect(api.post).not.toHaveBeenCalled();
   });
+  // TK-21-R2（BSM「储值」：「商户卡仍由发卡商户直接收款和退款……实际退款成功才结清」）：商户卡待退事项只展示，不在这里执行或核实。
+  it("merchant stored value pending row shows counter-refund hint without confirm button", async () => {
+    mount("requested", grants, { sourceType: "stored_value_account", merchantId: "merchant-1", originalPaymentRef: null, attempts: [] });
+    await openRefund();
+    await waitFor(() => expect(screen.getByText("该商户卡待退本金由发卡商户柜台退卡结清；柜台退卡成功即结清，这里只展示、不办理。")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "登记本人已执行退款" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "核实退款结果" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "在原单重试" })).toBeDisabled();
+  });
   it("没有原支付路径的储值待退不能借通用入口自动重试", async () => {
-    mount("requested", grants, { sourceType: "stored_value_account", originalPaymentRef: null });
+    mount("requested", grants, { sourceType: "stored_value_account", merchantId: null, originalPaymentRef: null });
     await openRefund();
     expect(screen.getByRole("button", { name: "在原单重试" })).toBeDisabled();
     expect(screen.getByText("该笔储值退款须按原收款路径办理并核实结果。" )).toBeTruthy();

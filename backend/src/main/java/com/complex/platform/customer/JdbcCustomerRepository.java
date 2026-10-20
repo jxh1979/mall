@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1391,6 +1391,202 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("fund_ownership"),
                 rs.getLong("principal_cent"),
                 rs.getLong("bonus_cent"));
+    }
+
+    // ---------- TK-19 / TK-20（V517）：充值批次、消费分摊、退款恢复、消费退款回冲 ----------
+
+    @Override
+    public int findStoredValueChannelFeeBps(String projectId, String channel) {
+        // 与 JdbcSettlementBillRepository.findChannelFee 同口径（生效、非草稿、项目特例 > 全局默认），只认该支付通路的专属配置；未配置 = 0。
+        Integer bps = jdbcTemplate.query("""
+                SELECT fee_bps FROM channel_fee_configs
+                 WHERE status = 'active' AND is_draft = FALSE AND channel = :channel
+                   AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
+                 ORDER BY (project_id IS NOT NULL) DESC
+                 LIMIT 1
+                """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("channel", channel),
+                rs -> rs.next() ? rs.getInt("fee_bps") : null);
+        return bps == null ? 0 : bps;
+    }
+
+    @Override
+    public void saveStoredValueTopupBatch(StoredValueTopupBatchRecord batch) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_topup_batches (id, account_id, customer_id, project_id, payment_channel, fee_bps,
+                    principal_cent, remaining_principal_cent, paid_at)
+                VALUES (:id, :account_id, :customer_id, :project_id, :payment_channel, :fee_bps,
+                    :principal_cent, :remaining_principal_cent, :paid_at)
+                """, new MapSqlParameterSource()
+                .addValue("id", batch.id())
+                .addValue("account_id", batch.accountId())
+                .addValue("customer_id", batch.customerId())
+                .addValue("project_id", batch.projectId())
+                .addValue("payment_channel", batch.paymentChannel())
+                .addValue("fee_bps", batch.feeBps())
+                .addValue("principal_cent", batch.principalCent())
+                .addValue("remaining_principal_cent", batch.remainingPrincipalCent())
+                .addValue("paid_at", timestampWithTimeZone(batch.paidAt())));
+    }
+
+    @Override
+    public List<StoredValueTopupBatchRecord> listOpenStoredValueTopupBatchesForUpdate(String accountId) {
+        return jdbcTemplate.query("""
+                SELECT id, account_id, customer_id, project_id, payment_channel, fee_bps, principal_cent, remaining_principal_cent, paid_at
+                  FROM stored_value_topup_batches
+                 WHERE account_id = :account_id AND remaining_principal_cent > 0
+                 ORDER BY paid_at, id
+                 FOR UPDATE
+                """, Map.of("account_id", accountId), this::mapTopupBatch);
+    }
+
+    @Override
+    public void addStoredValueTopupBatchRemaining(String batchId, long deltaCent) {
+        jdbcTemplate.update("UPDATE stored_value_topup_batches SET remaining_principal_cent = remaining_principal_cent + :delta WHERE id = :id",
+                new MapSqlParameterSource().addValue("delta", deltaCent).addValue("id", batchId));
+    }
+
+    @Override
+    public void saveStoredValueConsumeAllocation(StoredValueConsumeAllocationRecord allocation) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_consume_allocations (id, consume_txn_id, batch_id, principal_cent, restored_principal_cent,
+                    fee_bps, fee_cent, created_at)
+                VALUES (:id, :consume_txn_id, :batch_id, :principal_cent, :restored_principal_cent, :fee_bps, :fee_cent, :created_at)
+                """, new MapSqlParameterSource()
+                .addValue("id", allocation.id())
+                .addValue("consume_txn_id", allocation.consumeTxnId())
+                .addValue("batch_id", allocation.batchId())
+                .addValue("principal_cent", allocation.principalCent())
+                .addValue("restored_principal_cent", allocation.restoredPrincipalCent())
+                .addValue("fee_bps", allocation.feeBps())
+                .addValue("fee_cent", allocation.feeCent())
+                .addValue("created_at", timestampWithTimeZone(allocation.createdAt())));
+    }
+
+    @Override
+    public List<StoredValueConsumeAllocationRecord> listStoredValueConsumeAllocationsForUpdate(String consumeTxnId) {
+        return jdbcTemplate.query("""
+                SELECT id, consume_txn_id, batch_id, principal_cent, restored_principal_cent, fee_bps, fee_cent, created_at
+                  FROM stored_value_consume_allocations
+                 WHERE consume_txn_id = :consume_txn_id
+                 ORDER BY created_at, id
+                 FOR UPDATE
+                """, Map.of("consume_txn_id", consumeTxnId), (rs, rowNumber) -> new StoredValueConsumeAllocationRecord(
+                rs.getString("id"), rs.getString("consume_txn_id"), rs.getString("batch_id"), rs.getLong("principal_cent"),
+                rs.getLong("restored_principal_cent"), rs.getInt("fee_bps"), rs.getLong("fee_cent"), nullableInstant(rs, "created_at")));
+    }
+
+    @Override
+    public void addStoredValueAllocationRestored(String allocationId, long deltaCent) {
+        jdbcTemplate.update("UPDATE stored_value_consume_allocations SET restored_principal_cent = restored_principal_cent + :delta WHERE id = :id",
+                new MapSqlParameterSource().addValue("delta", deltaCent).addValue("id", allocationId));
+    }
+
+    @Override
+    public void saveStoredValueConsumeRestoration(String id, String reversalTxnId, String allocationId, long principalCent,
+                                                  int feeBps, long feeAdjustCent, Instant createdAt) {
+        jdbcTemplate.update("""
+                INSERT INTO stored_value_consume_restorations (id, reversal_txn_id, allocation_id, principal_cent, fee_bps, fee_adjust_cent, created_at)
+                VALUES (:id, :reversal_txn_id, :allocation_id, :principal_cent, :fee_bps, :fee_adjust_cent, :created_at)
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("reversal_txn_id", reversalTxnId)
+                .addValue("allocation_id", allocationId)
+                .addValue("principal_cent", principalCent)
+                .addValue("fee_bps", feeBps)
+                .addValue("fee_adjust_cent", feeAdjustCent)
+                .addValue("created_at", timestampWithTimeZone(createdAt)));
+    }
+
+    @Override
+    public Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdForUpdate(String id) {
+        if (id == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.query("""
+                SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
+                  FROM customer_stored_value_transactions
+                 WHERE id = :id
+                 FOR UPDATE
+                """, Map.of("id", id), this::mapStoredValueTransaction).stream().findFirst();
+    }
+
+    @Override
+    public CustomerStoredValueTransactionRecord saveStoredValueReversalTransaction(CustomerStoredValueTransactionRecord txn,
+                                                                                   String originalTxnId) {
+        jdbcTemplate.update("""
+                INSERT INTO customer_stored_value_transactions (
+                    id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
+                    payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent, original_txn_id
+                )
+                VALUES (
+                    :id, :account_id, :customer_id, :txn_type, :amount_cent, :balance_after_cent,
+                    :payment_intent_id, :reason, :idempotency_key, :created_at, :paid_at, :principal_cent, :bonus_cent, :original_txn_id
+                )
+                """, new MapSqlParameterSource()
+                .addValue("id", txn.id())
+                .addValue("account_id", txn.accountId())
+                .addValue("customer_id", txn.customerId())
+                .addValue("txn_type", txn.txnType())
+                .addValue("amount_cent", txn.amountCent())
+                .addValue("balance_after_cent", txn.balanceAfterCent())
+                .addValue("payment_intent_id", txn.paymentIntentId())
+                .addValue("reason", txn.reason())
+                .addValue("idempotency_key", txn.idempotencyKey())
+                .addValue("created_at", timestampWithTimeZone(txn.createdAt()))
+                .addValue("paid_at", timestampWithTimeZone(txn.paidAt()))
+                .addValue("principal_cent", txn.principalCent())
+                .addValue("bonus_cent", txn.bonusCent())
+                .addValue("original_txn_id", originalTxnId));
+        return txn;
+    }
+
+    @Override
+    public long[] sumStoredValueReversals(String originalTxnId) {
+        return jdbcTemplate.query("""
+                SELECT COALESCE(SUM(principal_cent), 0) AS principal_cent, COALESCE(SUM(bonus_cent), 0) AS bonus_cent
+                  FROM customer_stored_value_transactions
+                 WHERE txn_type = 'consume_reversal' AND original_txn_id = :original
+                """, Map.of("original", originalTxnId),
+                rs -> rs.next() ? new long[] {rs.getLong("principal_cent"), rs.getLong("bonus_cent")} : new long[] {0L, 0L});
+    }
+
+    @Override
+    public Optional<String> findStoredValueOriginalTxnId(String txnId) {
+        return jdbcTemplate.query("SELECT original_txn_id FROM customer_stored_value_transactions WHERE id = :id",
+                Map.of("id", txnId), (rs, n) -> rs.getString(1)).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    @Override
+    public void undoStoredValueRestorations(String reversalTxnId) {
+        jdbcTemplate.update("""
+                UPDATE stored_value_consume_allocations a SET restored_principal_cent = a.restored_principal_cent - r.principal_cent
+                  FROM stored_value_consume_restorations r
+                 WHERE r.reversal_txn_id = :id AND r.allocation_id = a.id
+                """, Map.of("id", reversalTxnId));
+        jdbcTemplate.update("""
+                UPDATE stored_value_topup_batches b SET remaining_principal_cent = b.remaining_principal_cent - x.principal_cent
+                  FROM (SELECT a.batch_id, SUM(r.principal_cent) AS principal_cent
+                          FROM stored_value_consume_restorations r JOIN stored_value_consume_allocations a ON a.id = r.allocation_id
+                         WHERE r.reversal_txn_id = :id GROUP BY a.batch_id) x
+                 WHERE b.id = x.batch_id
+                """, Map.of("id", reversalTxnId));
+    }
+
+    @Override
+    public long sumStoredValueTransactionsByIdempotencyPrefix(String prefix) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0) FROM customer_stored_value_transactions
+                 WHERE idempotency_key LIKE :prefix
+                """, Map.of("prefix", prefix.replace("%", "") + "%"), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    private StoredValueTopupBatchRecord mapTopupBatch(ResultSet rs, int rowNumber) throws SQLException {
+        return new StoredValueTopupBatchRecord(
+                rs.getString("id"), rs.getString("account_id"), rs.getString("customer_id"), rs.getString("project_id"),
+                rs.getString("payment_channel"), rs.getInt("fee_bps"), rs.getLong("principal_cent"),
+                rs.getLong("remaining_principal_cent"), nullableInstant(rs, "paid_at"));
     }
 
     private CustomerStoredValueTransactionRecord mapStoredValueTransaction(ResultSet rs, int rowNumber) throws SQLException {

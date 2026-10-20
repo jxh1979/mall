@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -73,6 +73,8 @@ public class FinanceService implements TerminationSettlementPort {
             "deposit_adjustment",
             // FS-013：单一酒吧门票综合服务费按计费月汇总后单独挂酒吧应收（结算过账写入；退款重算的应退同来源 direction=payable）。
             "single_bar_service_fee",
+            // 第十批 TK-24-R3：订台定金达标原路退回的应付退款项（BSM L1062「达标时，各笔定金分别原路退回」）。
+            "bar_deposit_refund",
             // FS-021-R1：通票分账负额明细（向商户追回）单独挂追收应收，不与应付轧差（BSM L755）。
             "ticket_distribution_recovery");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
@@ -114,6 +116,7 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("dividend_reserve_released", "分红留存已释放"), Map.entry("dealer_order", "经销订单"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
             Map.entry("platform_incentive_subsidy", "平台激励补贴(超池特批)"),
+            Map.entry("bar_deposit_refund", "订台定金达标退回"),
             Map.entry("ticket_points_issuance", "门票积分发行月结"),
             Map.entry("staff_payroll", "员工工资"),
             Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"),
@@ -974,9 +977,11 @@ public class FinanceService implements TerminationSettlementPort {
         String targetId = requireText(accountId, "account_id");
         long amount = requirePositive(payoutCent, "payout_cent");
         String sourceProject = trimToNull(projectId);
-        checkMerchantOwnership(merchantId);
+        // TK-21-R3：客人自助注销（客人 token 主体）为系统路径，按本人卡登记待退，不过员工的商户/项目范围闸。
+        boolean customerSelfService = "customer".equals(authorizationService.currentActor().accountType());
+        if (!customerSelfService) checkMerchantOwnership(merchantId);
         String reasonText = trimToDefault(reason, "储值本金待退");
-        String id = "refund_sv_" + stableToken("stored_value_refund", requireText(idempotencyKey, "idempotency_key"));
+        String id = storedValuePayoutRefundId(idempotencyKey);
         Optional<FinanceRefundRecord> existing = repository.findRefundById(id, true);
         if (existing.isPresent()) {
             FinanceRefundRecord original = existing.get();
@@ -986,7 +991,7 @@ public class FinanceService implements TerminationSettlementPort {
                     || (sourceProject != null && !sourceProject.equals(original.projectId()))) {
                 throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "该退款编号已用于其他来源或金额");
             }
-            checkProjectScope(original.projectId());
+            if (!customerSelfService) checkProjectScope(original.projectId());
             return original.id();
         }
         String project = sourceProject;
@@ -995,13 +1000,39 @@ public class FinanceService implements TerminationSettlementPort {
             if (projects.size() == 1) project = projects.getFirst();
         }
         // 商户卡可无独立项目。无法唯一归属时登记待核实，不拿调用者项目补写原卡，也不允许出款。
-        checkProjectScope(project);
+        if (!customerSelfService) checkProjectScope(project);
         Instant now = Instant.now();
         FinanceRefundRecord saved = repository.saveRefund(new FinanceRefundRecord(
                 id, targetId, amount, reasonText, "original", DEFAULT_REFUND_DIRECTION, "requested", now,
                 "stored_value_account", merchantId, project,
                 authorizationService.currentActor().id(), null, null, null, now, null));
         return saved.id();
+    }
+
+    private String storedValuePayoutRefundId(String idempotencyKey) {
+        return "refund_sv_" + stableToken("stored_value_refund", requireText(idempotencyKey, "idempotency_key"));
+    }
+
+    /** TK-21：按储值退款幂等键找已登记的储值待退事项（账户关闭/注销登记的 svclose_ 事项），无则空。仅供储值域内部调用。 */
+    public Optional<FinanceRefundRecord> findStoredValuePayoutRefund(String idempotencyKey) {
+        return repository.findRefundById(storedValuePayoutRefundId(idempotencyKey), false)
+                .filter(refund -> "stored_value_account".equals(refund.sourceType()));
+    }
+
+    /**
+     * TK-21-R2（BSM「储值」：「沿原退款审批和原收款路径执行；实际退款成功才结清」；CG-06b 第 16 条「商户按原退款流程实际退款」）：
+     * 发卡商户柜台退卡成功＝该商户卡待退事项的实际退款成功，事项置 success（gateway_ref＝兑付凭证号、succeeded_at＝现在），
+     * 并留一条 confirm 办理记录。只在储值域柜台退卡事务内调用；不触碰客人账号状态。
+     */
+    public FinanceRefundRecord settleStoredValuePayoutRefundAtCounter(FinanceRefundRecord pending, String redemptionVoucherNo) {
+        FinanceRefundRecord refund = repository.findRefundById(pending.id(), true).orElse(pending);
+        if ("success".equals(refund.status())) return refund;
+        String voucher = requireText(redemptionVoucherNo, "redemption_voucher_no");
+        repository.appendRefundAttempt(new FinanceRefundAttemptRecord(
+                "refund_attempt_" + UUID.randomUUID().toString().replace("-", ""), refund.id(),
+                "confirm", "success", "merchant_counter", voucher, "发卡商户柜台退卡结清",
+                voucher, authorizationService.currentActor().id(), null, List.of(), Instant.now()));
+        return saveRefundState(refundState(refund, "success", "merchant_counter", voucher));
     }
 
     /** 经销域已完成原审批及到账核实；仅登记待办，执行和结果仍走统一财务凭证流程。 */
@@ -1124,6 +1155,109 @@ public class FinanceService implements TerminationSettlementPort {
         repository.saveArApItemSource(new ArApItemSourceRecord(
                 "arap_src_svpay_" + key, itemId, "stored_value_consume", txnId, amountCent, now));
         return saved;
+    }
+
+    /**
+     * TK-20-R1 平台代收商户卡消费退款回卡：按回冲额对原「平台应付商户」追加一条冲正行（V344 红冲范式：回指原行 origin_item_id、
+     * 沿用原行方向/往来对象/来源单据、金额严格取反、status=reversed），原行不动；按来源聚合即净成扣除回冲后的应付。
+     * 原消费未挂应付（商户预收 / 旧卡未定格）则无可冲，返回 null。仅供储值域服务内部调用。
+     */
+    public ArApItemRecord recordStoredValueMerchantPayableReversal(String merchantId, String consumeTxnId,
+                                                                   String reversalTxnId, long amountCent) {
+        String mid = trimToNull(merchantId);
+        String txnId = trimToNull(consumeTxnId);
+        if (mid == null || txnId == null || amountCent <= 0) {
+            return null;
+        }
+        ArApItemRecord origin = repository.findArApItemById("arap_svpay_" + slug(txnId)).orElse(null);
+        if (origin == null) {
+            return null;
+        }
+        Instant now = Instant.now();
+        LocalDate businessDate = businessDayResolver.businessDate(now);  // 复核 money m3：钱账按营业日（ENUM L187），不按 UTC
+        if (repository.lockedDailyCloseExistsForDate(businessDate, mid)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "营业日 " + businessDate + " 已锁定，请走补录调整流程");
+        }
+        String key = slug(requireText(reversalTxnId, "reversal_txn_id"));
+        return repository.appendArApItem(new ArApItemRecord(
+                "arap_svrev_" + key,
+                "SVREV-" + key,
+                origin.direction(),
+                origin.counterpartyId(),
+                origin.sourceType(),
+                origin.sourceId(),
+                -amountCent,
+                0L,
+                -amountCent,
+                CURRENCY_CNY,
+                businessDate,
+                origin.accountingPeriod(),
+                "reversed",
+                now,
+                now,
+                origin.merchantId(),
+                origin.projectId(),
+                origin.id(),
+                null));
+    }
+
+    /**
+     * TK-29-R3（BSM L1145 三种情形分别按锁定合同出账；L1144 ①由娱乐平台公司售票收款后分给传媒公司）：某场某费项的结算行出账——
+     * 应付传媒公司（counterparty=传媒公司主体 be_media）；②③付方是酒吧（merchantId=酒吧，挂酒吧账本），①付方是娱乐平台公司（merchantId 为空）。
+     * source_type=media_performance_settlement、source_id=结算行 id；id 由结算行 id 派生，重放命中既有行即返回（零重复分录）；
+     * 遵守日结锁（按付方商户 scope 判锁）。仅供结算域服务内部调用（调用方已过 media.performance.settle 权限闸并在同一事务）。
+     */
+    public ArApItemRecord postMediaPerformancePayable(String settlementId, String payeeEntityId, String payerMerchantId,
+                                                       String projectId, long amountCent) {
+        String key = slug(requireText(settlementId, "settlement_id"));
+        String itemId = "arap_mps_" + key;
+        Optional<ArApItemRecord> existing = repository.findArApItemById(itemId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        if (amountCent <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "演出结算出账金额必须大于 0");
+        }
+        String payee = requireText(payeeEntityId, "payee_entity_id");
+        String merchantId = trimToNull(payerMerchantId);
+        Instant now = Instant.now();
+        LocalDate businessDate = businessDayResolver.businessDate(now);  // 复核 money m3：按营业日，不按服务器时区
+        if (repository.lockedDailyCloseExistsForDate(businessDate, merchantId)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "营业日 " + businessDate + " 已锁定，请走补录调整流程");
+        }
+        ArApItemRecord saved = repository.saveArApItem(new ArApItemRecord(
+                itemId, "MPS-" + key, "payable", payee, "media_performance_settlement", settlementId,
+                amountCent, 0L, amountCent, CURRENCY_CNY, businessDate, null, "pending_payment", now, now,
+                merchantId, trimToNull(projectId)));
+        repository.saveArApItemSource(new ArApItemSourceRecord(
+                "arap_src_mps_" + key, itemId, "media_performance_settlement", settlementId, amountCent, now));
+        return saved;
+    }
+
+    /**
+     * TK-29-R3（BSM L1145「已形成结算需要调整时，关联原记录并按既有历史调整规则办理，不覆盖原结果」）：调整时对原演出结算应付按 V344
+     * 红冲范式追加冲正行（回指原行 origin_item_id、金额严格取反、status=reversed），原行不动；新金额由新结算行另挂。
+     */
+    public ArApItemRecord reverseMediaPerformancePayable(String originItemId, String adjustingSettlementId) {
+        ArApItemRecord origin = repository.findArApItemById(requireText(originItemId, "origin_item_id"))
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "原演出结算应付不存在"));
+        String key = slug(requireText(adjustingSettlementId, "adjusting_settlement_id"));
+        Optional<ArApItemRecord> existing = repository.findArApItemById("arap_mpsrev_" + key);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        Instant now = Instant.now();
+        LocalDate businessDate = businessDayResolver.businessDate(now);  // 复核 money m3：按营业日，不按服务器时区
+        if (repository.lockedDailyCloseExistsForDate(businessDate, origin.merchantId())) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "营业日 " + businessDate + " 已锁定，请走补录调整流程");
+        }
+        return repository.appendArApItem(new ArApItemRecord(
+                "arap_mpsrev_" + key, "MPSREV-" + key, origin.direction(), origin.counterpartyId(), origin.sourceType(),
+                origin.sourceId(), -origin.amountCent(), 0L, -origin.amountCent(), CURRENCY_CNY, businessDate,
+                origin.accountingPeriod(), "reversed", now, now, origin.merchantId(), origin.projectId(), origin.id(), null));
     }
 
     public PageResponse<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId) {
@@ -1521,6 +1655,15 @@ public class FinanceService implements TerminationSettlementPort {
                 && "settled".equals(updated.status())) {
             savedBottleRemedyRecovery.onRecoverySettled(updated);
         }
+        // 复核 money I2（BSM L1062「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」）：订台定金达标原路退款应付
+        // 实付结清 → 同一事务回写定金为「达标已原路退回」（挂应付时只是退款处理中，定金仍为已支付）。
+        if (ticketPointsJdbc != null && "bar_deposit_refund".equals(updated.sourceType()) && "settled".equals(updated.status())) {
+            ticketPointsJdbc.update("""
+                    UPDATE bar_reservations SET deposit_status='settled', deposit_settlement='refunded_on_threshold',
+                           deposit_settled_at=now(), updated_at=now()
+                     WHERE id=? AND deposit_status='paid'
+                    """, updated.sourceId());
+        }
         // FS-021-R5（BSM L1683「每笔应付的实际到账结果回写该笔应付」）：确认到账即回写在途那次付款为到账。
         if (ticketPointsJdbc != null) {
             ticketPointsJdbc.update("""
@@ -1913,6 +2056,7 @@ public class FinanceService implements TerminationSettlementPort {
         return executeWrite("recordFinanceRefundExecution:" + refundId, actual.idempotencyKey(), actual,
                 FinanceRefundRecord.class, "finance_refund.execution_recorded", "finance_refund.execution_failed",
                 "finance.refund.create", "finance_refund", () -> {
+                    requireNotMerchantCounterOnlyRefund(refundId);
                     FinanceRefundRecord refund = scopedRefund(refundId, true, "finance.refund.create");
                     requireRefundOpenForExecution(refund);
                     requireDealerRefundSource(refund, true, false);
@@ -1940,6 +2084,7 @@ public class FinanceService implements TerminationSettlementPort {
         return executeWrite("confirmFinanceRefundResult:" + refundId, actual.idempotencyKey(), actual,
                 FinanceRefundRecord.class, "finance_refund.confirmed", "finance_refund.confirm_failed",
                 "finance.payment.register", "finance_refund", () -> {
+                    requireNotMerchantCounterOnlyRefund(refundId);
                     FinanceRefundRecord refund = scopedRefund(refundId, true, "finance.payment.register");
                     requireDealerRefundSource(refund, false, true);
                     if ("success".equals(refund.status())) return refund;
@@ -1968,6 +2113,22 @@ public class FinanceService implements TerminationSettlementPort {
                             actual.paymentReference(), execution.paymentOperatorId(), verifier,
                             actual.evidenceAttachmentIds(), Instant.now()));
                     return saveRefundState(refundState(refund, status, "manual_verified", actual.paymentReference()));
+                });
+    }
+
+    /**
+     * 复核 authz I2（BSM L833「商户卡仍由发卡商户直接收款和退款，生成待退事项不代表平台已经付款」）：账户关闭 / 注销为商户卡登记的
+     * 待退本金事项（svclose_）只能由发卡商户柜台退卡结清（StoredValueService.counterRefund），财务登记执行与结果确认一律拒绝，
+     * 防止财务结清后柜台再付一次。
+     */
+    private void requireNotMerchantCounterOnlyRefund(String refundId) {
+        repository.findRefundById(refundId, false)
+                .filter(refund -> "stored_value_account".equals(refund.sourceType()) && trimToNull(refund.merchantId()) != null)
+                .filter(refund -> findStoredValuePayoutRefund("svclose_" + refund.targetId())
+                        .map(pending -> pending.id().equals(refund.id())).orElse(false))
+                .ifPresent(refund -> {
+                    throw ApiException.conflict("STORED_VALUE_MERCHANT_COUNTER_ONLY",
+                            "商户卡待退本金由发卡商户柜台退卡结清，不在财务退款中办理");
                 });
     }
 

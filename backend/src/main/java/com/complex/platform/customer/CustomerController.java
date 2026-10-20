@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.bar.BarOrderRecord;
@@ -103,12 +103,25 @@ public class CustomerController {
                 .toString();
     }
 
-    /** 客人自助注销本人账号（V194）：凭本人 token；注销后动作/登录被拒、历史数据物理保留但客人不可见。 */
+    /**
+     * 客人自助注销本人账号（V194）：凭本人 token；注销后动作/登录被拒、历史数据物理保留但客人不可见。
+     * TK-21-R3：请求体 {waive_balance}——true 放弃余额径行注销；false/缺省 需退本金的生成待退事项（老客户端无请求体等同 false）。
+     */
     @PostMapping("/deregister")
     public ApiResponse<CustomerRecord> deregister(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) com.complex.platform.customer.dto.CustomerDeregisterRequest request) {
+        return ApiResponse.ok(service.deregisterAccount(requireCustomerToken(customerToken, authorization),
+                request != null && request.waive()));
+    }
+
+    /** TK-21-R3（BSM「账户注销」：「发起注销时系统须提醒其名下尚有……储值卡余额」）：注销预览——本人各卡本金/赠送金。 */
+    @GetMapping("/deregister/preview")
+    public ApiResponse<java.util.List<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse>> deregisterPreview(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization) {
-        return ApiResponse.ok(service.deregisterAccount(requireCustomerToken(customerToken, authorization)));
+        return ApiResponse.ok(service.deregisterPreview(requireCustomerToken(customerToken, authorization)));
     }
 
     @GetMapping("/ticket-products")

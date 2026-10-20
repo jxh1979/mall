@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -131,6 +133,26 @@ class StoredValuePrincipalBonusJdbcIntegrationTests {
         Map<String, Object> consume = singleTxn(account, "consume");
         assertThat(consume.get("principal_cent")).isEqualTo(0L);
         assertThat(consume.get("bonus_cent")).isEqualTo(-400L);
+    }
+
+    /** 操作员裁决 2026-10-20 第三轮第 7 条「退卡即全退并关卡」：通用卡部分退 400；全退（即使未勾销卡）一次退清本金、赠送金清零、卡关闭。 */
+    @Test
+    void generalCardRefundIsAlwaysFullAndClosesCard() {
+        seedAccount("svacc_cg06f_" + suffix, projectId, null, 3_000L, 500L, null);
+
+        assertThatThrownBy(() -> storedValueService.refund(customerId, projectId, null, 1_000L, "退一部分", false,
+                "cg06-refund-part-" + suffix))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).code())
+                .isEqualTo("STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY");
+        assertThat(account(projectId, null).get("balance_cent")).isEqualTo(3_500L);
+
+        storedValueService.refund(customerId, projectId, null, 3_000L, "退卡", false, "cg06-refund-full-" + suffix);
+
+        Map<String, Object> account = account(projectId, null);
+        assertThat(account.get("principal_cent")).isEqualTo(0L);
+        assertThat(account.get("bonus_cent")).isEqualTo(0L);
+        assertThat(account.get("status")).isEqualTo("closed");
     }
 
     /** 退卡只退未消费的本金：超过本金被拒；销户退剩余本金后赠送金清零、卡置 closed，流水分别留痕。 */

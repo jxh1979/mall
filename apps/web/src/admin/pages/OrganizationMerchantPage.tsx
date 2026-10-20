@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -305,6 +305,37 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     }
   }
 
+  // 第十批 TK-27（BSM L1058「待清台超过后台配置时限（业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限）」）：
+  // 酒吧商户配置待清台提醒时限——先读当前值，再按值、下限、上限三者同填提交（后端校验值在闭区间内）。
+  async function configurePendingClearAlert(id: string) {
+    setGlobalError(null);
+    try {
+      const current = await api.get<{ valueMinutes?: number | null; minMinutes?: number | null; maxMinutes?: number | null; effectiveMinutes: number }>(
+        `/api/v1/platform/merchants/${id}/pending-clear-alert`);
+      const configured = current.valueMinutes != null;
+      const value = window.prompt(`待清台提醒时限（分钟）；${configured ? "当前已配置" : "未配置，按出厂 15 分钟"}：`, String(current.effectiveMinutes));
+      if (value === null) return;
+      const min = window.prompt("时限下限（分钟，须与时限、上限同时配置）：", configured ? String(current.minMinutes) : "");
+      if (min === null) return;
+      const max = window.prompt("时限上限（分钟，须与时限、下限同时配置）：", configured ? String(current.maxMinutes) : "");
+      if (max === null) return;
+      const v = Number(value.trim()), lo = Number(min.trim()), hi = Number(max.trim());
+      if (![v, lo, hi].every((n) => Number.isInteger(n) && n >= 0) || lo > v || v > hi) {
+        setGlobalError("须同时填写时限及其上下限（非负整数分钟），时限须在上下限内");
+        return;
+      }
+      await api.put(`/api/v1/platform/merchants/${id}/pending-clear-alert`, {
+        idempotencyKey: `merchant-pending-clear-alert-${id}-${Date.now()}`,
+        valueMinutes: v,
+        minMinutes: lo,
+        maxMinutes: hi,
+      });
+      setActionResult({ action: "merchant_pending_clear_alert_configured", id });
+    } catch (actionError) {
+      reportWriteFailure(actionError, "待清台提醒时限保存失败");
+    }
+  }
+
   // 状态子集 KPI（正常商户）聚焦时对商户表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
   const merchantStatusFilter = kpiFocus?.table === "merchants" ? kpiFocus.status : null;
   const visibleMerchants = merchantStatusFilter ? merchants.filter((row) => row.status === merchantStatusFilter) : merchants;
@@ -389,6 +420,9 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
           { key: "delete-request", label: "申请删除", permissions: ["merchant.profile.manage"], danger: true, onClick: () => void requestDeleteMerchant(row.id), testId: `merchant-delete-request-${row.id}` },
         ]
       : [
+          ...(row.merchantType === "bar"
+            ? [{ key: "pending-clear-alert", label: "待清台提醒时限", permissions: ["merchant.profile.manage"], onClick: () => void configurePendingClearAlert(row.id), testId: `merchant-pending-clear-alert-${row.id}` }]
+            : []),
           { key: "archive", label: "存档", permissions: ["merchant.profile.manage"], onClick: () => void archiveMerchant(row.id, true), testId: `merchant-archive-${row.id}` },
         ];
     return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`merchant-actions-${row.id}`} />;

@@ -1,5 +1,7 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -453,10 +455,48 @@ public class VoucherService implements VoucherIssuePort {
     }
 
     private VoucherRedemptionEntryRecord redeemInternal(VoucherRedeemRequest request) {
+        return redeemInternal(request.code(), request.voucherInstanceId(), request.note(), null);
+    }
+
+    /** 第十批 TK-28：结账抵扣上下文——账单归属商户 / 账单标识 / 本次可抵扣的应付额（不含小费）。 */
+    private record BillDeduction(String merchantId, String billType, String billId, long deductibleCent) {
+    }
+
+    /**
+     * 第十批 TK-28-R1（ENUM L81「商户折扣券——到对应商户抵扣」；ENUM L83「券抵扣部分不折现」；PGM L303）：
+     * 结账路径核销一张商户折扣券。复用 {@link #redeemInternal} 全部闸（状态/过期/转赠冻结/CAS/实例级唯一索引），
+     * 额外要求券种为 merchant_discount 且券绑定商户＝账单商户（否则 VOUCHER_MERCHANT_MISMATCH，券不消耗）；
+     * 抵扣额＝min(面值, 可抵扣应付)，面值多出部分不找零不退。不走后台 REDEEM_PERM 与独立幂等——由结账权限与结账事务承接，
+     * 结账任一步失败整体回滚、券回到 issued。
+     */
+    public VoucherRedemptionEntryRecord redeemForBill(
+            String code, String instanceId, String billMerchantId, String billType, String billId, long deductibleCent) {
+        return redeemInternal(code, instanceId, null,
+                new BillDeduction(requireText(billMerchantId, "merchant_id"), billType, requireText(billId, "bill_id"), deductibleCent));
+    }
+
+    private VoucherRedemptionEntryRecord redeemInternal(String code, String instanceId, String note, BillDeduction bill) {
         Instant now = Instant.now();
-        VoucherInstanceRecord instance = resolveInstance(request);
+        VoucherInstanceRecord instance = resolveInstance(code, instanceId);
         VoucherDefinitionRecord definition = repository.findDefinitionById(instance.definitionId())
                 .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "券定义不存在或已被删除"));
+        // 第十批 TK-28：酒吧商户的折扣券只能在结账时抵扣核销（独立核销会让券被消耗而账单全价）；结账路径只收折扣券。
+        // 操作员裁决 2026-10-20 第三轮第 9 条「非酒吧保留独立核销」：只对券定义商户为酒吧（merchant_type=bar）的生效，
+        // 餐饮、零售商户的折扣券仍由商户在后台独立核销（这些商户的收银不在本系统）。
+        if (bill == null && "merchant_discount".equals(definition.voucherKind()) && "bar".equals(definition.merchantType())) {
+            throw ApiException.badRequest("VOUCHER_REQUIRES_BILL", "商户折扣券须在结账时抵扣核销，不能单独核销");
+        }
+        if (bill != null) {
+            if (!"merchant_discount".equals(definition.voucherKind())) {
+                throw ApiException.badRequest("VOUCHER_KIND_NOT_DEDUCTIBLE", "只有商户折扣券可在结账时抵扣");
+            }
+            if (!bill.merchantId().equals(definition.merchantId())) {
+                throw ApiException.badRequest("VOUCHER_MERCHANT_MISMATCH", "该券不属于本账单商户，不能抵扣");
+            }
+            if (bill.deductibleCent() <= 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "账单已无可抵扣的应付金额");
+            }
+        }
         // 越权防：定义绑定商户的券，商户 scope 账号只能核自家；平台通用券（merchant_id 空）任意核销点可核。
         checkMerchantOwnership(definition.merchantId());
         String block = VoucherStateMachine.redeemBlockReason(instance.status(), instance.expiresAt(), now);
@@ -538,16 +578,19 @@ public class VoucherService implements VoucherIssuePort {
                         : authorizationService.currentMerchantScope().orElse(null),
                 currentOperator(), definition.redeemMethod(), definition.settlementMode(),
                 settlementAmount, arApItemId, stockMovementRef, null,
-                blankToNull(request.note()), now, now);
+                blankToNull(note), now, now,
+                bill == null ? null : bill.billType(),
+                bill == null ? null : bill.billId(),
+                bill == null ? null : Math.min(definition.faceValueCent(), bill.deductibleCent()));
         if (!repository.insertRedemption(entry)) {
             throw ApiException.conflict("VOUCHER_ALREADY_REDEEMED", "该券已有核销记录，请勿重复核销");
         }
         return entry;
     }
 
-    private VoucherInstanceRecord resolveInstance(VoucherRedeemRequest request) {
-        String code = blankToNull(request.code());
-        String instanceId = blankToNull(request.voucherInstanceId());
+    private VoucherInstanceRecord resolveInstance(String rawCode, String rawInstanceId) {
+        String code = blankToNull(rawCode);
+        String instanceId = blankToNull(rawInstanceId);
         if (code == null && instanceId == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "券码或券编号必须至少填写一项");
         }

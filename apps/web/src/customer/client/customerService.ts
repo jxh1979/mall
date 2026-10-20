@@ -1,10 +1,11 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 // 客人端业务服务层：封装 P0 客旅用到的真实端点（全部 /api/v1/customer/* 与 finance/ticketing）
 // 所有接口均在 docs/openapi/openapi-p0.json 契约内；P1 能力（积分明细/礼物兑换）不在此暴露。
 
 import { CustomerApi } from "./customerClient";
 import type {
   CustomerTicket,
+  DeregisterPreviewCard,
   CustomerVoucher,
   TicketTransfer,
   TicketTransferPreview,
@@ -164,6 +165,15 @@ export class CustomerService {
 
   settleStoredValueTopup(payload: { paymentIntentId: string; projectId?: string; merchantId?: string }): Promise<StoredValueTransaction> {
     return this.api.post<StoredValueTransaction>("/api/v1/customer/stored-value/settle", payload);
+  }
+
+  // TK-21-R3 自助注销：先预览各卡本金/赠送金，再带「是否放弃余额」注销（waiveBalance 自动转蛇形 waive_balance）。
+  getDeregisterPreview(): Promise<DeregisterPreviewCard[]> {
+    return this.api.get<DeregisterPreviewCard[]>("/api/v1/customer/deregister/preview");
+  }
+
+  deregister(waiveBalance: boolean): Promise<{ status: string }> {
+    return this.api.post<{ status: string }>("/api/v1/customer/deregister", { waiveBalance });
   }
 
   getStoredValueTransactions(accountId: string, page = 1): Promise<StoredValueTransaction[]> {

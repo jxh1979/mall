@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -140,7 +142,8 @@ class BarJdbcIntegrationTests {
                 "bar.table_session.create",
                 "bar.table_session.transfer",
                 "bar.table_session.merge",
-                "bar.table_session.renew"
+                "bar.table_session.renew",
+                "bar.table_session.split"
         );
         assertThat(platformAdminPermissionCodes()).contains(
                 "bar.entry.age_verify",
@@ -167,7 +170,7 @@ class BarJdbcIntegrationTests {
     void migrationCreatesDepositRuleTableAndReservationDepositColumns() {
         assertThat(regclass("bar_deposit_rules")).isEqualTo("bar_deposit_rules");
         assertThat(columnNames("bar_reservations")).contains(
-                "deposit_intent_id", "deposit_paid_at", "deposit_settlement");
+                "deposit_intent_id", "deposit_paid_at", "deposit_settlement", "deposit_channel", "deposit_settled_at");
         assertThat(permissionCodes()).contains("bar.reservation.manage", "bar.deposit_rule.manage");
     }
 
@@ -731,5 +734,379 @@ class BarJdbcIntegrationTests {
                 "table_null_merchant", null, null, 2, 50000L, 2, null, null, "open",
                 now, null, null, 1L, now, now)))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // ========================================================================
+    // 第十批 TK-24-R2 / TK-25-R2：台组口径真库回归（bar_order_service_sources 归属 + 并台链递归）
+    // ========================================================================
+
+    /** 并台链真库夹具：projects/merchants/spaces 满足 bar_order_service_sources 外键。返回 merchant id。 */
+    private String barMerchantFixture(String suffix) {
+        String project = "b10p_" + suffix;
+        String company = "b10e_" + suffix;
+        String merchant = "b10m_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','台组综合体','active',now(),now())", project);
+        jdbcTemplate.update("INSERT INTO business_entities(id,entity_name,entity_role,status,created_at,updated_at) VALUES(?,'经营主体','management_company','active',now(),now())", company);
+        jdbcTemplate.update("INSERT INTO business_entity_projects(business_entity_id,project_id) VALUES(?,?)", company, project);
+        jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,contract_entity_id,settlement_entity_id,project_id,status,created_at,updated_at) VALUES(?,'台组酒吧','bar',?,?,?,?,'active',now(),now())", merchant, company, company, company, project);
+        return merchant;
+    }
+
+    private BarTableSessionRecord familySession(String id, String merchant, String tableId, long minSnapshot,
+            String status, String sourceSessionId) {
+        Instant now = Instant.parse("2026-06-20T02:00:00Z");
+        repository.saveTable(new BarTableRecord(tableId, merchant, merchant, "T-" + tableId, tableId, "card_seat",
+                6, 2, minSnapshot, "CNY", "opened", now, now));
+        return repository.saveTableSession(new BarTableSessionRecord(id, merchant, merchant,
+                LocalDate.parse("2026-06-20"), tableId, null, null, 2, minSnapshot, 2, null, null, status,
+                now, null, sourceSessionId, 1L, now, now));
+    }
+
+    /** 落一笔归属到 session 的订单（一条明细 amount），返回账单 id。 */
+    private String familyOrder(String id, String merchant, BarTableSessionRecord session, long amountCent) {
+        Instant now = Instant.parse("2026-06-20T03:00:00Z");
+        repository.saveProduct(new BarProductRecord("product_" + id, merchant, merchant, "Drink " + id, "beer",
+                amountCent, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null));
+        repository.saveOrder(new BarOrderRecord("order_" + id, merchant, merchant, session.tableId(), null, null,
+                "staff", "created", amountCent, "CNY", "web", null, null, now, now));
+        repository.saveOrderItem(new BarOrderItemRecord("item_" + id, "order_" + id, "product_" + id, "Drink " + id,
+                1, amountCent, amountCent, "pending", now, now, null, 0L));
+        String project = jdbcTemplate.queryForObject("SELECT project_id FROM merchants WHERE id=?", String.class, merchant);
+        jdbcTemplate.update("INSERT INTO bar_order_service_sources(order_id,session_id,table_id,project_id,merchant_id,business_date) VALUES(?,?,?,?,?,'2026-06-20')",
+                "order_" + id, session.id(), session.tableId(), project, merchant);
+        repository.saveBill(new BarBillRecord("bill_" + id, "BILL-" + id, "order_" + id, merchant, merchant,
+                session.tableId(), null, amountCent, 0L, 0L, amountCent, 0L, "CNY", "unpaid", "unsettled",
+                null, "non_sales", now, now));
+        return "bill_" + id;
+    }
+
+    private void familyAdjustment(String id, String billId, String type, long amountCent) {
+        Instant now = Instant.parse("2026-06-20T04:00:00Z");
+        repository.saveBillAdjustment(new BarBillAdjustmentRecord("bill_adj_" + id, billId, type, amountCent,
+                0L, 0L, type, "staff_1", false, "applied", "key_" + id, List.of(), null, "{}", now, null));
+    }
+
+    @Test
+    void familyConsumedIncludesMergedChildOrdersAndTopUp() {
+        // BSM L1079：A 单 300、B 单 400 并入 A、主台补足 100 → 进度 800；阈值 = 两侧低消快照之和。
+        String merchant = barMerchantFixture("fam");
+        BarTableSessionRecord a = familySession("sess_fam_a", merchant, "table_fam_a", 50000L, "open", null);
+        BarTableSessionRecord b = familySession("sess_fam_b", merchant, "table_fam_b", 60000L, "merged", a.id());
+        String billA = familyOrder("fam_a", merchant, a, 30000L);
+        familyOrder("fam_b", merchant, b, 40000L);
+        familyAdjustment("fam_topup", billA, "min_spend_top_up", 10000L);
+
+        assertThat(repository.familySessionIds(a.id(), false)).containsExactly(a.id(), b.id());
+        assertThat(repository.findSessionIdByOrderId("order_fam_b")).contains(b.id());
+        assertThat(BarMinSpend.thresholdCent(repository, a.id())).isEqualTo(110000L);
+        assertThat(BarMinSpend.consumedCent(repository, a.id())).isEqualTo(80000L);
+    }
+
+    @Test
+    void retainedBalanceSurvivesMergeFamily() {
+        // Q28「留款、抵用和未用分别留痕」：留款在 A（留 400、已抵 100），A 并入 B 后 B 的台组余额仍为 300。
+        String merchant = barMerchantFixture("ret");
+        BarTableSessionRecord b = familySession("sess_ret_b", merchant, "table_ret_b", 50000L, "open", null);
+        BarTableSessionRecord a = familySession("sess_ret_a", merchant, "table_ret_a", 50000L, "merged", b.id());
+        String billA = familyOrder("ret_a", merchant, a, 100000L);
+        familyAdjustment("ret_keep", billA, "min_spend_retained", 40000L);
+        familyAdjustment("ret_used", billA, "min_spend_retained_applied", 10000L);
+
+        assertThat(BarMinSpend.retainedBalanceCent(repository, b.id())).isEqualTo(30000L);
+    }
+
+    // ========================================================================
+    // 第十批 TK-27-R1：关台门槛（BSM L1058「关台指账单全部结清……除上述情形外，账单未结清（含挂起未结清）不得关台」；
+    // DEC-R8-97-R1-03）+ 关台时处置未达标定金（BSM L1062「客人已到店但未满足该台位最低消费的，定金不退、予以没收」）
+    // ========================================================================
+
+    @Autowired
+    private com.complex.platform.access.AccessRepository accessRepository;
+
+    @Autowired
+    private BarServiceResponsibilityService responsibilities;
+
+    @org.junit.jupiter.api.AfterEach
+    void clearActor() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
+    /** 关台真库夹具：商户 + 铺位（tableScope 需要）+ 持 bar.table.open_close 的在岗员工，并以其身份登录。 */
+    private String closeFixture(String suffix) {
+        String merchant = barMerchantFixture(suffix);
+        String project = jdbcTemplate.queryForObject("SELECT project_id FROM merchants WHERE id=?", String.class, merchant);
+        jdbcTemplate.update("INSERT INTO spaces(id,project_id,merchant_id,space_name,space_type,status,created_at,updated_at) VALUES(?,?,?,'关台卡座区','unit','active',now(),now())",
+                "space_" + suffix, project, merchant);
+        String user = "b10u_" + suffix;
+        accessRepository.createUser(new com.complex.platform.access.AccessUser(user, user, "staff", project, merchant, "active",
+                Instant.parse("2026-06-20T00:00:00Z")));
+        String role = "b10r_" + suffix;
+        jdbcTemplate.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,'关台测试','测试专用','platform','active',now())", role);
+        jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'bar.table.open_close')", role);
+        accessRepository.assignUserRole(user, role);
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        new com.complex.platform.access.AccessActor(user, user, "staff", project, merchant, "active"), "test", List.of()));
+        return merchant;
+    }
+
+    private BarTableSessionRecord closeSession(String id, String merchant, String tableId, long minSnapshot, String status,
+            String sourceSessionId) {
+        BarTableSessionRecord session = familySession(id, merchant, tableId, minSnapshot, status, sourceSessionId);
+        repository.assignTableSpace(tableId, "space_" + merchant.substring("b10m_".length()));
+        return session;
+    }
+
+    private BarPayrollRequests.CloseSession closeRequest(String key, BarTableSessionRecord session) {
+        return new BarPayrollRequests.CloseSession(key, session.sessionVersion(), "实际服务已结束");
+    }
+
+    private String tableStatus(String tableId) {
+        return repository.findTableById(tableId).orElseThrow().status();
+    }
+
+    @Test
+    void serviceCloseRejectsWhenAnyFamilyBillUnsettled() {
+        String merchant = closeFixture("cls1");
+        BarTableSessionRecord b = closeSession("sess_cls1_b", merchant, "table_cls1_b", 50000L, "open", null);
+        BarTableSessionRecord a = closeSession("sess_cls1_a", merchant, "table_cls1_a", 50000L, "merged", b.id());
+        familyOrder("cls1_a", merchant, a, 30000L); // A 账单 unsettled
+
+        assertThatThrownBy(() -> responsibilities.close(b.id(), closeRequest("close-cls1", b)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("BAR_TABLE_SESSION_BILL_UNSETTLED"));
+        assertThat(repository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("open");
+        assertThat(tableStatus("table_cls1_b")).isEqualTo("opened");
+    }
+
+    @Test
+    void serviceCloseRejectsOnAccountReceivableBill() {
+        String merchant = closeFixture("cls2");
+        BarTableSessionRecord b = closeSession("sess_cls2_b", merchant, "table_cls2_b", 50000L, "open", null);
+        String bill = familyOrder("cls2_b", merchant, b, 30000L);
+        jdbcTemplate.update("UPDATE bar_bills SET settlement_status='receivable' WHERE id=?", bill);
+
+        assertThatThrownBy(() -> responsibilities.close(b.id(), closeRequest("close-cls2", b)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("BAR_TABLE_SESSION_BILL_UNSETTLED"));
+        assertThat(repository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("open");
+    }
+
+    @Test
+    void serviceCloseAllowsWhenAllBillsSettledOrMerged() {
+        String merchant = closeFixture("cls3");
+        BarTableSessionRecord b = closeSession("sess_cls3_b", merchant, "table_cls3_b", 50000L, "open", null);
+        BarTableSessionRecord a = closeSession("sess_cls3_a", merchant, "table_cls3_a", 50000L, "merged", b.id());
+        String billB = familyOrder("cls3_b", merchant, b, 60000L);
+        String billA = familyOrder("cls3_a", merchant, a, 30000L);
+        jdbcTemplate.update("UPDATE bar_bills SET settlement_status='settled',payment_status='paid',paid_amount_cent=60000 WHERE id=?", billB);
+        jdbcTemplate.update("UPDATE bar_bills SET settlement_status='merged' WHERE id=?", billA);
+
+        responsibilities.close(b.id(), closeRequest("close-cls3", b));
+
+        assertThat(repository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("closed");
+        assertThat(tableStatus("table_cls3_b")).isEqualTo("pending_clear");
+    }
+
+    @Test
+    void serviceCloseAllowsEmptyTable() {
+        String merchant = closeFixture("cls4");
+        BarTableSessionRecord b = closeSession("sess_cls4_b", merchant, "table_cls4_b", 50000L, "open", null);
+
+        responsibilities.close(b.id(), closeRequest("close-cls4", b));
+
+        assertThat(repository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("closed");
+        assertThat(tableStatus("table_cls4_b")).isEqualTo("pending_clear");
+    }
+
+    @Test
+    void serviceCloseForfeitsUnsettledDeposit() {
+        // BSM L1062「客人已到店但未满足该台位最低消费的，定金不退、予以没收」：空台关台（进度 0 < 低消）→ 已付定金没收。
+        String merchant = closeFixture("cls5");
+        Instant now = Instant.parse("2026-06-20T02:00:00Z");
+        BarTableSessionRecord open = closeSession("sess_cls5_tmp", merchant, "table_cls5_b", 50000L, "closed", null);
+        repository.saveReservation(new BarReservationRecord("resv_cls5", merchant, merchant, "table_cls5_b", "customer_cls5",
+                now, 2, 2, 20000L, "paid", "staff", null, "reserved", "web", null, List.of(), now, now, null));
+        BarTableSessionRecord b = repository.saveTableSession(new BarTableSessionRecord("sess_cls5_b", merchant, merchant,
+                LocalDate.parse("2026-06-20"), "table_cls5_b", "resv_cls5", "customer_cls5", 2, 50000L, 2, null, null, "open",
+                now, null, null, 1L, now, now));
+        assertThat(open.status()).isEqualTo("closed");
+
+        responsibilities.close(b.id(), closeRequest("close-cls5", b));
+
+        assertThat(repository.findReservationById("resv_cls5")).get()
+                .extracting(BarReservationRecord::depositStatus, BarReservationRecord::depositSettlement)
+                .containsExactly("settled", "forfeited");
+    }
+
+    @Test
+    void listTablesFlagsPendingClearOverdue() {
+        // BSM L1058「待清台超过后台配置时限（业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限）未恢复空闲的，系统提醒当班主管」。
+        String merchant = barMerchantFixture("pcl");
+        Instant created = Instant.parse("2026-06-20T02:00:00Z");
+        // 真库 timestamptz 只到微秒，取整后再比较。
+        Instant overdue = Instant.now().minusSeconds(30 * 60).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        Instant fresh = Instant.now().minusSeconds(60).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        repository.saveTable(new BarTableRecord("table_pcl_old", merchant, merchant, "T-PCL-OLD", "old", "card_seat",
+                6, 2, 50000L, "CNY", "pending_clear", created, overdue));
+        repository.saveTable(new BarTableRecord("table_pcl_new", merchant, merchant, "T-PCL-NEW", "new", "card_seat",
+                6, 2, 50000L, "CNY", "pending_clear", created, fresh));
+        repository.saveTable(new BarTableRecord("table_pcl_idle", merchant, merchant, "T-PCL-IDLE", "idle", "card_seat",
+                6, 2, 50000L, "CNY", "active", created, overdue));
+
+        var byId = repository.listTables(Optional.of(merchant)).stream()
+                .collect(java.util.stream.Collectors.toMap(BarTableRecord::id, t -> t));
+        assertThat(byId.get("table_pcl_old").pendingClearOverdue()).isTrue();
+        assertThat(byId.get("table_pcl_old").pendingClearSince()).isEqualTo(overdue);
+        assertThat(byId.get("table_pcl_new").pendingClearOverdue()).isFalse();
+        assertThat(byId.get("table_pcl_idle").pendingClearOverdue()).isFalse();
+        assertThat(byId.get("table_pcl_idle").pendingClearSince()).isNull();
+
+        // 酒吧（商户）把时限配到 60 分钟（值与上下限同配）后，30 分钟前的待清台不再超时。
+        jdbcTemplate.update("UPDATE merchants SET pending_clear_alert_minutes=60, pending_clear_alert_min_minutes=10, "
+                + "pending_clear_alert_max_minutes=180 WHERE id=?", merchant);
+        assertThat(repository.listTables(Optional.of(merchant)).stream()
+                .filter(t -> t.id().equals("table_pcl_old")).findFirst().orElseThrow().pendingClearOverdue()).isFalse();
+        // 值与上下限同配：只改值、清空上下限被 CHECK 拒绝。
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE merchants SET pending_clear_alert_min_minutes=NULL WHERE id=?", merchant))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // 复核 money B1（BSM L1058「关台成功后台位自动进入待清台」「并台期间全部原台位保持已开台并归属该合并台组」）：关台时组内每张原台都进入待清台。
+    @Test
+    void serviceCloseMovesEveryGroupTableToPendingClear() {
+        String merchant = closeFixture("clg");
+        BarTableSessionRecord b = closeSession("sess_clg_b", merchant, "table_clg_b", 50000L, "open", null);
+        closeSession("sess_clg_a", merchant, "table_clg_a", 50000L, "merged", b.id());
+
+        responsibilities.close(b.id(), closeRequest("close-clg", b));
+
+        assertThat(tableStatus("table_clg_b")).isEqualTo("pending_clear");
+        assertThat(tableStatus("table_clg_a")).isEqualTo("pending_clear");
+    }
+
+    // 复核 money B3：并台期间在被并台位点的单归属该台位的并台会话（当前有效链内），计入台组进度、关台门槛检查其账单。
+    @Test
+    void orderOnMergedTableBindsToGroupAndBlocksCloseWhileUnsettled() {
+        String merchant = closeFixture("rob");
+        BarTableSessionRecord b = closeSession("sess_rob_b", merchant, "table_rob_b", 50000L, "open", null);
+        BarTableSessionRecord a = closeSession("sess_rob_a", merchant, "table_rob_a", 50000L, "merged", b.id());
+        Instant now = Instant.parse("2026-06-20T03:00:00Z");
+        BarOrderRecord order = repository.saveOrder(new BarOrderRecord("order_rob_a", merchant, merchant, "table_rob_a", null, null,
+                "staff", "created", 30000L, "CNY", "web", null, null, now, now));
+        responsibilities.recordOrder(order);
+        assertThat(repository.findSessionIdByOrderId("order_rob_a")).contains(a.id());
+        repository.saveBill(new BarBillRecord("bill_rob_a", "BILL-rob_a", "order_rob_a", merchant, merchant,
+                "table_rob_a", null, 30000L, 0L, 0L, 30000L, 0L, "CNY", "unpaid", "unsettled", null, "non_sales", now, now));
+
+        assertThatThrownBy(() -> responsibilities.close(b.id(), closeRequest("close-rob", b)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("BAR_TABLE_SESSION_BILL_UNSETTLED"));
+    }
+
+    // 复核 money B3：台组台位自开台以来无会话归属的订单，其未结账单同样阻断关台。
+    @Test
+    void orphanUnsettledBillOnGroupTableBlocksClose() {
+        String merchant = closeFixture("orp");
+        BarTableSessionRecord b = closeSession("sess_orp_b", merchant, "table_orp_b", 50000L, "open", null);
+        closeSession("sess_orp_a", merchant, "table_orp_a", 50000L, "merged", b.id());
+        Instant now = Instant.parse("2026-06-20T03:00:00Z");
+        repository.saveOrder(new BarOrderRecord("order_orp_a", merchant, merchant, "table_orp_a", null, null,
+                "staff", "created", 30000L, "CNY", "web", null, null, now, now));
+        repository.saveBill(new BarBillRecord("bill_orp_a", "BILL-orp_a", "order_orp_a", merchant, merchant,
+                "table_orp_a", null, 30000L, 0L, 0L, 30000L, 0L, "CNY", "unpaid", "unsettled", null, "non_sales", now, now));
+
+        assertThatThrownBy(() -> responsibilities.close(b.id(), closeRequest("close-orp", b)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("BAR_TABLE_SESSION_BILL_UNSETTLED"));
+    }
+
+    // 复核 money I1：从被并子会话取低消口径须先上溯到当前有效并台链根，阈值与进度按整个台组。
+    @Test
+    void minSpendFromMergedChildUsesWholeGroup() {
+        String merchant = barMerchantFixture("mch");
+        BarTableSessionRecord b = familySession("sess_mch_b", merchant, "table_mch_b", 50000L, "open", null);
+        BarTableSessionRecord a = familySession("sess_mch_a", merchant, "table_mch_a", 50000L, "merged", b.id());
+        familyOrder("mch_a", merchant, a, 30000L);
+        familyOrder("mch_b", merchant, b, 60000L);
+
+        assertThat(BarMinSpend.thresholdCent(repository, a.id())).isEqualTo(100000L);
+        assertThat(BarMinSpend.consumedCent(repository, a.id())).isEqualTo(90000L);
+    }
+
+    // 复核 money m4：待清台起点单独留痕，编辑台位资料不重置计时。
+    @Test
+    void pendingClearSinceSurvivesTableEdit() {
+        String merchant = barMerchantFixture("pcs");
+        Instant created = Instant.parse("2026-06-20T02:00:00Z");
+        Instant since = Instant.now().minusSeconds(30 * 60).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        repository.saveTable(new BarTableRecord("table_pcs", merchant, merchant, "T-PCS", "pcs", "card_seat",
+                6, 2, 50000L, "CNY", "pending_clear", created, since));
+        repository.saveTable(new BarTableRecord("table_pcs", merchant, merchant, "T-PCS", "pcs 改名", "card_seat",
+                6, 2, 50000L, "CNY", "pending_clear", created, Instant.now()));
+
+        BarTableRecord listed = repository.listTables(Optional.of(merchant)).stream()
+                .filter(t -> t.id().equals("table_pcs")).findFirst().orElseThrow();
+        assertThat(listed.pendingClearSince()).isEqualTo(since);
+        assertThat(listed.pendingClearOverdue()).isTrue();
+    }
+
+    @Autowired
+    private BarReceivableLedgerService barLedger;
+
+    @Autowired
+    private com.complex.platform.finance.FinanceService financeService;
+
+    // 复核 money I2（BSM L1062「只有实际退款成功才记为已退」）：定金退款应付经财务登记实付结清后，定金才置「达标已原路退回」。
+    @Test
+    void depositRefundMarkedRefundedOnlyAfterPayableSettled() {
+        String merchant = barMerchantFixture("dps");
+        Instant now = Instant.parse("2026-06-20T02:00:00Z");
+        familySession("sess_dps", merchant, "table_dps", 50000L, "open", null);
+        BarReservationRecord reservation = repository.saveReservation(new BarReservationRecord("resv_dps", merchant, merchant,
+                "table_dps", "customer_dps", now, 2, 2, 20000L, "paid", "staff", null, "reserved", "web", null, List.of(), now, now, null));
+        String payer = "b10u_dps_fin";
+        accessRepository.createUser(new com.complex.platform.access.AccessUser(payer, payer, "platform_admin", "org_1", null, "active", now));
+        accessRepository.saveUserPermissionOverrides(payer, List.of("finance.payment.register"),
+                com.complex.platform.access.AccessRepository.Effect.GRANT, "定金退款实付测试授权", payer);
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin(payer);
+        String itemId = barLedger.createDepositRefundPayable(reservation);
+        assertThat(barLedger.hasDepositRefundPayable("resv_dps")).isTrue();
+        assertThat(repository.findReservationById("resv_dps")).get()
+                .extracting(BarReservationRecord::depositStatus).isEqualTo("paid");
+
+        financeService.registerArApPayment(itemId, new com.complex.platform.finance.dto.ArApPaymentRequest(
+                "dps-pay", "原路退回定金", List.of(), 20000L, "aggregate_pay", Instant.now(), "flow_dps", null));
+
+        assertThat(repository.findReservationById("resv_dps")).get()
+                .extracting(BarReservationRecord::depositStatus, BarReservationRecord::depositSettlement)
+                .containsExactly("settled", "refunded_on_threshold");
+    }
+
+    @Test
+    void splitAttributionPrimitivesListOrphanOrdersAndPersistManualAttribution() {
+        // 第十批 TK-27-R3（BSM L1079「无法确认订单归属时，须先人工明确归属并留痕」）：真库原语——
+        // 开台期间台位上没有 bar_order_service_sources 的订单被列为待归属；人工归属写入后即有会话归属。
+        String merchant = closeFixture("spa");
+        BarTableSessionRecord b = closeSession("sess_spa_b", merchant, "table_spa_b", 50000L, "open", null);
+        Instant now = Instant.parse("2026-06-20T03:00:00Z");
+        repository.saveOrder(new BarOrderRecord("order_spa_orphan", merchant, merchant, "table_spa_b", null, null,
+                "staff", "created", 30000L, "CNY", "web", null, null, now, now));
+        repository.saveOrder(new BarOrderRecord("order_spa_old", merchant, merchant, "table_spa_b", null, null,
+                "staff", "created", 30000L, "CNY", "web", null, null, now.minusSeconds(7200), now.minusSeconds(7200)));
+
+        assertThat(repository.listOrdersWithoutSession(List.of("table_spa_b"), b.openedAt()))
+                .extracting(BarOrderRecord::id).containsExactly("order_spa_orphan");
+        assertThat(repository.findSessionIdByOrderId("order_spa_orphan")).isEmpty();
+
+        repository.saveOrderServiceSource("order_spa_orphan", b.id());
+
+        assertThat(repository.findSessionIdByOrderId("order_spa_orphan")).contains(b.id());
+        assertThat(repository.listOrdersWithoutSession(List.of("table_spa_b"), b.openedAt())).isEmpty();
+        assertThat(BarMinSpend.consumedCent(repository, b.id())).isEqualTo(0L); // 无明细，只验归属不改进度口径
     }
 }

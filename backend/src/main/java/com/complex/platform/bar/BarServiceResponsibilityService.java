@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -18,16 +18,20 @@ public class BarServiceResponsibilityService {
     private final BarRepository bars;
     private final IdempotencyService idem;
     private final AuditEventService audit;
-    public BarServiceResponsibilityService(BarPayrollSupport p,BarRepository bars,IdempotencyService idem,AuditEventService audit) {
-        this.p=p;this.bars=bars;this.idem=idem;this.audit=audit;
+    private final BarDepositSettlementService deposits;
+    public BarServiceResponsibilityService(BarPayrollSupport p,BarRepository bars,IdempotencyService idem,AuditEventService audit,
+            BarDepositSettlementService deposits) {
+        this.p=p;this.bars=bars;this.idem=idem;this.audit=audit;this.deposits=deposits;
     }
     void recordOpened(BarTableSessionRecord session) {
         if(session.serviceStaffId()==null)return;
         open(session,session.serviceStaffId(),session.openedAt(),"open:"+session.id(),"开台确认责任人");
     }
-    /** 订单在创建事务锁定当时场次；历史订单不反查当前开台补造历史。 */
+    /** 订单在创建事务锁定当时场次；历史订单不反查当前开台补造历史。
+     *  复核 money B3：并台期间被并台位的会话为 merged（当前有效并台链内），订单归属该台位的并台会话——随台组计进度、关台检查其账单，
+     *  拆台时按实际订单归属回到原台（BSM L1079）。 */
     void recordOrder(BarOrderRecord order) {
-        var sessions=p.jdbc.queryForList("SELECT id FROM bar_table_sessions WHERE table_id=? AND bar_id=? AND status='open' ORDER BY opened_at,id FOR UPDATE",
+        var sessions=p.jdbc.queryForList("SELECT id FROM bar_table_sessions WHERE table_id=? AND bar_id=? AND status IN ('open','merged') ORDER BY opened_at,id FOR UPDATE",
             String.class,order.tableId(),order.barId());
         if(sessions.size()>1)throw conflict("BAR_SESSION_AMBIGUOUS","该台位存在多个开台场次，须先核实再点单");
         if(sessions.isEmpty())return;
@@ -100,6 +104,13 @@ public class BarServiceResponsibilityService {
             p.jdbc.update("UPDATE bar_table_sessions SET service_staff_id=?,updated_at=? WHERE id=?",primary.serviceStaffId(),ts(at),id);
         }
     }
+    /** 第十批 TK-27-R3：拆出会话结束并台期间区间、由其现责任人继续负责（提成/小费归属不变）。 */
+    void recordSplit(List<BarTableSessionRecord> restored,Instant at,String sourceId) {
+        for(var s:restored) {
+            session(s.id(),true);end(s.id(),at);
+            if(s.serviceStaffId()!=null)openFor(s.id(),s.tableId(),s.serviceStaffId(),at,eventKey(sourceId+":"+s.id()),"拆台后拆出台位由其现责任人继续负责；并台期间区间保留");
+        }
+    }
     private List<String> family(String sessionId) {
         return p.jdbc.queryForList("""
             WITH RECURSIVE family AS (SELECT id FROM bar_table_sessions WHERE id=?
@@ -107,24 +118,42 @@ public class BarServiceResponsibilityService {
             SELECT id FROM family ORDER BY id
             """,String.class,sessionId);
     }
+    /**
+     * 关台（第十批 TK-27-R1，BSM L1058「关台指账单全部结清……结束本次开台，由当班服务员或收银执行；除上述情形外，账单未结清
+     * （含挂起未结清）不得关台」；DEC-R8-97-R1-03）：台组（含整体转台前旧链）全部账单须 settled 或 merged，挂账 receivable 亦拒；
+     * 通过后未达标定金没收（BSM L1062）。坏账例外：酒吧域尚无坏账状态（ENUM L135 挂单坏账条目未落地），落地后在同一门槛加白名单。
+     * 执行权限按「开台/关台」码 bar.table.open_close（V013）。
+     */
     @Transactional
-    @com.complex.platform.gate.GuardedAction(capability="bar.table_session.transfer")
+    @com.complex.platform.gate.GuardedAction(capability="bar.table.open_close")
     public List<Responsibility> close(String sessionId,CloseSession r) {
-        var s=session(sessionId,false);var scope=p.tableScope(s.tableId());p.requireScope(scope.project(),scope.merchant(),"bar.table_session.transfer");
+        var s=session(sessionId,false);var scope=p.tableScope(s.tableId());p.requireScope(scope.project(),scope.merchant(),"bar.table.open_close");
         if(r==null || r.sessionVersion()==null)throw invalid("须填写版本及实际服务结束原因");
         requireText(r.reason(),"reason");
         return Arrays.asList(idem.execute("barServiceClose:"+sessionId,requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
             var current=session(sessionId,true);
             if(!"open".equals(current.status()) || current.sessionVersion()!=r.sessionVersion())throw conflict("BAR_TABLE_SESSION_VERSION_CONFLICT","场次已变化，请刷新");
+            // 复核 money B3：台组全部台位自开台以来没有会话归属的订单，其账单同样纳入门槛。
+            var familySessions=bars.familySessionIds(sessionId,true);
+            var orderIds=new ArrayList<>(bars.listOrderIdsBySessionIds(familySessions));
+            var groupTables=familySessions.stream().map(bars::findTableSessionById).flatMap(Optional::stream).toList();
+            groupTables.stream().map(BarTableSessionRecord::openedAt).min(Comparator.naturalOrder()).ifPresent(since->
+                bars.listOrdersWithoutSession(groupTables.stream().map(BarTableSessionRecord::tableId).distinct().toList(),since)
+                    .forEach(o->orderIds.add(o.id())));
+            var unsettled=bars.listBillsByOrderIds(orderIds).stream()
+                .filter(b->!List.of("settled","merged").contains(b.settlementStatus())).map(BarBillRecord::billNo).toList();
+            if(!unsettled.isEmpty())throw conflict("BAR_TABLE_SESSION_BILL_UNSETTLED","账单未结清，不得关台："+String.join("、",unsettled));
             var ids=family(sessionId);
             Instant now=Instant.now();
             for(String id:ids) {
                 var child=session(id,true);end(id,now);
                 p.jdbc.update("UPDATE bar_table_sessions SET status=CASE WHEN id=? THEN 'closed' ELSE status END,closed_at=?,updated_at=?,session_version=session_version+1 WHERE id=?",
                     sessionId,ts(now),ts(now),id);
-                if(id.equals(sessionId))p.jdbc.update("UPDATE bar_tables SET status='pending_clear',updated_at=? WHERE id=?",ts(now),child.tableId());
+                // 复核 money B1（BSM L1058「关台成功后台位自动进入待清台」）：台组每张原台都进入待清台；pending_clear_since 记进入时刻（money m4）。
+                p.jdbc.update("UPDATE bar_tables SET status='pending_clear',pending_clear_since=?,updated_at=? WHERE id=?",ts(now),ts(now),child.tableId());
             }
-            audit.recordSuccess("bar.service.closed","bar.table_session.transfer","bar_table_session",sessionId,null,r.idempotencyKey(),Map.of("reason",r.reason()));
+            deposits.forfeitAtClose(sessionId);
+            audit.recordSuccess("bar.service.closed","bar.table.open_close","bar_table_session",sessionId,null,r.idempotencyKey(),Map.of("reason",r.reason()));
             return responsibilityRows(sessionId).toArray(Responsibility[]::new);
         },Responsibility[].class));
     }

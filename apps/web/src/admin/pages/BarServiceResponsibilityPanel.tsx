@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -45,7 +45,8 @@ export function BarServiceResponsibilityPanel({ api, effectivePermissions, setAc
     <label>实际交接或结束原因<input aria-label="实际交接或结束原因" value={reason} onChange={e => setReason(e.target.value)} /></label>
     <PermissionButton permissionsState={effectivePermissions} permissions={["bar.table_session.transfer"]} disabled={busy || session?.status !== "open"} onClick={() => void write("service-handover")}>确认此刻交接</PermissionButton>
     <label><input type="checkbox" checked={finished} onChange={e => setFinished(e.target.checked)} />本场及并入场次的实际服务均已结束</label>
-    <PermissionButton permissionsState={effectivePermissions} permissions={["bar.table_session.transfer"]} disabled={busy || session?.status !== "open" || !finished} onClick={() => void write("service-close")}>登记实际服务结束</PermissionButton>
+    <PermissionButton permissionsState={effectivePermissions} permissions={["bar.table.open_close"]} disabled={busy || session?.status !== "open" || !finished} onClick={() => void write("service-close")}>关台（登记实际服务结束）</PermissionButton>
+    <p>关台须台组全部账单已结清或已并入主账单；挂账、未结账单一律不得关台，关台后台位进入待清台，未达最低消费的已付定金没收。</p>
     <p>缺少早先责任区间时仍须补录复核，交接操作不会把未知历史自动补给当前人员。</p>
   </details>;
 }

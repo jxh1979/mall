@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -43,6 +43,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-CUS-005", label: "储值规则配置", route: "/admin/customers/stored-value-rules" },
   { pageId: "ADM-STL-001", label: "结算配置中心", route: "/admin/settlement/config" },
   { pageId: "ADM-STL-003", label: "内部结算价目录", route: "/admin/settlement/internal-price-catalog" },
+  { pageId: "ADM-STL-004", label: "演出合同与履约结算", route: "/admin/settlement/media-shows" },
   { pageId: "ADM-STL-002", label: "开票清单", route: "/admin/settlement/invoice-items" },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", route: "/admin/terminals/switch-matrix" },
   { pageId: "ADM-TER-002", label: "终端设备", route: "/admin/terminals/devices" },
@@ -182,6 +183,12 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("ipc-filters")).toBeVisible();
     await expect(page.getByTestId("ipc-draft-table")).toBeVisible();
     await expect(page.getByTestId("ipc-active-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-STL-004") {
+    // TK-29：逐场演出合同表单（三种情形开关）+ 逐场合同记录表可见。
+    await expect(page.getByTestId("media-show-page")).toBeVisible();
+    await expect(page.getByTestId("mps-form")).toBeVisible();
+    await expect(page.getByTestId("mps-form-fees")).toBeVisible();
+    await expect(page.getByTestId("mps-show-table")).toBeVisible();
   } else if (spec.pageId === "ADM-STL-002") {
     await expect(page.getByTestId("settlement-invoice-page")).toBeVisible();
     await expect(page.getByTestId("settlement-invoice-subject-table")).toBeVisible();

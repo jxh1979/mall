@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import com.complex.platform.evidence.AuditedOperation;
 
 enum BarWriteOperation implements AuditedOperation {
@@ -12,7 +14,8 @@ enum BarWriteOperation implements AuditedOperation {
     CREATE_PRODUCT("bar.product.created", "bar.product.create_failed", "bar.order.create", "bar_product"),
     CREATE_RESERVATION("bar.reservation.created", "bar.reservation.create_failed", "bar.reservation.create", "bar_reservation"),
     PAY_RESERVATION_DEPOSIT("bar.reservation_deposit_paid", "bar.reservation_deposit_pay_failed", "bar.reservation.manage", "bar_reservation"),
-    CHECK_IN_RESERVATION_DEPOSIT("bar.reservation_deposit_deducted", "bar.reservation_deposit_deduct_failed", "bar.reservation.manage", "bar_reservation"),
+    // 第十批 TK-24-R1：到店只留痕、定金不再抵扣（原 bar.reservation_deposit_deducted 事件停用）。
+    CHECK_IN_RESERVATION_DEPOSIT("bar.reservation_checked_in", "bar.reservation_checkin_failed", "bar.reservation.manage", "bar_reservation"),
     CANCEL_RESERVATION("bar.reservation.cancelled", "bar.reservation.cancel_failed", "bar.reservation.manage", "bar_reservation"),
     CREATE_DEPOSIT_RULE("bar.deposit_rule.created", "bar.deposit_rule.create_failed", "bar.deposit_rule.manage", "bar_deposit_rule"),
     VERIFY_RESERVATION_ENTRY_ALLOWANCE("bar.table_guest.entry_allowance_verified", "bar.table_guest.entry_allowance_verify_failed", "bar.table.guest_checkin", "bar_reservation"),
@@ -20,10 +23,14 @@ enum BarWriteOperation implements AuditedOperation {
     CREATE_TABLE("bar.table.changed", "bar.table.change_failed", "bar.table.manage", "bar_table"),
     ASSIGN_TABLE_SPACE("bar.table_space.assigned", "bar.table_space.assign_failed", "bar.table.manage", "bar_table"),
     OPEN_TABLE("bar.table.opened", "bar.table.open_failed", "bar.table.open_close", "bar_table"),
+    // 第十批 TK-27-R2：清台登记恢复空闲（BSM L1058）。
+    CLEAR_TABLE("bar.table.cleared", "bar.table.clear_failed", "bar.table.open_close", "bar_table"),
     CREATE_TABLE_SESSION("bar.table_session.created", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
     TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
     MERGE_TABLE_SESSIONS("bar.table.merged", "bar.table.merge_failed", "bar.table_session.merge", "bar_table_session_adjustment"),
     RENEW_TABLE_SESSION("bar.table.renewed", "bar.table.renew_failed", "bar.table_session.renew", "bar_table_session_adjustment"),
+    // 第十批 TK-27-R3：拆台（BSM L1079）。
+    SPLIT_TABLE_SESSIONS("bar.table.split", "bar.table.split_failed", "bar.table_session.split", "bar_table_session_adjustment"),
     CREATE_BILL_PAY_INTENT("payment.intent_created", "payment.intent_failed", "finance.payment_intent.create", "finance_payment_intent"),
     SETTLE_BILL("bar.bill.settled", "bar.bill.settle_failed", "finance.payment.register", "bar_bill"),
     APPLY_BILL_ADJUSTMENT("bar.bill.adjusted", "bar.bill.adjust_failed", "bar.bill.adjust", "bar_bill_adjustment"),

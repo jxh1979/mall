@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -38,6 +38,7 @@ const VoucherLedgerPage = React.lazy(() => import("./pages/VoucherLedgerPage").t
 const SettlementReviewPage = React.lazy(() => import("./pages/SettlementReviewPage").then((m) => ({ default: m.SettlementReviewPage })));
 const SettlementConfigPage = React.lazy(() => import("./pages/SettlementConfigPage").then((m) => ({ default: m.SettlementConfigPage })));
 const InternalPriceCatalogPage = React.lazy(() => import("./pages/InternalPriceCatalogPage").then((m) => ({ default: m.InternalPriceCatalogPage })));
+const MediaPerformanceShowPage = React.lazy(() => import("./pages/MediaPerformanceShowPage").then((m) => ({ default: m.MediaPerformanceShowPage })));
 const SettlementInvoicePage = React.lazy(() => import("./pages/SettlementInvoicePage").then((m) => ({ default: m.SettlementInvoicePage })));
 const ReconciliationPage = React.lazy(() => import("./pages/ReconciliationPage").then((m) => ({ default: m.ReconciliationPage })));
 const MerchantWorkOrdersPage = React.lazy(() => import("./pages/MerchantWorkOrdersPage").then((m) => ({ default: m.MerchantWorkOrdersPage })));
@@ -387,6 +388,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <SettlementInvoicePage {...props} />;
     case "ADM-STL-003":
       return <InternalPriceCatalogPage {...props} />;
+    case "ADM-STL-004":
+      return <MediaPerformanceShowPage {...props} />;
     case "ADM-MER-008":
       return <MerchantZoneDividendsPage {...props} />;
     case "ADM-CUS-002":

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -95,6 +95,23 @@ public class PlatformController {
         boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(maskPhonesForUnauthorized(service.assignMerchantProject(merchantId, request), viewPhonePlaintext));
+    }
+
+    /** 第十批 TK-27（BSM L1058）：酒吧（商户）待清台提醒时限；未配置按出厂 15 分钟。 */
+    @GetMapping("/merchants/{merchant_id}/pending-clear-alert")
+    public ApiResponse<MerchantPendingClearAlertRecord> getPendingClearAlert(@PathVariable("merchant_id") String merchantId) {
+        authorizationService.requirePermission("merchant.profile.view");
+        return ApiResponse.ok(service.getPendingClearAlert(merchantId));
+    }
+
+    /** 第十批 TK-27：配置待清台提醒时限（值、下限、上限同填且值在闭区间；权限同商户资料写口 merchant.profile.manage）。 */
+    @PutMapping("/merchants/{merchant_id}/pending-clear-alert")
+    public ApiResponse<MerchantPendingClearAlertRecord> configurePendingClearAlert(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody com.complex.platform.governance.dto.MerchantPendingClearAlertRequest request) {
+        authorizationService.requirePermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configurePendingClearAlert(merchantId, request));
     }
 
     @PostMapping("/business-entities/{entity_id}/projects")

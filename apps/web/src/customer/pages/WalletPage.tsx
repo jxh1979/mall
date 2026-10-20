@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { Alert, Button, Card, Empty, InputNumber, List, message, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -37,7 +37,8 @@ function splitLabel(principalCent: number | undefined, bonusCent: number | undef
   return `本金 ${yuan(principalCent ?? 0)} · 赠送金 ${yuan(bonusCent ?? 0)}`;
 }
 
-const TXN_TYPE_LABELS: Record<string, string> = { topup: "充值", consume: "消费", refund: "退款", adjust: "调整" };
+// TK-20-R4（BSM「我的余额」：每笔退款与回冲（含回冲顺序结果））：消费退款回原卡=退款回冲，拆分行里的本金/赠送金两段即回冲顺序结果。
+const TXN_TYPE_LABELS: Record<string, string> = { topup: "充值", consume: "消费", refund: "退款", adjust: "调整", consume_reversal: "退款回冲" };
 
 // ⑦ 储值钱包（AUD-061）：多卡（通用卡 + 各商户卡）分卡余额展示 + 选卡充值与交易记录。3.17：error/loading/empty 分离可重试。
 export function WalletPage({ service }: { service: CustomerService }): React.ReactElement {

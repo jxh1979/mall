@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +46,7 @@ class BarServiceTests {
 
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path evidenceDirectory;
     private InMemoryBarRepository barRepository;
+    private BarDepositSettlementService depositSettlements;
     private InMemoryAuditEventRepository auditEventRepository;
     private CapturingBarReceivableLedgerService receivableLedgerService;
     private AuthorizationService authorizationService;
@@ -204,12 +205,19 @@ class BarServiceTests {
         // 超额拒绝 / 引擎缺失场景各用例自行覆盖。
         billingService.refundAuthorizationService =
                 new com.complex.platform.finance.RefundAuthorizationService(barRefundRepoWithLimit(Long.MAX_VALUE));
+        // 第十批 TK-24-R3：定金处置引擎接到下单 / 补足 / 并台转台三处触发点。
+        depositSettlements = new BarDepositSettlementService(barRepository, receivableLedgerService, auditEventService);
+        barOrderService.depositSettlements = depositSettlements;
+        billingService.depositSettlements = depositSettlements;
+        BarTableSessionService tableSessionService = new BarTableSessionService(barRepository, authorizationService);
+        tableSessionService.depositSettlements = depositSettlements;
+        tableSessionService.auditEvents = auditEventService;
         service = new BarService(
                 barRepository,
                 new BarOperationExecutor(operations),
                 billingService,
                 new BarShiftService(barRepository, authorizationService, auditEventService),
-                new BarTableSessionService(barRepository, authorizationService),
+                tableSessionService,
                 barOrderService,
                 entryService,
                 authorizationService
@@ -859,20 +867,23 @@ class BarServiceTests {
     }
 
     @Test
-    void payDepositThenCheckInSettlesAsDeducted() {
+    void checkInKeepsDepositPaidAndDoesNotDeduct() {
+        // 第十批 TK-24-R1（BSM L889「定金不抵扣消费」）：到店只留痕，定金保持已支付待判，不再标 settled/deducted。
         BarReservationRecord reservation = reservationWithFixedDeposit("settle", 20000L, 30);
 
         BarReservationRecord paid = service.payReservationDeposit(reservation.id(),
                 new BarReservationDepositActionRequest("pay-settle", "pay", List.of(), "aggregate_pay"));
         assertThat(paid.depositStatus()).isEqualTo("paid");
         assertThat(paid.depositPaidAt()).isNotNull();
+        assertThat(paid.depositChannel()).isEqualTo("aggregate_pay");
 
         BarReservationRecord checkedIn = service.checkInReservationDeposit(reservation.id(),
                 new BarReservationDepositActionRequest("checkin-settle", "checkin", List.of(), null));
-        assertThat(checkedIn.depositStatus()).isEqualTo("settled");
-        assertThat(checkedIn.depositSettlement()).isEqualTo("deducted");
+        assertThat(checkedIn.depositStatus()).isEqualTo("paid");
+        assertThat(checkedIn.depositSettlement()).isNull();
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
-                .contains("bar.reservation_deposit_paid", "bar.reservation_deposit_deducted");
+                .contains("bar.reservation_deposit_paid", "bar.reservation_checked_in")
+                .doesNotContain("bar.reservation_deposit_deducted");
     }
 
     @Test
@@ -998,6 +1009,33 @@ class BarServiceTests {
                 new CommissionCalculateRequest("commission-payable-1", bill.id(), true, false));
         assertThat(saved.commissionAmountCent()).isPositive();
         assertThat(receivableLedgerService.ledgerPostings).isEmpty();
+    }
+
+    // 第十批 TK-28（ENUM L108「券抵扣的金额不计入…销售提成基数」；BSM L1064「不倒扣达标进度」）：
+    // 结账带折扣券抵扣 5000 后，提成基数 = subtotal − discount；桌低消 50000 与消费 128800 的判定不受抵扣影响。
+    @Test
+    void voucherDeductionExcludedFromCommissionBaseAndMinSpend() {
+        BarBillRecord bill = billForOrder("voucher-commission", "staff_sales");
+        com.complex.platform.voucher.VoucherService voucherService = mock(com.complex.platform.voucher.VoucherService.class);
+        when(voucherService.redeemForBill(org.mockito.ArgumentMatchers.eq("VCDISC"), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("bar_bill"), org.mockito.ArgumentMatchers.eq(bill.id()),
+                org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(new com.complex.platform.voucher.VoucherRedemptionEntryRecord(
+                        "vrr_vi_disc", "vi_disc", "vdef_disc", "merchant_discount", "customer-1", null, "usr_admin",
+                        "in_store_staff", "none", null, null, null, null, null, Instant.now(), Instant.now(),
+                        "bar_bill", bill.id(), 5000L));
+        billingService.voucherService = voucherService;
+
+        BarBillRecord settled = service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-voucher-commission", "settle", List.of(), "pay_voucher", bill.payableAmountCent() - 5000L,
+                "aggregate_pay", null, null, null, null, "VCDISC", null));
+        assertThat(settled.discountAmountCent()).isEqualTo(5000L);
+        assertThat(settled.payableAmountCent()).isEqualTo(bill.payableAmountCent() - 5000L);
+        assertThat(settled.settlementStatus()).isEqualTo("settled");
+
+        BarCommissionCalculationRecord commission = service.calculateCommission(bill.id(),
+                new CommissionCalculateRequest("commission-voucher-1", bill.id(), true, false));
+        assertThat(commission.commissionBaseCent()).isEqualTo(bill.subtotalAmountCent() - 5000L);
     }
 
     @Test
@@ -2002,6 +2040,98 @@ class BarServiceTests {
                 .contains(tuple("deliver", "delivered"));
     }
 
+    // ========================================================================
+    // 第十批 TK-26-R1：整单与出品票据只在全部有效明细送达后才置已送达（BSM L1025「分别标注已上菜与未上菜」；
+    // ENUM L112 出品票据状态流转；BSM L823「整笔……全部实际履约完成的时点」；裁决 W01）
+    // ========================================================================
+
+    @Test
+    void partialDeliveryKeepsOrderAndTicketUndelivered() {
+        BarReservationRecord reservation = createReservation("reservation-partial", "bar_1", 2);
+        BarProductRecord beer = product("partial-beer", "bar_1", 3000L);
+        BarProductRecord wine = product("partial-wine", "bar_1", 8000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "partial-deliver", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", beer.id(), "quantity", 1), Map.of("product_id", wine.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+
+        BarOrderRecord afterFirst = service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "partial-deliver-1", "deliver beer", List.of(),
+                List.of(Map.of("order_item_id", itemOf(order, beer), "quantity", 1)), "staff_1", List.of()));
+
+        assertThat(barRepository.findOrderById(order.id())).get()
+                .extracting(BarOrderRecord::status).isNotEqualTo("delivered");
+        assertThat(afterFirst.status()).isNotEqualTo("delivered");
+        assertThat(barRepository.findProductionTicketById("ticket_partial_deliver")).get()
+                .extracting(BarProductionTicketRecord::ticketStatus).isEqualTo("created");
+        assertThat(barRepository.productionTicketEvents)
+                .extracting(BarProductionTicketEventRecord::actionType).contains("partial_deliver");
+        assertThat(barRepository.listOrderItems(order.id()))
+                .extracting(BarOrderItemRecord::deliveryStatus).containsExactlyInAnyOrder("delivered", "pending");
+    }
+
+    @Test
+    void deliveryCompletesOnlyWhenAllNonVoidedItemsDelivered() {
+        BarReservationRecord reservation = createReservation("reservation-allvoid", "bar_1", 2);
+        BarProductRecord beer = product("allvoid-beer", "bar_1", 3000L);
+        BarProductRecord wine = product("allvoid-wine", "bar_1", 8000L);
+        BarProductRecord gin = product("allvoid-gin", "bar_1", 9000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "allvoid-deliver", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", beer.id(), "quantity", 1), Map.of("product_id", wine.id(), "quantity", 1),
+                        Map.of("product_id", gin.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        BarOrderItemRecord ginItem = barRepository.orderItems.get(itemOf(order, gin));
+        barRepository.saveOrderItem(new BarOrderItemRecord(ginItem.id(), ginItem.orderId(), ginItem.productId(),
+                ginItem.productName(), ginItem.quantity(), ginItem.unitPriceCent(), ginItem.amountCent(), "voided",
+                ginItem.createdAt(), Instant.now(), null, 0L, true, "customer_change", Instant.now(), "staff_1",
+                false, false, null));
+
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest("allvoid-1", "deliver beer", List.of(),
+                List.of(Map.of("order_item_id", itemOf(order, beer), "quantity", 1)), "staff_1", List.of()));
+        assertThat(barRepository.findOrderById(order.id())).get()
+                .extracting(BarOrderRecord::status).isNotEqualTo("delivered");
+
+        BarOrderRecord delivered = service.deliverOrder(order.id(), new BarOrderDeliveryRequest("allvoid-2", "deliver wine",
+                List.of(), List.of(Map.of("order_item_id", itemOf(order, wine), "quantity", 1)), "staff_1", List.of()));
+        assertThat(delivered.status()).isEqualTo("delivered");
+        assertThat(barRepository.findProductionTicketById("ticket_allvoid_deliver")).get()
+                .extracting(BarProductionTicketRecord::ticketStatus).isEqualTo("delivered");
+
+        assertThatThrownBy(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest("allvoid-3", "deliver gin",
+                List.of(), List.of(Map.of("order_item_id", ginItem.id(), "quantity", 1)), "staff_1", List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("BAR_ORDER_ITEM_VOIDED");
+    }
+
+    @Test
+    void closedSessionStillAllowsDeliveringRemainingItems() {
+        // BSM L1058「关台、清台及新客开台不自动完成原接待会话的未送达商品……原责任人仍须按实际送达……处理并留痕」。
+        BarReservationRecord reservation = createReservation("reservation-closed-deliver", "bar_1", 2);
+        BarTableSessionRecord session = openSession("closed-deliver", reservation.tableId(), "bar_1", reservation.id());
+        BarProductRecord beer = product("closed-beer", "bar_1", 3000L);
+        BarProductRecord wine = product("closed-wine", "bar_1", 8000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "closed-deliver", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                List.of(Map.of("product_id", beer.id(), "quantity", 1), Map.of("product_id", wine.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        service.deliverOrder(order.id(), new BarOrderDeliveryRequest("closed-1", "deliver beer", List.of(),
+                List.of(Map.of("order_item_id", itemOf(order, beer), "quantity", 1)), "staff_1", List.of()));
+
+        Instant closedAt = Instant.now();
+        barRepository.saveTableSession(new BarTableSessionRecord(session.id(), session.barId(), session.merchantId(),
+                session.businessDate(), session.tableId(), session.reservationId(), session.customerId(),
+                session.guestCount(), session.minConsumptionSnapshotCent(), session.allowedPassFreeGuestCountSnapshot(),
+                session.salesStaffId(), session.serviceStaffId(), "closed", session.openedAt(), closedAt,
+                session.sourceSessionId(), session.sessionVersion() + 1, session.createdAt(), closedAt));
+        assertThat(barRepository.findOrderById(order.id())).get()
+                .extracting(BarOrderRecord::status).isNotEqualTo("delivered");
+
+        BarOrderRecord delivered = service.deliverOrder(order.id(), new BarOrderDeliveryRequest("closed-2", "deliver wine",
+                List.of(), List.of(Map.of("order_item_id", itemOf(order, wine), "quantity", 1)), "staff_1", List.of()));
+        assertThat(delivered.status()).isEqualTo("delivered");
+        assertThat(barRepository.listOrderItems(order.id()))
+                .extracting(BarOrderItemRecord::deliveryStatus).containsOnly("delivered");
+    }
     // A2/A3(REQ-21): 现金结算发 payment.cash_received 事件；channel 用统一词表
     @Test
     void settleWithCashChannelEmitsCashReceivedEvent() {
@@ -2621,7 +2751,8 @@ class BarServiceTests {
                 .containsExactly(targetTable.id(), 2L, "open");
         assertThat(barRepository.findTableSessionById(session.id())).get()
                 .extracting(BarTableSessionRecord::serviceStaffId).isEqualTo("target_service_staff");
-        assertThat(barRepository.findTableById(sourceTable.id())).get().extracting(BarTableRecord::status).isEqualTo("pending_clear");
+        // 第十批 TK-27-R2（BSM L1079「原台随转台成功立即释放，可供其他客人预订或开台」）：源台直接回空闲。
+        assertThat(barRepository.findTableById(sourceTable.id())).get().extracting(BarTableRecord::status).isEqualTo("active");
         assertThat(barRepository.findTableById(targetTable.id())).get().extracting(BarTableRecord::status).isEqualTo("opened");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
@@ -2764,6 +2895,617 @@ class BarServiceTests {
                 .isEqualTo("BAR_TABLE_SESSION_VERSION_CONFLICT");
     }
 
+    // ========================================================================
+    // 第十批 TK-24：定金不抵扣、台组低消合计与进度、达标各笔原路退回 / 关台没收
+    // ========================================================================
+
+    @Test
+    void billNeverDeductsReservationDeposit() {
+        // BSM L889「定金不抵扣消费、不计入最低消费累计」：已付定金 20000 的订台开单，账单不减定金、应付=消费小计。
+        BarReservationRecord reservation = reservationWithFixedDeposit("nodeduct", 20000L, 30);
+        service.payReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("pay-nodeduct", "pay", List.of(), "aggregate_pay"));
+        BarProductRecord product = product("nodeduct", "bar_nodeduct", 30000L);
+        BarOrderRecord order = order("nodeduct", "bar_nodeduct", reservation.tableId(), reservation.id(), product, 1);
+        BarBillRecord bill = bill("nodeduct", order.id());
+
+        assertThat(bill.depositDeductAmountCent()).isZero();
+        assertThat(bill.payableAmountCent()).isEqualTo(30000L);
+    }
+
+    @Test
+    void mergeTableSessionsSumsMinConsumptionOfBothSides() {
+        // BSM L1079「合并后的……最低消费额，分别按两侧所包含全部原台的对应数值相加计算」：A 500 + B 600 → 1100。
+        BarTableRecord a = createTable("sum-a", "bar_1", "active", 50000L);
+        BarTableRecord b = createTable("sum-b", "bar_1", "active", 60000L);
+        BarTableSessionRecord primary = createSession("sum-a", a.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord secondary = createSession("sum-b", b.id(), "bar_1", "merchant_1");
+
+        BarTableSessionAdjustmentRecord adjustment = service.mergeTableSessions(primary.id(), new BarTableMergeRequest(
+                "merge-sum", "sum", List.of(), secondary.id(), "sum", "supervisor_1",
+                primary.sessionVersion(), secondary.sessionVersion()));
+
+        assertThat(adjustment.minConsumptionBeforeCent()).isEqualTo(50000L);
+        assertThat(adjustment.minConsumptionAfterCent()).isEqualTo(110000L);
+        assertThat(BarMinSpend.thresholdCent(barRepository, primary.id())).isEqualTo(110000L);
+    }
+
+    @Test
+    void groupTransferDropsOldChainFromThresholdButKeepsConsumption() {
+        // BSM L1079「合并台组整体转台到目标台后……原台及原并台关系不再参加之后的……数值计算」「原台已经发生的消费金额随台结转」。
+        BarTableRecord a = createTable("gt-a", "bar_1", "active", 50000L);
+        BarTableRecord b = createTable("gt-b", "bar_1", "active", 60000L);
+        BarTableRecord t = createTable("gt-t", "bar_1", "active", 80000L);
+        BarTableSessionRecord primary = createSession("gt-a", a.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord secondary = createSession("gt-b", b.id(), "bar_1", "merchant_1");
+        BarProductRecord product = product("gt", "bar_1", 30000L);
+        order("gt-a", "bar_1", a.id(), null, product, 1);
+        order("gt-b", "bar_1", b.id(), null, product, 2);
+        service.mergeTableSessions(primary.id(), new BarTableMergeRequest(
+                "merge-gt", "join", List.of(), secondary.id(), "join", "supervisor_1",
+                primary.sessionVersion(), secondary.sessionVersion()));
+        long mergedVersion = barRepository.findTableSessionById(primary.id()).orElseThrow().sessionVersion();
+
+        service.transferTableSession(primary.id(), new BarTableTransferRequest(
+                "transfer-gt", "move group", List.of(), t.id(), "move group", "supervisor_1",
+                mergedVersion, "target_service_staff"));
+
+        assertThat(BarMinSpend.thresholdCent(barRepository, primary.id())).isEqualTo(80000L);
+        assertThat(BarMinSpend.consumedCent(barRepository, primary.id())).isEqualTo(90000L);
+        assertThat(barRepository.findTableSessionById(secondary.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("merged_transferred");
+    }
+
+    @Test
+    void depositRefundsOnThresholdOnceAndKeepsResultAcrossMerge() {
+        // BSM L1062「达标时，各笔定金分别原路退回」「已成功退还……的定金保留原结果，不因转台、并台……重复退款」。
+        BarReservationRecord reservation = reservationWithFixedDeposit("dep1", 20000L, 30); // 台位低消 100000
+        service.payReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("pay-dep1", "pay", List.of(), "aggregate_pay"));
+        BarTableSessionRecord session = openSession("dep1", reservation.tableId(), "bar_dep1", reservation.id());
+        BarProductRecord product = product("dep1", "bar_dep1", 60000L);
+
+        order("dep1-first", "bar_dep1", reservation.tableId(), reservation.id(), product, 1);
+        assertThat(barRepository.findReservationById(reservation.id())).get()
+                .extracting(BarReservationRecord::depositStatus).isEqualTo("paid");
+        assertThat(receivableLedgerService.depositRefunds).isEmpty();
+
+        order("dep1-second", "bar_dep1", reservation.tableId(), reservation.id(), product, 1);
+        // 复核 money I2（BSM L1062「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」）：达标只挂原路退款应付，
+        // 定金仍为已支付（退款处理中），实付成功后由财务统一回写点置「达标已原路退回」。
+        BarReservationRecord settled = barRepository.findReservationById(reservation.id()).orElseThrow();
+        assertThat(settled.depositStatus()).isEqualTo("paid");
+        assertThat(settled.depositSettlement()).isNull();
+        assertThat(receivableLedgerService.depositRefunds).containsExactly(reservation.id());
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("bar.reservation_deposit_refunded_on_threshold");
+
+        // 并台 + 再下单：已退定金保留原结果，不重复退。
+        BarTableRecord other = createTable("dep1-other", "bar_dep1", "active", 30000L);
+        BarTableSessionRecord otherSession = createSession("dep1-other", other.id(), "bar_dep1", null);
+        service.mergeTableSessions(session.id(), new BarTableMergeRequest(
+                "merge-dep1", "join", List.of(), otherSession.id(), "join", "supervisor_1",
+                session.sessionVersion(), otherSession.sessionVersion()));
+        order("dep1-third", "bar_dep1", reservation.tableId(), reservation.id(), product, 1);
+        assertThat(receivableLedgerService.depositRefunds).containsExactly(reservation.id());
+        // 退款处理中的定金关台不没收。
+        depositSettlements.forfeitAtClose(session.id());
+        assertThat(barRepository.findReservationById(reservation.id())).get()
+                .extracting(BarReservationRecord::depositStatus, BarReservationRecord::depositSettlement)
+                .containsExactly("paid", null);
+    }
+
+    @Test
+    void mergedGroupRefundsEachUnsettledDepositWhenCombinedThresholdReached() {
+        // BSM L1062「并台按合并台的合计最低消费进度判断；达标时，各笔定金分别原路退回」：A 已退不重复，B 并台达标后新退。
+        BarReservationRecord a = reservationWithFixedDeposit("depa", 20000L, 30); // bar_depa，台位低消 100000
+        BarTableRecord tableB = createTable("depb", "bar_depa", "active", 60000L);
+        BarReservationRecord b = service.createReservation(new BarReservationRequest(
+                "resv-depb", "create reservation", List.of(), "bar_depa", tableB.id(),
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
+        service.payReservationDeposit(a.id(), new BarReservationDepositActionRequest("pay-depa", "pay", List.of(), "cash"));
+        service.payReservationDeposit(b.id(), new BarReservationDepositActionRequest("pay-depb", "pay", List.of(), "cash"));
+        BarTableSessionRecord sessionA = openSession("depa", a.tableId(), "bar_depa", a.id());
+        BarTableSessionRecord sessionB = openSession("depb", tableB.id(), "bar_depa", b.id());
+        BarProductRecord product = product("depab", "bar_depa", 50000L);
+
+        order("depa-1", "bar_depa", a.tableId(), a.id(), product, 2);   // A 100000 ≥ 100000 → A 退
+        order("depb-1", "bar_depa", tableB.id(), b.id(), product, 1);   // B 50000 < 60000 → 不退
+        assertThat(receivableLedgerService.depositRefunds).containsExactly(a.id());
+
+        service.mergeTableSessions(sessionA.id(), new BarTableMergeRequest(
+                "merge-depab", "join", List.of(), sessionB.id(), "join", "supervisor_1",
+                sessionA.sessionVersion(), sessionB.sessionVersion()));
+        // 合计阈值 160000、进度 150000 → 并台本身不触发。
+        assertThat(receivableLedgerService.depositRefunds).containsExactly(a.id());
+
+        order("depa-2", "bar_depa", a.tableId(), a.id(), product, 1);   // 进度 200000 ≥ 160000 → 只有 B 新退
+        assertThat(receivableLedgerService.depositRefunds).containsExactly(a.id(), b.id());
+    }
+
+    @Test
+    void closeSessionForfeitsDepositsBelowThreshold() {
+        // BSM L1062「客人已到店但未满足该台位最低消费的，定金不退、予以没收」。
+        BarReservationRecord reservation = reservationWithFixedDeposit("depc", 20000L, 30);
+        service.payReservationDeposit(reservation.id(),
+                new BarReservationDepositActionRequest("pay-depc", "pay", List.of(), "aggregate_pay"));
+        BarTableSessionRecord session = openSession("depc", reservation.tableId(), "bar_depc", reservation.id());
+        order("depc-1", "bar_depc", reservation.tableId(), reservation.id(), product("depc", "bar_depc", 30000L), 1);
+
+        depositSettlements.forfeitAtClose(session.id());
+
+        BarReservationRecord forfeited = barRepository.findReservationById(reservation.id()).orElseThrow();
+        assertThat(forfeited.depositStatus()).isEqualTo("settled");
+        assertThat(forfeited.depositSettlement()).isEqualTo("forfeited");
+        assertThat(forfeited.depositSettledAt()).isNotNull();
+        assertThat(receivableLedgerService.depositRefunds).isEmpty();
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("bar.reservation_deposit_forfeited");
+    }
+
+    // ========================================================================
+    // 第十批 TK-25：退品按低消拆可退与留款，留款抵用后续点单
+    // ========================================================================
+
+    @Test
+    void voidWithinMinSpendRetainsInsteadOfRefunding() {
+        // BSM L1064「退款后该台位累计消费将低于……最低消费的，不退款——该笔金额留在本台位账上」：低消 1000、已结 1000，退 400。
+        BarTableRecord table = createTable("ret1", "bar_1", "active", 100000L);
+        createSession("ret1", table.id(), "bar_1", "merchant_1");
+        BarProductRecord big = product("ret1-big", "bar_1", 60000L);
+        BarProductRecord small = product("ret1-small", "bar_1", 40000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-ret1", "create order", List.of(), "bar_1", table.id(), null,
+                List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        BarBillRecord bill = bill("ret1", order.id());
+        settle(bill, "ret1");
+
+        service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-ret1", "return", List.of(), itemOf(order, small), "customer returned", false, bill.id(), null));
+
+        assertThat(barRepository.listBillAdjustments(bill.id()))
+                .extracting(BarBillAdjustmentRecord::adjustmentType, BarBillAdjustmentRecord::amountCent)
+                .containsExactly(tuple("min_spend_retained", 40000L));
+        assertThat(receivableLedgerService.refundPayables).isEmpty();
+        assertThat(barRepository.findBillById(bill.id())).get()
+                .extracting(BarBillRecord::payableAmountCent).isEqualTo(100000L);
+    }
+
+    @Test
+    void voidAboveMinSpendRefundsOnlyExcess() {
+        // 低消 1000、已结 1300，退 400：可退 300、留款 100。
+        BarTableRecord table = createTable("ret2", "bar_1", "active", 100000L);
+        createSession("ret2", table.id(), "bar_1", "merchant_1");
+        BarProductRecord big = product("ret2-big", "bar_1", 90000L);
+        BarProductRecord small = product("ret2-small", "bar_1", 40000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-ret2", "create order", List.of(), "bar_1", table.id(), null,
+                List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        BarBillRecord bill = bill("ret2", order.id());
+        settle(bill, "ret2");
+
+        service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-ret2", "return", List.of(), itemOf(order, small), "customer returned", false, bill.id(), null));
+
+        assertThat(barRepository.listBillAdjustments(bill.id()))
+                .extracting(BarBillAdjustmentRecord::adjustmentType, BarBillAdjustmentRecord::amountCent)
+                .containsExactlyInAnyOrder(tuple("refund", 30000L), tuple("min_spend_retained", 10000L));
+        assertThat(receivableLedgerService.refundPayables)
+                .extracting(CapturedRefundPayable::refundAmountCent).containsExactly(30000L);
+        assertThat(barRepository.findBillById(bill.id())).get()
+                .extracting(BarBillRecord::payableAmountCent).isEqualTo(100000L);
+    }
+
+    @Test
+    void voidUnsettledBillWaivesOnlyExcessAndRetainsRest() {
+        // 未结 1000、低消 1000，退 400：应付仍 1000（等结账照常收取）、留款 400。
+        BarTableRecord table = createTable("ret3", "bar_1", "active", 100000L);
+        createSession("ret3", table.id(), "bar_1", "merchant_1");
+        BarProductRecord big = product("ret3-big", "bar_1", 60000L);
+        BarProductRecord small = product("ret3-small", "bar_1", 40000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-ret3", "create order", List.of(), "bar_1", table.id(), null,
+                List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        BarBillRecord bill = bill("ret3", order.id());
+
+        service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-ret3", "cancel", List.of(), itemOf(order, small), "customer changed mind", false, bill.id(), null));
+
+        assertThat(barRepository.findBillById(bill.id())).get()
+                .extracting(BarBillRecord::payableAmountCent).isEqualTo(100000L);
+        assertThat(barRepository.listBillAdjustments(bill.id()))
+                .extracting(BarBillAdjustmentRecord::adjustmentType, BarBillAdjustmentRecord::amountCent)
+                .containsExactly(tuple("min_spend_retained", 40000L));
+    }
+
+    @Test
+    void newBillAppliesRetainedBalanceWithoutRecollecting() {
+        // BSM L1064「继续点其他产品时，以该笔留款抵付的部分不重复收款」：留款 400 后再点 300 → 应付 0、余额 100；再点 200 → 抵 100、应付 100。
+        BarTableRecord table = createTable("ret4", "bar_1", "active", 100000L);
+        BarTableSessionRecord session = createSession("ret4", table.id(), "bar_1", "merchant_1");
+        BarProductRecord big = product("ret4-big", "bar_1", 60000L);
+        BarProductRecord small = product("ret4-small", "bar_1", 40000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-ret4", "create order", List.of(), "bar_1", table.id(), null,
+                List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        BarBillRecord bill = bill("ret4", order.id());
+        settle(bill, "ret4");
+        service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-ret4", "return", List.of(), itemOf(order, small), "customer returned", false, bill.id(), null));
+        assertThat(BarMinSpend.retainedBalanceCent(barRepository, session.id())).isEqualTo(40000L);
+
+        BarOrderRecord second = order("ret4-second", "bar_1", table.id(), null, product("ret4-30", "bar_1", 30000L), 1);
+        BarBillRecord secondBill = bill("ret4-second", second.id());
+        assertThat(secondBill.payableAmountCent()).isZero();
+        assertThat(barRepository.listBillAdjustments(secondBill.id()))
+                .extracting(BarBillAdjustmentRecord::adjustmentType, BarBillAdjustmentRecord::amountCent)
+                .containsExactly(tuple("min_spend_retained_applied", 30000L));
+        assertThat(BarMinSpend.retainedBalanceCent(barRepository, session.id())).isEqualTo(10000L);
+
+        BarOrderRecord third = order("ret4-third", "bar_1", table.id(), null, product("ret4-20", "bar_1", 20000L), 1);
+        BarBillRecord thirdBill = bill("ret4-third", third.id());
+        assertThat(thirdBill.payableAmountCent()).isEqualTo(10000L);
+        assertThat(barRepository.listBillAdjustments(thirdBill.id()))
+                .extracting(BarBillAdjustmentRecord::amountCent).containsExactly(10000L);
+        assertThat(BarMinSpend.retainedBalanceCent(barRepository, session.id())).isZero();
+    }
+
+    @Test
+    void commissionBaseExcludesRetainedApplied() {
+        // Q28「不重复收款、收入或奖励」：抵用账单提成基数 = subtotal − 已抵用留款。
+        BarTableRecord table = createTable("ret5", "bar_1", "active", 100000L);
+        createSession("ret5", table.id(), "bar_1", "merchant_1");
+        BarProductRecord big = product("ret5-big", "bar_1", 60000L);
+        BarProductRecord small = product("ret5-small", "bar_1", 40000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-ret5", "create order", List.of(), "bar_1", table.id(), null,
+                List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        BarBillRecord bill = bill("ret5", order.id());
+        settle(bill, "ret5");
+        service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-ret5", "return", List.of(), itemOf(order, small), "customer returned", false, bill.id(), null));
+
+        BarOrderRecord second = order("ret5-second", "bar_1", table.id(), null, product("ret5-50", "bar_1", 50000L), 1);
+        BarBillRecord secondBill = bill("ret5-second", second.id());
+        assertThat(secondBill.payableAmountCent()).isEqualTo(10000L);
+
+        BarCommissionCalculationRecord commission = service.calculateCommission(secondBill.id(),
+                new CommissionCalculateRequest("commission-ret5", secondBill.id(), true, false));
+        assertThat(commission.commissionBaseCent()).isEqualTo(10000L);
+    }
+
+    @Test
+    void voidRejectionReversesRetainedRecordAndRestoresProgress() {
+        // 退品驳回：留款作废（status=reversed，不再计入进度/余额）；全额留款无应付可加回，应付不变；明细恢复后进度回到退品前。
+        BarTableRecord table = createTable("ret6", "bar_1", "active", 100000L);
+        BarTableSessionRecord session = createSession("ret6", table.id(), "bar_1", "merchant_1");
+        BarProductRecord big = product("ret6-big", "bar_1", 60000L);
+        BarProductRecord small = product("ret6-small", "bar_1", 40000L);
+        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+                "order-ret6", "create order", List.of(), "bar_1", table.id(), null,
+                List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
+                "staff_sales", List.of(), "offline"));
+        BarBillRecord bill = bill("ret6", order.id());
+        settle(bill, "ret6");
+        BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
+                "void-ret6", "return", List.of(), itemOf(order, small), "customer returned", false, bill.id(), null));
+        assertThat(BarMinSpend.retainedBalanceCent(barRepository, session.id())).isEqualTo(40000L);
+        assertThat(BarMinSpend.consumedCent(barRepository, session.id())).isEqualTo(100000L);
+
+        service.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-ret6-decide", "rejected", "not justified"));
+
+        assertThat(barRepository.listBillAdjustments(bill.id()))
+                .extracting(BarBillAdjustmentRecord::adjustmentType, BarBillAdjustmentRecord::status)
+                .containsExactly(tuple("min_spend_retained", "reversed"));
+        assertThat(BarMinSpend.retainedBalanceCent(barRepository, session.id())).isZero();
+        assertThat(BarMinSpend.consumedCent(barRepository, session.id())).isEqualTo(100000L);
+        assertThat(barRepository.findBillById(bill.id())).get()
+                .extracting(BarBillRecord::payableAmountCent).isEqualTo(100000L);
+    }
+
+    private BarProductRecord product(String key, String barId, long priceCent) {
+        return service.createProduct(new BarProductRequest(
+                "product-" + key, "create product", List.of(), barId, "Drink " + key, "beer",
+                priceCent, null, null, "active", null, null, false, null, null, null, null, null, null, null));
+    }
+
+    private BarOrderRecord order(String key, String barId, String tableId, String reservationId,
+            BarProductRecord product, int quantity) {
+        return service.createOrder(new BarOrderRequest(
+                "order-" + key, "create order", List.of(), barId, tableId, reservationId,
+                List.of(Map.of("product_id", product.id(), "quantity", quantity)), "staff_sales", List.of(), "offline"));
+    }
+
+    private BarBillRecord bill(String key, String orderId) {
+        return service.createOrderBill(orderId, new BarOrderBillCreateRequest(
+                "bill-" + key, "create bill", List.of(), "offline", false, 0));
+    }
+
+    private void settle(BarBillRecord bill, String key) {
+        service.settleBill(bill.id(), new BarBillSettleRequest(
+                "settle-" + key, "settle", List.of(), "pay-" + key, null, "aggregate_pay", null, null));
+    }
+
+    private String itemOf(BarOrderRecord order, BarProductRecord product) {
+        return barRepository.listOrderItems(order.id()).stream()
+                .filter(item -> item.productId().equals(product.id())).findFirst().orElseThrow().id();
+    }
+
+    private BarTableSessionRecord openSession(String key, String tableId, String barId, String reservationId) {
+        return service.createTableSession(new BarTableSessionRequest(
+                "session-" + key, "open session", List.of(), barId, null, LocalDate.parse("2026-06-20"),
+                tableId, reservationId, null, 2, "staff_sales", "staff_service", "supervisor_1"));
+    }
+
+    // ========================================================================
+    // 第十批 TK-27-R2：清台登记恢复空闲、并台期间原台位保持已开台、转台源台立即释放
+    // （BSM L1058「关台成功后台位自动进入待清台；由负责该台位的服务员完成清理后在系统登记恢复空闲」
+    //  「并台期间全部原台位保持已开台并归属该合并台组」；BSM L1079「原台随转台成功立即释放」；DEC-R8-97-16）
+    // ========================================================================
+
+    @Test
+    void clearTableRestoresIdleOnlyFromPendingClear() {
+        BarTableRecord table = createTable("clear-idle", "bar_1", "active", 50000L);
+        barRepository.saveTable(new BarTableRecord(table.id(), table.barId(), table.merchantId(), table.tableCode(),
+                table.tableName(), table.tableType(), table.capacity(), table.allowedPassFreeGuestCount(),
+                table.minConsumptionCent(), table.currency(), "pending_clear", table.createdAt(), Instant.now()));
+
+        service.clearTable(table.id(), new BarTableClearRequest("clear-idle-1", "清理完成", List.of()));
+
+        assertThat(barRepository.findTableById(table.id())).get()
+                .extracting(BarTableRecord::status).isEqualTo("active");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.table.cleared");
+
+        BarTableRecord opened = createTable("clear-opened", "bar_1", "active", 50000L);
+        createSession("clear-opened", opened.id(), "bar_1", "merchant_1");
+        assertThatThrownBy(() -> service.clearTable(opened.id(), new BarTableClearRequest("clear-opened-1", "清理完成", List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("BAR_TABLE_NOT_PENDING_CLEAR");
+        assertThat(barRepository.findTableById(opened.id())).get()
+                .extracting(BarTableRecord::status).isEqualTo("opened");
+    }
+
+    @Test
+    void mergeKeepsMergedTableOpenedUntilClose() {
+        BarTableRecord primaryTable = createTable("keep-primary", "bar_1", "active", 50000L);
+        BarTableRecord secondaryTable = createTable("keep-secondary", "bar_1", "active", 60000L);
+        BarTableSessionRecord primary = createSession("keep-primary", primaryTable.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord secondary = createSession("keep-secondary", secondaryTable.id(), "bar_1", "merchant_1");
+
+        service.mergeTableSessions(primary.id(), new BarTableMergeRequest("merge-keep", "join", List.of(),
+                secondary.id(), "join", "supervisor_1", primary.sessionVersion(), secondary.sessionVersion()));
+
+        assertThat(barRepository.findTableById(secondaryTable.id())).get()
+                .extracting(BarTableRecord::status).isEqualTo("opened");
+        assertThat(barRepository.findTableById(primaryTable.id())).get()
+                .extracting(BarTableRecord::status).isEqualTo("opened");
+    }
+
+    // 复核 money B1（BSM L1079「原台随转台成功立即释放……单台转台与合并台组转台同样适用」）：合并台组整体转台后，组内每张原台都释放。
+    @Test
+    void groupTransferReleasesEveryOriginalTable() {
+        BarTableRecord a = createTable("gtr-a", "bar_1", "active", 50000L);
+        BarTableRecord b = createTable("gtr-b", "bar_1", "active", 60000L);
+        BarTableRecord t = createTable("gtr-t", "bar_1", "active", 80000L);
+        BarTableSessionRecord primary = createSession("gtr-a", a.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord secondary = createSession("gtr-b", b.id(), "bar_1", "merchant_1");
+        merge("gtr", primary, secondary);
+        service.transferTableSession(primary.id(), new BarTableTransferRequest("transfer-gtr", "move group", List.of(),
+                t.id(), "move group", "supervisor_1", barRepository.findTableSessionById(primary.id()).orElseThrow().sessionVersion(),
+                "target_service_staff"));
+        assertThat(barRepository.findTableById(a.id())).get().extracting(BarTableRecord::status).isEqualTo("active");
+        assertThat(barRepository.findTableById(b.id())).get().extracting(BarTableRecord::status).isEqualTo("active");
+        assertThat(barRepository.findTableById(t.id())).get().extracting(BarTableRecord::status).isEqualTo("opened");
+    }
+
+    // 复核 money B2（BSM L1064「退款后该台位累计消费将低于……最低消费的，不退款——该笔金额留在本台位账上」）：账单级商品退款减低消进度，
+    // 连续两次退款时第二次按扣减后的进度判留款，留款不重复计入进度。
+    @Test
+    void billLevelRefundsReduceProgressSoSecondRefundIsRetained() {
+        BarTableRecord table = createTable("brf", "bar_1", "active", 100000L);
+        BarTableSessionRecord session = createSession("brf", table.id(), "bar_1", "merchant_1");
+        BarOrderRecord order = order("brf", "bar_1", table.id(), null, product("brf", "bar_1", 130000L), 1);
+        BarBillRecord bill = bill("brf", order.id());
+        settle(bill, "brf");
+        service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
+                "brf-r1", "refund", List.of("att_brf"), "refund", 30000L, "客人退款", "finance_1"));
+        assertThat(BarMinSpend.consumedCent(barRepository, session.id())).isEqualTo(100000L);
+
+        BarBillAdjustmentRecord second = service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
+                "brf-r2", "refund", List.of("att_brf"), "refund", 20000L, "客人再退", "finance_1"));
+        assertThat(second.adjustmentType()).isEqualTo("min_spend_retained");
+        assertThat(second.amountCent()).isEqualTo(20000L);
+        assertThat(receivableLedgerService.refundPayables).hasSize(1);
+        assertThat(BarMinSpend.consumedCent(barRepository, session.id())).isEqualTo(100000L);
+        assertThat(BarMinSpend.retainedBalanceCent(barRepository, session.id())).isEqualTo(20000L);
+    }
+
+    @Test
+    void transferReleasesSourceTableToIdle() {
+        BarTableRecord sourceTable = createTable("release-source", "bar_1", "active", 50000L);
+        BarTableRecord targetTable = createTable("release-target", "bar_1", "active", 80000L);
+        BarTableSessionRecord session = createSession("release-source", sourceTable.id(), "bar_1", "merchant_1");
+
+        service.transferTableSession(session.id(), new BarTableTransferRequest("transfer-release", "move", List.of(),
+                targetTable.id(), "move", "supervisor_1", session.sessionVersion(), "target_service_staff"));
+
+        assertThat(barRepository.findTableById(sourceTable.id())).get()
+                .extracting(BarTableRecord::status).isEqualTo("active");
+        assertThat(barRepository.findTableById(targetTable.id())).get()
+                .extracting(BarTableRecord::status).isEqualTo("opened");
+    }
+    // ========================================================================
+    // 第十批 TK-27-R3：拆台（BSM L1079 拆台整段：拆回两侧 / 任选一台 / 一次全拆、订单归属校验、结果台保持已开台；
+    // BSM L1062 定金随结果台组重判；「后续拆台只处理该次转台之后新形成的并台关系」；DEC-R6-19、DEC-R8-95）
+    // ========================================================================
+
+    private BarTableSessionAdjustmentRecord merge(String key, BarTableSessionRecord primary, BarTableSessionRecord merged) {
+        return service.mergeTableSessions(primary.id(), new BarTableMergeRequest("merge-" + key, "join", List.of(),
+                merged.id(), "join", "supervisor_1",
+                barRepository.findTableSessionById(primary.id()).orElseThrow().sessionVersion(),
+                barRepository.findTableSessionById(merged.id()).orElseThrow().sessionVersion()));
+    }
+
+    private BarTableSplitRequest split(String key, BarTableSessionRecord primary, String mode, String splitSessionId,
+            List<Map<String, Object>> orderAssignments) {
+        return new BarTableSplitRequest("split-" + key, "split", List.of(), mode, splitSessionId, orderAssignments,
+                "客人分开结账", "supervisor_1",
+                barRepository.findTableSessionById(primary.id()).orElseThrow().sessionVersion());
+    }
+
+    @Test
+    void splitLastMergeRestoresMergedSessionAndKeepsHistory() {
+        BarTableRecord tableA = createTable("split-a", "bar_1", "active", 50000L);
+        BarTableRecord tableB = createTable("split-b", "bar_1", "active", 60000L);
+        BarTableSessionRecord a = createSession("split-a", tableA.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord b = createSession("split-b", tableB.id(), "bar_1", "merchant_1");
+        merge("split-ab", a, b);
+
+        BarTableSessionAdjustmentRecord adjustment = service.splitTableSessions(a.id(), split("ab", a, "last_merge", null, List.of()));
+
+        assertThat(barRepository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status, BarTableSessionRecord::sourceSessionId)
+                .containsExactly("open", null);
+        assertThat(barRepository.findTableSessionById(a.id())).get()
+                .extracting(BarTableSessionRecord::status, BarTableSessionRecord::sessionVersion)
+                .containsExactly("open", 3L);
+        assertThat(barRepository.findTableById(tableB.id())).get().extracting(BarTableRecord::status).isEqualTo("opened");
+        assertThat(barRepository.familySessionIds(a.id(), true)).containsExactly(a.id());
+        assertThat(adjustment)
+                .extracting(BarTableSessionAdjustmentRecord::adjustmentType, BarTableSessionAdjustmentRecord::sourceSessionId,
+                        BarTableSessionAdjustmentRecord::minConsumptionBeforeCent, BarTableSessionAdjustmentRecord::minConsumptionAfterCent)
+                .containsExactly("split", b.id(), 110000L, 50000L);
+        assertThat(barRepository.listTableSessionAdjustments(a.id()))
+                .extracting(BarTableSessionAdjustmentRecord::adjustmentType).containsExactly("merge", "split");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.table.split");
+    }
+
+    @Test
+    void splitSingleFromThreeCompressesTree() {
+        BarTableRecord tableQ = createTable("split-q", "bar_1", "active", 50000L);
+        BarTableRecord tableP = createTable("split-p", "bar_1", "active", 50000L);
+        BarTableRecord tableM = createTable("split-m", "bar_1", "active", 50000L);
+        BarTableSessionRecord q = createSession("split-q", tableQ.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord p = createSession("split-p", tableP.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord m = createSession("split-m", tableM.id(), "bar_1", "merchant_1");
+        merge("split-pm", p, m);   // M1 → P
+        merge("split-qp", q, p);   // P（含 M1）→ Q
+
+        service.splitTableSessions(q.id(), split("qp", q, "single", p.id(), List.of()));
+
+        assertThat(barRepository.findTableSessionById(m.id())).get()
+                .extracting(BarTableSessionRecord::status, BarTableSessionRecord::sourceSessionId)
+                .containsExactly("merged", q.id());
+        assertThat(barRepository.findTableSessionById(p.id())).get()
+                .extracting(BarTableSessionRecord::status, BarTableSessionRecord::sourceSessionId)
+                .containsExactly("open", null);
+        assertThat(barRepository.familySessionIds(q.id(), false)).containsExactlyInAnyOrder(q.id(), m.id());
+    }
+
+    @Test
+    void splitAllRestoresEveryOriginalTable() {
+        BarTableRecord tableQ = createTable("split-all-q", "bar_1", "active", 50000L);
+        BarTableRecord tableP = createTable("split-all-p", "bar_1", "active", 50000L);
+        BarTableRecord tableM = createTable("split-all-m", "bar_1", "active", 50000L);
+        BarTableSessionRecord q = createSession("split-all-q", tableQ.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord p = createSession("split-all-p", tableP.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord m = createSession("split-all-m", tableM.id(), "bar_1", "merchant_1");
+        merge("split-all-pm", p, m);
+        merge("split-all-qp", q, p);
+
+        service.splitTableSessions(q.id(), split("all", q, "all", null, List.of()));
+
+        for (BarTableSessionRecord session : List.of(q, p, m)) {
+            assertThat(barRepository.findTableSessionById(session.id())).get()
+                    .extracting(BarTableSessionRecord::status, BarTableSessionRecord::sourceSessionId)
+                    .containsExactly("open", null);
+        }
+        assertThat(barRepository.familySessionIds(q.id(), false)).containsExactly(q.id());
+    }
+
+    @Test
+    void splitRejectsWhenOrdersLackAttribution() {
+        BarTableRecord tableA = createTable("split-attr-a", "bar_1", "active", 50000L);
+        BarTableRecord tableB = createTable("split-attr-b", "bar_1", "active", 60000L);
+        BarTableSessionRecord a = createSession("split-attr-a", tableA.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord b = createSession("split-attr-b", tableB.id(), "bar_1", "merchant_1");
+        merge("split-attr", a, b);
+        BarReservationRecord reservationB = service.createReservation(new BarReservationRequest(
+                "resv-split-attr-b", "create reservation", List.of(), "bar_1", tableB.id(),
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
+        // 复核 money B3 后并台期间在被并台位落单会归属其并台会话；这里模拟一笔无法确认归属的订单（无 bar_order_service_sources）。
+        BarOrderRecord orphan = order("split-attr", "bar_1", tableB.id(), reservationB.id(), product("split-attr", "bar_1", 30000L), 1);
+        barRepository.orderSessions.remove(orphan.id());
+        assertThat(barRepository.findSessionIdByOrderId(orphan.id())).isEmpty();
+
+        assertThatThrownBy(() -> service.splitTableSessions(a.id(), split("attr-1", a, "last_merge", null, List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED");
+                    assertThat(e.getMessage()).contains(orphan.id());
+                });
+        assertThat(barRepository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("merged");
+
+        service.splitTableSessions(a.id(), split("attr-2", a, "last_merge", null,
+                List.of(Map.of("order_id", orphan.id(), "session_id", b.id()))));
+
+        assertThat(barRepository.findSessionIdByOrderId(orphan.id())).contains(b.id());
+        assertThat(barRepository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("open");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.table_session.order_attributed");
+    }
+
+    @Test
+    void splitRejectsHistoricalTransferredChain() {
+        BarTableRecord tableA = createTable("split-hist-a", "bar_1", "active", 50000L);
+        BarTableRecord tableB = createTable("split-hist-b", "bar_1", "active", 60000L);
+        BarTableRecord tableT = createTable("split-hist-t", "bar_1", "active", 80000L);
+        BarTableSessionRecord a = createSession("split-hist-a", tableA.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord b = createSession("split-hist-b", tableB.id(), "bar_1", "merchant_1");
+        merge("split-hist", a, b);
+        service.transferTableSession(a.id(), new BarTableTransferRequest("transfer-split-hist", "move", List.of(),
+                tableT.id(), "move", "supervisor_1",
+                barRepository.findTableSessionById(a.id()).orElseThrow().sessionVersion(), "target_service_staff"));
+        assertThat(barRepository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("merged_transferred");
+
+        assertThatThrownBy(() -> service.splitTableSessions(a.id(), split("hist-1", a, "last_merge", null, List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("BAR_SPLIT_HISTORICAL_CHAIN");
+        assertThatThrownBy(() -> service.splitTableSessions(a.id(), split("hist-2", a, "single", b.id(), List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("BAR_SPLIT_HISTORICAL_CHAIN");
+        assertThat(barRepository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("merged_transferred");
+    }
+
+    @Test
+    void splitReevaluatesDepositsPerResultGroup() {
+        // BSM L1062「拆台时，各笔尚未处置定金按照其在当前有效并台链中的台位归属关联到对应拆分结果，再按该结果台位或台组的
+        // 最低消费进度判断」：合并达标前拆台，达标的一侧定金退、未达标一侧仍 paid。
+        BarReservationRecord a = reservationWithFixedDeposit("spld", 20000L, 30); // bar_spld，台位低消 100000
+        BarTableRecord tableB = createTable("spld-b", "bar_spld", "active", 60000L);
+        BarReservationRecord b = service.createReservation(new BarReservationRequest(
+                "resv-spld-b", "create reservation", List.of(), "bar_spld", tableB.id(),
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
+        service.payReservationDeposit(a.id(), new BarReservationDepositActionRequest("pay-spld-a", "pay", List.of(), "cash"));
+        service.payReservationDeposit(b.id(), new BarReservationDepositActionRequest("pay-spld-b", "pay", List.of(), "cash"));
+        BarTableSessionRecord sessionA = openSession("spld-a", a.tableId(), "bar_spld", a.id());
+        BarTableSessionRecord sessionB = openSession("spld-b", tableB.id(), "bar_spld", b.id());
+        merge("spld", sessionA, sessionB);
+        order("spld-1", "bar_spld", a.tableId(), a.id(), product("spld", "bar_spld", 60000L), 2); // 120000 < 合计 160000
+        assertThat(receivableLedgerService.depositRefunds).isEmpty();
+
+        service.splitTableSessions(sessionA.id(), split("spld", sessionA, "last_merge", null, List.of()));
+
+        assertThat(receivableLedgerService.depositRefunds).containsExactly(a.id());
+        assertThat(barRepository.findReservationById(b.id())).get()
+                .extracting(BarReservationRecord::depositStatus, BarReservationRecord::depositSettlement)
+                .containsExactly("paid", null);
+    }
     private BarTableRecord createTable(String key, String barId, String status, long minConsumptionCent) {
         return service.createTable(new BarTableRequest(
                 "table-" + key,
@@ -4056,8 +4798,53 @@ class BarServiceTests {
 
         @Override
         public BarOrderRecord saveOrder(BarOrderRecord order) {
+            // 第十批 TK-24：订单首次保存时按台位上的 open 会话锁定归属（JDBC 由 recordOrder 写 bar_order_service_sources）。
+            if (!orders.containsKey(order.id())) {
+                tableSessions.values().stream()
+                        .filter(s -> ("open".equals(s.status()) || "merged".equals(s.status())) && s.tableId().equals(order.tableId()))
+                        .findFirst().ifPresent(s -> orderSessions.put(order.id(), s.id()));
+            }
             orders.put(order.id(), order);
             return order;
+        }
+
+        private final Map<String, String> orderSessions = new LinkedHashMap<>();
+
+        @Override
+        public List<String> familySessionIds(String sessionId, boolean includeTransferred) {
+            List<String> family = new ArrayList<>(List.of(sessionId));
+            for (int i = 0; i < family.size(); i++) {
+                String parent = family.get(i);
+                tableSessions.values().stream()
+                        .filter(s -> parent.equals(s.sourceSessionId()) && ("merged".equals(s.status())
+                                || (includeTransferred && "merged_transferred".equals(s.status()))))
+                        .map(BarTableSessionRecord::id).filter(id -> !family.contains(id)).forEach(family::add);
+            }
+            return family;
+        }
+
+        @Override
+        public List<BarOrderRecord> listOrdersWithoutSession(List<String> tableIds, Instant since) {
+            return orders.values().stream()
+                    .filter(o -> tableIds.contains(o.tableId()) && !o.createdAt().isBefore(since)
+                            && !"cancelled".equals(o.status()) && !orderSessions.containsKey(o.id()))
+                    .toList();
+        }
+
+        @Override
+        public void saveOrderServiceSource(String orderId, String sessionId) {
+            orderSessions.put(orderId, sessionId);
+        }
+
+        @Override
+        public List<String> listOrderIdsBySessionIds(List<String> sessionIds) {
+            return orderSessions.entrySet().stream()
+                    .filter(e -> sessionIds.contains(e.getValue())).map(Map.Entry::getKey).toList();
+        }
+
+        @Override
+        public Optional<String> findSessionIdByOrderId(String orderId) {
+            return Optional.ofNullable(orderSessions.get(orderId));
         }
 
         @Override
@@ -4188,6 +4975,7 @@ class BarServiceTests {
 
         @Override
         public BarBillAdjustmentRecord saveBillAdjustment(BarBillAdjustmentRecord adjustment) {
+            billAdjustments.removeIf(existing -> existing.id().equals(adjustment.id()));
             billAdjustments.add(adjustment);
             return adjustment;
         }
@@ -4537,6 +5325,20 @@ class BarServiceTests {
         private final List<String> ledgerPostings = new ArrayList<>();
 
         private final List<CapturedRefundPayable> refundPayables = new ArrayList<>();
+        /** 第十批 TK-24-R3：达标退回定金的订台 id（按过账顺序）。 */
+        private final List<String> depositRefunds = new ArrayList<>();
+
+        @Override
+        public String createDepositRefundPayable(BarReservationRecord reservation) {
+            ledgerPostings.add("createDepositRefundPayable");
+            depositRefunds.add(reservation.id());
+            return "arap_deposit_refund_" + reservation.id();
+        }
+
+        @Override
+        public boolean hasDepositRefundPayable(String reservationId) {
+            return depositRefunds.contains(reservationId);
+        }
 
         @Override
         public String createRefundPayable(

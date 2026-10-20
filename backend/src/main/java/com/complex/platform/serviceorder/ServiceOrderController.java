@@ -1,5 +1,7 @@
 package com.complex.platform.serviceorder;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -83,6 +85,22 @@ public class ServiceOrderController {
     public ApiResponse<ServiceCatalogItemRecord> deleteApproveCatalog(@org.springframework.web.bind.annotation.PathVariable("id") String id,
             @RequestBody(required = false) com.complex.platform.serviceorder.dto.ServiceCatalogMutationRequest request) {
         return ApiResponse.ok(service.approveDeleteCatalogItem(id, request == null ? null : request.decision()));
+    }
+
+    /** TK-23-R3:已上架目录项管理费变更草案(拟改费率 + 指定生效日;service.catalog.manage)。 */
+    @PostMapping("/catalog/{id}/fee-draft")
+    public ApiResponse<ServiceCatalogItemRecord> feeDraft(@org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceCatalogFeeDraftRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.draftFeeChange(id, request));
+    }
+
+    /** TK-23-R3:管理费草案差人复核转正(service.catalog.approve;起草人不得自审)。 */
+    @PostMapping("/catalog/{id}/fee-activate")
+    public ApiResponse<ServiceCatalogItemRecord> feeActivate(@org.springframework.web.bind.annotation.PathVariable("id") String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.ServiceCatalogMutationRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.activateFeeDraft(id, request.idempotencyKey()));
     }
 
     @PostMapping("/catalog")
