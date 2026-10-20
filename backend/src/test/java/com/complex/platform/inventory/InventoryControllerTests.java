@@ -1,14 +1,17 @@
-// 文件版本：V0.03
+// 文件版本：V0.07
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -92,6 +95,7 @@ class InventoryControllerTests {
         when(service.listInventoryItems()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.listPurchaseRequests()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.listSavedBottles()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        when(service.listSavedBottles(any(String.class))).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.listStockBalances()).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
         when(service.listStockBatches()).thenReturn(new PageResponse<>(List.of(stockBatch()), 1, 50, 1));
         when(service.listRiskAlerts()).thenReturn(new PageResponse<>(List.of(riskAlert()), 1, 50, 1));
@@ -106,6 +110,44 @@ class InventoryControllerTests {
         when(service.createPurchaseRequest(any(PurchaseRequestCreate.class))).thenReturn(purchaseRequest());
         when(service.createSavedBottle(any(SavedBottleRequest.class))).thenReturn(savedBottle());
         when(service.claimSavedBottle(eq("saved_1"), any(SavedBottleClaimRequest.class))).thenReturn(savedBottleClaim());
+        // FS-016：转让 / 发码 / 人工例外四步。
+        when(service.transferSavedBottle(eq("saved_1"), any(com.complex.platform.inventory.dto.SavedBottleTransferRequest.class)))
+                .thenReturn(savedBottleTransfer());
+        when(service.requestSavedBottleVerificationCode(eq("saved_1"), any(com.complex.platform.inventory.dto.SavedBottleVerificationCodeRequest.class)))
+                .thenReturn(new SavedBottleVerificationCodeReceipt("saved_1", "transfer", Instant.parse("2026-06-14T00:00:00Z")));
+        when(service.renewSavedBottle(eq("saved_1"), any(com.complex.platform.inventory.dto.SavedBottleRenewalRequest.class)))
+                .thenReturn(renewal("pending_review"));
+        when(service.reviewSavedBottleRenewal(eq("rnw_1"), any(com.complex.platform.inventory.dto.SavedBottleRenewalRequest.class)))
+                .thenReturn(renewal("effective"));
+        when(service.listSavedBottleRenewals(eq("saved_1")))
+                .thenReturn(new PageResponse<>(List.of(renewal("effective")), 1, 50, 1));
+        when(service.initiateManualPickup(eq("saved_1"), any(com.complex.platform.inventory.dto.SavedBottleManualPickupRequest.class)))
+                .thenReturn(manualPickup("initiated"));
+        when(service.reviewManualPickup(eq("mpk_1"), any(com.complex.platform.inventory.dto.SavedBottleManualPickupRequest.class)))
+                .thenReturn(manualPickup("reviewed"));
+        when(service.confirmManualPickupMarketing(eq("mpk_1"), any(com.complex.platform.inventory.dto.SavedBottleManualPickupRequest.class)))
+                .thenReturn(manualPickup("marketing_confirmed"));
+        when(service.dispenseManualPickup(eq("mpk_1"), any(com.complex.platform.inventory.dto.SavedBottleManualPickupDispenseRequest.class)))
+                .thenReturn(manualPickup("dispensed"));
+        // FS-017：补存/赔付、退出清点通知、交接。
+        when(service.registerSavedBottleRemedy(eq("saved_1"), any(com.complex.platform.inventory.dto.SavedBottleRemedyRequest.class)))
+                .thenReturn(remedy("pending_approval"));
+        when(service.listSavedBottleRemedies(eq("saved_1"))).thenReturn(new PageResponse<>(List.of(remedy("closed")), 1, 50, 1));
+        when(service.approveSavedBottleRemedy(eq("sbr_1"), any(com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest.class)))
+                .thenReturn(remedy("approved"));
+        when(service.settleSavedBottleRemedy(eq("sbr_1"), any(com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest.class)))
+                .thenReturn(remedy("closed"));
+        when(service.advanceSavedBottleRemedyByPlatform(eq("sbr_1"), any(com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest.class)))
+                .thenReturn(remedy("pending_approval"));
+        when(service.assignSavedBottleRemedyStaffLiability(eq("sbr_1"), any(com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest.class)))
+                .thenReturn(remedy("closed"));
+        when(service.settleSavedBottleRemedyRecovery(eq("sbr_1"), any(com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest.class)))
+                .thenReturn(remedy("closed"));
+        when(service.noticeSavedBottleExit(any(com.complex.platform.inventory.dto.SavedBottleExitNoticeRequest.class)))
+                .thenReturn(new SavedBottleExitNoticeResult("m_1", 2, 2, Map.of("item_1", 3)));
+        when(service.handoverSavedBottlesToPlatform(any(com.complex.platform.inventory.dto.SavedBottleHandoverRequest.class)))
+                .thenReturn(handover());
+        when(service.listSavedBottleHandovers()).thenReturn(new PageResponse<>(List.of(handover()), 1, 50, 1));
         when(service.createStockAdjustment(any(StockAdjustmentRequest.class))).thenReturn(stockAdjustment());
         when(service.createStockBatch(any(InventoryStockBatchRequest.class))).thenReturn(stockBatch());
         when(service.runInventoryRiskScan(any(InventoryRiskScanRequest.class))).thenReturn(riskScanResult());
@@ -113,7 +155,6 @@ class InventoryControllerTests {
         when(service.createStockIn(any(StockInRequest.class))).thenReturn(stockMovement("inbound"));
         when(service.createStockMovement(any(StockMovementRequest.class))).thenReturn(stockMovement("outbound"));
         when(service.transferStockMovement(any(StockMovementRequest.class))).thenReturn(stockMovement("transfer"));
-        when(service.createTypedStockMovement(eq("damage"), any(StockMovementRequest.class))).thenReturn(stockMovement("damage"));
         when(service.createInventorySupplier(any(InventorySupplierRequest.class))).thenReturn(supplier());
         when(service.scanTraceCodeHandover(any(VerificationRequest.class))).thenReturn(traceHandover());
         when(service.listStocktakes()).thenReturn(new PageResponse<>(List.of(stocktake()), 1, 50, 1));
@@ -138,6 +179,28 @@ class InventoryControllerTests {
             "GET,/api/v1/inventory/saved-bottles,bar.saved_bottle.manage",
             "POST,/api/v1/inventory/saved-bottles,bar.saved_bottle.manage",
             "POST,/api/v1/inventory/saved-bottles/saved_1/claim,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/lookup,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/saved_1/transfer,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/saved_1/verification-code,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/saved_1/manual-pickups,bar.saved_bottle.manual_pickup.initiate",
+            "POST,/api/v1/inventory/saved-bottles/manual-pickups/mpk_1/review,bar.saved_bottle.manual_pickup.review",
+            "POST,/api/v1/inventory/saved-bottles/manual-pickups/mpk_1/confirm-marketing,bar.saved_bottle.manual_pickup.confirm_marketing",
+            "POST,/api/v1/inventory/saved-bottles/manual-pickups/mpk_1/dispense,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/saved_1/renewals,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/renewals/rnw_1/review,bar.saved_bottle.renewal.review",
+            "GET,/api/v1/inventory/saved-bottles/saved_1/renewals,bar.saved_bottle.manage",
+            "PUT,/api/v1/inventory/saved-bottles/manual-pickup-policy,bar.saved_bottle.manual_pickup_policy.manage",
+            "PUT,/api/v1/inventory/saved-bottles/renewal-policy,bar.saved_bottle.renewal_policy.manage",
+            "POST,/api/v1/inventory/saved-bottles/saved_1/remedy,bar.saved_bottle.manage",
+            "GET,/api/v1/inventory/saved-bottles/saved_1/remedies,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/remedies/sbr_1/approve,inventory.high_value.review",
+            "POST,/api/v1/inventory/saved-bottles/remedies/sbr_1/settle,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/remedies/sbr_1/advance,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/remedies/sbr_1/staff-liability,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/remedies/sbr_1/recovery/settle,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/exit-notice,bar.saved_bottle.manage",
+            "POST,/api/v1/inventory/saved-bottles/handover,bar.saved_bottle.manage",
+            "GET,/api/v1/inventory/saved-bottles/handovers,bar.saved_bottle.manage",
             "POST,/api/v1/inventory/stock-adjustments,inventory.stock.adjust",
             "GET,/api/v1/inventory/stock-balances,inventory.stock.view",
             "GET,/api/v1/inventory/stock-batches,inventory.stock.view",
@@ -174,6 +237,12 @@ class InventoryControllerTests {
         if ("GET".equals(method)) {
             mockMvc.perform(get(path).with(user("ops").roles("P0_SMOKE")))
                     .andExpect(status().isOk());
+        } else if ("PUT".equals(method)) {
+            mockMvc.perform(put(path)
+                            .with(user("ops").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(bodyFor(path)))
+                    .andExpect(status().isOk());
         } else {
             mockMvc.perform(post(path)
                             .with(user("ops").roles("P0_SMOKE"))
@@ -200,6 +269,8 @@ class InventoryControllerTests {
             "/api/v1/inventory/purchase-requests,'{\"items\":[{\"item_id\":\"item_1\",\"quantity\":2}]}'",
             "/api/v1/inventory/saved-bottles,'{\"customer_id\":\"cust_1\",\"bar_id\":\"bar_1\",\"items\":[{\"item_id\":\"item_1\",\"quantity\":1,\"bottle_name\":\"Vodka\",\"unit\":\"bottle\"}]}'",
             "/api/v1/inventory/saved-bottles/saved_1/claim,'{\"claim_items\":[{\"quantity\":1}]}'",
+            "/api/v1/inventory/saved-bottles/saved_1/transfer,'{\"to_name_or_nickname\":\"乙\",\"to_phone\":\"13900139000\",\"verification_code\":\"000000\"}'",
+            "/api/v1/inventory/saved-bottles/saved_1/renewals,'{\"verification_code\":\"000000\"}'",
             "/api/v1/inventory/stock-adjustments,'{\"adjustment_type\":\"loss\",\"items\":[{\"item_id\":\"item_1\",\"quantity\":1,\"location_id\":\"wh_1\"}],\"reason\":\"broken\"}'",
             "/api/v1/inventory/stock-batches,'{\"item_id\":\"item_1\",\"location_id\":\"wh_1\",\"batch_no\":\"BATCH-1\",\"quantity\":2}'",
             "/api/v1/inventory/risk-alerts/scan,'{\"expiry_warning_days\":7,\"operator_user_id\":\"staff_ops\"}'",
@@ -226,6 +297,28 @@ class InventoryControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
+    }
+
+    // FS-018 R1：POST /stock-movements/damage（前端真实蛇形请求体）转入 stock-adjustments 同一实现：
+    // adjustment_type=damage、reason 取 operator_note、库位取 from_location_id、照片/视频证据透传，不再走直接扣减的 createTypedStockMovement。
+    @Test
+    void typedDamageRouteDelegatesToStockAdjustment() throws Exception {
+        mockMvc.perform(post("/api/v1/inventory/stock-movements/damage")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key":"typed-damage-1","operator_note":"碰落破损","from_location_id":"wh_1",
+                                 "items":[{"item_id":"item_1","quantity":1}],
+                                 "photo_attachment_ids":["att_p"],"video_attachment_ids":["att_v"]}
+                                """))
+                .andExpect(status().isOk());
+
+        verify(service).createStockAdjustment(argThat(a -> "damage".equals(a.adjustmentType())
+                && "碰落破损".equals(a.reason())
+                && "wh_1".equals(a.items().get(0).get("location_id"))
+                && List.of("att_p").equals(a.photoAttachmentIds())
+                && List.of("att_v").equals(a.videoAttachmentIds())));
+        verify(service, never()).createTypedStockMovement(eq("damage"), any());
     }
 
     @Test
@@ -295,6 +388,81 @@ class InventoryControllerTests {
         if (path.contains("saved-bottles/") && path.endsWith("/claim")) {
             return """
                     {"idempotency_key":"claim-create","claim_items":[{"quantity":1}]}
+                    """;
+        }
+        if (path.endsWith("/remedy")) {
+            return """
+                    {"idempotency_key":"remedy-register","remedy_type":"compensation","amount_cent":12000,"reason":"无法替代"}
+                    """;
+        }
+        if (path.contains("/remedies/") && path.endsWith("/approve")) {
+            return """
+                    {"idempotency_key":"remedy-approve","role":"supervisor","reason":"同意"}
+                    """;
+        }
+        if (path.contains("/remedies/") && path.endsWith("/staff-liability")) {
+            return """
+                    {"idempotency_key":"remedy-staff","staff_user_id":"usr_staff_x","reason":"复核认定"}
+                    """;
+        }
+        if (path.contains("/remedies/")) {
+            return """
+                    {"idempotency_key":"remedy-action","evidence_ids":["att-1"]}
+                    """;
+        }
+        if (path.endsWith("saved-bottles/exit-notice")) {
+            return """
+                    {"idempotency_key":"exit-notice","merchant_id":"m_1"}
+                    """;
+        }
+        if (path.endsWith("saved-bottles/handover")) {
+            return """
+                    {"idempotency_key":"handover","merchant_id":"m_1","pickup_location":"平台仓 A 区","items":[{"saved_bottle_id":"saved_1","received_quantity":1,"condition":"intact"}]}
+                    """;
+        }
+        if (path.endsWith("saved-bottles/lookup")) {
+            return """
+                    {"phone":"13800138000"}
+                    """;
+        }
+        if (path.contains("saved-bottles/") && path.endsWith("/transfer")) {
+            return """
+                    {"idempotency_key":"transfer-1","to_name_or_nickname":"乙","to_phone":"13900139000","verification_code":"000000"}
+                    """;
+        }
+        if (path.contains("saved-bottles/") && path.endsWith("/verification-code")) {
+            return """
+                    {"idempotency_key":"vc-1","scene":"transfer"}
+                    """;
+        }
+        if (path.endsWith("manual-pickup-policy")) {
+            return """
+                    {"idempotency_key":"mpp-1","project_id":"project_1","orders_within_1m":2,"orders_within_3m":3,"orders_total":5,"min_orders":1,"max_orders":10,"reason":"首次配置"}
+                    """;
+        }
+        if (path.endsWith("renewal-policy")) {
+            return """
+                    {"idempotency_key":"rnp-1","policy_key":"max_renewals","scope_id":"global","value":2,"min_value":1,"max_value":5}
+                    """;
+        }
+        if (path.contains("renewals") && path.endsWith("/review")) {
+            return """
+                    {"idempotency_key":"rn-rv-1","decision":"approve"}
+                    """;
+        }
+        if (path.contains("renewals")) {
+            return """
+                    {"idempotency_key":"rn-1","verification_code":"000000"}
+                    """;
+        }
+        if (path.contains("manual-pickups") && path.endsWith("/dispense")) {
+            return """
+                    {"idempotency_key":"mp-4","claim_items":[{"quantity":1}],"present_in_person":true}
+                    """;
+        }
+        if (path.contains("manual-pickups")) {
+            return """
+                    {"idempotency_key":"mp-1","reason":"客人手机遗失"}
                     """;
         }
         if (path.endsWith("saved-bottles")) {
@@ -395,6 +563,187 @@ class InventoryControllerTests {
     private SavedBottleClaimRecord savedBottleClaim() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new SavedBottleClaimRecord("claim_1", "saved_1", 1, null, "staff_work_phone", null, "picked_up", List.of(), now);
+    }
+
+    private SavedBottleTransferRecord savedBottleTransfer() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new SavedBottleTransferRecord("transfer_1", "saved_1", "cust_1", "甲", "乙", "13900139000", "hash",
+                2, "usr_admin", "transferred", List.of(), now, "web", "hash0", null);
+    }
+
+    private SavedBottleRenewalRecord renewal(String status) {
+        Instant now = Instant.parse("2026-06-15T00:00:00Z");
+        return new SavedBottleRenewalRecord("rnw_1", "saved_1", "m_1", "project_1", "cust_1", "hash", 30,
+                now.plusSeconds(86400), now.plusSeconds(31 * 86400L), 1, 2, "global:v1", "global:v1", "usr_admin", "web",
+                "sms", null, null, null, status, now, now);
+    }
+
+    // FS-025：员工代办转存按前端真实请求形状（adminClient.mapKeys 蛇形键）；响应不外泄手机哈希。
+    @Test
+    void renewSavedBottleUsesSnakeCaseRequestAndResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/inventory/saved-bottles/saved_1/renewals")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "admin-saved-bottle-renew-saved_1",
+                                  "operator_note": "客人到店代办转存",
+                                  "verification_code": "000000"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("rnw_1"))
+                .andExpect(jsonPath("$.data.status").value("pending_review"))
+                .andExpect(jsonPath("$.data.extension_days").value(30))
+                .andExpect(jsonPath("$.data.renewal_count").value(1))
+                .andExpect(jsonPath("$.data.new_expire_at").exists())
+                .andExpect(jsonPath("$.data.phone_hash").doesNotExist());
+
+        org.mockito.ArgumentCaptor<com.complex.platform.inventory.dto.SavedBottleRenewalRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.inventory.dto.SavedBottleRenewalRequest.class);
+        verify(service).renewSavedBottle(eq("saved_1"), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().verificationCode()).isEqualTo("000000");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().operatorNote()).isEqualTo("客人到店代办转存");
+        verify(authorizationService).requirePermission("bar.saved_bottle.manage");
+    }
+
+    private static SavedBottleRemedyRecord remedy(String status) {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new SavedBottleRemedyRecord("sbr_1", "saved_1", "m_1", "project_1", "compensation", null, 12000L, null, null,
+                "original_merchant", "m_1", null, null, null, null, status, null, List.of(), "无法替代", "none", null, null, "none",
+                null, null, null, List.of(), "usr_admin", now, now);
+    }
+
+    private static SavedBottleHandoverRecord handover() {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new SavedBottleHandoverRecord("sbh_1", "m_1", "project_1", "ent_platform", "平台仓 A 区", 1, 1, 0, List.of(), List.of(),
+                List.of(new SavedBottleHandoverRecord.SavedBottleHandoverItemRecord("saved_1", 1, "intact", 0)), "usr_admin", now);
+    }
+
+    // FS-017：补存/赔付登记与交接按前端真实请求形状（adminClient.mapKeys 蛇形键，含嵌套 items）；响应不外泄 merchant_id。
+    @Test
+    void savedBottleRemedyAndHandoverUseSnakeCaseRequestShape() throws Exception {
+        mockMvc.perform(post("/api/v1/inventory/saved-bottles/saved_1/remedy")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "admin-saved-bottle-remedy-saved_1",
+                                  "operator_note": "无法同品替代",
+                                  "remedy_type": "compensation",
+                                  "amount_cent": 12000,
+                                  "reason": "无法替代"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("sbr_1"))
+                .andExpect(jsonPath("$.data.remedy_type").value("compensation"))
+                .andExpect(jsonPath("$.data.customer_delivery_status").value("pending_approval"))
+                .andExpect(jsonPath("$.data.recovery_status").value("none"))
+                .andExpect(jsonPath("$.data.merchant_id").doesNotExist());
+        org.mockito.ArgumentCaptor<com.complex.platform.inventory.dto.SavedBottleRemedyRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.inventory.dto.SavedBottleRemedyRequest.class);
+        verify(service).registerSavedBottleRemedy(eq("saved_1"), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().remedyType()).isEqualTo("compensation");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().amountCent()).isEqualTo(12000L);
+
+        mockMvc.perform(post("/api/v1/inventory/saved-bottles/handover")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "admin-saved-bottle-handover-m_1",
+                                  "merchant_id": "m_1",
+                                  "pickup_location": "平台仓 A 区",
+                                  "photo_attachment_ids": ["att_photo"],
+                                  "video_attachment_ids": ["att_video"],
+                                  "items": [{"saved_bottle_id": "saved_1", "received_quantity": 1, "condition": "intact"}]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("sbh_1"))
+                .andExpect(jsonPath("$.data.pickup_location").value("平台仓 A 区"))
+                .andExpect(jsonPath("$.data.items[0].condition").value("intact"))
+                .andExpect(jsonPath("$.data.merchant_id").doesNotExist());
+        org.mockito.ArgumentCaptor<com.complex.platform.inventory.dto.SavedBottleHandoverRequest> handoverCaptor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.inventory.dto.SavedBottleHandoverRequest.class);
+        verify(service).handoverSavedBottlesToPlatform(handoverCaptor.capture());
+        org.assertj.core.api.Assertions.assertThat(handoverCaptor.getValue().merchantId()).isEqualTo("m_1");
+        org.assertj.core.api.Assertions.assertThat(handoverCaptor.getValue().items().getFirst().get("saved_bottle_id")).isEqualTo("saved_1");
+        org.assertj.core.api.Assertions.assertThat(handoverCaptor.getValue().items().getFirst().get("condition")).isEqualTo("intact");
+
+        // 财务审批 role=finance 核既有财务码（supervisor 走参数化映射表）。
+        mockMvc.perform(post("/api/v1/inventory/saved-bottles/remedies/sbr_1/approve")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "admin-remedy-approve-fin", "role": "finance", "reason": "同意赔付"}
+                                """))
+                .andExpect(status().isOk());
+        verify(authorizationService).requirePermission("finance.ar_ap.manage");
+    }
+
+    private SavedBottleManualPickupRecord manualPickup(String status) {
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        return new SavedBottleManualPickupRecord("mpk_1", "saved_1", null, "project_1", "cust_1", "hash", "手机遗失",
+                "orders_total", "usr_manager", now, null, null, null, null, null, null, null, null, status, List.of(), now, now);
+    }
+
+    // FS-016：转让按前端真实请求形状（adminClient.mapKeys 蛇形键）。
+    @Test
+    void transferSavedBottleUsesSnakeCaseRequestAndResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/inventory/saved-bottles/saved_1/transfer")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "admin-saved-bottle-transfer-saved_1",
+                                  "operator_note": "后台转让",
+                                  "evidence_attachment_ids": ["att-1"],
+                                  "to_name_or_nickname": "乙",
+                                  "to_phone": "13900139000",
+                                  "verification_code": "000000"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("transfer_1"))
+                .andExpect(jsonPath("$.data.to_name_or_nickname").value("乙"))
+                .andExpect(jsonPath("$.data.operation_source").value("web"))
+                .andExpect(jsonPath("$.data.to_phone").doesNotExist());
+
+        org.mockito.ArgumentCaptor<com.complex.platform.inventory.dto.SavedBottleTransferRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.inventory.dto.SavedBottleTransferRequest.class);
+        verify(service).transferSavedBottle(eq("saved_1"), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().toNameOrNickname()).isEqualTo("乙");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().toPhone()).isEqualTo("13900139000");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().verificationCode()).isEqualTo("000000");
+        verify(authorizationService).requirePermission("bar.saved_bottle.manage");
+    }
+
+    // FS-016：领取按前端真实请求形状（claim_items/claim_by_phone/verification_code/bottle_label_value/customer_name_or_nickname）。
+    @Test
+    void claimSavedBottleUsesSnakeCaseRequestShape() throws Exception {
+        mockMvc.perform(post("/api/v1/inventory/saved-bottles/saved_1/claim")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "idempotency_key": "admin-saved-bottle-claim-saved_1-1",
+                                  "claim_items": [{"saved_bottle_id": "saved_1", "quantity": 1}],
+                                  "claim_by_phone": "13800138000",
+                                  "verification_code": "000000",
+                                  "bottle_label_value": "LBL-1",
+                                  "customer_name_or_nickname": "甲",
+                                  "evidence_attachment_ids": ["att-1"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("claim_1"));
+        org.mockito.ArgumentCaptor<SavedBottleClaimRequest> captor = org.mockito.ArgumentCaptor.forClass(SavedBottleClaimRequest.class);
+        verify(service).claimSavedBottle(eq("saved_1"), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().verificationCode()).isEqualTo("000000");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().bottleLabelValue()).isEqualTo("LBL-1");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().customerNameOrNickname()).isEqualTo("甲");
     }
 
     private StockMovementRecord stockMovement(String movementType) {

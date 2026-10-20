@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -123,6 +123,10 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("compensation_fulfillment", "补偿新增履约结算"),
             // 裁决 2026-10-19 第二轮第 5 条：补偿应付已付部分在该次核销撤销后对提供方的追收应收。
             Map.entry("compensation_fulfillment_recovery", "补偿应付已付追收"),
+            // FS-017（BSM L1072）：存酒作废补存/赔付的经营损失（internal_accounting，承担方=原门店或接收后的娱乐平台公司）；
+            // 平台垫付后向原门店追收的应收（receivable，经统一回写点结清时回写补存/赔付记录的追收状态）。
+            Map.entry("saved_bottle_remedy", "存酒补存/赔付损失"),
+            Map.entry("saved_bottle_remedy_recovery", "存酒退出承接垫付追收"),
             Map.entry("single_bar_service_fee", "单店门票综合服务费"),
             Map.entry("ticket_distribution_recovery", "通票分账追收"));
 
@@ -190,6 +194,11 @@ public class FinanceService implements TerminationSettlementPort {
     // 可为 null（旧构造/单测未注入）；包私有便于单测置位。开标志后超额财务退款须复核（见 requireRefundTierAuthorized）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     RefundAuthorizationService refundAuthorizationService;
+
+    // FS-017：存酒退出承接垫付追收回写端口（inventory 域实现；@Lazy 防初始化环；可为 null＝不回写）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    SavedBottleRemedyRecoveryPort savedBottleRemedyRecovery;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.evidence.EvidenceAttachmentValidator refundEvidenceValidator;
@@ -1507,6 +1516,11 @@ public class FinanceService implements TerminationSettlementPort {
         if (settlementProgress != null) {
             settlementProgress.onArApItemPaid(updated);
         }
+        // FS-017：存酒退出承接垫付追收应收结清 → 同一事务内回写补存/赔付记录的追收状态（对客结案不读此状态）。
+        if (savedBottleRemedyRecovery != null && "saved_bottle_remedy_recovery".equals(updated.sourceType())
+                && "settled".equals(updated.status())) {
+            savedBottleRemedyRecovery.onRecoverySettled(updated);
+        }
         // FS-021-R5（BSM L1683「每笔应付的实际到账结果回写该笔应付」）：确认到账即回写在途那次付款为到账。
         if (ticketPointsJdbc != null) {
             ticketPointsJdbc.update("""
@@ -2207,6 +2221,25 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     // ── P1#13/#14 内部实现 ──────────────────────────────────────────────────────
+
+    /**
+     * FS-017（BSM L1072「由原门店承担的作废酒品价值按内部结算价计入该酒吧的经营损失」「补酒成本计入该酒吧的经营损失」
+     * 「接收后因该娱乐平台公司保管造成的损失由该公司承担」）：补存/赔付经营损失记内部核算台账（范式同 postInventoryVariance damage 分支）。
+     * counterparty=承担方（原门店商户 id 或娱乐平台公司主体 id）；merchantId=原门店承担时挂原门店账本，平台承担时不挂商户。
+     */
+    @Transactional
+    public ArApItemRecord postSavedBottleRemedyLoss(String remedyId, String bearerId, String merchantId, long amountCent, String idempotencyKey) {
+        return persistDerivedArApItem("internal_accounting", requireText(bearerId, "bearer_id"), "saved_bottle_remedy",
+                requireText(remedyId, "remedy_id"), amountCent, requireText(idempotencyKey, "idempotency_key"), merchantId);
+    }
+
+    /** FS-017（BSM L1072「该娱乐平台公司可经审批先垫付并向原门店追收」）：对原门店挂追收应收，经统一回写点 settleArApItem 收回。 */
+    @Transactional
+    public ArApItemRecord postSavedBottleRemedyRecovery(String remedyId, String originalMerchantId, long amountCent, String idempotencyKey) {
+        String merchantId = requireText(originalMerchantId, "original_merchant_id");
+        return persistDerivedArApItem("receivable", merchantId, "saved_bottle_remedy_recovery",
+                requireText(remedyId, "remedy_id"), amountCent, requireText(idempotencyKey, "idempotency_key"), merchantId);
+    }
 
     private ArApItemRecord postInventoryVarianceInternal(InventoryVariancePostRequest request) {
         InventoryVariancePostRequest actual = requireRequest(request);

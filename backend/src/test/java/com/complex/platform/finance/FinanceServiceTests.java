@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -2083,6 +2083,30 @@ class FinanceServiceTests {
                 LocalDate.parse("2026-06-30"),
                 "2026-06"
         );
+    }
+
+    // FS-017（BSM L1072「该娱乐平台公司可经审批先垫付并向原门店追收……对客实际交付结案与内部追收状态分别记录」）：
+    // 追收应收经统一回写点结清时回调 inventory 域端口一次（入参＝已回写 settled 的行）。
+    @Test
+    void settlingSavedBottleRemedyRecoveryMarksRemedyRecovered() {
+        List<ArApItemRecord> recovered = new ArrayList<>();
+        service.savedBottleRemedyRecovery = recovered::add;
+        ArApItemRecord item = service.postSavedBottleRemedyRecovery("sbr_1", "m_a", 12000L, "sbr-1-recovery");
+        assertThat(item.direction()).isEqualTo("receivable");
+        assertThat(item.sourceType()).isEqualTo("saved_bottle_remedy_recovery");
+        assertThat(item.counterpartyId()).isEqualTo("m_a");
+        assertThat(item.unpaidAmountCent()).isEqualTo(12000L);
+        ArApItemRecord loss = service.postSavedBottleRemedyLoss("sbr_1", "m_a", "m_a", 12000L, "sbr-1-loss");
+        assertThat(loss.direction()).isEqualTo("internal_accounting");
+        assertThat(loss.status()).isEqualTo("settled");
+        assertThat(recovered).isEmpty();
+
+        service.registerArApPayment(item.id(), paymentRequest("sbr-1-pay-part", 2000L));
+        assertThat(recovered).isEmpty();
+        service.registerArApPayment(item.id(), paymentRequest("sbr-1-pay-rest", 10000L));
+        assertThat(recovered).extracting(ArApItemRecord::id).containsExactly(item.id());
+        assertThat(recovered.getFirst().status()).isEqualTo("settled");
+        assertThat(recovered.getFirst().sourceType()).isEqualTo("saved_bottle_remedy_recovery");
     }
 
     private ArApPaymentRequest paymentRequest(String idempotencyKey, long amountCent) {

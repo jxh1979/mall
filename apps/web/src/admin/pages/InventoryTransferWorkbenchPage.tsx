@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -20,6 +20,8 @@ import type { AdminPageProps } from "../types";
 // 此页补仓管与财务的可视与可点：「谁调给谁 → 调了什么多少 → 收没收到 → 这笔算多少钱 → 进没进应收应付台账」一行看全，
 // 断链（已合格签收、账没挂）单独立卡告警——货对不上账最容易出在这一段。
 // 读权限 inventory.transfer_order.view 由路由 requiredPermissions 门控；写动作按钮用 manage 码。
+// FS-019（BSM L1201）：借用只转保管责任不转所有权——建单须约定归还时间，借出方交货扫码、借入方收货扫码、借出方收货扫码按行按码归还，
+// 无法归还经双方确认、主管与财务复核后形成借入方对借出方应付，借出方登记实物处置完成才结束该数量的归还事项。
 const MANAGE_PERMISSION = "inventory.transfer_order.manage";
 
 type TransferLine = {
@@ -45,6 +47,7 @@ type TransferOrder = {
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
+  returnDueAt?: string | null;
   lines?: TransferLine[];
 };
 
@@ -61,6 +64,12 @@ type FulfillmentLine = {
   shortQuantity?: number;
   resolvedQuantity?: number;
   unresolvedQuantity?: number;
+  // FS-019 借用单：已归还、无法归还登记中、实物处置已完成、尚未归还。
+  traceCodes?: string[];
+  returnedQuantity?: number;
+  unreturnableClaimedQuantity?: number;
+  unreturnableClosedQuantity?: number;
+  outstandingQuantity?: number;
 };
 type Disposition = {
   id: string;
@@ -75,8 +84,13 @@ type Disposition = {
   reviewedBy?: string | null;
   reviewReason?: string | null;
   reshipOrderId?: string | null;
+  traceCodes?: string[];
+  confirmedBy?: string | null;
+  disposalNote?: string | null;
+  payableItemId?: string | null;
 };
-type Fulfillment = { payableItemId?: string | null; lines?: FulfillmentLine[]; dispositions?: Disposition[] };
+type TransferReturn = { id: string; lineId?: string; returnedQuantity?: number; traceCodes?: string[]; receivedBy?: string; receivedAt?: string };
+type Fulfillment = { payableItemId?: string | null; lines?: FulfillmentLine[]; dispositions?: Disposition[]; returns?: TransferReturn[] };
 type MerchantLite = { id: string; displayName?: string; merchantName?: string; companyName?: string };
 type ItemLite = { id: string; itemName?: string; itemCode?: string; unit?: string };
 type ArApLite = {
@@ -96,7 +110,7 @@ const TEXT = {
   description:
     "平台供货公司送货给商户（调拨）、商户之间借/调（借调）的流转单在这里建单、发货、扫码收货、归还与取消；每一单的货值与应付挂账凭证同屏可查，可直接下钻应收应付台账。",
   evidence:
-    "接口证据：读取 /api/v1/inventory/transfer-orders、/api/v1/inventory/transfer-orders/{order_id}、/api/v1/inventory/transfer-orders/{order_id}/dispositions、/api/v1/inventory/supply-entities、/api/v1/inventory/items、/api/v1/inventory/warehouses、/api/v1/platform/merchants、/api/v1/finance/ar-ap-items；写入 POST /api/v1/inventory/transfer-orders 及其 /submit、/lines、/supplier-review、/pick、/ship、/deliver、/receive、/dispositions、/dispositions/{disposition_id}/review、/return、/cancel，上传 /api/v1/evidence/attachments/upload。",
+    "接口证据：读取 /api/v1/inventory/transfer-orders、/api/v1/inventory/transfer-orders/{order_id}、/api/v1/inventory/transfer-orders/{order_id}/dispositions、/api/v1/inventory/supply-entities、/api/v1/inventory/items、/api/v1/inventory/warehouses、/api/v1/platform/merchants、/api/v1/finance/ar-ap-items；写入 POST /api/v1/inventory/transfer-orders 及其 /submit、/lines、/supplier-review、/pick、/ship、/deliver、/receive、/dispositions、/dispositions/{disposition_id}/review、/return、/unreturnable、/dispositions/{disposition_id}/confirm、/dispositions/{disposition_id}/disposal-completed、/cancel，上传 /api/v1/evidence/attachments/upload。",
   loadFailed: "跨主体流转单读取失败",
 };
 
@@ -129,9 +143,15 @@ const REQUISITION_AFTER_RECEIPT = new Set(["discrepancy", "completed"]);
 const REQUISITION_CANCEL_NEEDS_APPROVAL = new Set(["pending_supplier_review", "pending_picking", "pending_outbound"]);
 const OWNER_TYPE_LABELS: Record<string, string> = { supply_entity: "平台供货公司", merchant: "商户" };
 // 差异处理（BSM L1212「财务复核金额后办理补发、退回、货款调整或责任损失」）。
-const DISPOSITION_LABELS: Record<string, string> = { return_accepted: "退回验收", loss: "损失", reship: "补发", payment_adjustment: "货款调减" };
+const DISPOSITION_LABELS: Record<string, string> = { return_accepted: "退回验收", loss: "损失", reship: "补发", payment_adjustment: "货款调减", unreturnable: "无法归还（损坏/丢失）" };
 const RESPONSIBLE_LABELS: Record<string, string> = { supplier: "供货主体", carrier: "配送保管方", receiver: "收货方（门店）" };
-const DISPOSITION_STATUS_LABELS: Record<string, string> = { pending_review: "待复核", approved: "已通过", rejected: "已驳回" };
+const DISPOSITION_STATUS_LABELS: Record<string, string> = {
+  pending_counterparty: "待对方确认", pending_supervisor: "主管复核中", pending_review: "待复核（财务）", approved: "财务复核通过", rejected: "已驳回", disposal_completed: "实物处置已完成",
+};
+/** FS-019 借用单：收货后（含部分归还）才有归还、无法归还可办；返回后只看。 */
+const BORROW_AFTER_RECEIPT = new Set(["received", "returned"]);
+type ReturnInput = { quantity: string; codes: string };
+const EMPTY_UNRETURNABLE = { lineId: "", quantity: "1", codes: "", reason: "", amountYuan: "", disposalNote: "" };
 const FINANCE_REVIEW_PERMISSION = "finance.ar_ap.manage";
 type ReceiptInput = { arrived: string; accepted: string; rejected: string; codes: string };
 const EMPTY_RECEIPT_INPUT: ReceiptInput = { arrived: "", accepted: "", rejected: "", codes: "" };
@@ -161,6 +181,15 @@ function orderQuantity(order: TransferOrder): number | null {
 /** 借用（borrow）默认不计占用费＝不挂账；供货调拨与买断按货款挂应付（后端在接收方合格签收/收货后挂账）。 */
 function isBillable(order: TransferOrder): boolean {
   return order.transferType === "supply" || (order.transferType === "lending" && order.lendingMode === "purchase");
+}
+
+function isBorrowOrder(order?: TransferOrder | null): boolean {
+  return order?.transferType === "lending" && order.lendingMode === "borrow";
+}
+
+/** 借用单当前保管方：收货后在借入方，归还/处置完成后回到借出方；所有权始终是借出方（BSM L1201）。 */
+function custodianOf(order: TransferOrder): string | undefined {
+  return order.status === "received" ? order.toOwnerId : order.fromOwnerId;
 }
 
 type PostingKind =
@@ -261,6 +290,14 @@ export function InventoryTransferWorkbenchPage({
   const [createOpen, setCreateOpen] = React.useState(false);
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [scannedCodes, setScannedCodes] = React.useState("");
+  // FS-019：借用单借出方交货扫码、借出方收货按行扫码归还、无法归还登记。
+  const [shipOpen, setShipOpen] = React.useState(false);
+  const [shipCodes, setShipCodes] = React.useState("");
+  const [returnOpen, setReturnOpen] = React.useState(false);
+  const [returnLines, setReturnLines] = React.useState<Record<string, ReturnInput>>({});
+  const [unreturnableOpen, setUnreturnableOpen] = React.useState(false);
+  const [unreturnable, setUnreturnable] = React.useState(EMPTY_UNRETURNABLE);
+  const [returnDueAt, setReturnDueAt] = React.useState("");
   // FS-011：草稿改单复用建单表单；供货主体审核与未出库取消申请各一个弹窗。
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = React.useState(false);
@@ -319,7 +356,8 @@ export function InventoryTransferWorkbenchPage({
       // FS-011：门店要货的应付挂在签收（及差异处理）上，按签收结果里的 payable_item_id 对账。
       const fulfillmentRows = await Promise.all(
         withLines
-          .filter((order) => order.transferType === "supply" && REQUISITION_AFTER_RECEIPT.has(order.status ?? ""))
+          .filter((order) => (order.transferType === "supply" && REQUISITION_AFTER_RECEIPT.has(order.status ?? ""))
+            || (isBorrowOrder(order) && BORROW_AFTER_RECEIPT.has(order.status ?? "")))
           .map(async (order) => [
             order.id,
             await api.get<Fulfillment>(`/api/v1/inventory/transfer-orders/${order.id}/dispositions`).catch(() => null),
@@ -443,6 +481,9 @@ export function InventoryTransferWorkbenchPage({
       setCancelRequestOpen(false);
       setReceiptOpen(false);
       setDispositionOpen(false);
+      setShipOpen(false);
+      setReturnOpen(false);
+      setUnreturnableOpen(false);
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : `${actionName}失败`;
@@ -458,6 +499,8 @@ export function InventoryTransferWorkbenchPage({
     if (!editingId && !fromOwnerId) return "请选择出让方。";
     if (!editingId && !toOwnerId) return "请选择接收方（商户）。";
     if (!editingId && transferType === "lending" && fromOwnerId === toOwnerId) return "借调的出让方与接收方不能是同一个商户。";
+    // BSM L1201「不可消费物品（设备、器具等）的借用必须约定归还时间」。
+    if (!editingId && transferType === "lending" && lendingMode === "borrow" && !returnDueAt) return "请填写约定归还时间。";
     if (!itemId) return "请选择物料。";
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) return "数量必须大于 0。";
@@ -504,6 +547,7 @@ export function InventoryTransferWorkbenchPage({
         toOwnerId,
         operatorNote: operatorNote || null,
         lines: [formLine()],
+        returnDueAt: transferType === "lending" && lendingMode === "borrow" ? new Date(returnDueAt).toISOString() : null,
       },
       "建单",
     );
@@ -524,6 +568,108 @@ export function InventoryTransferWorkbenchPage({
 
   const storeWarehouses = warehouses.filter((row) => row.merchantId === selected?.toOwnerId && (row.status ?? "active") === "active");
   const selectedFulfillment = selected ? fulfillments.get(selected.id) : undefined;
+
+  // ── FS-019 借用：借出方交货扫码（借出时间取此刻）。 ──
+  function shipValidation(): string | null {
+    if (!selected) return "请先选中一张流转单。";
+    const scanned = splitCodes(shipCodes);
+    if (scanned.length === 0) return `本单随货 ${selectedCodes.length} 个溯源码，借出方交货必须逐码扫齐后再发货。`;
+    if (new Set(scanned).size !== selectedCodes.length) {
+      return `已录入 ${new Set(scanned).size} 个溯源码，与本单应扫的 ${selectedCodes.length} 个不一致，请核对实物后重扫。`;
+    }
+    return null;
+  }
+
+  function outstandingOf(line: TransferLine): number {
+    const fact = selectedFulfillment?.lines?.find((row) => row.lineId === line.id);
+    return fact?.outstandingQuantity ?? line.quantity ?? 0;
+  }
+
+  // ── FS-019 借用归还：借出方收货按行扫码/数量登记，可分多次。 ──
+  function openReturn() {
+    setFormError("");
+    setReturnLines(Object.fromEntries((selected?.lines ?? []).map((line) => [line.id, { quantity: String(outstandingOf(line)), codes: "" }])));
+    setReturnOpen(true);
+  }
+
+  function setReturnField(lineId: string, key: keyof ReturnInput, value: string) {
+    setReturnLines((current) => ({ ...current, [lineId]: { ...(current[lineId] ?? { quantity: "0", codes: "" }), [key]: value } }));
+  }
+
+  function returnValidation(): string | null {
+    let any = false;
+    for (const line of selected?.lines ?? []) {
+      const input = returnLines[line.id] ?? { quantity: "0", codes: "" };
+      const quantityValue = Number(input.quantity);
+      if (input.quantity.trim() === "" || !Number.isInteger(quantityValue) || quantityValue < 0) return `${itemName(line.itemId)}：归还数量须为不小于 0 的整数。`;
+      if (quantityValue === 0) continue;
+      any = true;
+      if (quantityValue > outstandingOf(line)) return `${itemName(line.itemId)}：归还数量不能超过尚未归还的 ${outstandingOf(line)}。`;
+      if ((line.traceCodes ?? []).length > 0 && new Set(splitCodes(input.codes)).size !== quantityValue) {
+        return `${itemName(line.itemId)}：归还 ${quantityValue} 件须逐件扫码录入溯源码。`;
+      }
+    }
+    return any ? null : "归还须按实物扫码/数量登记，至少一行数量大于 0。";
+  }
+
+  function submitReturn() {
+    void runAction("inventory_transfer_order_returned", orderPath("return"), {
+      lines: (selected?.lines ?? [])
+        .map((line) => ({ line, input: returnLines[line.id] ?? { quantity: "0", codes: "" } }))
+        .filter(({ input }) => Number(input.quantity) > 0)
+        .map(({ line, input }) => ({ lineId: line.id, returnedQuantity: Number(input.quantity), traceCodes: splitCodes(input.codes) })),
+    }, "归还");
+  }
+
+  // ── FS-019 无法归还：双方确认、主管与财务复核、赔偿应付、实物处置完成。 ──
+  function openUnreturnable() {
+    const line = selected?.lines?.[0];
+    setFormError("");
+    setProofs([]);
+    setUnreturnable({ ...EMPTY_UNRETURNABLE, lineId: line?.id ?? "", amountYuan: line ? String((line.unitPriceCent ?? 0) / 100) : "" });
+    setUnreturnableOpen(true);
+  }
+
+  function setUnreturnableField(key: keyof typeof EMPTY_UNRETURNABLE) {
+    return (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const value = event.target.value;
+      setUnreturnable((current) => {
+        const next = { ...current, [key]: value };
+        // 赔偿缺省＝数量×建单锁定内部结算价（DEC-R3-38），改数量或明细时跟着算，手改后以手改为准。
+        if (key === "quantity" || key === "lineId") {
+          const line = selected?.lines?.find((row) => row.id === next.lineId);
+          next.amountYuan = String(((line?.unitPriceCent ?? 0) * (Number(next.quantity) || 0)) / 100);
+        }
+        return next;
+      });
+    };
+  }
+
+  function unreturnableValidation(): string | null {
+    const line = selected?.lines?.find((row) => row.id === unreturnable.lineId);
+    if (!line) return "请选择明细。";
+    const quantityValue = Number(unreturnable.quantity);
+    if (!Number.isInteger(quantityValue) || quantityValue <= 0) return "无法归还数量须为大于 0 的整数。";
+    if (quantityValue > outstandingOf(line)) return `无法归还数量不能超过尚未归还的 ${outstandingOf(line)}。`;
+    if ((line.traceCodes ?? []).length > 0 && new Set(splitCodes(unreturnable.codes)).size !== quantityValue) return `须逐件列出无法归还 ${quantityValue} 件的溯源码。`;
+    const amount = Number(unreturnable.amountYuan);
+    if (!Number.isFinite(amount) || Math.round(amount * 100) < (line.unitPriceCent ?? 0) * quantityValue || amount <= 0) return "赔偿不得低于内部结算价。";
+    if (!unreturnable.reason.trim()) return "请写明无法归还的原因。";
+    if (proofs.length === 0) return "须上传证据（照片、录像等）后再登记。";
+    return null;
+  }
+
+  function submitUnreturnable() {
+    void runAction("inventory_transfer_unreturnable_registered", orderPath("unreturnable"), {
+      lineId: unreturnable.lineId,
+      quantity: Number(unreturnable.quantity),
+      traceCodes: splitCodes(unreturnable.codes),
+      reason: unreturnable.reason.trim(),
+      amountCent: Math.round(Number(unreturnable.amountYuan) * 100),
+      disposalNote: unreturnable.disposalNote.trim() || null,
+      evidenceAttachmentIds: proofs.map((proof) => proof.id),
+    }, "登记无法归还");
+  }
 
   /** 门店要货待签收走按行签收；借调仍扫码收货。 */
   function openReceive() {
@@ -678,6 +824,13 @@ export function InventoryTransferWorkbenchPage({
       { label: "出货库位", value: order.fromLocationId ?? "—" },
       { label: "收货库位", value: order.toLocationId ?? "—" },
       { label: "单据状态", value: label(TRANSFER_STATUS_LABELS, order.status) },
+      ...(isBorrowOrder(order)
+        ? [
+            { label: "所有权方", value: `始终为借出方：${merchantName(order.fromOwnerId)}` },
+            { label: "当前保管方", value: merchantName(custodianOf(order)) },
+            { label: "应归还期限", value: cnDate(order.returnDueAt ?? undefined) },
+          ]
+        : []),
       { label: "货值合计", value: amount === null ? "—" : yuan(amount) },
       { label: "建单时间", value: cnDate(order.createdAt) },
       { label: "最近状态变更时间", value: cnDate(order.updatedAt) },
@@ -735,7 +888,7 @@ export function InventoryTransferWorkbenchPage({
       <TechDetails>
         <div className="admin-generic-evidence" data-testid="inventory-transfer-evidence">{TEXT.evidence}</div>
       </TechDetails>
-      <AuditTrailHint event="inventory.transfer_order_created / inventory.transfer_order_submitted / inventory.transfer_order_supplier_reviewed / inventory.transfer_order_picked / inventory.transfer_order_shipped / inventory.transfer_order_delivered / inventory.transfer_order_received / inventory.transfer_disposition_registered / inventory.transfer_disposition_reviewed / inventory.transfer_order_returned / inventory.transfer_order_cancelled" />
+      <AuditTrailHint event="inventory.transfer_order_created / inventory.transfer_order_submitted / inventory.transfer_order_supplier_reviewed / inventory.transfer_order_picked / inventory.transfer_order_shipped / inventory.transfer_order_delivered / inventory.transfer_order_received / inventory.transfer_disposition_registered / inventory.transfer_disposition_reviewed / inventory.transfer_order_returned / inventory.transfer_unreturnable_registered / inventory.transfer_unreturnable_confirmed / inventory.transfer_disposal_completed / inventory.transfer_order_cancelled" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="inventory-transfer-kpi-focus-banner">
@@ -824,6 +977,16 @@ export function InventoryTransferWorkbenchPage({
             permissionsState={effectivePermissions}
             permissions={[MANAGE_PERMISSION]}
             data-testid="inventory-transfer-ship"
+            precheck={() => {
+              // FS-019：借用单有随货溯源码时，借出方交货须逐码扫齐（借出时间取此刻），改走扫码弹窗。
+              if (isBorrowOrder(selected) && selectedCodes.length > 0) {
+                setFormError("");
+                setShipCodes("");
+                setShipOpen(true);
+                return false;
+              }
+              return true;
+            }}
             onConfirm={() => selected && void runAction("inventory_transfer_order_shipped", `/api/v1/inventory/transfer-orders/${selected.id}/ship`, undefined, "发货")}
           />
           <PermissionButton
@@ -853,15 +1016,24 @@ export function InventoryTransferWorkbenchPage({
           >
             差异处理
           </PermissionButton>
-          <HighRiskConfirm
-            label="归还"
-            impact="把借用的货退回出让方，溯源码归属翻回原主体并留痕；仅借用（约定归还）型已收货单据可归还。"
-            disabled={submitting || !canReturn}
+          <PermissionButton
             permissionsState={effectivePermissions}
             permissions={[MANAGE_PERMISSION]}
+            disabled={submitting || !canReturn}
             data-testid="inventory-transfer-return"
-            onConfirm={() => selected && void runAction("inventory_transfer_order_returned", `/api/v1/inventory/transfer-orders/${selected.id}/return`, undefined, "归还")}
-          />
+            onClick={openReturn}
+          >
+            归还（借出方收货扫码）
+          </PermissionButton>
+          <PermissionButton
+            permissionsState={effectivePermissions}
+            permissions={[MANAGE_PERMISSION]}
+            disabled={!canReturn}
+            data-testid="inventory-transfer-unreturnable-open"
+            onClick={openUnreturnable}
+          >
+            无法归还 / 处置
+          </PermissionButton>
           <HighRiskConfirm
             label="取消单据"
             impact="取消草稿或未发货的借调单；已提交未出库的门店要货单须走「申请取消」审批；已出库的不能直接取消，须经差异处理实际退回验收或复核完成损失处理。"
@@ -919,6 +1091,11 @@ export function InventoryTransferWorkbenchPage({
               </select>
             </label>
           ) : null}
+          {transferType === "lending" && lendingMode === "borrow" ? (
+            <label>约定归还时间（借用只限不可消费物品，必须约定归还时间）
+              <input data-testid="inventory-transfer-create-return-due" type="datetime-local" value={returnDueAt} onChange={(event) => setReturnDueAt(event.target.value)} />
+            </label>
+          ) : null}
           <label>出让方
             <select data-testid="inventory-transfer-create-from" value={fromOwnerId} onChange={(event) => setFromOwnerId(event.target.value)}>
               <option value="">请选择</option>
@@ -946,6 +1123,110 @@ export function InventoryTransferWorkbenchPage({
           <label>结算单价（元）<input data-testid="inventory-transfer-create-price" type="number" min="0" step="0.01" value={unitPriceYuan} onChange={(event) => setUnitPriceYuan(event.target.value)} /></label>
           <label>随货溯源码（多个用空格或逗号分隔，可留空）<input data-testid="inventory-transfer-create-codes" value={traceCodes} onChange={(event) => setTraceCodes(event.target.value)} /></label>
           <label>备注<input data-testid="inventory-transfer-create-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
+        </FormModal>
+
+        <FormModal
+          open={shipOpen}
+          title="借出方交货扫码"
+          description={`本单随货 ${selectedCodes.length} 个溯源码，借出方交货须逐个扫描/录入后发货；借出时间取此次扫码时刻，不设手工填写。`}
+          testId="inventory-transfer-ship-scan"
+          submitTestId="inventory-transfer-ship-scan-submit"
+          submitLabel="确认发货"
+          submitting={submitting}
+          error={formError || undefined}
+          validate={shipValidation}
+          onClose={() => setShipOpen(false)}
+          onSubmit={() => void runAction("inventory_transfer_order_shipped", orderPath("ship"), { scannedTraceCodes: splitCodes(shipCodes) }, "发货")}
+        >
+          <label>扫描到的溯源码（多个用空格或逗号分隔）
+            <input data-testid="inventory-transfer-ship-scan-codes" value={shipCodes} onChange={(event) => setShipCodes(event.target.value)} />
+          </label>
+        </FormModal>
+
+        <FormModal
+          open={returnOpen}
+          title="借用归还（借出方收货扫码）"
+          description="借出方收到实物时按行登记归还数量，有随货溯源码的逐件扫码；可分多次归还，全部数量归还或实物处置完成后借用结束。实际归还时间取本次扫码时刻；所有权始终在借出方，只是保管责任回到借出方。"
+          testId="inventory-transfer-return-form"
+          submitTestId="inventory-transfer-return-submit"
+          submitLabel="确认归还"
+          submitting={submitting}
+          error={formError || undefined}
+          validate={returnValidation}
+          onClose={() => setReturnOpen(false)}
+          onSubmit={submitReturn}
+        >
+          {(selected?.lines ?? []).map((line) => {
+            const input = returnLines[line.id] ?? { quantity: "0", codes: "" };
+            return (
+              <fieldset key={line.id} data-testid={`inventory-transfer-return-line-${line.id}`}>
+                <legend>{itemName(line.itemId)} · 借出 {line.quantity ?? 0} · 尚未归还 {outstandingOf(line)}</legend>
+                <label>本次归还数量<input data-testid={`inventory-transfer-return-quantity-${line.id}`} type="number" min="0" value={input.quantity} onChange={(event) => setReturnField(line.id, "quantity", event.target.value)} /></label>
+                {(line.traceCodes ?? []).length > 0 ? (
+                  <label>归还件溯源码（逐件扫码，空格或逗号分隔）
+                    <input data-testid={`inventory-transfer-return-codes-${line.id}`} value={input.codes} onChange={(event) => setReturnField(line.id, "codes", event.target.value)} />
+                  </label>
+                ) : null}
+              </fieldset>
+            );
+          })}
+        </FormModal>
+
+        <FormModal
+          open={unreturnableOpen}
+          title="无法归还（损坏/丢失）"
+          description="借出方或借入方任一方登记原因、数量、实物处置方式并附证据；另一方确认后进主管复核，再由财务复核赔偿金额（缺省按数量×建单锁定内部结算价），通过后形成借入方对借出方的应付、单独跟进清偿；借出方登记实物处置实际完成后，才结束对应数量的归还事项。借入方单方报废不构成归还。"
+          testId="inventory-transfer-unreturnable"
+          submitTestId="inventory-transfer-unreturnable-submit"
+          submitLabel="登记，待对方确认"
+          submitting={submitting || uploading}
+          error={formError || undefined}
+          validate={unreturnableValidation}
+          onClose={() => setUnreturnableOpen(false)}
+          onSubmit={submitUnreturnable}
+        >
+          <ul data-testid="inventory-transfer-unreturnable-list">
+            {(selectedFulfillment?.dispositions ?? []).map((row) => (
+              <li key={row.id} data-testid={`inventory-transfer-unreturnable-row-${row.id}`}>
+                {label(DISPOSITION_LABELS, row.dispositionType)}
+                {row.quantity ? ` ${row.quantity} 件` : ""}
+                {(row.traceCodes ?? []).length > 0 ? ` · ${(row.traceCodes ?? []).join("、")}` : ""}
+                {row.amountCent ? ` · 赔偿 ${yuan(row.amountCent)}` : " · 不赔偿"}
+                {` · ${row.reason ?? ""} · ${label(DISPOSITION_STATUS_LABELS, row.status)}`}
+                {row.disposalNote ? ` · 处置：${row.disposalNote}` : ""}
+                {row.payableItemId ? ` · 应付 ${row.payableItemId}（单独跟进）` : ""}
+                {row.status === "pending_counterparty" ? (
+                  <PermissionButton permissionsState={effectivePermissions} permissions={[MANAGE_PERMISSION]} disabled={submitting} data-testid={`inventory-transfer-unreturnable-confirm-${row.id}`} onClick={() => void runAction("inventory_transfer_unreturnable_confirmed", orderPath(`dispositions/${row.id}/confirm`), { operatorNote: unreturnable.reason.trim() || null }, "对方确认")}>对方确认，提交主管复核</PermissionButton>
+                ) : null}
+                {row.status === "pending_review" ? (
+                  <>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={[FINANCE_REVIEW_PERMISSION]} disabled={submitting} data-testid={`inventory-transfer-disposition-approve-${row.id}`} onClick={() => reviewDisposition(row.id, "approved")}>财务复核通过</PermissionButton>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={[FINANCE_REVIEW_PERMISSION]} disabled={submitting} data-testid={`inventory-transfer-disposition-reject-${row.id}`} onClick={() => reviewDisposition(row.id, "rejected")}>驳回</PermissionButton>
+                  </>
+                ) : null}
+                {row.status === "approved" ? (
+                  <PermissionButton permissionsState={effectivePermissions} permissions={[MANAGE_PERMISSION]} disabled={submitting} data-testid={`inventory-transfer-disposal-complete-${row.id}`} onClick={() => void runAction("inventory_transfer_disposal_completed", orderPath(`dispositions/${row.id}/disposal-completed`), { operatorNote: unreturnable.disposalNote.trim() || null }, "登记实物处置完成")}>借出方登记实物处置完成</PermissionButton>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <label>复核意见（财务复核待复核项时填写）<input data-testid="inventory-transfer-unreturnable-review-reason" value={disposition.reviewReason} onChange={setDispositionField("reviewReason")} /></label>
+          <label>明细
+            <select data-testid="inventory-transfer-unreturnable-line" value={unreturnable.lineId} onChange={setUnreturnableField("lineId")}>
+              {(selected?.lines ?? []).map((line) => <option key={line.id} value={line.id}>{itemName(line.itemId)} · 尚未归还 {outstandingOf(line)}</option>)}
+            </select>
+          </label>
+          <label>无法归还数量<input data-testid="inventory-transfer-unreturnable-quantity" type="number" min="1" value={unreturnable.quantity} onChange={setUnreturnableField("quantity")} /></label>
+          {(selected?.lines?.find((row) => row.id === unreturnable.lineId)?.traceCodes ?? []).length > 0 ? (
+            <label>无法归还件的溯源码（逐件列出）<input data-testid="inventory-transfer-unreturnable-codes" value={unreturnable.codes} onChange={setUnreturnableField("codes")} /></label>
+          ) : null}
+          <label>原因（损坏/丢失经过）<input data-testid="inventory-transfer-unreturnable-reason" value={unreturnable.reason} onChange={setUnreturnableField("reason")} /></label>
+          <label>赔偿金额（元，缺省＝数量×内部结算价）<input data-testid="inventory-transfer-unreturnable-amount" type="number" min="0" step="0.01" value={unreturnable.amountYuan} onChange={setUnreturnableField("amountYuan")} /></label>
+          <label>实物处置方式<input data-testid="inventory-transfer-unreturnable-disposal" value={unreturnable.disposalNote} onChange={setUnreturnableField("disposalNote")} /></label>
+          <label>证据（照片、录像等）
+            <input data-testid="inventory-transfer-unreturnable-evidence" type="file" multiple disabled={uploading} onChange={(event) => { void uploadProofs(event.target.files); event.target.value = ""; }} />
+          </label>
+          <ul>{proofs.map((proof) => <li key={proof.id}>{proof.name}（已上传）</li>)}</ul>
         </FormModal>
 
         <FormModal

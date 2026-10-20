@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.02
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -325,6 +327,75 @@ class InventoryJdbcIntegrationTests {
                 INSERT INTO supplier_qualifications (id, supplier_id, qualification_type)
                 VALUES ('qual_bad', 'sup_qchk', 'spaceship_permit')
                 """)).hasMessageContaining("chk_supplier_qual_type");
+    }
+
+    // FS-017（BSM L1072）：V514 补存/赔付、交接表与 saved_bottles 保管/领取地点列，CHECK 拒非法值，审批人≠登记人。
+    @Test
+    void migrationV514CreatesSavedBottleRemediesAndHandovers() {
+        assertThat(regclass("saved_bottle_remedies")).isEqualTo("saved_bottle_remedies");
+        assertThat(regclass("saved_bottle_handovers")).isEqualTo("saved_bottle_handovers");
+        assertThat(regclass("saved_bottle_handover_items")).isEqualTo("saved_bottle_handover_items");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT column_name FROM information_schema.columns
+                 WHERE table_name = 'saved_bottles'
+                   AND column_name IN ('remedy_of_saved_bottle_id', 'custodian_entity_id', 'pickup_location', 'handed_over_at', 'handover_id')
+                """, String.class)).hasSize(5);
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT column_name FROM information_schema.columns
+                 WHERE table_name = 'saved_bottle_claims' AND column_name = 'pickup_location'
+                """, String.class)).hasSize(1);
+
+        Instant now = Instant.parse("2026-06-14T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO inventory_items (id, sku_code, item_name, item_type, unit, trace_required, min_quantity, status, created_at, updated_at)
+                VALUES ('item_v514', 'SKU-V514', 'V514 Vodka', 'spirit', 'bottle', false, 0, 'active', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """);
+        repository.saveSavedBottle(new SavedBottleRecord("saved_v514", null, "bar_v514", "item_v514", "Vodka", 1, 1, "bottle",
+                now.plusSeconds(86400), "cancelled", List.of(), now, now, "m_v514", false, null, "LBL-V514", "甲",
+                "13800138000", "hash_v514", List.of("reg"), null, null, null, null, null,
+                null, "ent_platform", "平台仓 A 区", now, "sbh_v514"));
+        SavedBottleRecord read = repository.listSavedBottlesByMerchant("m_v514").stream()
+                .filter(b -> b.id().equals("saved_v514")).findFirst().orElseThrow();
+        assertThat(read.custodianEntityId()).isEqualTo("ent_platform");
+        assertThat(read.pickupLocation()).isEqualTo("平台仓 A 区");
+        assertThat(read.handoverId()).isEqualTo("sbh_v514");
+
+        String insert = """
+                INSERT INTO saved_bottle_remedies (id, saved_bottle_id, merchant_id, remedy_type, amount_cent, bearer_type, bearer_id,
+                    supervisor_approved_by, customer_delivery_status, recovery_party_type, recovery_status, created_by, created_at, updated_at)
+                VALUES (?, 'saved_v514', 'm_v514', ?, ?, ?, 'm_v514', ?, ?, ?, ?, 'usr_a', now(), now())
+                """;
+        jdbcTemplate.update(insert, "sbr_ok", "compensation", 12000L, "original_merchant", null, "pending_approval", "none", "none");
+        expectCheck(() -> jdbcTemplate.update(insert, "sbr_bad_type", "refund", 12000L, "original_merchant", null, "pending_approval", "none", "none"), "chk_saved_bottle_remedies_type");
+        expectCheck(() -> jdbcTemplate.update(insert, "sbr_bad_amount", "compensation", 0L, "original_merchant", null, "pending_approval", "none", "none"), "chk_saved_bottle_remedies_amount");
+        expectCheck(() -> jdbcTemplate.update(insert, "sbr_bad_bearer", "compensation", 12000L, "customer", null, "pending_approval", "none", "none"), "chk_saved_bottle_remedies_bearer");
+        expectCheck(() -> jdbcTemplate.update(insert, "sbr_bad_status", "compensation", 12000L, "original_merchant", null, "paid", "none", "none"), "chk_saved_bottle_remedies_delivery_status");
+        expectCheck(() -> jdbcTemplate.update(insert, "sbr_bad_party", "compensation", 12000L, "original_merchant", null, "pending_approval", "customer", "none"), "chk_saved_bottle_remedies_recovery_party");
+        expectCheck(() -> jdbcTemplate.update(insert, "sbr_bad_rec", "compensation", 12000L, "original_merchant", null, "pending_approval", "none", "done"), "chk_saved_bottle_remedies_recovery_status");
+        expectCheck(() -> jdbcTemplate.update(insert, "sbr_self", "compensation", 12000L, "original_merchant", "usr_a", "pending_approval", "none", "none"), "chk_saved_bottle_remedies_sod");
+
+        jdbcTemplate.update("""
+                INSERT INTO saved_bottle_handovers (id, merchant_id, platform_entity_id, pickup_location, counted_total, received_intact,
+                    damaged_or_short, created_by, created_at)
+                VALUES ('sbh_v514', 'm_v514', 'ent_platform', '平台仓 A 区', 1, 1, 0, 'usr_a', now())
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO saved_bottle_handover_items (handover_id, saved_bottle_id, received_quantity, condition)
+                VALUES ('sbh_v514', 'saved_v514', 1, 'intact')
+                """);
+        expectCheck(() -> jdbcTemplate.update("""
+                INSERT INTO saved_bottle_handover_items (handover_id, saved_bottle_id, received_quantity, condition)
+                VALUES ('sbh_v514', 'saved_v514', 1, 'lost')
+                """), "chk_saved_bottle_handover_items_condition");
+        assertThat(repository.findSavedBottleHandoverItem("sbh_v514", "saved_v514").orElseThrow().condition()).isEqualTo("intact");
+    }
+
+    /** 同一 @Transactional 用例内连续验证多条 CHECK：每次失败后回滚到保存点，避免事务进入 aborted 态。 */
+    private void expectCheck(Runnable insert, String constraint) {
+        jdbcTemplate.execute("SAVEPOINT chk");
+        assertThatThrownBy(insert::run).hasMessageContaining(constraint);
+        jdbcTemplate.execute("ROLLBACK TO SAVEPOINT chk");
     }
 
     @Test

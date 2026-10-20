@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarOrderRecord;
@@ -1039,6 +1039,35 @@ public class CustomerService {
         CustomerRecord customer = requireCustomer(customerToken);
         return readPage("customer.my_tickets_viewed", "customer.my_tickets_view_failed", "not_applicable",
                 "issued_entitlement", () -> ticketingService.listCustomerHeldTickets(customer.id()));
+    }
+
+    /** FS-016（BSM L867「我的存酒：查看本人名下全部存酒、到期日与动态取酒码……跨店汇总展示」）：只下发客人可见字段（安全投影）。 */
+    public PageResponse<com.complex.platform.customer.dto.CustomerSavedBottleResponse> listMySavedBottles(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.my_saved_bottles_viewed", "customer.my_saved_bottles_view_failed", "not_applicable",
+                "saved_bottle", () -> inventoryService.listSavedBottlesForCustomer(customer.id(), customer.phone()).stream()
+                        .map(com.complex.platform.customer.dto.CustomerSavedBottleResponse::from).toList());
+    }
+
+    /** FS-016：官方动态取酒码——按当前持有人授权签发，窗口为全场统一刷新间隔（BSM L585/L1073）。 */
+    public com.complex.platform.inventory.SavedBottlePickupCodeResponse getSavedBottlePickupCode(
+            String customerToken, String savedBottleId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return inventoryService.issueSavedBottlePickupCode(savedBottleId, customer.id(), customer.phone());
+    }
+
+    /** FS-025（ENUM L120）：客人本人转存——发码到本人手机（scene=inventory.saved_bottle.renew）。 */
+    public com.complex.platform.inventory.SavedBottleVerificationCodeReceipt requestMySavedBottleRenewalCode(
+            String customerToken, String savedBottleId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return inventoryService.requestSavedBottleRenewalCodeByCustomer(savedBottleId, customer.id(), customer.phone());
+    }
+
+    /** FS-025（ENUM L120「转存须客人本人短信验证码确认（与转让同款）」）：客人本人转存，验证成功即顺延。 */
+    public com.complex.platform.inventory.SavedBottleRenewalRecord renewMySavedBottle(
+            String customerToken, String savedBottleId, com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return inventoryService.renewSavedBottleByCustomer(savedBottleId, customer.id(), customer.phone(), request);
     }
 
     public com.complex.platform.ticketing.TicketTransferResponse initiateTicketTransfer(

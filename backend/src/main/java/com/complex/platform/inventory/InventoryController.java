@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.06
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -44,6 +44,7 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -151,6 +152,16 @@ public class InventoryController {
         return ApiResponse.ok(service.listSavedBottles());
     }
 
+    /** FS-016 顺带：检索存酒记录只能输入手机号（BSM L1073 / PGM L878）；手机号属 PII，走 POST body 不进 URL（AUD-020）。 */
+    @PostMapping("/saved-bottles/lookup")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant
+    public ApiResponse<PageResponse<SavedBottleRecord>> lookupSavedBottles(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleLookupRequest request) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        return ApiResponse.ok(service.listSavedBottles(
+                com.complex.platform.common.Strings.requireText(request == null ? null : request.phone(), "phone")));
+    }
+
     @PostMapping("/saved-bottles")
     public ApiResponse<SavedBottleRecord> createSavedBottle(@RequestBody @jakarta.validation.Valid SavedBottleRequest request) {
         authorizationService.requirePermission("bar.saved_bottle.manage");
@@ -166,6 +177,105 @@ public class InventoryController {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.transferSavedBottle(id, request));
+    }
+
+    /** FS-016：向当前持有人手机发送短信验证码（scene=transfer|claim）。 */
+    @PostMapping("/saved-bottles/{id}/verification-code")
+    public ApiResponse<SavedBottleVerificationCodeReceipt> requestSavedBottleVerificationCode(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleVerificationCodeRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestSavedBottleVerificationCode(id, request));
+    }
+
+    // FS-016 人工例外取酒四步（BSM L1073）：店长发起 → 另一主管复核 → 营销确认 → 本人到场放酒。
+    @PostMapping("/saved-bottles/{id}/manual-pickups")
+    public ApiResponse<SavedBottleManualPickupRecord> initiateManualPickup(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleManualPickupRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.MANUAL_PICKUP_INITIATE);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.initiateManualPickup(id, request));
+    }
+
+    @PostMapping("/saved-bottles/manual-pickups/{id}/review")
+    public ApiResponse<SavedBottleManualPickupRecord> reviewManualPickup(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleManualPickupRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.MANUAL_PICKUP_REVIEW);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reviewManualPickup(id, request));
+    }
+
+    @PostMapping("/saved-bottles/manual-pickups/{id}/confirm-marketing")
+    public ApiResponse<SavedBottleManualPickupRecord> confirmManualPickupMarketing(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleManualPickupRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.MANUAL_PICKUP_CONFIRM_MARKETING);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.confirmManualPickupMarketing(id, request));
+    }
+
+    @PostMapping("/saved-bottles/manual-pickups/{id}/dispense")
+    public ApiResponse<SavedBottleManualPickupRecord> dispenseManualPickup(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleManualPickupDispenseRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.dispenseManualPickup(id, request));
+    }
+
+    // FS-025 存酒转存（延期）（ENUM L120 / BSM L1072）：员工代办（客人本人短信确认）→ 当班营销主管复核生效；转存流水列表。
+    @PostMapping("/saved-bottles/{id}/renewals")
+    public ApiResponse<SavedBottleRenewalRecord> renewSavedBottle(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRenewalRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.renewSavedBottle(id, request));
+    }
+
+    @PostMapping("/saved-bottles/renewals/{id}/review")
+    public ApiResponse<SavedBottleRenewalRecord> reviewSavedBottleRenewal(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRenewalRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.RENEWAL_REVIEW);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reviewSavedBottleRenewal(id, request));
+    }
+
+    @GetMapping("/saved-bottles/{id}/renewals")
+    public ApiResponse<PageResponse<SavedBottleRenewalRecord>> listSavedBottleRenewals(@PathVariable String id) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        return ApiResponse.ok(service.listSavedBottleRenewals(id));
+    }
+
+    /** FS-016：配置人工例外取酒消费历史条件（BSM L1073：按项目可配，调整须最高权限审批并留痕，须同时配置上下限）。 */
+    @PutMapping("/saved-bottles/manual-pickup-policy")
+    public ApiResponse<SavedBottleManualPickupPolicyRecord> configureManualPickupPolicy(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleManualPickupPolicyRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.MANUAL_PICKUP_POLICY_MANAGE);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configureManualPickupPolicy(request));
+    }
+
+    /** FS-025：配置转存次数上限（按项目）与顺延期限（按酒吧）（ENUM L120：须同时配置上下限，每次保存 version+1）。 */
+    @PutMapping("/saved-bottles/renewal-policy")
+    public ApiResponse<SavedBottleRenewalPolicyRecord> configureRenewalPolicy(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.RENEWAL_POLICY_MANAGE);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configureRenewalPolicy(request));
     }
 
     @PostMapping("/saved-bottles/{id}/claim")
@@ -197,6 +307,100 @@ public class InventoryController {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.disputeSavedBottle(id, request));
+    }
+
+    // ── FS-017 存酒作废后对客补存/赔付、门店退出清点通知与交接、责任归属与内部追收（BSM L1072 ①②③④）──
+    @PostMapping("/saved-bottles/{id}/remedy")
+    public ApiResponse<SavedBottleRemedyRecord> registerSavedBottleRemedy(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRemedyRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.registerSavedBottleRemedy(id, request));
+    }
+
+    @GetMapping("/saved-bottles/{id}/remedies")
+    public ApiResponse<PageResponse<SavedBottleRemedyRecord>> listSavedBottleRemedies(@PathVariable String id) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        return ApiResponse.ok(service.listSavedBottleRemedies(id));
+    }
+
+    /** 赔付方案审批：role=supervisor 核门店主管复核码，role=finance 核财务既有应收应付管理码。 */
+    @PostMapping("/saved-bottles/remedies/{id}/approve")
+    public ApiResponse<SavedBottleRemedyRecord> approveSavedBottleRemedy(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest request
+    ) {
+        String role = request == null ? null : request.role();
+        authorizationService.requirePermission("finance".equals(role)
+                ? InventoryService.REMEDY_FINANCE_APPROVE : InventoryService.REMEDY_SUPERVISOR_APPROVE);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveSavedBottleRemedy(id, request));
+    }
+
+    @PostMapping("/saved-bottles/remedies/{id}/settle")
+    public ApiResponse<SavedBottleRemedyRecord> settleSavedBottleRemedy(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.settleSavedBottleRemedy(id, request));
+    }
+
+    @PostMapping("/saved-bottles/remedies/{id}/advance")
+    public ApiResponse<SavedBottleRemedyRecord> advanceSavedBottleRemedyByPlatform(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.advanceSavedBottleRemedyByPlatform(id, request));
+    }
+
+    @PostMapping("/saved-bottles/remedies/{id}/staff-liability")
+    public ApiResponse<SavedBottleRemedyRecord> assignSavedBottleRemedyStaffLiability(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.assignSavedBottleRemedyStaffLiability(id, request));
+    }
+
+    @PostMapping("/saved-bottles/remedies/{id}/recovery/settle")
+    public ApiResponse<SavedBottleRemedyRecord> settleSavedBottleRemedyRecovery(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleRemedyActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.settleSavedBottleRemedyRecovery(id, request));
+    }
+
+    @PostMapping("/saved-bottles/exit-notice")
+    public ApiResponse<SavedBottleExitNoticeResult> noticeSavedBottleExit(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleExitNoticeRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.noticeSavedBottleExit(request));
+    }
+
+    @PostMapping("/saved-bottles/handover")
+    public ApiResponse<SavedBottleHandoverRecord> handoverSavedBottlesToPlatform(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleHandoverRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.handoverSavedBottlesToPlatform(request));
+    }
+
+    @GetMapping("/saved-bottles/handovers")
+    public ApiResponse<PageResponse<SavedBottleHandoverRecord>> listSavedBottleHandovers() {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        return ApiResponse.ok(service.listSavedBottleHandovers());
     }
 
     // ── R5 T6：库存域内高价值复核（saved_bottle_void/damage_report/stock_variance）──
@@ -407,12 +611,18 @@ public class InventoryController {
     }
 
     @PostMapping("/stock-movements/{movement_type}")
-    public ApiResponse<StockMovementRecord> createTypedStockMovement(
+    public ApiResponse<?> createTypedStockMovement(
             @PathVariable("movement_type") String movementType,
             @RequestBody @jakarta.validation.Valid StockMovementRequest request
     ) {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        // FS-018 R1：报损族（damage/loss/waste）统一进入既有高价值复核流程——与 /stock-adjustments 同一实现：
+        // 命中高价值返回 pending_review 调整单 + 建复核单（需照片+视频双证据），主管批准后才扣减；非高价值即时调整并补流水。
+        // BSM L1183/L1196/L2016、ENUM L164。
+        if (InventoryStockMovementService.TYPED_DAMAGE_FAMILY.contains(movementType)) {
+            return ApiResponse.ok(service.createStockAdjustment(StockAdjustmentRequest.fromTypedMovement(movementType, request)));
+        }
         return ApiResponse.ok(maskCostForUnauthorized(service.createTypedStockMovement(movementType, request)));
     }
 
@@ -462,10 +672,13 @@ public class InventoryController {
     }
 
     @PostMapping("/transfer-orders/{order_id}/ship")
-    @com.complex.platform.access.IdempotencyKeyFromPath("order_id") // M724-F06：没有请求体，服务层把单号当提交编号；重复提交返回第一次的结果并提示已完成
-    public ApiResponse<InventoryTransferOrderRecord> shipTransferOrder(@PathVariable("order_id") String orderId) {
+    @com.complex.platform.access.IdempotencyKeyFromPath("order_id") // M724-F06：服务层把单号当提交编号；重复提交返回第一次的结果并提示已完成
+    public ApiResponse<InventoryTransferOrderRecord> shipTransferOrder(
+            @PathVariable("order_id") String orderId,
+            // FS-019：借用单发货＝借出方交货扫码（scanned_trace_codes），借出时间取此刻；其余单无请求体。
+            @RequestBody(required = false) com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
         authorizationService.requirePermission("inventory.transfer_order.manage");
-        return ApiResponse.ok(service.shipTransferOrder(orderId));
+        return ApiResponse.ok(service.shipTransferOrder(orderId, request));
     }
 
     @PostMapping("/transfer-orders/{order_id}/receive")
@@ -549,15 +762,46 @@ public class InventoryController {
         return ApiResponse.ok(transferFlow.reviewDisposition(orderId, dispositionId, request));
     }
 
-    // ── V277 借调归还 / 取消(AUD-002/003)：借用型收货后可归还翻回归属；新建的借调单可取消，已发货不能直接取消（FS-011）。 ──
+    // ── FS-019 借用归还 / 无法归还：借出方收货扫码按行登记归还；无法归还经双方确认、主管与财务复核，借出方登记实物处置完成。 ──
     @PostMapping("/transfer-orders/{order_id}/return")
     public ApiResponse<InventoryTransferOrderRecord> returnTransferOrder(
             @PathVariable("order_id") String orderId,
-            @RequestBody(required = false) com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
+            @RequestBody(required = false) com.complex.platform.inventory.dto.ReturnTransferRequest request) {
         authorizationService.requirePermission("inventory.transfer_order.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.returnTransferOrder(orderId, request));
     }
+
+    @PostMapping("/transfer-orders/{order_id}/unreturnable")
+    public ApiResponse<java.util.Map<String, Object>> registerTransferUnreturnable(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.Disposition request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.registerUnreturnable(orderId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/dispositions/{disposition_id}/confirm")
+    public ApiResponse<java.util.Map<String, Object>> confirmTransferUnreturnable(
+            @PathVariable("order_id") String orderId,
+            @PathVariable("disposition_id") String dispositionId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.Step request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.confirmUnreturnable(orderId, dispositionId, request));
+    }
+
+    @PostMapping("/transfer-orders/{order_id}/dispositions/{disposition_id}/disposal-completed")
+    public ApiResponse<java.util.Map<String, Object>> completeTransferDisposal(
+            @PathVariable("order_id") String orderId,
+            @PathVariable("disposition_id") String dispositionId,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.TransferFlowRequests.Step request) {
+        authorizationService.requirePermission("inventory.transfer_order.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(transferFlow.completeDisposal(orderId, dispositionId, request));
+    }
+
+    // ── V277 借调取消(AUD-002/003)：新建的借调单可取消，已发货不能直接取消（FS-011）。 ──
 
     @PostMapping("/transfer-orders/{order_id}/cancel")
     public ApiResponse<InventoryTransferOrderRecord> cancelTransferOrder(

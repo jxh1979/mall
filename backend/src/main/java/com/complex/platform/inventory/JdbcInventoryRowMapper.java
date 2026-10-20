@@ -1,5 +1,7 @@
 package com.complex.platform.inventory;
 
+// 文件版本：V0.05
+
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -37,7 +39,8 @@ final class JdbcInventoryRowMapper {
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at"),
                 resultSet.getString("merchant_id"),
-                resultSet.getBoolean("manual_high_value")
+                resultSet.getBoolean("manual_high_value"),
+                resultSet.getBoolean("non_consumable")
         );
     }
 
@@ -289,7 +292,66 @@ final class JdbcInventoryRowMapper {
                 instantOrNull(resultSet, "transferred_at"),
                 resultSet.getString("transfer_to_name_or_nickname"),
                 piiCipher.decrypt(resultSet.getString("transfer_to_phone")),
-                resultSet.getString("transfer_to_phone_hash")
+                resultSet.getString("transfer_to_phone_hash"),
+                resultSet.getString("remedy_of_saved_bottle_id"),
+                resultSet.getString("custodian_entity_id"),
+                resultSet.getString("pickup_location"),
+                instantOrNull(resultSet, "handed_over_at"),
+                resultSet.getString("handover_id")
+        );
+    }
+
+    SavedBottleRemedyRecord mapSavedBottleRemedy(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SavedBottleRemedyRecord(
+                resultSet.getString("id"),
+                resultSet.getString("saved_bottle_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("remedy_type"),
+                resultSet.getString("replacement_saved_bottle_id"),
+                resultSet.getObject("amount_cent", Long.class),
+                resultSet.getObject("loss_cost_cent", Long.class),
+                resultSet.getString("loss_ar_ap_item_id"),
+                resultSet.getString("bearer_type"),
+                resultSet.getString("bearer_id"),
+                resultSet.getString("supervisor_approved_by"),
+                instantOrNull(resultSet, "supervisor_approved_at"),
+                resultSet.getString("finance_approved_by"),
+                instantOrNull(resultSet, "finance_approved_at"),
+                resultSet.getString("customer_delivery_status"),
+                instantOrNull(resultSet, "delivered_at"),
+                readList(resultSet.getString("delivery_evidence_ids")),
+                resultSet.getString("reason"),
+                resultSet.getString("recovery_party_type"),
+                resultSet.getString("recovery_party_id"),
+                resultSet.getObject("recovery_amount_cent", Long.class),
+                resultSet.getString("recovery_status"),
+                resultSet.getString("recovery_ar_ap_item_id"),
+                resultSet.getString("advance_approved_by"),
+                instantOrNull(resultSet, "advance_approved_at"),
+                readList(resultSet.getString("recovery_evidence_ids")),
+                resultSet.getString("created_by"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
+    /** 交接单表头；明细由仓储层另查填充。 */
+    SavedBottleHandoverRecord mapSavedBottleHandover(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SavedBottleHandoverRecord(
+                resultSet.getString("id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("platform_entity_id"),
+                resultSet.getString("pickup_location"),
+                resultSet.getInt("counted_total"),
+                resultSet.getInt("received_intact"),
+                resultSet.getInt("damaged_or_short"),
+                readList(resultSet.getString("photo_attachment_ids")),
+                readList(resultSet.getString("video_attachment_ids")),
+                java.util.List.of(),
+                resultSet.getString("created_by"),
+                instant(resultSet, "created_at")
         );
     }
 
@@ -406,7 +468,10 @@ final class JdbcInventoryRowMapper {
                 instantOrNull(resultSet, "printed_at"),
                 resultSet.getString("created_by"),
                 instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
+                instant(resultSet, "updated_at"),
+                resultSet.getString("custodian_type"),
+                resultSet.getString("custodian_id"),
+                resultSet.getString("lending_order_id")
         );
     }
 
@@ -433,5 +498,75 @@ final class JdbcInventoryRowMapper {
     private Integer nullableInteger(ResultSet resultSet, String column) throws SQLException {
         int value = resultSet.getInt(column);
         return resultSet.wasNull() ? null : value;
+    }
+
+    // ===== FS-016 =====
+    SavedBottlePickupCodeRecord mapSavedBottlePickupCode(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SavedBottlePickupCodeRecord(
+                resultSet.getString("id"),
+                resultSet.getString("saved_bottle_id"),
+                resultSet.getString("customer_id"),
+                resultSet.getString("code_hash"),
+                instant(resultSet, "issued_at"),
+                instant(resultSet, "expires_at"),
+                resultSet.getInt("refresh_interval_seconds"),
+                resultSet.getString("status"),
+                resultSet.getString("consumed_claim_id"),
+                instant(resultSet, "created_at")
+        );
+    }
+
+    SavedBottleRenewalRecord mapSavedBottleRenewal(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SavedBottleRenewalRecord(
+                resultSet.getString("id"),
+                resultSet.getString("saved_bottle_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("customer_id"),
+                resultSet.getString("phone_hash"),
+                resultSet.getInt("extension_days"),
+                instant(resultSet, "previous_expire_at"),
+                instant(resultSet, "new_expire_at"),
+                resultSet.getInt("renewal_count"),
+                resultSet.getInt("max_renewals"),
+                resultSet.getString("limit_config_version"),
+                resultSet.getString("days_config_version"),
+                resultSet.getString("operator_id"),
+                resultSet.getString("operation_source"),
+                resultSet.getString("confirmation_method"),
+                resultSet.getString("reviewed_by"),
+                instantOrNull(resultSet, "reviewed_at"),
+                resultSet.getString("review_reason"),
+                resultSet.getString("status"),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
+    }
+
+    SavedBottleManualPickupRecord mapSavedBottleManualPickup(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SavedBottleManualPickupRecord(
+                resultSet.getString("id"),
+                resultSet.getString("saved_bottle_id"),
+                resultSet.getString("merchant_id"),
+                resultSet.getString("project_id"),
+                resultSet.getString("customer_id"),
+                resultSet.getString("phone_hash"),
+                resultSet.getString("reason"),
+                resultSet.getString("history_condition"),
+                resultSet.getString("initiated_by"),
+                instant(resultSet, "initiated_at"),
+                resultSet.getString("reviewed_by"),
+                instantOrNull(resultSet, "reviewed_at"),
+                resultSet.getString("marketing_confirmed_by"),
+                resultSet.getString("marketing_confirm_basis"),
+                instantOrNull(resultSet, "marketing_confirmed_at"),
+                resultSet.getString("dispensed_by"),
+                instantOrNull(resultSet, "dispensed_at"),
+                resultSet.getString("claim_id"),
+                resultSet.getString("status"),
+                readList(resultSet.getString("evidence_attachment_ids")),
+                instant(resultSet, "created_at"),
+                instant(resultSet, "updated_at")
+        );
     }
 }

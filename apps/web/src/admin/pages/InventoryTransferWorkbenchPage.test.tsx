@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +15,9 @@ const ORDERS = [
   ...["draft", "pending_supplier_review", "pending_picking", "in_delivery", "pending_receipt", "discrepancy"].map((status) => ({
     id: `trf_${status}`, transferType: "supply", fromOwnerType: "supply_entity", fromOwnerId: "supply_1", toOwnerType: "merchant", toOwnerId: "merchant-1", toLocationId: "loc-1", status, createdAt: "2026-10-19T08:00:00Z", updatedAt: "2026-10-19T08:00:00Z",
   })),
+  // FS-019：带码的借用单各一张（列表第 2 页）——待发货（借出方交货扫码）、已收货（借出方收货扫码归还 / 无法归还处置）。
+  { id: "trf_borrow_created", transferType: "lending", lendingMode: "borrow", fromOwnerType: "merchant", fromOwnerId: "merchant-A", toOwnerType: "merchant", toOwnerId: "merchant-B", status: "created", returnDueAt: "2026-12-31T10:00:00Z", createdAt: "2026-10-20T08:00:00Z", updatedAt: "2026-10-20T08:00:00Z" },
+  { id: "trf_borrow_codes", transferType: "lending", lendingMode: "borrow", fromOwnerType: "merchant", fromOwnerId: "merchant-A", toOwnerType: "merchant", toOwnerId: "merchant-B", status: "received", returnDueAt: "2026-12-31T10:00:00Z", createdAt: "2026-10-20T08:00:00Z", updatedAt: "2026-10-20T08:30:00Z" },
 ];
 
 const LINES: Record<string, unknown> = {
@@ -22,6 +25,8 @@ const LINES: Record<string, unknown> = {
   trf_lend_ship: [{ id: "l1s", itemId: "item-1", quantity: 2, unitPriceCent: 5000, traceCodes: ["TRACE-A", "TRACE-B"] }],
   trf_missing: [{ id: "l2", itemId: "item-1", quantity: 2, unitPriceCent: 5000, traceCodes: [] }],
   trf_borrow: [{ id: "l3", itemId: "item-1", quantity: 1, unitPriceCent: 0, traceCodes: [] }],
+  trf_borrow_created: [{ id: "trf_borrow_created_l0", itemId: "item-1", quantity: 2, unitPriceCent: 80000, traceCodes: ["TRACE-A", "TRACE-B"] }],
+  trf_borrow_codes: [{ id: "trf_borrow_codes_l0", itemId: "item-1", quantity: 2, unitPriceCent: 80000, traceCodes: ["TRACE-C", "TRACE-D"] }],
   trf_draft: [{ id: "trf_draft_l0", itemId: "item-1", quantity: 5, unitPriceCent: 1000, traceCodes: [] }],
   trf_pending_supplier_review: [{ id: "l5", itemId: "item-1", quantity: 5, unitPriceCent: 1000, traceCodes: [] }],
   trf_pending_picking: [{ id: "l6", itemId: "item-1", quantity: 5, unitPriceCent: 1000, traceCodes: [] }],
@@ -41,6 +46,17 @@ const FULFILLMENT: Record<string, unknown> = {
     orderId: "trf_missing", status: "completed", payableItemId: null,
     lines: [{ lineId: "l2", itemId: "item-1", quantity: 2, unitPriceCent: 5000, acceptedQuantity: 2, rejectedQuantity: 0, shortQuantity: 0, resolvedQuantity: 0, unresolvedQuantity: 0 }],
     dispositions: [],
+  },
+  // FS-019：借用单两码都未归还；三条无法归还登记分别待对方确认、待财务复核、财务通过待实物处置完成。
+  trf_borrow_codes: {
+    orderId: "trf_borrow_codes", status: "received", returnDueAt: "2026-12-31T10:00:00Z",
+    lines: [{ lineId: "trf_borrow_codes_l0", itemId: "item-1", quantity: 2, unitPriceCent: 80000, traceCodes: ["TRACE-C", "TRACE-D"], returnedQuantity: 0, unreturnableClaimedQuantity: 0, unreturnableClosedQuantity: 0, outstandingQuantity: 2 }],
+    returns: [],
+    dispositions: [
+      { id: "trd_u1", lineId: "trf_borrow_codes_l0", dispositionType: "unreturnable", quantity: 1, traceCodes: ["TRACE-D"], amountCent: 80000, reason: "演出中摔坏", status: "pending_counterparty", requestedBy: "u-borrower" },
+      { id: "trd_u2", lineId: "trf_borrow_codes_l0", dispositionType: "unreturnable", quantity: 1, traceCodes: ["TRACE-C"], amountCent: 80000, reason: "丢失", status: "pending_review", requestedBy: "u-lender" },
+      { id: "trd_u3", lineId: "trf_borrow_codes_l0", dispositionType: "unreturnable", quantity: 1, traceCodes: ["TRACE-C"], amountCent: 80000, reason: "丢失", status: "approved", requestedBy: "u-lender", payableItemId: "arap_trf_trd_u3" },
+    ],
   },
 };
 
@@ -347,5 +363,165 @@ describe("门店要货签收与差异处理：按行签收、出库后不可直�
       "/api/v1/inventory/transfer-orders/trf_discrepancy/dispositions/trd_1/review",
       { decision: "approved", reason: "核对退回交接单" },
     ));
+  });
+});
+
+// FS-019（BSM L1201「「借」只转移保管责任、不转移所有权」「不可消费物品……的借用必须约定归还时间」「借出时间取借出方交货扫码的时刻」
+// 「实际归还时间取借出方收货扫码的时刻」「不可消费借用物无法归还时……由借出所有权方与借入保管方确认……并经主管及财务复核」）。
+describe("借用只转保管责任：约定归还时间、交货与收货扫码归还、无法归还双方确认与处置", () => {
+  /** 借用单夹具在列表第 2 页：翻页后选中。 */
+  async function selectOnPageTwo(id: string) {
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-pager-next")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-pager-next"));
+    await waitFor(() => expect(screen.queryByTestId(`inventory-transfer-select-${id}`)).not.toBeNull());
+    fireEvent.click(screen.getByTestId(`inventory-transfer-select-${id}`));
+  }
+
+  async function openCreateAsBorrow() {
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-open"));
+    fireEvent.change(await screen.findByTestId("inventory-transfer-create-type"), { target: { value: "lending" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-mode"), { target: { value: "borrow" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-from"), { target: { value: "merchant-A" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-to"), { target: { value: "merchant-B" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-item"), { target: { value: "item-1" } });
+  }
+
+  it("借用建单必须填约定归还时间：缺填被前端拦下不发请求，填了按后端契约提交 returnDueAt", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create-open")).toBeEnabled());
+    await openCreateAsBorrow();
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-create-return-due")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create")).toHaveTextContent("请填写约定归还时间"));
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-return-due"), { target: { value: "2026-12-31T10:00" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/inventory/transfer-orders", expect.objectContaining({
+      transferType: "lending",
+      lendingMode: "borrow",
+      fromOwnerId: "merchant-A",
+      toOwnerId: "merchant-B",
+      returnDueAt: new Date("2026-12-31T10:00").toISOString(),
+    })));
+  });
+
+  it("借用单发货须逐码扫齐后按后端契约提交 scanned_trace_codes", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await selectOnPageTwo("trf_borrow_created");
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-ship")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-ship"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-ship-scan-codes")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-transfer-ship-scan-codes"), { target: { value: "TRACE-A" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-ship-scan-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-ship-scan")).toHaveTextContent("与本单应扫的 2 个不一致"));
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("inventory-transfer-ship-scan-codes"), { target: { value: "TRACE-A TRACE-B" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-ship-scan-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/inventory/transfer-orders/trf_borrow_created/ship",
+      { scannedTraceCodes: ["TRACE-A", "TRACE-B"] },
+    ));
+  });
+
+  it("归还须逐件扫码：漏扫被前端拦下，不发请求", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await selectOnPageTwo("trf_borrow_codes");
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-return")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-return"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-return-codes-trf_borrow_codes_l0")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-transfer-return-codes-trf_borrow_codes_l0"), { target: { value: "TRACE-C" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-return-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-return-form")).toHaveTextContent("归还 2 件须逐件扫码录入溯源码"));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("扫齐后按后端契约提交 lines（可部分归还）", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await selectOnPageTwo("trf_borrow_codes");
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-return")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-return"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-return-quantity-trf_borrow_codes_l0")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-transfer-return-quantity-trf_borrow_codes_l0"), { target: { value: "1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-return-codes-trf_borrow_codes_l0"), { target: { value: "TRACE-C" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-return-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/inventory/transfer-orders/trf_borrow_codes/return",
+      { lines: [{ lineId: "trf_borrow_codes_l0", returnedQuantity: 1, traceCodes: ["TRACE-C"] }] },
+    ));
+  });
+
+  it("借用单登记无法归还须附证据并按后端契约提交", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "trd_u9", status: "pending_counterparty" });
+    const postForm = vi.fn().mockResolvedValue({ id: "att-9" });
+    renderPage({ ...makeApi(getResolver(), post), postForm });
+    await selectOnPageTwo("trf_borrow_codes");
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-unreturnable-open")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-unreturnable-open")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-open"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-unreturnable-quantity")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-quantity"), { target: { value: "1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-codes"), { target: { value: "TRACE-D" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-reason"), { target: { value: "演出中摔坏" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-disposal"), { target: { value: "借出方收回残件报废" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-unreturnable")).toHaveTextContent("须上传证据"));
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-evidence"), { target: { files: [new File(["x"], "damage.png", { type: "image/png" })] } });
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-unreturnable")).toHaveTextContent("damage.png"));
+    expect(postForm).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-unreturnable-submit")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/inventory/transfer-orders/trf_borrow_codes/unreturnable", {
+      lineId: "trf_borrow_codes_l0",
+      quantity: 1,
+      traceCodes: ["TRACE-D"],
+      reason: "演出中摔坏",
+      amountCent: 80000,
+      disposalNote: "借出方收回残件报废",
+      evidenceAttachmentIds: ["att-9"],
+    }));
+  });
+
+  it("无法归还赔偿低于数量×内部结算价时拦截（操作员裁决「不得低于内部结算价」）", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await selectOnPageTwo("trf_borrow_codes");
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-unreturnable-open")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-open"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-unreturnable-amount")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-quantity"), { target: { value: "1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-codes"), { target: { value: "TRACE-D" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-reason"), { target: { value: "丢失" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-unreturnable-amount"), { target: { value: "799.99" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-unreturnable")).toHaveTextContent("赔偿不得低于内部结算价"));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("处置按状态显示对方确认 / 财务复核 / 实物处置完成按钮，并按后端契约提交", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await selectOnPageTwo("trf_borrow_codes");
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-unreturnable-open")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-unreturnable-open")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-open"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-unreturnable-row-trd_u1")).not.toBeNull());
+    expect(screen.getByTestId("inventory-transfer-unreturnable-row-trd_u1")).toHaveTextContent("待对方确认");
+    expect(screen.getByTestId("inventory-transfer-unreturnable-confirm-trd_u1")).toBeInTheDocument();
+    expect(screen.getByTestId("inventory-transfer-unreturnable-row-trd_u2")).toHaveTextContent("待复核（财务）");
+    expect(screen.getByTestId("inventory-transfer-disposition-approve-trd_u2")).toBeInTheDocument();
+    expect(screen.getByTestId("inventory-transfer-unreturnable-row-trd_u3")).toHaveTextContent("财务复核通过");
+    expect(screen.getByTestId("inventory-transfer-unreturnable-row-trd_u3")).toHaveTextContent("单独跟进");
+    expect(screen.getByTestId("inventory-transfer-disposal-complete-trd_u3")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-confirm-trd_u1"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/inventory/transfer-orders/trf_borrow_codes/dispositions/trd_u1/confirm", { operatorNote: null }));
+    fireEvent.click(screen.getByTestId("inventory-transfer-unreturnable-open"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-disposal-complete-trd_u3")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("inventory-transfer-disposal-complete-trd_u3"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/inventory/transfer-orders/trf_borrow_codes/dispositions/trd_u3/disposal-completed", { operatorNote: null }));
   });
 });

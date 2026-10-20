@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.07
+// 文件版本：V0.10
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -207,6 +207,21 @@ public final class FieldLabels {
         p("group_booking_id", "团体预订");
         p("queue_entry_id", "排队号");
         p("saved_bottle_id", "存酒记录");
+        p("renewal_id", "转存记录");
+        p("manual_pickup_id", "人工例外取酒申请");
+        p("remedy_id", "补存/赔付记录");
+        p("remedy_type", "补存/赔付方式");
+        p("bearer_type", "承担方类型");
+        p("bearer_id", "承担方");
+        p("original_merchant_id", "原门店商户");
+        p("pickup_location", "领取地点");
+        p("received_quantity", "实收数量");
+        p("condition", "接收状态");
+        p("staff_user_id", "责任员工");
+        p("role", "审批角色");
+        p("scene", "验证码用途");
+        p("to_phone", "受让人手机号");
+        p("customer_phone", "客户手机号");
         p("bottle_label_value", "存酒标签");
         p("combo_name", "套餐名称");
         p("package_name", "套餐名称");
@@ -516,6 +531,7 @@ public final class FieldLabels {
         p("domain", "业务域");
         p("segment", "分段");
         p("scope_id", "范围标识");
+        p("policy_key", "业务参数键");
         p("scope_type", "范围类型");
         p("category", "分类");
         p("category_name", "分类名称");

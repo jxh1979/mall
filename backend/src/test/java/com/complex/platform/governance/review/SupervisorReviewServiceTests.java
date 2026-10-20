@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -57,7 +57,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(40); // 包括工资、绩效、酒吧分配、合同三类（HP-C01）及门店要货未出库取消（FS-011）审批。
+        assertThat(page.total()).isEqualTo(41); // 包括工资、绩效、酒吧分配、合同三类（HP-C01）、门店要货未出库取消（FS-011）及借用物无法归还（FS-019）审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",

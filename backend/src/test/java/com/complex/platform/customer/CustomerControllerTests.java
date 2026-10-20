@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.customer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -397,6 +397,67 @@ class CustomerControllerTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].catalog_item_id").value("gift_1"));
 
+        verify(authorizationService, never()).requirePermission(any(String.class));
+    }
+
+    // FS-016-R3：客人端「我的存酒」与动态取酒码——无令牌 401，有令牌委托服务层。
+    @Test
+    void savedBottleEndpointsRequireCustomerTokenAndDelegate() throws Exception {
+        when(service.listMySavedBottles("cust_token_1")).thenReturn(new PageResponse<>(List.of(), 1, 50, 0));
+        when(service.getSavedBottlePickupCode("cust_token_1", "saved_1")).thenReturn(
+                new com.complex.platform.inventory.SavedBottlePickupCodeResponse(
+                        "saved_1", "swp_abc", Instant.parse("2026-06-15T00:00:20Z"), 20));
+
+        mockMvc.perform(get("/api/v1/customer/my-saved-bottles"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/customer/saved-bottles/saved_1/pickup-code"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/customer/my-saved-bottles")
+                        .header("X-Customer-Token", "cust_token_1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray());
+        mockMvc.perform(get("/api/v1/customer/saved-bottles/saved_1/pickup-code")
+                        .header("X-Customer-Token", "cust_token_1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.code").value("swp_abc"))
+                .andExpect(jsonPath("$.data.refresh_interval_seconds").value(20));
+        verify(authorizationService, never()).requirePermission(any(String.class));
+    }
+
+    // FS-025：客人本人转存（ENUM L120「转存须客人本人短信验证码确认」）——无令牌 401，有令牌按蛇形体委托服务层。
+    @Test
+    void savedBottleRenewalEndpointsRequireCustomerTokenAndDelegate() throws Exception {
+        Instant now = Instant.parse("2026-06-15T00:00:00Z");
+        when(service.requestMySavedBottleRenewalCode("cust_token_1", "saved_1")).thenReturn(
+                new com.complex.platform.inventory.SavedBottleVerificationCodeReceipt("saved_1", "renew", now));
+        when(service.renewMySavedBottle(org.mockito.ArgumentMatchers.eq("cust_token_1"), org.mockito.ArgumentMatchers.eq("saved_1"),
+                any(com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest.class))).thenReturn(
+                new com.complex.platform.inventory.SavedBottleRenewalRecord("rnw_1", "saved_1", "m_1", "project_1", "cust_1",
+                        "hash", 30, now, now.plusSeconds(30 * 86400L), 1, 2, "global:v1", "global:v1", "cust_1", "customer_self",
+                        "sms", null, null, null, "effective", now, now));
+
+        mockMvc.perform(post("/api/v1/customer/saved-bottles/saved_1/renewal-code"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/customer/saved-bottles/saved_1/renew")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"rn-c-1\",\"sms_code\":\"000000\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/customer/saved-bottles/saved_1/renewal-code")
+                        .header("X-Customer-Token", "cust_token_1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.scene").value("renew"));
+        mockMvc.perform(post("/api/v1/customer/saved-bottles/saved_1/renew")
+                        .header("X-Customer-Token", "cust_token_1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"rn-c-1\",\"sms_code\":\"000000\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("effective"))
+                .andExpect(jsonPath("$.data.renewal_count").value(1))
+                .andExpect(jsonPath("$.data.phone_hash").doesNotExist());
+        org.mockito.ArgumentCaptor<com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest.class);
+        verify(service).renewMySavedBottle(org.mockito.ArgumentMatchers.eq("cust_token_1"), org.mockito.ArgumentMatchers.eq("saved_1"), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().smsCode()).isEqualTo("000000");
         verify(authorizationService, never()).requirePermission(any(String.class));
     }
 

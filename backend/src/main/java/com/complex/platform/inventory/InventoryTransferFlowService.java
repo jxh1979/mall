@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -44,7 +44,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FS-011 门店要货（供货调拨）九态流转与合格签收。借调单不走本类。
+ * FS-011 门店要货（供货调拨）九态流转与合格签收；FS-019 借用物无法归还闭环（见「借用无法归还」节），其余借调步骤不走本类。
  * BSM L1212「门店要货依次经过门店提交、供货主体审核、仓库拣配、出库、配送、门店签收和差异处理；每次转换记录操作者和时间。
  * 签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款。未出库数量可经审批取消」；
  * BSM L1213 / ENUM L169 九态；操作员裁决 2026-10-19 第 2 条「供货主体不同意时退回草稿，门店改后可重新提交，不想要了再自行取消」。
@@ -54,12 +54,19 @@ import org.springframework.transaction.annotation.Transactional;
  * 财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款。全部数量处理完且库存、款项记录齐全后完成要货单」）：凭交接证据登记，
  * 财务（finance.ar_ap.manage，非商户账号、能触及门店所属项目、非登记人）复核后生效；拒收与短少的每一件经退回验收或损失有了结果，
  * 且无待复核项，才完成。
+ * FS-019 借用无法归还（BSM L1201「不可消费借用物无法归还时，关联原借用记录，由借出所有权方与借入保管方确认原因、数量和实物处置，并经主管及财务复核；
+ * 赔偿按已有约定及现行跨商户结算规则形成借入方对借出方的应付。双方确认的实物处置实际完成后，结束对应数量的原物归还事项；未付赔偿款单独跟进直到
+ * 实际清偿。借入方单方报废不构成归还」；台账 §25「不得无记录地直接改变所有权」；DEC-R3-38 跨商户借调一律按内部结算价）：
+ * 一方登记（附证据）→ 另一方确认并挂主管复核 → 主管通过进财务复核 → 财务通过按建单锁定内部结算价形成借入方对借出方应付（独立跟进）→
+ * 借出方登记实物处置完成，该数量的归还事项结束、保管主体回到借出方；全部数量归还或处置完成后借用单 returned。所有权始终不动。
  */
 @Service
 public class InventoryTransferFlowService {
     static final String MANAGE = "inventory.transfer_order.manage";
     private static final String VIEW = "inventory.transfer_order.view";
     public static final String CANCEL_ACTION = "inventory.transfer_order.cancel";
+    /** FS-019 借用物无法归还：对方确认后挂主管复核的事项类型。 */
+    public static final String UNRETURNABLE_ACTION = "inventory.transfer_order.unreturnable";
     private static final String OBJECT_TYPE = "inventory_transfer_order";
     /** 已提交、未出库：取消须经审批。 */
     private static final Set<String> CANCEL_NEEDS_APPROVAL = Set.of("pending_supplier_review", "pending_picking", "pending_outbound");
@@ -197,8 +204,14 @@ public class InventoryTransferFlowService {
     @EventListener
     @Transactional
     public void decided(SupervisorReviewDecisionRecord decision) {
-        if (!CANCEL_ACTION.equals(decision.actionType()) || !OBJECT_TYPE.equals(decision.objectType())
-                || !Set.of("approved", "rejected").contains(decision.reviewStatus())) {
+        if (!OBJECT_TYPE.equals(decision.objectType()) || !Set.of("approved", "rejected").contains(decision.reviewStatus())) {
+            return;
+        }
+        if (UNRETURNABLE_ACTION.equals(decision.actionType())) {
+            unreturnableDecided(decision);
+            return;
+        }
+        if (!CANCEL_ACTION.equals(decision.actionType())) {
             return;
         }
         Locked locked = lock(decision.objectId());
@@ -298,15 +311,24 @@ public class InventoryTransferFlowService {
     public Map<String, Object> fulfillment(String orderId) {
         try {
             InventoryTransferOrderRecord o = reload(requireText(orderId, "order_id"));
-            if (!"supply".equals(o.transferType())) {
-                throw ApiException.badRequest("TRANSFER_NOT_REQUISITION", "只有门店要货（平台供货调拨）单走此流程");
-            }
-            requireStoreSide(o, VIEW);
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("order_id", o.id());
             result.put("status", o.status());
-            result.put("payable_item_id", currentPayableId(o.id()));
-            result.put("lines", lineFacts(o.id()));
+            if (isBorrow(o)) {
+                // FS-019：借用单按行的归还事实、归还登记与无法归还处置，借出方与借入方都可查看。
+                requireParty(o, VIEW);
+                result.put("return_due_at", o.returnDueAt());
+                result.put("lines", lendingLineFacts(o));
+                result.put("returns", jdbc.queryForList("SELECT * FROM inventory_transfer_returns WHERE transfer_order_id=? ORDER BY received_at,id", o.id())
+                        .stream().map(this::plain).toList());
+            } else {
+                if (!"supply".equals(o.transferType())) {
+                    throw ApiException.badRequest("TRANSFER_NOT_REQUISITION", "只有门店要货（平台供货调拨）单走此流程");
+                }
+                requireStoreSide(o, VIEW);
+                result.put("payable_item_id", currentPayableId(o.id()));
+                result.put("lines", lineFacts(o.id()));
+            }
             result.put("dispositions", jdbc.queryForList("SELECT * FROM inventory_transfer_dispositions WHERE transfer_order_id=? ORDER BY requested_at,id",
                     o.id()).stream().map(this::plain).toList());
             audit.recordSuccess("inventory.transfer_fulfillment_viewed", VIEW, OBJECT_TYPE, orderId, null, null, Map.of());
@@ -387,7 +409,7 @@ public class InventoryTransferFlowService {
     public Map<String, Object> reviewDisposition(String orderId, String dispositionId, TransferFlowRequests.SupplierReview r) {
         return write("reviewTransferDisposition:" + dispositionId, FINANCE_REVIEW, r.idempotencyKey(), r, "inventory.transfer_disposition_reviewed",
                 "inventory.transfer_disposition_review_failed", orderId, () -> {
-                    InventoryTransferOrderRecord o = lockOpen(orderId);
+                    InventoryTransferOrderRecord o = lockAny(orderId);
                     requireFinanceReviewer(o);
                     Map<String, Object> d = jdbc.queryForList("SELECT * FROM inventory_transfer_dispositions WHERE id=? AND transfer_order_id=? FOR UPDATE",
                             requireText(dispositionId, "disposition_id"), o.id()).stream().findFirst()
@@ -413,6 +435,9 @@ public class InventoryTransferFlowService {
                         Long amount = d.get("amount_cent") == null ? null : ((Number) d.get("amount_cent")).longValue();
                         if ("loss".equals(type) && "receiver".equals(d.get("responsible_party")) && amount != null) {
                             payable = postPayable(o, dispositionId, amount, projectOf(o.id()), now);
+                        } else if ("unreturnable".equals(type)) {
+                            // FS-019：赔偿（登记时已保证≥数量×锁定内部结算价）形成借入方（to）对借出方（from）的应付，之后由应收应付台账独立跟进直到清偿。
+                            payable = postPayable(o, dispositionId, amount, projectOfMerchant(o.toOwnerId()), now);
                         } else if ("reship".equals(type)) {
                             reship = openReship(o, d, now);
                         } else if ("payment_adjustment".equals(type)) {
@@ -437,9 +462,198 @@ public class InventoryTransferFlowService {
                             UPDATE inventory_transfer_dispositions SET status=?,reviewed_by=?,reviewed_at=?,review_reason=?,payable_item_id=?,
                              reversal_item_id=?,reship_order_id=? WHERE id=?
                             """, decision, actor, Timestamp.from(now), reason, payable, reversal, reship, dispositionId);
-                    completeWhenSettled(o);
+                    if ("supply".equals(o.transferType())) {
+                        completeWhenSettled(o);
+                    }
                     return disposition(dispositionId);
                 }, MAP);
+    }
+
+    // ── FS-019 借用无法归还 ──
+
+    /**
+     * 借出方或借入方登记无法归还（损坏/丢失）：须附证据，lineId 的 quantity 件（有码行逐件列码）不超过尚未归还数，赔偿金额缺省为
+     * 数量×建单锁定内部结算价（DEC-R3-38），登记后待对方确认。2026-10-20 操作员裁决「不得低于内部结算价」：赔偿金额≥数量×锁定内部结算价，
+     * 低于（含 0）400；「已有约定」只能往高约定。
+     */
+    public Map<String, Object> registerUnreturnable(String orderId, TransferFlowRequests.Disposition r) {
+        return write("registerTransferUnreturnable:" + orderId, MANAGE, r.idempotencyKey(), r, "inventory.transfer_unreturnable_registered",
+                "inventory.transfer_unreturnable_register_failed", orderId, () -> {
+                    InventoryTransferOrderRecord o = lockBorrow(orderId);
+                    if (!"received".equals(o.status())) {
+                        throw ApiException.conflict("TRANSFER_ORDER_STATUS_CONFLICT", "只有已收货、尚未全部归还的借用单才能登记无法归还");
+                    }
+                    requireParty(o, MANAGE);
+                    String reason = requireText(r.reason(), "reason");
+                    requireEvidence(o.id(), r.evidenceAttachmentIds());
+                    InventoryTransferLineRecord line = repository.listTransferLinesByOrder(o.id()).stream()
+                            .filter(l -> l.id().equals(r.lineId())).findFirst()
+                            .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "line_id 须为本单明细"));
+                    Integer quantity = r.quantity();
+                    if (quantity == null || quantity <= 0) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "无法归还数量须大于 0");
+                    }
+                    InventoryLendingFacts facts = repository.lendingFacts(o.id());
+                    if (quantity > facts.outstanding(line)) {
+                        throw ApiException.conflict("TRANSFER_DISPOSITION_EXCEEDS_DISCREPANCY", "登记数量超过该行尚未归还的数量");
+                    }
+                    List<String> codes = r.traceCodes() == null ? List.of() : r.traceCodes();
+                    boolean codesOk = line.traceCodes().isEmpty()
+                            ? codes.isEmpty()
+                            : codes.size() == quantity && new HashSet<>(codes).size() == codes.size() && line.traceCodes().containsAll(codes)
+                                    && codes.stream().noneMatch(c -> facts.returnedCodes().contains(c) || facts.claimedCodes().contains(c));
+                    if (!codesOk) {
+                        throw ApiException.badRequest("TRACE_CODE_MISMATCH", "无法归还的件须逐件列出本行借出、尚未归还的溯源码");
+                    }
+                    long floor = Math.multiplyExact((long) quantity, line.unitPriceCent());
+                    long value = r.amountCent() != null ? r.amountCent() : floor;
+                    if (value <= 0 || value < floor) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "赔偿不得低于内部结算价");
+                    }
+                    String id = "trd_" + Hashing.idempotencyCode(o.id() + ":" + r.idempotencyKey());
+                    jdbc.update("""
+                            INSERT INTO inventory_transfer_dispositions(id,transfer_order_id,line_id,disposition_type,quantity,amount_cent,trace_codes,
+                             reason,evidence_attachment_ids,status,requested_by,requested_at,disposal_note)
+                            VALUES(?,?,?,'unreturnable',?,?,?::jsonb,?,?::jsonb,'pending_counterparty',?,?,?)
+                            """, id, o.id(), line.id(), quantity, value, json(codes), reason, json(r.evidenceAttachmentIds()),
+                            auth.currentActor().id(), Timestamp.from(Instant.now()), trimToNull(r.disposalNote()));
+                    return disposition(id);
+                }, MAP);
+    }
+
+    /** 另一方（登记人所在商户之外的借出/借入方商户账号）确认原因、数量与实物处置，随即挂主管复核。 */
+    public Map<String, Object> confirmUnreturnable(String orderId, String dispositionId, TransferFlowRequests.Step r) {
+        return write("confirmTransferUnreturnable:" + dispositionId, MANAGE, r.idempotencyKey(), r, "inventory.transfer_unreturnable_confirmed",
+                "inventory.transfer_unreturnable_confirm_failed", orderId, () -> {
+                    InventoryTransferOrderRecord o = lockBorrow(orderId);
+                    Map<String, Object> d = unreturnable(o, dispositionId, "pending_counterparty");
+                    String merchant = auth.currentMerchantIdQuietly().orElse(null);
+                    String registrant = merchantOf((String) d.get("requested_by"));
+                    if (merchant == null || !(merchant.equals(o.fromOwnerId()) || merchant.equals(o.toOwnerId())) || merchant.equals(registrant)) {
+                        throw ApiException.forbidden("COUNTERPARTY_CONFIRM_ONLY", "须由借出方与借入方中的另一方商户账号确认");
+                    }
+                    Instant now = Instant.now();
+                    String note = trimToNull(r.operatorNote());
+                    Long amount = d.get("amount_cent") == null ? null : ((Number) d.get("amount_cent")).longValue();
+                    SupervisorReviewDecisionRecord review = reviews.evaluate(new SupervisorReviewEvaluateRequest(
+                            r.idempotencyKey() + ":unreturnable_review", note == null ? "双方确认" : note, List.of(), UNRETURNABLE_ACTION, OBJECT_TYPE,
+                            dispositionId, amount, "借用单 " + o.id() + " 无法归还 " + d.get("quantity") + " 件：" + d.get("reason"), null, List.of()));
+                    if (!review.blocked() || !"pending_review".equals(review.reviewStatus())) {
+                        throw ApiException.conflict("TRANSFER_UNRETURNABLE_REVIEW_REQUIRED", "无法归还须经主管复核");
+                    }
+                    jdbc.update("""
+                            UPDATE inventory_transfer_dispositions SET status='pending_supervisor',confirmed_by=?,confirmed_at=?,supervisor_review_id=? WHERE id=?
+                            """, auth.currentActor().id(), Timestamp.from(now), review.reviewId(), dispositionId);
+                    return disposition(dispositionId);
+                }, MAP);
+    }
+
+    /** 主管复核结果：通过→待财务复核；驳回→该项不生效（数量回到待归还）。 */
+    private void unreturnableDecided(SupervisorReviewDecisionRecord decision) {
+        if ("approved".equals(decision.reviewStatus())) {
+            jdbc.update("UPDATE inventory_transfer_dispositions SET status='pending_review' WHERE id=? AND supervisor_review_id=? AND status='pending_supervisor'",
+                    decision.objectId(), decision.reviewId());
+        } else {
+            jdbc.update("""
+                    UPDATE inventory_transfer_dispositions SET status='rejected',reviewed_by=?,reviewed_at=now(),review_reason='主管复核驳回'
+                     WHERE id=? AND supervisor_review_id=? AND status='pending_supervisor'
+                    """, "supervisor_review:" + decision.reviewId(), decision.objectId(), decision.reviewId());
+        }
+    }
+
+    /**
+     * 借出方（所有权方）登记双方确认的实物处置实际完成：结束该数量的归还事项，码的保管主体回到借出方、在借单置空并记保管台账；
+     * 所有权不动。全部数量归还或处置完成后借用单 returned。赔偿款在应收应付台账单独跟进，不以此为前提。
+     */
+    public Map<String, Object> completeDisposal(String orderId, String dispositionId, TransferFlowRequests.Step r) {
+        return write("completeTransferDisposal:" + dispositionId, MANAGE, r.idempotencyKey(), r, "inventory.transfer_disposal_completed",
+                "inventory.transfer_disposal_complete_failed", orderId, () -> {
+                    InventoryTransferOrderRecord o = lockBorrow(orderId);
+                    Map<String, Object> d = unreturnable(o, dispositionId, "approved");
+                    String merchant = auth.currentMerchantIdQuietly().orElse(null);
+                    if (merchant == null ? !auth.isPlatformAdmin(auth.currentActor()) : !merchant.equals(o.fromOwnerId())) {
+                        throw ApiException.forbidden("LENDER_DISPOSAL_ONLY", "实物处置完成须由借出方（所有权方）登记");
+                    }
+                    Instant now = Instant.now();
+                    List<String> codes;
+                    try {
+                        codes = List.of(mapper.readValue(String.valueOf(d.get("trace_codes")), String[].class));
+                    } catch (JsonProcessingException exception) {
+                        throw new IllegalStateException(exception);
+                    }
+                    int seq = 0;
+                    for (String code : codes) {
+                        int affected = repository.updateTraceCodeCustodianIfOwnedBy(code, o.fromOwnerId(), o.fromOwnerType(), o.fromOwnerId(), null, now);
+                        if (affected == 0 && repository.traceCodeExists(code)) {
+                            throw ApiException.badRequest("TRACE_OWNER_MISMATCH", "溯源码所有权已不是借出方：" + code);
+                        }
+                        repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(dispositionId + "_h" + (seq++), code,
+                                o.toOwnerType(), o.toOwnerId(), o.fromOwnerType(), o.fromOwnerId(), o.id(), now, InventoryTraceOwnershipHistoryRecord.CUSTODY));
+                    }
+                    jdbc.update("""
+                            UPDATE inventory_transfer_dispositions SET status='disposal_completed',disposal_completed_by=?,disposal_completed_at=?,
+                             disposal_note=COALESCE(?,disposal_note) WHERE id=?
+                            """, auth.currentActor().id(), Timestamp.from(now), trimToNull(r.operatorNote()), dispositionId);
+                    InventoryLendingFacts facts = repository.lendingFacts(o.id());
+                    if (repository.listTransferLinesByOrder(o.id()).stream().allMatch(facts::settled)) {
+                        move(o, "received", "returned", "归还事项全部结束（含实物处置完成）");
+                    }
+                    return disposition(dispositionId);
+                }, MAP);
+    }
+
+    private Map<String, Object> unreturnable(InventoryTransferOrderRecord o, String dispositionId, String expectedStatus) {
+        Map<String, Object> d = jdbc.queryForList("SELECT * FROM inventory_transfer_dispositions WHERE id=? AND transfer_order_id=? FOR UPDATE",
+                requireText(dispositionId, "disposition_id"), o.id()).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("TRANSFER_DISPOSITION_NOT_FOUND", "无法归还登记不存在"));
+        if (!"unreturnable".equals(d.get("disposition_type")) || !expectedStatus.equals(d.get("status"))) {
+            throw ApiException.conflict("TRANSFER_DISPOSITION_STATUS_CONFLICT", "该项无法归还登记当前状态不能办理此步骤");
+        }
+        return d;
+    }
+
+    /** 借用单按行：数量、已归还、无法归还登记中、实物处置已完成、尚未归还。 */
+    private List<Map<String, Object>> lendingLineFacts(InventoryTransferOrderRecord o) {
+        InventoryLendingFacts facts = repository.lendingFacts(o.id());
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (InventoryTransferLineRecord line : repository.listTransferLinesByOrder(o.id())) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("line_id", line.id());
+            row.put("item_id", line.itemId());
+            row.put("quantity", line.quantity());
+            row.put("unit_price_cent", line.unitPriceCent());
+            row.put("trace_codes", line.traceCodes());
+            row.put("returned_quantity", facts.returned(line.id()));
+            row.put("unreturnable_claimed_quantity", facts.claimed(line.id()));
+            row.put("unreturnable_closed_quantity", facts.closed(line.id()));
+            row.put("outstanding_quantity", facts.outstanding(line));
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private static boolean isBorrow(InventoryTransferOrderRecord o) {
+        return "lending".equals(o.transferType()) && "borrow".equals(o.lendingMode());
+    }
+
+    /** 借用单双方：商户账号须为借出方或借入方；非商户账号须能触及借入方所属项目（平台管理员恒可）。 */
+    private void requireParty(InventoryTransferOrderRecord o, String permission) {
+        String merchant = auth.currentMerchantIdQuietly().orElse(null);
+        if (merchant != null) {
+            if (!merchant.equals(o.fromOwnerId()) && !merchant.equals(o.toOwnerId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "只能办理本商户借出或借入的借用单");
+            }
+            return;
+        }
+        requireStoreProject(o, permission);
+    }
+
+    private String merchantOf(String userId) {
+        return jdbc.queryForList("SELECT merchant_id FROM access_users WHERE id=?", String.class, userId).stream().findFirst().orElse(null);
+    }
+
+    private String projectOfMerchant(String merchantId) {
+        return jdbc.queryForList("SELECT project_id FROM merchants WHERE id=?", String.class, merchantId).stream().findFirst().orElse(null);
     }
 
     /** 建单与草稿改单共用的明细写入：至少一行，数量大于 0，单价不为负。 */
@@ -475,17 +689,42 @@ public class InventoryTransferFlowService {
     private record Locked(InventoryTransferOrderRecord order, String cancelReviewId) {
     }
 
-    private Locked lock(String orderId) {
+    private Locked lockRow(String orderId) {
         List<String> rows = jdbc.queryForList("SELECT cancel_review_id FROM inventory_transfer_orders WHERE id=? FOR UPDATE",
                 String.class, requireText(orderId, "order_id"));
         if (rows.isEmpty()) {
             throw ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除");
         }
-        InventoryTransferOrderRecord order = reload(orderId);
-        if (!"supply".equals(order.transferType())) {
+        return new Locked(reload(orderId), rows.getFirst());
+    }
+
+    private Locked lock(String orderId) {
+        Locked locked = lockRow(orderId);
+        if (!"supply".equals(locked.order().transferType())) {
             throw ApiException.badRequest("TRANSFER_NOT_REQUISITION", "只有门店要货（平台供货调拨）单走此流程");
         }
-        return new Locked(order, rows.getFirst());
+        return locked;
+    }
+
+    /** FS-019：加锁读借用单（lending+borrow）。 */
+    private InventoryTransferOrderRecord lockBorrow(String orderId) {
+        InventoryTransferOrderRecord order = lockRow(orderId).order();
+        if (!isBorrow(order)) {
+            throw ApiException.badRequest("TRANSFER_NOT_BORROW", "只有借用（约定归还）型借调单走此流程");
+        }
+        return order;
+    }
+
+    /** 门店要货或借用单都可：取消审批挂起中不得继续办理。 */
+    private InventoryTransferOrderRecord lockAny(String orderId) {
+        Locked locked = lockRow(orderId);
+        if (!"supply".equals(locked.order().transferType()) && !isBorrow(locked.order())) {
+            throw ApiException.badRequest("TRANSFER_NOT_REQUISITION", "只有门店要货（平台供货调拨）单或借用单走此流程");
+        }
+        if (locked.cancelReviewId() != null && !"cancelled".equals(locked.order().status())) {
+            throw ApiException.conflict("TRANSFER_CANCEL_PENDING", "取消审批中，审批结束前不能继续办理");
+        }
+        return locked.order();
     }
 
     /** 加锁读单；取消审批挂起中不得继续办理。 */
@@ -724,7 +963,7 @@ public class InventoryTransferFlowService {
     private InventoryTransferOrderRecord withLines(InventoryTransferOrderRecord o) {
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
-                o.createdBy(), o.createdAt(), o.updatedAt(), repository.listTransferLinesByOrder(o.id()));
+                o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), repository.listTransferLinesByOrder(o.id()));
     }
 
     private static ApiException statusConflict() {
