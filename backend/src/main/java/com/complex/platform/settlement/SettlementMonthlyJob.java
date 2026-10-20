@@ -1,4 +1,6 @@
 package com.complex.platform.settlement;
+
+// 文件版本：V0.01
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.access.AccessActor;
@@ -46,6 +48,10 @@ public class SettlementMonthlyJob {
     private final boolean scheduledEnabled;
     /** 过账独立闸(与作业运行开关解耦):默认 false·不进 application-prod.yml,过账需用户拍板后单独翻 true 才激活账本首落。 */
     private final boolean postingEnabled;
+
+    /** TK-29（BSM L1673 月结定格即出结果）：月结回看窗内已锁定且事实已确认的演出场次补跑三项结算；可选装配，测试构造器不带。 */
+    @Autowired(required = false)
+    MediaPerformanceSettlementService mediaSettlement;
 
     /** 每次跑回看的月数：补齐停机/失败留下的缺月（默认 6，覆盖数月连续停机的补跑窗口）。 */
     @Value("${settlement.monthly.backfill-months:6}")
@@ -115,6 +121,10 @@ public class SettlementMonthlyJob {
                     if (postingEnabled && "confirmed".equals(repository.findBillStatus(billId))) {
                         postingService.postBill(billId);
                     }
+                }
+                // 复核 money I7：演出结算出账即挂应付（真过账），同受过账独立闸 settlement.monthly.posting.enabled 约束。
+                if (postingEnabled && mediaSettlement != null) {
+                    mediaSettlement.settleConfirmedForMonth(month);
                 }
             }
         } finally {

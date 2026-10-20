@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import com.complex.platform.bar.BarBillAdjustmentRequest.RefundLine;
@@ -30,7 +30,8 @@ public class BarPayrollRefundService {
             sources.add(new RefundSource(source,table,goods,fee,tip));
         }
         var prior=p.jdbc.query("""
-            SELECT r.*,CASE WHEN (SELECT COALESCE(sum(p.amount_cent),0) FROM ar_ap_payments p WHERE p.ar_ap_item_id=r.ar_ap_item_id)>=a.amount_cent
+            SELECT r.*,CASE WHEN r.ar_ap_item_id IS NULL OR (SELECT COALESCE(sum(p.amount_cent),0) FROM ar_ap_payments p WHERE p.ar_ap_item_id=r.ar_ap_item_id)
+              >=(SELECT COALESCE(sum(i.amount_cent),0) FROM ar_ap_items i WHERE i.id=r.ar_ap_item_id)
               THEN 'paid' ELSE 'pending' END payment_status
             FROM bar_payroll_refund_lines r JOIN bar_bill_adjustments a ON a.id=r.adjustment_id
             WHERE r.collection_bill_id=? ORDER BY r.created_at,r.id
@@ -93,8 +94,11 @@ public class BarPayrollRefundService {
             long expected=((Number)a.get("amount_cent")).longValue();
             long lines=p.jdbc.queryForObject("SELECT COALESCE(sum(amount_cent),0) FROM bar_payroll_refund_lines WHERE adjustment_id=?",Long.class,a.get("id"));
             if(lines!=expected)throw conflict("BAR_PAYROLL_REFUND_BREAKDOWN_REQUIRED","原退款尚未有经核实的完整分项明细");
-            long paid=p.jdbc.queryForObject("SELECT COALESCE(sum(amount_cent),0) FROM ar_ap_payments WHERE ar_ap_item_id=?",Long.class,a.get("ar_ap_item_id"));
-            if(paid<expected)throw conflict("BAR_PAYROLL_REFUND_PENDING","退款尚未实际全部付成，不以退款申请时间认定成功");
+            // TK-20-R2：退款中回冲到储值卡的部分即时到账、不挂应付；只有挂出的应付（金额=非储值渠道部分）须实际付成。
+            Object itemId=a.get("ar_ap_item_id");
+            long payable=itemId==null?0L:p.jdbc.queryForObject("SELECT COALESCE(sum(amount_cent),0) FROM ar_ap_items WHERE id=?",Long.class,itemId);
+            long paid=itemId==null?0L:p.jdbc.queryForObject("SELECT COALESCE(sum(amount_cent),0) FROM ar_ap_payments WHERE ar_ap_item_id=?",Long.class,itemId);
+            if(paid<payable)throw conflict("BAR_PAYROLL_REFUND_PENDING","退款尚未实际全部付成，不以退款申请时间认定成功");
         }
     }
     long refunded(String source,String type) {
@@ -102,7 +106,8 @@ public class BarPayrollRefundService {
             SELECT COALESCE(sum(r.amount_cent),0) FROM bar_payroll_refund_lines r
             JOIN bar_bill_adjustments a ON a.id=r.adjustment_id
             WHERE r.source_bill_id=? AND r.component_type=?
-              AND (SELECT COALESCE(sum(p.amount_cent),0) FROM ar_ap_payments p WHERE p.ar_ap_item_id=r.ar_ap_item_id)>=a.amount_cent
+              AND (r.ar_ap_item_id IS NULL OR (SELECT COALESCE(sum(p.amount_cent),0) FROM ar_ap_payments p WHERE p.ar_ap_item_id=r.ar_ap_item_id)
+                   >=(SELECT COALESCE(sum(i.amount_cent),0) FROM ar_ap_items i WHERE i.id=r.ar_ap_item_id))
             """,Long.class,source,type);
     }
 }

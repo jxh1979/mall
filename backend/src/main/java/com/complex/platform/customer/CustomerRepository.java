@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
@@ -270,6 +270,67 @@ public interface CustomerRepository {
 
     default Optional<StoredValueTopupIntentScope> findStoredValueTopupIntent(String paymentIntentId) {
         return Optional.empty();
+    }
+
+    // ---------- TK-19 充值批次 / 消费分摊 / 退款恢复；TK-20 消费退款回原卡（V517）。default 供内存测试双子零改动兼容：读返回空、写不落 ----------
+
+    /** 通路费率：按 (项目, 支付通路) 取 channel_fee_configs 生效配置（项目特例优先），未配置 = 0。 */
+    default int findStoredValueChannelFeeBps(String projectId, String channel) {
+        return 0;
+    }
+
+    default void saveStoredValueTopupBatch(StoredValueTopupBatchRecord batch) {
+    }
+
+    /** 该卡剩余本金 > 0 的批次（按充值先后），行锁。 */
+    default List<StoredValueTopupBatchRecord> listOpenStoredValueTopupBatchesForUpdate(String accountId) {
+        return List.of();
+    }
+
+    default void addStoredValueTopupBatchRemaining(String batchId, long deltaCent) {
+    }
+
+    default void saveStoredValueConsumeAllocation(StoredValueConsumeAllocationRecord allocation) {
+    }
+
+    default List<StoredValueConsumeAllocationRecord> listStoredValueConsumeAllocationsForUpdate(String consumeTxnId) {
+        return List.of();
+    }
+
+    default void addStoredValueAllocationRestored(String allocationId, long deltaCent) {
+    }
+
+    default void saveStoredValueConsumeRestoration(String id, String reversalTxnId, String allocationId, long principalCent,
+                                                   int feeBps, long feeAdjustCent, Instant createdAt) {
+    }
+
+    default Optional<CustomerStoredValueTransactionRecord> findStoredValueTransactionByIdForUpdate(String id) {
+        return Optional.empty();
+    }
+
+    /** consume_reversal 流水（流水表 append-only，original_txn_id 随 INSERT 写入）。 */
+    default CustomerStoredValueTransactionRecord saveStoredValueReversalTransaction(CustomerStoredValueTransactionRecord txn,
+                                                                                    String originalTxnId) {
+        return saveStoredValueTransaction(txn);
+    }
+
+    /** consume_reversal 流水回指的原消费流水 id（original_txn_id）。 */
+    default Optional<String> findStoredValueOriginalTxnId(String txnId) {
+        return Optional.empty();
+    }
+
+    /** 复核 money I3：撤回某笔消费退款回冲对原充值批次的恢复（分摊已恢复额与批次剩余本金按该次恢复记录减回）。 */
+    default void undoStoredValueRestorations(String reversalTxnId) {
+    }
+
+    /** 原消费已回冲合计 {本金, 赠送金}（正数）。 */
+    default long[] sumStoredValueReversals(String originalTxnId) {
+        return new long[] {0L, 0L};
+    }
+
+    /** 幂等键前缀匹配的流水金额合计（酒吧退品驳回扣回已回冲储值用）。 */
+    default long sumStoredValueTransactionsByIdempotencyPrefix(String prefix) {
+        return 0L;
     }
 
     // 积分会员间转赠已下线（HTML：积分不支持会员间转赠；2026-06-24 裁决）。相关 repo 方法/记录类/表已随 V172 清理移除。

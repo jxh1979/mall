@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -70,7 +70,7 @@ class BarControllerTests {
         when(service.splitBill(eq("bill_1"), any(BarBillSplitRequest.class))).thenReturn(billOperation("split"));
         when(service.mergeBills(eq("bill_1"), any(BarBillMergeRequest.class))).thenReturn(billOperation("merge"));
         when(service.listBillOperations(eq("bill_1"))).thenReturn(new PageResponse<>(List.of(billOperation("split")), 1, 50, 1));
-        when(service.listOrders()).thenReturn(new PageResponse<>(List.of(BarOrderView.of(order(), List.of())), 1, 50, 1));
+        when(service.listOrders()).thenReturn(new PageResponse<>(List.of(BarOrderView.of(order(), List.of(), List.of())), 1, 50, 1));
         when(service.createOrder(any(BarOrderRequest.class))).thenReturn(order());
         when(service.createOrderBill(eq("order_1"), any(BarOrderBillCreateRequest.class))).thenReturn(bill());
         when(service.deliverOrder(eq("order_1"), any(BarOrderDeliveryRequest.class))).thenReturn(orderDelivered());
@@ -87,11 +87,13 @@ class BarControllerTests {
         when(service.listTables()).thenReturn(new PageResponse<>(List.of(table()), 1, 50, 1));
         when(service.createTable(any(BarTableRequest.class))).thenReturn(table());
         when(service.openTable(eq("table_1"), any(OpenBarTableRequest.class))).thenReturn(openedTable());
+        when(service.clearTable(eq("table_1"), any(BarTableClearRequest.class))).thenReturn(table());
         when(service.listTableSessions()).thenReturn(new PageResponse<>(List.of(tableSession()), 1, 50, 1));
         when(service.createTableSession(any(BarTableSessionRequest.class))).thenReturn(tableSession());
         when(service.transferTableSession(eq("session_1"), any(BarTableTransferRequest.class))).thenReturn(adjustment("transfer"));
         when(service.mergeTableSessions(eq("session_1"), any(BarTableMergeRequest.class))).thenReturn(adjustment("merge"));
         when(service.renewTableSession(eq("session_1"), any(BarTableRenewRequest.class))).thenReturn(adjustment("renew"));
+        when(service.splitTableSessions(eq("session_1"), any(BarTableSplitRequest.class))).thenReturn(adjustment("split"));
         when(redemptionService.redeemDrink(any(BarEntitlementDrinkRedemptionRequest.class))).thenReturn(giftRedemption());
         when(redemptionService.listRedemptions()).thenReturn(new PageResponse<>(List.of(giftRedemption()), 1, 50, 1));
     }
@@ -126,11 +128,13 @@ class BarControllerTests {
             "GET,/api/v1/bar/tables,bar.table.view",
             "POST,/api/v1/bar/tables,bar.table.manage",
             "POST,/api/v1/bar/tables/table_1/open,bar.table.open_close",
+            "POST,/api/v1/bar/tables/table_1/clear,bar.table.open_close",
             "GET,/api/v1/bar/table-sessions,bar.table_session.view",
             "POST,/api/v1/bar/table-sessions,bar.table_session.create",
             "POST,/api/v1/bar/table-sessions/session_1/transfer,bar.table_session.transfer",
             "POST,/api/v1/bar/table-sessions/session_1/merge,bar.table_session.merge",
             "POST,/api/v1/bar/table-sessions/session_1/renew,bar.table_session.renew",
+            "POST,/api/v1/bar/table-sessions/session_1/split,bar.table_session.split",
             "POST,/api/v1/bar/entitlement-redemptions/drink,bar.entitlement.redeem",
             "GET,/api/v1/bar/entitlement-redemptions,bar.entitlement.read"
     })
@@ -171,10 +175,12 @@ class BarControllerTests {
             "/api/v1/bar/reservations/reservation_1/invitation/entry-verify",
             "/api/v1/bar/tables",
             "/api/v1/bar/tables/table_1/open",
+            "/api/v1/bar/tables/table_1/clear",
             "/api/v1/bar/table-sessions",
             "/api/v1/bar/table-sessions/session_1/transfer",
             "/api/v1/bar/table-sessions/session_1/merge",
             "/api/v1/bar/table-sessions/session_1/renew",
+            "/api/v1/bar/table-sessions/session_1/split",
             "/api/v1/bar/entitlement-redemptions/drink"
     })
     void writeRoutesRejectMissingIdempotencyKey(String path) throws Exception {
@@ -188,6 +194,67 @@ class BarControllerTests {
     }
 
 
+
+    @Test
+    void createOrderAcceptsAdminWebSnakeCaseBodyAndKeepsReservationBinding() throws Exception {
+        // 第十批 TK-24-R3：后台 adminClient.mapKeys 蛇形体（table_id / reservation_id / items[].product_id）落单，
+        // 服务层随后按订台定金达标判退（BarServiceTests.depositRefundsOnThresholdOnceAndKeepsResultAcrossMerge）。
+        mockMvc.perform(post("/api/v1/bar/orders")
+                        .with(user("bar").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key":"order-deposit-web","operator_note":"web order","evidence_attachment_ids":[],"bar_id":"bar_1","table_id":"table_1","reservation_id":"reservation_1","items":[{"product_id":"product_1","quantity":2}],"salesperson_user_id":"staff_sales","service_user_ids":[],"payment_mode":"offline"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("order_1"));
+
+        org.mockito.ArgumentCaptor<BarOrderRequest> captor = org.mockito.ArgumentCaptor.forClass(BarOrderRequest.class);
+        verify(service).createOrder(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().tableId()).isEqualTo("table_1");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().reservationId()).isEqualTo("reservation_1");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().items().getFirst())
+                .containsEntry("product_id", "product_1").containsEntry("quantity", 2);
+    }
+
+    @Test
+    void deliverAcceptsSnakeCaseDeliveredItemsFromAdminWeb() throws Exception {
+        // 第十批 TK-26-R2：后台 adminClient.mapKeys 蛇形体 delivered_items[].order_item_id（按明细勾选送达）；
+        // 部分明细送达时服务层不置整单已送达（BarServiceTests.partialDeliveryKeepsOrderAndTicketUndelivered），接口原样返回在途状态。
+        when(service.deliverOrder(eq("order_1"), any(BarOrderDeliveryRequest.class))).thenReturn(order());
+        mockMvc.perform(post("/api/v1/bar/orders/order_1/deliver")
+                        .with(user("bar").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key":"deliver-web-partial","operator_note":"完整后台验收出品","delivery_photo_attachment_ids":["att-admin-delivery-1"],"delivered_items":[{"order_item_id":"item_1","quantity":2}]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("created"));
+
+        org.mockito.ArgumentCaptor<BarOrderDeliveryRequest> captor = org.mockito.ArgumentCaptor.forClass(BarOrderDeliveryRequest.class);
+        verify(service).deliverOrder(eq("order_1"), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().deliveredItems()).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().deliveredItems().getFirst())
+                .containsEntry("order_item_id", "item_1").containsEntry("quantity", 2);
+    }
+
+    // 第十批 TK-28：结账弹窗按前端真实请求形状（adminClient.mapKeys 蛇形）带 voucher_code，服务端收到折扣券码。
+    @Test
+    void settleBillAcceptsSnakeCaseVoucherCodeFromWeb() throws Exception {
+        mockMvc.perform(post("/api/v1/bar/bills/bill_1/settle")
+                        .with(user("bar").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key":"settle-web-voucher","payment_id":"payment_1","payment_channel":"aggregate_pay","voucher_code":"VCAAA","operator_note":"按本次真实收款凭据登记，多渠道累计足额后完成账单"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.settlement_status").value("settled"));
+
+        org.mockito.ArgumentCaptor<BarBillSettleRequest> captor = org.mockito.ArgumentCaptor.forClass(BarBillSettleRequest.class);
+        verify(service).settleBill(eq("bill_1"), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().voucherCode()).isEqualTo("VCAAA");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().voucherInstanceId()).isNull();
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().settlementAmountCent()).isNull();
+    }
 
     @Test
     void listEntitlementRedemptionsReturnsGiftLedger() throws Exception {
@@ -288,6 +355,11 @@ class BarControllerTests {
                     "adjustment_type":"service_fee","amount_cent":12880,"reason":"10 percent service fee","requested_by_user_id":"supervisor_1","evidence_attachment_ids":["att_1"]}
                     """;
         }
+        if (path.contains("table-sessions") && path.endsWith("/split")) {
+            return "{" + idempotency + """
+                    "mode":"last_merge","order_assignments":[{"order_id":"order_9","session_id":"session_2"}],"reason":"guests part ways","requested_by_user_id":"supervisor_1","primary_session_version":2}
+                    """;
+        }
         if (path.endsWith("/split")) {
             return "{" + idempotency + """
                     "split_amount_cent":40000,"reason":"guest wants separate payment","requested_by_user_id":"cashier_1","evidence_attachment_ids":["att_split"]}
@@ -316,6 +388,9 @@ class BarControllerTests {
             return "{" + idempotency + """
                     "bar_id":"bar_1","table_id":"table_1","reservation_time":"2026-06-20T21:00:00Z","guest_count":2,"salesperson_user_id":"staff_sales"}
                     """;
+        }
+        if (path.contains("tables") && path.endsWith("/clear")) {
+            return "{" + idempotency + "\"operator_note\":\"清理完成，登记恢复空闲\"}";
         }
         if (path.contains("tables") && path.endsWith("/open")) {
             return "{" + idempotency + "\"reservation_id\":\"reservation_1\",\"opened_by_user_id\":\"staff_1\",\"guest_count\":2}";

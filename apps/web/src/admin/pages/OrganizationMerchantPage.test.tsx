@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -320,6 +320,32 @@ describe("OrganizationMerchantPage 存档/删除写路径（M012-008）", () => 
     const [url, init] = postCalls()[0]!;
     expect(String(url)).toContain("/api/v1/platform/merchants/m-3/delete-request");
     expect(String((init as RequestInit).body)).toContain("录入错误，退场清理");
+  });
+
+  // 第十批 TK-27（BSM L1058「待清台超过后台配置时限（业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限）」）：
+  // 酒吧商户行有「待清台提醒时限」入口：先读当前值（未配置显示出厂 15），再按值、下限、上限三者同填 PUT。
+  it("酒吧商户：待清台提醒时限 → 读当前值后 PUT 值与上下限（蛇形键）", async () => {
+    const BAR = [{ id: "m-bar", project_id: "p-1", merchant_name: "酒吧丁", merchant_type: "bar", status: "active" }];
+    const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
+    vi.spyOn(window, "prompt").mockReturnValueOnce("30").mockReturnValueOnce("10").mockReturnValueOnce("60");
+    renderPage((url, init) => {
+      if (url.includes("/pending-clear-alert") && init?.method === "PUT") return ok({ merchant_id: "m-bar", value_minutes: 30, min_minutes: 10, max_minutes: 60, effective_minutes: 30 });
+      if (url.includes("/pending-clear-alert")) return ok({ merchant_id: "m-bar", value_minutes: null, min_minutes: null, max_minutes: null, effective_minutes: 15 });
+      if (url.includes("/platform/merchants")) return envelope(BAR);
+      return undefined;
+    });
+    await waitFor(() => expect(screen.queryByTestId("merchant-actions-m-bar")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-actions-m-bar"));
+    await waitFor(() => expect(screen.queryByTestId("merchant-pending-clear-alert-m-bar")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-pending-clear-alert-m-bar"));
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const putCalls = () => fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    await waitFor(() => expect(putCalls()).toHaveLength(1));
+    expect(window.prompt).toHaveBeenNthCalledWith(1, expect.stringContaining("出厂 15"), "15");
+    const [url, init] = putCalls()[0]!;
+    expect(String(url)).toContain("/api/v1/platform/merchants/m-bar/pending-clear-alert");
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body).toMatchObject({ value_minutes: 30, min_minutes: 10, max_minutes: 60 });
   });
 
   it("写路径失败可见：存档接口报错 → setGlobalError 收到错误信息，不成未处理拒绝", async () => {

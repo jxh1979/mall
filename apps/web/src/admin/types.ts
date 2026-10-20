@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 export type AdminUser = {
   id: string;
   username: string;
@@ -249,6 +249,9 @@ export type BarTableRow = {
   guestLimit?: number;
   barId?: string;
   status?: string;
+  // 第十批 TK-27-R2（BSM L1058 待清台超时提醒）：待清台起始时刻与是否已超过酒吧配置的提醒时限。
+  pendingClearSince?: string | null;
+  pendingClearOverdue?: boolean;
 };
 
 export type BarReservationRow = {
@@ -311,6 +314,17 @@ export type BarOrderRow = {
   paidAt?: string;
   // 后端 BarOrderView.bills（每单最新在前）：账单号+支付状态，供账单列/结算/提成定位账单；修复前后端从不返回。
   bills?: BarBillRow[];
+  // 第十批 TK-26-R2（BSM L1025「分别标注已上菜与未上菜」）：后端 BarOrderView.items，后台按明细勾选送达。
+  items?: BarOrderItemRow[];
+};
+
+/** 酒吧订单明细（后端 BarOrderItemRecord）：deliveryStatus pending=未上菜 / delivered=已上菜 / voided=已撤单。 */
+export type BarOrderItemRow = {
+  id: string;
+  productName?: string;
+  quantity?: number;
+  amountCent?: number;
+  deliveryStatus?: string;
 };
 
 /**
@@ -1279,6 +1293,8 @@ export type VoucherDefinitionRow = {
   redeemMethod?: string;
   settlementMode?: string;
   merchantId?: string | null;
+  // 操作员裁决 2026-10-20 第三轮第 9 条：券定义商户的业态（后端只读派生）；bar 的折扣券须在结账时抵扣。
+  merchantType?: string | null;
   faceValueCent?: number | null;
   inventoryItemId?: string | null;
   stockLocationId?: string | null;

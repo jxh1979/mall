@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -79,7 +79,8 @@ public class BarService {
                                             },
                                             Collectors.toList())));
                     return orders.stream()
-                            .map(order -> BarOrderView.of(order, billsByOrder.getOrDefault(order.id(), List.of())))
+                            .map(order -> BarOrderView.of(order, billsByOrder.getOrDefault(order.id(), List.of()),
+                                    repository.listOrderItems(order.id())))
                             .toList();
                 }
         );
@@ -551,6 +552,21 @@ public class BarService {
         );
     }
 
+    /** 第十批 TK-27-R2：清台登记恢复空闲（BSM L1058），与开台同权限码 bar.table.open_close。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.open_close")
+    @Transactional
+    public BarTableRecord clearTable(String tableId, BarTableClearRequest request) {
+        String id = operations.requireText(tableId, "table_id");
+        return operations.executeWrite(
+                "clearBarTable:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarTableRecord.class,
+                BarWriteOperation.CLEAR_TABLE,
+                () -> tableSessionService.clearTable(id, request)
+        );
+    }
+
     public PageResponse<BarTableSessionRecord> listTableSessions() {
         return operations.readPage(
                 BarReadOperation.LIST_TABLE_SESSIONS,
@@ -596,6 +612,21 @@ public class BarService {
                 BarTableSessionAdjustmentRecord.class,
                 BarWriteOperation.MERGE_TABLE_SESSIONS,
                 () -> tableSessionService.mergeTableSessions(id, request)
+        );
+    }
+
+    /** 第十批 TK-27-R3：拆台（BSM L1079「由授权岗位操作」），整笔事务一次性成功或整体失败（DEC-R8-95）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.split")
+    @Transactional
+    public BarTableSessionAdjustmentRecord splitTableSessions(String sessionId, BarTableSplitRequest request) {
+        String id = operations.requireText(sessionId, "session_id");
+        return operations.executeWrite(
+                "splitBarTableSession:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarTableSessionAdjustmentRecord.class,
+                BarWriteOperation.SPLIT_TABLE_SESSIONS,
+                () -> tableSessionService.splitTableSessions(id, request)
         );
     }
 

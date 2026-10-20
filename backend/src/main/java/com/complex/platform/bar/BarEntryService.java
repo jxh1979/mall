@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
@@ -137,8 +139,9 @@ public class BarEntryService {
                     "只有待支付状态的订金才能支付");
         }
         Instant now = Instant.now();
-        BarReservationRecord updated = withDeposit(reservation, "paid", reservation.depositSettlement(),
-                reservation.depositIntentId(), now, now);
+        // 第十批 TK-24（BSM L1062「每笔定金保留原订台单、原付款人、付款渠道和金额」）：支付渠道落库，达标退回按此原路。
+        BarReservationRecord updated = reservation.withDepositState("paid", reservation.depositSettlement(),
+                trimToNull(actual.channel()), now, null, now);
         BarReservationRecord saved = repository.saveReservation(updated);
         auditEventService.recordSuccess("bar.reservation_deposit_paid", "bar.reservation.manage",
                 "bar_reservation", saved.id(), null, actual.idempotencyKey(),
@@ -155,17 +158,16 @@ public class BarEntryService {
         }
         if (!"paid".equals(reservation.depositStatus())) {
             throw ApiException.conflict("BAR_DEPOSIT_NOT_DEDUCTIBLE",
-                    "订金须先支付才能在到店时抵扣");
+                    "订金须先支付才能登记到店");
         }
-        Instant now = Instant.now();
-        // 到店核销：定金转抵扣进账单（落账由 BarBillingService.createBill 按 reservation.depositAmountCent 抵扣），
-        // 此处将订台标记为已结算/抵扣并留痕，状态闭环。
-        BarReservationRecord updated = withDeposit(reservation, "settled", "deducted",
-                reservation.depositIntentId(), reservation.depositPaidAt(), now);
-        BarReservationRecord saved = repository.saveReservation(updated);
-        auditEventService.recordSuccess("bar.reservation_deposit_deducted", "bar.reservation.manage",
+        // 第十批 TK-24-R1（BSM L889「定金不抵扣消费、不计入最低消费累计」；DEC-R6-05）：到店只留痕，定金保持已支付待判
+        // （paid）；达标后由 BarDepositSettlementService 原路退回，未达标关台没收。历史 settled/deducted 只读保留。
+        BarReservationRecord saved = repository.saveReservation(reservation.withDepositState("paid",
+                reservation.depositSettlement(), reservation.depositChannel(), reservation.depositPaidAt(),
+                reservation.depositSettledAt(), Instant.now()));
+        auditEventService.recordSuccess("bar.reservation_checked_in", "bar.reservation.manage",
                 "bar_reservation", saved.id(), null, actual.idempotencyKey(),
-                Map.of("deposit_amount_cent", saved.depositAmountCent(), "deposit_settlement", "deducted"));
+                Map.of("deposit_amount_cent", saved.depositAmountCent(), "deposit_status", "paid"));
         return saved;
     }
 
@@ -201,30 +203,10 @@ public class BarEntryService {
             }
         }
         String depositStatus = settlement == null ? reservation.depositStatus() : "settled";
-        BarReservationRecord cancelled = new BarReservationRecord(
-                reservation.id(),
-                reservation.barId(),
-                reservation.merchantId(),
-                reservation.tableId(),
-                reservation.customerId(),
-                reservation.reservedAt(),
-                reservation.guestCount(),
-                reservation.allowedPassFreeGuestCount(),
-                reservation.depositAmountCent(),
-                depositStatus,
-                reservation.orderSource(),
-                reservation.salesStaffId(),
-                "cancelled",
-                reservation.createdTerminal(),
-                reservation.deviceId(),
-                reservation.evidenceAttachmentIds(),
-                reservation.createdAt(),
-                now,
-                reservation.depositRule(),
-                reservation.depositIntentId(),
-                reservation.depositPaidAt(),
-                settlement
-        );
+        // 第十批 TK-24：取消的退还/没收同样记 deposit_settled_at，并保留定金渠道等原付款留痕。
+        BarReservationRecord cancelled = reservation.withDepositState(depositStatus, settlement,
+                reservation.depositChannel(), reservation.depositPaidAt(),
+                settlement == null ? reservation.depositSettledAt() : now, now).withStatus("cancelled", now);
         BarReservationRecord saved = repository.saveReservation(cancelled);
         if (settlement != null) {
             auditEventService.recordSuccess(event, "bar.reservation.manage",
@@ -305,40 +287,6 @@ public class BarEntryService {
             }
         });
         return reservation;
-    }
-
-    private BarReservationRecord withDeposit(
-            BarReservationRecord reservation,
-            String depositStatus,
-            String depositSettlement,
-            String depositIntentId,
-            Instant depositPaidAt,
-            Instant updatedAt
-    ) {
-        return new BarReservationRecord(
-                reservation.id(),
-                reservation.barId(),
-                reservation.merchantId(),
-                reservation.tableId(),
-                reservation.customerId(),
-                reservation.reservedAt(),
-                reservation.guestCount(),
-                reservation.allowedPassFreeGuestCount(),
-                reservation.depositAmountCent(),
-                depositStatus,
-                reservation.orderSource(),
-                reservation.salesStaffId(),
-                reservation.status(),
-                reservation.createdTerminal(),
-                reservation.deviceId(),
-                reservation.evidenceAttachmentIds(),
-                reservation.createdAt(),
-                updatedAt,
-                reservation.depositRule(),
-                depositIntentId,
-                depositPaidAt,
-                depositSettlement
-        );
     }
 
     BarReservationEntryAllowanceVerificationRecord verifyGuestEntryAllowance(String reservationId, VerificationRequest request) {

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +12,8 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 // 「同一次操作重复提交时，返回第一次的结果并提示已完成」）：
 // 第一次提交服务端已生效、响应却丢了，对话框留着，操作员再点提交——这是同一次核销／发放，不是新的一次。
 const DEFINITIONS = [
-  { id: "vdef_1", name: "满 100 减 50 券", voucher_kind: "merchant_discount", redeem_method: "in_store_staff", settlement_mode: "none", merchant_id: "merchant-1", face_value_cent: 5000, valid_days: 30, status: "active" },
+  // 第十批 TK-28：商户折扣券改为只在酒吧结账时抵扣核销，台账独立核销用例改用店内实物券承载。
+  { id: "vdef_1", name: "啤酒一杯券", voucher_kind: "in_store_goods", redeem_method: "in_store_staff", settlement_mode: "none", merchant_id: "merchant-1", inventory_item_id: "item_1", stock_location_id: "loc_1", stock_quantity: 1, valid_days: 30, status: "active" },
 ];
 const INSTANCES = [
   { id: "vi_1", definition_id: "vdef_1", customer_id: "customer-1", code: "VCAAA", source_type: "marketing_grant", source_ref: "vgrant_1", status: "issued", issued_at: "2026-07-18T00:00:00Z" },

@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -72,6 +72,21 @@ public final class FieldLabels {
         p("supplier_bill_reference", "供能账单编号");
         p("transaction_basis", "交易认定依据");
         p("verifier_id", "核实人员");
+        // ── 第十批（储值 / 酒吧台位 / 传媒演出）复核 html B2a 补齐 ──────────────────
+        p("adjust_reason", "调整理由");
+        p("adjusting_settlement_id", "调整结算行");
+        p("bar_merchant_id", "演出酒吧");
+        p("basis", "依据");
+        p("completed_content", "已完成内容");
+        p("consume_txn_id", "原储值消费流水");
+        p("dispute_reason", "争议理由");
+        p("media_merchant_id", "传媒公司");
+        p("origin_item_id", "原应收应付款项");
+        p("payee_entity_id", "收款主体");
+        p("reversal_txn_id", "回冲流水");
+        p("show_id", "演出场次");
+        p("show_kind", "场次类型");
+        p("split_session_id", "拆出的原台会话");
         // ── 组织 / 主体 ──────────────────────────────────────────────
         p("project_id", "项目");
         p("project_name", "项目名称");

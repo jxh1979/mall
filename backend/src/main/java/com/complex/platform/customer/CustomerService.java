@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarOrderRecord;
@@ -1165,14 +1165,14 @@ public class CustomerService {
     /**
      * 平台拉黑客人账号（永久）。需 customer.account.manage。
      * CG-06b：拉黑即关闭账户——同事务内把该客人名下综合体通用卡的未消费本金退还本人、赠送金作废、卡置 closed；
-     * 商户级卡不动（由发卡商户按自设规则到店办理）。重复拉黑不重复退。
+     * 商户级卡按发卡商户规则登记待退本金事项并通知发卡商户（TK-21-R1，钱在商户处、柜台退卡才结清）。重复拉黑不重复退。
      */
     @Transactional
     public CustomerRecord blacklistCustomer(String customerId, String reason) {
         CustomerRecord closed = changeAccountStatus(customerId, "blacklisted", null, reason,
                 "customer.account.blacklisted", "customer.account.blacklist_failed");
         if (storedValueService != null) {
-            storedValueService.closeGeneralCardsOnAccountClosure(closed.id(), reason);
+            storedValueService.closeCardsOnAccountClosure(closed.id(), reason);
         }
         return closed;
     }
@@ -1183,14 +1183,53 @@ public class CustomerService {
         return changeAccountStatus(customerId, "active", null, reason, "customer.account.reinstated", "customer.account.reinstate_failed");
     }
 
-    /** 客人自助注销本人账号（凭本人 token，无需管理权限）。注销后动作/登录被拒、数据物理保留。 */
+    /** 客人自助注销本人账号（凭本人 token，无需管理权限）。注销后动作/登录被拒、数据物理保留。不放弃余额（需退本金的登记待退）。 */
     @Transactional
     public CustomerRecord deregisterAccount(String customerToken) {
+        return deregisterAccount(customerToken, false);
+    }
+
+    /**
+     * TK-21-R3（BSM「账户注销」：「发起注销时系统须提醒其名下尚有……储值卡余额，客人可以选择……放弃余额，径行注销；放弃的储值卡余额归发卡主体
+     * ……需要退还本金的注销事项按本文件「储值」条自动生成待退事项、通知发卡主体执行，并跟踪至实际退款成功；已明确确认放弃余额的仍按上述例外办理」）：
+     * waiveBalance=true 各卡本金与赠送金作废、卡 closed、不生成事项；false 按「储值」条关闭各卡（通用卡登记待退、商户卡按规则登记待退并通知）。
+     * 卡处理在先，状态改 deregistered 在后，同一事务。
+     */
+    @Transactional
+    public CustomerRecord deregisterAccount(String customerToken, boolean waiveBalance) {
         CustomerRecord customer = requireCustomer(customerToken);
         repository.findPointsByCustomerIdForUpdate(customer.id());
         if (pointsRecoveries != null) pointsRecoveries.cancelForDeregistration(customer.id(), Instant.now());
+        if (storedValueService != null) {
+            if (waiveBalance) {
+                storedValueService.waiveBalancesOnDeregistration(customer.id());
+            } else {
+                storedValueService.closeCardsOnAccountClosure(customer.id(), "账户注销");
+            }
+        }
         return changeAccountStatus(customer.id(), "deregistered", null, "self-service deregistration",
                 "customer.account.deregistered", "customer.account.deregister_failed");
+    }
+
+    /** TK-21-R3 注销预览：本人各未销户储值卡的本金/赠送金（供注销前提醒与「放弃余额」选择）。 */
+    public List<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse> deregisterPreview(String customerToken) {
+        // 复核 authz M1：按 OpenAPI 声明记 customer.account.deregister_previewed / customer.account.deregister_preview_failed。
+        try {
+            CustomerRecord customer = requireCustomer(customerToken);
+            List<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse> cards =
+                    repository.listStoredValueAccountsByCustomer(customer.id()).stream()
+                            .filter(card -> !"closed".equals(card.status()))
+                            .map(card -> new com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse(
+                                    card.id(), card.cardScope(), card.merchantId(), card.principalCent(), card.bonusCent()))
+                            .toList();
+            auditEventService.recordSuccess("customer.account.deregister_previewed", "not_applicable", "customer",
+                    customer.id(), null, null, Map.of("open_cards", cards.size()));
+            return cards;
+        } catch (ApiException e) {
+            auditEventService.recordFailure("customer.account.deregister_preview_failed", "not_applicable", "customer",
+                    "unknown", null, null, e.code());
+            throw e;
+        }
     }
 
     /** 平台按手机号查客人账号（盲索引精确匹配；按手机号查人属敏感操作，成功与否均留审计）。 */

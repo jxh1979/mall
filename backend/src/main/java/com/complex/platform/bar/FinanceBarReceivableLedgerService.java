@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApItemRequest;
@@ -12,9 +14,26 @@ import org.springframework.stereotype.Service;
 class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
 
     private final FinanceService financeService;
+    // TK-20-R2：退款按收款相反顺序逐笔原路退回——储值收款部分回原卡（StoredValueService.refundConsumption），其余渠道仍挂应付。
+    private final BarRepository barRepository;
+    private final com.complex.platform.customer.CustomerRepository customerRepository;
+    private final com.complex.platform.customer.StoredValueService storedValueService;
 
+    /** 旧构造（单测/内存双子）：无结算流水与储值依赖，退款全部挂应付（既有行为）。 */
     FinanceBarReceivableLedgerService(FinanceService financeService) {
+        this(financeService, null, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    FinanceBarReceivableLedgerService(FinanceService financeService, BarRepository barRepository,
+                                      com.complex.platform.customer.CustomerRepository customerRepository,
+                                      // @Lazy 断环：ledger → StoredValueService → CustomerService → BarOrderService → ledger
+                                      @org.springframework.context.annotation.Lazy
+                                      com.complex.platform.customer.StoredValueService storedValueService) {
         this.financeService = financeService;
+        this.barRepository = barRepository;
+        this.customerRepository = customerRepository;
+        this.storedValueService = storedValueService;
     }
 
     @Override
@@ -57,6 +76,53 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
             List<String> evidenceAttachmentIds
     ) {
         LocalDate today = LocalDate.now();
+        // TK-20-R2（ENUM「退款资金流向」/ BSM「退款资金流向」：「混合支付的退款按收款相反顺序逐笔原路退回（后收的先退，单笔退足再退上一笔）；
+        // 储值部分回冲仍按先赠送金后本金的既有顺序」；CG-06a 第 12 条「酒吧消费获准退款均回原卡」）：
+        // 按该账单结算流水倒序分配本次退款额，已退额（之前 applied 的 refund 减 refund_reversal）先从末笔起占满；
+        // settle_channel=stored_value 的部分回冲原消费流水（barsv_<结算幂等键>），其余渠道合并为一条应付台账项。
+        long alreadyRefunded = barRepository == null ? 0L : barRepository.listBillAdjustments(bill.id()).stream()
+                .filter(a -> "applied".equals(a.status()))
+                .mapToLong(a -> "refund".equals(a.adjustmentType()) ? a.amountCent()
+                        : "refund_reversal".equals(a.adjustmentType()) ? -a.amountCent() : 0L)
+                .sum();
+        List<BarBillSettlementRecord> settlements = barRepository == null || storedValueService == null
+                ? new java.util.ArrayList<>() : new java.util.ArrayList<>(barRepository.listBillSettlements(bill.id()));
+        java.util.Collections.reverse(settlements);
+        long skip = Math.max(0L, alreadyRefunded);
+        long left = refundAmountCent;
+        long otherChannelsCent = 0L;
+        int seq = 0;
+        for (BarBillSettlementRecord settlement : settlements) {
+            if (left <= 0) {
+                break;
+            }
+            long capacity = settlement.settlementAmountCent();
+            long skipped = Math.min(capacity, skip);
+            skip -= skipped;
+            capacity -= skipped;
+            if (capacity <= 0) {
+                continue;
+            }
+            long part = Math.min(capacity, left);
+            left -= part;
+            if ("stored_value".equals(settlement.settleChannel())) {
+                String consumeKey = "barsv_" + settlement.id().substring("settle_".length());
+                var consume = customerRepository.findStoredValueTransactionByIdempotencyKey(consumeKey)
+                        .orElseThrow(() -> com.complex.platform.common.api.ApiException.conflict(
+                                "STORED_VALUE_CONSUME_NOT_FOUND", "找不到该结算对应的储值消费流水"));
+                storedValueService.refundConsumption(consume.id(), part, "酒吧账单退款 " + adjustmentId,
+                        "barsvrev_" + adjustmentId + "_" + (seq++));
+            } else {
+                otherChannelsCent += part;
+            }
+        }
+        // 旧构造（单测 / 内存双子，无结算流水与储值依赖）：退款全部挂应付（既有行为）。
+        if (barRepository == null || storedValueService == null) {
+            otherChannelsCent = refundAmountCent;
+        }
+        if (otherChannelsCent <= 0) {
+            return null;
+        }
         // RC1①：退款过账为 direction='payable'、source_type='refund' 的应付台账项（"应退/已退"）。
         // source_id 取退款调整记录 id（唯一），与 V008 唯一索引 (direction, source_type, source_id) 对齐，幂等。
         // 退款过账与退款主流程（V079 减项）同事务执行（applyBillAdjustment @Transactional / createArApItem @Transactional
@@ -69,11 +135,35 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
                 counterpartyId(bill, order),
                 "refund",
                 adjustmentId,
-                refundAmountCent,
+                otherChannelsCent,
                 today,
                 YearMonth.from(today).toString()
         ));
         return item.id();
+    }
+
+    @Override
+    public long reverseStoredValueRefund(BarBillRecord bill, BarOrderRecord order, String originalAdjustmentId,
+                                         String reversalIdempotencyKey, String reason) {
+        // TK-20-R2 退品驳回对称回滚：原退款调整回冲到卡上的金额（barsvrev_<调整id>_<序>）按发卡商户卡重新扣回；
+        // 卡余额不足 / 冻结即按既有消费守卫拒绝，驳回整笔回滚（fail-closed）。
+        if (customerRepository == null || storedValueService == null) {
+            return 0L;
+        }
+        // 复核 money I3：逐笔撤回原退款回冲（barsvrev_<调整id>_<序>）——写回指原消费的负向 consume_reversal，
+        // 原消费的已回冲累计随之净额扣减，之后同一账单再退款可再回冲。
+        long credited = 0L;
+        for (int seq = 0; ; seq++) {
+            var reversal = customerRepository.findStoredValueTransactionByIdempotencyKey(
+                    "barsvrev_" + originalAdjustmentId + "_" + seq).orElse(null);
+            if (reversal == null) {
+                break;
+            }
+            storedValueService.undoConsumptionRefund(reversal.id(), "退品驳回：扣回已回冲储值 " + originalAdjustmentId,
+                    "barsvund_" + BarValidation.slug(reversalIdempotencyKey) + "_" + seq);
+            credited += reversal.amountCent();
+        }
+        return credited;
     }
 
     @Override
@@ -103,6 +193,34 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
                 YearMonth.from(today).toString()
         ));
         return item.id();
+    }
+
+    @Override
+    public String createDepositRefundPayable(BarReservationRecord reservation) {
+        LocalDate today = LocalDate.now();
+        // 第十批 TK-24-R3（BSM L1062「达标时，各笔定金分别原路退回」「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」）：
+        // 定金达标退回过账为 direction='payable'、source_type='bar_deposit_refund'、source_id=订台 id 的应付退款项
+        // （V008 唯一索引天然幂等）；原付款渠道与意向随说明留痕供「原路」实付，实付由既有 finance 收付款登记完成。
+        ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
+                "bar-deposit-refund-" + reservation.id(),
+                "bar reservation deposit refund on min-spend threshold: " + reservation.id()
+                        + " (channel " + reservation.depositChannel() + ", intent " + reservation.depositIntentId() + ")",
+                List.of(),
+                "payable",
+                reservation.customerId() != null && !reservation.customerId().isBlank()
+                        ? reservation.customerId() : reservation.id(),
+                "bar_deposit_refund",
+                reservation.id(),
+                reservation.depositAmountCent(),
+                today,
+                YearMonth.from(today).toString()
+        ));
+        return item.id();
+    }
+
+    @Override
+    public boolean hasDepositRefundPayable(String reservationId) {
+        return barRepository != null && barRepository.depositRefundPayableExists(reservationId);
     }
 
     @Override

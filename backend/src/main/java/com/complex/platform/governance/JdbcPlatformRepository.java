@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1337,6 +1337,24 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 UPDATE merchants SET project_id = :project_id
                  WHERE id = :id AND (project_id IS NULL OR project_id = :project_id)
                 """, Map.of("id", merchantId, "project_id", projectId)) == 1;
+    }
+
+    @Override
+    public MerchantPendingClearAlertRecord findPendingClearAlert(String merchantId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT pending_clear_alert_minutes, pending_clear_alert_min_minutes, pending_clear_alert_max_minutes
+                  FROM merchants WHERE id = :id
+                """, Map.of("id", merchantId), (rs, n) -> MerchantPendingClearAlertRecord.of(merchantId,
+                (Integer) rs.getObject(1), (Integer) rs.getObject(2), (Integer) rs.getObject(3)));
+    }
+
+    @Override
+    public void savePendingClearAlert(String merchantId, int valueMinutes, int minMinutes, int maxMinutes) {
+        jdbcTemplate.update("""
+                UPDATE merchants SET pending_clear_alert_minutes = :v, pending_clear_alert_min_minutes = :lo,
+                       pending_clear_alert_max_minutes = :hi, updated_at = now()
+                 WHERE id = :id
+                """, Map.of("id", merchantId, "v", valueMinutes, "lo", minMinutes, "hi", maxMinutes));
     }
 
     @Override

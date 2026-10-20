@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.util.List;
 import java.util.Optional;
@@ -166,6 +166,11 @@ public interface PlatformRepository {
     void associateBusinessEntityProject(String businessEntityId, String projectId);
 
     boolean assignMerchantProject(String merchantId, String projectId);
+
+    /** 第十批 TK-27：酒吧（商户）待清台提醒时限（值与上下限同配；三者皆空＝未配置）。 */
+    MerchantPendingClearAlertRecord findPendingClearAlert(String merchantId);
+
+    void savePendingClearAlert(String merchantId, int valueMinutes, int minMinutes, int maxMinutes);
 
     default com.complex.platform.common.api.PageResponse<BusinessEntityRecord> listBusinessEntitiesPaged(
             String projectId, int page, int size) {

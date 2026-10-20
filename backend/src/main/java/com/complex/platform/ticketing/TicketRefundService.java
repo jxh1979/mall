@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -52,6 +52,12 @@ public class TicketRefundService {
     // 用字段注入（非构造）以免改动既有多处构造点；包私有便于单测直接置位（仿 AmusementService.enforceDeviceRegistry）。
     @org.springframework.beans.factory.annotation.Value("${refund.tiered_authorization.enabled:false}")
     boolean tieredRefundEnabled;
+
+    // TK-20-R3（CG-06a 第 12 条「票务……消费获准退款均回原卡」）：储值支付订单获准退款时回冲原消费卡。字段注入 + @Lazy 免构造环
+    // （customer.StoredValueService 已依赖 ticketing）；可为 null = 旧构造/兼容测试（不回卡，沿既有拨付路径）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.customer.StoredValueService storedValueService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketRefundService(
@@ -318,6 +324,22 @@ public class TicketRefundService {
             // 限量票名额回补：退一张放一个可售名额（退成功的父票实例数），与下单即扣对称；无限量票 GREATEST(0,..) 兜底无害。
             if (!refundedInstances.isEmpty()) {
                 repository.releaseTicketStock(order.ticketTypeId(), refundedInstances.size());
+            }
+            // TK-20-R3（CG-06a 第 12 条「票务……消费获准退款均回原卡，固定先回原消费尚未回冲的赠送金，再回本金；不扩大原退款资格」）：
+            // 储值支付的订单（支付意图 channel=stored_value、id=原消费流水）获准即回冲原卡，回冲到账即为「原路退回结果」，
+            // 退款单直接 approved→success，不再等财务 confirm-payout；资格/金额沿上面既有审批算定，不改。非储值订单路径不变。
+            TicketPaymentIntentRecord storedValueIntent = storedValueService == null ? null
+                    : repository.findSucceededTicketPaymentIntentByOrder(order.id())
+                            .filter(intent -> "stored_value".equals(intent.channel())).orElse(null);
+            if (storedValueIntent != null) {
+                storedValueService.refundConsumption(storedValueIntent.id(), approved.refundAmountCent(),
+                        "票务退款 " + approved.id(), "ticketrev_" + approved.id());
+                repository.markTicketRefundSucceeded(approved.id(), now);
+                eventPublisher.publishEvent(new TicketRewardFacts.Refunded(approved.id()));
+                return new TicketRefundRecord(
+                        approved.id(), approved.targetId(), approved.refundAmountCent(), approved.reason(), approved.refundChannel(),
+                        "success", approved.requestedBy(), approved.approvedBy(), approved.approvedAt(),
+                        approved.createdAt(), now, approved.merchantId());
             }
             // 打款拨付信号：金额已落 ticket_refunds，此事件只承载实际打款，不重复入账。
             eventPublisher.publishEvent(new TicketRefundApprovedEvent(

@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -52,6 +54,29 @@ interface BarReceivableLedgerService {
      * F-TXN-03 piece③b 通票免费酒水平台↔酒吧结算：核销发放免费酒水后，平台按该酒水内部结算价向酒吧(merchant)挂应付
      * （direction='payable'、source_type='pass_drink_settlement'、source_id/幂等键=verificationId）。返回 ar_ap 项 id。
      */
+    /**
+     * TK-20-R2 退品驳回：把该退款调整已回冲到储值卡的部分重新扣回（与 createRefundPayable 的储值回卡对称）。
+     * default no-op 供内存测试双子兼容；返回扣回金额（分）。
+     */
+    default long reverseStoredValueRefund(BarBillRecord bill, BarOrderRecord order, String originalAdjustmentId,
+                                          String reversalIdempotencyKey, String reason) {
+        return 0L;
+    }
+
+    /**
+     * 第十批 TK-24-R3：订台定金达标原路退回——过一条 direction='payable'、source_type='bar_deposit_refund'、
+     * source_id=reservation.id 的应付退款项（V008 唯一索引天然幂等），实付由既有 finance 收付款登记完成。
+     * default null 供内存测试双子兼容。
+     */
+    default String createDepositRefundPayable(BarReservationRecord reservation) {
+        return null;
+    }
+
+    /** 复核 money I2：该订台的定金原路退款应付是否已挂出（退款处理中）；default false 供内存测试双子兼容。 */
+    default boolean hasDepositRefundPayable(String reservationId) {
+        return false;
+    }
+
     String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent);
 
     /**

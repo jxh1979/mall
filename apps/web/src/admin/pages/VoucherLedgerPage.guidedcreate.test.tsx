@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,14 +8,15 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 // 券台账管理（V301 统一台账）：引导式新建券定义 / 发放（营销赠发）/ 作废理由必填 / 核销打统一端点 / 全部券聚合视图。
 const DEFINITIONS = [
-  { id: "vdef_1", name: "满 100 减 50 券", voucher_kind: "merchant_discount", redeem_method: "in_store_staff", settlement_mode: "none", merchant_id: "merchant-1", face_value_cent: 5000, inventory_item_id: null, stock_location_id: null, stock_quantity: null, internal_price_cent: null, valid_days: 30, valid_until: null, status: "active", created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z" },
+  // 第十批 TK-28：商户折扣券改为只在酒吧结账时抵扣核销，台账独立核销用例改用店内实物券承载。
+  { id: "vdef_1", name: "啤酒一杯券", voucher_kind: "in_store_goods", redeem_method: "in_store_staff", settlement_mode: "none", merchant_id: "merchant-1", face_value_cent: null, inventory_item_id: "item_1", stock_location_id: "loc_1", stock_quantity: 1, internal_price_cent: null, valid_days: 30, valid_until: null, status: "active", created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z" },
 ];
 const INSTANCES = [
   { id: "vi_1", definition_id: "vdef_1", customer_id: "customer-1", code: "VCAAA", source_type: "points_redemption", source_ref: "redemption_1", status: "issued", issued_at: "2026-07-18T00:00:00Z", expires_at: "2026-08-17T00:00:00Z", redeemed_at: null, revoked_at: null, revoke_reason: null, created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z" },
   { id: "vi_2", definition_id: "vdef_1", customer_id: "customer-2", code: "VCBBB", source_type: "marketing_grant", source_ref: "vgrant_1", status: "redeemed", issued_at: "2026-07-18T00:00:00Z", expires_at: null, redeemed_at: "2026-07-18T02:00:00Z", revoked_at: null, revoke_reason: null, created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T02:00:00Z" },
 ];
 const OVERVIEW = [
-  { id: "vi_1", source: "unified", name: "满 100 减 50 券", voucher_kind: "merchant_discount", customer_id: "customer-1", status: "issued", remaining_times: 1, expires_at: "2026-08-17T00:00:00Z" },
+  { id: "vi_1", source: "unified", name: "啤酒一杯券", voucher_kind: "in_store_goods", customer_id: "customer-1", status: "issued", remaining_times: 1, expires_at: "2026-08-17T00:00:00Z" },
   { id: "ie_1", source: "pass_partner", name: "餐厅第三方券", voucher_kind: "external_partner", customer_id: "customer-1", status: "active", remaining_times: 3, expires_at: "2026-12-31T00:00:00Z" },
 ];
 

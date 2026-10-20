@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
@@ -1412,6 +1412,13 @@ class PlatformServiceTests {
     }
 
     private static final class InMemoryPlatformRepository implements PlatformRepository {
+        private final Map<String, MerchantPendingClearAlertRecord> pendingClearAlerts = new java.util.HashMap<>();
+        @Override public MerchantPendingClearAlertRecord findPendingClearAlert(String merchantId) {
+            return pendingClearAlerts.getOrDefault(merchantId, MerchantPendingClearAlertRecord.of(merchantId, null, null, null));
+        }
+        @Override public void savePendingClearAlert(String merchantId, int valueMinutes, int minMinutes, int maxMinutes) {
+            pendingClearAlerts.put(merchantId, MerchantPendingClearAlertRecord.of(merchantId, valueMinutes, minMinutes, maxMinutes));
+        }
         @Override public void setMerchantArchiveReason(String id, String reason) { }
         @Override public void lockMerchant(String merchantId) { }
         @Override public boolean businessEntityInProject(String entityId, String projectId) {

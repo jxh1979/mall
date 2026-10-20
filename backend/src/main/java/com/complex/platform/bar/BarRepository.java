@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
 import java.util.Optional;
@@ -254,4 +256,43 @@ public interface BarRepository {
 
     /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
     void setReservationArchiveReason(String id, String reason);
+
+    // ── 第十批 TK-24/TK-25：台组（并台链）口径原语；求和逻辑统一在 BarMinSpend ─────────────────
+    /**
+     * 当前有效并台链：本会话 + 递归 status='merged' 子会话；includeTransferred=true 时连同整体转台前的旧链
+     * （status='merged_transferred'，只算消费与留款、不算低消阈值）。默认只含自身（轻量桩）。
+     */
+    default List<String> familySessionIds(String sessionId, boolean includeTransferred) {
+        return List.of(sessionId);
+    }
+
+    /** 开台期间锁定归属到这些会话的订单（JDBC：bar_order_service_sources）。默认空。 */
+    default List<String> listOrderIdsBySessionIds(List<String> sessionIds) {
+        return List.of();
+    }
+
+    /** 复核 money I2：该订台是否已挂出定金原路退款应付（ar_ap_items source_type=bar_deposit_refund）。默认 false。 */
+    default boolean depositRefundPayableExists(String reservationId) {
+        return false;
+    }
+
+    /** 复核 money B2：一笔账单级退款调整中商品部分的金额（有薪资退款分项按 goods 分项合计，无分项＝全额）。默认＝全额。 */
+    default long refundGoodsCent(String adjustmentId, long amountCent) {
+        return amountCent;
+    }
+
+    /** 订单落单时锁定的开台会话（JDBC：bar_order_service_sources.order_id）。默认空=无会话归属。 */
+    default Optional<String> findSessionIdByOrderId(String orderId) {
+        return Optional.empty();
+    }
+
+    // ── 第十批 TK-27-R3 拆台：订单归属校验与人工归属留痕 ─────────────────────────────────────
+    /** 这些台位上自 since 起产生、但没有会话归属（无 bar_order_service_sources）且未取消的订单。默认空。 */
+    default List<BarOrderRecord> listOrdersWithoutSession(List<String> tableIds, java.time.Instant since) {
+        return List.of();
+    }
+
+    /** 人工明确订单归属到某会话（JDBC：写 bar_order_service_sources）。默认无操作。 */
+    default void saveOrderServiceSource(String orderId, String sessionId) {
+    }
 }

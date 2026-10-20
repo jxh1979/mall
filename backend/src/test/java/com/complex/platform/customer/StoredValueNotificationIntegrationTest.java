@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,6 +35,9 @@ class StoredValueNotificationIntegrationTest {
 
     @Autowired
     private com.complex.platform.common.crypto.PiiCipher piiCipher;
+
+    @Autowired
+    private CustomerService customerService;
 
     @BeforeEach
     void setUp() {
@@ -111,6 +114,59 @@ class StoredValueNotificationIntegrationTest {
         assertThat(logParam("consume", phone, "amount_cent")).isEqualTo("2300");
         assertThat(logParam("consume", phone, "balance_after_cent")).isEqualTo("5700");
         assertThat(logParam("consume", phone, "card_type")).isEqualTo("merchant");
+    }
+
+    /**
+     * TK-21-R1 / 复核 html m11（BSM L833「系统自动生成应退本金事项并通知发卡主体获授权人员」）：拉黑后商户卡待退事项生成，事务提交后
+     * 短信通知发卡商户内持 customer.stored_value.refund 权限的员工（员工档案手机号）；无该权限的员工、商户档案联系电话、客人本人都不收。
+     */
+    @Test
+    void accountClosureWithMerchantCardNotifiesAuthorizedIssuingMerchantStaff() {
+        String prefix = unique("pending");
+        String customerId = prefix + "_customer";
+        String merchantId = prefix + "_merchant";
+        String cardId = prefix + "_card";
+        String customerPhone = uniquePhone();
+        String merchantPhone = uniquePhone();
+        String staffPhone = uniquePhone();
+        String otherStaffPhone = uniquePhone();
+        insertCustomer(customerId, customerPhone);
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, contact_phone, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'bar', ?, 'active', now(), now())", merchantId, "待退通知商户" + prefix, piiCipher.encrypt(merchantPhone));
+        merchantStaff(prefix + "_u1", merchantId, staffPhone, true);
+        merchantStaff(prefix + "_u2", merchantId, otherStaffPhone, false);
+        customerRepository.saveStoredValueAccount(new CustomerStoredValueAccountRecord(
+                cardId, customerId, null, merchantId, 2_000L, "active", java.time.Instant.now(), java.time.Instant.now(),
+                "merchant_prepaid", 2_000L, 0L));
+        customerRepository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
+                merchantId, true, 10_000, true, "merchant_prepaid", java.time.Instant.now(), java.time.Instant.now()));
+
+        TestSecurityActors.asPlatformAdmin();
+        customerService.blacklistCustomer(customerId, "notification test blacklist");
+
+        assertThat(logCount("pending_refund", staffPhone)).isEqualTo(1);
+        assertThat(logValue("pending_refund", staffPhone, "request_id")).isEqualTo("svpend:" + cardId + ":" + prefix + "_u1");
+        assertThat(logValue("pending_refund", staffPhone, "template_code")).isEqualTo("sms.stored_value.pending_refund");
+        assertThat(logParam("pending_refund", staffPhone, "account_id")).isEqualTo(cardId);
+        assertThat(logParam("pending_refund", staffPhone, "payout_cent")).isEqualTo("2000");
+        assertThat(logParam("pending_refund", staffPhone, "customer_phone")).isEqualTo(maskPhone(customerPhone));
+        assertThat(logCount("pending_refund", otherStaffPhone)).isZero();
+        assertThat(logCount("pending_refund", merchantPhone)).isZero();
+        assertThat(logCount("pending_refund", customerPhone)).isZero();
+    }
+
+    private void merchantStaff(String userId, String merchantId, String phone, boolean withRefundPermission) {
+        jdbcTemplate.update("INSERT INTO access_users(id,username,account_type,organization_id,merchant_id,status,created_at) VALUES(?,?,'staff','org_1',?,'active',now())",
+                userId, userId, merchantId);
+        jdbcTemplate.update("INSERT INTO staff_profiles(id,project_id,merchant_id,user_id,name,phone,registration_status,status,created_at,updated_at) VALUES(?,?,?,?,?,?,'approved','active',now(),now())",
+                "sp_" + userId, "org_1", merchantId, userId, "员工" + userId, phone);
+        if (withRefundPermission) {
+            String role = "role_" + userId;
+            jdbcTemplate.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'待退通知','project','active',now())",
+                    role, "待退通知员工角色" + System.nanoTime());
+            jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'customer.stored_value.refund')", role);
+            jdbcTemplate.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", userId, role);
+        }
     }
 
     @Test

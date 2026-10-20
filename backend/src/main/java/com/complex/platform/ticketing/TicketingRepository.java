@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.util.List;
 import java.util.Optional;
@@ -329,6 +329,11 @@ public interface TicketingRepository {
 
     // 支付回写闭环（2a-2）：读取票务支付意图（确认支付成功时按 id 校验归属/金额并回写订单 paid）。
     Optional<TicketPaymentIntentRecord> findTicketPaymentIntentById(String id);
+
+    // TK-20-R3：该票务订单已成功的支付意图（最新一条；储值支付时 id = 储值消费流水 id、channel = stored_value）。default 供内存双子兼容。
+    default Optional<TicketPaymentIntentRecord> findSucceededTicketPaymentIntentByOrder(String orderId) {
+        return Optional.empty();
+    }
 
     // 退款冻结（2a-3）：退款审批通过 → 把 active 权益置 refunded（不可再核销）。返回受影响行数（幂等：已 refunded 返回 0）。
     int freezeEntitlementForRefund(String id, java.time.Instant updatedAt);

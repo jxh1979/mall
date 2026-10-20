@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -58,6 +58,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-STL-001", label: "结算配置中心", module: "结算", group: "settlement", route: "/admin/settlement/config", requiredPermissions: ["settlement.config.view"] },
   { pageId: "ADM-STL-002", label: "开票清单", module: "结算", group: "settlement", route: "/admin/settlement/invoice-items", requiredPermissions: ["settlement.invoice.view"] },
   { pageId: "ADM-STL-003", label: "内部结算价目录", module: "结算", group: "settlement", route: "/admin/settlement/internal-price-catalog", requiredPermissions: ["settlement.config.view"] },
+  { pageId: "ADM-STL-004", label: "演出合同与履约结算", module: "结算", group: "settlement", route: "/admin/settlement/media-shows", requiredPermissions: ["media.performance.view"] },
   { pageId: "ADM-MER-001", label: "商户服务工单", module: "商户服务", group: "governance", route: "/admin/merchant-service/tickets", requiredPermissions: ["merchant.service_work_order.view"] },
   { pageId: "ADM-MER-002", label: "商户授权工作台", module: "商户门户", group: "governance", route: "/admin/merchant-portal/scope", requiredPermissions: ["merchant.service_work_order.view", "merchant.billing.view"] },
   { pageId: "ADM-VND-001", label: "外包维保工单", module: "外包工作台", group: "vendor", route: "/admin/vendor/work-orders", requiredPermissions: ["facility.work_order.view_assigned"], accountForms: ["vendor"] },

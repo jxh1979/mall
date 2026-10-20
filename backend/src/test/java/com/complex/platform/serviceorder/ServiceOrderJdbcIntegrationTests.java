@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,6 +43,14 @@ class ServiceOrderJdbcIntegrationTests {
 
     @Autowired
     private com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
+
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDayResolver;
+
+    /** 与 MVC 请求反序列化同一命名策略(application.yml spring.jackson SNAKE_CASE):把前端真实请求形状(adminClient.mapKeys 蛇形键)反序列化成 DTO。 */
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper()
+            .findAndRegisterModules()
+            .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE);
 
     @BeforeEach
     void setUp() {
@@ -110,8 +119,8 @@ class ServiceOrderJdbcIntegrationTests {
         assertThat(cancelled.status()).isEqualTo("cancelled");
         assertThat(cancelled.cancelReason()).isEqualTo("客人取消");
 
-        // 月度统计:完成 1 单,分账应得=270 元(公司代收,月结进薪资)。
-        String month = java.time.YearMonth.now(java.time.ZoneOffset.UTC).toString();
+        // 月度统计:完成 1 单,分账应得=270 元(公司代收,月结进薪资)。TK-23-R2:月份按完成时点所在 bar 营业日。
+        String month = ServiceOrderService.settlementMonth(businessDayResolver, completed.completedAt());
         var stats = service.myStats(month);
         assertThat((Long) stats.get("completed_count")).isEqualTo(1L);
         assertThat((Long) stats.get("reference_income_cent")).isEqualTo(27000L);
@@ -251,6 +260,29 @@ class ServiceOrderJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.pay_confirm_failed' AND event_result='failure'",
                 Integer.class)).isGreaterThanOrEqualTo(1);
+    }
+
+    /** TK-23-R1(前端真实形状):{price_cent:10000, mgmt_fee_mode:'fixed', mgmt_fee_value:10001} → 400 VALIDATION_FAILED
+     * 并落 service.catalog.save_failed 审计。 */
+    @Test
+    void fixedFeeAboveServicePriceBySnakeCaseBodyIsRejectedWithFailureAudit() throws Exception {
+        var request = objectMapper.readValue(
+                "{\"idempotency_key\":\"" + key() + "\",\"name\":\"越界固定费\",\"price_cent\":10000,"
+                        + "\"mgmt_fee_mode\":\"fixed\",\"mgmt_fee_value\":10001}",
+                com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest.class);
+        assertThat(request.mgmtFeeValue()).isEqualTo(10001L);
+        long before = failedSaveAuditCount();
+        assertThatThrownBy(() -> service.upsertCatalogItem(request))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(failedSaveAuditCount()).isGreaterThan(before);
+    }
+
+    private long failedSaveAuditCount() {
+        Long c = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM audit_events WHERE event_name='service.catalog.save_failed' AND event_result='failure'",
+                Long.class);
+        return c == null ? 0 : c;
     }
 
     private String key() {

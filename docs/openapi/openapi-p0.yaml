@@ -2137,7 +2137,16 @@ paths:
         - bar
         - finance
       operationId: settleBarBill
-      summary: 账单结清
+      summary: 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张）
+      x-failure-codes:
+        - VOUCHER_NOT_FOUND
+        - VOUCHER_MERCHANT_MISMATCH
+        - VOUCHER_ONE_PER_SETTLEMENT
+        - VOUCHER_KIND_NOT_DEDUCTIBLE
+        - VOUCHER_ALREADY_REDEEMED
+        - VOUCHER_EXPIRED
+        - VOUCHER_REVOKED
+        - VOUCHER_TRANSFERRING
       x-permission: finance.payment.register
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -2248,6 +2257,7 @@ paths:
         - bar
       operationId: deliverBarOrder
       summary: 出酒或送达确认
+      description: 按明细登记送达：delivered_items 只含本次实际送达的未撤单明细；非撤单明细全部送达后整单与出品票据才置已送达，部分明细送达不置整单已送达、出品票据只追加 partial_deliver 事件（BSM L1025 分别标注已上菜与未上菜；ENUM L112）。
       x-permission: bar.order.create
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -2656,6 +2666,58 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/bar/tables/{table_id}/clear:
+    post:
+      tags:
+        - bar
+      operationId: clearBarTable
+      summary: 清台登记恢复空闲
+      description: 第十批 TK-27-R2（BSM L1058「关台成功后台位自动进入待清台；由负责该台位的服务员完成清理后在系统登记恢复空闲，散台与卡座同一动作」）：只接受待清台台位，否则 409 BAR_TABLE_NOT_PENDING_CLEAR；成功后台位回空闲（active）。台位列表随行返回 pending_clear_since 与 pending_clear_overdue（超过酒吧配置的 pending_clear_alert_minutes，出厂 15 分钟，上下限 1～120）供提醒当班主管。
+      x-permission: bar.table.open_close
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table.cleared
+      x-audit-event-failure: bar.table.clear_failed
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - BAR_TABLE_NOT_PENDING_CLEAR
   /api/v1/customer/auth/phone-login:
     post:
       tags:
@@ -8571,6 +8633,88 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/platform/merchants/{merchant_id}/pending-clear-alert:
+    get:
+      tags:
+        - platform
+      operationId: getMerchantPendingClearAlert
+      summary: 查询酒吧待清台提醒时限
+      description: TK-27（BSM L1058「待清台超过后台配置时限（业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限）未恢复空闲的，系统提醒当班主管」）：读酒吧（merchant_type=bar 的商户）待清台提醒时限；未配置时 value_minutes/min_minutes/max_minutes 为空、effective_minutes=15（出厂值）。
+      x-permission: merchant.profile.view
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: merchant.viewed
+      x-audit-event-failure: merchant.view_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    put:
+      tags:
+        - platform
+      operationId: configureMerchantPendingClearAlert
+      summary: 配置酒吧待清台提醒时限(值与上下限同配)
+      description: TK-27（BSM L1058）：配置酒吧（商户）待清台提醒时限。按仓库「值与上下限同配」范式：value_minutes、min_minutes、max_minutes 三者必填，min_minutes≥0 且 min_minutes≤value_minutes≤max_minutes，否则 400 VALIDATION_FAILED；不另设硬上下限。台位列表据此标记待清台超时。
+      x-permission: merchant.profile.manage
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.pending_clear_alert_configured
+      x-audit-event-failure: merchant.pending_clear_alert_config_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - value_minutes
+                - min_minutes
+                - max_minutes
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                value_minutes:
+                  type: integer
+                  description: 待清台提醒时限（分钟），须在 min_minutes 与 max_minutes 闭区间内。
+                  minimum: 0
+                min_minutes:
+                  type: integer
+                  description: 时限下限（分钟），与时限、上限同时配置。
+                  minimum: 0
+                max_minutes:
+                  type: integer
+                  description: 时限上限（分钟），与时限、下限同时配置。
+                  minimum: 0
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/platform/projects:
     get:
       tags:
@@ -10689,7 +10833,7 @@ paths:
       tags:
         - bar
       operationId: checkInBarReservationDeposit
-      summary: 订台到店核销（定金转抵扣进账单）
+      summary: 订台到店登记（定金不抵扣账单，保持已支付待判；达标后原路退回、未达标关台没收）
       x-permission: bar.reservation.manage
       x-data-scope: project-bar
       x-terminal-allowed:
@@ -10698,8 +10842,8 @@ paths:
         - tablet
         - mobile_admin
       x-idempotency-required: true
-      x-audit-event-success: bar.reservation_deposit_deducted
-      x-audit-event-failure: bar.reservation_deposit_deduct_failed
+      x-audit-event-success: bar.reservation_checked_in
+      x-audit-event-failure: bar.reservation_checkin_failed
       parameters:
         - $ref: "#/components/parameters/Id"
           description: 订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。
@@ -12252,7 +12396,7 @@ paths:
         - customer
       operationId: refundStoredValueAccount
       summary: 会员储值退卡/退余额（后台）
-      description: CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。
+      description: CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。
       x-permission: customer.stored_value.refund
       x-data-scope: project
       x-terminal-allowed:
@@ -14351,6 +14495,109 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/bar/table-sessions/{session_id}/split:
+    post:
+      tags:
+        - bar
+      operationId: splitBarTableSession
+      summary: 拆分酒水台位会话（拆台）
+      description: 第十批 TK-27-R3 拆台（BSM L1079）：mode=last_merge 按最近一次并台记录拆回该次并台前的两侧台组、single 任选一张原台单独拆出（压缩只剩一侧的空层级）、all 一次把全部原台同时拆开；并台期间无法确认归属的订单须由 order_assignments 人工明确归属并留痕，否则 409 BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED；整体转台前的旧并台组不得再拆出（409 BAR_SPLIT_HISTORICAL_CHAIN）；拆出会话恢复开台、台位保持已开台、各结果台组按各自最低消费进度重判定金，低消不足不阻断；整笔一次性成功或整体失败。
+      x-auth-context: staff-token
+      x-permission: bar.table_session.split
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table.split
+      x-audit-event-failure: bar.table.split_failed
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 合并台组主会话 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - mode
+                - reason
+                - primary_session_version
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                mode:
+                  type: string
+                  description: 拆台方式。
+                  enum:
+                    - last_merge
+                    - single
+                    - all
+                split_session_id:
+                  type: string
+                  description: mode=single 时要单独拆出的原台会话 ID。
+                  maxLength: 64
+                order_assignments:
+                  type: array
+                  description: 并台期间无法自动确认归属的订单的人工归属。
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      - order_id
+                      - session_id
+                    properties:
+                      order_id:
+                        type: string
+                        maxLength: 64
+                      session_id:
+                        type: string
+                        maxLength: 64
+                reason:
+                  type: string
+                  description: 拆台原因。
+                  maxLength: 4000
+                requested_by_user_id:
+                  type: string
+                  description: 发起人。
+                  maxLength: 64
+                primary_session_version:
+                  type: integer
+                  description: 主会话版本号。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+      x-failure-codes:
+        - BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED
+        - BAR_SPLIT_HISTORICAL_CHAIN
+        - BAR_SPLIT_NOTHING_TO_SPLIT
+        - BAR_TABLE_SESSION_VERSION_CONFLICT
   /api/v1/bar/table-sessions/{session_id}/renew:
     post:
       tags:
@@ -23352,6 +23599,33 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: customer.account.deregistered
       x-audit-event-failure: customer.account.deregister_failed
+      requestBody:
+        $ref: "#/components/requestBodies/CustomerDeregisterRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
+  /api/v1/customer/deregister/preview:
+    get:
+      tags:
+        - customer
+      operationId: previewCustomerDeregistration
+      summary: 客人注销预览（提醒名下各储值卡本金/赠送金；供选择放弃余额或生成待退事项）
+      description: TK-21-R3（BSM「账户注销」）：返回本人每张未销户储值卡的 account_id、card_scope、merchant_id、principal_cent、bonus_cent。
+      x-permission: not_applicable
+      x-data-scope: self
+      x-terminal-allowed:
+        - miniapp
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.account.deregister_previewed
+      x-audit-event-failure: customer.account.deregister_preview_failed
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -26392,7 +26666,8 @@ paths:
       operationId: upsertServiceCatalogItem
       summary: 维护服务目录项(固定参考价)
       description: G批口径①(H批修订):后台目录+固定价;公司代收口径下价格为实收金额,全额入公司账,完成履约时按管理费/提成分账列支。DEC-R8-90:percent 模式 mgmt_fee_value 为 0..10000
-        bp;fixed 模式 mgmt_fee_value 必须为 0..price_cent。任一越界值复用本操作既有 400 Error 响应拒绝保存,不得静默截断、封顶或改写。
+        bp;fixed 模式 mgmt_fee_value 必须为 0..price_cent。任一越界值复用本操作既有 400 Error 响应拒绝保存,不得静默截断、封顶或改写。TK-23-R3:已有目录项带不同
+        mgmt_fee_mode/mgmt_fee_value 提交时返回 400 FEE_CHANGE_REQUIRES_DRAFT,管理费变更须走 draftServiceCatalogFeeChange → activateServiceCatalogFeeDraft(指定生效日形成新版本 fee_version);首次新建仍可直接写出厂管理费。
       x-permission: service.catalog.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -26466,6 +26741,120 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/catalog/{id}/fee-draft:
+    post:
+      tags:
+        - service
+      operationId: draftServiceCatalogFeeChange
+      summary: 提交服务目录项管理费变更草案(指定生效日)
+      description: TK-23-R3(ENUM L291 / BSM L1127「配置主体与审批、出厂默认值、变更版本化与指定生效日、单据下单时锁定费率版本……一律比照销售提成的对应规则执行」):已有目录项的管理费不再直接保存生效,改为提交草案(拟改模式/数值
+        + 生效日,生效日不得早于当日营业日),由他人复核转正;区间校验同 upsertServiceCatalogItem(percent 0..10000 bp、fixed 0..price_cent,越界 400 VALIDATION_FAILED)。同一 idempotency_key 同体重放返回第一次结果、异体 409。
+      x-permission: service.catalog.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.catalog.fee_drafted
+      x-audit-event-failure: service.catalog.fee_draft_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - effective_from
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                mgmt_fee_mode:
+                  type: string
+                  description: 拟改管理费模式。
+                  enum:
+                    - none
+                    - percent
+                    - fixed
+                mgmt_fee_value:
+                  type: integer
+                  description: 拟改管理费值(percent=基点bp,静态上限 10000;fixed=分,上限为该目录项 price_cent)。
+                  minimum: 0
+                effective_from:
+                  type: string
+                  format: date
+                  description: 指定生效日(营业日,不得早于当日营业日);只对生效日起发生的新单有效,之前下的单按其下单时锁定的版本分账。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/services/catalog/{id}/fee-activate:
+    post:
+      tags:
+        - service
+      operationId: activateServiceCatalogFeeDraft
+      summary: 复核转正服务目录项管理费草案(差人)
+      description: TK-23-R3 比照销售提成 activateDraft:起草人不得自审(403 SELF_APPROVAL_FORBIDDEN);转正只标记复核人,草案自指定生效营业日起由下单路径翻为新版本(fee_version+1、清空草案),之前下的单仍按下单时锁定的版本分账;转正时向该目录项近
+        90 天履约人与所属酒吧联系人通告并留痕 service.catalog.fee_change_notified。
+      x-permission: service.catalog.approve
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: service.catalog.fee_activated
+      x-audit-event-failure: service.catalog.fee_activate_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -32725,7 +33114,7 @@ paths:
       tags:
         - customer
       operationId: listVoucherDefinitions
-      summary: 券定义列表（统一台账模板：类型/核销方式/结算口径；内部结算价按 voucher.internal_price.view 权限脱敏）
+      summary: 券定义列表（统一台账模板：类型/核销方式/结算口径；内部结算价按 voucher.internal_price.view 权限脱敏；每行带只读 merchant_type＝券定义商户业态）
       x-auth-context: staff-token
       x-permission: customer.voucher.view
       x-data-scope: merchant
@@ -33015,7 +33404,7 @@ paths:
       tags:
         - customer
       operationId: redeemVoucher
-      summary: 统一核销（三类口径：折扣券结账抵扣/实物券扣库存＋内部结算价挂应付；每券一次；响应 settlement_amount_cent 按 voucher.internal_price.view 权限脱敏）
+      summary: 统一核销（实物券扣库存＋内部结算价挂应付；酒吧商户（merchant_type=bar）的折扣券不在此核销——须在酒吧结账 settleBarBill 时抵扣核销，本端点返回 VOUCHER_REQUIRES_BILL；非酒吧商户的折扣券仍可在此独立核销（操作员裁决 2026-10-20 第三轮第 9 条）；每券一次；响应 settlement_amount_cent 按 voucher.internal_price.view 权限脱敏）
       x-auth-context: staff-token
       x-permission: customer.voucher.redeem
       x-data-scope: merchant
@@ -33025,6 +33414,7 @@ paths:
       x-audit-event-success: voucher.redeemed
       x-audit-event-failure: voucher.redeem_failed
       x-failure-codes:
+        - VOUCHER_REQUIRES_BILL
         - VOUCHER_NOT_FOUND
         - VOUCHER_ALREADY_REDEEMED
         - VOUCHER_REVOKED
@@ -33303,6 +33693,648 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+  /api/v1/settlement/media-shows:
+    get:
+      tags:
+        - settlement
+      operationId: listMediaPerformanceShows
+      summary: 逐场演出合同记录列表
+      description: TK-29：按项目 / 商户范围列出逐场演出合同记录（商户用户只见自己是酒吧方或传媒方的场次）。
+      x-auth-context: staff-token
+      x-permission: media.performance.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-audit-event-success: media_show.listed
+      x-audit-event-failure: media_show.list_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - settlement
+      operationId: createMediaPerformanceShow
+      summary: 新建逐场演出合同记录（草案）
+      description: TK-29（BSM L1145「按演出合同可以同时存在三种情形……并在后台配置页面逐场填写、随合同固化版本」；操作员裁决 2026-10-20「逐场填每张加价×已核销张数」）。三种情形各自可空；自办场次不得填固定费/酒水提成/门票加价分成（400 MEDIA_SHOW_SELF_HOSTED_NO_BAR_PAYABLE）；酒吧 / 传媒商户须属该场项目（400 MEDIA_SHOW_MERCHANT_PROJECT_MISMATCH）；同号同体重放返回第一次结果、异体 409。
+      x-auth-context: staff-token
+      x-permission: media.performance.contract.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_show.created
+      x-audit-event-failure: media_show.create_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                bar_merchant_id:
+                  type: string
+                media_merchant_id:
+                  type: string
+                show_kind:
+                  type: string
+                  enum:
+                    - bar_show
+                    - self_hosted
+                show_date:
+                  type: string
+                  format: date
+                planned_start_at:
+                  type: string
+                  format: date-time
+                planned_end_at:
+                  type: string
+                  format: date-time
+                contract_ref:
+                  type: string
+                ticket_share_mode:
+                  type: string
+                  enum:
+                    - none
+                    - ratio
+                    - fixed
+                ticket_share_bps:
+                  type: integer
+                ticket_share_amount_cent:
+                  type: integer
+                ticket_surcharge_per_ticket_cent:
+                  type: integer
+                ticket_type_id:
+                  type: string
+                fixed_fee_cent:
+                  type: integer
+                drink_commission_bps:
+                  type: integer
+                drink_base_template:
+                  type: string
+                  enum:
+                    - show_window
+                    - whole_store_session
+              required:
+                - idempotency_key
+                - project_id
+                - media_merchant_id
+                - show_kind
+                - show_date
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/media-shows/{id}:
+    get:
+      tags:
+        - settlement
+      operationId: getMediaPerformanceShow
+      summary: 逐场演出合同详情（含履约事实与三项结算）
+      description: TK-29：合同记录 + 实际履约记录 + 三项结算行（pending/posted/adjusted）。
+      x-auth-context: staff-token
+      x-permission: media.performance.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-audit-event-success: media_show.viewed
+      x-audit-event-failure: media_show.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+    patch:
+      tags:
+        - settlement
+      operationId: updateMediaPerformanceShow
+      summary: 修改草案合同记录
+      description: TK-29：只允许草案；已锁定 → 409 MEDIA_SHOW_LOCKED（改动须新建版本）。
+      x-auth-context: staff-token
+      x-permission: media.performance.contract.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_show.updated
+      x-audit-event-failure: media_show.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                bar_merchant_id:
+                  type: string
+                media_merchant_id:
+                  type: string
+                show_kind:
+                  type: string
+                  enum:
+                    - bar_show
+                    - self_hosted
+                show_date:
+                  type: string
+                  format: date
+                planned_start_at:
+                  type: string
+                  format: date-time
+                planned_end_at:
+                  type: string
+                  format: date-time
+                contract_ref:
+                  type: string
+                ticket_share_mode:
+                  type: string
+                  enum:
+                    - none
+                    - ratio
+                    - fixed
+                ticket_share_bps:
+                  type: integer
+                ticket_share_amount_cent:
+                  type: integer
+                ticket_surcharge_per_ticket_cent:
+                  type: integer
+                ticket_type_id:
+                  type: string
+                fixed_fee_cent:
+                  type: integer
+                drink_commission_bps:
+                  type: integer
+                drink_base_template:
+                  type: string
+                  enum:
+                    - show_window
+                    - whole_store_session
+              required:
+                - idempotency_key
+                - project_id
+                - media_merchant_id
+                - show_kind
+                - show_date
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/lock:
+    post:
+      tags:
+        - settlement
+      operationId: lockMediaPerformanceShow
+      summary: 锁定合同版本
+      description: TK-29「随合同固化版本」：锁定后数值不可改，结算只读锁定行；同组旧版本置 superseded（旧行保留）；该场已有出账结算时 409 MEDIA_SHOW_SETTLED_USE_ADJUST。
+      x-auth-context: staff-token
+      x-permission: media.performance.contract.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_show.locked
+      x-audit-event-failure: media_show.lock_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+              required:
+                - idempotency_key
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/versions:
+    post:
+      tags:
+        - settlement
+      operationId: createMediaPerformanceShowVersion
+      summary: 从锁定版本新建合同版本草案
+      description: TK-29：contract_version+1，旧行保留；项目 / 场次类型 / 传媒商户沿用原版本；酒吧商户须属该场项目与操作者范围；该场已有出账结算时 409 MEDIA_SHOW_SETTLED_USE_ADJUST（合同变更改走结算调整）。
+      x-auth-context: staff-token
+      x-permission: media.performance.contract.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_show.version_created
+      x-audit-event-failure: media_show.version_create_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                bar_merchant_id:
+                  type: string
+                media_merchant_id:
+                  type: string
+                show_kind:
+                  type: string
+                  enum:
+                    - bar_show
+                    - self_hosted
+                show_date:
+                  type: string
+                  format: date
+                planned_start_at:
+                  type: string
+                  format: date-time
+                planned_end_at:
+                  type: string
+                  format: date-time
+                contract_ref:
+                  type: string
+                ticket_share_mode:
+                  type: string
+                  enum:
+                    - none
+                    - ratio
+                    - fixed
+                ticket_share_bps:
+                  type: integer
+                ticket_share_amount_cent:
+                  type: integer
+                ticket_surcharge_per_ticket_cent:
+                  type: integer
+                ticket_type_id:
+                  type: string
+                fixed_fee_cent:
+                  type: integer
+                drink_commission_bps:
+                  type: integer
+                drink_base_template:
+                  type: string
+                  enum:
+                    - show_window
+                    - whole_store_session
+              required:
+                - idempotency_key
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/fulfillment:
+    post:
+      tags:
+        - settlement
+      operationId: recordMediaPerformanceFulfillment
+      summary: 传媒经办登记实际履约
+      description: TK-29（BSM L1145「由传媒经办人在现有逐场合同记录中登记实际履约时间、已完成和未完成内容及依据」）：合同须已锁定（409 MEDIA_SHOW_NOT_LOCKED），登记人须属该传媒商户范围，一场一条。
+      x-auth-context: staff-token
+      x-permission: media.performance.fulfillment.record
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_fulfillment.recorded
+      x-audit-event-failure: media_fulfillment.record_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                actual_start_at:
+                  type: string
+                  format: date-time
+                actual_end_at:
+                  type: string
+                  format: date-time
+                completed_content:
+                  type: string
+                uncompleted_content:
+                  type: string
+                basis:
+                  type: string
+              required:
+                - idempotency_key
+                - actual_start_at
+                - actual_end_at
+                - completed_content
+                - basis
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/fulfillment/confirm:
+    post:
+      tags:
+        - settlement
+      operationId: confirmMediaPerformanceFulfillment
+      summary: 确认实际履约
+      description: TK-29：到酒吧演出由该酒吧范围的现场责任人确认（否则 403）；自办场次由该传媒范围、非登记人本人的主管确认（本人 → 409 MEDIA_FULFILLMENT_SELF_CONFIRM）。
+      x-auth-context: staff-token
+      x-permission: media.performance.fulfillment.confirm
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_fulfillment.confirmed
+      x-audit-event-failure: media_fulfillment.confirm_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+              required:
+                - idempotency_key
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/fulfillment/dispute:
+    post:
+      tags:
+        - settlement
+      operationId: disputeMediaPerformanceFulfillment
+      summary: 对实际履约提出争议
+      description: TK-29：确认方同一范围；挂起 disputed，相关结算保持待处理。
+      x-auth-context: staff-token
+      x-permission: media.performance.fulfillment.confirm
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_fulfillment.disputed
+      x-audit-event-failure: media_fulfillment.dispute_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                dispute_reason:
+                  type: string
+              required:
+                - idempotency_key
+                - dispute_reason
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/fulfillment/dispute/resolve:
+    post:
+      tags:
+        - settlement
+      operationId: resolveMediaPerformanceDispute
+      summary: 主管裁决履约争议
+      description: TK-29：结论必填、裁决人 / 时间留痕（范式同 contract.settlement.dispute.resolve）；裁决后事实回到可结算态。
+      x-auth-context: staff-token
+      x-permission: media.performance.dispute.resolve
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_fulfillment.dispute_resolved
+      x-audit-event-failure: media_fulfillment.dispute_resolve_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                resolution_note:
+                  type: string
+              required:
+                - idempotency_key
+                - resolution_note
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/settle:
+    post:
+      tags:
+        - settlement
+      operationId: settleMediaPerformanceShow
+      summary: 按锁定合同结算三项费用
+      description: TK-29（BSM L1145「共同引用该场已确认的实际履约事实，分别按该场已锁定合同的适用条款结算……保持待处理，不默认全额、半价或零额」）：事实未确认 / 争议 / 合同未约定 → pending 行不出账；已确认 → 分别挂应付传媒公司（②③付方酒吧、①付方娱乐平台公司）；重跑幂等。按场次项目 / 商户范围校验（不符 403）；同号同体重放返回第一次结果。
+      x-auth-context: staff-token
+      x-permission: media.performance.settle
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_settlement.settled
+      x-audit-event-failure: media_settlement.settle_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+              required:
+                - idempotency_key
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/media-shows/{id}/settlements/{settlementId}/adjust:
+    post:
+      tags:
+        - settlement
+      operationId: adjustMediaPerformanceSettlement
+      summary: 调整已出账结算
+      description: TK-29（BSM L1145「关联原记录并按既有历史调整规则办理，不覆盖原结果」）：新行回指原行、原行置 adjusted；原应付 V344 红冲取反、新额另挂。按场次项目 / 商户范围校验（不符 403）；同号同体重放返回第一次结果、异体 409。
+      x-auth-context: staff-token
+      x-permission: media.performance.settle
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: media_settlement.adjusted
+      x-audit-event-failure: media_settlement.adjust_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                amount_cent:
+                  type: integer
+                adjust_reason:
+                  type: string
+              required:
+                - idempotency_key
+                - amount_cent
+                - adjust_reason
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: settlementId
+          in: path
+          required: true
+          schema:
+            type: string
   /api/v1/settlement/config/overview:
     get:
       tags:
@@ -36000,7 +37032,7 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: finance_refund.execution_recorded
       x-audit-event-failure: finance_refund.execution_failed
-      description: 实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。
+      description: 实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。账户关闭 / 注销为商户卡登记的待退本金事项只能由发卡商户柜台退卡结清，本接口 409 STORED_VALUE_MERCHANT_COUNTER_ONLY。
         经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。
       responses:
         "200":
@@ -36039,7 +37071,7 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: finance_refund.confirmed
       x-audit-event-failure: finance_refund.confirm_failed
-      description: 独立核实本人执行记录；金额、流水号和经办人必须一致，必须提供真实附件。自动渠道未知结果只能查询，不能用本接口绕过。 必须同时具备 finance.refund.create 与
+      description: 独立核实本人执行记录；金额、流水号和经办人必须一致，必须提供真实附件。自动渠道未知结果只能查询，不能用本接口绕过。账户关闭 / 注销为商户卡登记的待退本金事项只能由发卡商户柜台退卡结清，本接口 409 STORED_VALUE_MERCHANT_COUNTER_ONLY。 必须同时具备 finance.refund.create 与
         finance.payment.register 权限。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。
       responses:
         "200":
@@ -45648,8 +46680,9 @@ paths:
         - bar
       operationId: closeBarServiceResponsibility
       summary: 实际服务完成后关闭责任区间
+      description: 关台（BSM L1058）：台组（含整体转台前旧链）全部账单须已结清或已并入主账单，否则 409 BAR_TABLE_SESSION_BILL_UNSETTLED（挂账亦拒）；通过后主会话关闭、台位进入待清台、未达最低消费的已付定金没收。
       x-auth-context: staff-token
-      x-permission: bar.table_session.transfer
+      x-permission: bar.table.open_close
       x-data-scope: project-merchant
       x-terminal-allowed:
         - web
@@ -46199,6 +47232,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/CustomerConsentRequest"
+    CustomerDeregisterRequest:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CustomerDeregisterRequest"
     CustomerTicketOrderRequest:
       required: true
       content:
@@ -49737,6 +50776,14 @@ components:
           type: string
           description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
           maxLength: 64
+    CustomerDeregisterRequest:
+      type: object
+      description: 请求载荷 `CustomerDeregisterRequest`；TK-21-R3 自助注销是否放弃余额。
+      additionalProperties: false
+      properties:
+        waive_balance:
+          type: boolean
+          description: true=客人明确确认放弃全部储值余额（归发卡主体）径行注销；false/缺省=需退本金的按「储值」条生成待退事项并通知发卡主体。
     CustomerTicketOrderRequest:
       type: object
       description: 请求载荷 `CustomerTicketOrderRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -50161,6 +51208,14 @@ components:
         payment_channel:
           type: string
           description: 支付渠道；P0 使用聚合支付并保留直连接口抽象。
+          maxLength: 64
+        voucher_code:
+          type: string
+          description: 本次结账抵扣的本商户折扣券核销码（与 voucher_instance_id 二选一，可不填）；每次结账只能用一张折扣券，抵扣额＝min(面值, 应付−已付)，面值超出部分不找零，核销与结账同事务、任一失败整体回滚。
+          maxLength: 64
+        voucher_instance_id:
+          type: string
+          description: 本次结账抵扣的折扣券实例 ID（与 voucher_code 二选一，可不填）；两项同填返回 VOUCHER_ONE_PER_SETTLEMENT。
           maxLength: 64
     CommissionCalculateRequest:
       type: object

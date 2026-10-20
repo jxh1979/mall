@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -117,9 +117,12 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
   const latestExecution = detail?.attempts.slice().reverse().find((attempt) => ["submit", "retry", "execution"].includes(attempt.operation));
   const execution = latestExecution?.operation === "execution" ? latestExecution : undefined;
   const projectUnresolved = !!selected && selected.sourceType !== "ar_ap_payment" && !selected.projectId?.trim();
-  const mayExecute = !projectUnresolved && (selected?.status === "requested" || selected?.status === "failed");
+  // TK-21-R2（BSM「储值」：「商户卡仍由发卡商户直接收款和退款……实际退款成功才结清」）：账户关闭/注销登记的商户卡待退本金，
+  // 由发卡商户柜台退卡这一个口结清，本面板只展示，不开执行/核实，避免两条执行路径。
+  const merchantCounter = !!selected && selected.sourceType === "stored_value_account" && !!selected.merchantId?.trim();
+  const mayExecute = !projectUnresolved && !merchantCounter && (selected?.status === "requested" || selected?.status === "failed");
   const mayRetry = mayExecute && selected?.sourceType === "ar_ap_payment" && !!selected.originalPaymentRef?.trim() && !["cash", "pos"].includes(selected.refundChannel);
-  const mayConfirm = !projectUnresolved && selected?.status === "processing" && !!execution && execution.paymentOperatorId !== user.id && !(selected.refundChannel === "cash" && selected.requestedBy === user.id);
+  const mayConfirm = !projectUnresolved && !merchantCounter && selected?.status === "processing" && !!execution && execution.paymentOperatorId !== user.id && !(selected.refundChannel === "cash" && selected.requestedBy === user.id);
   const blocked = busy || uploading;
   const closed = selected?.status === "success";
   const payment = payments.find((item) => item.id === paymentId);
@@ -166,7 +169,7 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
     {detail && selected ? <section data-testid="finance-refund-detail" aria-label="退款详情">
       <h3>退款单 {selected.id}</h3><p>{stateLabel(selected.status)}</p>
       <p>金额：¥{yuan(selected.refundAmountCent)}；原收款流水：{selected.originalPaymentRef ?? "待核实"}；原因：{selected.reason}</p>
-      {projectUnresolved ? <p>待核实项目归属</p> : ["ticket_payment_rejection", "channel_ticket_rejection"].includes(selected.sourceType ?? "") ? <p>停售拒收款：先核对原收款和渠道订单，按原渠道办理；真实退款凭证经另一人核实成功后才结清。</p> : selected.sourceType === "stored_value_account" && !selected.originalPaymentRef ? <p>该笔储值退款须按原收款路径办理并核实结果。</p> : null}
+      {projectUnresolved ? <p>待核实项目归属</p> : ["ticket_payment_rejection", "channel_ticket_rejection"].includes(selected.sourceType ?? "") ? <p>停售拒收款：先核对原收款和渠道订单，按原渠道办理；真实退款凭证经另一人核实成功后才结清。</p> : merchantCounter ? <p>该商户卡待退本金由发卡商户柜台退卡结清；柜台退卡成功即结清，这里只展示、不办理。</p> : selected.sourceType === "stored_value_account" && !selected.originalPaymentRef ? <p>该笔储值退款须按原收款路径办理并核实结果。</p> : null}
       <fieldset disabled={blocked || closed}>
         <legend>查询、重试与核实</legend>
         <div className="admin-form-row"><label>办理说明<input value={note} onChange={(event) => setNote(event.target.value)} /></label>

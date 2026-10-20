@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import {
   CalendarOutlined,
   GiftOutlined,
@@ -29,6 +30,7 @@ import { BarInvitationPage } from "./pages/BarInvitationPage";
 import { BarReservationPage } from "./pages/BarReservationPage";
 import { BarScanOrderPage } from "./pages/BarScanOrderPage";
 import { BuyTicketPage } from "./pages/BuyTicketPage";
+import { DeregisterPage } from "./pages/DeregisterPage";
 import { HomePage } from "./pages/HomePage";
 import { MyOrdersPage } from "./pages/MyOrdersPage";
 import { PointsPage } from "./pages/PointsPage";
@@ -42,9 +44,9 @@ dayjs.locale("zh-cn");
 
 const { Header, Content, Sider } = Layout;
 
-type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "vouchers" | "transfer";
+type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "vouchers" | "transfer" | "deregister";
 
-const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "vouchers", "transfer"];
+const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "vouchers", "transfer", "deregister"];
 
 // 页面标题单一来源：侧栏菜单与每页 h1（语义地标）共用。
 const PAGE_TITLES: Record<PageKey, string> = {
@@ -58,6 +60,8 @@ const PAGE_TITLES: Record<PageKey, string> = {
   wallet: "储值 / 会员",
   vouchers: "我的券包",
   transfer: "门票转赠",
+  // TK-21-R3：客人自助注销（预览余额、放弃余额或生成待退事项）。
+  deregister: "注销账号",
 };
 
 // 3.11 多页入口 + 深链修复：
@@ -197,6 +201,7 @@ export default function CustomerApp(): React.ReactElement {
               { key: "wallet", icon: <WalletOutlined />, label: PAGE_TITLES.wallet },
               { key: "vouchers", icon: <GiftOutlined />, label: PAGE_TITLES.vouchers },
               { key: "transfer", icon: <ShoppingOutlined />, label: PAGE_TITLES.transfer },
+              { key: "deregister", icon: <UnorderedListOutlined />, label: PAGE_TITLES.deregister },
             ]}
             onClick={(info) => goTo(info.key as PageKey)}
           />
@@ -223,6 +228,7 @@ export default function CustomerApp(): React.ReactElement {
             {page === "wallet" ? <WalletPage service={service} /> : null}
             {page === "vouchers" ? <VoucherWalletPage service={service} /> : null}
             {page === "transfer" ? <TicketTransferPage service={service} /> : null}
+            {page === "deregister" ? <DeregisterPage service={service} onDeregistered={onLogout} /> : null}
           </Content>
         </Layout>
       </Layout>

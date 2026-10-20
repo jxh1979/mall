@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -29,6 +29,9 @@ public class BarBillingService {
     BarPayrollSourceService payrollSources;
     @org.springframework.beans.factory.annotation.Autowired
     BarPayrollRefundService payrollRefunds;
+    // 第十批 TK-24-R3：结账补足低消后判定金达标退回（字段注入免改构造点；单测手工置位）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarDepositSettlementService depositSettlements;
     private final BarRepository repository;
     private final BarReceivableLedgerService receivableLedgerService;
     private final AuthorizationService authorizationService;
@@ -53,6 +56,10 @@ public class BarBillingService {
     // bar → access.staff 是既有的向下依赖（本类已依赖 access.AuthorizationService），无需再造端口。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
+    // 第十批 TK-28-R1（ENUM L81「商户折扣券——到对应商户抵扣」）：结账时核销本商户折扣券并原子抵扣应付。
+    // 字段注入免改构造点（同上各例）；null＝旧构造/单测未注入，带券结账即拒绝。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.voucher.VoucherService voucherService;
 
     public BarBillingService(
             BarRepository repository,
@@ -95,11 +102,13 @@ public class BarBillingService {
         long subtotal = repository.listOrderItems(order.id()).stream()
                 .mapToLong(BarOrderItemRecord::amountCent)
                 .sum();
-        BarReservationRecord reservation = order.reservationId() == null
-                ? null
-                : repository.findReservationById(order.reservationId()).orElse(null);
-        long depositDeduct = reservation == null ? 0L : Math.min(reservation.depositAmountCent(), subtotal);
-        long payable = subtotal - depositDeduct;
+        // 第十批 TK-24-R1（BSM L889「定金不抵扣消费、不计入最低消费累计」；DEC-R6-05）：开单不再抵扣订台定金，
+        // deposit_deduct_amount_cent 恒 0（历史账单只读保留）；定金达标后由 BarDepositSettlementService 原路退回。
+        // 第十批 TK-25-R2（BSM L1064「以该笔留款抵付的部分不重复收款、不重复确认收入」）：台组未抵用留款先抵本单应付。
+        long retainedApplied = repository.findSessionIdByOrderId(order.id())
+                .map(sessionId -> Math.min(BarMinSpend.retainedBalanceCent(repository, sessionId), subtotal))
+                .orElse(0L);
+        long payable = subtotal - retainedApplied;
         Instant now = Instant.now();
         // G/V349：开单即把提成角色档【按销售归属人的员工岗位】快照进账单，计提时直接读这一列。
         // 快照而非计提时现查：账单上写的角色档、提成台账里的角色档、对账页上看到的角色档必须是同一个值；
@@ -115,7 +124,7 @@ public class BarBillingService {
                 order.reservationId(),
                 subtotal,
                 0L,
-                depositDeduct,
+                0L,
                 payable,
                 0L,
                 CURRENCY_CNY,
@@ -126,6 +135,14 @@ public class BarBillingService {
                 now,
                 now
         ));
+        if (retainedApplied > 0) {
+            repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                    "bill_adjustment_" + billSlug(created.id() + ":min_spend_retained_applied:" + request.idempotencyKey()),
+                    created.id(), "min_spend_retained_applied", retainedApplied, subtotal, payable,
+                    "留款抵用：以台组未抵用留款抵付本单消费，不重复收款", authorizationService.currentActor().id(),
+                    false, "applied", request.idempotencyKey() + ":retained", List.of(), null,
+                    billAdjustmentSnapshot(created, payable, "unpaid", "unsettled", null), now, null));
+        }
         if (payrollSources != null) {
             long serviceFee = payrollSources.requiredCharge(created);
             if (serviceFee > 0) {
@@ -190,20 +207,54 @@ public class BarBillingService {
         }
         // 2c-1 低消硬阻断（用户裁定 + PRD §617/716）：未满足最低消费不可结账。
         // 低消基数 = 实际消费 subtotal + 已补差 min_spend_top_up（运营补足低消的手段），不含 tip/deposit/service_fee。
+        // 第十批 TK-24-R2（BSM L1079 并台合计 / 转台结转；DEC-SEAT-MERGE-001、DEC-R8-95）：有开台会话归属的账单按台组
+        // （当前有效并台链）合计阈值与累计进度判；无会话归属的账单沿用台位口径（subtotal + 补足）。
         if (bill.tableId() != null) {
-            BarTableRecord table = repository.findTableById(bill.tableId()).orElse(null);
-            if (table != null && table.minConsumptionCent() > 0) {
-                long topUp = repository.listBillAdjustments(bill.id()).stream()
+            Optional<String> sessionId = bill.orderId() == null
+                    ? Optional.empty() : repository.findSessionIdByOrderId(bill.orderId());
+            long threshold;
+            long consumed;
+            if (sessionId.isPresent()) {
+                threshold = BarMinSpend.thresholdCent(repository, sessionId.get());
+                consumed = BarMinSpend.consumedCent(repository, sessionId.get());
+            } else {
+                BarTableRecord table = repository.findTableById(bill.tableId()).orElse(null);
+                threshold = table == null ? 0L : table.minConsumptionCent();
+                consumed = bill.subtotalAmountCent() + repository.listBillAdjustments(bill.id()).stream()
                         .filter(a -> "min_spend_top_up".equals(a.adjustmentType()))
                         .mapToLong(BarBillAdjustmentRecord::amountCent)
                         .sum();
-                if (bill.subtotalAmountCent() + topUp < table.minConsumptionCent()) {
-                    throw ApiException.conflict("BAR_MIN_CONSUMPTION_NOT_MET",
-                            "未达到订台最低消费，请先加购消费或补足低消差额再结账");
-                }
+            }
+            if (threshold > 0 && consumed < threshold) {
+                throw ApiException.conflict("BAR_MIN_CONSUMPTION_NOT_MET",
+                        "未达到订台最低消费，请先加购消费或补足低消差额再结账");
             }
         }
         requireText(actual.paymentId(), "payment_id");
+        // 第十批 TK-28-R1：本次结账带一张本商户折扣券 → 同事务核销并抵扣应付（ENUM L81；PGM L303 任一步失败整体回滚、券回 issued）。
+        // 抵扣上限＝应付−已付（不含小费：服务费/小费基数不受扣券影响，BSM L1076）；面值多出部分不找零（ENUM L83）；
+        // 抵扣进 discount_amount_cent：提成基数=subtotal−discount（ENUM L108），低消进度看 subtotal 不看 discount（BSM L1064）。
+        // 操作员裁决（2026-10-20）「一次结账一张」：券码与券编号同填即拒绝，其余留到下次结账再带。
+        String voucherCode = trimToNull(actual.voucherCode());
+        String voucherInstanceId = trimToNull(actual.voucherInstanceId());
+        if (voucherCode != null || voucherInstanceId != null) {
+            if (voucherCode != null && voucherInstanceId != null) {
+                throw ApiException.badRequest("VOUCHER_ONE_PER_SETTLEMENT", "每次结账只能使用一张折扣券，其余留到下次结账");
+            }
+            if (voucherService == null) {
+                throw ApiException.conflict("VOUCHER_SERVICE_UNAVAILABLE", "折扣券核销服务不可用");
+            }
+            com.complex.platform.voucher.VoucherRedemptionEntryRecord voucherEntry = voucherService.redeemForBill(
+                    voucherCode, voucherInstanceId, bill.merchantId(), "bar_bill", bill.id(),
+                    bill.payableAmountCent() - bill.paidAmountCent());
+            long deduction = voucherEntry.deductionAmountCent();
+            bill = billWithAmounts(bill, bill.subtotalAmountCent(), bill.discountAmountCent() + deduction,
+                    bill.depositDeductAmountCent(), bill.payableAmountCent() - deduction, bill.paidAmountCent(),
+                    bill.paymentStatus(), bill.settlementStatus(), Instant.now());
+            auditEventService.recordSuccess("bar.bill.voucher_deducted", "finance.payment.register", "bar_bill",
+                    bill.id(), null, actual.idempotencyKey(),
+                    Map.of("voucher_instance_id", voucherEntry.voucherInstanceId(), "deduction_cent", deduction));
+        }
         // V091：结算应收含小费（payable + tip）。小费为代收（归属服务员/交班结算），不计入低消/提成基数。
         long settleTotal = bill.payableAmountCent() + bill.tipAmountCent();
         // AUD-009 续付累计：本次金额按「剩余未付」校验并累计入 paidAmount，不再按原始总额校验/覆盖——
@@ -348,6 +399,7 @@ public class BarBillingService {
         String settlementStatus = bill.settlementStatus();
         Instant refundedAt = null;
         long afterTip = bill.tipAmountCent();
+        long retained = 0L;
         java.util.List<BarBillAdjustmentRequest.RefundLine> refundLines = java.util.List.of();
         if ("service_fee".equals(type) || "min_spend_top_up".equals(type)) {
             if ("service_fee".equals(type)) {
@@ -376,6 +428,18 @@ public class BarBillingService {
             }
             if (payrollRefunds != null) refundLines = payrollRefunds.validate(bill, actual.refundLines(), amount);
             long tipRefund = refundLines.stream().filter(l -> "tip".equals(l.componentType())).mapToLong(BarBillAdjustmentRequest.RefundLine::amountCent).sum();
+            // 第十批 TK-25-R1（BSM L1064「退款后该台位累计消费将低于……最低消费的，不退款——该笔金额留在本台位账上」）：
+            // 商品部分按台组低消进度拆可退/留款；留款单独记 min_spend_retained（不减应付、不出金），分项从末尾商品行扣减。
+            long goodsRequested = refundLines.isEmpty() ? amount
+                    : refundLines.stream().filter(l -> "goods".equals(l.componentType())).mapToLong(BarBillAdjustmentRequest.RefundLine::amountCent).sum();
+            retained = minSpendRetainedCent(bill, goodsRequested);
+            if (retained > 0) {
+                amount -= retained;
+                refundLines = reduceGoodsLines(refundLines, retained);
+                if (amount == 0L) {
+                    return saveMinSpendRetained(bill, retained, beforePayable, reason, requestedBy, actual.idempotencyKey(), Instant.now());
+                }
+            }
             afterTip = Math.subtractExact(bill.tipAmountCent(), tipRefund);
             // AUD-007 分级授权 fail-closed 常在：超额度退款须复核——单步退款无独立复核状态机，超额/无额度直接拒，由额度内授权人办理。
             // AUD-008 权威综合体：酒吧账单不自带 project，取操作者授权 scope（非请求体）；平台/无组织 → null=仅全局配置。
@@ -451,6 +515,9 @@ public class BarBillingService {
                 refundedAt
         ));
         if ("refund".equals(type) && payrollRefunds != null) payrollRefunds.record(savedAdjustment, refundLines);
+        if (retained > 0) saveMinSpendRetained(bill, retained, afterPayable, reason, requestedBy, actual.idempotencyKey(), now);
+        // 第十批 TK-24-R3（BSM L1064「结账补足的差额按普通消费计入」）：补足后重判台组进度，达标即退定金。
+        if ("min_spend_top_up".equals(type) && depositSettlements != null) depositSettlements.evaluateForOrder(bill.orderId());
         return savedAdjustment;
     }
 
@@ -610,7 +677,8 @@ public class BarBillingService {
         long commissionExcluded = repository.listBillAdjustments(bill.id()).stream()
                 .filter(a -> "applied".equals(a.status()))
                 .mapToLong(a -> switch (a.adjustmentType()) {
-                    case "waiver", "refund" -> a.amountCent();
+                    // 第十批 TK-25-R2（Q28「不重复收款、收入或奖励」）：留款抵用部分原账单已计提，不再计入本单基数。
+                    case "waiver", "refund", "min_spend_retained_applied" -> a.amountCent();
                     case "waiver_reversal", "refund_reversal" -> -a.amountCent();
                     default -> 0L;
                 })
@@ -790,6 +858,48 @@ public class BarBillingService {
                 bill.id(), null, actual.idempotencyKey(),
                 Map.of("tip_amount_cent", tip, "tip_total_cent", newTip));
         return saved;
+    }
+
+    /** 第十批 TK-25-R1：退品/退款的商品金额按台组低消进度拆出留款额；无开台会话归属 = 0（沿用全额退）。 */
+    private long minSpendRetainedCent(BarBillRecord bill, long goodsAmountCent) {
+        if (goodsAmountCent <= 0 || bill.orderId() == null) {
+            return 0L;
+        }
+        return repository.findSessionIdByOrderId(bill.orderId())
+                .map(sessionId -> goodsAmountCent - BarMinSpend.refundableCent(
+                        BarMinSpend.consumedCent(repository, sessionId),
+                        BarMinSpend.thresholdCent(repository, sessionId), goodsAmountCent))
+                .orElse(0L);
+    }
+
+    /** 留款记录：不动应付、不出金，仍计入低消进度，供后续账单抵用（createBill）。 */
+    private BarBillAdjustmentRecord saveMinSpendRetained(BarBillRecord bill, long retainedCent, long payableCent,
+            String reason, String requestedBy, String idempotencyKey, Instant now) {
+        return repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                "bill_adjustment_" + billSlug(bill.id() + ":min_spend_retained:" + idempotencyKey),
+                bill.id(), "min_spend_retained", retainedCent, payableCent, payableCent,
+                "退款留款（低消）: " + reason, requestedBy, true, "applied", idempotencyKey + ":retained", List.of(), null,
+                billAdjustmentSnapshot(bill, payableCent, bill.paymentStatus(), bill.settlementStatus(), null), now, null));
+    }
+
+    /** 留款从末尾商品分项扣减（分项合计须等于实际退款额，供薪资退款分项核对）。 */
+    private static java.util.List<BarBillAdjustmentRequest.RefundLine> reduceGoodsLines(
+            java.util.List<BarBillAdjustmentRequest.RefundLine> lines, long retainedCent) {
+        java.util.List<BarBillAdjustmentRequest.RefundLine> out = new java.util.ArrayList<>();
+        long left = retainedCent;
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            BarBillAdjustmentRequest.RefundLine line = lines.get(i);
+            if ("goods".equals(line.componentType()) && left > 0) {
+                long cut = Math.min(left, line.amountCent());
+                left -= cut;
+                if (line.amountCent() - cut > 0) {
+                    out.add(0, new BarBillAdjustmentRequest.RefundLine(line.sourceBillId(), line.componentType(), line.amountCent() - cut));
+                }
+            } else {
+                out.add(0, line);
+            }
+        }
+        return out;
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {

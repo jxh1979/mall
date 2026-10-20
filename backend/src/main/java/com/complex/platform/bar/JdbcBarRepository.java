@@ -1,4 +1,6 @@
 package com.complex.platform.bar;
+
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -48,12 +50,13 @@ class JdbcBarRepository implements BarRepository {
                 INSERT INTO bar_tables (
                     id, bar_id, merchant_id, table_code, table_name, table_type, capacity,
                     allowed_pass_free_guest_count, min_consumption_cent, currency,
-                    status, created_at, updated_at
+                    status, created_at, updated_at, pending_clear_since
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_code, :table_name, :table_type, :capacity,
                     :allowed_pass_free_guest_count, :min_consumption_cent, :currency,
-                    :status, :created_at, :updated_at
+                    :status, :created_at, :updated_at,
+                    CASE WHEN CAST(:status AS VARCHAR) = 'pending_clear' THEN CAST(:updated_at AS TIMESTAMPTZ) END
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -66,7 +69,12 @@ class JdbcBarRepository implements BarRepository {
                     min_consumption_cent = EXCLUDED.min_consumption_cent,
                     currency = EXCLUDED.currency,
                     status = EXCLUDED.status,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    -- 复核 money m4：待清台起点只在进入待清台时写一次，编辑资料不重置；离开待清台清空。
+                    pending_clear_since = CASE
+                        WHEN EXCLUDED.status <> 'pending_clear' THEN NULL
+                        WHEN bar_tables.status = 'pending_clear' THEN COALESCE(bar_tables.pending_clear_since, EXCLUDED.pending_clear_since)
+                        ELSE EXCLUDED.pending_clear_since END
                 """, parameterSource.tableParameters(table));
         return table;
     }
@@ -89,25 +97,27 @@ class JdbcBarRepository implements BarRepository {
         return ids;
     }
 
+    // 第十批 TK-27-R2（BSM L1058 待清台超时提醒）：列表面带出待清台起始时刻与是否超过酒吧（merchant_type=bar 的商户）
+    // 配置的 merchants.pending_clear_alert_minutes（出厂 15）；起点为 bar_tables.pending_clear_since（复核 money m4，编辑台位不重置）。
+    private static final String TABLE_LISTING_SQL = """
+            SELECT t.id, t.bar_id, t.merchant_id, t.table_code, t.table_name, t.table_type, t.capacity,
+                   t.allowed_pass_free_guest_count, t.min_consumption_cent, t.currency,
+                   t.status, t.created_at, t.updated_at,
+                   CASE WHEN t.status = 'pending_clear' THEN t.pending_clear_since END AS pending_clear_since,
+                   (t.status = 'pending_clear'
+                        AND t.pending_clear_since < now() - make_interval(mins => COALESCE(m.pending_clear_alert_minutes, 15)))
+                       AS pending_clear_overdue
+              FROM bar_tables t
+              LEFT JOIN merchants m ON m.id = t.bar_id
+            """;
+
     @Override
     public List<BarTableRecord> listTables(Optional<String> merchantScope) {
         if (merchantScope.isEmpty()) {
-            return jdbcTemplate.query("""
-                    SELECT id, bar_id, merchant_id, table_code, table_name, table_type, capacity,
-                           allowed_pass_free_guest_count, min_consumption_cent, currency,
-                           status, created_at, updated_at
-                      FROM bar_tables
-                     ORDER BY created_at DESC, id
-                    """, rowMapper::mapTable);
+            return jdbcTemplate.query(TABLE_LISTING_SQL + " ORDER BY t.created_at DESC, t.id", rowMapper::mapTableListing);
         }
-        return jdbcTemplate.query("""
-                SELECT id, bar_id, merchant_id, table_code, table_name, table_type, capacity,
-                       allowed_pass_free_guest_count, min_consumption_cent, currency,
-                       status, created_at, updated_at
-                  FROM bar_tables
-                 WHERE merchant_id = :merchant_id
-                 ORDER BY created_at DESC, id
-                """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapTable);
+        return jdbcTemplate.query(TABLE_LISTING_SQL + " WHERE t.merchant_id = :merchant_id ORDER BY t.created_at DESC, t.id",
+                Map.of("merchant_id", merchantScope.get()), rowMapper::mapTableListing);
     }
 
     @Override
@@ -191,7 +201,8 @@ class JdbcBarRepository implements BarRepository {
                     deposit_intent_id, deposit_paid_at, deposit_settlement,
                     invitation_token, invitation_signature, invitation_capacity,
                     invitation_status, invitation_issued_at,
-                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                    deposit_channel, deposit_settled_at
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :customer_id, :reserved_at, :guest_count,
@@ -201,7 +212,8 @@ class JdbcBarRepository implements BarRepository {
                     :deposit_intent_id, :deposit_paid_at, :deposit_settlement,
                     :invitation_token, :invitation_signature, :invitation_capacity,
                     :invitation_status, :invitation_issued_at,
-                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :deposit_channel, :deposit_settled_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -234,7 +246,9 @@ class JdbcBarRepository implements BarRepository {
                     delete_status = EXCLUDED.delete_status,
                     delete_requested_by = EXCLUDED.delete_requested_by,
                     delete_requested_at = EXCLUDED.delete_requested_at,
-                    delete_reason = EXCLUDED.delete_reason
+                    delete_reason = EXCLUDED.delete_reason,
+                    deposit_channel = EXCLUDED.deposit_channel,
+                    deposit_settled_at = EXCLUDED.deposit_settled_at
                 """, parameterSource.reservationParameters(reservation));
         return reservation;
     }
@@ -1390,6 +1404,91 @@ class JdbcBarRepository implements BarRepository {
                  WHERE session_id = :session_id
                  ORDER BY created_at DESC, id
                 """, Map.of("session_id", sessionId), rowMapper::mapTableSessionAdjustment);
+    }
+
+    // ── 第十批 TK-24/TK-25：台组（并台链）口径原语 ────────────────────────────────
+    @Override
+    public List<String> familySessionIds(String sessionId, boolean includeTransferred) {
+        return jdbcTemplate.query("""
+                WITH RECURSIVE family AS (
+                    SELECT id, 0 AS depth FROM bar_table_sessions WHERE id = :id
+                    UNION ALL
+                    SELECT s.id, f.depth + 1 FROM bar_table_sessions s JOIN family f ON s.source_session_id = f.id
+                     WHERE s.status = 'merged' OR (:include_transferred AND s.status = 'merged_transferred')
+                )
+                SELECT id FROM family ORDER BY depth, id
+                """, Map.of("id", sessionId, "include_transferred", includeTransferred),
+                (rs, rowNum) -> rs.getString("id"));
+    }
+
+    @Override
+    public List<BarOrderRecord> listOrdersWithoutSession(List<String> tableIds, Instant since) {
+        if (tableIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT o.id, o.bar_id, o.merchant_id, o.table_id, o.reservation_id, o.customer_id, o.order_source,
+                       o.status, o.total_amount_cent, o.currency, o.created_terminal, o.device_id,
+                       o.sales_staff_id, o.created_at, o.updated_at, o.order_type, o.paid_at
+                  FROM bar_orders o
+                 WHERE o.table_id IN (:table_ids)
+                   AND o.created_at >= :since
+                   AND o.status <> 'cancelled'
+                   AND NOT EXISTS (SELECT 1 FROM bar_order_service_sources s WHERE s.order_id = o.id)
+                 ORDER BY o.created_at, o.id
+                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+                .addValue("table_ids", tableIds)
+                .addValue("since", timestampWithTimeZone(since)), rowMapper::mapOrder);
+    }
+
+    @Override
+    public void saveOrderServiceSource(String orderId, String sessionId) {
+        jdbcTemplate.update("""
+                INSERT INTO bar_order_service_sources (order_id, session_id, table_id, project_id, merchant_id, business_date)
+                SELECT :order_id, s.id, s.table_id, sp.project_id, t.merchant_id, s.business_date
+                  FROM bar_table_sessions s
+                  JOIN bar_tables t ON t.id = s.table_id
+                  JOIN spaces sp ON sp.id = t.space_id
+                 WHERE s.id = :session_id
+                ON CONFLICT (order_id) DO NOTHING
+                """, Map.of("order_id", orderId, "session_id", sessionId));
+    }
+
+    @Override
+    public List<String> listOrderIdsBySessionIds(List<String> sessionIds) {
+        if (sessionIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT order_id FROM bar_order_service_sources
+                 WHERE session_id IN (:session_ids)
+                 ORDER BY recorded_at, order_id
+                """, Map.of("session_ids", sessionIds), (rs, rowNum) -> rs.getString("order_id"));
+    }
+
+    @Override
+    public Optional<String> findSessionIdByOrderId(String orderId) {
+        return jdbcTemplate.query("""
+                SELECT session_id FROM bar_order_service_sources WHERE order_id = :order_id
+                """, Map.of("order_id", orderId), (rs, rowNum) -> rs.getString("session_id")).stream().findFirst();
+    }
+
+    @Override
+    public boolean depositRefundPayableExists(String reservationId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM ar_ap_items
+                                WHERE direction = 'payable' AND source_type = 'bar_deposit_refund' AND source_id = :id)
+                """, Map.of("id", reservationId), Boolean.class));
+    }
+
+    @Override
+    public long refundGoodsCent(String adjustmentId, long amountCent) {
+        List<Long> goods = jdbcTemplate.query("""
+                SELECT CASE WHEN count(*) = 0 THEN NULL
+                            ELSE COALESCE(SUM(amount_cent) FILTER (WHERE component_type = 'goods'), 0) END AS goods
+                  FROM bar_payroll_refund_lines WHERE adjustment_id = :id
+                """, Map.of("id", adjustmentId), (rs, rowNum) -> (Long) rs.getObject("goods", Long.class));
+        return goods.isEmpty() || goods.get(0) == null ? amountCent : goods.get(0);
     }
 
     // ── 库存原子扣补 / 流水改道成本管道 / 支付意向 ────────────────────────────────

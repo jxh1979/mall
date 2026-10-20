@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.customer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -477,6 +477,25 @@ class CustomerControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
+    }
+
+    /** TK-21-R3：自助注销请求体按前端真实形状（蛇形键 waive_balance）进入服务层。 */
+    @Test
+    void deregisterAcceptsSnakeCaseWaiveBalanceBody() throws Exception {
+        when(service.deregisterAccount("cust_token_1", true)).thenReturn(new CustomerRecord(
+                "customer_1", "13800008000", "138****8000", "deregistered", null, null,
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
+
+        mockMvc.perform(post("/api/v1/customer/deregister")
+                        .header("X-Customer-Token", "cust_token_1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"waive_balance": true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("deregistered"));
+
+        verify(service).deregisterAccount("cust_token_1", true);
     }
 
     @TestConfiguration

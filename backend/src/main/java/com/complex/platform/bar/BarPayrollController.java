@@ -1,5 +1,5 @@
 package com.complex.platform.bar;
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.bar.BarPayrollRequests.*;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.ApiException;
@@ -58,7 +58,7 @@ public class BarPayrollController {
     }
     @PostMapping("/table-sessions/{id}/service-close")
     public ApiResponse<List<Responsibility>> serviceClose(@PathVariable("id")String id,@RequestBody CloseSession r) {
-        return call("bar.service.closed","bar.table_session.transfer","bar_table_session",id,r==null?null:r.idempotencyKey(),false,()->responsibilities.close(id,r));
+        return call("bar.service.closed","bar.table.open_close","bar_table_session",id,r==null?null:r.idempotencyKey(),false,()->responsibilities.close(id,r));
     }
     private <T> ApiResponse<T> call(String event,String permission,String type,String id,String key,boolean read,Supplier<T> work) {
         try {

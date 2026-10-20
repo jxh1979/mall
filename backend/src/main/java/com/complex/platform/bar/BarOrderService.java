@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -33,6 +33,9 @@ public class BarOrderService {
 
     @Autowired
     BarServiceResponsibilityService serviceResponsibilities;
+    // 第十批 TK-24-R3：落单后按台组低消进度判定金达标退回（字段注入免改构造点；单测手工置位）。
+    @Autowired(required = false)
+    BarDepositSettlementService depositSettlements;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -297,6 +300,8 @@ public class BarOrderService {
                     now
             ));
         }
+        // 第十批 TK-24-R3（BSM L1062「达标时，各笔定金分别原路退回」）：落单即按台组低消进度判定金。
+        if (depositSettlements != null) depositSettlements.evaluateForOrder(order.id());
         return order;
     }
 
@@ -559,6 +564,7 @@ public class BarOrderService {
                 order.createdAt(),
                 now
         ));
+        if (depositSettlements != null) depositSettlements.evaluateForOrder(order.id());
         return last;
     }
 
@@ -616,6 +622,19 @@ public class BarOrderService {
                     item.isGift(),
                     now
             ));
+        }
+        // 第十批 TK-26-R1（BSM L1025「分别标注已上菜与未上菜」；ENUM L112 出品票据状态流转；BSM L823「整笔……全部实际
+        // 履约完成的时点」；W01）：非撤单明细全部送达，整单与出品票据才置已送达；部分送达只在票据事件上记在途留痕。
+        boolean allDelivered = repository.listOrderItems(order.id()).stream()
+                .filter(item -> !"voided".equals(item.deliveryStatus()))
+                .allMatch(item -> "delivered".equals(item.deliveryStatus()));
+        if (!allDelivered) {
+            recordPartialDelivery(order, actual, actorId, deliveryEvidenceAttachmentIds, now);
+            traceabilityService.recordResponsibility(new TraceabilityResponsibilityRecord(
+                    null, order.id(), order.tableId(), order.customerId(), null,
+                    actorId, List.of(), order.salesStaffId(), null, null, null, null,
+                    actorId, null, null, null, null, null, "partial"));
+            return repository.findOrderById(order.id()).orElse(order);
         }
         BarOrderRecord deliveredOrder = repository.saveOrder(new BarOrderRecord(
                 order.id(),
@@ -834,6 +853,34 @@ public class BarOrderService {
                             now
                     ));
                 });
+    }
+
+    /** 第十批 TK-26-R1：部分明细送达——票据状态不动，只追加一条 partial_deliver 事件（已取消/异常/已送达票据不写）。 */
+    private void recordPartialDelivery(
+            BarOrderRecord order,
+            BarOrderDeliveryRequest request,
+            String actorId,
+            List<String> deliveryEvidenceAttachmentIds,
+            Instant now
+    ) {
+        String idempotencyKey = requireText(request.idempotencyKey(), "idempotency_key");
+        repository.findProductionTicketByOrderId(order.id())
+                .filter(ticket -> !List.of("cancelled", "exception", "delivered").contains(ticket.ticketStatus()))
+                .ifPresent(ticket -> repository.saveProductionTicketEvent(new BarProductionTicketEventRecord(
+                        "production_event_" + slug(ticket.id() + ":partial:" + idempotencyKey),
+                        ticket.id(),
+                        ticket.orderId(),
+                        ticket.barId(),
+                        "partial_deliver",
+                        ticket.ticketStatus(),
+                        ticket.ticketStatus(),
+                        null,
+                        actorId,
+                        trimToDefault(request.operatorNote(), "partially delivered by service staff"),
+                        idempotencyKey,
+                        deliveryEvidenceAttachmentIds,
+                        now
+                )));
     }
 
     private void atomicDecreaseStock(String itemId, String locationId, int quantity, String orderId, List<String> evidenceAttachmentIds) {
@@ -1370,53 +1417,73 @@ public class BarOrderService {
             BarBillRecord bill = repository.findBillById(current.billId()).orElse(null);
             if (bill != null) {
                 checkMerchantOwnership(bill.merchantId());
-                long amount = current.amountCent();
-                long beforePayable = bill.payableAmountCent();
-                long afterPayable = beforePayable + amount;
-                boolean settled = "settled".equals(bill.settlementStatus());
+                // 第十批 TK-25：驳回退品时留款一并作废（status→reversed，不再计入低消进度与留款余额）；
+                // 应付加回额取 void 当时实际减掉的额（可退部分），不是明细全额；全额留款时无应付可加回。
+                List<BarBillAdjustmentRecord> voidAdjustments = repository.listBillAdjustments(bill.id());
+                String retainedId = boundedAdjustmentId("bill_adjustment_void_",
+                        bill.id() + ":" + item.id() + ":" + current.idempotencyKey() + ":retained");
+                voidAdjustments.stream()
+                        .filter(a -> retainedId.equals(a.id()) && "applied".equals(a.status()))
+                        .forEach(a -> repository.saveBillAdjustment(new BarBillAdjustmentRecord(a.id(), a.billId(),
+                                a.adjustmentType(), a.amountCent(), a.beforePayableAmountCent(), a.afterPayableAmountCent(),
+                                a.reason(), a.requestedByUserId(), a.approvalRequired(), "reversed", a.idempotencyKey(),
+                                a.evidenceAttachmentIds(), a.arApItemId(), a.snapshotJson(), a.createdAt(), a.refundedAt())));
+                BarBillAdjustmentRecord applied = voidAdjustments.stream()
+                        .filter(a -> a.id().equals(current.billAdjustmentId())).findFirst().orElse(null);
+                if (applied == null || !retainedId.equals(applied.id())) {
+                    long amount = applied != null ? applied.amountCent() : current.amountCent();
+                    long beforePayable = bill.payableAmountCent();
+                    long afterPayable = beforePayable + amount;
+                    boolean settled = "settled".equals(bill.settlementStatus());
 
-                // 反向 adjustment 用独立幂等键（区别于原 void 减项，避开 uq_bar_bill_adjustments_idempotency 唯一索引冲突）。
-                String reversalIdempotencyKey = current.idempotencyKey() + ":void_reject";
-                // 已结退款过账冲正：过一条对冲应收，财务退款台账净额归零。
-                String reversalArApItemId = null;
-                String reversalAdjustmentId = boundedAdjustmentId("bill_adjustment_void_reject_", bill.id() + ":" + item.id() + ":" + reversalIdempotencyKey);
-                if (settled) {
-                    BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
-                            .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
-                    reversalArApItemId = receivableLedgerService.reverseRefundPayable(
-                            bill, refundOrder, reversalAdjustmentId, amount,
-                            reversalIdempotencyKey, "void rejected: " + current.reason(),
-                            safeList(current.evidenceAttachmentIds()));
+                    // 反向 adjustment 用独立幂等键（区别于原 void 减项，避开 uq_bar_bill_adjustments_idempotency 唯一索引冲突）。
+                    String reversalIdempotencyKey = current.idempotencyKey() + ":void_reject";
+                    // 已结退款过账冲正：过一条对冲应收，财务退款台账净额归零。
+                    String reversalArApItemId = null;
+                    String reversalAdjustmentId = boundedAdjustmentId("bill_adjustment_void_reject_", bill.id() + ":" + item.id() + ":" + reversalIdempotencyKey);
+                    if (settled) {
+                        BarOrderRecord refundOrder = repository.findOrderById(bill.orderId())
+                                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
+                        // TK-20-R2：原退款若（部分）回冲到了储值卡，先按同额扣回；剩余才是当时挂出的应付，按原额对冲。
+                        long storedValueReversed = receivableLedgerService.reverseStoredValueRefund(
+                                bill, refundOrder, current.billAdjustmentId(), reversalIdempotencyKey,
+                                "void rejected: " + current.reason());
+                        long payableAmount = amount - storedValueReversed;
+                        reversalArApItemId = payableAmount <= 0 ? null : receivableLedgerService.reverseRefundPayable(
+                                bill, refundOrder, reversalAdjustmentId, payableAmount,
+                                reversalIdempotencyKey, "void rejected: " + current.reason(),
+                                safeList(current.evidenceAttachmentIds()));
+                    }
+
+                    repository.saveBill(com.complex.platform.bar.BarBillRecords.billWithAmounts(
+                            bill,
+                            bill.subtotalAmountCent(),
+                            bill.discountAmountCent(),
+                            bill.depositDeductAmountCent(),
+                            afterPayable,
+                            bill.paidAmountCent(),
+                            bill.paymentStatus(),
+                            bill.settlementStatus(),
+                            now));
+                    repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                            reversalAdjustmentId,
+                            bill.id(),
+                            settled ? "refund_reversal" : "waiver_reversal",
+                            amount,
+                            beforePayable,
+                            afterPayable,
+                            "void rejected, restore bill: " + current.reason(),
+                            reviewer,
+                            true,
+                            "applied",
+                            reversalIdempotencyKey,
+                            safeList(current.evidenceAttachmentIds()),
+                            reversalArApItemId,
+                            com.complex.platform.bar.BarBillRecords.billAdjustmentSnapshot(
+                                    bill, afterPayable, bill.paymentStatus(), bill.settlementStatus(), reversalArApItemId),
+                            now,
+                            settled ? now : null));
                 }
-
-                repository.saveBill(com.complex.platform.bar.BarBillRecords.billWithAmounts(
-                        bill,
-                        bill.subtotalAmountCent(),
-                        bill.discountAmountCent(),
-                        bill.depositDeductAmountCent(),
-                        afterPayable,
-                        bill.paidAmountCent(),
-                        bill.paymentStatus(),
-                        bill.settlementStatus(),
-                        now));
-                repository.saveBillAdjustment(new BarBillAdjustmentRecord(
-                        reversalAdjustmentId,
-                        bill.id(),
-                        settled ? "refund_reversal" : "waiver_reversal",
-                        amount,
-                        beforePayable,
-                        afterPayable,
-                        "void rejected, restore bill: " + current.reason(),
-                        reviewer,
-                        true,
-                        "applied",
-                        reversalIdempotencyKey,
-                        safeList(current.evidenceAttachmentIds()),
-                        reversalArApItemId,
-                        com.complex.platform.bar.BarBillRecords.billAdjustmentSnapshot(
-                                bill, afterPayable, bill.paymentStatus(), bill.settlementStatus(), reversalArApItemId),
-                        now,
-                        settled ? now : null));
             }
         }
 
@@ -1469,10 +1536,33 @@ public class BarOrderService {
             throw ApiException.conflict("BAR_BILL_ORDER_MISMATCH", "账单与被作废明细的订单不一致");
         }
         boolean settled = "settled".equals(bill.settlementStatus());
-        long amount = item.amountCent();
+        Instant now = Instant.now();
+        // 第十批 TK-25-R1（BSM L1064「退款后该台位累计消费将低于……最低消费的，不退款——该笔金额留在本台位账上，客人可继续点其他产品」；
+        // DEC-R6-04、Q28）：有开台会话归属时按台组低消进度拆可退/留款；留款记 min_spend_retained（不减应付、不出金），
+        // 仍计入低消进度，供后续账单抵用（BarBillingService.createBill）。无会话归属沿用全额退。
+        long retained = repository.findSessionIdByOrderId(item.orderId())
+                .map(sessionId -> item.amountCent() - BarMinSpend.refundableCent(
+                        BarMinSpend.consumedCent(repository, sessionId),
+                        BarMinSpend.thresholdCent(repository, sessionId), item.amountCent()))
+                .orElse(0L);
+        String retainedAdjustmentId = null;
+        if (retained > 0) {
+            retainedAdjustmentId = boundedAdjustmentId("bill_adjustment_void_",
+                    bill.id() + ":" + item.id() + ":" + idempotencyKey + ":retained");
+            repository.saveBillAdjustment(new BarBillAdjustmentRecord(
+                    retainedAdjustmentId, bill.id(), "min_spend_retained", retained,
+                    bill.payableAmountCent(), bill.payableAmountCent(), "void item retained (min spend): " + reason,
+                    actorId, true, "applied", idempotencyKey + ":retained", evidenceAttachmentIds, null,
+                    com.complex.platform.bar.BarBillRecords.billAdjustmentSnapshot(
+                            bill, bill.payableAmountCent(), bill.paymentStatus(), bill.settlementStatus(), null),
+                    now, null));
+        }
+        long amount = item.amountCent() - retained;
+        if (amount <= 0) {
+            return retainedAdjustmentId;
+        }
         long beforePayable = bill.payableAmountCent();
         long afterPayable = Math.max(0L, beforePayable - amount);
-        Instant now = Instant.now();
         String adjustmentType = settled ? "refund" : "waiver";
         Instant refundedAt = settled ? now : null;
         // 已结账单退酒资金回退 → finance refund 应付台账（含 DAY_CLOSE_LOCKED 校验在 finance 层强拦截）。

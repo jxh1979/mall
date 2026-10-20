@@ -1,5 +1,7 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -242,6 +244,15 @@ class VoucherServiceTests {
         return definition;
     }
 
+    private VoucherDefinitionRecord discountDefinition(String id, String merchantId, String merchantType) {
+        VoucherDefinitionRecord definition = new VoucherDefinitionRecord(
+                id, "满减券", "merchant_discount", "in_store_staff", "none", merchantId,
+                5000L, null, null, null, null, null, null, "active", true,
+                Instant.parse("2026-07-18T00:00:00Z"), Instant.parse("2026-07-18T00:00:00Z"), merchantType);
+        repository.insertDefinition(definition);
+        return definition;
+    }
+
     private VoucherDefinitionRecord goodsDefinition(String id, String merchantId, Long internalPriceCent) {
         VoucherDefinitionRecord definition = new VoucherDefinitionRecord(
                 id, "店内实物券", "in_store_goods", "in_store_staff",
@@ -374,20 +385,61 @@ class VoucherServiceTests {
 
     // ── 三类核销 ───────────────────────────────────────────────────────────
 
+    // 第十批 TK-28（ENUM L81「商户折扣券——到对应商户抵扣」；PGM L303）：折扣券只能在结账时抵扣核销，
+    // 独立核销端点拒绝（VOUCHER_REQUIRES_BILL），券不被消耗、无核销记录。
     @Test
-    void redeemDiscountVoucherMarksRedeemedWithoutInventoryOrSettlement() {
-        VoucherDefinitionRecord definition = discountDefinition("vdef_d1", "merchant-1");
+    void standaloneRedeemOfMerchantDiscountIsRejected() {
+        // 操作员裁决 2026-10-20 第三轮第 9 条：「必须结账抵扣」只对酒吧商户（merchant_type=bar）的券生效。
+        VoucherDefinitionRecord definition = discountDefinition("vdef_d1", "merchant-1", "bar");
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-d1");
 
-        VoucherRedemptionEntryRecord entry = service.redeem(
-                new VoucherRedeemRequest("redeem-d1", instance.code(), null, "结账抵扣"));
+        assertThatThrownBy(() -> service.redeem(
+                new VoucherRedeemRequest("redeem-d1", instance.code(), null, "结账抵扣")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_REQUIRES_BILL"));
 
-        assertThat(entry.voucherKind()).isEqualTo("merchant_discount");
-        assertThat(entry.settlementMode()).isEqualTo("none");
-        assertThat(entry.settlementAmountCent()).isNull();
-        assertThat(entry.arApItemId()).isNull();
-        assertThat(entry.merchantId()).isEqualTo("merchant-1");
+        assertThat(repository.instances.get(instance.id()).status()).isEqualTo("issued");
+        assertThat(repository.redemptions).isEmpty();
+        verifyNoInteractions(inventoryService);
+        verifyNoInteractions(settlementPort);
+    }
+
+
+    // 操作员裁决 2026-10-20 第三轮第 9 条「非酒吧保留独立核销」：餐饮、零售商户的折扣券仍由商户在后台独立核销。
+    @Test
+    void standaloneRedeemOfNonBarMerchantDiscountSucceeds() {
+        VoucherDefinitionRecord definition = discountDefinition("vdef_dc", "merchant-c", "catering");
+        VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-dc");
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> service.redeem(new VoucherRedeemRequest("redeem-dc", instance.code(), null, "餐饮店核销")))
+                .doesNotThrowAnyException();
+
+        assertThat(repository.redemptions).hasSize(1);
         assertThat(repository.instances.get(instance.id()).status()).isEqualTo("redeemed");
+    }
+
+    // 第十批 TK-28：结账路径核销折扣券——抵扣额 = min(面值, 可抵扣应付)，核销记录关联账单；他商户券拒绝不消耗。
+    @Test
+    void redeemForBillDeductsMinOfFaceAndPayableAndRejectsOtherMerchant() {
+        VoucherDefinitionRecord definition = discountDefinition("vdef_d2", "merchant-1");
+        VoucherInstanceRecord capped = issueTo("customer-1", definition, "issue-d2a");
+        VoucherInstanceRecord full = issueTo("customer-1", definition, "issue-d2b");
+
+        VoucherRedemptionEntryRecord entry = service.redeemForBill(capped.code(), null, "merchant-1", "bar_bill", "bill_1", 3000L);
+        assertThat(entry.deductionAmountCent()).isEqualTo(3000L);
+        assertThat(entry.billType()).isEqualTo("bar_bill");
+        assertThat(entry.billId()).isEqualTo("bill_1");
+        assertThat(repository.instances.get(capped.id()).status()).isEqualTo("redeemed");
+
+        VoucherRedemptionEntryRecord entry2 = service.redeemForBill(null, full.id(), "merchant-1", "bar_bill", "bill_2", 30000L);
+        assertThat(entry2.deductionAmountCent()).isEqualTo(5000L);
+
+        VoucherInstanceRecord other = issueTo("customer-1", discountDefinition("vdef_d3", "merchant-2"), "issue-d3");
+        assertThatThrownBy(() -> service.redeemForBill(other.code(), null, "merchant-1", "bar_bill", "bill_3", 30000L))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_MERCHANT_MISMATCH"));
+        assertThat(repository.instances.get(other.id()).status()).isEqualTo("issued");
         verifyNoInteractions(inventoryService);
         verifyNoInteractions(settlementPort);
     }
@@ -449,7 +501,8 @@ class VoucherServiceTests {
 
     @Test
     void redeemRejectsExpiredRevokedAndAlreadyRedeemed() {
-        VoucherDefinitionRecord definition = discountDefinition("vdef_d2", "merchant-1");
+        // 第十批 TK-28：商户折扣券改为只在结账时抵扣核销（VOUCHER_REQUIRES_BILL），通用核销闸用例改用店内实物券承载。
+        VoucherDefinitionRecord definition = goodsDefinition("vdef_d2", "merchant-1", null);
         // 过期券：拒绝且惰性落 expired。
         Instant past = Instant.parse("2026-01-01T00:00:00Z");
         repository.insertInstance(new VoucherInstanceRecord(
@@ -476,7 +529,8 @@ class VoucherServiceTests {
 
     @Test
     void redeemIsIdempotentBySameKeyAndRejectsSameKeyDifferentPayload() {
-        VoucherDefinitionRecord definition = discountDefinition("vdef_d3", "merchant-1");
+        // 第十批 TK-28：商户折扣券改为只在结账时抵扣核销（VOUCHER_REQUIRES_BILL），通用核销闸用例改用店内实物券承载。
+        VoucherDefinitionRecord definition = goodsDefinition("vdef_d3", "merchant-1", null);
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-idem");
         VoucherRedemptionEntryRecord first = service.redeem(
                 new VoucherRedeemRequest("same-key", instance.code(), null, "第一次"));
@@ -493,8 +547,9 @@ class VoucherServiceTests {
 
     @Test
     void merchantScopedActorCannotRedeemOtherMerchantsVoucherButCanRedeemOwnAndPlatform() {
-        VoucherDefinitionRecord otherMerchant = discountDefinition("vdef_other", "merchant-other");
-        VoucherDefinitionRecord ownMerchant = discountDefinition("vdef_own", "merchant-scope");
+        // 第十批 TK-28：商户折扣券改为只在结账时抵扣核销（VOUCHER_REQUIRES_BILL），通用核销闸用例改用店内实物券承载。
+        VoucherDefinitionRecord otherMerchant = goodsDefinition("vdef_other", "merchant-other", null);
+        VoucherDefinitionRecord ownMerchant = goodsDefinition("vdef_own", "merchant-scope", null);
         VoucherDefinitionRecord platform = goodsDefinition("vdef_platform", null, null);
         VoucherInstanceRecord otherInstance = issueTo("customer-1", otherMerchant, "issue-other");
         VoucherInstanceRecord ownInstance = issueTo("customer-1", ownMerchant, "issue-own");
@@ -519,7 +574,8 @@ class VoucherServiceTests {
 
     @Test
     void revokeRequiresReasonOnlyIssuedRevocableAndReplayIsIdempotent() {
-        VoucherDefinitionRecord definition = discountDefinition("vdef_rv", "merchant-1");
+        // 第十批 TK-28：商户折扣券改为只在结账时抵扣核销（VOUCHER_REQUIRES_BILL），通用核销闸用例改用店内实物券承载。
+        VoucherDefinitionRecord definition = goodsDefinition("vdef_rv", "merchant-1", null);
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-rv2");
         assertThatThrownBy(() -> service.revoke(instance.id(), new VoucherRevokeRequest("k0", " ")))
                 .isInstanceOf(ApiException.class).hasMessageContaining("reason");
@@ -723,7 +779,8 @@ class VoucherServiceTests {
 
     @Test
     void redeemBlockedWhileTransferPending() {
-        VoucherDefinitionRecord definition = discountDefinition("vdef_tf", "merchant-1");
+        // 第十批 TK-28：商户折扣券改为只在结账时抵扣核销（VOUCHER_REQUIRES_BILL），通用核销闸用例改用店内实物券承载。
+        VoucherDefinitionRecord definition = goodsDefinition("vdef_tf", "merchant-1", null);
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-tf");
         // 该券有在途转赠：核销冻结拒绝，券保持 issued，不产生核销记录。
         when(transferRepository.existsPendingForInstance(instance.id())).thenReturn(true);

@@ -1,5 +1,7 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -24,14 +26,16 @@ class JdbcVoucherRepository implements VoucherRepository {
     private static final String DEFINITION_COLS =
             "id, name, voucher_kind, redeem_method, settlement_mode, merchant_id, face_value_cent, "
                     + "inventory_item_id, stock_location_id, stock_quantity, internal_price_cent, "
-                    + "valid_days, valid_until, status, transferable, created_at, updated_at";
+                    + "valid_days, valid_until, status, transferable, created_at, updated_at, "
+                    // 操作员裁决 2026-10-20 第三轮第 9 条：带出券定义商户的业态（只读派生），「必须结账抵扣」只对酒吧商户生效。
+                    + "(SELECT m.merchant_type FROM merchants m WHERE m.id = voucher_definitions.merchant_id) AS merchant_type";
     private static final String INSTANCE_COLS =
             "id, definition_id, customer_id, code, source_type, source_ref, status, issued_at, "
                     + "expires_at, redeemed_at, revoked_at, revoke_reason, stock_reserved, created_at, updated_at";
     private static final String REDEMPTION_COLS =
             "id, voucher_instance_id, definition_id, voucher_kind, customer_id, merchant_id, operator_user_id, "
                     + "redeem_method, settlement_mode, settlement_amount_cent, ar_ap_item_id, stock_movement_ref, "
-                    + "external_redemption_ref, note, redeemed_at, created_at";
+                    + "external_redemption_ref, note, redeemed_at, created_at, bill_type, bill_id, deduction_amount_cent";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -276,15 +280,18 @@ class JdbcVoucherRepository implements VoucherRepository {
                 INSERT INTO voucher_redemption_records (
                     id, voucher_instance_id, definition_id, voucher_kind, customer_id, merchant_id, operator_user_id,
                     redeem_method, settlement_mode, settlement_amount_cent, ar_ap_item_id, stock_movement_ref,
-                    external_redemption_ref, note, redeemed_at, created_at
+                    external_redemption_ref, note, redeemed_at, created_at, bill_type, bill_id, deduction_amount_cent
                 )
                 VALUES (
                     :id, :voucher_instance_id, :definition_id, :voucher_kind, :customer_id, :merchant_id, :operator_user_id,
                     :redeem_method, :settlement_mode, :settlement_amount_cent, :ar_ap_item_id, :stock_movement_ref,
-                    :external_redemption_ref, :note, :redeemed_at, :created_at
+                    :external_redemption_ref, :note, :redeemed_at, :created_at, :bill_type, :bill_id, :deduction_amount_cent
                 )
                 ON CONFLICT (voucher_instance_id) DO NOTHING
                 """, new MapSqlParameterSource()
+                .addValue("bill_type", entry.billType(), Types.VARCHAR)
+                .addValue("bill_id", entry.billId(), Types.VARCHAR)
+                .addValue("deduction_amount_cent", entry.deductionAmountCent(), Types.BIGINT)
                 .addValue("id", entry.id())
                 .addValue("voucher_instance_id", entry.voucherInstanceId())
                 .addValue("definition_id", entry.definitionId())
@@ -402,7 +409,8 @@ class JdbcVoucherRepository implements VoucherRepository {
                 rs.getString("status"),
                 rs.getBoolean("transferable"),
                 nullableInstant(rs, "created_at"),
-                nullableInstant(rs, "updated_at"));
+                nullableInstant(rs, "updated_at"),
+                rs.getString("merchant_type"));
     }
 
     private VoucherInstanceRecord mapInstance(ResultSet rs, int rowNum) throws SQLException {
@@ -441,6 +449,9 @@ class JdbcVoucherRepository implements VoucherRepository {
                 rs.getString("external_redemption_ref"),
                 rs.getString("note"),
                 nullableInstant(rs, "redeemed_at"),
-                nullableInstant(rs, "created_at"));
+                nullableInstant(rs, "created_at"),
+                rs.getString("bill_type"),
+                rs.getString("bill_id"),
+                rs.getObject("deduction_amount_cent", Long.class));
     }
 }

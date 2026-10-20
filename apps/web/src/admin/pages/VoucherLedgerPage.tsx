@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -323,6 +324,12 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
     return definitions.find((d) => d.id === definitionId)?.name ?? definitionId ?? "—";
   }
 
+  // 操作员裁决 2026-10-20 第三轮第 9 条「非酒吧保留独立核销」：只有酒吧商户（merchantType=bar）的折扣券须在结账时抵扣。
+  function requiresBillDeduction(definitionId: string | undefined): boolean {
+    const definition = definitions.find((d) => d.id === definitionId);
+    return definition?.voucherKind === "merchant_discount" && definition?.merchantType === "bar";
+  }
+
   function openInstanceDetail(row: VoucherInstanceRow) {
     setDetail({
       title: `券实例明细 · ${row.id}`,
@@ -453,12 +460,17 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
                     <button type="button" className="admin-row-detail-btn" aria-label="查看券实例明细" onClick={(event) => { event.stopPropagation(); openInstanceDetail(row); }}>查看详情</button>
                     {row.status === "issued" ? (
                       <>
+                        {/* 第十批 TK-28（ENUM L81「商户折扣券——到对应商户抵扣」）：酒吧商户折扣券只在酒吧结账时抵扣核销，台账不提供独立核销。 */}
+                        {requiresBillDeduction(row.definitionId) ? (
+                          <span className="admin-muted-action">在酒吧结账时抵扣核销</span>
+                        ) : (
                         <PermissionButton
                           permissionsState={effectivePermissions}
                           permissions={REDEEM_PERMS}
                           data-testid={`voucher-redeem-open-${row.id}`}
                           onClick={() => openRedeem(row)}
                         >核销</PermissionButton>
+                        )}
                         <PermissionButton
                           permissionsState={effectivePermissions}
                           permissions={MANAGE_PERMS}

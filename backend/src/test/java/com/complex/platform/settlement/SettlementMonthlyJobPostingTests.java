@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -137,6 +137,20 @@ class SettlementMonthlyJobPostingTests {
      * 🔴 过账独立闸(main follow-up):postingEnabled=false 时,settleMonth 照常算单→confirmed(内部计算),
      * 但 postBill <b>不执行</b>——单保持 confirmed、明细 draft、无 ar_ap。防"月度作业开关 prod=true 连带自动过账"激活账本首落。
      */
+    // 复核 money I7：过账闸关闭时，月结作业不得补跑演出结算（演出结算出账即挂应付，属真过账）。
+    @Test
+    void scheduledSettleWithPostingDisabledSkipsMediaPerformanceSettlement() {
+        MediaPerformanceSettlementService media = org.mockito.Mockito.mock(MediaPerformanceSettlementService.class);
+        SettlementMonthlyJob job = new SettlementMonthlyJob(
+                org.mockito.Mockito.mock(TicketDistributionSettlementService.class),
+                org.mockito.Mockito.mock(JdbcSettlementBillRepository.class),
+                org.mockito.Mockito.mock(SettlementPostingService.class),
+                Clock.fixed(Instant.parse("2009-09-15T04:00:00Z"), ZoneOffset.UTC), true, false);
+        job.mediaSettlement = media;
+        job.scheduledSettle();
+        org.mockito.Mockito.verify(media, org.mockito.Mockito.never()).settleConfirmedForMonth(org.mockito.ArgumentMatchers.any());
+    }
+
     @Test
     void scheduledSettleWithPostingDisabledDoesNotPostConfirmedBill() {
         // 未越池月 → confirmed(总池 80000、固定额 5000 ≤ 80000)。

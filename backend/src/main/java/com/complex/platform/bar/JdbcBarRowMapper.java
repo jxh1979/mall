@@ -1,4 +1,7 @@
 package com.complex.platform.bar;
+
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -38,6 +41,18 @@ final class JdbcBarRowMapper {
         );
     }
 
+    /** 第十批 TK-27-R2：台位列表面（带待清台起始时刻与超时标记）。 */
+    BarTableRecord mapTableListing(ResultSet resultSet, int rowNumber) throws SQLException {
+        BarTableRecord base = mapTable(resultSet, rowNumber);
+        return new BarTableRecord(
+                base.id(), base.barId(), base.merchantId(), base.tableCode(), base.tableName(), base.tableType(),
+                base.capacity(), base.allowedPassFreeGuestCount(), base.minConsumptionCent(), base.currency(),
+                base.status(), base.createdAt(), base.updatedAt(),
+                nullableInstant(resultSet, "pending_clear_since"),
+                resultSet.getBoolean("pending_clear_overdue")
+        );
+    }
+
     BarReservationRecord mapReservation(ResultSet resultSet, int rowNumber) throws SQLException {
         return new BarReservationRecord(
                 resultSet.getString("id"),
@@ -72,7 +87,9 @@ final class JdbcBarRowMapper {
                 resultSet.getString("delete_status"),
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
-                resultSet.getString("delete_reason")
+                resultSet.getString("delete_reason"),
+                resultSet.getString("deposit_channel"),
+                nullableInstant(resultSet, "deposit_settled_at")
         );
     }
 
