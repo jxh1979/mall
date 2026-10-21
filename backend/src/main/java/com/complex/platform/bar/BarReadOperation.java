@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import com.complex.platform.evidence.AuditedOperation;
 
 enum BarReadOperation implements AuditedOperation {
@@ -13,6 +15,8 @@ enum BarReadOperation implements AuditedOperation {
     LIST_TABLE_AVAILABILITY("bar.table_availability.viewed", "bar.table_availability.view_failed", "bar.reservation.create", "bar_table"),
     LIST_TABLE_SESSIONS("bar.table_session.viewed", "bar.table_session.view_failed", "bar.table_session.view", "bar_table_session"),
     LIST_BILL_OPERATIONS("bar.bill_operations.viewed", "bar.bill_operations.view_failed", "bar.bill.split_merge", "bar_bill_operation"),
+    // 第十一批 TK-04-R5：账单端反查本单商户消费奖励（凭查看订单账单的 bar.order.view，限本商户）。
+    LIST_BILL_REWARDS("bar.bill_rewards.viewed", "bar.bill_rewards.view_failed", "bar.order.view", "merchant_consumption_reward"),
     LIST_TABLES_WITHOUT_SPACE("bar.table_space_backlog.viewed", "bar.table_space_backlog.view_failed", "bar.table.manage", "bar_table"),
     LIST_SHIFTS("bar.shift.viewed", "bar.shift.view_failed", "bar.shift.manage", "bar_shift"),
     LIST_GIFT_REDEMPTIONS("bar.entitlement_redemption.viewed", "bar.entitlement_redemption.view_failed", "bar.entitlement.read", "bar_gift_redemption"),

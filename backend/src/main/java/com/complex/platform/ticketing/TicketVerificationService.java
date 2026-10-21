@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -73,9 +73,13 @@ public class TicketVerificationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     ParkWideFaultSalesGate parkWideFaultSalesGate;
 
+    // TK-06 一人多次票首次核销留脸、后续按留存人脸核对同一使用人。字段注入免改构造点；旧构造/未注入的单测为 null（不涉及人脸）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    TicketFacePhotoService facePhotoService;
+
     // CG-05 核销记录状态闭集（ENUM「核销记录状态」：成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常）。
     // 落记录的非成功结果按 result_reason 归类：规则不允许 → rejected；设备 / 网络 / 凭证技术原因 → failed。
-    // 「异常」（anomaly）的进入条件待 HTML 补句后另开 PR：本类不写 anomaly。manual_overridden 历史保留、不再写入。
+    // 「异常」（anomaly）只由主管核实前的异常复核提起写入（TK-14，见 raiseVerificationAnomaly），核销链不写。manual_overridden 历史保留、不再写入。
     static final String STATUS_SUCCESS = "success";
     static final String STATUS_REJECTED = "rejected";
     static final String STATUS_FAILED = "failed";
@@ -86,7 +90,9 @@ public class TicketVerificationService {
             "TICKET_INSTANCE_REFUND_IN_PROGRESS", "TICKET_TRANSFER_PENDING", "MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
             "ENTITLEMENT_PROVIDER_MISMATCH", "ENTITLEMENT_NOT_AMUSEMENT", "ENTITLEMENT_NOT_FOR_PROJECT",
             "AMUSEMENT_ONLINE_REQUIRED", "AMUSEMENT_PROJECT_UNRESOLVED", "AMUSEMENT_BUSINESS_DAY_REQUIRED",
-            "PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH");
+            "PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH",
+            // TK-06 一人多次票留脸 / 核对同一使用人。
+            "MULTI_USE_FACE_CONSENT_REQUIRED", "MULTI_USE_FACE_CAPTURE_REQUIRED", "MULTI_USE_HOLDER_MISMATCH");
     /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed。 */
     static final Set<String> TECHNICAL_FAILURE_CODES = Set.of(
             "CREDENTIAL_NOT_FOUND", "CREDENTIAL_EXPIRED", "ENTITLEMENT_NOT_FOUND", "DEVICE_NOT_REGISTERED", "DEVICE_NOT_MANAGED",
@@ -228,7 +234,7 @@ public class TicketVerificationService {
             var window=amusementService.requireEntryWindow(request.pointId(),request.deviceId(),at);
             boolean allowed=amusementAdmissions.preview(entitlement.id(),window,at);
             return new VerificationPreviewResponse(allowed,allowed?"ok":"not_allowed",
-                    TicketEntitlementMapper.toOfflineEntitlementResponse(entitlement));
+                    TicketEntitlementMapper.toOfflineEntitlementResponse(entitlement), null);
         }
         // P0-2 越权修复：预览同样会泄露他商户权益明细（剩余次数/人数/有效期），按调用者商户范围校验归属（平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
@@ -241,7 +247,9 @@ public class TicketVerificationService {
         return new VerificationPreviewResponse(
                 allowed,
                 allowed ? "ok" : "not_allowed",
-                TicketEntitlementMapper.toOfflineEntitlementResponse(entitlement)
+                TicketEntitlementMapper.toOfflineEntitlementResponse(entitlement),
+                // TK-06：告诉检票终端本次入场要不要留脸（capture）或比对（match）；供应商不可用时为空。
+                allowed && facePhotoService != null ? facePhotoService.faceBinding(entitlement) : null
         );
     }
 
@@ -291,6 +299,10 @@ public class TicketVerificationService {
         }
         if (original.reversedAt() != null) {
             throw ApiException.conflict("VERIFICATION_ALREADY_REVERSED", "该核销记录已冲正，请勿重复操作");
+        }
+        // TK-14（ENUM「异常状态的统一出口」）：异常待主管处置期间不走普通冲正，须由主管选「作废并冲正」出口。
+        if (repository.openVerificationAnomalyExists(original.id())) {
+            throw ApiException.conflict("VERIFICATION_ANOMALY_OPEN", "该核销记录有待主管处置的异常复核，请先处置异常");
         }
         Instant now = Instant.now();
         // F-TXN-04 并发双花修复：先以"原 success 记录 → reversed"的状态 CAS 作为并发唯一闸（markVerificationReversed
@@ -367,6 +379,66 @@ public class TicketVerificationService {
         eventPublisher.publishEvent(new TicketRewardFacts.Reversed(original.id()));
         }
         return new VerificationResponse(reversal.id(), reversal.verificationNo(), reversal.status(), reversal.resultReason());
+    }
+
+    /**
+     * TK-14 提起异常复核（ENUM「核销记录状态」：平台已记成功并扣次，但现场未放行或实际权益交付有争议、需主管核实时进入异常复核，
+     * 保留原成功记录与扣次事实；普通拒绝、失败不得改为异常）：只对成功核销提起，新增一条 status=anomaly 的记录指向原记录，
+     * 复制原权益、设备、点位、商户与人数；不改次数，不发积分、结算、退款事件。提起人记在 staff_id。
+     */
+    VerificationRecord raiseVerificationAnomaly(String verificationId, String reason, String raisedBy) {
+        String anomalyReason = requireText(reason, "reason");
+        VerificationRecord original = repository.findVerificationById(requireText(verificationId, "verification_id"))
+                .orElseThrow(() -> ApiException.notFound("VERIFICATION_NOT_FOUND", "核销记录不存在或已被删除"));
+        enforceMerchantScope(original.merchantId());
+        if (!STATUS_SUCCESS.equals(original.status())) {
+            throw ApiException.conflict("VERIFICATION_ANOMALY_SOURCE_NOT_SUCCESS", "只有核销成功（未冲正）的记录才能提起异常复核");
+        }
+        if (repository.openVerificationAnomalyExists(original.id())) {
+            throw ApiException.conflict("VERIFICATION_ANOMALY_OPEN", "该核销记录已有待主管处置的异常复核");
+        }
+        return repository.saveVerification(new VerificationRecord(
+                "ver_" + UUID.randomUUID().toString().replace("-", ""),
+                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
+                original.entitlementId(), original.entitlementCode(), original.credentialType(), original.credentialPayload(),
+                original.deviceId(), original.pointId(), STATUS_ANOMALY, anomalyReason, "verification_anomaly", null, Instant.now(),
+                null, raisedBy, original.merchantId(), null, null, original.verifiedPeople(), null, null, null, null, null,
+                original.id(), null, null, null, null));
+    }
+
+    private static final Set<String> ANOMALY_RESOLUTIONS = Set.of("restored", "voided_reversed");
+
+    /**
+     * TK-14「作废并冲正」与直接冲正同一合同准入闸（PGM:707「不符合合同或基础定义的后续流程必须先被卡住，再按审批链逐级审批放行」；
+     * V099 ticketing_verify_reverse_over_scope）：闸由切面在进入本方法前按原核销记录判定（拦截即建复核单并 409），方法体无事可做。
+     * 须经代理调用（由 TicketingService 在处置前调用），同类内自调用不过闸。
+     */
+    @com.complex.platform.gate.GuardedAction(admissionAction = "ticketing.verification_reverse", objectType = "verification", objectIdParam = 0)
+    public void admitAnomalyVoidReversal(String originalVerificationId, String reason) {
+    }
+
+    /**
+     * TK-14 异常统一出口（ENUM「异常状态的统一出口」：主管选「更正后恢复」或「作废并冲正」之一处置，填写原因并留痕）：
+     * restored——只写处置留痕，原成功记录与扣次不动；voided_reversed——同事务走既有冲正（恢复次数、原记录置已冲正）。
+     * 两种处置都不生成退款（ENUM「核销记录状态」「不自动退款」）。处置先做 CAS，再冲正，故冲正内的待处置闸不挡本出口。
+     */
+    VerificationRecord resolveVerificationAnomaly(String anomalyId, String resolution, String reason, String resolvedBy) {
+        String resolveReason = requireText(reason, "reason");
+        String outcome = requireText(resolution, "resolution");
+        if (!ANOMALY_RESOLUTIONS.contains(outcome)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "resolution 只能是更正后恢复或作废并冲正");
+        }
+        VerificationRecord anomaly = repository.findVerificationById(requireText(anomalyId, "verification_id"))
+                .filter(record -> STATUS_ANOMALY.equals(record.status()))
+                .orElseThrow(() -> ApiException.notFound("VERIFICATION_ANOMALY_NOT_FOUND", "核销异常记录不存在"));
+        enforceMerchantScope(anomaly.merchantId());
+        if (repository.markVerificationAnomalyResolved(anomaly.id(), outcome, resolvedBy, Instant.now(), resolveReason) == 0) {
+            throw ApiException.conflict("VERIFICATION_ANOMALY_ALREADY_RESOLVED", "该异常已处置，请勿重复操作");
+        }
+        if ("voided_reversed".equals(outcome)) {
+            reverseVerification(anomaly.anomalyOfVerificationId(), "异常复核作废：" + resolveReason, resolvedBy);
+        }
+        return repository.findVerificationById(anomaly.id()).orElseThrow();
     }
 
     /**
@@ -587,6 +659,10 @@ public class TicketVerificationService {
         // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
         // 同场次内不同人可不同时间分别入场，但不能跨场次/日期。单人票/无父票不约束。
         enforceMultiPersonSameSession(entitlement, now);
+        // TK-06：一人多次票（供应商可用时）——未绑定须同意 + 拍照，已绑定按留存人脸比对；不合规 → 拒、不扣次。
+        //   置于场次 / 当天入场记录写入之前，被拒不留任何副作用。
+        TicketFacePhotoService.PendingFace pendingFace = facePhotoService == null ? null
+                : facePhotoService.requireMultiUseHolder(entitlement, request.faceCapture(), request.faceConsentAccepted());
         // 结算重构批3-2(PRD §6.2)：入场资格「场次规则」——仅 consumption_window=per_session 的权益走场次判定；
         // 其余(NULL/per_use/per_day/unlimited_in_day)零改动、走下方现状逐次扣。若返回非 null 即已在本方法内落 success 记录并返回。
         if (SESSION_WINDOW.equals(entitlement.consumptionWindow())) {
@@ -650,6 +726,10 @@ public class TicketVerificationService {
                 null,
                 settlementPriceCent
         ));
+        // TK-06：扣次成功后同事务——首次留脸落同意并加密绑定父票；该票用完（或已到期）即删除人脸。
+        if (facePhotoService != null) {
+            facePhotoService.afterUse(updated, pendingFace, verification.id(), verification.deviceId(), now);
+        }
         // P0 清单#2 / F-TXN-03 按核销张数：核销成功 → 发积分确认事件，带该订单最新 Σused/Σtotal；
         // customer 域据此把已确认份额对齐 floor(总额 × Σused / Σtotal)（多次/多人票部分核销按张数比例确认）。
         // CG-08b：补偿补发权益的使用不重复产生原人份/次份的积分与成长值（不发积分确认事件），履约锁定到补偿记录。

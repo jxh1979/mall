@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -163,6 +163,22 @@ public class JdbcSettlementTransactionRepository {
                   ) k
                  WHERE v.id = :verId
                 """, new MapSqlParameterSource().addValue("verId", verificationId), this::mapSettledFactRow);
+    }
+
+    /**
+     * TK-05-R4：已成功退款所退权益上的成功核销（按核销先后）——即该退款对应的、已形成分账的核销结算。
+     * 退款未成功（requested/approved/rejected）返回空：BSM:804「门票实际退款成功后」才冲回。
+     */
+    public List<String> findSettledVerificationsOfSucceededRefund(String refundId) {
+        return jdbcTemplate.queryForList("""
+                SELECT v.id
+                  FROM ticket_refunds r
+                  JOIN ticket_refund_lines l ON l.refund_id = r.id
+                  JOIN ticket_verifications v ON v.entitlement_id = l.entitlement_id
+                 WHERE r.id = :refund_id AND r.status = 'success'
+                   AND v.status = 'success' AND v.reverses_verification_id IS NULL
+                 ORDER BY v.created_at, v.id
+                """, new MapSqlParameterSource().addValue("refund_id", refundId), String.class);
     }
 
     private SettledFactRow mapSettledFactRow(java.sql.ResultSet rs) throws java.sql.SQLException {

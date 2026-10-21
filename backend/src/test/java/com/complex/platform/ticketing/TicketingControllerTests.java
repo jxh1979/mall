@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.ticketing;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -75,48 +75,6 @@ class TicketingControllerTests {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.detail_code").value("AUTH_SESSION_INVALID"));
-    }
-
-    // R-005：柜台散客人脸照同意落账端点与出票同权限；无 ticket.ticket.issue → 403。
-    @Test
-    void recordingFacePhotoConsentWithoutIssuePermissionReturnsPermissionDenied() throws Exception {
-        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied"))
-                .when(authorizationService)
-                .requirePermission("ticket.ticket.issue");
-        mockMvc.perform(post("/api/v1/ticketing/orders/to_1/face-photo-consent")
-                        .with(user("ops").roles("P0_SMOKE"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "idempotency_key": "consent-denied",
-                                  "accepted": true,
-                                  "source_terminal": "counter"
-                                }
-                                """))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
-    }
-
-    @Test
-    void recordingFacePhotoConsentReturnsConsentIdEnvelope() throws Exception {
-        when(service.recordFacePhotoConsent(any(String.class),
-                any(com.complex.platform.ticketing.dto.FacePhotoConsentRequest.class)))
-                .thenReturn(new TicketFacePhotoService.FaceConsentView("consent_walkin_1", "to_1",
-                        "face_photo_notice_v1@retention_30d", java.time.Instant.parse("2026-09-07T12:00:00Z")));
-        mockMvc.perform(post("/api/v1/ticketing/orders/to_1/face-photo-consent")
-                        .with(user("ops").roles("P0_SMOKE"))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "idempotency_key": "consent-ok",
-                                  "accepted": true,
-                                  "source_terminal": "counter"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.consent_id").value("consent_walkin_1"))
-                .andExpect(jsonPath("$.data.version").value("face_photo_notice_v1@retention_30d"));
-        verify(authorizationService).requirePermission("ticket.ticket.issue");
     }
 
     @Test
@@ -475,6 +433,70 @@ class TicketingControllerTests {
     }
 
 
+    /**
+     * TK-05：后台按前端真实请求形状（adminClient.mapKeys 转蛇形键）提交退款理由闭集与通票安全事件，控制器原样绑定、按权限码校验。
+     */
+    @Test
+    void refundReasonAndSafetyEventRoutesBindFrontendSnakeCaseShape() throws Exception {
+        TicketSafetyEventRecord event = new TicketSafetyEventRecord("tse_1", "prj_1", "ticket_order_1", "tkt_1", 2, null, null,
+                null, "客人突发情绪失控", "场内冲突", "be_amusement", "refund", "pending", "ops", Instant.parse("2026-10-20T14:00:00Z"),
+                null, null, null, null, null);
+        when(service.requestTicketRefund(any(TicketRefundRequest.class))).thenReturn(new TicketRefundRecord("refund_1",
+                "ticket_order_1", 9900L, "活动取消", "original", "requested", "ops", null, null,
+                Instant.parse("2026-10-20T14:00:00Z"), Instant.parse("2026-10-20T14:00:00Z"), null, "event_cancelled", "be_amusement", false));
+        when(service.requestTicketSafetyEvent(any(com.complex.platform.ticketing.dto.TicketSafetyEventRequest.class))).thenReturn(event);
+        when(service.approveTicketSafetyEvent(any(String.class), any(StatusChangeRequest.class))).thenReturn(event);
+        when(service.listTicketSafetyEvents()).thenReturn(new PageResponse<>(List.of(event), 1, 50, 1));
+
+        mockMvc.perform(post("/api/v1/ticketing/refunds")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "refund-ec", "target_id": "ticket_order_1", "reason": "活动取消",
+                                 "reason_code": "event_cancelled", "responsible_entity_id": "be_amusement",
+                                 "ticket_instance_ids": ["tkt_1"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reason_code").value("event_cancelled"))
+                .andExpect(jsonPath("$.data.responsible_entity_id").value("be_amusement"));
+        mockMvc.perform(post("/api/v1/ticketing/safety-events")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "tse-req", "ticket_instance_id": "tkt_1", "slot_index": 2,
+                                 "reason": "客人突发情绪失控", "situation": "场内冲突", "responsible_entity_id": "be_amusement"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.outcome").value("refund"));
+        mockMvc.perform(post("/api/v1/ticketing/safety-events/tse_1/approve")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "tse-approve", "action": "approve", "reason": "核实属实"}
+                                """))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/ticketing/safety-events").with(user("ops").roles("P0_SMOKE")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].slot_index").value(2));
+
+        org.mockito.ArgumentCaptor<TicketRefundRequest> refund = org.mockito.ArgumentCaptor.forClass(TicketRefundRequest.class);
+        verify(service).requestTicketRefund(refund.capture());
+        org.assertj.core.api.Assertions.assertThat(refund.getValue().reasonCode()).isEqualTo("event_cancelled");
+        org.assertj.core.api.Assertions.assertThat(refund.getValue().responsibleEntityId()).isEqualTo("be_amusement");
+        org.assertj.core.api.Assertions.assertThat(refund.getValue().ticketInstanceIds()).containsExactly("tkt_1");
+        org.mockito.ArgumentCaptor<com.complex.platform.ticketing.dto.TicketSafetyEventRequest> safety =
+                org.mockito.ArgumentCaptor.forClass(com.complex.platform.ticketing.dto.TicketSafetyEventRequest.class);
+        verify(service).requestTicketSafetyEvent(safety.capture());
+        org.assertj.core.api.Assertions.assertThat(safety.getValue().ticketInstanceId()).isEqualTo("tkt_1");
+        org.assertj.core.api.Assertions.assertThat(safety.getValue().slotIndex()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(safety.getValue().situation()).isEqualTo("场内冲突");
+        org.assertj.core.api.Assertions.assertThat(safety.getValue().responsibleEntityId()).isEqualTo("be_amusement");
+        verify(service).approveTicketSafetyEvent(org.mockito.ArgumentMatchers.eq("tse_1"), any(StatusChangeRequest.class));
+        verify(authorizationService, times(2)).requirePermission("ticket.refund.request");
+        verify(authorizationService).requirePermission("ticket.refund.approve");
+        verify(authorizationService).requirePermission("ticket.refund.view");
+    }
+
     @Test
     void dynamicPricingRoutesUseExactPermissionsAndRequireIdempotency() throws Exception {
         TicketDynamicPricingRuleRecord rule = new TicketDynamicPricingRuleRecord(
@@ -636,12 +658,6 @@ class TicketingControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
-        }
-
-        @Bean
-        TicketFacePhotoService ticketFacePhotoService() {
-            // 修既有基线断裂：控制器构造器新增 facePhotoService 后本切片未同步，12 条测试全数上下文加载失败。
-            return Mockito.mock(TicketFacePhotoService.class);
         }
 
         @Bean

@@ -2147,6 +2147,7 @@ paths:
         - VOUCHER_EXPIRED
         - VOUCHER_REVOKED
         - VOUCHER_TRANSFERRING
+        - MEMBER_NOT_FOUND
       x-permission: finance.payment.register
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -3409,6 +3410,7 @@ paths:
         - finance
       operationId: createDailyClose
       summary: 日结锁定
+      description: 日结锁定。TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。
       x-permission: finance.daily_close.lock
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -9388,7 +9390,7 @@ paths:
         - terminals
       operationId: syncTerminalTasks
       summary: 同步终端任务
-      description: "用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 离线同步的核销尝试：规则不允许的结果落 rejected 记录、设备/网络/凭证技术原因落 failed，任务结果同态（status/reason），同批其他任务照常处理。"
+      description: "用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 离线同步的核销尝试：规则不允许的结果落 rejected 记录、设备/网络/凭证技术原因落 failed，任务结果同态（status/reason），同批其他任务照常处理。"
       x-permission: terminal.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -9754,33 +9756,6 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-  /api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo:
-    get:
-      tags:
-        - ticketing
-      operationId: getIssuedEntitlementFacePhoto
-      summary: 取购票人脸照（核销比对本人）
-      description: 核销员在核销时按需调取该权益购票时留存的人脸照（原写「核销预检后」，预检两步流已废止（DEC-R6-08），待代码轮下线，不得新增调用。），肉眼比对是否本人（防转票）。照片为个人敏感信息：加密存库、限核销/运营权限、每次调取写审计；到留存期由清理作业硬删。
-      x-permission: verification.view
-      x-data-scope: project
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: ticket_face_photo.viewed
-      x-audit-event-failure: ticket_face_photo.view_failed
-      parameters:
-        - $ref: "#/components/parameters/EntitlementId"
-          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/ticketing/orders:
     get:
       tags:
@@ -10053,6 +10028,93 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/ticketing/safety-events:
+    get:
+      tags:
+        - ticketing
+      operationId: listTicketSafetyEvents
+      summary: 查询通票安全事件
+      description: TK-05 通票安全事件台账（待批准在前）：原因、当时情形、处理结论、申请人、批准人及其依据（当班夜班值班经理 / 夜班值班经理的上级 / 最高权限）。商户范围只见本商户受理订单的事件。
+      x-auth-context: staff-token
+      x-permission: ticket.refund.view
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: ticket_safety_event.viewed
+      x-audit-event-failure: ticket_safety_event.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - ticketing
+      operationId: requestTicketSafetyEvent
+      summary: 登记通票安全事件
+      description: TK-05（BSM「退款」通票安全例外；2026-10-21 操作员裁决补充第 5 条）：登记到原票下出事客人那一人份，待夜班值班经理及以上批准。处理结论按票判定：多次通票（total_times>1）＝restore，只恢复本次入场已消耗的 1 次，须有本次入场成功核销，否则 409 SAFETY_RESTORE_NO_ENTRY；其他通票＝refund，免除该人份票款（已核销也退）。同一人份只退一次、同一次入场只恢复一次，重复 409 TICKET_SAFETY_EVENT_DUPLICATE；票非可用状态 409 TICKET_INSTANCE_NOT_ACTIVE；跨商户 403 CROSS_MERCHANT_FORBIDDEN。
+      x-permission: ticket.refund.request
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: true
+      x-audit-event-success: ticket_safety_event.requested
+      x-audit-event-failure: ticket_safety_event.request_failed
+      requestBody:
+        $ref: "#/components/requestBodies/TicketSafetyEventRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/safety-events/{safety_event_id}/approve:
+    post:
+      tags:
+        - ticketing
+      operationId: approveTicketSafetyEvent
+      summary: 批准通票安全事件
+      description: TK-05：申请人不得自批（403 SELF_APPROVAL_FORBIDDEN）；批准人须为最高权限、本项目当前已发布排班的夜班值班经理，或组织层级中位于本项目夜班职责排班人（含顶班人、在职）之上的人员，否则 403 NIGHT_DUTY_MANAGER_REQUIRED；挂商户的账号只办本商户受理的订单（403 CROSS_MERCHANT_FORBIDDEN），不挂商户的项目员工按 ticket.refund.approve 可触及的项目办理（403 FORBIDDEN）；已处理 409 TICKET_SAFETY_EVENT_NOT_PENDING。批准即生效：refund＝生成已批准的退款单（reason_code=safety_exception，金额＝该票出票分摊额按人数均分后该人份份额；单人票整张冻结退，多人票只退该人份、已用权益与核销记录保留，同票他人照常使用），之后按原路退回与确认拨付办理，退款成功后冲回该人份奖励并对已形成分账的核销逐段追加反向结算记录；restore＝不退现金、不回改原核销与已用次数，在原票下补发完整票面一份（安全事件补偿批次 safety_restore，关联事件、次份与原入场），自发放日起按补偿有效期，使用不重复积分成长值，新增履约由所填公司承担。reason 必填。
+      x-permission: ticket.refund.approve
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket_safety_event.approved
+      x-audit-event-failure: ticket_safety_event.approve_failed
+      parameters:
+        - name: safety_event_id
+          in: path
+          required: true
+          description: 通票安全事件 ID。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/StatusChange"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/ticketing/qr-refresh-config:
     get:
       tags:
@@ -10283,7 +10345,7 @@ paths:
         - ticketing
       operationId: createTicketVerification
       summary: 正式核销
-      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回、不落记录。"
+      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回、不落记录。"
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -10330,14 +10392,14 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常，进入条件待 HTML 补句后另开 PR）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。"
+      description: "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 anomaly 记录带 anomaly_of_verification_id（原成功核销）、anomaly_resolution（null=待主管处置 / restored 更正后恢复 / voided_reversed 作废并冲正）、anomaly_resolved_by、anomaly_resolved_at、anomaly_resolution_reason。"
   /api/v1/ticketing/verifications/{id}/reverse:
     post:
       tags:
         - ticketing
       operationId: reverseTicketVerification
       summary: 核销冲正
-      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。
+      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。 原记录有待主管处置的核销异常时 409 VERIFICATION_ANOMALY_OPEN（须走主管处置出口）。
       x-permission: ticket.verify.reverse
       x-data-scope: project-point
       x-terminal-allowed:
@@ -10366,6 +10428,113 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/ticketing/verifications/{id}/anomaly:
+    post:
+      tags:
+        - ticketing
+      operationId: raiseTicketVerificationAnomaly
+      summary: 核销提起异常复核
+      description: TK-14（ENUM「核销记录状态」）：平台已记录核销成功并扣减次数，但现场未放行或实际权益交付存在争议、需要主管核实时提起异常复核——新增一条 status=anomaly 的核销记录（anomaly_of_verification_id 指向原记录），保留原成功记录与扣次事实，不改次数、不发积分结算事件、不自动退款。只对 status=success 的记录提起，拒绝、失败、已冲正记录 409 VERIFICATION_ANOMALY_SOURCE_NOT_SUCCESS；同一原记录已有待处置异常 409 VERIFICATION_ANOMALY_OPEN；跨商户 403 CROSS_MERCHANT_FORBIDDEN；reason 必填。
+      x-permission: verification.execute
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket.verification_anomaly_raised
+      x-audit-event-failure: ticket.verification_anomaly_raise_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 原成功核销记录 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 幂等键；同一提起重试必须复用。
+                  maxLength: 128
+                reason:
+                  type: string
+                  description: 争议说明（现场未放行或实际权益交付争议）；必填，记入异常记录 result_reason 留痕。
+                  maxLength: 255
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/ticketing/verification-anomalies/{id}/resolve:
+    post:
+      tags:
+        - ticketing
+      operationId: resolveTicketVerificationAnomaly
+      summary: 主管处置核销异常
+      description: TK-14（ENUM「异常状态的统一出口」）：主管在系统内二选一处置——restored（更正后恢复：原成功记录与扣次不动）或 voided_reversed（作废并冲正：先对原核销记录过与直接冲正相同的合同准入闸 ticketing.verification_reverse，商户生效合同经营范围不含票务时建复核单并 409 ADMISSION_BLOCKED；通过后同事务走既有核销冲正，恢复次数、原记录置已冲正、冲正原因「异常复核作废：」+原因）；填写原因并留痕（处置人、时间、原因写在异常记录上）；两种处置都不自动退款，补偿仍走既有故障补偿流程。异常记录不存在 404 VERIFICATION_ANOMALY_NOT_FOUND；已处置 409 VERIFICATION_ANOMALY_ALREADY_RESOLVED；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填。
+      x-permission: ticket.verify.anomaly.resolve
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: ticket.verification_anomaly_resolved
+      x-audit-event-failure: ticket.verification_anomaly_resolve_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 异常复核记录（status=anomaly）ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - resolution
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 幂等键；同一处置重试必须复用。
+                  maxLength: 128
+                resolution:
+                  type: string
+                  description: 处置方式：restored（更正后恢复）/ voided_reversed（作废并冲正）。
+                  enum:
+                    - restored
+                    - voided_reversed
+                reason:
+                  type: string
+                  description: 处置原因；必填，留痕。
+                  maxLength: 1000
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/ticketing/verifications/preview:
     post:
       tags:
@@ -10373,7 +10542,7 @@ paths:
       operationId: previewTicketVerification
       summary: 票务核销预览（已废止，不得新增调用）
       deprecated: true
-      description: 已废止（DEC-R6-08），待代码轮下线，不得新增调用。核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。
+      description: 已废止（DEC-R6-08），待代码轮下线，不得新增调用。核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。 TK-06：响应 data.face_binding 仅在一人多次票且人脸供应商可用时出现——capture=本次首次入场须客人同意并拍照留存，match=须拍照按留存人脸比对；单次票、多人票或供应商不可用时为空。
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -14795,6 +14964,37 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/bar/bills/{bill_id}/rewards:
+    get:
+      tags:
+        - bar
+      operationId: listBarBillMerchantRewards
+      summary: 查询酒水账单产生的商户消费积分与成长值
+      description: 第十一批 TK-04-R5：从酒吧账单反查本单产生的商户消费积分与成长值记录（ENUM L77「从消费单据可以反查该单产生的积分与成长值记录」）；限本商户，不返回客人身份。
+      x-auth-context: staff-token
+      x-permission: bar.order.view
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - tablet
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.bill_rewards.viewed
+      x-audit-event-failure: bar.bill_rewards.view_failed
+      parameters:
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 酒水账单 ID。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/bills/{bill_id}/adjustments:
     post:
       tags:
@@ -16197,7 +16397,7 @@ paths:
         - amusement
       operationId: listAmusementFaultCompensationBatches
       summary: 查询某次全园故障的补偿批次
-      description: CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、延长与补发数量、补偿有效期截止。
+      description: CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、补发人份数、补偿有效期截止。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -16230,7 +16430,7 @@ paths:
         - amusement
       operationId: initiateAmusementFaultCompensationBatch
       summary: 发起全园故障补偿批次（第一岗位：快照受影响人份）
-      description: CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；尚未核销但游乐权益仍在有效期内的人份/次份 → extend（只延长原核销权，不增加次数；多次票只补受影响的 1 次份）。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）；承担主体须为主体主数据（business_entities）中在用（active）的法律主体，否则 400 COMPENSATION_BEARER_ENTITY_INVALID（FS-012，ENUM「发放记录须明确该公司的具体法律主体」）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      description: CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；TK-09（2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」）：故障期间没入场、持有效未核票的人份不进快照、不延期，原票照原有效期使用。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）；承担主体须为主体主数据（business_entities）中在用（active）的法律主体，否则 400 COMPENSATION_BEARER_ENTITY_INVALID（FS-012，ENUM「发放记录须明确该公司的具体法律主体」）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
       x-permission: amusement.park_fault.confirm_as_head
       x-data-scope: project
       x-terminal-allowed:
@@ -16299,7 +16499,7 @@ paths:
         - amusement
       operationId: confirmAmusementFaultCompensationBatch
       summary: 第二岗位确认并发放补偿
-      description: CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：extend 人份的原权益 valid_to 延长到发放日 + 补偿有效期（取较晚者）；full_reissue 人份在原票下按票种完整票面补发各权益各一次（标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。FS-012：补发各项权益每次实际履约逐笔记录，锁定履约时内部结算价目录生效价与目录行版本（无目录引用的权益不设内部结算价、只留履约记录）；价格大于 0 且提供方商户不属承担主体时，由承担主体对实际提供方追加补偿应付（ar_ap_items source_type=compensation_fulfillment，普通内部结算，到期日按该钱路财务指定付账日、次月出账日起的异议期与银行工作日推算并固化到 internal_payable_schedules，同 FS-021-R4）；补偿核销不写普通核销结算事实、补偿赠饮不挂平台赠饮应付；该次核销冲正时按 V344 追加严格取反的冲正行；已付部分再追加重述行承接，并另挂一笔对提供方的追收应收（source_type=compensation_fulfillment_recovery，幂等键取该次冲正 id，到期日按该钱路付账日规则推算），全部未付时只冲正。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。TK-18 场次提前结束批次（event_type=session_early_end，系统生成、无发起岗位）：第一次岗位确认只记为发起方并保持待确认，另一岗位、另一人再次确认才发放，并把该结束原件下已进批次的入场待办写回 compensation_issued。
+      description: CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：full_reissue 人份在原票下按票种完整票面补发（TK-10：每条绑定按票面份数各补一行、人数不展开，只补受影响这一人份并沿用原座次；每行次数＝该绑定一个次份的次数，多次票按受影响原权益次数折算为单次份；标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。FS-012：补发各项权益每次实际履约逐笔记录，锁定履约时内部结算价目录生效价与目录行版本（无目录引用的权益不设内部结算价、只留履约记录）；价格大于 0 且提供方商户不属承担主体时，由承担主体对实际提供方追加补偿应付（ar_ap_items source_type=compensation_fulfillment，普通内部结算，到期日按该钱路财务指定付账日、次月出账日起的异议期与银行工作日推算并固化到 internal_payable_schedules，同 FS-021-R4）；补偿核销不写普通核销结算事实、补偿赠饮不挂平台赠饮应付；该次核销冲正时按 V344 追加严格取反的冲正行；已付部分再追加重述行承接，并另挂一笔对提供方的追收应收（source_type=compensation_fulfillment_recovery，幂等键取该次冲正 id，到期日按该钱路付账日规则推算），全部未付时只冲正。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。TK-18 场次提前结束批次（event_type=session_early_end，系统生成、无发起岗位）：第一次岗位确认只记为发起方并保持待确认，另一岗位、另一人再次确认才发放，并把该结束原件下已进批次的入场待办写回 compensation_issued。
       x-permission: amusement.park_fault.confirm_as_engineering_safety
       x-data-scope: project
       x-terminal-allowed:
@@ -16362,7 +16562,7 @@ paths:
         - amusement
       operationId: listAmusementFaultCompensationItems
       summary: 查询补偿批次的补偿记录
-      description: CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（延长 / 完整补发）、状态（待确认 / 已发放 / 已使用）、延长后截止、补发权益行、履约核销与锁定结算价。
+      description: CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（完整补发）、状态（待确认 / 已发放 / 已使用）、补偿有效期至、补发权益行、履约核销与锁定结算价。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -23642,6 +23842,7 @@ paths:
         - customer
       operationId: listCustomerOrderTickets
       summary: 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id）
+      description: TK-13（ENUM L148「“我的票”按对应人份或次份显示补偿标注及其实际有效期，不额外增加专用通知渠道」；BSM L862）：每条票实例带 compensation_kind——full_reissue＝全园故障（或场次提前结束）完整补发的补偿行，挂原票原人份（parent_ticket_id、slot_index），其 valid_to 即该人份实际补偿有效期；null＝原票行。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -27288,6 +27489,8 @@ paths:
       tags:
         - service
       operationId: markServiceOrderPaid
+      x-failure-codes:
+        - MEMBER_NOT_FOUND
       summary: 确认收款到公司账户(服务员现场)
       description: H批(2026-07-02 最终拍板,公司代收):客人扫公司统一收款码支付,服务员目视支付 成功页确认;钱进公司账户,财务可对账——解决个人收款码无支付回调的确认盲区; 未确认收款不可完成履约。
       x-permission: service.order.create
@@ -27324,6 +27527,10 @@ paths:
                   type: string
                   description: 收款方式(默认公司收款码;聚合支付回调二期)。
                   maxLength: 24
+                member_phone:
+                  type: string
+                  description: 会员号即客人注册手机号（选填）；收款时录入用于识别本单会员累计积分与成长值，走客人查询专门通道留痕；查无会员返回 MEMBER_NOT_FOUND。
+                  maxLength: 32
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -27652,6 +27859,7 @@ paths:
         - customer
       operationId: listMyTickets
       summary: 我的票(持有人视角:自购未转+受赠,含转赠中标记)
+      description: TK-13（ENUM L148「“我的票”按对应人份或次份显示补偿标注及其实际有效期，不额外增加专用通知渠道」；BSM L862）：每条票实例带 compensation_kind——full_reissue＝全园故障（或场次提前结束）完整补发的补偿行，挂原票原人份（parent_ticket_id、slot_index），其 valid_to 即该人份实际补偿有效期；null＝原票行。
       x-permission: not_applicable
       x-data-scope: customer
       x-terminal-allowed:
@@ -39561,6 +39769,79 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/customer/merchant-rewards:
+    get:
+      tags:
+        - customer
+      operationId: getOwnMerchantConsumptionRewards
+      summary: 查看本人商户消费积分与成长值
+      description: 第十一批 TK-04-R5：只展示结果、客人端不自行计算（BSM L877）。商户消费积分按整笔有效消费全部实际履约完成时点起算等待期，等待期已满且无待处理的对应退款申请才转为可用；已成功退款部分按原规则排除，积分与成长值为扣除后的现值；来源单号可反查消费单据（ENUM L77）。
+      x-permission: not_applicable
+      x-data-scope: customer
+      x-auth-context: customer-token
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
+      x-idempotency-required: false
+      x-audit-event-success: merchant.reward.customer.viewed
+      x-audit-event-failure: merchant.reward.customer.viewed.failed
+      responses:
+        "200":
+          description: 按真实业务记录返回。
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - code
+                  - message
+                  - data
+                  - request_id
+                  - server_time
+                properties:
+                  success:
+                    type: boolean
+                    const: true
+                    description: 请求是否成功；成功响应固定为 true。
+                  code:
+                    type: string
+                    example: OK
+                    description: 业务响应码；成功响应默认 SUCCESS。
+                    maxLength: 128
+                  message:
+                    type: string
+                    description: 面向调用方的简短结果说明。
+                    maxLength: 255
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MerchantConsumptionRewardView"
+                  request_id:
+                    type: string
+                    description: 请求唯一 ID，用于日志追踪、客服排查和跨系统对账。
+                    maxLength: 64
+                  server_time:
+                    type: string
+                    format: date-time
+                    description: 服务端响应时间，ISO 8601 格式。
+                  replayed:
+                    type: boolean
+                    description: 已完成（重复提交）标记。只在重复提交、返回的是第一次的结果时出现且为 true，此时 message 为「该操作已完成（重复提交，返回首次结果）」、data 仍是第一次的结果；第一次执行的响应不带该字段。
+                description: successresponse请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/loyalty/ticket-points-billing/rules:
     get:
       tags:
@@ -46837,14 +47118,6 @@ components:
         type: string
         maxLength: 64
       description: OrderId 路径参数；必须引用当前数据范围内存在且允许访问的记录。
-    EntitlementId:
-      name: entitlement_id
-      in: path
-      required: true
-      schema:
-        type: string
-        maxLength: 64
-      description: EntitlementId 路径参数；必须引用当前数据范围内存在且允许访问的记录。
     TicketId:
       name: ticket_id
       in: path
@@ -47220,6 +47493,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/RefundRequest"
+    TicketSafetyEventRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/TicketSafetyEventRequest"
     CustomerPhoneLoginRequest:
       required: true
       content:
@@ -49200,6 +49479,13 @@ components:
           type: object
           additionalProperties: true
           description: 核销业务上下文；用于区分通票、权益、酒水领取、卡座入场等场景。
+        face_capture:
+          type: string
+          maxLength: 4000000
+          description: TK-06：一人多次票入场时检票终端拍下的人脸（base64 图串）；人脸供应商可用时，未绑定的首次入场与已绑定的后续各次必带，其余入场不带。
+        face_consent_accepted:
+          type: boolean
+          description: TK-06：一人多次票首次留脸前客人单独表示的同意；人脸供应商可用且该票尚未留存人脸时须为 true，否则拒 MULTI_USE_FACE_CONSENT_REQUIRED、不扣次。
       description: 核销请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
     ProviderAdapter:
       type: object
@@ -50678,6 +50964,7 @@ components:
       required:
         - target_id
         - reason
+        - reason_code
       properties:
         idempotency_key:
           type: string
@@ -50727,6 +51014,66 @@ components:
             type: string
             maxLength: 64
           maxItems: 200
+        reason_code:
+          type: string
+          description: TK-05 退款理由闭集（BSM「退款」：只有票种规则明确允许、活动或场次取消、平台或履约方无法提供服务、重复扣款、法律法规要求这五种情形才允许退款；五种情形之外只能由持授权 U 盘密钥的最高权限逐笔放行）：ticket_type_rule（票种规则明确允许，仍须票种开关为允许，否则 409 TICKET_TYPE_NOT_REFUNDABLE）/ event_cancelled / service_unavailable / duplicate_charge / legal_requirement（不看票种开关）/ master_override（五种情形之外，审批人须为最高权限，否则 403 MASTER_AUTHORITY_REQUIRED；不享额度内自助）。缺失或闭集外（含 safety_exception，通票安全例外只走 /api/v1/ticketing/safety-events）400 REFUND_REASON_CODE_REQUIRED。所有理由仍只退完全未核销的整张票。
+          enum:
+            - ticket_type_rule
+            - event_cancelled
+            - service_unavailable
+            - duplicate_charge
+            - legal_requirement
+            - master_override
+        responsible_entity_id:
+          type: string
+          description: 退款责任主体（主体主数据中在用的法律主体 business_entities.id）；每笔退款必填，缺失或不在用 400 REFUND_RESPONSIBLE_ENTITY_REQUIRED。
+          maxLength: 64
+    TicketSafetyEventRequest:
+      type: object
+      description: TK-05 通票安全例外登记（BSM「退款」：客人出现重大情绪不稳定、安全问题或其他必要问题时，由夜班值班经理及以上批准处理，须记录原因、批准人与当时情形）。
+      additionalProperties: false
+      required:
+        - ticket_instance_id
+        - reason
+        - situation
+        - responsible_entity_id
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 操作备注；进入审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        ticket_instance_id:
+          type: string
+          description: 出事客人所持的票（ticket_instances.id）；只适用于通票，单一酒吧门票 409 SAFETY_EXCEPTION_PASS_ONLY。
+          maxLength: 64
+        slot_index:
+          type: integer
+          description: 出事客人在该票中的人份序号（单人票为 1，缺省 1）；超出人数 400。
+          minimum: 1
+          maximum: 999
+        reason:
+          type: string
+          description: 原因；必填，留痕。
+          maxLength: 1000
+        situation:
+          type: string
+          description: 当时情形；必填，留痕。
+          maxLength: 2000
+        responsible_entity_id:
+          type: string
+          description: 责任主体（主体主数据中在用的法律主体）：退款时为退款责任主体；多次通票恢复次数时即承担新增实际履约费用的具体域主管公司。
+          maxLength: 64
     CustomerPhoneLoginRequest:
       type: object
       description: 请求载荷 `CustomerPhoneLoginRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -50823,12 +51170,6 @@ components:
           type: string
           description: 酒吧唯一标识；单店票必填、通票必空；服务端据票种校验并快照。
           maxLength: 64
-        face_photos:
-          type: array
-          description: 购票人入场人脸照（base64 图串），每张票一张，仅要求拍照的票种需要；照片加密暂存到本单，出票时转绑到已发权益。
-          maxItems: 20
-          items:
-            type: string
     VenueBusinessHoursRequest:
       type: object
       description: 请求载荷 `VenueBusinessHoursRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -51217,6 +51558,10 @@ components:
           type: string
           description: 本次结账抵扣的折扣券实例 ID（与 voucher_code 二选一，可不填）；两项同填返回 VOUCHER_ONE_PER_SETTLEMENT。
           maxLength: 64
+        member_phone:
+          type: string
+          description: 会员号即客人注册手机号（选填）；收银现场录入用于识别本单会员累计积分与成长值，走客人查询专门通道留痕；查无会员返回 MEMBER_NOT_FOUND，不代建会员。
+          maxLength: 32
     CommissionCalculateRequest:
       type: object
       description: 请求载荷 `CommissionCalculateRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -53278,9 +53623,6 @@ components:
           type: string
           maxLength: 64
           description: 权益模板.point_id 字段（可选）；权益归属点位，为空表示不限定。
-        require_face_photo:
-          type: boolean
-          description: 权益模板.require_face_photo 字段（可选）；购买/发放时是否要求拍脸照存档，缺省 false。
         agreement_price_cent:
           type: integer
           minimum: 0
@@ -61306,6 +61648,12 @@ components:
         open_objections:
           type: integer
           format: int32
+        fee_kind:
+          type: string
+          enum:
+            - ticket
+            - merchant
+          description: 费用类别：ticket＝门票积分发行费，merchant＝商户积分发行费（各自出账、各自挂账）。
       required:
         - id
         - billing_month
@@ -61323,6 +61671,7 @@ components:
         - unpaid_amount_cent
         - payment_status
         - open_objections
+        - fee_kind
     TicketPointsBillingFeeLine:
       type: object
       additionalProperties: false
@@ -61330,7 +61679,9 @@ components:
         reward_id:
           type: string
         parent_ticket_id:
-          type: string
+          type:
+            - string
+            - "null"
         slot_index:
           type: integer
           format: int32
@@ -61350,6 +61701,15 @@ components:
         confirmed_at:
           type: string
           format: date-time
+        source_type:
+          type: string
+          enum:
+            - ticket_use
+            - bar_bill
+            - service_order
+          description: 明细来源：门票行为 ticket_use（source_id＝原票）；商户消费行为来源消费单据类型。
+        source_id:
+          type: string
       required:
         - reward_id
         - parent_ticket_id
@@ -61360,6 +61720,8 @@ components:
         - amount_cent
         - price_version_id
         - confirmed_at
+        - source_type
+        - source_id
     TicketRewardConfig:
       type: object
       additionalProperties: false
@@ -61376,6 +61738,21 @@ components:
           type:
             - string
             - "null"
+        business_format:
+          type:
+            - string
+            - "null"
+          enum:
+            [
+              "bar",
+              "catering",
+              "retail",
+              "amusement",
+              "media",
+              "other",
+              null
+            ]
+          description: 商户业态；仅 merchant_points（每产生 1 积分所需有效消费，分）与 merchant_growth（每记 1 成长值所需有效消费，分）必填，按业态全国生效。
         version:
           type: string
         values:
@@ -61486,6 +61863,21 @@ components:
             - "null"
           items:
             type: string
+        merchant_waiting_hours:
+          type:
+            - integer
+            - "null"
+          format: int32
+        minimum_merchant_waiting_hours:
+          type:
+            - integer
+            - "null"
+          format: int32
+        maximum_merchant_waiting_hours:
+          type:
+            - integer
+            - "null"
+          format: int32
       required: []
     TicketRewardConfigRequest:
       type: object
@@ -61503,7 +61895,9 @@ components:
               "growth",
               "national",
               "sales_contract",
-              "recovery_waiver"
+              "recovery_waiver",
+              "merchant_points",
+              "merchant_growth"
             ]
         ticket_type_id:
           type:
@@ -61513,6 +61907,21 @@ components:
           type:
             - string
             - "null"
+        business_format:
+          type:
+            - string
+            - "null"
+          enum:
+            [
+              "bar",
+              "catering",
+              "retail",
+              "amusement",
+              "media",
+              "other",
+              null
+            ]
+          description: 商户业态；仅 merchant_points（每产生 1 积分所需有效消费，分）与 merchant_growth（每记 1 成长值所需有效消费，分）必填，按业态全国生效。
         values:
           $ref: "#/components/schemas/TicketRewardConfigValues"
         effective_at:
@@ -61684,6 +62093,63 @@ components:
       required:
         - rewards
         - pending_recovery
+    MerchantConsumptionRewardView:
+      type: object
+      additionalProperties: false
+      description: 商户消费奖励结果（积分、成长值为扣除已成功退款部分后的现值；不含客人身份）。
+      properties:
+        id:
+          type: string
+        source_type:
+          type: string
+          enum:
+            - bar_bill
+            - service_order
+        source_id:
+          type: string
+        source_no:
+          type: string
+          description: 来源单号（酒吧账单号；专项服务单为服务单编号）。
+        merchant_name:
+          type: string
+        points:
+          type: integer
+          format: int64
+        growth:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+            - pending
+            - confirmed
+            - cancelled
+            - reversed
+        completed_at:
+          type: string
+          format: date-time
+        available_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        confirmed_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - id
+        - source_type
+        - source_id
+        - source_no
+        - merchant_name
+        - points
+        - growth
+        - status
+        - completed_at
+        - available_at
+        - confirmed_at
     TicketPointsCalendarCase:
       type: object
       additionalProperties: false

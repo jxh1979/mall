@@ -1,5 +1,7 @@
 package com.complex.terminal
 
+// 文件版本：V0.01
+
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -284,6 +286,43 @@ class TerminalFieldWorkflowTest {
     assertEquals(1, syncBodies.size)
     assertTrue(task.clientTaskId in syncBodies.first())
     assertTrue("\"staff_id\":\"staff-1\"" in syncBodies.first())
+  }
+
+  // TK-06（BSM:780 一人多次票首次核销留存人脸、后续以该人脸核对）：预检读 face_binding；核销带上本次拍照与客人同意。
+  @Test
+  fun verifyOnlineSendsFaceCaptureForMultiUseFirstEntry() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val api = newApi { req ->
+      captured += req
+      when (req.path) {
+        "/api/v1/ticketing/verifications/preview" ->
+          okJson("""{"allowed":true,"reason":"ok","face_binding":"capture"}""")
+        "/api/v1/ticketing/verifications" ->
+          okJson("""{"id":"ver-9","verification_no":"V-9","status":"success"}""")
+        else -> error("unexpected path ${req.path}")
+      }
+    }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
+
+    assertEquals("capture", workflow.previewOnline("E-MULTI-1").faceBinding)
+    workflow.verifyOnline("E-MULTI-1", faceCapture = "RkFDRQ==", faceConsentAccepted = true)
+
+    val body = captured.last().body
+    assertTrue("\"face_capture\":\"RkFDRQ==\"" in body, body)
+    assertTrue("\"face_consent_accepted\":true" in body, body)
+  }
+
+  @Test
+  fun verifyOnlineWithoutFaceSendsNoFaceKeys() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val api = newApi { req ->
+      captured += req
+      okJson("""{"id":"ver-10","verification_no":"V-10","status":"success"}""")
+    }
+    TerminalWorkflow(api, storeWithSessionAndBinding()).verifyOnline("E-SINGLE-1")
+
+    assertTrue("face_capture" !in captured.single().body)
+    assertTrue("face_consent_accepted" !in captured.single().body)
   }
 
   private fun okJson(body: String): HttpResponse<String> = StubResponse(200, body)

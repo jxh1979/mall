@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.evidence.AuditedOperation;
 
 enum TicketingReadOperation implements AuditedOperation {
@@ -12,6 +14,7 @@ enum TicketingReadOperation implements AuditedOperation {
     LIST_TICKET_INSTANCES("ticket_instance.viewed", "ticket_instance.viewed_failed", "ticket.verify.view", "ticket_instance"),
     LIST_TICKET_REFUND_LINES("ticket_refund_line.viewed", "ticket_refund_line.view_failed", "ticket.refund.view", "ticket_refund_line"),
     LIST_TICKET_REFUNDS("ticket_refund.viewed", "ticket_refund.view_failed", "ticket.refund.view", "ticket_refund"),
+    LIST_TICKET_SAFETY_EVENTS("ticket_safety_event.viewed", "ticket_safety_event.view_failed", "ticket.refund.view", "ticket_safety_event"),
     LIST_VERIFICATIONS("verification.viewed", "verification.view_failed", "verification.view", "ticket_verification"),
     LIST_TICKET_TRANSFERS("ticket_transfer.viewed", "ticket_transfer.view_failed", "ticket.transfer.read", "ticket_transfer");
 

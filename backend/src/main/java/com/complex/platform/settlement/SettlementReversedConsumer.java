@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.ticketing.VerificationReversedEvent;
 import java.time.Instant;
@@ -102,6 +102,41 @@ public class SettlementReversedConsumer {
                 //   月累计=天然释放封顶额度;该票 G 净额抵回 0 → 锚点复位,下一次核销可重新计提。
                 -original.giftCostCent(),
                 original.giftCostConfigId()));
+    }
+
+    /**
+     * TK-05-R4（BSM:804「已完成分账的票发生退款时，按与结算相反的顺序逐段冲回：先冲回域内实际提供方已收份额，再冲回域间份额，最后处理第三方
+     * 渠道费用……所退票已计收的门票综合服务费随票全额退回……每一段冲回都生成反向结算记录，不覆盖原归属、原计算与原结算记录」）：
+     * 通票分账在每次核销时形成核销结算事实（ST-VS，带提供方、业态归属与综合服务费），月结由事实逐段拆出提供方份额、业态（域间）份额与渠道费。
+     * 退款实际成功后，对所退权益上每一次成功核销追加一条严格取反的冲回事实（ST-RR，原行不改），月结按同一链路逐段反向冲回；
+     * 原核销所属月已结付的落当月，由当月单列追收（{@link #reversalBusinessAt}）。普通退款只发生在完全未核销的票上，没有可冲的核销，天然 no-op。
+     * 幂等：transaction_no 由退款与原核销确定，重放 DO NOTHING。
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onTicketRefunded(com.complex.platform.ticketing.TicketRewardFacts.Refunded event) {
+        String refundId = event == null ? null : trimToNull(event.refundId());
+        if (refundId == null) {
+            return;
+        }
+        for (String verificationId : transactionRepository.findSettledVerificationsOfSucceededRefund(refundId)) {
+            var original = transactionRepository.findVerificationSettledByVerificationId(verificationId);
+            if (original == null) {
+                continue; // 该次核销未形成分账事实（补偿补发行、direct 出票）→ 无可冲。
+            }
+            String key = java.util.UUID.nameUUIDFromBytes((refundId + "|" + verificationId)
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-", "");
+            transactionRepository.insertImmutableFact(new SettlementTransactionRecord(
+                    "st_rr_" + key, "ST-RR-" + key, TRANSACTION_TYPE_VERIFICATION_REVERSED,
+                    original.entitlementId(), original.orderId(), original.ticketTypeId(), verificationId,
+                    original.entitlementType(), -1, original.totalTimes(), -original.numPeople(),
+                    -original.verifiedAmountCent(), -original.verifiedAmountCent(), 0L,
+                    original.beneficiaryType(), original.merchantId(), original.projectId(), STATUS_DRAFT,
+                    original.entitlementValidTo(), original.exclusiveMerchantId(),
+                    reversalBusinessAt(original.projectId(), original.businessAt()),
+                    -original.discountAmountCent(), -original.compServiceFeeCent(), original.compServiceFeeConfigId(),
+                    original.beneficiaryEntityId(), original.parentTicketId(), -original.giftCostCent(), original.giftCostConfigId()));
+        }
     }
 
     /**

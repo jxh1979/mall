@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarOrderRecord;
@@ -55,9 +55,6 @@ public class CustomerService {
 
     @org.springframework.beans.factory.annotation.Autowired
     private PointsRecoveryService pointsRecoveries;
-
-    // V368：人脸照拍摄同意在同意台账里的类型（与既有 privacy/marketing 同表不同类型）。
-    private static final String FACE_PHOTO_CONSENT_TYPE = "ticket_face_photo";
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -257,19 +254,12 @@ public class CustomerService {
                 "customer.ticket_products_view_failed",
                 "public",
                 "ticket_product",
-                () -> {
-                    // V359：一次查出「要拍脸照的票种」，客人端只对这些票才弹拍照（其余票种一律不问客人要生物识别信息）。
-                    java.util.Set<String> facePhotoTypes = ticketingService.ticketTypeIdsRequiringFacePhoto();
-                    // 留存天数取当前生效配置，随客人端一起下发——告知的期限必须是真的那个数。
-                    Integer retentionDays = facePhotoTypes.isEmpty() ? null : ticketingService.facePhotoRetentionDays();
-                    return ticketingService.listTicketTypes().items().stream()
-                            // AUD-015：公开列表只认已发布（过了权益绑定发布闸）的票种；历史 active 行由 V293 一次性归位。
-                            .filter(ticketType -> "published".equals(ticketType.status()))
-                            .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
-                            .map(ticketType -> toTicketProduct(
-                                    ticketType, facePhotoTypes.contains(ticketType.id()), retentionDays))
-                            .toList();
-                }
+                () -> ticketingService.listTicketTypes().items().stream()
+                        // AUD-015：公开列表只认已发布（过了权益绑定发布闸）的票种；历史 active 行由 V293 一次性归位。
+                        .filter(ticketType -> "published".equals(ticketType.status()))
+                        .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
+                        .map(this::toTicketProduct)
+                        .toList()
         );
     }
 
@@ -292,7 +282,6 @@ public class CustomerService {
                 "not_applicable",
                 "ticket_order",
                 () -> {
-                    List<String> facePhotos = actual.facePhotos() == null ? List.of() : actual.facePhotos();
                     return ticketingService.createTicketOrder(new TicketOrderRequest(
                             key,
                             actual.buyerNote(),
@@ -306,11 +295,7 @@ public class CustomerService {
                             customer.id(),
                             java.util.Map.of(),
                             // AUD-076：把客人选中的酒吧透传给服务端校验+快照（单店票必填、通票必空）。
-                            actual.barId(),
-                            // V359：客人在 H5 上拍的入场人脸照，加密暂存到本单，后台出票时转绑到已发权益。
-                            facePhotos,
-                            // V368：拍照前那块告知的同意，先落一条留痕到同意台账，照片挂它的 id。
-                            recordFacePhotoConsent(customer, key, facePhotos, actual.faceConsent())
+                            actual.barId()
                     ));
                 }
         );
@@ -378,44 +363,6 @@ public class CustomerService {
                     ));
                 }
         );
-    }
-
-    /**
-     * V368 人脸照同意留痕（用户 2026-07-28 裁决「要，落到同意台账」）。
-     *
-     * <p>客人在拍照前那块告知上勾了「我已阅读并同意」，这个同意此前只活在浏览器里。人脸是生物识别信息，
-     * 将来被问「这位客人同意过吗」，必须拿得出证据——所以往既有同意台账 customer_consents 落一条：
-     * 谁（customer_id）、什么时候（accepted_at）、同意了哪一版告知（version=模板版本@当时告知的留存天数）。
-     * 不新建第二套台账：客人的隐私/营销同意都在这张表，人脸照同意换个 consent_type 而已。
-     *
-     * <p>没拍照就不问同意（不需要脸照的票种一律不碰这里）；拍了照没勾同意直接拒——
-     * 没有同意就不该有照片，这条在 TicketFacePhotoService.stageForOrder 与库上 CHECK 再各兜一道。
-     *
-     * @return 同意留痕 id（无照片时为 null）
-     */
-    private String recordFacePhotoConsent(CustomerRecord customer, String key,
-                                          List<String> facePhotos, Boolean faceConsent) {
-        if (facePhotos.isEmpty()) {
-            return null;
-        }
-        if (!Boolean.TRUE.equals(faceConsent)) {
-            throw ApiException.badRequest("FACE_PHOTO_CONSENT_REQUIRED",
-                    "上传人脸照片前须客人同意人脸照片告知书");
-        }
-        Instant now = Instant.now();
-        // id 由幂等键派生：同一次下单重放不会多出第二条同意（saveConsent 按 id ON CONFLICT 覆盖）。
-        return repository.saveConsent(new CustomerConsentRecord(
-                "consent_face_" + slug(key),
-                customer.id(),
-                FACE_PHOTO_CONSENT_TYPE,
-                true,
-                ticketingService.facePhotoNoticeVersion(),
-                "miniapp",
-                now,
-                null,
-                now,
-                now
-        )).id();
     }
 
     public CustomerPointsResponse getPoints(String customerToken) {
@@ -1265,8 +1212,7 @@ public class CustomerService {
         }
     }
 
-    private CustomerTicketProductResponse toTicketProduct(
-            TicketTypeRecord ticketType, boolean requireFacePhoto, Integer facePhotoRetentionDays) {
+    private CustomerTicketProductResponse toTicketProduct(TicketTypeRecord ticketType) {
         return new CustomerTicketProductResponse(
                 ticketType.id(),
                 ticketType.ticketName(),
@@ -1277,10 +1223,7 @@ public class CustomerService {
                 ticketType.status(),
                 // AUD-076 单店票挂酒吧：结构化 bar_id + 实时解析酒吧名（null=综合体通票）。
                 ticketType.barId(),
-                ticketingService.resolveBarName(ticketType.barId()),
-                // V359：该票是否要求购票人拍入场人脸照（游乐票默认要）+ 当前生效的留存天数（供如实告知）。
-                requireFacePhoto,
-                requireFacePhoto ? facePhotoRetentionDays : null
+                ticketingService.resolveBarName(ticketType.barId())
         );
     }
 

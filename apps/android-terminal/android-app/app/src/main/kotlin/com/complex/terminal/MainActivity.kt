@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import android.app.Activity
 import android.content.Intent
@@ -43,6 +43,9 @@ import kotlinx.serialization.json.JsonPrimitive
  *   - 扫码：ZXing 内置扫码（IntentIntegrator）调起真机相机，结果回填输入框；无相机时可手动输入 credential 兜底。
  *   - Keystore：设备公钥/指纹取自 AndroidKeyStore（EC P-256，私钥不可导出），见 DeviceKeystore。
  */
+// TK-06：入场人脸拍照的回调请求码（与 ZXing 扫码 0xc0de 区分）。
+private const val FACE_SHOT_REQUEST = 0x7E06
+
 class MainActivity : Activity() {
 
   private val store = InMemoryLocalStore()
@@ -83,7 +86,28 @@ class MainActivity : Activity() {
       .initiateScan()
   }
 
+  // TK-06 一人多次票留脸 / 核对：用系统相机拍一张入场客人（缩略图即可交供应商比对），只在内存里，核销提交后即丢。
+  private var faceShotResult: ((Bitmap?) -> Unit)? = null
+
+  private fun launchFaceShot(onShot: (Bitmap?) -> Unit) {
+    faceShotResult = onShot
+    startActivityForResult(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE), FACE_SHOT_REQUEST)
+  }
+
+  private fun jpegBase64(bitmap: Bitmap): String {
+    val out = java.io.ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+    return android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+  }
+
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    if (requestCode == FACE_SHOT_REQUEST) {
+      val callback = faceShotResult
+      faceShotResult = null
+      @Suppress("DEPRECATION")
+      callback?.invoke(if (resultCode == RESULT_OK) data?.extras?.get("data") as? Bitmap else null)
+      return
+    }
     val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
     if (result != null) {
       val callback = scanResult
@@ -370,6 +394,23 @@ class MainActivity : Activity() {
     val credential = editText("核销凭证（扫码或手动输入）")
     val status = statusText("先预检再核销")
     val scanButton = button("扫码读取凭证") { launchScan(credential) }
+    // TK-06：预检给出 capture（首次留脸，须客人单独同意 + 拍照）或 match（按留存人脸比对，须拍照）；为空则不涉及人脸。
+    var faceBinding: String? = null
+    var faceCapture: String? = null
+    val faceConsent = android.widget.CheckBox(this).apply {
+      text = "客人已阅读并同意：本票为一人多次票，首次入场留存人脸，仅用于核对后续各次是否同一使用人；加密保存，该票用完或到期后删除"
+      visibility = View.GONE
+    }
+    val faceButton = button("为入场客人拍照") {
+      launchFaceShot { bitmap ->
+        if (bitmap == null) {
+          status.text = "未拍到照片，请重拍"
+        } else {
+          faceCapture = jpegBase64(bitmap)
+          status.text = "已拍照，可核销"
+        }
+      }
+    }.apply { visibility = View.GONE }
 
     val previewButton = button("预检") {
       val code = credential.text.toString().trim()
@@ -379,8 +420,18 @@ class MainActivity : Activity() {
         runBackground(
           action = { workflow.previewOnline(code) },
           onSuccess = { r ->
-            status.text = if (r.allowed) "预检通过：可核销（${r.reason.ifBlank { "allowed" }}）"
-            else "预检不通过：${r.reason.ifBlank { "denied" }}"
+            faceBinding = r.faceBinding
+            faceCapture = null
+            faceConsent.isChecked = false
+            faceConsent.visibility = if (faceBinding == "capture") View.VISIBLE else View.GONE
+            faceButton.visibility = if (faceBinding != null) View.VISIBLE else View.GONE
+            val faceHint = when (faceBinding) {
+              "capture" -> "\n一人多次票首次入场：须客人同意留存人脸并拍照；不同意不能入场（票仍未核销）"
+              "match" -> "\n一人多次票：须为入场客人拍照，由系统比对是否同一使用人"
+              else -> ""
+            }
+            status.text = (if (r.allowed) "预检通过：可核销（${r.reason.ifBlank { "allowed" }}）"
+            else "预检不通过：${r.reason.ifBlank { "denied" }}") + faceHint
           },
           onError = { status.text = "预检失败：${friendly(it)}" },
         )
@@ -390,11 +441,20 @@ class MainActivity : Activity() {
     val verifyButton = button("核销") {
       val code = credential.text.toString().trim()
       if (code.isEmpty()) { status.text = "请输入核销凭证"; return@button }
+      if (faceBinding == "capture" && !faceConsent.isChecked) {
+        status.text = "客人未同意留存人脸，不能首次入场（票仍未核销）"; return@button
+      }
+      if (faceBinding != null && faceCapture == null) { status.text = "请先为入场客人拍照"; return@button }
+      val capture = faceCapture
+      val consent = if (faceBinding == "capture") true else null
       requireBindingOr(status) {
         status.text = "正在核销…"
         runBackground(
-          action = { workflow.verifyOnline(code) },
-          onSuccess = { r -> status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}" },
+          action = { workflow.verifyOnline(code, capture, consent) },
+          onSuccess = { r ->
+            faceCapture = null
+            status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}"
+          },
           onError = { status.text = "核销失败：${friendly(it)}" },
         )
       }
@@ -403,7 +463,7 @@ class MainActivity : Activity() {
     setContentView(
       screen(
         title = "门票 / 权益核销",
-        children = listOf(status, credential, scanButton, previewButton, verifyButton, backButton()),
+        children = listOf(status, credential, scanButton, previewButton, faceConsent, faceButton, verifyButton, backButton()),
       ),
     )
   }
@@ -1309,6 +1369,7 @@ class MainActivity : Activity() {
       onError = { catalog.text = "目录拉取失败：${friendly(it)}" },
     )
     val lastOrderId = editText("服务单(下单后自动填)")
+    val memberPhone = editText("会员手机号(选填，累计积分与成长值)")
     val paidButton = button("已收款到公司账户(目视支付成功)") {
       val id = lastOrderId.text.toString().trim()
       if (id.isEmpty()) { status.text = "请先下单"; return@button }
@@ -1317,7 +1378,8 @@ class MainActivity : Activity() {
         message = "将把服务单 $id 标记为已收款（公司统一账户）。\n标记后服务进入履约与分账流程，不可撤回。\n请先目视确认客人支付成功。",
       ) {
         runBackground(
-          action = { api.markServiceOrderPaid(id, ServiceMarkPaidReq("mp_${System.currentTimeMillis()}")) },
+          action = { api.markServiceOrderPaid(id, ServiceMarkPaidReq("mp_${System.currentTimeMillis()}",
+            memberPhone = memberPhone.text.toString().trim().ifEmpty { null })) },
           onSuccess = { status.text = "已确认收款(公司账户):${it.id};舞者可上台" },
           onError = { status.text = "确认收款失败：${friendly(it)}" },
         )
@@ -1367,7 +1429,7 @@ class MainActivity : Activity() {
     setContentView(screen(
       title = "代客点服务(公司代收)",
       children = listOf(catalog, catalogList, itemId, performer, tableId, note, orderButton, status, qrImage,
-        lastOrderId, paidButton, completeButton,
+        lastOrderId, memberPhone, paidButton, completeButton,
         backButton()),
       secure = true,
     ))

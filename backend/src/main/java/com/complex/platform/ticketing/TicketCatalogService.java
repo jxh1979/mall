@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
@@ -268,9 +270,7 @@ public class TicketCatalogService {
                 // 暂无配置入口，待运营后台补 consumption_window 编辑项（判定层对 NULL/per_use 走现状）。
                 "per_use",
                 // 批3-4/餐饮(用户2026-07-06)：专属商户「不分摊」由请求透传(可空=非专属走池)；餐饮填餐厅商户使核销全额按内部结算价直付餐厅。
-                trimToNull(actual.exclusiveMerchantId()),
-                // 批3-6(用户2026-07-04)：拍脸照开关由请求透传(可空=false)；游乐模板走 V229 种子回填默认开，新建按请求。
-                Boolean.TRUE.equals(actual.requireFacePhoto())
+                trimToNull(actual.exclusiveMerchantId())
         // 批10/E：挂目录引用(withCatalogRef 同步写快照;code 为空时等价于原构造,快照亦空)。
         ).withCatalogRef(catalogItemCode, snapshotPriceCent, now));
     }

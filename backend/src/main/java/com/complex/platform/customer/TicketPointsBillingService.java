@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.customer.TicketPointsBilling.*;
@@ -125,10 +125,19 @@ public class TicketPointsBillingService {
         if("approved".equals(e.reviewStatus()) && "ticket_points_portal_outage".equals(e.objectType()))extendUnpaidSchedules(e.objectId());
     }
 
-    /** 定时入口：仅已结束自然月、已到配置出账日的费用事实归集出账。 */
+    /** 费用类别 → 费用事实表、账单明细表（常量表名）。 */
+    private static final Map<String,String[]> FEE_TABLES=Map.of(
+            "ticket",new String[]{"ticket_points_issuance_fees","ticket_points_monthly_bill_items"},
+            "merchant",new String[]{"merchant_points_issuance_fees","merchant_points_monthly_bill_items"});
+
+    /**
+     * 定时入口：仅已结束自然月、已到配置出账日的费用事实归集出账。第十一批 TK-04-b：门票积分发行费与商户积分发行费
+     * （BSM L823「只有转为可用才产生商户积分发行费」）各自归集、各自出账（ENUM L84「各自全额挂账」），同一月同一批关账。
+     */
     @Transactional public int closeReadyMonths(Instant now) {
         LocalDate today=now.atZone(LocalZone.ID).toLocalDate();
-        List<LocalDate> months=jdbc.queryForList("SELECT DISTINCT date_trunc('month',f.confirmed_at AT TIME ZONE ?)::date FROM ticket_points_issuance_fees f LEFT JOIN ticket_points_monthly_bill_items i ON i.reward_id=f.reward_id WHERE i.reward_id IS NULL AND f.confirmed_at<? ORDER BY 1",LocalDate.class,LocalZone.ID.getId(),Timestamp.from(today.withDayOfMonth(1).atStartOfDay(LocalZone.ID).toInstant()));
+        Timestamp currentMonth=Timestamp.from(today.withDayOfMonth(1).atStartOfDay(LocalZone.ID).toInstant());
+        List<LocalDate> months=jdbc.queryForList("SELECT DISTINCT m FROM (SELECT date_trunc('month',f.confirmed_at AT TIME ZONE ?)::date AS m FROM ticket_points_issuance_fees f LEFT JOIN ticket_points_monthly_bill_items i ON i.reward_id=f.reward_id WHERE i.reward_id IS NULL AND f.confirmed_at<? UNION SELECT date_trunc('month',f.confirmed_at AT TIME ZONE ?)::date FROM merchant_points_issuance_fees f LEFT JOIN merchant_points_monthly_bill_items i ON i.reward_id=f.reward_id WHERE i.reward_id IS NULL AND f.confirmed_at<?) x ORDER BY 1",LocalDate.class,LocalZone.ID.getId(),currentMonth,LocalZone.ID.getId(),currentMonth);
         int count=0;
         for(LocalDate month:months){
             Rule rule=effective(month);
@@ -136,14 +145,17 @@ public class TicketPointsBillingService {
             jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))",rs->{},"points-month:"+month);
             if(jdbc.queryForObject("SELECT count(*) FROM ticket_points_closed_months WHERE billing_month=?",Integer.class,month)>0)continue;
             record Fee(String reward,String seller,String merchant,String receiver,String project,long amount){}
-            List<Fee> fees=jdbc.query("SELECT f.* FROM ticket_points_issuance_fees f LEFT JOIN ticket_points_monthly_bill_items i ON i.reward_id=f.reward_id WHERE i.reward_id IS NULL AND f.confirmed_at>=? AND f.confirmed_at<? ORDER BY f.reward_id",(rs,n)->new Fee(rs.getString("reward_id"),rs.getString("seller_entity_id"),rs.getString("seller_merchant_id"),rs.getString("receiver_entity_id"),rs.getString("project_id"),rs.getLong("amount_cent")),Timestamp.from(month.atStartOfDay(LocalZone.ID).toInstant()),Timestamp.from(month.plusMonths(1).atStartOfDay(LocalZone.ID).toInstant()));
-            Map<List<String>,List<Fee>> groups=new LinkedHashMap<>();
-            for(Fee f:fees)groups.computeIfAbsent(Arrays.asList(f.seller(),f.merchant(),f.receiver(),f.project()),k->new ArrayList<>()).add(f);
-            for(List<Fee> group:groups.values()){
-                Fee f=group.getFirst();String id=id("tpmb");long amount=group.stream().mapToLong(Fee::amount).reduce(0,Math::addExact);
-                jdbc.update("INSERT INTO ticket_points_monthly_bills(id,billing_month,billing_rule_id,seller_entity_id,seller_merchant_id,receiver_entity_id,project_id,amount_cent,created_at) VALUES(?,?,?,?,?,?,?,?,?)",id,month,rule.id(),f.seller(),f.merchant(),f.receiver(),f.project(),amount,Timestamp.from(now));
-                for(Fee fee:group)jdbc.update("INSERT INTO ticket_points_monthly_bill_items(reward_id,bill_id) VALUES(?,?)",fee.reward(),id);
-                publishIfReachable(find(id),rule,now);count++;
+            for(String kind:List.of("ticket","merchant")){
+                String[] tables=FEE_TABLES.get(kind);
+                List<Fee> fees=jdbc.query("SELECT f.* FROM "+tables[0]+" f LEFT JOIN "+tables[1]+" i ON i.reward_id=f.reward_id WHERE i.reward_id IS NULL AND f.confirmed_at>=? AND f.confirmed_at<? ORDER BY f.reward_id",(rs,n)->new Fee(rs.getString("reward_id"),rs.getString("seller_entity_id"),rs.getString("seller_merchant_id"),rs.getString("receiver_entity_id"),rs.getString("project_id"),rs.getLong("amount_cent")),Timestamp.from(month.atStartOfDay(LocalZone.ID).toInstant()),Timestamp.from(month.plusMonths(1).atStartOfDay(LocalZone.ID).toInstant()));
+                Map<List<String>,List<Fee>> groups=new LinkedHashMap<>();
+                for(Fee f:fees)groups.computeIfAbsent(Arrays.asList(f.seller(),f.merchant(),f.receiver(),f.project()),k->new ArrayList<>()).add(f);
+                for(List<Fee> group:groups.values()){
+                    Fee f=group.getFirst();String id=id("tpmb");long amount=group.stream().mapToLong(Fee::amount).reduce(0,Math::addExact);
+                    jdbc.update("INSERT INTO ticket_points_monthly_bills(id,billing_month,billing_rule_id,seller_entity_id,seller_merchant_id,receiver_entity_id,project_id,amount_cent,created_at,fee_kind) VALUES(?,?,?,?,?,?,?,?,?,?)",id,month,rule.id(),f.seller(),f.merchant(),f.receiver(),f.project(),amount,Timestamp.from(now),kind);
+                    for(Fee fee:group)jdbc.update("INSERT INTO "+tables[1]+"(reward_id,bill_id) VALUES(?,?)",fee.reward(),id);
+                    publishIfReachable(find(id),rule,now);count++;
+                }
             }
             jdbc.update("INSERT INTO ticket_points_closed_months(billing_month,closed_at) VALUES(?,?)",month,Timestamp.from(now));
         }
@@ -192,7 +204,7 @@ public class TicketPointsBillingService {
     /** 出账事务完成后的定时通知，复用真实发送日志；提醒结果不参与异议期起算。 */
     public void notifyPublishedBills(){
         record Notice(String id,String bill,String merchant,LocalDate month,long amount,LocalDate deadline,String reason){}
-        List<Notice> notices=jdbc.query("SELECT b.id AS notice_id,b.id,b.seller_merchant_id,b.billing_month,b.amount_cent,b.objection_deadline,'门票积分发行费月结出账' AS reason FROM ticket_points_monthly_bills b WHERE b.visible_at IS NOT NULL AND b.seller_merchant_id IS NOT NULL UNION ALL SELECT s.id,b.id,b.seller_merchant_id,b.billing_month,b.amount_cent,s.objection_deadline,'核实整日门户故障，未付款期限延长' FROM ticket_points_bill_schedule_adjustments s JOIN ticket_points_monthly_bills b ON b.id=s.bill_id WHERE b.seller_merchant_id IS NOT NULL",(r,n)->new Notice(r.getString("notice_id"),r.getString("id"),r.getString("seller_merchant_id"),r.getObject("billing_month",LocalDate.class),r.getLong("amount_cent"),r.getObject("objection_deadline",LocalDate.class),r.getString("reason")));
+        List<Notice> notices=jdbc.query("SELECT b.id AS notice_id,b.id,b.seller_merchant_id,b.billing_month,b.amount_cent,b.objection_deadline,CASE b.fee_kind WHEN 'merchant' THEN '商户积分发行费月结出账' ELSE '门票积分发行费月结出账' END AS reason FROM ticket_points_monthly_bills b WHERE b.visible_at IS NOT NULL AND b.seller_merchant_id IS NOT NULL UNION ALL SELECT s.id,b.id,b.seller_merchant_id,b.billing_month,b.amount_cent,s.objection_deadline,'核实整日门户故障，未付款期限延长' FROM ticket_points_bill_schedule_adjustments s JOIN ticket_points_monthly_bills b ON b.id=s.bill_id WHERE b.seller_merchant_id IS NOT NULL",(r,n)->new Notice(r.getString("notice_id"),r.getString("id"),r.getString("seller_merchant_id"),r.getObject("billing_month",LocalDate.class),r.getLong("amount_cent"),r.getObject("objection_deadline",LocalDate.class),r.getString("reason")));
         for(Notice n:notices){
             String request="ticket-points-bill:"+n.id();
             if(jdbc.queryForObject("SELECT count(*) FROM notification_send_log WHERE request_id=?",Integer.class,request)>0)continue;
@@ -212,7 +224,16 @@ public class TicketPointsBillingService {
         return true;
     }
     public List<Map<String,Object>> objections(String id){requireVisible(find(id));return jdbc.queryForList("SELECT id,reason,submitted_at,status,resolution,resolved_at FROM ticket_points_bill_objections WHERE bill_id=? ORDER BY submitted_at",id);}
-    public List<FeeLine> items(String id){requireVisible(find(id));return jdbc.query("SELECT f.*,r.parent_ticket_id,r.slot_index,r.use_index FROM ticket_points_monthly_bill_items i JOIN ticket_points_issuance_fees f ON f.reward_id=i.reward_id JOIN ticket_use_rewards r ON r.id=f.reward_id WHERE i.bill_id=? ORDER BY f.confirmed_at,f.reward_id",(rs,n)->new FeeLine(rs.getString("reward_id"),rs.getString("parent_ticket_id"),rs.getInt("slot_index"),rs.getInt("use_index"),rs.getLong("points"),rs.getBigDecimal("unit_price_cent"),rs.getLong("amount_cent"),rs.getString("price_version_id"),rs.getTimestamp("confirmed_at").toInstant()),id);}
+    /** 账单明细：门票行取原票／人份／次份，商户消费行取来源消费单据（ENUM L77 从单据可反查）。 */
+    public List<FeeLine> items(String id){requireVisible(find(id));return jdbc.query("""
+            SELECT f.*,r.parent_ticket_id,r.slot_index,r.use_index,'ticket_use' AS source_type,r.parent_ticket_id AS source_id
+              FROM ticket_points_monthly_bill_items i JOIN ticket_points_issuance_fees f ON f.reward_id=i.reward_id JOIN ticket_use_rewards r ON r.id=f.reward_id WHERE i.bill_id=?
+            UNION ALL
+            SELECT f.reward_id,f.price_version_id,f.seller_entity_id,f.seller_merchant_id,f.receiver_entity_id,f.project_id,f.points,f.unit_price_cent,f.amount_cent,f.confirmed_at,
+                   NULL,0,0,r.source_type,r.source_id
+              FROM merchant_points_monthly_bill_items i JOIN merchant_points_issuance_fees f ON f.reward_id=i.reward_id JOIN merchant_consumption_rewards r ON r.id=f.reward_id WHERE i.bill_id=?
+            ORDER BY confirmed_at,reward_id
+            """,(rs,n)->new FeeLine(rs.getString("reward_id"),rs.getString("parent_ticket_id"),rs.getInt("slot_index"),rs.getInt("use_index"),rs.getLong("points"),rs.getBigDecimal("unit_price_cent"),rs.getLong("amount_cent"),rs.getString("price_version_id"),rs.getTimestamp("confirmed_at").toInstant(),rs.getString("source_type"),rs.getString("source_id")),id,id);}
     @Transactional public CaseReceipt resolveUnchanged(String objectionId,ResolutionRequest r) {
         national(MANAGE);nationalApprover(r.finalApproverId());requireText(r.resolution(),"resolution");
         return idem.execute("ticketPointsObjectionResolution:"+objectionId,requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
@@ -247,7 +268,7 @@ public class TicketPointsBillingService {
     // 沿用现 StaffService 的结算日期处理：配置日超出当月长度时取该月月末。
     private LocalDate statementDate(LocalDate month,int day){LocalDate next=month.plusMonths(1);return next.withDayOfMonth(Math.min(day,next.lengthOfMonth()));}
     private Bill find(String id){return jdbc.query(SELECT+" WHERE b.id=?",this::bill,id).stream().findFirst().orElseThrow(()->ApiException.notFound("POINTS_BILL_NOT_FOUND","积分账单不存在"));}
-    private Bill bill(ResultSet r,int n)throws SQLException{return new Bill(r.getString("id"),r.getObject("billing_month",LocalDate.class),r.getString("billing_rule_id"),r.getString("seller_entity_id"),r.getString("seller_merchant_id"),r.getString("receiver_entity_id"),r.getString("project_id"),r.getLong("amount_cent"),TicketRewardConfigService.instant(r,"visible_at"),r.getObject("effective_objection_deadline",LocalDate.class),r.getObject("effective_due_date",LocalDate.class),r.getString("ar_ap_item_id"),r.getLong("paid"),r.getLong("unpaid"),r.getString("payment_status"),r.getInt("open_objections"));}
+    private Bill bill(ResultSet r,int n)throws SQLException{return new Bill(r.getString("id"),r.getObject("billing_month",LocalDate.class),r.getString("billing_rule_id"),r.getString("seller_entity_id"),r.getString("seller_merchant_id"),r.getString("receiver_entity_id"),r.getString("project_id"),r.getLong("amount_cent"),TicketRewardConfigService.instant(r,"visible_at"),r.getObject("effective_objection_deadline",LocalDate.class),r.getObject("effective_due_date",LocalDate.class),r.getString("ar_ap_item_id"),r.getLong("paid"),r.getLong("unpaid"),r.getString("payment_status"),r.getInt("open_objections"),r.getString("fee_kind"));}
     private Rule rule(ResultSet r,int n)throws SQLException{return new Rule(r.getString("id"),r.getString("version"),r.getObject("effective_month",LocalDate.class),r.getInt("statement_day"),r.getInt("objection_working_days"),r.getInt("minimum_days"),r.getInt("maximum_days"),Arrays.asList((Integer[])r.getArray("pay_days").getArray()),r.getString("status"),r.getString("review_id"));}
     private String encode(Object o){try{return json.writeValueAsString(o);}catch(Exception e){throw new IllegalStateException(e);}}
     private List<Day> decodeDays(String raw){try{return Arrays.asList(json.readValue(raw,Day[].class));}catch(Exception e){throw new IllegalStateException(e);}}

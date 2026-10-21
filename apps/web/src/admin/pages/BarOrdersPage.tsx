@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { TechDetails } from "../components/TechDetails";
@@ -93,6 +93,9 @@ function formatAmount(amountCent: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amount);
 }
 
+type BillRewardRow = { id: string; points: number; growth: number; status: string };
+const REWARD_STATUS: Record<string, string> = { pending: "待确认", confirmed: "已确认", cancelled: "已取消", reversed: "已冲回" };
+
 function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
   return latestBill(order);
 }
@@ -159,6 +162,8 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [paymentSmsCode, setPaymentSmsCode] = React.useState("");
   // 第十批 TK-28（ENUM L81「商户折扣券——到对应商户抵扣」；操作员裁决「一次结账一张」）：结账带一张折扣券码；结账后回显账单折扣合计。
   const [voucherCode, setVoucherCode] = React.useState("");
+  // 第十一批 TK-04-R2（BSM L822「由收银在收款时现场录入会员号累计」；PGM L878 会员号即注册手机号）：选填，后端走客人查询专门通道留痕。
+  const [memberPhone, setMemberPhone] = React.useState("");
   const [voucherDiscountCent, setVoucherDiscountCent] = React.useState<number | null>(null);
   // 行明细抽屉：整行可点 → 该订单完整字段（状态/提成口径中文·金额¥·下单/支付时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -199,6 +204,15 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
         { label: TEXT.paidAt, value: cnDate(bill?.paidAt ?? order.paidAt) },
       ],
     });
+    // 第十一批 TK-04-R5（ENUM L77「从消费单据可以反查该单产生的积分与成长值记录」）：账单详情显示本单商户消费奖励结果。
+    if (!bill?.id) return;
+    const title = `订单明细 · ${order.id}`;
+    const append = (value: string) => setDetail((current) => (current && current.title === title
+      ? { ...current, fields: [...current.fields, { label: "本单消费奖励", value }] } : current));
+    api.get<BillRewardRow[]>(`/api/v1/bar/bills/${bill.id}/rewards`)
+      .then((rows) => append(rows.length === 0 ? "本单未产生消费积分或成长值"
+        : rows.map((r) => `${r.points} 积分 · ${r.growth} 成长值 · ${REWARD_STATUS[r.status] ?? r.status}`).join("；")))
+      .catch(() => append("消费奖励暂时加载失败，可稍后重开明细"));
   }
 
   React.useEffect(() => {
@@ -361,13 +375,14 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
       ...(voucherCode.trim() ? { voucherCode: voucherCode.trim() } : {}),
+      ...(memberPhone.trim() ? { memberPhone: memberPhone.trim() } : {}),
       operatorNote: "按本次真实收款凭据登记，多渠道累计足额后完成账单",
     };
     const serialized = JSON.stringify({ billId, ...body });
     if (paymentRetry.current?.body !== serialized) paymentRetry.current = { body: serialized, key: crypto.randomUUID() };
     await runOrderAction("bar_bill_settled", async () => {
       const result = await api.post<{ discountAmountCent?: number }>(`/api/v1/bar/bills/${billId}/settle`, { ...body, idempotencyKey: paymentRetry.current!.key });
-      paymentRetry.current = null; setPaymentAmount(""); setPaymentReference("");
+      paymentRetry.current = null; setPaymentAmount(""); setPaymentReference(""); setMemberPhone("");
       if (voucherCode.trim()) { setVoucherDiscountCent(result?.discountAmountCent ?? null); setVoucherCode(""); }
       return result;
     });
@@ -547,6 +562,7 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           ) : null}
           <label>折扣券码（选填，一次结账一张）<input data-testid="bar-settle-voucher-code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} placeholder="本商户折扣券核销码" /></label>
           <p>折扣券按面值抵扣本次应付，面值超出部分不找零；多张券请分次结账各带一张。</p>
+          <label>会员手机号（选填）<input aria-label="会员手机号（选填）" type="tel" autoComplete="off" value={memberPhone} onChange={(e) => setMemberPhone(e.target.value)} placeholder="客人注册手机号，累计积分与成长值" /></label>
           {voucherDiscountCent !== null ? <p data-testid="bar-settle-voucher-result">折扣券已抵扣，账单折扣合计 {formatAmount(voucherDiscountCent)}</p> : null}
         </div>
         <div className="admin-form-row" data-testid="bar-order-actions">

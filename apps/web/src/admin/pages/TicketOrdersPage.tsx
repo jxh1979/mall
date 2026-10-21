@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -17,11 +18,12 @@ import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
+import { TicketRefundCasesPanel } from "./TicketRefundCasesPanel";
 
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
   description: "\u805a\u5408\u7968\u52a1\u8ba2\u5355\u3001\u652f\u4ed8\u72b6\u6001\u3001\u51fa\u7968\u72b6\u6001\u3001\u6743\u76ca\u548c\u6838\u9500\u9884\u68c0\uff0c\u7528\u4e8e\u5b9a\u4f4d\u672a\u51fa\u7968\u548c\u5f02\u5e38\u6838\u9500\u3002",
-  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview\uff1b\u53d6\u8d2d\u7968\u4eba\u8138\u7167 GET /api/v1/ticketing/issued-entitlements/{entitlement_id}/face-photo；读取 /api/v1/ticketing/refunds；确认拨付 POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout。",
+  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview；读取 /api/v1/ticketing/refunds；确认拨付 POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout；提起核销异常复核 POST /api/v1/ticketing/verifications/{id}/anomaly；主管处置核销异常 POST /api/v1/ticketing/verification-anomalies/{id}/resolve；发起退款 POST /api/v1/ticketing/refunds；退款审批 POST /api/v1/ticketing/refunds/{refund_id}/approve、/reject；通票安全事件 GET/POST /api/v1/ticketing/safety-events、批准 POST /api/v1/ticketing/safety-events/{safety_event_id}/approve。",
   loadFailed: "\u7968\u52a1\u8ba2\u5355\u8ffd\u8e2a\u6570\u636e\u8bfb\u53d6\u5931\u8d25",
   actionFailed: "\u7968\u52a1\u8ba2\u5355\u64cd\u4f5c\u5931\u8d25",
   noOrder: "\u5f53\u524d\u6ca1\u6709\u53ef\u51fa\u7968\u8ba2\u5355\u3002",
@@ -58,10 +60,10 @@ const TEXT = {
   selectedOrderHelp: "\u5f53\u524d\u9009\u4e2d",
   focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
   // C2 \u8d2d\u7968\u4eba\u8138\u7167\u6bd4\u5bf9\uff08\u540e\u7aef V229 \u5b58\u6863\u3001V353 \u7559\u5b58\u5929\u6570\u540e\u53f0\u53ef\u914d\uff09\u3002
-  facePhotoTitle: "\u8d2d\u7968\u4eba\u8138\u7167\uff08\u6bd4\u5bf9\u672c\u4eba\uff09",
-  facePhotoHint: "\u6838\u9500\u524d\u8bf7\u8089\u773c\u6bd4\u5bf9\u773c\u524d\u7684\u4eba\u4e0e\u8fd9\u5f20\u8d2d\u7968\u65f6\u7559\u5b58\u7684\u7167\u7247\u662f\u5426\u4e3a\u540c\u4e00\u4eba\uff1b\u4e0d\u4e00\u81f4\u8bf7\u62d2\u7edd\u6838\u9500\u5e76\u6309\u73b0\u573a\u89c4\u5b9a\u5904\u7406\u3002\u7167\u7247\u5c5e\u4e2a\u4eba\u654f\u611f\u4fe1\u606f\uff0c\u4ec5\u4f9b\u672c\u6b21\u6bd4\u5bf9\uff0c\u770b\u5b8c\u8bf7\u70b9\u300c\u6e05\u9664\u7167\u7247\u300d\uff0c\u7981\u6b62\u7ffb\u62cd\u3001\u4e0b\u8f7d\u6216\u8f6c\u53d1\u3002",
-  facePhotoMissing: "\u672c\u7968\u6ca1\u6709\u7559\u5b58\u8d2d\u7968\u4eba\u8138\u7167\uff08\u8be5\u7968\u79cd\u672a\u8981\u6c42\u62cd\u7167\uff0c\u6216\u7167\u7247\u5df2\u8fc7\u7559\u5b58\u671f\u81ea\u52a8\u9500\u6bc1\uff09\uff0c\u6309\u5e38\u89c4\u6d41\u7a0b\u6838\u9500\u3002",
-  facePhotoClear: "\u6e05\u9664\u7167\u7247",
+  // TK-06（BSM:780 一人多次票首次核销留存人脸、后续以该人脸核对；2026-10-21 裁决：供应商不可用时不留不核，不做目视核对）。
+  faceBindingTitle: "一人多次票人脸核对",
+  faceBindingCapture: "本票是一人多次票、尚未留存人脸：本次为首次入场，须客人单独同意留存人脸后在检票终端拍照，系统留存后用于核对后续各次是否同一使用人；客人不同意的不能入场，票保持未核销。",
+  faceBindingMatch: "本票已留存首次入场人脸：在检票终端为本人拍照，由系统比对是否同一使用人，不一致的拒绝核销。",
   // 退款待确认拨付（业务口径：退款以“成功”为最终完成态，只有“成功”才计入已退金额；“已通过”只是已批准并已发起兑付）。
   refundTitle: "退款待确认拨付",
   refundHint: "“已通过”表示已批准并已发起原路退回，钱还没到客人账上；财务实际打款成功后在这里确认，退款才记“成功”并计入已退金额。",
@@ -78,6 +80,25 @@ const TEXT = {
   refundRequestedBy: "申请人",
   refundApprovedBy: "审批人",
   refundCreatedAt: "申请时间",
+  // TK-14 核销异常复核（ENUM「核销记录状态」「异常状态的统一出口」）。
+  verificationTitle: "核销记录",
+  verificationHint: "已成功扣次但现场未放行或实际权益交付有争议、需要主管核实时，对该成功记录提起异常复核：原成功记录与扣次保留；主管在「更正后恢复」「作废并冲正」中选一种处置并填写原因，不自动退款。普通拒绝、失败不改为异常。",
+  verificationNo: "核销单号",
+  verificationReason: "结果说明",
+  verificationAt: "时间",
+  anomalyColumn: "异常复核",
+  anomalyReasonLabel: "原因（提起异常复核或主管处置时必填）",
+  anomalyReasonRequired: "请先填写原因再提起异常复核或处置。",
+  raiseAnomaly: "提起异常复核",
+  anomalyPending: "待主管处置",
+  resolveRestored: "更正后恢复",
+  resolveVoided: "作废并冲正",
+  verificationsEmpty: "当前没有核销记录。",
+};
+
+const ANOMALY_RESOLUTION_LABELS = {
+  restored: TEXT.resolveRestored,
+  voided_reversed: TEXT.resolveVoided,
 };
 
 // KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
@@ -85,11 +106,8 @@ const TEXT = {
 type KpiTarget = "orders" | "paid" | "not_issued";
 type KpiFocus = { target: KpiTarget };
 
-// C2：核销预检返回体里带的权益（拿它的 id 去取脸照）+ 取照端点返回体。
-type VerificationPreviewResult = { entitlement?: { id?: string } };
-type FacePhotoResult = { photoBase64?: string; contentType?: string };
-// 脸照只在内存里存这一份：要么是可显示的 data URI，要么是一句「本票无照」的说明。
-type FacePhotoState = { dataUri?: string; notice?: string };
+// TK-06：核销预检返回体里的人脸处置（capture=首次留脸、match=按留存人脸比对；单次票、多人票或供应商不可用时为空）。
+type VerificationPreviewResult = { entitlement?: { id?: string }; faceBinding?: "capture" | "match" | null };
 
 function readKpiFocusFromUrl(): KpiFocus | null {
   if (typeof window === "undefined") return null;
@@ -123,6 +141,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [refundsNotice, setRefundsNotice] = React.useState<string | null>(null);
   const [onlyPendingPayout, setOnlyPendingPayout] = React.useState(true);
   const [payoutResult, setPayoutResult] = React.useState("");
+  const [anomalyReason, setAnomalyReason] = React.useState("");
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [entitlementCode, setEntitlementCode] = React.useState("ENT-0001");
   const [formError, setFormError] = React.useState("");
@@ -131,8 +150,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该订单完整字段（金额¥·枚举中文·下单/支付时间中文），与既有单选/下钻并存。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
-  // C2 购票人脸照：只活在这个 state 里，离开页面即随组件卸载消失，不写 localStorage/sessionStorage。
-  const [facePhoto, setFacePhoto] = React.useState<FacePhotoState | null>(null);
+  const [faceBinding, setFaceBinding] = React.useState<VerificationPreviewResult["faceBinding"]>(null);
 
   // 浏览器后退/前进也能进出聚焦视图。AdminApp 的 popstate 只重建 route/focus，本页 ?kpi= 参数自理，互不干扰。
   React.useEffect(() => {
@@ -163,6 +181,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   // 无权限副资源不请求（根因修）：核销记录端点需 verification.view，页面基础权限 ticket.verify.view 不含之。
   const canVerificationView = hasPermissions(effectivePermissions, ["verification.view"]);
   const canRefundView = hasPermissions(effectivePermissions, ["ticket.refund.view"]);
+  const canRaiseAnomaly = hasPermissions(effectivePermissions, ["verification.execute"]);
+  const canResolveAnomaly = hasPermissions(effectivePermissions, ["ticket.verify.anomaly.resolve"]);
   const { loading, error, reload: reloadResource } = useAdminResource(
     async () => {
       const [orderRows, entitlementRows, verificationRows, refundRows] = await Promise.all([
@@ -212,6 +232,11 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   // 待确认拨付=已通过但尚未确认实际打款的退款单（业务 enum：只有“成功”才计入已退金额）。
   const pendingPayoutRefunds = refunds.filter((refund) => refund.status === "approved");
   const visibleRefunds = onlyPendingPayout ? pendingPayoutRefunds : refunds;
+  // 有待处置异常的原成功核销：不再给提起入口（同一原记录同时只能有一条待处置异常）。
+  const openAnomalyOf = new Set(verifications
+    .filter((row) => row.status === "anomaly" && !row.anomalyResolution)
+    .map((row) => row.anomalyOfVerificationId));
+  const pagedVerifications = usePagedRows(verifications, 10);
 
   React.useEffect(() => {
     if (focusedOrder) setSelectedOrderId(focusedOrder.id);
@@ -256,38 +281,17 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
       setFormError(TEXT.entitlementRequired);
       return;
     }
-    // 换一张票就先把上一张脸照从内存里扔掉，不让上一位客人的照片留在屏幕上。
-    clearFacePhoto();
+    // 换一张票就先清掉上一张票的人脸提示。
+    setFaceBinding(null);
     await runAction("ticket_verification_previewed", async () => {
       const preview = await api.post<VerificationPreviewResult>("/api/v1/ticketing/verifications/preview", {
         entitlementCode,
         operatorNote: TEXT.previewNote,
       });
-      await loadFacePhoto(preview?.entitlement?.id);
+      // TK-06：只按后端给的人脸处置提示；单次票、多人票或供应商不可用时不出现任何人脸区块。
+      setFaceBinding(preview?.faceBinding ?? null);
       return preview;
     }, false);
-  }
-
-  // C2 购票人脸照比对：核销预检扫到权益后按需取这张票的存档照，核销员肉眼比对是不是本人（防转票）。
-  //   ① 只在预检时取，不随列表批量拉；② 只放 React 内存，不写任何浏览器存储、不进 setActionResult（那是会被记录/展示的操作结果）；
-  //   ③ 每次取照后端都写审计（谁·何时·看了哪张票的脸照），前端不重复留痕。
-  async function loadFacePhoto(entitlementId?: string) {
-    if (!entitlementId) return;
-    try {
-      const photo = await api.get<FacePhotoResult>(`/api/v1/ticketing/issued-entitlements/${encodeURIComponent(entitlementId)}/face-photo`);
-      if (photo?.photoBase64) {
-        setFacePhoto({ dataUri: `data:${photo.contentType || "image/jpeg"};base64,${photo.photoBase64}` });
-        return;
-      }
-      setFacePhoto({ notice: TEXT.facePhotoMissing });
-    } catch {
-      // 无照/无权限都不该打断核销主链：本票就是没要求拍照的普通票时，这里 404 是正常情况。
-      setFacePhoto({ notice: TEXT.facePhotoMissing });
-    }
-  }
-
-  function clearFacePhoto() {
-    setFacePhoto(null);
   }
 
   // 财务实际打完款后确认拨付：approved→success。原路退回结果必填（业务 HTML 退款授权与留痕行要求留痕该结果）。
@@ -304,6 +308,64 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
       return false;
     }
     return true;
+  }
+
+  function validateAnomalyReason() {
+    if (!anomalyReason.trim()) {
+      setFormError(TEXT.anomalyReasonRequired);
+      return false;
+    }
+    return true;
+  }
+
+  // TK-14：成功核销提起异常复核（原成功记录与扣次保留）。
+  async function raiseAnomaly(row: TicketVerificationRow) {
+    if (!validateAnomalyReason()) return;
+    await runAction("ticket_verification_anomaly_raised", () => api.post(
+      `/api/v1/ticketing/verifications/${encodeURIComponent(row.id)}/anomaly`,
+      { reason: anomalyReason.trim() },
+    ));
+  }
+
+  // TK-14：主管二选一处置（更正后恢复 / 作废并冲正），原因必填。
+  async function resolveAnomaly(row: TicketVerificationRow, resolution: "restored" | "voided_reversed") {
+    await runAction("ticket_verification_anomaly_resolved", () => api.post(
+      `/api/v1/ticketing/verification-anomalies/${encodeURIComponent(row.id)}/resolve`,
+      { resolution, reason: anomalyReason.trim() },
+    ));
+  }
+
+  function anomalyCell(row: TicketVerificationRow) {
+    if (row.status === "anomaly") {
+      if (row.anomalyResolution) {
+        return `${(ANOMALY_RESOLUTION_LABELS as Record<string, string | undefined>)[row.anomalyResolution] ?? row.anomalyResolution} · ${row.anomalyResolvedBy ?? "-"} · ${cnDate(row.anomalyResolvedAt)} · ${row.anomalyResolutionReason ?? ""}`;
+      }
+      return (
+        <>
+          {TEXT.anomalyPending}
+          {canResolveAnomaly ? (["restored", "voided_reversed"] as const).map((resolution) => (
+            <HighRiskConfirm
+              key={resolution}
+              label={ANOMALY_RESOLUTION_LABELS[resolution]}
+              impact={resolution === "restored"
+                ? "原成功核销记录与扣次保持不变，本异常记为已处置并留痕原因；不退款。"
+                : "按既有冲正规则作废原成功核销并恢复一次次数，本异常记为已处置并留痕原因；不自动退款。"}
+              disabled={busyAction !== ""}
+              precheck={validateAnomalyReason}
+              onConfirm={() => void resolveAnomaly(row, resolution)}
+              data-testid={`ticket-verification-resolve-${resolution}-${row.id}`}
+            />
+          )) : null}
+        </>
+      );
+    }
+    if (row.status === "success" && canRaiseAnomaly && !openAnomalyOf.has(row.id)) {
+      return (
+        <button type="button" data-testid={`ticket-verification-raise-anomaly-${row.id}`} disabled={busyAction !== ""}
+          onClick={() => void raiseAnomaly(row)}>{TEXT.raiseAnomaly}</button>
+      );
+    }
+    return "—";
   }
 
   function openOrderDetail(order: TicketOrderRow) {
@@ -367,36 +429,10 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
           <span className="admin-muted-action" data-testid="ticket-order-boundary">{TEXT.boundary}</span>
         </div>
         {formError ? <div data-testid="ticket-orders-error" className="admin-inline-error">{formError}</div> : null}
-        {facePhoto ? (
-          <div className="admin-state" data-testid="ticket-face-photo-panel">
-            <strong>{TEXT.facePhotoTitle}</strong>
-            {facePhoto.dataUri ? (
-              <>
-                <p>{TEXT.facePhotoHint}</p>
-                {/* 用背景图而不是 <img>：右键没有「图片另存为」，拖拽也带不走，降低随手翻拍留存的可能。
-                    这是防手滑不是防技术手段——能开开发者工具的人照样拿得到，真正的闸在后端授权+每次取照写审计。 */}
-                <div
-                  data-testid="ticket-face-photo-image"
-                  role="img"
-                  aria-label="购票人脸照"
-                  onContextMenu={(event) => event.preventDefault()}
-                  onDragStart={(event) => event.preventDefault()}
-                  style={{
-                    width: 220,
-                    height: 220,
-                    backgroundImage: `url("${facePhoto.dataUri}")`,
-                    backgroundSize: "contain",
-                    backgroundPosition: "center",
-                    backgroundRepeat: "no-repeat",
-                    border: "1px solid #ccc",
-                    userSelect: "none",
-                  }}
-                />
-                <button type="button" data-testid="ticket-face-photo-clear" onClick={clearFacePhoto}>{TEXT.facePhotoClear}</button>
-              </>
-            ) : (
-              <p data-testid="ticket-face-photo-missing">{facePhoto.notice}</p>
-            )}
+        {faceBinding ? (
+          <div className="admin-state" data-testid="ticket-face-binding">
+            <strong>{TEXT.faceBindingTitle}</strong>
+            <p>{faceBinding === "capture" ? TEXT.faceBindingCapture : TEXT.faceBindingMatch}</p>
           </div>
         ) : null}
         </>
@@ -439,6 +475,45 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
           <TablePager testid="ticket-orders-pager" page={paged.page} pageCount={paged.pageCount} total={paged.total} onPrev={paged.prev} onNext={paged.next} />
         </div>
         )}
+        {canVerificationView && !verificationsNotice ? (
+          <div className="admin-section" data-testid="ticket-verification-panel">
+            <h3>{TEXT.verificationTitle}</h3>
+            <p className="admin-muted-action">{TEXT.verificationHint}</p>
+            <div className="admin-form-row">
+              <input
+                data-testid="ticket-verification-anomaly-reason"
+                value={anomalyReason}
+                onChange={(event) => setAnomalyReason(event.target.value)}
+                aria-label={TEXT.anomalyReasonLabel}
+                placeholder={TEXT.anomalyReasonLabel}
+              />
+            </div>
+            {verifications.length === 0 ? (
+              <div className="admin-state admin-empty">{TEXT.verificationsEmpty}</div>
+            ) : (
+              <div className="admin-table-scroll">
+                <table className="admin-table" data-testid="ticket-verifications-table">
+                  <thead>
+                    <tr><th>{TEXT.verificationNo}</th><th>{TEXT.status}</th><th>{TEXT.verificationReason}</th><th>{TEXT.verificationAt}</th><th>{TEXT.anomalyColumn}</th></tr>
+                  </thead>
+                  <tbody>
+                    {pagedVerifications.pageRows.map((row) => (
+                      <tr key={row.id} data-testid={`ticket-verification-row-${row.id}`}>
+                        <td>{row.verificationNo ?? row.id}</td>
+                        <td>{formatBusinessStatus(row.status)}</td>
+                        <td>{row.resultReason ?? "—"}</td>
+                        <td>{cnDate(row.createdAt)}</td>
+                        <td>{anomalyCell(row)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <TablePager testid="ticket-verifications-pager" page={pagedVerifications.page} pageCount={pagedVerifications.pageCount}
+                  total={pagedVerifications.total} onPrev={pagedVerifications.prev} onNext={pagedVerifications.next} />
+              </div>
+            )}
+          </div>
+        ) : null}
         <div className="admin-section" data-testid="ticket-refund-payout-panel">
           <h3>{TEXT.refundTitle}（{pendingPayoutRefunds.length}）</h3>
           <p className="admin-muted-action">{TEXT.refundHint}</p>
@@ -506,6 +581,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
             </>
           )}
         </div>
+        <TicketRefundCasesPanel api={api} effectivePermissions={effectivePermissions} selectedOrderId={selectedOrder?.id}
+          refunds={refunds} busy={busyAction !== ""} runAction={runAction} setFormError={setFormError} />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>

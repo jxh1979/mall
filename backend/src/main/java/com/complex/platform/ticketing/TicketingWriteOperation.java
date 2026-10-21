@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.evidence.AuditedOperation;
 
 enum TicketingWriteOperation implements AuditedOperation {
@@ -29,8 +31,6 @@ enum TicketingWriteOperation implements AuditedOperation {
     CONFIRM_TICKET_ORDER_PAYMENT("ticket_order.payment_confirmed", "ticket_order.payment_confirm_failed", "finance.payment.register", "ticket_order"),
     CANCEL_TICKET_ORDER("ticket_order.cancelled", "ticket_order.cancel_failed", "ticket.order.create", "ticket_order"),
     ISSUE_TICKET_ORDER("ticket.issued", "ticket.issue_failed", "ticket.ticket.issue", "issued_entitlement"),
-    // R-005：柜台散客人脸照同意落账（BSM-1.7.3 留同意版本、时间和范围），与出票同权限。
-    RECORD_FACE_PHOTO_CONSENT("ticket_face_photo.consent_recorded", "ticket_face_photo.consent_failed", "ticket.ticket.issue", "ticket_order"),
     // V369 改票种售价/折扣(综合/联合通票售价自动算 + 凑整误差闸):保存当场比对允许误差,超出即拒。
     UPDATE_TICKET_TYPE_PRICING("ticket_product.pricing_changed", "ticket_product.pricing_change_failed", "ticket.product.manage", "ticket_type"),
     PUBLISH_TICKET_TYPE("ticket_price.published", "ticket_price.publish_failed", "ticket.product.manage", "ticket_type"),
@@ -39,9 +39,15 @@ enum TicketingWriteOperation implements AuditedOperation {
     REJECT_TICKET_REFUND("ticket_refund.rejected", "ticket_refund.reject_failed", "ticket.refund.approve", "ticket_refund"),
     // 退款实际拨付确认（business-enum 退款单状态：只有“成功”才计入已退金额）：approved→success。
     CONFIRM_TICKET_REFUND_PAYOUT("ticket_refund.payout_confirmed", "ticket_refund.payout_confirm_failed", "ticket.refund.approve", "ticket_refund"),
+    // TK-05-R2/R3 通票安全例外（BSM:804）：登记与夜班值班经理及以上批准。
+    REQUEST_TICKET_SAFETY_EVENT("ticket_safety_event.requested", "ticket_safety_event.request_failed", "ticket.refund.request", "ticket_safety_event"),
+    APPROVE_TICKET_SAFETY_EVENT("ticket_safety_event.approved", "ticket_safety_event.approve_failed", "ticket.refund.approve", "ticket_safety_event"),
     PREVIEW_VERIFICATION("verification.previewed", "verification.failed", "verification.execute", "ticket_verification"),
     CREATE_VERIFICATION("verification.succeeded", "verification.failed", "verification.execute", "ticket_verification"),
     REVERSE_VERIFICATION("ticket.verification_reversed", "ticket.verification_reverse_failed", "ticket.verify.reverse", "ticket_verification"),
+    // TK-14（ENUM「核销记录状态」「异常状态的统一出口」）：成功核销提起异常复核 / 主管二选一处置。
+    RAISE_VERIFICATION_ANOMALY("ticket.verification_anomaly_raised", "ticket.verification_anomaly_raise_failed", "verification.execute", "ticket_verification"),
+    RESOLVE_VERIFICATION_ANOMALY("ticket.verification_anomaly_resolved", "ticket.verification_anomaly_resolve_failed", "ticket.verify.anomaly.resolve", "ticket_verification"),
     SYNC_TERMINAL_TASKS("terminal.sync_task.accepted", "terminal.sync_task.accepted_failed", "terminal.device.bind", "terminal_sync_task"),
     // AUD-006 转赠发起/领取走 executeWrite 幂等+审计(事件名与 openapi x-audit-event 对齐;客人端权限=not_applicable)。
     INITIATE_TICKET_TRANSFER("ticket_transfer.created", "ticket_transfer.create_failed", "not_applicable", "ticket_transfer"),

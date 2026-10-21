@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -97,12 +97,14 @@ public class PointsRecoveryWaiverService {
 
     private List<Line> lines(String customerId,boolean lock) {
         return jdbc.query("""
-                SELECT r.*,w.project_id,s.seller_merchant_id FROM customer_points_recoveries r
-                JOIN ticket_use_rewards w ON w.id=r.reward_id
+                SELECT r.*,COALESCE(r.reward_id,r.merchant_reward_id) AS line_id,COALESCE(w.project_id,m.project_id) AS line_project_id,
+                       COALESCE(s.seller_merchant_id,m.merchant_id) AS line_merchant_id FROM customer_points_recoveries r
+                LEFT JOIN ticket_use_rewards w ON w.id=r.reward_id
                 LEFT JOIN ticket_order_sales_contracts s ON s.order_id=w.order_id
-                WHERE r.customer_id=? ORDER BY r.created_at,r.reward_id
-                """+(lock?" FOR UPDATE OF r":""),(rs,n)->new Line(rs.getString("reward_id"),rs.getString("project_id"),
-                    rs.getString("seller_merchant_id"),rs.getLong("original_points"),rs.getLong("remaining_points"),
+                LEFT JOIN merchant_consumption_rewards m ON m.id=r.merchant_reward_id
+                WHERE r.customer_id=? ORDER BY r.created_at,line_id
+                """+(lock?" FOR UPDATE OF r":""),(rs,n)->new Line(rs.getString("line_id"),rs.getString("line_project_id"),
+                    rs.getString("line_merchant_id"),rs.getLong("original_points"),rs.getLong("remaining_points"),
                     rs.getString("status"),rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("updated_at").toInstant()),customerId);
     }
     private void requireScope(List<Line> lines,String permission) {

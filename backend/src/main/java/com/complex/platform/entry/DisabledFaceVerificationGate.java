@@ -1,5 +1,7 @@
 package com.complex.platform.entry;
 
+// 文件版本：V0.01
+
 /**
  * 默认实现：能力开关 {@code face.verification.enabled} 关时使用（本期默认）。
  * 不调任何外部人脸/实名厂商，统一返回 {@code RESERVED}，入场不阻塞，年龄由制度兜底
@@ -12,6 +14,16 @@ public final class DisabledFaceVerificationGate implements FaceVerificationPort 
 
     @Override
     public FaceVerificationResult verifyEntry(FaceVerificationRequest request) {
+        return FaceVerificationResult.reserved(MSG);
+    }
+
+    @Override
+    public boolean holderMatchAvailable() {
+        return false;
+    }
+
+    @Override
+    public FaceVerificationResult matchHolder(String storedPhotoBase64, String capturedPhotoBase64) {
         return FaceVerificationResult.reserved(MSG);
     }
 }

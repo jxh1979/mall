@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -363,7 +363,7 @@ class ParkWideFaultSalesSuspensionJdbcIntegrationTests {
 
     private TicketOrderRequest order(String ticketTypeId, String orderBarId) {
         return new TicketOrderRequest("cg08-ord-" + UUID.randomUUID(), null, List.of(), ticketTypeId, null, 1,
-                LocalDate.now(), "admin", null, null, Map.of(), orderBarId, List.of(), null);
+                LocalDate.now(), "admin", null, null, Map.of(), orderBarId);
     }
 
     private String ticketType(String key, String ticketBarId, List<String> entitlementTypes) {
@@ -375,7 +375,7 @@ class ParkWideFaultSalesSuspensionJdbcIntegrationTests {
         for (String type : entitlementTypes) {
             String templateId = "tpl_cg08_" + key + "_" + (i++) + "_" + suffix;
             repository.saveEntitlementTemplate(new EntitlementTemplateRecord(templateId, "权益-" + type, type, 1, 5000L, "active",
-                    ticketBarId != null ? ticketBarId : barId, null, null, null, now, now, "virtual", null, "per_use", null, false));
+                    ticketBarId != null ? ticketBarId : barId, null, null, null, now, now, "virtual", null, "per_use", null));
             repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord("bind_" + templateId, id, templateId, 1, 1,
                     5000L, "default", 1, 5000L, now, now));
         }

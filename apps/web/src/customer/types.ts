@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // 客人端响应类型（对齐后端 customer 域 record，camelCase 化后口径）
 
 export type TicketProduct = {
@@ -12,9 +12,6 @@ export type TicketProduct = {
   // AUD-076 单店票挂酒吧：所属酒吧 id 与实时名称（null=综合体通票，展示“综合体通用”）。
   barId?: string | null;
   barName?: string | null;
-  // V359：本票是否要求购票人拍入场人脸照（游乐票默认要）+ 当前生效的照片留存天数（用于如实告知客人）。
-  requireFacePhoto?: boolean;
-  facePhotoRetentionDays?: number | null;
 };
 
 // 1.8 我的票：订单内票实例安全投影（后端 CustomerTicketResponse）。
@@ -35,6 +32,8 @@ export type CustomerTicket = {
   ticketNo?: string | null;
   // AUD-077 转赠中标记（"transferring"=该票转赠冻结中不可用）。
   transferState?: string | null;
+  // TK-13 补偿标注（"full_reissue"=原票原人份下的完整补发补偿行，其 validTo 即实际补偿有效期；null=原票行）。
+  compensationKind?: string | null;
 };
 
 // AUD-077 门票转赠记录（后端 TicketTransferResponse 安全投影）。

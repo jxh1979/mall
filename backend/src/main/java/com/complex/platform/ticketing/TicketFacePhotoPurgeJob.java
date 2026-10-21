@@ -1,4 +1,8 @@
 package com.complex.platform.ticketing;
+
+// 文件版本：V0.01
+
+import com.complex.platform.common.LocalZone;
 import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Clock;
@@ -9,9 +13,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 结算重构批3-6(用户2026-07-04)：游乐票人脸照到期清理(照 SettlementExpiryJob 范式，薄 @Scheduled 包装)。
+ * TK-06 一人多次票人脸绑定清理(照 SettlementExpiryJob 范式，薄 @Scheduled 包装)。
  *
- * <p>硬删 purge_after &lt; 今天 的脸照行(密文一并删)——生物识别敏感信息 PIPL，票失效后 30 天自清，越短越安全。
+ * <p>BSM:843「该人脸在该票用完或到期后删除」：硬删父票下已无可用入场权益（用完或到期）的绑定(密文一并删)，不再「到期后再留 N 天」。
+ * 用完的那一次核销已在同事务删除，本任务兜住到期未用完的票。
  * 业务逻辑在可直接调用的 {@link #purgeExpired(LocalDate)}，@Scheduled 仅薄包装；
  * 定时任务 @ConditionalOnProperty 默认关闭(需显式开 ticket.face-photo.purge.scheduled.enabled=true 才注册)。
  */
@@ -46,11 +51,11 @@ public class TicketFacePhotoPurgeJob {
         if (!scheduledEnabled) {
             return;
         }
-        purgeExpired(LocalDate.now(clock));
+        purgeExpired(LocalDate.now(clock.withZone(LocalZone.ID)));
     }
 
-    /** 硬删 purge_after < today 的脸照行(幂等：删过不再删)。返回本次删除行数(observability)。 */
+    /** 硬删 today（所在地日历日）零点前已到期或已用完的票的人脸绑定(幂等：删过不再删)。返回本次删除行数(observability)。 */
     public int purgeExpired(LocalDate today) {
-        return repository.deleteExpired(today);
+        return repository.deleteAllWithoutUsableEntry(today.atStartOfDay(LocalZone.ID).toInstant());
     }
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1664,6 +1664,11 @@ public class FinanceService implements TerminationSettlementPort {
                      WHERE id=? AND deposit_status='paid'
                     """, updated.sourceId());
         }
+        // 第十一批 TK-04-b（BSM L823「退款成功时取消对应尚待确认积分」）：退款应付实付结清＝退款已实际退出，同一事务通知来源域回写。
+        if (refundEvents != null && "refund".equals(updated.sourceType()) && "payable".equals(updated.direction())
+                && "settled".equals(updated.status())) {
+            refundEvents.publishEvent(new RefundPayableSettled(updated.id(), updated.sourceId()));
+        }
         // FS-021-R5（BSM L1683「每笔应付的实际到账结果回写该笔应付」）：确认到账即回写在途那次付款为到账。
         if (ticketPointsJdbc != null) {
             ticketPointsJdbc.update("""
@@ -1696,6 +1701,12 @@ public class FinanceService implements TerminationSettlementPort {
         if (repository.dailyCloseExists(businessDate, scopeType, scopeId)) {
             throw ApiException.conflict("DAILY_CLOSE_EXISTS",
                     "该营业日已完成日结锁定：日期 " + businessDate + "，范围 " + scopeType + "/" + scopeId);
+        }
+        // TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：票务核销异常待主管处置时拒锁。
+        if (repository.openTicketVerificationAnomalyExists(businessDayResolver.startInstant(businessDate),
+                businessDayResolver.endInstant(businessDate), scopeType, scopeId)) {
+            throw ApiException.conflict("DAY_CLOSE_ANOMALY_PENDING",
+                    "该营业日有待主管处置的票务核销异常，处置完毕后才能确认日结锁定");
         }
         Instant now = Instant.now();
         String dailyCloseId = "daily_close_" + slug(actual.idempotencyKey());

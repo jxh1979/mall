@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -625,7 +625,8 @@ public class LoyaltyService {
         return award;
     }
 
-    private long levelMultiplierBasisPoints(String levelCode) {
+    /** 包内复用：商户消费奖励（MerchantConsumptionRewardService）按同一等级倍率计算。 */
+    long levelMultiplierBasisPoints(String levelCode) {
         for (CustomerMemberLevelRecord level : repository.listMemberLevels(null)) {
             if (level.levelCode().equals(levelCode)) {
                 return level.pointMultiplierBasisPoints();
@@ -634,7 +635,7 @@ public class LoyaltyService {
         return BASIS_POINTS_DENOMINATOR;
     }
 
-    private long birthdayMultiplierBasisPoints(CustomerRecord customer, Instant now) {
+    long birthdayMultiplierBasisPoints(CustomerRecord customer, Instant now) {
         if (customer.birthDate() == null) {
             return BASIS_POINTS_DENOMINATOR;
         }
@@ -696,7 +697,7 @@ public class LoyaltyService {
                 account.createdAt(), now);
     }
 
-    private CustomerPointsAccountRecord loadOrCreateForUpdate(String customerId, Instant now) {
+    CustomerPointsAccountRecord loadOrCreateForUpdate(String customerId, Instant now) {
         return repository.findPointsByCustomerIdForUpdate(customerId)
                 .orElseGet(() -> repository.savePoints(CustomerService.newPointsAccount(customerId, now)));
     }

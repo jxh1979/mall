@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -375,6 +375,26 @@ class JdbcFinanceRepository implements FinanceRepository {
                     locked_at = EXCLUDED.locked_at
                 """, dailyCloseParameters(dailyClose));
         return dailyClose;
+    }
+
+    @Override
+    public boolean openTicketVerificationAnomalyExists(Instant from, Instant to, String scopeType, String scopeId) {
+        boolean merchantScope = isMerchantScope(scopeType);
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM ticket_verifications a
+                      JOIN ticket_verifications o ON o.id = a.anomaly_of_verification_id
+                     WHERE a.status = 'anomaly'
+                       AND a.anomaly_resolution IS NULL
+                       AND o.created_at >= :from
+                       AND o.created_at < :to
+                       AND (:merchant_scope = FALSE OR o.merchant_id = :merchant_id))
+                """, new MapSqlParameterSource()
+                .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("merchant_scope", merchantScope)
+                .addValue("merchant_id", merchantScope ? scopeId : null), Boolean.class));
     }
 
     @Override

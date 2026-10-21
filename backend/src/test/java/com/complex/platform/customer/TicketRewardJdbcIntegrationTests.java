@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -496,6 +496,22 @@ class TicketRewardJdbcIntegrationTests {
         assertThat(only(f).status()).isEqualTo("cancelled");
         assertThat(customers.findPointsByCustomerId(f.member()).orElseThrow().balance()).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_points_issuance_fees WHERE reward_id=?",Integer.class,only(f).id())).isZero();
+    }
+    /** TK-05-R2（2026-10-21 操作员裁决补充第 5 条「多人通票安全例外只退出事一人份，同票其他人照常使用」）：退款成功只冲回所退人份的奖励。 */
+    @Test void refundOfOneShareCancelsOnlyThatSharesReward() throws Exception {
+        Fixture f=seed();Use mine=use(f,1,1,"ticket",f.member());Use other=use(f,2,1,"ticket",f.buyer());
+        rewards.used(new TicketRewardFacts.Used(mine.verification(),mine.credential()));rewards.used(new TicketRewardFacts.Used(other.verification(),other.credential()));
+        rewards.refunded(new TicketRewardFacts.Refunded(refund(f,mine,"success")));
+        assertThat(rewards.list(f.member()).getFirst().status()).isEqualTo("cancelled");
+        assertThat(rewards.list(f.buyer()).getFirst().status()).isEqualTo("pending");
+    }
+    /** BSM:822「上述处理仅作用于退款申请对应票或人份、次份的尚待确认积分」：他人份到期释放不被所退人份的退款卡住或冲回。 */
+    @Test void refundOfOneShareDoesNotBlockOtherSharesRelease() throws Exception {
+        Fixture f=seed();Use mine=use(f,1,1,"ticket",f.member());Use other=use(f,2,1,"ticket",f.buyer());
+        rewards.used(new TicketRewardFacts.Used(mine.verification(),mine.credential()));rewards.used(new TicketRewardFacts.Used(other.verification(),other.credential()));
+        rewards.refunded(new TicketRewardFacts.Refunded(refund(f,mine,"success")));
+        assertThat(rewards.release(rewards.list(f.buyer()).getFirst().id(),at.plusSeconds(86400))).isTrue();
+        assertThat(rewards.list(f.buyer()).getFirst().status()).isEqualTo("confirmed");
     }
     @Test void specialRefundKeepsUnrecoveredBalanceAndFuturePointsRepayIt() throws Exception {
         Fixture f=seed();Use u=use(f,1,1,"ticket",f.member());rewards.used(new TicketRewardFacts.Used(u.verification(),u.credential()));

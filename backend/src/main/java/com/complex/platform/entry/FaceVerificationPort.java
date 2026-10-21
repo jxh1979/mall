@@ -1,5 +1,7 @@
 package com.complex.platform.entry;
 
+// 文件版本：V0.01
+
 /**
  * 人脸入场闸端口（端口/适配器模式，用户口径：第三方/人脸一律“预留接口 + 能力开关默认关”）。
  *
@@ -22,4 +24,17 @@ public interface FaceVerificationPort {
 
     /** 入场人脸/年龄核验（占位实现不调外部）。 */
     FaceVerificationResult verifyEntry(FaceVerificationRequest request);
+
+    /**
+     * TK-06（BSM:780 / BSM:843「一人多次票在首次核销时留存人脸，作为后续各次核销核对同一使用人的凭证」；BSM:1559 不自研人脸算法，
+     * 按后台开关接入第三方供应商）：当前是否接入了可用的人脸比对供应商。不可用（开关关 / 未接入 / 故障）时，
+     * 按 2026-10-21 操作员裁决「设备不可用时不留不核」照常核销，不要求同意与拍照、不比对。
+     */
+    boolean holderMatchAvailable();
+
+    /**
+     * TK-06：一人多次票后续各次核销，把留存人脸与本次拍照交供应商比对是否同一人。PASSED=同一人；FAILED=不是同一人（拒）；
+     * RESERVED / NOT_CONFIGURED=供应商当次不可用（照常核销，不比对）。
+     */
+    FaceVerificationResult matchHolder(String storedPhotoBase64, String capturedPhotoBase64);
 }

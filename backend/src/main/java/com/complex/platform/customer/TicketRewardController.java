@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -15,8 +15,9 @@ public class TicketRewardController {
     private final TicketRewardService rewards;
     private final CustomerService customers;
     private final PointsRecoveryService recoveries;
+    private final MerchantConsumptionRewardService merchantRewards;
     private final com.complex.platform.evidence.AuditedOperationExecutor operations;
-    public TicketRewardController(TicketRewardConfigService configs,TicketRewardService rewards,CustomerService customers,PointsRecoveryService recoveries,com.complex.platform.evidence.AuditedOperationExecutor operations){this.configs=configs;this.rewards=rewards;this.customers=customers;this.recoveries=recoveries;this.operations=operations;}
+    public TicketRewardController(TicketRewardConfigService configs,TicketRewardService rewards,CustomerService customers,PointsRecoveryService recoveries,MerchantConsumptionRewardService merchantRewards,com.complex.platform.evidence.AuditedOperationExecutor operations){this.configs=configs;this.rewards=rewards;this.customers=customers;this.recoveries=recoveries;this.merchantRewards=merchantRewards;this.operations=operations;}
     @GetMapping("/loyalty/ticket-reward-configs")
     public ApiResponse<List<TicketRewardConfig>> list(@RequestParam(name="project_id",required=false)String project){return audited("ticket.reward.config.listed",TicketRewardConfigService.VIEW,project,()->configs.list(project));}
     @PostMapping("/loyalty/ticket-reward-configs")
@@ -30,11 +31,19 @@ public class TicketRewardController {
     @GetMapping("/customer/ticket-rewards")
     public ApiResponse<RewardSummary> ownRewards(@RequestHeader(name="X-Customer-Token",required=false)String token,@RequestHeader(name="Authorization",required=false)String authorization){
         return audited("ticket.reward.customer.viewed","not_applicable",null,()->{
-            String resolved=token==null||token.isBlank()?authorization!=null&&authorization.startsWith("Bearer ")?authorization.substring(7):null:token;
-            if(resolved==null||resolved.isBlank())throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED","缺少客人登录凭证，请重新登录");
-            String customer=customers.requireCustomerRecord(resolved).id();
+            String customer=customer(token,authorization);
             return new RewardSummary(rewards.list(customer),recoveries.outstanding(customer));
         });
+    }
+    /** 第十一批 TK-04-R5（BSM L877 客人端只展示结果；ENUM L77 与消费单据双向可查）：本人商户消费奖励及来源单号。 */
+    @GetMapping("/customer/merchant-rewards")
+    public ApiResponse<List<MerchantConsumptionRewardService.RewardView>> ownMerchantRewards(@RequestHeader(name="X-Customer-Token",required=false)String token,@RequestHeader(name="Authorization",required=false)String authorization){
+        return audited("merchant.reward.customer.viewed","not_applicable",null,()->merchantRewards.listForCustomer(customer(token,authorization)));
+    }
+    private String customer(String token,String authorization){
+        String resolved=token==null||token.isBlank()?authorization!=null&&authorization.startsWith("Bearer ")?authorization.substring(7):null:token;
+        if(resolved==null||resolved.isBlank())throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED","缺少客人登录凭证，请重新登录");
+        return customers.requireCustomerRecord(resolved).id();
     }
     private <T> ApiResponse<T> audited(String event,String permission,String id,java.util.function.Supplier<T> call){return ApiResponse.ok(operations.readSingle(com.complex.platform.evidence.AuditedOperation.of(event,event+".failed",permission,"ticket_reward"),call,result->result instanceof TicketRewardConfig c?c.id():id==null?"all":id));}
 }

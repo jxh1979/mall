@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -78,7 +78,6 @@ final class JdbcTicketingRowMapper {
                 nullableLong(resultSet, "agreement_price_cent"),
                 resultSet.getString("consumption_window"),
                 resultSet.getString("exclusive_merchant_id"),
-                resultSet.getBoolean("require_face_photo"),
                 nullableInstant(resultSet, "archived_at"),
                 resultSet.getString("archived_by"),
                 resultSet.getString("delete_status"),
@@ -330,7 +329,10 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "approved_at"),
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "updated_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                resultSet.getString("reason_code"),
+                resultSet.getString("responsible_entity_id"),
+                (Boolean) resultSet.getObject("ticket_type_refundable_snapshot")
         );
     }
 

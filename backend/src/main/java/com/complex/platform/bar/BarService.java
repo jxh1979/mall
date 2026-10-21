@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -697,6 +697,12 @@ public class BarService {
                 BarReadOperation.LIST_BILL_OPERATIONS,
                 () -> repository.listBillOperations(id)
         );
+    }
+
+    /** 第十一批 TK-04-R5：账单端查看本单商户消费奖励（积分、成长值结果与状态）。 */
+    public PageResponse<com.complex.platform.customer.MerchantConsumptionRewardService.RewardView> listBillRewards(String billId) {
+        String id = operations.requireText(billId, "bill_id");
+        return operations.readPage(BarReadOperation.LIST_BILL_REWARDS, () -> billingService.listBillRewards(id));
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.bill.split_merge")

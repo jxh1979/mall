@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,7 +22,7 @@ public final class TicketPointsBilling {
     public record Bill(String id,LocalDate billingMonth,String billingRuleId,String sellerEntityId,String sellerMerchantId,
             String receiverEntityId,String projectId,long amountCent,Instant visibleAt,LocalDate objectionDeadline,
             LocalDate dueDate,String arApItemId,long paidAmountCent,long unpaidAmountCent,String paymentStatus,
-            int openObjections) {}
+            int openObjections,String feeKind) {}
     public record FeeLine(String rewardId,String parentTicketId,int slotIndex,int useIndex,long points,
-            java.math.BigDecimal unitPriceCent,long amountCent,String priceVersionId,Instant confirmedAt) {}
+            java.math.BigDecimal unitPriceCent,long amountCent,String priceVersionId,Instant confirmedAt,String sourceType,String sourceId) {}
 }

@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.util.List;
@@ -49,6 +51,7 @@ public class TicketingOperationExecutor {
         if (value instanceof EntitlementTemplateRecord record) return record.id();
         if (value instanceof TicketTypeEntitlementRecord record) return record.id();
         if (value instanceof VerificationResponse response) return response.id();
+        if (value instanceof VerificationRecord record) return record.id();
         if (value instanceof TicketTransferResponse response) return response.id();
         if (value instanceof IssuedTicketResponse response && !response.issuedEntitlements().isEmpty()) {
             return response.issuedEntitlements().getFirst().entitlementCode();
@@ -60,6 +63,7 @@ public class TicketingOperationExecutor {
         if (value instanceof TicketOrderRecord record) return record.id();
         if (value instanceof TicketPaymentIntentRecord record) return record.id();
         if (value instanceof TicketRefundRecord record) return record.id();
+        if (value instanceof TicketSafetyEventRecord record) return record.id();
         return null;
     }
 }

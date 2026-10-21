@@ -1,5 +1,8 @@
 package com.complex.terminal
 
+// 文件版本：V0.01
+
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -41,6 +44,16 @@ class TerminalRequestSerializationTest {
     assertEquals("tbl_1", resv["table_id"]?.toString()?.trim('"'))
     assertEquals("2026-07-02T20:00:00Z", resv["reservation_time"]?.toString()?.trim('"'))
     assertEquals("usr_staff_1", resv["salesperson_user_id"]?.toString()?.trim('"'))
+  }
+
+  @Test
+  fun serviceMarkPaidCarriesOptionalMemberPhone() {
+    // 第十一批 TK-04-R2（BSM L822「由收银在收款时现场录入会员号累计」）：确认收款可带会员号（注册手机号）member_phone；不填不带该键。
+    val req = api.json.decodeFromString<ServiceMarkPaidReq>("""{"idempotency_key":"mp_1","member_phone":"13900001111"}""")
+    val body = api.json.parseToJsonElement(api.json.encodeToString(req)).jsonObject
+    assertEquals("13900001111", body["member_phone"]?.toString()?.trim('"'))
+    val none = api.json.parseToJsonElement(api.json.encodeToString(ServiceMarkPaidReq("mp_2"))).jsonObject
+    assertFalse(none.containsKey("member_phone"))
   }
 
   @Test

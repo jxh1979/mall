@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 
@@ -112,7 +114,7 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now
         ,
-        null, null, null, null, false));
+        null, null, null, null));
 
         assertThat(repository.listTicketTypes())
                 .extracting(
@@ -159,7 +161,7 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now
         ,
-        null, null, null, null, false));
+        null, null, null, null));
         repository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "link_jdbc",
                 "ticket_type_jdbc_issue",
@@ -322,7 +324,7 @@ class TicketingJdbcIntegrationTests {
                 "ticket_type_chk", "P0 Chk", "weekday_weekend_holiday", 9900L, 11900L, 12900L, false, "published",null,null, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "template_chk", "P0 Entry", "entry", 4, 9900L, "active",null,null,null,null, now, now,
-                null, null, null, null, false));
+                null, null, null, null));
         // V159 起 issued_entitlements.order_id 外键引用 ticket_orders，先建父订单避免 FK 违反。
         repository.saveTicketOrder(new TicketOrderRecord(
                 "order_chk", "ON-CHK", "cust_chk", "ticket_type_chk", null, 4,
@@ -424,7 +426,7 @@ class TicketingJdbcIntegrationTests {
                 now,
                 now
         ,
-        null, null, null, null, false));
+        null, null, null, null));
         repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_order_jdbc",
                 "P0-ORDER-JDBC",
@@ -545,7 +547,7 @@ class TicketingJdbcIntegrationTests {
                 19800L, null, 19800L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 "tpl_share_live", "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now,
-                null, null, null, null, false));
+                null, null, null, null));
         // 两张父票实例，各一条挂父票的权益。
         repository.saveTicketInstance(new TicketInstanceRecord(
                 "inst_share_a", "TN-A", "o_share_live", "tt_share_live", 1, 1, 1,
@@ -563,12 +565,15 @@ class TicketingJdbcIntegrationTests {
                 null, null, null, null, "inst_share_b", 2, null, null));
 
         TicketRefundService refundService = new TicketRefundService(repository, event -> { }, null, null);
+        // BSM:806 每笔退款须写明责任主体（主体主数据中在用的法律主体）。
+        jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES ('be_share_live', '退票责任主体', 'project_company', 'active', now(), now())");
 
         // 传金额≠整票额（选一张票传 19800）→ REFUND_AMOUNT_MISMATCH。
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> refundService.requestRefund(
-                TicketRefundRequest.ofTicketInstances(
+                new TicketRefundRequest(
                         "share-live-over", "refund", List.of(), "o_share_live", 19800L, "customer request", "original",
-                        List.of("inst_share_a"))))
+                        null, List.of("inst_share_a"), "ticket_type_rule", "be_share_live")))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
                         assertThat(ex.code()).isEqualTo("REFUND_AMOUNT_MISMATCH"));
         // 活证据：被拒后 DB 无该单退款行（钱没动）。
@@ -577,9 +582,9 @@ class TicketingJdbcIntegrationTests {
                 .isEqualTo(0L);
 
         // 不带金额=服务端算定整票额（9900）可退并落库。
-        TicketRefundRecord ok = refundService.requestRefund(TicketRefundRequest.ofTicketInstances(
+        TicketRefundRecord ok = refundService.requestRefund(new TicketRefundRequest(
                 "share-live-ok", "refund", List.of(), "o_share_live", null, "customer request", "original",
-                List.of("inst_share_a")));
+                null, List.of("inst_share_a"), "ticket_type_rule", "be_share_live"));
         assertThat(ok.refundAmountCent()).isEqualTo(9900L);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM ticket_refunds WHERE target_id = ?", Long.class, "o_share_live"))

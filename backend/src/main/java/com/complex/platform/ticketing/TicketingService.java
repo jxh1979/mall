@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 
@@ -12,7 +12,6 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
-import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
@@ -23,6 +22,7 @@ import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
+import com.complex.platform.ticketing.dto.VerificationAnomalyResolveRequest;
 import com.complex.platform.ticketing.dto.VerificationReverseRequest;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -44,6 +44,9 @@ public class TicketingService {
     private final AuthorizationService authorizationService;
     // AUD-077 转赠链(可空=既有单元测试双子用 InMemory repo,不走转赠;生产由 @Autowired 主构造注入)。
     private final TicketTransferService transferService;
+    // TK-05-R2/R3 通票安全例外（字段注入免改既有构造点；生产恒注入）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    TicketSafetyExceptionService safetyExceptionService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketingService(
@@ -131,27 +134,6 @@ public class TicketingService {
                 TicketingWriteOperation.UPDATE_TICKET_TYPE_PRICING,
                 () -> catalogService.updatePricing(id, request)
         );
-    }
-
-    /** V359：要求购票人拍入场人脸照的票种 id 集合（供客人端购票页判定是否弹拍照）。 */
-    public java.util.Set<String> ticketTypeIdsRequiringFacePhoto() {
-        return repository.listTicketTypeIdsRequiringFacePhoto();
-    }
-
-    /**
-     * V359：当前生效的人脸照留存天数（后台 ADM-ANA-011 可改，缺配置 30）。
-     * 客人端拍照前要把「照片留多久」如实告诉客人，写死数字会在运营改配置后变成假告知。
-     */
-    public int facePhotoRetentionDays() {
-        return orderService.facePhotoRetentionDays();
-    }
-
-    /**
-     * V368：当前这一版拍照告知的版本号（模板版本 + 当时告知的留存天数）。
-     * 客人勾同意时把它写进同意台账，将来才答得出「这位客人同意的是哪一版告知」。
-     */
-    public String facePhotoNoticeVersion() {
-        return orderService.facePhotoNoticeVersion();
     }
 
     public PageResponse<TicketPriceRuleRecord> listTicketPriceRules() {
@@ -637,21 +619,6 @@ public class TicketingService {
         return processed;
     }
 
-    /** R-005：柜台散客人脸照同意落账（出票前一步），与出票同权限、同终端开关，走写操作留痕与幂等。 */
-    @com.complex.platform.gate.GuardedAction(capability = "ticket.ticket.issue")
-    @Transactional
-    public TicketFacePhotoService.FaceConsentView recordFacePhotoConsent(String orderId, FacePhotoConsentRequest request) {
-        String id = operations.requireText(orderId, "order_id");
-        return operations.executeWrite(
-                "recordFacePhotoConsent:" + id,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                TicketFacePhotoService.FaceConsentView.class,
-                TicketingWriteOperation.RECORD_FACE_PHOTO_CONSENT,
-                () -> orderService.recordWalkInFaceConsent(id, request)
-        );
-    }
-
     @com.complex.platform.gate.GuardedAction(capability = "ticket.ticket.issue")
     @Transactional
     public IssuedTicketResponse issueTicketOrder(String orderId, StatusChangeRequest request) {
@@ -866,6 +833,40 @@ public class TicketingService {
         );
     }
 
+    /** TK-05-R2/R3 登记通票安全事件（BSM:804 通票安全例外；须记录原因、当时情形），待夜班值班经理及以上批准。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.request")
+    @Transactional
+    public TicketSafetyEventRecord requestTicketSafetyEvent(com.complex.platform.ticketing.dto.TicketSafetyEventRequest request) {
+        return operations.executeWrite(
+                "requestTicketSafetyEvent",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketSafetyEventRecord.class,
+                TicketingWriteOperation.REQUEST_TICKET_SAFETY_EVENT,
+                () -> safetyExceptionService.request(request)
+        );
+    }
+
+    /** TK-05-R2/R3 批准通票安全事件：非多次通票退该人份票款（已核销也退），多次通票恢复本次 1 次完整补偿使用机会。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.approve")
+    @Transactional
+    public TicketSafetyEventRecord approveTicketSafetyEvent(String eventId, StatusChangeRequest request) {
+        String id = operations.requireText(eventId, "safety_event_id");
+        return operations.executeWrite(
+                "approveTicketSafetyEvent:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketSafetyEventRecord.class,
+                TicketingWriteOperation.APPROVE_TICKET_SAFETY_EVENT,
+                () -> safetyExceptionService.approve(id, request)
+        );
+    }
+
+    /** TK-05 通票安全事件台账（待批准在前）；权限 ticket.refund.view。 */
+    public PageResponse<TicketSafetyEventRecord> listTicketSafetyEvents() {
+        return operations.readPage(TicketingReadOperation.LIST_TICKET_SAFETY_EVENTS, () -> safetyExceptionService.list());
+    }
+
     /**
      * 退款单台账（后台“待确认拨付”看板）：业务人员靠它看哪几笔已批准但钱还没打出去。
      * 权限 ticket.refund.view；商户 scope 只见本商户受理的退款（V220 退款单直挂 merchant_id）。
@@ -958,6 +959,40 @@ public class TicketingService {
         );
         verificationService.requireAmusementReversalScope(verificationId);
         return result;
+    }
+
+    /** TK-14：已成功扣次的核销提起异常复核（保留原成功记录与扣次）；权限 verification.execute，幂等+审计。 */
+    @com.complex.platform.gate.GuardedAction(capability = "verification.execute")
+    @Transactional
+    public VerificationRecord raiseVerificationAnomaly(String verificationId, VerificationReverseRequest request, String raisedBy) {
+        return operations.executeWrite(
+                "raiseTicketVerificationAnomaly",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                VerificationRecord.class,
+                TicketingWriteOperation.RAISE_VERIFICATION_ANOMALY,
+                () -> verificationService.raiseVerificationAnomaly(verificationId, request == null ? null : request.reason(), raisedBy)
+        );
+    }
+
+    /** TK-14：主管二选一处置核销异常（restored / voided_reversed），原因必填；权限 ticket.verify.anomaly.resolve，幂等+审计。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.verify.anomaly.resolve")
+    @Transactional
+    public VerificationRecord resolveVerificationAnomaly(String anomalyId, VerificationAnomalyResolveRequest request, String resolvedBy) {
+        // 作废并冲正先过与直接冲正相同的合同准入闸（对原核销记录）；更正后恢复不动次数，不过闸。
+        if (request != null && "voided_reversed".equals(request.resolution()) && anomalyId != null) {
+            repository.findVerificationById(anomalyId).map(VerificationRecord::anomalyOfVerificationId)
+                    .ifPresent(original -> verificationService.admitAnomalyVoidReversal(original, request.reason()));
+        }
+        return operations.executeWrite(
+                "resolveTicketVerificationAnomaly",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                VerificationRecord.class,
+                TicketingWriteOperation.RESOLVE_VERIFICATION_ANOMALY,
+                () -> verificationService.resolveVerificationAnomaly(anomalyId, request == null ? null : request.resolution(),
+                        request == null ? null : request.reason(), resolvedBy)
+        );
     }
 
     public PageResponse<VerificationRecord> listVerifications() {

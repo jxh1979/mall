@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { Alert, Button, Card, Empty, Input, List, Modal, Select, Space, Spin, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 
@@ -133,8 +133,16 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
       <List
         size="small"
         dataSource={Array.from(groups.values())}
-        renderItem={(members) => {
-          const head = members[0];
+        renderItem={(all) => {
+          // TK-13（ENUM L148「“我的票”按对应人份或次份显示补偿标注及其实际有效期」）：完整补发的补偿行按人份单列标注与补偿有效期，
+          // 不并入原票「剩余 x/y 次」。
+          const members = all.filter((m) => m.compensationKind !== "full_reissue");
+          const compensations = new Map<string, CustomerTicket[]>();
+          for (const c of all.filter((m) => m.compensationKind === "full_reissue")) {
+            const key = `${c.slotIndex ?? 1}|${c.validTo ?? ""}`;
+            compensations.set(key, [...(compensations.get(key) ?? []), c]);
+          }
+          const head = members[0] ?? all[0];
           if (!head) return null;
           const remaining = members.reduce((sum, m) => sum + m.remainingTimes, 0);
           const total = members.reduce((sum, m) => sum + m.totalTimes, 0);
@@ -169,6 +177,19 @@ export function MyOrdersPage({ service }: { service: CustomerService }): React.R
                         </Button>
                       ))}
                     </Space>
+                    {Array.from(compensations.entries()).map(([key, rows]) => (
+                      <Space wrap key={key} data-testid="ticket-compensation">
+                        <Tag color="orange" data-testid="ticket-compensation-tag">
+                          补偿（第{rows[0]?.slotIndex ?? 1}人）{rows[0]?.validTo ? ` · 补偿有效期至 ${new Date(rows[0].validTo).toLocaleDateString()}` : ""}
+                        </Tag>
+                        {rows.map((c) => (
+                          <Button key={c.id} size="small" disabled={c.status !== "active"} onClick={() => setQrTicketId(c.id)}
+                            data-testid="ticket-qr-open">
+                            出示二维码
+                          </Button>
+                        ))}
+                      </Space>
+                    ))}
                   </Space>
                 }
               />

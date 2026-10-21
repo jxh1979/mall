@@ -1,5 +1,7 @@
 package com.complex.platform.entry;
 
+// 文件版本：V0.01
+
 /**
  * 闸接缝实现：能力开关 {@code face.verification.enabled} 开但当前无真实厂商接入时使用。
  *
@@ -14,6 +16,17 @@ public final class ReservedFaceVerificationGate implements FaceVerificationPort 
 
     @Override
     public FaceVerificationResult verifyEntry(FaceVerificationRequest request) {
+        return FaceVerificationResult.notConfigured(MSG);
+    }
+
+    // TK-06：无真实供应商 = 不可用；接入真实人脸 SDK 后在此返回 true 并实现比对。
+    @Override
+    public boolean holderMatchAvailable() {
+        return false;
+    }
+
+    @Override
+    public FaceVerificationResult matchHolder(String storedPhotoBase64, String capturedPhotoBase64) {
         return FaceVerificationResult.notConfigured(MSG);
     }
 }

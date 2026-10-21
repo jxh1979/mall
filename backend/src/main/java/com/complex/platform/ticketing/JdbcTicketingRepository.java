@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -193,14 +193,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                 INSERT INTO entitlement_templates (
                     id, name, entitlement_type, default_total_times, default_value_cent,
                     status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                    agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
+                    agreement_price_cent, consumption_window, exclusive_merchant_id,
                     archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
                     catalog_item_code, created_at, updated_at
                 )
                 VALUES (
                     :id, :name, :entitlement_type, :default_total_times, :default_value_cent,
                     :status, :merchant_id, :venue_id, :point_id, :bar_item_ref, :entitlement_kind,
-                    :agreement_price_cent, :consumption_window, :exclusive_merchant_id, :require_face_photo,
+                    :agreement_price_cent, :consumption_window, :exclusive_merchant_id,
                     :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
                     :catalog_item_code, :created_at, :updated_at
                 )
@@ -218,7 +218,6 @@ class JdbcTicketingRepository implements TicketingRepository {
                     agreement_price_cent = EXCLUDED.agreement_price_cent,
                     consumption_window = EXCLUDED.consumption_window,
                     exclusive_merchant_id = EXCLUDED.exclusive_merchant_id,
-                    require_face_photo = EXCLUDED.require_face_photo,
                     catalog_item_code = EXCLUDED.catalog_item_code,
                     archived_at = EXCLUDED.archived_at,
                     archived_by = EXCLUDED.archived_by,
@@ -236,7 +235,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
+                       agreement_price_cent, consumption_window, exclusive_merchant_id,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
                        catalog_item_code, created_at, updated_at
                   FROM entitlement_templates
@@ -251,7 +250,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, name, entitlement_type, default_total_times, default_value_cent,
                        status, merchant_id, venue_id, point_id, bar_item_ref, entitlement_kind,
-                       agreement_price_cent, consumption_window, exclusive_merchant_id, require_face_photo,
+                       agreement_price_cent, consumption_window, exclusive_merchant_id,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
                        catalog_item_code, created_at, updated_at
                   FROM entitlement_templates
@@ -311,18 +310,6 @@ class JdbcTicketingRepository implements TicketingRepository {
                  WHERE ticket_type_id = :ticket_type_id
                  ORDER BY created_at ASC, id
                 """, Map.of("ticket_type_id", ticketTypeId), rowMapper::mapTicketTypeEntitlement);
-    }
-
-    @Override
-    public java.util.Set<String> listTicketTypeIdsRequiringFacePhoto() {
-        // V359：一条 SQL 拿全量「要脸照的票种」，客人端购票页据此决定问不问客人要照片。
-        //   票种可绑多个权益模板，任一模板 require_face_photo=TRUE 即整张票要拍（发放时逐张按模板判定不受影响）。
-        return java.util.Set.copyOf(jdbcTemplate.queryForList("""
-                SELECT DISTINCT tte.ticket_type_id
-                  FROM ticket_type_entitlements tte
-                  JOIN entitlement_templates et ON et.id = tte.entitlement_template_id
-                 WHERE et.require_face_photo = TRUE
-                """, Map.of(), String.class));
     }
 
     @Override
@@ -495,19 +482,6 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
-    public int extendIssuedEntitlementValidTo(String id, java.time.Instant newValidTo, java.time.Instant now) {
-        // CG-08b：只延长（valid_to 取较晚者），不改次数、不改状态。
-        return jdbcTemplate.update("""
-                UPDATE issued_entitlements
-                   SET valid_to = GREATEST(valid_to, :new_valid_to),
-                       updated_at = :updated_at
-                 WHERE id = :id AND status = 'active'
-                """, new MapSqlParameterSource().addValue("id", id)
-                .addValue("new_valid_to", java.sql.Timestamp.from(newValidTo))
-                .addValue("updated_at", java.sql.Timestamp.from(now)));
-    }
-
-    @Override
     public IssuedEntitlementRecord updateIssuedEntitlement(IssuedEntitlementRecord entitlement) {
         jdbcTemplate.update("""
                 UPDATE issued_entitlements
@@ -618,16 +592,17 @@ class JdbcTicketingRepository implements TicketingRepository {
                     credential_payload, device_id, point_id, status, result_reason, source_type,
                     client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
                     verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
-                    amusement_verification_id
+                    amusement_verification_id, anomaly_of_verification_id
                 )
                 VALUES (
                     :id, :verification_no, :entitlement_id, :entitlement_code, :credential_type,
                     :credential_payload, :device_id, :point_id, :status, :result_reason, :source_type,
                     :client_task_id, :created_at, :nonce, :staff_id, :merchant_id, :window_valid, :signature_valid,
                     :verified_people, :reverses_verification_id, :reversed_by, :reversed_at, :settlement_price_cent,
-                    :amusement_verification_id
+                    :amusement_verification_id, :anomaly_of_verification_id
                 )
-                """, parameterSource.verificationParameters(verification));
+                """, parameterSource.verificationParameters(verification)
+                .addValue("anomaly_of_verification_id", verification.anomalyOfVerificationId()));
         return verification;
     }
 
@@ -638,10 +613,10 @@ class JdbcTicketingRepository implements TicketingRepository {
                        credential_payload, device_id, point_id, status, result_reason, source_type,
                        client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
                        verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
-                       amusement_verification_id
+                       amusement_verification_id, %s
                   FROM ticket_verifications
                  ORDER BY created_at DESC, id
-                """, rowMapper::mapVerification);
+                """.formatted(ANOMALY_COLUMNS), this::mapVerification);
     }
 
     @Override
@@ -651,10 +626,49 @@ class JdbcTicketingRepository implements TicketingRepository {
                        credential_payload, device_id, point_id, status, result_reason, source_type,
                        client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
                        verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
-                       amusement_verification_id
+                       amusement_verification_id, %s
                   FROM ticket_verifications
                  WHERE id = :id
-                """, Map.of("id", id), rowMapper::mapVerification).stream().findFirst();
+                """.formatted(ANOMALY_COLUMNS), Map.of("id", id), this::mapVerification).stream().findFirst();
+    }
+
+    private static final String ANOMALY_COLUMNS =
+            "anomaly_of_verification_id, anomaly_resolution, anomaly_resolved_by, anomaly_resolved_at, anomaly_resolution_reason";
+
+    private VerificationRecord mapVerification(java.sql.ResultSet rs, int rowNumber) throws java.sql.SQLException {
+        java.time.OffsetDateTime resolvedAt = rs.getObject("anomaly_resolved_at", java.time.OffsetDateTime.class);
+        return rowMapper.mapVerification(rs, rowNumber).withAnomaly(rs.getString("anomaly_of_verification_id"),
+                rs.getString("anomaly_resolution"), rs.getString("anomaly_resolved_by"),
+                resolvedAt == null ? null : resolvedAt.toInstant(), rs.getString("anomaly_resolution_reason"));
+    }
+
+    @Override
+    public boolean openVerificationAnomalyExists(String verificationId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM ticket_verifications
+                                WHERE anomaly_of_verification_id = :id AND status = 'anomaly' AND anomaly_resolution IS NULL)
+                """, Map.of("id", verificationId), Boolean.class));
+    }
+
+    @Override
+    public int markVerificationAnomalyResolved(String anomalyId, String resolution, String resolvedBy,
+                                               java.time.Instant resolvedAt, String reason) {
+        // 待处置 → 已处置的 CAS：并发两次处置只一路得 1，另一路得 0（调用方拒 ALREADY_RESOLVED）。
+        return jdbcTemplate.update("""
+                UPDATE ticket_verifications
+                   SET anomaly_resolution = :resolution,
+                       anomaly_resolved_by = :resolved_by,
+                       anomaly_resolved_at = :resolved_at,
+                       anomaly_resolution_reason = :reason
+                 WHERE id = :id
+                   AND status = 'anomaly'
+                   AND anomaly_resolution IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("id", anomalyId)
+                .addValue("resolution", resolution)
+                .addValue("resolved_by", resolvedBy)
+                .addValue("resolved_at", resolvedAt.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("reason", reason));
     }
 
     @Override
@@ -696,7 +710,8 @@ class JdbcTicketingRepository implements TicketingRepository {
     public List<TicketRefundRecord> listTicketRefunds() {
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
-                       requested_by, approved_by, approved_at, created_at, updated_at, merchant_id
+                       requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
+                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot
                   FROM ticket_refunds
                  ORDER BY created_at DESC, id
                 """, Map.of(), rowMapper::mapTicketRefund);
@@ -1370,11 +1385,13 @@ class JdbcTicketingRepository implements TicketingRepository {
         jdbcTemplate.update("""
                 INSERT INTO ticket_refunds (
                     id, target_id, refund_amount_cent, reason, refund_channel, status,
-                    requested_by, approved_by, approved_at, created_at, updated_at, merchant_id
+                    requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
+                    reason_code, responsible_entity_id, ticket_type_refundable_snapshot
                 )
                 VALUES (
                     :id, :target_id, :refund_amount_cent, :reason, :refund_channel, :status,
-                    :requested_by, :approved_by, :approved_at, :created_at, :updated_at, :merchant_id
+                    :requested_by, :approved_by, :approved_at, :created_at, :updated_at, :merchant_id,
+                    :reason_code, :responsible_entity_id, :ticket_type_refundable_snapshot
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
@@ -1389,7 +1406,8 @@ class JdbcTicketingRepository implements TicketingRepository {
     public Optional<TicketRefundRecord> findTicketRefundById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
-                       requested_by, approved_by, approved_at, created_at, updated_at, merchant_id
+                       requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
+                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot
                   FROM ticket_refunds
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketRefund).stream().findFirst();
@@ -1428,6 +1446,13 @@ class JdbcTicketingRepository implements TicketingRepository {
                  WHERE refund_id = :refund_id
                  ORDER BY created_at ASC, id
                 """, Map.of("refund_id", refundId), rowMapper::mapTicketRefundLine);
+    }
+
+    @Override
+    public boolean isActiveBusinessEntity(String id) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM business_entities WHERE id = :id AND status = 'active')",
+                Map.of("id", id), Boolean.class));
     }
 
     @Override

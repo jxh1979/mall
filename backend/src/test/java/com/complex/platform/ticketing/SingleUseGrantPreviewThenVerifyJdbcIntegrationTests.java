@@ -1,10 +1,9 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -14,7 +13,6 @@ import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.TemporaryGrant;
 import com.complex.platform.common.api.ApiResponse;
-import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -73,9 +71,6 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
     @Autowired
     private TicketingRepository ticketingRepository;
 
-    @Autowired
-    private PiiCipher piiCipher;
-
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String userId = "usr_m723pv_" + suffix;
     private final String code = "m723pv-code-" + suffix;
@@ -89,8 +84,6 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
         com.complex.platform.support.AppendOnlyTestBypass.update(
                 jdbcTemplate, "DELETE FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
         jdbcTemplate.update("DELETE FROM ticket_verifications WHERE entitlement_id = ?", "ent_" + code);
-        jdbcTemplate.update("DELETE FROM ticket_face_photos WHERE entitlement_id = ?", "ent_" + code);
-        jdbcTemplate.update("DELETE FROM customer_consents WHERE id = ?", "consent_" + code);
         jdbcTemplate.update("DELETE FROM ticket_credentials WHERE entitlement_id = ?", "ent_" + code);
         jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", "ent_" + code);
         jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + code);
@@ -286,31 +279,6 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
                 id, "ent_" + code, "order_" + code, token, "nonce_" + id, null, "dynamic_qr",
                 windowStartedAt, now.plusSeconds(3600), "active", 1, now, now, 60,
                 windowStartedAt, signatureValue, "v1"));
-    }
-
-    // 操作员 2026-10-04：核销预检附带显示人脸照「不算用掉」。只持单次「查看核销」授权（verification.view）的本商户员工
-    // 取人脸照两次都 200，来源未消耗、没有消耗日志。修复前第一次取照就把授权扣掉，第二次 403。
-    @Test
-    void viewingTheFacePhotoShownWithThePrecheckDoesNotUseUpTheSingleUseGrant() throws Exception {
-        seedEntitlement();
-        // 照片行须指向同意台账里真实存在的一行（V397 外键）；同意以订单为主体落账
-        jdbcTemplate.update("""
-                INSERT INTO customer_consents (id, customer_id, consent_type, accepted, version, source_terminal,
-                                               accepted_at, created_at, updated_at, order_id)
-                VALUES (?, NULL, 'ticket_face_photo', TRUE, 'v', 'counter', now(), now(), now(), ?)
-                """, "consent_" + code, "order_" + code);
-        jdbcTemplate.update("""
-                INSERT INTO ticket_face_photos (id, entitlement_id, photo_ciphertext, content_type, captured_at, purge_after, consent_id)
-                VALUES (?, ?, ?, 'image/png', now(), CURRENT_DATE + 30, ?)
-                """, "tfp_" + code, "ent_" + code,
-                piiCipher.encrypt("bTcyMw==").getBytes(StandardCharsets.UTF_8), "consent_" + code);
-        staffWithSingleUseGrant("verification.view");
-        String url = "/api/v1/ticketing/issued-entitlements/ent_" + code + "/face-photo";
-
-        for (int i = 0; i < 2; i++) {
-            mockMvc.perform(get(url).with(session())).andExpect(status().isOk());
-            assertUnconsumed();
-        }
     }
 
     // 操作员 2026-10-04：价格仿真「不算用掉」。只持单次「动态定价仿真」授权（ticket.dynamic_pricing.simulate）的员工仿真两次都 200，

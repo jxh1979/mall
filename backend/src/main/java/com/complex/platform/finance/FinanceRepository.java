@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -298,6 +298,15 @@ public interface FinanceRepository {
     DailyCloseRecord saveDailyClose(DailyCloseRecord dailyClose);
 
     boolean dailyCloseExists(LocalDate businessDate, String scopeType, String scopeId);
+
+    /**
+     * TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日窗口 [from, to)、
+     * 仍待主管处置的票务核销异常是否存在。范围口径同 {@link #aggregateOfficialTicket(LocalDate, Instant, Instant, String, String)}：
+     * merchant 范围只看本商户，其余平台口径。default 无库替身视为没有；Jdbc 覆写。
+     */
+    default boolean openTicketVerificationAnomalyExists(Instant from, Instant to, String scopeType, String scopeId) {
+        return false;
+    }
 
     PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent);
 

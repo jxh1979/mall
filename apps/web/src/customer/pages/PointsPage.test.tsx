@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,7 @@ describe("PointsPage", () => {
       getPoints: vi.fn().mockResolvedValue({ customerId: "c-1", balance: 320, level: "黄金" }),
       listTicketRewards: vi.fn().mockResolvedValue({ pendingRecovery: 40, rewards: [{ id: "reward1", parentTicketId: "ticket1", slotIndex: 2, useIndex: 3, points: 100, growth: 7, waitingHours: 24, availableAt: "2026-10-20T08:00:00Z", status: "pending" }] }),
       listTicketRewardRules: vi.fn().mockResolvedValue([{ id: "r1", ticketName: "游乐日票", projectName: "长沙项目", kind: "points", fixedValue: 100, version: "V0.01", effectiveAt: "2026-10-20T00:00:00Z", publishedAt: "2026-10-18T00:00:00Z" }]),
+      listMerchantRewards: vi.fn().mockResolvedValue([]),
       listCheckIns: vi.fn().mockResolvedValue([]), listRedemptions: vi.fn().mockResolvedValue([]),
       listRedemptionItems: vi.fn().mockResolvedValue([{ id: "gift", itemName: "礼品", itemType: "gift", pointsCost: 10, stockQuantity: 5, status: "active" }]),
     } as unknown as CustomerService;
@@ -28,6 +29,7 @@ describe("PointsPage", () => {
     const service = {
       listTicketRewards: vi.fn().mockResolvedValue({ rewards: [], pendingRecovery: 0 }),
       listTicketRewardRules: vi.fn().mockResolvedValue([]),
+      listMerchantRewards: vi.fn().mockResolvedValue([]),
       getPoints: vi.fn().mockResolvedValue({ customerId: "c-1", balance: 320, level: "黄金", recentSummary: null }),
       listCheckIns: vi.fn().mockResolvedValue([
         { id: "ci-1", customerId: "c-1", checkInDate: "2026-06-18", streak: 3, awardedPoints: 30, sourceTerminal: "customer-web", createdAt: "" },
@@ -45,5 +47,20 @@ describe("PointsPage", () => {
     expect(screen.getByTestId("points-redemption-catalog")).toBeInTheDocument();
     expect(screen.getByText("精酿啤酒")).toBeInTheDocument();
     expect(screen.getByText(/连续 3 天/)).toBeInTheDocument();
+  });
+
+  // 第十一批 TK-04-R5（BSM L877 客人端只展示结果；ENUM L77「从消费单据可以反查该单产生的积分与成长值记录」）。
+  it("lists merchant consumption rewards with merchant, source bill number and waiting status", async () => {
+    const service = {
+      getPoints: vi.fn().mockResolvedValue({ customerId: "c-1", balance: 0, level: "黄金" }),
+      listTicketRewards: vi.fn().mockResolvedValue({ rewards: [], pendingRecovery: 0 }),
+      listTicketRewardRules: vi.fn().mockResolvedValue([]),
+      listMerchantRewards: vi.fn().mockResolvedValue([{ id: "mcr1", sourceType: "bar_bill", sourceId: "bill1", sourceNo: "BILL-001", merchantName: "一号酒吧", points: 15, growth: 150, status: "pending", completedAt: "2026-10-20T14:00:00Z", availableAt: "2026-10-21T14:00:00Z", confirmedAt: null }]),
+      listCheckIns: vi.fn().mockResolvedValue([]), listRedemptions: vi.fn().mockResolvedValue([]), listRedemptionItems: vi.fn().mockResolvedValue([]),
+    } as unknown as CustomerService;
+    render(<PointsPage service={service} />);
+    await waitFor(() => expect(screen.getByTestId("merchant-rewards")).toHaveTextContent("一号酒吧 · 单号 BILL-001 · 15 积分 · 150 成长值"));
+    expect(screen.getByTestId("merchant-rewards")).toHaveTextContent("待确认 · 等待期至");
+    expect(screen.getByTestId("merchant-rewards")).toHaveTextContent("退款处理期间不发放");
   });
 });
