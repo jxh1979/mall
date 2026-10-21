@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import android.app.Activity
 import android.content.Intent
@@ -355,6 +355,7 @@ class MainActivity : Activity() {
       button("待办与消息中心") { showInbox() },
       button("公司公告") { showStaffNotices() },
       button("我的工单") { showMyWorkOrders() },
+      button("我的接警（已收到并接手）") { showMyFacilityAlarms() },
       button("酒吧空位 / 帮客订位") { showBarAvailability() },
       button("我的排班") { showMyShifts() },
       button("考勤打卡(NFC/扫码)") { showPunch() },
@@ -848,22 +849,101 @@ class MainActivity : Activity() {
     ))
   }
 
+  /**
+   * 我的工单：派给我的只读（处理在公司设备）；第十二批操作员裁决第 13 条：一并列出「待我提单确认」的单，
+   * 点选后可「确认」（/review）或填不通过原因「退回返工」（/rework）。
+   */
   private fun showMyWorkOrders() {
     val status = statusText("正在拉取流转到我的工单…")
-    val list = statusText("")
-    runBackground(
-      action = { api.listMyWorkOrders() },
-      onSuccess = { orders ->
-        status.text = "我的工单 ${orders.size} 条(只读,处理在公司设备)"
-        list.text = if (orders.isEmpty()) "暂无流转到你的工单" else orders.joinToString("\n\n") { o ->
-          "${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""}\n优先级 ${o.priority ?: "-"} / 处理时限 ${o.handleDueAt ?: "-"}"
-        }
-      },
-      onError = { status.text = "拉取失败：${friendly(it)}" },
-    )
+    val list = rowsContainer()
+    val orderId = editText("待我提单确认的工单（点上方「待我提单确认」一条自动回填）")
+    val reason = editText("退回返工须填不通过原因")
+    val me = store.session?.staffId
+    val refresh = {
+      runBackground(
+        action = { api.listMyWorkOrders() },
+        onSuccess = { orders ->
+          status.text = "我的工单 ${orders.size} 条（派给我的只读，处理在公司设备；待我提单确认的可确认或退回返工）"
+          fillSelectableRows(
+            list,
+            orders.map { o ->
+              val pending = o.awaitsConfirmationBy(me)
+              "${if (pending) "[待我提单确认] " else ""}${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""}\n优先级 ${o.priority ?: "-"} / 处理时限 ${o.handleDueAt ?: "-"}" to {
+                if (pending) { orderId.setText(o.id ?: ""); status.text = "已选待我提单确认：${o.code ?: o.id}" }
+              }
+            },
+            emptyText = "暂无流转到你的工单",
+          )
+        },
+        onError = { status.text = "拉取失败：${friendly(it)}" },
+      )
+    }
+    val confirm = button("确认") {
+      val id = orderId.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请先选择待我提单确认的工单"; return@button }
+      runBackground(
+        action = { api.confirmWorkOrder(id, WorkOrderConfirmationRequest("byod_wo_confirm_${System.currentTimeMillis()}")) },
+        onSuccess = { status.text = "已确认：${it.code ?: id}"; orderId.setText(""); refresh() },
+        onError = { status.text = "确认失败：${friendly(it)}" },
+      )
+    }
+    val rework = button("退回返工") {
+      val id = orderId.text.toString().trim()
+      val note = reason.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请先选择待我提单确认的工单"; return@button }
+      if (note.isEmpty()) { status.text = "退回返工须填不通过原因"; return@button }
+      runBackground(
+        action = { api.reworkWorkOrder(id, WorkOrderConfirmationRequest("byod_wo_rework_${System.currentTimeMillis()}", note)) },
+        onSuccess = { status.text = "已退回返工：${it.code ?: id}"; orderId.setText(""); reason.setText(""); refresh() },
+        onError = { status.text = "退回失败：${friendly(it)}" },
+      )
+    }
+    refresh()
     setContentView(screen(
       title = "我的工单",
-      children = listOf(status, list, backButton()),
+      children = listOf(status, list, orderId, reason, confirm, rework, backButton()),
+    ))
+  }
+
+  /** HP-F01（BSM「楼宇运营」告警条）：当班接警人须点「已收到并接手」才算明确接手；查看本屏、公告确认已读、接听语音都不算。 */
+  private fun showMyFacilityAlarms() {
+    val status = statusText("正在拉取我的接警…")
+    val list = rowsContainer()
+    val alarmId = editText("要接手的告警（点上方待接手告警自动回填）")
+    val refresh = {
+      runBackground(
+        action = { api.listMyFacilityAlarms() },
+        onSuccess = { alarms ->
+          status.text = "我的接警 ${alarms.size} 条（点一条自动回填）"
+          fillSelectableRows(
+            list,
+            alarms.map { a ->
+              val st = if (a.status == "awaiting_takeover") "待明确接手" else "已明确接手"
+              "[$st] 设备 ${a.equipmentId ?: "-"} 优先级 ${a.priority ?: "-"}\n响应时限 ${a.responseDueAt ?: "-"}" +
+                (if (a.uncovered == true) "（无已确认处置规则，待专业处置人员判定）" else "") to {
+                alarmId.setText(a.id ?: "")
+                status.text = "已选告警：${a.id}"
+              }
+            },
+            emptyText = "暂无待接手或我持有的告警",
+          )
+        },
+        onError = { status.text = "拉取失败：${friendly(it)}" },
+      )
+    }
+    val takeOver = button("已收到并接手") {
+      val id = alarmId.text.toString().trim()
+      if (id.isEmpty()) { status.text = "请先选择告警"; return@button }
+      runBackground(
+        action = { api.takeOverFacilityAlarm(id, FacilityAlarmTakeOverRequest("byod_alarm_take_${System.currentTimeMillis()}")) },
+        onSuccess = { status.text = "已明确接手：${it.id ?: id}，请按原派单流程派维修"; refresh() },
+        onError = { status.text = "接手失败：${friendly(it)}" },
+      )
+    }
+    refresh()
+    setContentView(screen(
+      title = "我的接警",
+      children = listOf(status, list, alarmId, takeOver, backButton()),
     ))
   }
 
@@ -2141,6 +2221,9 @@ class MainActivity : Activity() {
         runCatching { api.listMyWorkOrders() }.getOrDefault(emptyList()).forEach { o ->
           items.add("[待办工单] ${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""} 时限${o.handleDueAt ?: "-"}")
         }
+        runCatching { api.listMyFacilityAlarms() }.getOrDefault(emptyList())
+          .filter { it.status == "awaiting_takeover" }
+          .forEach { a -> items.add("[待接警] 设备 ${a.equipmentId ?: "-"} 优先级 ${a.priority ?: "-"} 时限${a.responseDueAt ?: "-"}（去「我的接警」明确接手）") }
         runCatching { api.listMyShifts() }.getOrDefault(emptyList()).forEach { s ->
           items.add("[排班] ${s.workDate} ${s.startAt ?: "-"}~${s.endAt ?: "-"}")
         }
@@ -2151,7 +2234,7 @@ class MainActivity : Activity() {
         items.toList()
       },
       onSuccess = { items ->
-        status.text = "共 ${items.size} 条(请假结果/待办工单/排班/公告)"
+        status.text = "共 ${items.size} 条(请假结果/待办工单/待接警/排班/公告)"
         list.text = if (items.isEmpty()) "暂无待办与消息" else items.joinToString("\n\n")
       },
       onError = { status.text = "汇总失败：${friendly(it)}" },

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -10,13 +11,15 @@ import type { AdminPageProps } from "../types";
 //   新建/改价先落草案 → 具备高敏权限的他人复核转正 → 只对之后的核销/结算生效，转正同时同步四处业务快照；
 //   核销/结算发生时当时价固化到流水，此后改价不影响已发生的账；条目可下线归档，不影响历史引用。
 // 敏感：内部结算价仅授权后台人员可见（读端权限闸在后端，无权限直接 403）。
+// HP-P01：提供方可为经营主体（城市项目公司经营停车，品类 parking_credit「停车抵免（每小时）」），提供商家与提供主体二选一。
 const BASE = "/api/v1/settlement/config";
 const MANAGE = ["settlement.config.manage"];
 
 type CatalogRow = {
   id: string;
   itemCode: string;
-  merchantId: string;
+  merchantId?: string | null;
+  providerEntityId?: string | null;
   businessFormat?: string | null;
   category: string;
   itemName: string;
@@ -40,8 +43,9 @@ function yuan(cent: number | null | undefined): string {
   return (cent / 100).toFixed(2);
 }
 
-type Form = { itemCode: string; merchantId: string; category: string; itemName: string; priceYuan: string };
-const EMPTY_FORM: Form = { itemCode: "", merchantId: "", category: "", itemName: "", priceYuan: "" };
+type Form = { itemCode: string; merchantId: string; entityId: string; category: string; itemName: string; priceYuan: string };
+const EMPTY_FORM: Form = { itemCode: "", merchantId: "", entityId: "", category: "", itemName: "", priceYuan: "" };
+const provider = (row: CatalogRow) => row.merchantId ?? row.providerEntityId ?? "—";
 
 export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<CatalogRow[]>([]);
@@ -88,11 +92,16 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
   async function submitDraft() {
     setFormError(null);
     const merchantId = form.merchantId.trim();
+    const entityId = form.entityId.trim();
     const category = form.category.trim();
     const itemName = form.itemName.trim();
     const priceYuan = form.priceYuan.trim();
-    if (!merchantId || !category || !itemName || !priceYuan) {
-      setFormError("提供商家、品类、条目名称、内部结算价都必填（条目编码留空=新建）");
+    if (merchantId && entityId) {
+      setFormError("提供商家与提供主体二选一（商户提供的填商家，城市项目公司等经营主体提供的填主体）");
+      return;
+    }
+    if (!(merchantId || entityId) || !category || !itemName || !priceYuan) {
+      setFormError("提供方、品类、条目名称、内部结算价都必填（条目编码留空=新建）");
       return;
     }
     const priceCent = Math.round(Number(priceYuan) * 100);
@@ -105,7 +114,8 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
       const itemCode = await api.post<string>(`${BASE}/internal-price-item`, {
         idempotencyKey: `ipc-${Date.now()}`,
         itemCode: form.itemCode.trim() || null,
-        merchantId,
+        merchantId: merchantId || null,
+        providerEntityId: entityId || null,
         category,
         itemName,
         priceCent,
@@ -182,7 +192,8 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
       </p>
       <div className="admin-inline-form" data-testid="ipc-create-form">
         <label><span>条目编码（留空=新建）</span><input data-testid="ipc-form-code" value={form.itemCode} onChange={(e) => setForm({ ...form, itemCode: e.target.value })} /></label>
-        <label><span>提供商家</span><input data-testid="ipc-form-merchant" value={form.merchantId} onChange={(e) => setForm({ ...form, merchantId: e.target.value })} placeholder="商户 ID（必填）" /></label>
+        <label><span>提供商家</span><input data-testid="ipc-form-merchant" value={form.merchantId} onChange={(e) => setForm({ ...form, merchantId: e.target.value })} placeholder="商户 ID" /></label>
+        <label><span>或提供主体</span><input data-testid="ipc-form-entity" value={form.entityId} onChange={(e) => setForm({ ...form, entityId: e.target.value })} placeholder="经营主体 ID（如城市项目公司）" /></label>
         <label><span>品类</span><input data-testid="ipc-form-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="如 spirit / combo / dining" /></label>
         <label><span>条目名称</span><input data-testid="ipc-form-name" value={form.itemName} onChange={(e) => setForm({ ...form, itemName: e.target.value })} /></label>
         <label><span>内部结算价（元）</span><input data-testid="ipc-form-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setForm({ ...form, priceYuan: e.target.value })} placeholder="0=商户让利型" /></label>
@@ -203,7 +214,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
             ) : drafts.map((row) => (
               <tr key={row.id} data-testid={`ipc-draft-${row.itemCode}`}>
                 <td>{row.itemCode}</td>
-                <td>{row.merchantId}</td>
+                <td>{provider(row)}</td>
                 <td>{FORMAT_LABELS[row.businessFormat ?? ""] ?? row.businessFormat ?? "—"}</td>
                 <td>{row.category}</td>
                 <td>{row.itemName}</td>
@@ -228,7 +239,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
             ) : actives.map((row) => (
               <tr key={row.id} data-testid={`ipc-active-${row.itemCode}`}>
                 <td>{row.itemCode}</td>
-                <td>{row.merchantId}</td>
+                <td>{provider(row)}</td>
                 <td>{FORMAT_LABELS[row.businessFormat ?? ""] ?? row.businessFormat ?? "—"}</td>
                 <td>{row.category}</td>
                 <td>{row.itemName}</td>

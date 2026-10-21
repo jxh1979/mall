@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
@@ -39,7 +40,14 @@ type VendorEquipmentRow = {
   nextMaintenanceDue?: string | null;
 };
 
+// HP-F01 R7（BSM「楼宇运营」告警条 L1417「各类故障处置规则先由设备专业负责人和维保单位确认」）：维保单位一方确认。
+type VendorFaultRuleRow = {
+  id: string; projectId?: string; equipmentId?: string | null; equipmentType?: string; faultScenario?: string;
+  handlingRequirement?: string; status?: string; vendorConfirmedAt?: string | null;
+};
+
 const PROCESS = ["facility.work_order.process_assigned"];
+const RULE_CONFIRM = ["facility.fault_rule.confirm"];
 const DONE_STATUSES = ["completed", "closed", "accepted"];
 
 function nextKey(prefix: string) {
@@ -71,6 +79,7 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该工单/设备完整字段（枚举中文·时间中文·处理人可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  const [faultRules, setFaultRules] = React.useState<VendorFaultRuleRow[]>([]);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -107,13 +116,16 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
   // 无权限副资源不请求（根因修）：设备台账 GET 对外包账号需 facility.equipment.view——本页 accountForms:["vendor"]，
   // 后端 FacilityController.requireReadPermission 外包分支要 .view（内部账号才要 .manage），外包模板授的也是 .view。
   const canEquipmentView = hasPermissions(effectivePermissions, ["facility.equipment.view"]);
+  const canConfirmRule = hasPermissions(effectivePermissions, RULE_CONFIRM);
   const { loading, error, reload } = useAdminResource(
     async () => {
       // AUD-032：设备台账是副资源，外包账号可能无权（403）——降级为区块提示，不拖垮工单主内容。
-      const [workOrders, equipment] = await Promise.all([
+      const [workOrders, equipment, rules] = await Promise.all([
         api.get<VendorWorkOrderRow[]>("/api/v1/facility/work-orders"),
         loadSecondaryIfPermitted(canEquipmentView, () => api.get<VendorEquipmentRow[]>("/api/v1/facility/equipment"), [] as VendorEquipmentRow[]),
+        loadSecondaryIfPermitted(canConfirmRule, () => api.get<VendorFaultRuleRow[]>("/api/v1/facility/fault-rules"), [] as VendorFaultRuleRow[]),
       ]);
+      setFaultRules(rules.data ?? []);
       setRows(workOrders ?? []);
       setEquipmentRows(equipment.data);
       setEquipmentNotice(equipment.notice);
@@ -140,6 +152,11 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
       resolution: action === "complete" ? resolution : undefined,
     };
     await runAction(`vendor_work_order_${action}`, request, () => api.post(`/api/v1/facility/work-orders/${encodeURIComponent(selected.id)}/${action}`, request));
+  }
+
+  async function confirmFaultRule(id: string) {
+    const request = { idempotencyKey: nextKey("vendor-fault-rule-confirm") };
+    await runAction("vendor_fault_rule_confirm", request, () => api.post(`/api/v1/facility/fault-rules/${encodeURIComponent(id)}/confirm`, request));
   }
 
   const pendingRows = rows.filter((row) => !DONE_STATUSES.includes(row.status ?? ""));
@@ -271,6 +288,30 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
           </>
         )}
       </AdminDataState>
+      {canConfirmRule ? (
+        <>
+          <h3>故障处置规则确认（维保单位）</h3>
+          <div className="admin-table-scroll">
+            <table className="admin-table" data-testid="vendor-fault-rules-table">
+              <thead><tr><th>设备分类/设备</th><th>故障场景</th><th>处置要求</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                {faultRules.map((row) => (
+                  <tr key={row.id} data-testid={`vendor-fault-rule-${row.id}`}>
+                    <td>{formatBusinessStatus(row.equipmentType)} / {row.equipmentId ?? "本分类通用"}</td>
+                    <td>{row.faultScenario ?? "-"}</td>
+                    <td>{row.handlingRequirement ?? "-"}</td>
+                    <td>{row.status === "active" ? "已生效" : row.status === "retired" ? "已停用" : row.vendorConfirmedAt ? "待专业负责人确认" : "待维保单位确认"}</td>
+                    <td>{row.status === "pending_confirmation" && !row.vendorConfirmedAt ? (
+                      <PermissionButton permissionsState={effectivePermissions} permissions={RULE_CONFIRM} data-testid={`vendor-fault-rule-confirm-${row.id}`} disabled={busyAction !== ""} onClick={() => void confirmFaultRule(row.id)}>确认</PermissionButton>
+                    ) : null}</td>
+                  </tr>
+                ))}
+                {faultRules.length === 0 ? <tr><td colSpan={5}>暂无待确认的故障处置规则</td></tr> : null}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

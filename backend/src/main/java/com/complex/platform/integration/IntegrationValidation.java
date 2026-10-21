@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +19,9 @@ final class IntegrationValidation {
             "video",
             "device",
             "retail",
-            "catering"
+            "catering",
+            // HP-P01：第三方停车系统（BSM L1444「停车系统回传入出场记录、缴费结果和车位占用」）。
+            "parking"
     );
     private static final Set<String> MODES = Set.of("mock", "sandbox", "production");
     private static final Set<String> STATUSES = Set.of("draft", "mock_ready", "test_ready", "production_ready", "disabled");

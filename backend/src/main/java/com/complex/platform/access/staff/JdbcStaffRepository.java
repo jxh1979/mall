@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -933,22 +933,39 @@ public class JdbcStaffRepository {
     /** 原班、部分顶班和继续顶班均沿真实交接关系确定唯一当班人，不修改原班及缺勤。 */
     public Optional<NightDuty> findCurrentNightDuty(String userId,String projectId,java.time.Instant at) {
         if (!projectId.equals(findUserProjectId(userId).orElse(null))) return Optional.empty();
-        var matches=jdbcTemplate.query("""
-                WITH RECURSIVE duty(root_id,id,user_id) AS (
-                    SELECT id,id,user_id FROM staff_shift_schedules
-                     WHERE night_duty_project_id=:project AND start_at<=:at AND end_at>:at
+        var roots=jdbcTemplate.queryForList("""
+                SELECT id FROM staff_shift_schedules
+                 WHERE night_duty_project_id=:project AND start_at<=:at AND end_at>:at
+                """,new MapSqlParameterSource().addValue("project",projectId)
+                .addValue("at",java.sql.Timestamp.from(at)),String.class);
+        var matches=roots.stream().flatMap(root->findEffectiveShiftHolders(root,at).stream()
+                .filter(h->h.userId().equals(userId)).map(h->new NightDuty(root,h.shiftId()))).toList();
+        if (matches.size()>1) throw ApiException.conflict("NIGHT_DUTY_AMBIGUOUS", "本项目当前夜班职责存在重叠，请核实排班");
+        return matches.stream().findFirst();
+    }
+
+    /** 已发布班次此刻的实际当班人；endAt 为该段（原班或顶班时段）结束时刻。 */
+    public record ShiftHolder(String userId,String shiftId,java.time.Instant endAt) {}
+
+    /**
+     * HP-F01：已发布班次此刻的实际当班人——原班，或沿顶班（部分顶班、继续顶班）递归到此刻无人再顶的那一段；
+     * 班次此刻不在进行（未开始或已结束）返回空。夜班值班经理与设备告警接警值守共用这一份顶班解析。
+     */
+    public List<ShiftHolder> findEffectiveShiftHolders(String shiftId,java.time.Instant at) {
+        return jdbcTemplate.query("""
+                WITH RECURSIVE duty(id,user_id,end_at) AS (
+                    SELECT id,user_id,end_at FROM staff_shift_schedules
+                     WHERE id=:shift AND start_at<=:at AND end_at>:at
                     UNION ALL
-                    SELECT d.root_id,c.cover_shift_id,c.cover_user_id FROM duty d
+                    SELECT c.cover_shift_id,c.cover_user_id,c.end_at FROM duty d
                       JOIN staff_shift_covers c ON c.shift_id=d.id
                      WHERE c.start_at<=:at AND c.end_at>:at
                 )
-                SELECT d.root_id,d.id FROM duty d WHERE d.user_id=:user
-                   AND NOT EXISTS(SELECT 1 FROM staff_shift_covers c WHERE c.shift_id=d.id
+                SELECT d.id,d.user_id,d.end_at FROM duty d
+                 WHERE NOT EXISTS(SELECT 1 FROM staff_shift_covers c WHERE c.shift_id=d.id
                        AND c.start_at<=:at AND c.end_at>:at)
-                """,new MapSqlParameterSource().addValue("project",projectId).addValue("user",userId)
-                .addValue("at",java.sql.Timestamp.from(at)),(rs,n)->new NightDuty(rs.getString("root_id"),rs.getString("id")));
-        if (matches.size()>1) throw ApiException.conflict("NIGHT_DUTY_AMBIGUOUS", "本项目当前夜班职责存在重叠，请核实排班");
-        return matches.stream().findFirst();
+                """,new MapSqlParameterSource().addValue("shift",shiftId).addValue("at",java.sql.Timestamp.from(at)),
+                (rs,n)->new ShiftHolder(rs.getString("user_id"),rs.getString("id"),nullableInstant(rs,"end_at")));
     }
 
     /** 普通排班审批不能回改已记录的顶班事实，或在待审期间与新增顶班形成重复应出勤。 */

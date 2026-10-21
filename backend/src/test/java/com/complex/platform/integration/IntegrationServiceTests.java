@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -276,6 +276,14 @@ class IntegrationServiceTests {
                 assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
     }
 
+
+    /** HP-P01：第三方停车系统可登记为供应商适配器（BSM「连接第三方接入，停车系统回传入出场记录、缴费结果和车位占用」）。 */
+    @Test
+    void parkingAdapterTypeAccepted() {
+        org.assertj.core.api.Assertions.assertThatCode(() -> IntegrationValidation.validateCreateRequest(new ProviderAdapterRequest(
+                "pk-adapter", null, java.util.List.of(), "pk-vendor", "parking", "mock", Map.of(), Map.of(), Map.of(), false)))
+                .doesNotThrowAnyException();
+    }
 
     @Test
     void webhookPersistsEventAndDuplicateIdempotencyReturnsOriginalResult() {

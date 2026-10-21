@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -131,7 +131,12 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("saved_bottle_remedy", "存酒补存/赔付损失"),
             Map.entry("saved_bottle_remedy_recovery", "存酒退出承接垫付追收"),
             Map.entry("single_bar_service_fee", "单店门票综合服务费"),
-            Map.entry("ticket_distribution_recovery", "通票分账追收"));
+            Map.entry("ticket_distribution_recovery", "通票分账追收"),
+            // HP-P01（BSM L1437 账单类型「车位月租」；L1445「停车费收入归城市项目公司」）：合同车位月租应收、客人停车费内部核算。
+            Map.entry("contract_parking_monthly", "车位月租"),
+            Map.entry("parking_fee", "停车费"),
+            // HP-P01 第二组（BSM「停车场」章「消费抵免」条）：城市项目公司对承担商户的停车抵免成本普通内部结算应收。
+            Map.entry("parking_credit_cost", "停车抵免成本"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
@@ -2405,6 +2410,25 @@ public class FinanceService implements TerminationSettlementPort {
                 requireText(remedyId, "remedy_id"), amountCent, requireText(idempotencyKey, "idempotency_key"), merchantId);
     }
 
+    /**
+     * HP-F03（BSM L1408「残值或损失由财务记录并关联原设备」）：楼宇设备报废残值＝对回收方的应收，来源关联原报废单、归原设备项目；
+     * 收款走既有登记收付款（registerArApPayment→settleArApItem），款项独立跟进到实际收清。
+     */
+    public ArApItemRecord postFacilityEquipmentScrapResidual(String scrapId, String counterpartyId, String projectId,
+            long amountCent, String idempotencyKey) {
+        return persistDerivedArApItem("receivable", requireText(counterpartyId, "residual_counterparty_id"),
+                "facility_equipment_scrap", requireText(scrapId, "scrap_id"), amountCent,
+                requireText(idempotencyKey, "idempotency_key"), null, null, LocalDate.now(), projectId);
+    }
+
+    /** HP-F03：楼宇设备报废损失＝承担方的内部核算（登记即确认），来源关联原报废单、归原设备项目。 */
+    public ArApItemRecord postFacilityEquipmentScrapLoss(String scrapId, String bearerId, String projectId,
+            long amountCent, String idempotencyKey) {
+        return persistDerivedArApItem("internal_accounting", requireText(bearerId, "bearer_id"),
+                "facility_equipment_scrap_loss", requireText(scrapId, "scrap_id"), amountCent,
+                requireText(idempotencyKey, "idempotency_key"), null, null, LocalDate.now(), projectId);
+    }
+
     /** FS-017（BSM L1072「该娱乐平台公司可经审批先垫付并向原门店追收」）：对原门店挂追收应收，经统一回写点 settleArApItem 收回。 */
     @Transactional
     public ArApItemRecord postSavedBottleRemedyRecovery(String remedyId, String originalMerchantId, long amountCent, String idempotencyKey) {
@@ -2919,6 +2943,22 @@ public class FinanceService implements TerminationSettlementPort {
             String merchantId,
             String accountingPeriod,
             LocalDate dueDate) {
+        return persistDerivedArApItem(direction, counterpartyId, sourceType, sourceId, amountCent, idempotencyKey,
+                merchantId, accountingPeriod, dueDate, null);
+    }
+
+    /** projectId：派生台账的项目归属（HP-F03 报废残值/损失归原设备项目，供项目财务收款与隔离）；其余派生方传 null。 */
+    private ArApItemRecord persistDerivedArApItem(
+            String direction,
+            String counterpartyId,
+            String sourceType,
+            String sourceId,
+            long amountCent,
+            String idempotencyKey,
+            String merchantId,
+            String accountingPeriod,
+            LocalDate dueDate,
+            String projectId) {
         LocalDate today = LocalDate.now();
         // F-OPS-09：派生台账按本条目归属 merchantId 判锁（与下方 ArApItemRecord.merchantId 同口径）；
         // merchantId 为空（平台口径派生）则受任一封账约束。
@@ -2952,7 +2992,8 @@ public class FinanceService implements TerminationSettlementPort {
                 status,
                 now,
                 now,
-                merchantId);
+                merchantId,
+                projectId);
         ArApItemRecord saved = repository.saveArApItem(item);
         repository.saveArApItemSource(new ArApItemSourceRecord(
                 "arap_src_" + slug,

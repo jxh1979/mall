@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 // 客人端业务服务层：封装 P0 客旅用到的真实端点（全部 /api/v1/customer/* 与 finance/ticketing）
 // 所有接口均在 docs/openapi/openapi-p0.json 契约内；P1 能力（积分明细/礼物兑换）不在此暴露。
 
@@ -33,6 +33,16 @@ export type TicketRewardSummary = { rewards: TicketUseReward[]; pendingRecovery:
 // 第十一批 TK-04-R5（BSM L877 客人端只展示结果；ENUM L77 与消费单据双向可查）：商户消费积分与成长值结果（已扣除已退部分）。
 export type MerchantConsumptionReward = { id: string; sourceType: string; sourceId: string; sourceNo: string; merchantName: string; points: number; growth: number; status: string; completedAt: string; availableAt: string | null; confirmedAt: string | null };
 export type TicketRewardRule = { id: string; ticketTypeId: string; ticketName: string; projectId: string; projectName: string; kind: string; version: string; fixedValue: number; effectiveAt: string; publishedAt: string };
+
+// HP-P01（BSM L1435／L1433）：在场车辆停车费查询与缴费；付款确认后返回离场宽限截止。
+export type ParkingSessionQuote = { parkingSessionId: string; projectId: string; plateNo: string | null; tempCode: string | null;
+  enteredAt: string; grossFeeCent?: number; feeCent: number; paidCent: number; dueCent: number; graceUntil: string | null;
+  creditId?: string | null; creditStatus?: string | null; creditMinutes?: number; creditOffsetHours?: number };
+// HP-P01（BSM「停车场」章「消费抵免」条）：本项目当日消费抵免——可用／已用／已撤销／未达标、已累计有效消费、门槛与抵免时长。
+export type ParkingCredit = { projectId: string; businessDate: string; status: "available" | "used" | "revoked" | "not_reached";
+  eligibleAmountCent: number; thresholdCent: number; creditMinutes: number };
+export type ParkingPayment = { id: string; parkingSessionId?: string; amountCent: number; status: string; paidAt?: string | null;
+  graceUntil?: string | null; paymentUrl?: string | null };
 
 export class CustomerService {
   private readonly api: CustomerApi;
@@ -294,6 +304,25 @@ export class CustomerService {
 
   listIncomingTicketTransfers(): Promise<TicketTransfer[]> {
     return this.api.get<TicketTransfer[]>("/api/v1/customer/ticket-transfers/incoming");
+  }
+
+  // 有牌车按车牌（省份简称开头）查，无牌车按入口领取的临时码查。
+  findParkingSession(projectId: string, code: string): Promise<ParkingSessionQuote> {
+    const key = /^[\u4e00-\u9fa5]/.test(code) ? "plate_no" : "temp_code";
+    return this.api.get<ParkingSessionQuote>(
+      `/api/v1/customer/parking/sessions?project_id=${encodeURIComponent(projectId)}&${key}=${encodeURIComponent(code)}`);
+  }
+
+  getParkingCredit(projectId: string): Promise<ParkingCredit> {
+    return this.api.get<ParkingCredit>(`/api/v1/customer/parking/credits?project_id=${encodeURIComponent(projectId)}`);
+  }
+
+  createParkingPayment(parkingSessionId: string): Promise<ParkingPayment> {
+    return this.api.post<ParkingPayment>("/api/v1/customer/parking/payments", { parkingSessionId });
+  }
+
+  confirmParkingPayment(paymentId: string): Promise<ParkingPayment> {
+    return this.api.post<ParkingPayment>(`/api/v1/customer/parking/payments/${encodeURIComponent(paymentId)}/confirm`);
   }
 
   listOutgoingTicketTransfers(): Promise<TicketTransfer[]> {

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -207,7 +207,8 @@ public class MerchantConsumptionRewardService {
         jdbc.queryForList("SELECT bill_id FROM bar_bill_adjustments WHERE id = ?", String.class, event.sourceId()).forEach(this::reconcileBarBill);
     }
 
-    private static final String BAR_EFFECTIVE = """
+    /** 酒吧账单有效消费（停车消费抵免 HP-P01 同口径复用）。 */
+    public static final String BAR_EFFECTIVE = """
             b.payable_amount_cent + COALESCE((SELECT sum(CASE a.adjustment_type WHEN 'min_spend_retained' THEN -a.amount_cent ELSE a.amount_cent END)
                 FROM bar_bill_adjustments a WHERE a.bill_id = b.id AND a.status = 'applied'
                  AND a.adjustment_type IN ('min_spend_retained', 'min_spend_retained_applied')), 0)""";

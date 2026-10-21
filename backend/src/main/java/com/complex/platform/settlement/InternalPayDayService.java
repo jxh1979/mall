@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -50,10 +50,12 @@ public class InternalPayDayService {
     public static final String COMPENSATION_FULFILLMENT = "compensation_fulfillment";
     /** 操作员裁决 2026-10-19 第二轮第 5 条「已付部分另挂追收」：补偿应付已付部分在该次核销撤销后对提供方的追收应收（钱路同上、方向相反）。 */
     public static final String COMPENSATION_FULFILLMENT_RECOVERY = "compensation_fulfillment_recovery";
+    /** HP-P01（BSM「停车场」章「消费抵免」条「按内部结算价与城市项目公司走平台内部各主体之间的普通内部结算应收应付，按月结算」）：停车抵免成本。 */
+    public static final String PARKING_CREDIT_COST = "parking_credit_cost";
     /** 本批纳入财务指定付账日的普通内部结算钱路（应收应付来源）。 */
     public static final Set<String> ROUTES = Set.of("ticket_distribution", "ticket_distribution_recovery",
             "platform_incentive_subsidy", SingleBarServiceFeeService.SOURCE_TYPE, COMPENSATION_FULFILLMENT,
-            COMPENSATION_FULFILLMENT_RECOVERY);
+            COMPENSATION_FULFILLMENT_RECOVERY, PARKING_CREDIT_COST);
     private static final String GLOBAL = "__global__";
 
     public record Rule(String id, String kind, String route, Integer firstPayDay, Integer secondPayDay, Integer thirdPayDay,

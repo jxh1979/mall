@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -1394,7 +1394,7 @@ public class ContractService implements com.complex.platform.finance.Termination
 
     /**
      * 单期各费目幂等挂账核心（无权限校验，由调用方门控：generatePeriodBills 查 finance.ar_ap.manage，
-     * activate 已查 contract.lifecycle.activate）。租金（withRent=false 时不排）+ 物业费 + 能源费(基非 none)；免租/0/已挂账跳过。
+     * activate 已查 contract.lifecycle.activate）。租金（withRent=false 时不排）+ 物业费 + 车位月租 + 能源费(基非 none)；免租/0/已挂账跳过。
      */
     private List<ContractRentBillRecord> billPeriodFees(ContractRecord c, String period, String idemKey, boolean withRent) {
         Map<String, Object> rt = c.rentTerms() == null ? Map.of() : c.rentTerms();
@@ -1413,6 +1413,12 @@ public class ContractService implements com.complex.platform.finance.Termination
         ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, null, dueDate, idemKey);
         if (pb != null) {
             out.add(pb);
+        }
+        // HP-P01（BSM L1437「商户月租车位按合同约定、按月出账，账单类型为「车位月租」」）：合同约定车位月租（分/月）逐期出账，0 不出。
+        ContractRentBillRecord parking = genFeeBill(c, period, "parking_monthly", numLong(rt.get("parkingMonthlyCent")), null,
+                dueDate, idemKey);
+        if (parking != null) {
+            out.add(parking);
         }
         // 清单 P1-3 方案B:能源费(含 by_contract 包干固定额)统一由能耗抄表域 EnergyService.settleEnergyFee 出账,
         // 合同域不再挂能源费,消除合同域(contract_energy_fee)×能耗域(energy_fee)对同一户同期双挂账。

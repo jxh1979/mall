@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.49
+文档版本：V0.50
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3747,3 +3747,40 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - TK-05：退款理由五类闭集，票种开关只管「票种规则允许」，五类之外仅最高权限逐笔放行（仍限未核销），每笔退款记责任主体与规则版本；非多次通票安全例外夜班值班经理及以上批准、已核销也可退；多次通票安全事件只恢复本次 1 次完整补偿使用机会；安全例外退款成功后结算逆序冲回、已结付月追收。
 - TK-04：结账与服务收款录入会员手机号识别会员（客人查询专门通道留痕）；整笔有效消费全部履约完成后入待确认积分与成长值；等待期届满且无对应退款才转可用；部分退款不改原完成时点；可用后退款冲回与待追回；商户积分发行费并入月账单与票务分账；客人端与账单端双向可查（`V527`、`V528`）。
 - 人脸取照查看接口已下线（不做检票员目视核对）。
+
+## 2026-10-21 第十二批（楼宇设备/物业＋停车）操作员裁决（文档同步，HTML 不改）
+
+### 来源与范围
+
+2026-10-21 控制席第十二批（batch12，工作树 `feature/business-code-batch12-20261021`，实施台账 HP-F01、HP-F02、HP-F03、HP-P01），核对与实现中向操作员弹窗共 16 条，操作员逐项答复；原文记录于控制席任务书 `B12-BRIEF.md`「2026-10-21 操作员裁决补充」节及其「（续）」节（本机 `html-audit-20261017/`，不在仓内）。本节逐字登记并注明落地位置；三份业务 HTML 保持冻结、一句不改。本节追加时，原台账除文档版本 V0.49→V0.50 外，其他历史字节保持。
+
+### 裁决原文（逐字）与落地代码位置
+
+| 编号 | 裁决原文（逐字） | 落地代码位置 |
+|---|---|---|
+| 1 | HP-F01 告警类型与优先级：操作员选「按设备四组台账分」：电梯扶梯、暖通空调、配电供电、给排水消防四类；优先级紧急/高/普通，由上报人（或物联网上报）当场选；后台配 4×3 格响应时限。 | 迁移 `V529__facility_alarm_takeover.sql`（告警类型×优先级响应时限 `facility_alarm_response_policies`、接警单 `facility_alarms`）；`FacilityEquipmentService`（告警／故障上报当场选优先级）、`FacilityAlarmService`（落单按该格计时，未配置的格拒绝上报）；后台楼宇运营工作台「④ 设备接警」逐格配置响应时限。 |
+| 2 | HP-F02 验收不通过：操作员选「退回原维修人返工」：填不通过原因后工单回「处理中」由原维修人继续修；另一方已做的确认作废，修好后两方重新确认；时效不重算、超时照常升级；要换人用既有「转派」。 | 迁移 `V531__facility_work_order_dual_confirmation.sql`；`FacilityWorkOrderService.rework`（`POST /api/v1/facility/work-orders/{work_order_id}/rework`，主管验收不通过由持 `facility.work_order.manage` 者、提单确认不通过由提单确认承接人本人退回）；楼宇运营工作台工单行「退回返工」。 |
+| 3 | HP-P01 门票与停车消费抵免：操作员先答「门票不能减免」，澄清后选「门票不计入门槛、也不承担」：门票消费不参与停车抵免——门槛只算酒吧账单和商户有效消费，成本也只由它们承担。（与 BSM L1436「当日的门票、酒吧账单及商户有效消费累计」不同；HTML 不改，裁决记台账。） | 迁移 `V534__parking_consumption_credits.sql`（`parking_credit_components` 来源限酒吧账单、商户服务点单）；`ParkingCreditService`（门槛组成与成本分担只取酒吧账单与商户有效消费，门票不计入）。 |
+| 4 | HP-P01 抵免内部结算价：操作员选「实际抵掉小时数×每小时内部价」：按实际提供的停车服务计成本；客人在免费时长内离场、没抵掉计费时长的，不算用掉抵免、不产生成本。 | `ParkingCreditService`、`ParkingFeeCalculator`（成本＝实际抵掉的计费小时数×首次使用时固化的每小时内部结算价，取内部结算价目录城市项目公司「停车抵免（每小时）」生效条目；免费时长内离场不占用、不产生成本）。 |
+| 5 | HP-P01 员工车位占用计入出租率：操作员选「员工按登记车辆数」：月租按合同已租车位个数；员工按已登记且在职的员工车辆数（一辆算一个车位）计入。 | `JdbcAnalyticsRepository.occupancyAreas`、`DashboardAggregationJob`（车位出租率按个数＝合同已租车位个数＋已登记且在职的员工车辆数，÷车位个数）。 |
+| 6 | HP-P01 抵免占比：操作员选「按车次」：当日用了消费抵免的临停离场车次 ÷ 当日临停离场车次。 | `JdbcAnalyticsRepository.parkingDayFacts`、`DashboardAggregationJob`（指标 `parking.credit_share`）。 |
+| 7 | HP-P01 停车收入：操作员选「临停加月租一起算」：停车看板的停车收入＝临停停车费实收＋当期车位月租账单金额。（只是看板口径；车位月租照旧是合同账单，不改其收入归集。） | `JdbcAnalyticsRepository.parkingDayFacts`、`DashboardAggregationJob`（指标 `parking.revenue`）；车位月租照旧按合同出账（应收来源 `contract_parking_monthly`），并与固定租金、物业费、能源费同口径计入合同租金挂账 `revenue.contract_rent`。 |
+| 8 | HP-F01 有规则但本次故障不在任何一条规则里：操作员选「维持现状（推荐）」：HTML 没写额外动作；有规则对不上时由接警人电话联系当班专业处置人员，判定照样在系统里记。（设备一条生效规则都没有时，系统自动标未覆盖并以系统消息＋短信通知当班专业处置人员，维持不变；不加「转专业处置人员判定」按钮。） | 不改代码（`FacilityAlarmService` 只在设备一条生效故障处置规则都没有时标未覆盖并通知当班专业处置人员；处置要求记录 `POST /api/v1/facility/alarms/{alarm_id}/disposition` 照常）。 |
+| 9 | HP-F02 设施工单转派：操作员选「补转派（推荐）」：已派单或处理中时，由物业主管改派给他人；处理时限不重算；留痕原处理人、新处理人和原因。 | `FacilityWorkOrderService.reassign`（`POST /api/v1/facility/work-orders/{work_order_id}/reassign`，持 `facility.work_order.manage`；只限已派单或处理中、须改派给原处理人以外的人、原因必填；只换处理人，状态、响应／处理时限、派单时间与超时标记都不动；审计 `facility.work_order_reassigned` 留 `previous_assignee_id`、`assignee_id`、`reason`）；楼宇运营工作台工单行「转派」。 |
+| 10 | HP-P01 抵免成本分担尾差：操作员选「城市项目公司」：维持现状——停车业务的收款主体是城市项目公司，按「售票收款主体承担」处理。 | 不改代码（`ParkingCreditService.allocate` 按组成有效消费金额比例四舍五入到分，尾差单列一行由停车收款主体城市项目公司承担；`dueMonths` 尾差行不对自己挂账）。 |
+| 11 | HP-P01 封顶时「实际抵掉」口径：操作员选「按实际少收的钱算（推荐）」：一分没少收＝没用掉抵免、不计成本；少收了就按少收金额折回的小时数（不足一小时按一小时）×每小时内部价计成本。 | `ParkingFeeCalculator.offsetHours`（少收金额按小时费率折回、不足一小时按一小时，不超过抵免覆盖的计费小时数，一分没少收为 0）；`ParkingCustomerService.quote`（整次停车累计不抵免应缴与累计实缴之差折回小时，确实少收才随缴费预占抵免；已用在本次停车上的抵免续缴时也带上）；`ParkingCreditService.use`（缴费成功置已使用，实际抵掉小时取本笔按整次停车累计算出的值、续缴可升可降，成本＝实际抵掉小时数×首次使用时固化的每小时内部结算价）、`ParkingCreditService.release`（续缴后整次停车累计一分没少收的，抵免退回可用、清成本、删未入账分担）；迁移 `V534__parking_consumption_credits.sql`（`chk_ppay_credit` 允许续缴缴费带抵免而实际抵掉 0 小时）。 |
+| 12 | HP-F02 复杂类范围：操作员选「关联设备的报修才两道」：关联了设备的报修单（含设备告警自动生成的）走两道（主管验收＋提单方确认）；没关联设备的普通报修按后台配置的验收方式。 | 迁移 `V531__facility_work_order_dual_confirmation.sql`（主管验收与提单方确认分别留存）；`FacilityWorkOrderService.dual`（报修且关联设备＝两道）、`complete`（两道的完工即进待验收，每次完工作废上一轮验收与确认）、`accept`／`review`（两项齐全才关闭）；没关联设备的照旧按 `facility_work_order_policy.acceptance_by` 配置验收。 |
+| 13 | HP-F02 提单确认入口：操作员选「员工手机「我的工单」（推荐）」：在员工自有手机「我的工单」里一并列出「待我提单确认」的单，带「确认」「退回返工」两个按钮。 | `JdbcFacilityWorkOrderRepository.listAssignedToMe`（`GET /api/v1/facility/work-orders/assigned-to-me`：派给本人的，加待我提单确认的——关联设备的报修、提单确认未做、待验收或已验收）；员工手机 `MainActivity.showMyWorkOrders`「我的工单」标「[待我提单确认]」（`MyWorkOrderRecord.awaitsConfirmationBy`：本人是承接人且不是本次维修人），「确认」走 `/review`、「退回返工」填原因走 `/rework`（`TerminalApiClient.confirmWorkOrder`／`reworkWorkOrder`）；服务层 `FacilityWorkOrderService.confirmerSelf` 对承接人本人放行。 |
+| 14 | HP-P01 事后登记放行的逃费异常：操作员选「不自动关闭（推荐）」：HTML 没写；由人在异常队列里按审批结果处理关闭。 | 不改代码（`ParkingReleaseService.decided` 审批结论只回写放行单状态并留痕，不关闭已入队的逃费异常；逃费异常留在统一异常队列，由人按审批结果处置关闭（`RiskAlertService.resolve`／`dismiss`）；驳回后仍欠费的照旧由 `ParkingVendorService.checkFeeEvasion` 补进逃费异常）。 |
+| 15 | HP-F02 员工手工建的关联设备报修单由谁做提单确认：操作员选「提单员工本人（推荐）」：和告警单一样，提单员工就是承接人，在手机「我的工单」里确认或退回；提单人就是本次维修人时，由物业主管指定他人并留痕。 | `FacilityWorkOrderService.create`／`createInternal`（`POST /api/v1/facility/work-orders` 建关联设备的报修、`reporter_type=staff` 的单：提单员工＝在后台点「新建工单」的当前登录员工，服务端取当前登录账号记为 `reporter_id`、不取请求体里的值，建单即记为提单确认承接人 `confirmer_id`；承接人在岗按工单项目判，建单未带项目的同告警单取设备台账的项目）；`FacilityWorkOrderService.confirmerBound`／`confirmerSelf`／`requireConfirmer`（`review`、`rework` 对此类单与设备告警自动工单同一套承接人校验：提单确认只许承接人本人做，持 `facility.work_order.manage` 的旁人 403 `CONFIRMER_MISMATCH`，主管验收照旧；承接人不在岗或就是本次维修人（派单或转派给提单人本人）409 `CONFIRMER_DESIGNATION_REQUIRED`）、`designateConfirmer`（同 BSM L1385 规则，由物业主管指定本项目其他在岗员工并留痕，原因 `is_repairer`／`not_on_duty`／`missing`）；`JdbcFacilityWorkOrderRepository.listAssignedToMe` 与员工手机 `MyWorkOrderRecord.awaitsConfirmationBy` 按 `confirmer_id` 列入「待我提单确认」（与告警单同一判断，不改代码）；后台楼宇运营工作台工单行对此类单与设备告警自动工单只给承接人本人且其不是本次维修人时显示「提单确认」，另显示「指定确认人」；OpenAPI 建单、提单确认、退回返工、指定提单确认人接口描述同步。 |
+| 16 | HP-F02 主管验收后谁能退回返工：操作员选「只许承接人本人（推荐）」：主管验收后只剩提单确认这一道，退回也只让承接人本人做，与第 15 条一致；后台对旁人不显示该按钮。 | `FacilityWorkOrderService.rework`（`POST /api/v1/facility/work-orders/{work_order_id}/rework`：设备告警自动工单与员工手工建的关联设备报修单（`confirmerBound`）在已验收 `accepted` 时一律走 `requireConfirmer` 承接人校验——非承接人本人 403 `CONFIRMER_MISMATCH`（承接人不在岗或就是本次维修人 409 `CONFIRMER_DESIGNATION_REQUIRED`），被拒状态不变并记 `facility.work_order_rework_failed`；待验收 `pending_acceptance` 时主管验收不通过的退回照旧）；后台楼宇运营工作台 `FacilityWorkbenchPage` 工单行对这类已验收单只给承接人本人且其不是本次维修人时显示「退回返工」；员工手机「我的工单」本就按承接人列出并带「退回返工」（`MyWorkOrderRecord.awaitsConfirmationBy`，不改代码）；OpenAPI 退回返工接口描述同步。 |
+
+### 复核后有依据直接修（不弹窗，非新裁决）
+
+- 告警工单须先明确接手再派单：依据 BSM L1417「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」。落地 `FacilityWorkOrderService.assign`：设备告警自动生成的工单（`source=equipment_alarm`）经 `FacilityAlarmService.requireTakenOverBeforeDispatch`，接警单被明确接手前拒绝派单（409 `ALARM_TAKEOVER_REQUIRED`，提示先确认「已收到并接手」）；当班物业主管、项目负责人本就在可接手角色（`FacilityAlarmService.TAKEOVER_ROLES`）内；`FacilityWorkOrderService.resume`：待派单时挂起、没有处理人的工单恢复回待派单（不进处理中），派单闸只剩 `assign` 一个入口；派单被拒记 `facility.work_order_assign_failed`；OpenAPI 派单、恢复接口描述同步。
+- 停车收入只计临停：依据本节第 7 条原文「临停停车费实收＋当期车位月租账单金额」。落地 `JdbcAnalyticsRepository.parkingDayFacts`：停车收入的平台缴费与停车系统自收两路只计停车记录车辆类型为临停（`vehicle_kind='temporary'`）的，员工车辆折扣缴费不计入，与同方法抵免占比的「临停」口径一致；停车系统自收而回报没带停车记录号（`session_ref` 选填）的按临停计入。
+- 指定提单确认人时原承接人为空报 500：依据 BSM L1385「自动生成的大型维修工单，由该设备或点位的在岗责任人承接提单确认；责任人不在岗或本人负责此次维修时，由物业主管指定其他人员并留痕」。落地 `FacilityWorkOrderService.designateConfirmer`：审计元数据只在原承接人非空时放 `previous_confirmer_id`。
+
+### 第二轮复核后有依据直接修（不弹窗，非新裁决）
+
+- 客人端停车页不显示「消费抵免 −¥0.00」：依据本节第 11 条原文「一分没少收＝没用掉抵免、不计成本」。续缴累计少收降到 0 时抵免已退回可用、本次未用掉，客人端只在实际抵掉小时数大于 0 时显示消费抵免一行。落地客人端 `ParkingPage`（停车缴费页）：消费抵免一行改按查车试算返回的 `credit_offset_hours`（实际抵掉小时数）大于 0 才显示，不再按是否带 `credit_id` 显示；金额按实际少收＝停车费−max(抵后应收, 已缴) 显示，与后端折回小时数同口径（第 11 条「少收了就按少收金额折回的小时数」）。

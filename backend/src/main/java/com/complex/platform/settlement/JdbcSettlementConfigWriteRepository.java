@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.LocalZone;
@@ -322,16 +322,17 @@ public class JdbcSettlementConfigWriteRepository {
     // ================= 批10/E 内部结算 SKU 目录(V379/V380) =================
 
     /** 目录条目落草案(Path 2:草案槽覆盖,不动生效行)。新建与改价同一入口:item_code 新码=新建,既有码=改价草案。 */
-    public String upsertInternalPriceItemDraft(String id, String itemCode, String merchantId, String category,
+    public String upsertInternalPriceItemDraft(String id, String itemCode, String merchantId, String providerEntityId, String category,
                                                String itemName, long priceCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO internal_price_catalog
-                    (id, item_code, merchant_id, category, item_name, price_cent, status, is_draft, updated_by,
+                    (id, item_code, merchant_id, provider_entity_id, category, item_name, price_cent, status, is_draft, updated_by,
                      created_at, updated_at)
-                VALUES (:id, :item_code, :merchant_id, :category, :item_name, :price_cent, 'active', TRUE, :updated_by,
+                VALUES (:id, :item_code, :merchant_id, :provider_entity_id, :category, :item_name, :price_cent, 'active', TRUE, :updated_by,
                         now(), now())
                 ON CONFLICT (item_code, is_draft) WHERE status = 'active' DO UPDATE SET
                     merchant_id = EXCLUDED.merchant_id,
+                    provider_entity_id = EXCLUDED.provider_entity_id,
                     category = EXCLUDED.category,
                     item_name = EXCLUDED.item_name,
                     price_cent = EXCLUDED.price_cent,
@@ -340,14 +341,14 @@ public class JdbcSettlementConfigWriteRepository {
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("item_code", itemCode).addValue("merchant_id", merchantId)
-                .addValue("category", category).addValue("item_name", itemName).addValue("price_cent", priceCent)
+                .addValue("provider_entity_id", providerEntityId).addValue("category", category).addValue("item_name", itemName).addValue("price_cent", priceCent)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
     /** 生效条目(is_draft=FALSE,status=active)读取:引用校验/快照同步用。 */
     public CatalogEntryRow findActiveCatalogEntry(String itemCode) {
         List<CatalogEntryRow> rows = jdbcTemplate.query("""
-                SELECT c.id, c.item_code, c.merchant_id, m.merchant_type AS business_format, c.category, c.item_name,
+                SELECT c.id, c.item_code, c.merchant_id, c.provider_entity_id, m.merchant_type AS business_format, c.category, c.item_name,
                        c.price_cent, c.status, c.is_draft, c.updated_by, c.updated_at
                   FROM internal_price_catalog c
                   LEFT JOIN merchants m ON m.id = c.merchant_id
@@ -356,10 +357,10 @@ public class JdbcSettlementConfigWriteRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    /** 同 code 生效或草案行是否已被别的商户占用(引用/新建守卫:一码一商家,不得跨商户复用)。 */
+    /** 同 code 生效或草案行是否已被别的商户(或经营主体)占用(引用/新建守卫:一码一提供方,不得跨提供方复用)。 */
     public String catalogItemMerchant(String itemCode) {
         return jdbcTemplate.query("""
-                SELECT merchant_id FROM internal_price_catalog
+                SELECT COALESCE(merchant_id, provider_entity_id) FROM internal_price_catalog
                  WHERE item_code = :item_code AND status = 'active'
                  ORDER BY is_draft LIMIT 1
                 """, new MapSqlParameterSource().addValue("item_code", itemCode),
@@ -374,7 +375,7 @@ public class JdbcSettlementConfigWriteRepository {
     public List<CatalogEntryRow> listCatalogEntries(String merchantId, String businessFormat, String category,
                                                     boolean includeDrafts, boolean includeArchived) {
         StringBuilder sql = new StringBuilder("""
-                SELECT c.id, c.item_code, c.merchant_id, m.merchant_type AS business_format, c.category, c.item_name,
+                SELECT c.id, c.item_code, c.merchant_id, c.provider_entity_id, m.merchant_type AS business_format, c.category, c.item_name,
                        c.price_cent, c.status, c.is_draft, c.updated_by, c.updated_at
                   FROM internal_price_catalog c
                   LEFT JOIN merchants m ON m.id = c.merchant_id
@@ -424,13 +425,20 @@ public class JdbcSettlementConfigWriteRepository {
     /** 草案行读取(id 定位;转正专案分支要拿 item_code/price 做 0 价守卫与快照传播)。 */
     public CatalogEntryRow findCatalogDraftById(String id) {
         List<CatalogEntryRow> rows = jdbcTemplate.query("""
-                SELECT c.id, c.item_code, c.merchant_id, m.merchant_type AS business_format, c.category, c.item_name,
+                SELECT c.id, c.item_code, c.merchant_id, c.provider_entity_id, m.merchant_type AS business_format, c.category, c.item_name,
                        c.price_cent, c.status, c.is_draft, c.updated_by, c.updated_at
                   FROM internal_price_catalog c
                   LEFT JOIN merchants m ON m.id = c.merchant_id
                  WHERE c.id = :id AND c.is_draft = TRUE AND c.status = 'active'
                 """, new MapSqlParameterSource().addValue("id", id), CATALOG_ROW_MAPPER);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** HP-P01：经营主体存在性（提供方为经营主体的目录条目落草案先验）。 */
+    public boolean businessEntityExists(String entityId) {
+        Integer n = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM business_entities WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", entityId), Integer.class);
+        return n != null && n > 0;
     }
 
     /** 商户存在性(落草案先验:给明确 400 而不是 FK 违约 500)。 */
@@ -475,12 +483,13 @@ public class JdbcSettlementConfigWriteRepository {
                     rs.getString("business_format"), rs.getString("category"), rs.getString("item_name"),
                     rs.getLong("price_cent"), rs.getString("status"), rs.getBoolean("is_draft"),
                     rs.getString("updated_by"),
-                    rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant());
+                    rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant(),
+                    rs.getString("provider_entity_id"));
 
     /** 目录条目一行(读端投影;business_format 随商家带出)。 */
     public record CatalogEntryRow(String id, String itemCode, String merchantId, String businessFormat,
                                   String category, String itemName, long priceCent, String status, boolean isDraft,
-                                  String updatedBy, java.time.Instant updatedAt) {
+                                  String updatedBy, java.time.Instant updatedAt, String providerEntityId) {
     }
 
     // ================= §3 复核转正(旧生效行软替换 status→inactive,不物理删)=================
@@ -770,7 +779,7 @@ public class JdbcSettlementConfigWriteRepository {
                     UNION ALL
                     -- 批10/E 内部结算 SKU 目录条目草案:复核人要看清「哪家商户的哪个 SKU 改成多少钱」。
                     SELECT c.id, 'internal_price_item',
-                           '商户=' || COALESCE(m.merchant_name, c.merchant_id) || ' 品类=' || c.category
+                           '提供方=' || COALESCE(m.merchant_name, c.merchant_id, c.provider_entity_id) || ' 品类=' || c.category
                                || ' 条目=' || c.item_name || ' 内部结算价 ' || c.price_cent || '分',
                            c.updated_at
                       FROM internal_price_catalog c

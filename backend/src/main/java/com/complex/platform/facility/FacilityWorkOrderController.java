@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AccessActor;
@@ -8,7 +10,9 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.facility.dto.FacilityWorkOrderActionRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderConfirmerRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderPolicyRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderReassignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -71,6 +75,15 @@ public class FacilityWorkOrderController {
         return ApiResponse.ok(service.assign(workOrderId, request));
     }
 
+    /** 第十二批裁决第 9 条「补转派」：已派单或处理中的工单由物业主管改派给他人，处理时限不重算，留痕原处理人、新处理人和原因。 */
+    @PostMapping("/{work_order_id}/reassign")
+    public ApiResponse<FacilityWorkOrderRecord> reassign(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderReassignRequest request) {
+        authorizationService.requirePermission(PERM);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.reassign(workOrderId, request));
+    }
+
     @PostMapping("/{work_order_id}/start")
     public ApiResponse<FacilityWorkOrderRecord> start(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
@@ -98,9 +111,27 @@ public class FacilityWorkOrderController {
     @PostMapping("/{work_order_id}/review")
     public ApiResponse<FacilityWorkOrderRecord> review(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePermission(PERM);
+        // 权限在服务层核：持 facility.work_order.manage，或本人即设备告警自动工单的提单确认承接人（BSM L1385）。
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.review(workOrderId, request));
+    }
+
+    /** 第十二批裁决第 2 条：验收或提单确认不通过，填原因退回原维修人返工（回「处理中」，另一方已做的确认作废）。 */
+    @PostMapping("/{work_order_id}/rework")
+    public ApiResponse<FacilityWorkOrderRecord> rework(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
+        // 权限在服务层核：同 review（主管验收不通过由持 manage 者退回，提单确认不通过由承接人本人退回）。
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.rework(workOrderId, request));
+    }
+
+    /** HP-F02：自动生成的大型维修工单，设备责任人不在岗或本人维修时由物业主管指定提单确认人。 */
+    @PostMapping("/{work_order_id}/confirmer")
+    public ApiResponse<FacilityWorkOrderRecord> designateConfirmer(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderConfirmerRequest request) {
+        authorizationService.requirePermission(PERM);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.designateConfirmer(workOrderId, request));
     }
 
     @PostMapping("/{work_order_id}/suspend")

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -20,6 +20,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-CONT-001", label: "合同生命周期工作台", module: "合同", group: "governance", route: "/admin/contracts", requiredPermissions: ["contract.draft.manage"] },
   { pageId: "ADM-LEASE-001", label: "招商工作台", module: "招商租赁", group: "governance", route: "/admin/leasing/workbench", requiredPermissions: ["leasing.lead.manage", "leasing.intent.manage", "leasing.brand.manage"] },
   { pageId: "ADM-FAC-001", label: "楼宇运营工作台", module: "物业/楼宇", group: "ops", route: "/admin/facility/workbench", requiredPermissions: ["facility.equipment.manage"] },
+  { pageId: "ADM-PARK-001", label: "停车场工作台", module: "停车场", group: "ops", route: "/admin/parking/workbench", requiredPermissions: ["parking.ops.view", "parking.config.manage", "parking.vehicle.manage", "parking.release.record"] },
   { pageId: "ADM-FAC-002", label: "进场审批", module: "物业/楼宇", group: "ops", route: "/admin/facility/site-entry-review", requiredPermissions: ["facility.site_entry.review"], accountForms: ["platform"] },
   { pageId: "ADM-FAC-003", label: "施工验收", module: "物业/楼宇", group: "ops", route: "/admin/facility/site-entry-acceptance", requiredPermissions: ["facility.site_entry.accept"], accountForms: ["platform"] },
   { pageId: "ADM-ENE-001", label: "能源工作台", module: "物业/楼宇", group: "ops", route: "/admin/energy/workbench", requiredPermissions: ["energy.reading.manage", "energy.meter.manage", "energy.reading.approve"] },
@@ -107,6 +108,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-MER-006", label: "我的合同", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/contracts", requiredPermissions: ["contract.view"], accountForms: ["merchant"] },
   { pageId: "ADM-MER-007", label: "费用通知", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/fee-recipients", requiredPermissions: ["merchant.portal.fee_recipient.manage"], accountForms: ["merchant"] },
   { pageId: "ADM-MER-008", label: "我的分红", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/dividends", requiredPermissions: ["finance.dividend.view"], accountForms: ["merchant"] },
+  { pageId: "ADM-MER-009", label: "员工车辆", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/staff-vehicles", requiredPermissions: ["parking.vehicle.manage"], accountForms: ["merchant"] },
   { pageId: "ADM-FLR-001", label: "商场平面图导入", module: "地产/空间", group: "ops", route: "/admin/space/floor-plans", requiredPermissions: ["floor_plan.view"] },
   { pageId: "ADM-COMP-001", label: "合规到期提醒台账", module: "合规", group: "compliance", route: "/admin/compliance/reminders", requiredPermissions: ["compliance.reminder.view"] },
   { pageId: "ADM-COMP-002", label: "企微会话合规监察", module: "合规", group: "compliance", route: "/admin/compliance/wecom", requiredPermissions: ["wecom.risk_hit.view"] },

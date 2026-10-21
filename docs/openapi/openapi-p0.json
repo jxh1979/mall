@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.25",
+    "version": "V0.26",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -81,6 +81,10 @@
     {
       "name": "dealer",
       "description": "经销（CG-11：经销商准入、价格目录、询价、订单、退货）"
+    },
+    {
+      "name": "parking",
+      "description": "停车场（HP-P01：停车参数、停车系统接入、客人缴费、月租与员工车辆、人工放行）"
     }
   ],
   "paths": {
@@ -29631,6 +29635,7 @@
         ],
         "operationId": "changeFacilityEquipmentStatus",
         "summary": "变更设备状态/上报告警",
+        "description": "置 alarm/fault 发布设备告警事件自动转报修工单。不能经此接口直接置报废（409 FACILITY_EQUIPMENT_SCRAP_APPROVAL_REQUIRED，报废须走报废申请并经审批）；已报废设备不能改回其他状态（409 FACILITY_EQUIPMENT_RETIRED）。",
         "x-permission": "facility.equipment.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29687,6 +29692,7 @@
         ],
         "operationId": "recordFacilityEquipmentMaintenanceDone",
         "summary": "记录设备维保完成",
+        "description": "维保完成回写：状态回正常并重算下次到期；已报废设备 409 FACILITY_EQUIPMENT_RETIRED。",
         "x-permission": "facility.equipment.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29718,6 +29724,214 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/equipment/{equipment_id}/scrap-requests": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "createFacilityEquipmentScrapRequest",
+        "summary": "申请设备报废",
+        "description": "BSM「楼宇机电设备」：楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证；残值或损失由财务记录并关联原设备；标记报废不等于实物处置或款项完成。提交报废原因与处置方式进统一审批（action_type=facility.equipment.scrap，发起人沿直接上级到其指定的最终审批人）；审批通过才把设备置报废并记批准人，驳回设备照常在用、可重新申请。设备已报废 409 FACILITY_EQUIPMENT_RETIRED；已有待审批申请 409 FACILITY_EQUIPMENT_SCRAP_PENDING。",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.equipment_scrap_requested",
+        "x-audit-event-failure": "facility.equipment_scrap_request_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "equipment_id",
+            "in": "path",
+            "required": true,
+            "description": "设备 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityEquipmentScrapCreateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/equipment-scraps": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityEquipmentScraps",
+        "summary": "设备报废处置清单",
+        "description": "BSM「楼宇机电设备」：楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证；残值或损失由财务记录并关联原设备；标记报废不等于实物处置或款项完成。每行分别给出审批（approval_status）、实物处置（disposal_status：pending/completed）、款项（money_status：pending_finance/residual_pending_collection/settled）三项，completed＝实物已处置且款项已结清。",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.equipment_scraps_viewed",
+        "x-audit-event-failure": "facility.equipment_scraps_view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-permissions-any-of": [
+          "facility.equipment.manage",
+          "finance.ar_ap.manage"
+        ]
+      }
+    },
+    "/api/v1/facility/equipment-scraps/{scrap_id}/disposal": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "completeFacilityEquipmentScrapDisposal",
+        "summary": "登记设备报废实际处置",
+        "description": "BSM「楼宇机电设备」：楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证；残值或损失由财务记录并关联原设备；标记报废不等于实物处置或款项完成。报废经批准后单独登记实际处置，须附已上传且绑定本报废单（business_type=facility_equipment_scrap）的凭证；不涉及款项。未批准或已登记 409 FACILITY_EQUIPMENT_SCRAP_STATUS_CONFLICT；无凭证 400 EVIDENCE_REQUIRED；凭证未绑定本报废单 400 EVIDENCE_BINDING_MISMATCH。",
+        "x-permission": "facility.equipment.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.equipment_scrap_disposal_completed",
+        "x-audit-event-failure": "facility.equipment_scrap_disposal_complete_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "scrap_id",
+            "in": "path",
+            "required": true,
+            "description": "报废单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityEquipmentScrapDisposalRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/equipment-scraps/{scrap_id}/finance": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "recordFacilityEquipmentScrapFinance",
+        "summary": "财务登记设备报废残值或损失",
+        "description": "BSM「楼宇机电设备」：楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证；残值或损失由财务记录并关联原设备；标记报废不等于实物处置或款项完成。报废经批准后由财务登记一次：残值记为对回收方的应收（source_type=facility_equipment_scrap），收款走应收应付登记收付款，收足前款项未结清；损失记为内部核算（source_type=facility_equipment_scrap_loss，登记即确认），均关联本报废单与原设备项目。未批准 409 FACILITY_EQUIPMENT_SCRAP_STATUS_CONFLICT；已登记 409 FACILITY_EQUIPMENT_SCRAP_FINANCE_RECORDED；有残值未填回收方 400。",
+        "x-permission": "finance.ar_ap.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.equipment_scrap_finance_recorded",
+        "x-audit-event-failure": "facility.equipment_scrap_finance_record_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "scrap_id",
+            "in": "path",
+            "required": true,
+            "description": "报废单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityEquipmentScrapFinanceRequest"
+        },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
@@ -29780,6 +29994,7 @@
         ],
         "operationId": "createFacilityWorkOrder",
         "summary": "创建维保/物业工单",
+        "description": "第十二批操作员裁决第 15 条：员工手工建的关联设备报修单（work_order_type=repair、带 equipment_id、reporter_type=staff）走主管验收＋提单方确认两道，提单员工＝建单的当前登录员工（reporter_type=staff 时服务端取当前登录账号记为 reporter_id，不取请求体里的 reporter_id），记为提单确认承接人 confirmer_id，只许其本人做提单确认；未带 project_id 的取设备台账的项目（承接人在岗按工单项目判）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29903,6 +30118,7 @@
         ],
         "operationId": "assignFacilityWorkOrder",
         "summary": "工单派单",
+        "description": "只有待派单的工单才能派单。BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」：设备告警自动生成的工单（source=equipment_alarm），其接警单仍待明确接手时拒绝派单（409 ALARM_TAKEOVER_REQUIRED，先由当班接警人员确认「已收到并接手」）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -29926,6 +30142,63 @@
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/FacilityWorkOrderAssignRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/reassign": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "reassignFacilityWorkOrder",
+        "summary": "工单转派",
+        "description": "第十二批操作员裁决第 9 条「补转派」：已派单或处理中的工单由物业主管改派给他人（只换处理人，状态不变）；处理时限不重算（响应／处理时限、派单时间与超时标记都不动，超时照常升级）；留痕原处理人、新处理人和原因（reason 必填）。其余状态 400 INVALID_STATE；改派给原处理人 400 VALIDATION_FAILED。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_reassigned",
+        "x-audit-event-failure": "facility.work_order_reassign_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderReassignRequest"
         },
         "responses": {
           "200": {
@@ -30127,10 +30400,12 @@
         ],
         "operationId": "reviewFacilityWorkOrder",
         "summary": "报修方回访工单",
+        "description": "持 facility.work_order.manage，或本人即设备告警自动生成的大型维修工单（主管验收＋提单方确认）的提单确认承接人（BSM L1385「由该设备或点位的在岗责任人承接提单确认」）、员工手工建的关联设备报修单的提单确认承接人（第十二批操作员裁决第 15 条：提单员工就是承接人）；承接人凭承接身份确认，不需另持 manage，非承接人且不持 manage 的 403 PERMISSION_DENIED。这两类单只许承接人本人做提单确认：持 manage 的旁人 403 CONFIRMER_MISMATCH，承接人不在岗或就是本次维修人 409 CONFIRMER_DESIGNATION_REQUIRED（由物业主管经 /confirmer 指定他人）。承接人可在员工自有手机「我的工单」里确认（第十二批操作员裁决第 13 条）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web"
+          "web",
+          "staff_private_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "facility.work_order_reviewed",
@@ -30150,6 +30425,121 @@
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/rework": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "reworkFacilityWorkOrder",
+        "summary": "验收或提单确认不通过退回返工",
+        "description": "第十二批操作员裁决第 2 条：关联设备的报修单（主管验收＋提单方确认两道，裁决第 12 条）在待验收或已验收时，填不通过原因（note 必填）后回「处理中」由原维修人继续修；另一方已做的确认作废，修好后两方重新确认；处理时限不重算、超时照常升级。权限：持 facility.work_order.manage（主管验收不通过），或本人即设备告警自动工单、员工手工建的关联设备报修单（第十二批操作员裁决第 15 条）的提单确认承接人（提单确认不通过）；两者都不是的 403 PERMISSION_DENIED。第十二批操作员裁决第 16 条：设备告警自动工单与员工手工建的关联设备报修单在主管已验收（accepted）后只剩提单确认这一道，退回也只许承接人本人（同提单确认的承接人校验：旁人 403 CONFIRMER_MISMATCH，承接人不在岗或就是本次维修人 409 CONFIRMER_DESIGNATION_REQUIRED），被拒记 facility.work_order_rework_failed；待验收时主管验收不通过的退回照旧。承接人可在员工自有手机「我的工单」里退回返工（第十二批操作员裁决第 13 条）。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_rework_requested",
+        "x-audit-event-failure": "facility.work_order_rework_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/confirmer": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "designateFacilityWorkOrderConfirmer",
+        "summary": "指定提单确认人",
+        "description": "BSM「物业服务」运营细则：自动生成的大型维修工单由设备或点位的在岗责任人承接提单确认；责任人不在岗或本人负责此次维修时，由物业主管指定其他人员并留痕；员工手工建的关联设备报修单（提单员工就是承接人）提单人就是本次维修人时同此（第十二批操作员裁决第 15 条）。仅在现承接人缺失、不在岗或就是本次维修人时可指定（否则 409 CONFIRMER_DESIGNATION_NOT_ALLOWED）；被指定人须为本项目在岗员工且不是本次维修人。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_confirmer_designated",
+        "x-audit-event-failure": "facility.work_order_confirmer_designate_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderConfirmerRequest"
         },
         "responses": {
           "200": {
@@ -30239,6 +30629,7 @@
         ],
         "operationId": "resumeFacilityWorkOrder",
         "summary": "恢复工单",
+        "description": "恢复已挂起的工单：有处理人的回处理中；待派单时挂起、没有处理人的回待派单，派单仍走派单接口（设备告警自动生成的工单仍须接警单明确接手后才能派单，BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -30359,6 +30750,580 @@
         "x-auth-context": "staff-token",
         "requestBody": {
           "$ref": "#/components/requestBodies/FacilityWorkOrderPolicyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/alarms/policies": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "saveFacilityAlarmResponsePolicy",
+        "summary": "保存设备告警响应时限（告警类型×优先级一格）",
+        "description": "HP-F01：告警类型＝设备四组台账（电梯扶梯/暖通空调/配电供电/给排水消防），优先级紧急/高/普通，后台逐格配置响应时限；未配置的格上报告警时拒绝（POLICY_NOT_FOUND）。",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.alarm_policy_saved",
+        "x-audit-event-failure": "facility.alarm_policy_save_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityAlarmPolicyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/alarms": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityAlarms",
+        "summary": "设备告警接警记录",
+        "description": "HP-F01：接警单（待明确接手/已明确接手、响应时限与升级轮次、持有人、是否未覆盖、处置要求）带逐次联系（系统消息、短信、语音及结果）、明确接手明细与覆盖该设备的生效故障处置规则。",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.alarm.viewed",
+        "x-audit-event-failure": "facility.alarm.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/alarms/mine": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listMyFacilityAlarms",
+        "summary": "我的接警",
+        "description": "HP-F01：本人此刻当班且承担接警任务可接的待接手告警、本人已接手且工单未关闭的告警，以及本人此刻当班专业处置待判定的未覆盖告警；只读，查看不等于接手。",
+        "x-permission": "facility.alarm.take_over",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.alarm_mine.viewed",
+        "x-audit-event-failure": "facility.alarm_mine.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/alarms/{alarm_id}/take-over": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "takeOverFacilityAlarm",
+        "summary": "设备告警明确接手（已收到并接手）",
+        "description": "HP-F01：唯一改变接警状态的动作；操作人此刻须为该告警项目当班且承担接警任务的值守人（主接/备用/物业主管/项目负责人），记录确认人、班次与时间；推送或短信送达、打开消息、拨通、响铃、接听均不等于明确接手。不改工单状态。",
+        "x-permission": "facility.alarm.take_over",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web",
+          "staff_work_phone",
+          "staff_private_phone"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.alarm_taken_over",
+        "x-audit-event-failure": "facility.alarm_take_over_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "alarm_id",
+            "in": "path",
+            "required": true,
+            "description": "接警单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityAlarmTakeOverRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/alarm-duties": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityAlarmDuties",
+        "summary": "接警值守安排列表",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.alarm_duty.viewed",
+        "x-audit-event-failure": "facility.alarm_duty.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "项目 id；不传为全部项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "assignFacilityAlarmDuty",
+        "summary": "安排接警值守（挂已发布班次）",
+        "description": "HP-F01：在已发布且未结束的班次上指定主接、备用、物业主管、项目负责人或专业处置人员及联系电话；项目取班次所属项目；同一班次同一角色只能有一条有效安排（ALARM_DUTY_DUPLICATE）。班次被顶班时由顶班人当班接警。",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.alarm_duty_assigned",
+        "x-audit-event-failure": "facility.alarm_duty_assign_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityAlarmDutyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/alarm-duties/{duty_id}/cancel": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "cancelFacilityAlarmDuty",
+        "summary": "撤销接警值守安排",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.alarm_duty_cancelled",
+        "x-audit-event-failure": "facility.alarm_duty_cancel_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "duty_id",
+            "in": "path",
+            "required": true,
+            "description": "值守安排 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityAlarmDutyCancelRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/alarms/{alarm_id}/disposition": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "recordFacilityAlarmDisposition",
+        "summary": "记录设备告警处置要求",
+        "description": "HP-F01：按覆盖该设备的生效故障处置规则处理时填 applied_rule_id（此刻当班的接警值守人员可记）；未按已确认规则处理的，由此刻当班的专业处置人员填 judgement 判定停用或继续使用等（ALARM_SPECIALIST_REQUIRED）。每张接警单只记一次（ALARM_DISPOSITION_RECORDED）。只落记录，不调用任何设备控制、不改设备状态，不等于授权平台远程停机。",
+        "x-permission": "facility.alarm.take_over",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.alarm_disposition_recorded",
+        "x-audit-event-failure": "facility.alarm_disposition_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "alarm_id",
+            "in": "path",
+            "required": true,
+            "description": "接警单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityAlarmDispositionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/fault-rules": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityFaultRules",
+        "summary": "设备故障处置规则列表",
+        "description": "HP-F01：平台侧凭 facility.alarm.manage 查看，可按项目筛；维保单位（外包账号）凭 facility.fault_rule.confirm 只看本项目规则。",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "facility.fault_rule.viewed",
+        "x-audit-event-failure": "facility.fault_rule.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "项目 id；不传为全部项目（维保单位固定为本项目）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "createFacilityFaultRule",
+        "summary": "登记设备故障处置规则",
+        "description": "HP-F01：按单台设备（项目与分类取设备台账）或按项目×设备四组台账分类登记故障场景与处置要求；登记后待设备专业负责人与维保单位两方确认，确认前不覆盖任何告警。",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.fault_rule_created",
+        "x-audit-event-failure": "facility.fault_rule_create_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityFaultRuleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/fault-rules/{rule_id}/confirm": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "confirmFacilityFaultRule",
+        "summary": "确认设备故障处置规则",
+        "description": "HP-F01：外包维保账号确认的记维保单位一方（须本项目），平台员工确认的记设备专业负责人一方；两方都确认后生效（active）。同一方重复确认 FAULT_RULE_ALREADY_CONFIRMED，非待确认 FAULT_RULE_NOT_PENDING。",
+        "x-permission": "facility.fault_rule.confirm",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.fault_rule_confirmed",
+        "x-audit-event-failure": "facility.fault_rule_confirm_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "description": "故障处置规则 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityFaultRuleActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/fault-rules/{rule_id}/retire": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "retireFacilityFaultRule",
+        "summary": "停用设备故障处置规则",
+        "description": "HP-F01：停用后不再覆盖新告警；已停用的再停用 FAULT_RULE_RETIRED。",
+        "x-permission": "facility.alarm.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.fault_rule_retired",
+        "x-audit-event-failure": "facility.fault_rule_retire_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "description": "故障处置规则 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityFaultRuleActionRequest"
         },
         "responses": {
           "200": {
@@ -34705,7 +35670,7 @@
         ],
         "operationId": "listWorkOrdersAssignedToMe",
         "summary": "我的工单(员工自有手机)",
-        "description": "BYOD 一期(2026-07-02):员工自有手机只看流转到自己的工单(只读,最近200条); 凭 view_assigned,不见别人的单。",
+        "description": "BYOD 一期(2026-07-02):员工自有手机看流转到自己的工单(只读,最近200条); 凭 view_assigned,不见别人的单。第十二批操作员裁决第 13 条：一并列出「待我提单确认」的单（confirmer_id＝本人、关联设备的报修、提单确认未做、待验收或已验收），确认与退回返工走 /review、/rework。",
         "x-permission": "facility.work_order.view_assigned",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -49548,7 +50513,8 @@
                       "platform_incentive_subsidy",
                       "single_bar_service_fee",
                       "compensation_fulfillment",
-                      "compensation_fulfillment_recovery"
+                      "compensation_fulfillment_recovery",
+                      "parking_credit_cost"
                     ],
                     "description": "钱路(应收应付来源)，kind=route 必填。"
                   },
@@ -49828,7 +50794,7 @@
         ],
         "operationId": "settlementConfigUpsertInternalPriceItem",
         "summary": "维护内部结算SKU目录条目(草案)",
-        "description": "批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code 留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格 0 为商户让利型合法价。提供商家业态为其他且档案未指定主管公司 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。",
+        "description": "批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code 留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格 0 为商户让利型合法价。提供商家业态为其他且档案未指定主管公司 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。HP-P01：提供方可为经营主体（城市项目公司经营停车，品类 parking_credit「停车抵免（每小时）」），provider_entity_id 与 merchant_id 恰填其一，绑定的提供方不可改。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -49853,6 +50819,9 @@
                   "merchant_id": {
                     "type": "string"
                   },
+                  "provider_entity_id": {
+                    "type": "string"
+                  },
                   "category": {
                     "type": "string"
                   },
@@ -49865,7 +50834,6 @@
                 },
                 "required": [
                   "idempotency_key",
-                  "merchant_id",
                   "category",
                   "item_name",
                   "price_cent"
@@ -65182,6 +66150,1301 @@
         },
         "x-auth-context": "staff-token"
       }
+    },
+    "/api/v1/parking/policies/{project_id}": {
+      "get": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "getParkingPolicy",
+        "summary": "查看本项目停车业务参数",
+        "description": "BSM「停车场」L1434～L1437：免费时长、超出后按小时计费、每日封顶、离场宽限、消费抵免门槛与抵免时长、员工车辆优惠均为业务参数（按项目可配，须同时配置上下限；出厂默认值实施前补定）。项目未配置返回 409 PARKING_POLICY_NOT_CONFIGURED，不回落任何默认值；跨项目 403 CROSS_PROJECT_FORBIDDEN。",
+        "x-permission": "parking.ops.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "saveParkingPolicy",
+        "summary": "配置本项目停车业务参数（值与上下限同配）",
+        "description": "BSM「停车场」L1434～L1437「业务参数，按项目可配，须同时配置上下限」：七项参数及各自上下限须一次给齐（缺任一 400 PARKING_POLICY_BOUNDS_REQUIRED），且 0 ≤ 下限 ≤ 值 ≤ 上限、员工优惠上限不超过 10000（否则 400 PARKING_POLICY_OUT_OF_BOUNDS）；只作用于该项目，跨项目 403 CROSS_PROJECT_FORBIDDEN。保存后经开放接口下发给停车系统。",
+        "x-permission": "parking.config.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.policy_saved",
+        "x-audit-event-failure": "parking.policy_save_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "free_minutes",
+                  "free_minutes_min",
+                  "free_minutes_max",
+                  "hourly_rate_cent",
+                  "hourly_rate_cent_min",
+                  "hourly_rate_cent_max",
+                  "daily_cap_cent",
+                  "daily_cap_cent_min",
+                  "daily_cap_cent_max",
+                  "exit_grace_minutes",
+                  "exit_grace_minutes_min",
+                  "exit_grace_minutes_max",
+                  "credit_threshold_cent",
+                  "credit_threshold_cent_min",
+                  "credit_threshold_cent_max",
+                  "credit_minutes",
+                  "credit_minutes_min",
+                  "credit_minutes_max",
+                  "staff_discount_bp",
+                  "staff_discount_bp_min",
+                  "staff_discount_bp_max"
+                ],
+                "properties": {
+                  "free_minutes": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "免费时长（分钟）"
+                  },
+                  "free_minutes_min": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "免费时长（分钟）下限"
+                  },
+                  "free_minutes_max": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "免费时长（分钟）上限"
+                  },
+                  "hourly_rate_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "超出后每小时费率（分，不足一小时按一小时）"
+                  },
+                  "hourly_rate_cent_min": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "超出后每小时费率（分，不足一小时按一小时）下限"
+                  },
+                  "hourly_rate_cent_max": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "超出后每小时费率（分，不足一小时按一小时）上限"
+                  },
+                  "daily_cap_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "每日封顶（分，按营业日）"
+                  },
+                  "daily_cap_cent_min": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "每日封顶（分，按营业日）下限"
+                  },
+                  "daily_cap_cent_max": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "每日封顶（分，按营业日）上限"
+                  },
+                  "exit_grace_minutes": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "提前缴费后的离场宽限时限（分钟）"
+                  },
+                  "exit_grace_minutes_min": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "提前缴费后的离场宽限时限（分钟）下限"
+                  },
+                  "exit_grace_minutes_max": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "提前缴费后的离场宽限时限（分钟）上限"
+                  },
+                  "credit_threshold_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "消费抵免门槛（分）"
+                  },
+                  "credit_threshold_cent_min": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "消费抵免门槛（分）下限"
+                  },
+                  "credit_threshold_cent_max": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "消费抵免门槛（分）上限"
+                  },
+                  "credit_minutes": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "抵免时长（分钟）"
+                  },
+                  "credit_minutes_min": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "抵免时长（分钟）下限"
+                  },
+                  "credit_minutes_max": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "抵免时长（分钟）上限"
+                  },
+                  "staff_discount_bp": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "员工车辆优惠（万分比减免，10000＝免费）"
+                  },
+                  "staff_discount_bp_min": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "员工车辆优惠（万分比减免，10000＝免费）下限"
+                  },
+                  "staff_discount_bp_max": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "员工车辆优惠（万分比减免，10000＝免费）上限"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/overview": {
+      "get": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "getParkingOverview",
+        "summary": "在场与出场记录及车位占用",
+        "description": "BSM「停车场」L1433「入出场记录和车位占用由第三方停车系统回传」：返回本项目停车记录（车牌或临时码、车辆类型、入出场时间、停车系统应收与自收、平台已收）与最近一次车位占用回传。",
+        "x-permission": "parking.ops.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体项目；缺省取本人项目，平台管理员须指定。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "in_lot（在场）／exited（已出场），缺省全部。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/monthly-vehicles": {
+      "get": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "listParkingMonthlyVehicles",
+        "summary": "月租车牌清单",
+        "description": "BSM「停车场」L1428「月租车位在本平台后台配置并下发给停车系统」：列出本项目各合同登记的月租车牌（有效与已撤销）。仅平台后台账号可用：商户、外包账号即使持 parking.vehicle.manage 也 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-permission": "parking.vehicle.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体项目；缺省取本人项目，平台管理员须指定。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/contracts/{contract_id}/vehicles": {
+      "post": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "registerParkingMonthlyVehicle",
+        "summary": "为合同登记月租车牌",
+        "description": "BSM「停车场」L1437「商户月租车位按合同约定、按月出账，账单类型为「车位月租」」：只能为约定了车位月租（rent_terms.parkingMonthlyCent＞0）的合同登记，否则 409 PARKING_MONTHLY_NOT_CONTRACTED；同合同同车牌只有一条有效（409 PARKING_PLATE_ALREADY_REGISTERED）。生效且在租期内的合同的有效车牌随配置下发给停车系统。仅平台后台账号可用：商户、外包账号即使持 parking.vehicle.manage 也 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-permission": "parking.vehicle.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.monthly_vehicle_registered",
+        "x-audit-event-failure": "parking.monthly_vehicle_register_failed",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "description": "合同。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "plate_no"
+                ],
+                "properties": {
+                  "plate_no": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "车牌（去空格、转大写）"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/monthly-vehicles/{vehicle_id}/revoke": {
+      "post": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "revokeParkingMonthlyVehicle",
+        "summary": "撤销月租车牌",
+        "description": "撤销后该车牌不再随配置下发给停车系统。仅平台后台账号可用：商户、外包账号即使持 parking.vehicle.manage 也 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-permission": "parking.vehicle.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.monthly_vehicle_revoked",
+        "x-audit-event-failure": "parking.monthly_vehicle_revoke_failed",
+        "parameters": [
+          {
+            "name": "vehicle_id",
+            "in": "path",
+            "required": true,
+            "description": "月租车牌登记。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/staff-vehicles": {
+      "get": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "listParkingStaffVehicles",
+        "summary": "员工车辆清单",
+        "description": "BSM「停车场」L1437 员工车辆：商户账号只看本商户员工车辆。",
+        "x-permission": "parking.vehicle.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体项目；缺省取本人项目，平台管理员须指定。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "registerParkingStaffVehicle",
+        "summary": "所属主体登记员工车辆",
+        "description": "BSM「停车场」L1437「员工车辆由所属主体登记车牌后，按后台配置免费或折扣」：商户账号只能登记本商户员工，非商户账号只能登记同一归属下不属任何商户的员工（403 PARKING_STAFF_NOT_OWNED），平台管理员不受限；员工须在职（409 PARKING_STAFF_INACTIVE）；同项目同车牌只有一条有效（409 PARKING_PLATE_ALREADY_REGISTERED）。在职员工的有效车牌随配置下发，优惠取本项目 staff_discount_bp。",
+        "x-permission": "parking.vehicle.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.staff_vehicle_registered",
+        "x-audit-event-failure": "parking.staff_vehicle_register_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "project_id",
+                  "user_id",
+                  "plate_no"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "综合体项目。"
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "员工账号。"
+                  },
+                  "plate_no": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "车牌（去空格、转大写）"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/staff-vehicles/{vehicle_id}/revoke": {
+      "post": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "revokeParkingStaffVehicle",
+        "summary": "撤销员工车辆",
+        "description": "撤销后该车牌不再随配置下发；商户账号只能撤销本商户员工车辆。",
+        "x-permission": "parking.vehicle.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.staff_vehicle_revoked",
+        "x-audit-event-failure": "parking.staff_vehicle_revoke_failed",
+        "parameters": [
+          {
+            "name": "vehicle_id",
+            "in": "path",
+            "required": true,
+            "description": "员工车辆登记。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/manual-releases": {
+      "get": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "listParkingManualReleases",
+        "summary": "人工放行记录",
+        "description": "BSM「停车场」L1438：列出本项目人工放行（原因、操作人、车牌、时间、免费或减免及审批状态）。",
+        "x-permission": "parking.release.record",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体项目；缺省取本人项目，平台管理员须指定。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "recordParkingManualRelease",
+        "summary": "当班保安登记人工放行",
+        "description": "BSM「停车场」L1438「识别失败、道闸故障、客人对缴费有争议时，由当班保安人工核对后放行，人工放行必须记录原因、操作人、车牌和时间，进留痕与异常；免费放行和减免须经物业主管审批」：操作人取登录人、时间取服务器时刻，须此刻当班（排班或顶班，否则 409 PARKING_GUARD_NOT_ON_DUTY）；同事务进统一异常队列（source_domain=parking，alert_type=parking.manual_release）。waive_type=free／reduction 时进统一审批（最终审批人须经角色持有 parking.release.approve），审批结论回写 approved／rejected；待批或已批的免费／减免覆盖该次出场欠费时不判逃费，驳回后补判。",
+        "x-permission": "parking.release.record",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.manual_release_recorded",
+        "x-audit-event-failure": "parking.manual_release_record_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "project_id",
+                  "plate_no",
+                  "release_reason",
+                  "reason"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "综合体项目。"
+                  },
+                  "plate_no": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "车牌（去空格、转大写）"
+                  },
+                  "parking_session_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "关联停车记录；缺省按车牌取此刻在场的那一条。"
+                  },
+                  "release_reason": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "description": "放行原因。",
+                    "enum": [
+                      "recognition_failed",
+                      "gate_fault",
+                      "fee_dispute"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "核对说明。"
+                  },
+                  "waive_type": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "免费或减免，缺省 none。",
+                    "enum": [
+                      "none",
+                      "free",
+                      "reduction"
+                    ]
+                  },
+                  "reduction_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "减免金额（分），waive_type=reduction 时必填且大于 0。"
+                  },
+                  "final_approver_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "最终审批人（物业主管），免费放行与减免必填。"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/parking/credits": {
+      "get": {
+        "tags": [
+          "parking"
+        ],
+        "operationId": "listParkingCredits",
+        "summary": "停车消费抵免台账",
+        "description": "BSM「停车场」章「消费抵免」条：列出本项目的消费抵免（同一客人当日一条；门槛与抵免时长为生成时的本项目参数快照；状态 available 可用／used 已使用／revoked 已撤销），每条带构成资格的酒吧账单与商户服务点单及其归属商户与合同主体（门票不计入，第十二批操作员裁决补充第 3 条）、实际抵掉的计费小时数、首次使用时固化的每小时内部结算价与抵免成本（第 4 条），以及按组成有效消费金额比例的成本分担（尾差单列，由停车收款主体城市项目公司承担）与是否已并入月度内部结算。",
+        "x-permission": "parking.ops.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体项目；缺省取本人项目，平台管理员须指定。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "business_date",
+            "in": "query",
+            "required": false,
+            "description": "营业日（YYYY-MM-DD），缺省列最近 200 条。",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer/parking/sessions": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "findCustomerParkingSession",
+        "summary": "客人按车牌或临时码查在场车辆停车费",
+        "description": "BSM「停车场」L1433「无牌车在入口扫码领取临时码、出口凭码缴费」、L1435：返回 parking_session_id、入场时间、停车费（按本项目下发给停车系统的同一套规则试算：先扣免费时长，剩余按营业日切段、不足一小时按一小时、每日封顶；停车系统认定为员工车辆的再按本项目员工优惠减免）、平台已收、应缴与离场宽限截止。HP-P01 消费抵免（BSM「停车场」章「消费抵免」条）：先扣免费时长再扣该车入场营业日本人可用的消费抵免时长（或已用在本次停车上的抵免），另返回 gross_fee_cent 抵免前停车费、fee_cent 抵免后停车费、credit_status、credit_minutes、credit_offset_hours 实际抵掉的计费小时数（按实际少收的钱折回：整次停车累计不抵免应缴与累计实缴之差÷小时费率，不足一小时按一小时，不超过抵免覆盖的计费小时；一分没少收为 0）与 credit_id（确实少收才有值；已用在本次停车上的抵免续缴时也带上，此时 credit_offset_hours 可为 0，第十二批操作员裁决补充第 4、11 条）。未找到在场车辆 404 PARKING_SESSION_NOT_FOUND；项目未配置 409 PARKING_POLICY_NOT_CONFIGURED。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "description": "停车场所在综合体项目（出口二维码携带）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "plate_no",
+            "in": "query",
+            "required": false,
+            "description": "车牌。",
+            "schema": {
+              "type": "string",
+              "maxLength": 16
+            }
+          },
+          {
+            "name": "temp_code",
+            "in": "query",
+            "required": false,
+            "description": "无牌车临时码。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/parking/payments": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "createCustomerParkingPayment",
+        "summary": "客人停车缴费下单",
+        "description": "BSM「停车场」L1435「出口扫码支付，或在官方 App/小程序提前缴费后在离场宽限时限内离场……不做车牌绑定无感支付」、L1445「停车费收入归城市项目公司」：按应缴拉起支付意向（business_order_type=parking_fee），收款主体为本项目唯一有效的城市项目公司（否则 409 CITY_PROJECT_COMPANY_MISSING）；离场宽限内已缴 409 PARKING_ALREADY_PAID；无需缴费 409 PARKING_NO_FEE_DUE；已出场 409 PARKING_SESSION_EXITED。不保存车牌与账户的代扣绑定。HP-P01 消费抵免：带实际抵掉计费小时的抵免下单即预占（同一次抵免只一笔能用；本客人另一辆在场车已占用时本笔按无抵免计），须城市项目公司有且仅有一条已生效的停车抵免每小时内部结算价（内部结算价目录品类 parking_credit，否则 409 PARKING_CREDIT_PRICE_MISSING，不按 0 计）并随缴费固化；抵免把应缴抵到 0 元时直接记 0 元已缴（无支付意向）并置抵免已使用、按组成比例分担成本，停车系统按缴费记录放行。已用在本次停车上的抵免续缴时随缴费带上，缴费成功按整次停车累计重算实际抵掉小时与成本（可升可降）；累计一分没少收的（如带抵免缴费后停到每日封顶），抵免退回可用、不计成本、未并入月度内部结算的分担删除（第十二批操作员裁决补充第 11 条「一分没少收＝没用掉抵免、不计成本」）。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.payment_created",
+        "x-audit-event-failure": "parking.payment_create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "parking_session_id"
+                ],
+                "properties": {
+                  "parking_session_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "停车记录（查车返回）。"
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/parking/payments/{payment_id}/confirm": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "confirmCustomerParkingPayment",
+        "summary": "客人停车缴费确认",
+        "description": "支付意向经渠道核验成功才记已缴（PAYMENT_NOT_SUCCEEDED／PAYMENT_GATEWAY_UNAVAILABLE 时不记），离场宽限截止＝缴费时刻＋本项目离场宽限时限；收入按支付意向成功写内部核算（source_type=parking_fee）。重复确认返回原结果。带抵免的缴费成功后抵免置已使用：成本＝实际抵掉的计费小时数×首次使用时固化的每小时内部结算价，按组成有效消费金额比例由各承担商户分担（尾差单列由城市项目公司承担），按月并入城市项目公司对承担商户的普通内部结算应收（source_type=parking_credit_cost）；抵免已被撤销的本笔照常记已缴、不产生抵免成本。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp",
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "parking.payment_paid",
+        "x-audit-event-failure": "parking.payment_confirm_failed",
+        "parameters": [
+          {
+            "name": "payment_id",
+            "in": "path",
+            "required": true,
+            "description": "停车缴费单。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/parking/credits": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerParkingCredit",
+        "summary": "客人查看本日停车消费抵免",
+        "description": "BSM「停车场」章「连接客人端，客人在官方 App/小程序缴费并查看消费抵免」、「消费抵免」条：按同一客人在本项目当前营业日的酒吧账单与商户有效消费累计判断门槛（门票不计入，第十二批操作员裁决补充第 3 条；收银识别的会员优先、否则下单客人；已退部分排除；服务点单须收款时已识别会员），返回 status（available 可用／used 已使用／revoked 消费退款后已撤销／not_reached 未达门槛）、eligible_amount_cent 已累计、threshold_cent 门槛与 credit_minutes 抵免时长；同一客人每日一次，达到门槛的多倍不增加次数。项目未配置 409 PARKING_POLICY_NOT_CONFIGURED。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp",
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "parking.credit.granted",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "description": "停车场所在综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/open/d/{endpoint_key}/parking/config": {
+      "get": {
+        "tags": [
+          "open-platform"
+        ],
+        "operationId": "getOpenParkingConfig",
+        "summary": "停车系统拉取平台下发配置",
+        "description": "BSM「停车场」L1428「停车费率、消费抵免规则和月租车位在本平台后台配置并下发给停车系统」、BSM L1511「第三方可以在身份核验后读取或回写平台数据」：按开放平台应用签名核验后，返回端点所绑定项目的七项参数、生效且在租期内合同的有效月租车牌（含合同起止日）与在职员工的有效车牌。端点未绑定项目 403 PARKING_ENDPOINT_NOT_BOUND；项目未配置 409 PARKING_POLICY_NOT_CONFIGURED。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "open-endpoint",
+        "x-terminal-allowed": [],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "api_call.logged",
+        "x-audit-event-failure": "api_call.rejected",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EndpointKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "open-app-credential",
+        "x-invocation-channel": [
+          "server-to-server"
+        ]
+      }
+    },
+    "/api/open/d/{endpoint_key}/parking/payments": {
+      "get": {
+        "tags": [
+          "open-platform"
+        ],
+        "operationId": "listOpenParkingPayments",
+        "summary": "停车系统拉取平台已收停车费",
+        "description": "供道闸放行：按收款时间顺序返回端点所绑定项目平台已收的停车费（payment_id、停车系统记录号 session_ref、车牌或临时码、金额、缴费时间、离场宽限截止、本笔所用消费抵免时长 credit_minutes，未用为 0），after 为上一页最后一笔的 payment_id，每页 200 笔。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "open-endpoint",
+        "x-terminal-allowed": [],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "api_call.logged",
+        "x-audit-event-failure": "api_call.rejected",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EndpointKey"
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "上一页最后一笔 payment_id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "open-app-credential",
+        "x-invocation-channel": [
+          "server-to-server"
+        ]
+      }
     }
   },
   "components": {
@@ -67588,6 +69851,36 @@
           }
         }
       },
+      "FacilityEquipmentScrapCreateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityEquipmentScrapCreateRequest"
+            }
+          }
+        }
+      },
+      "FacilityEquipmentScrapDisposalRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityEquipmentScrapDisposalRequest"
+            }
+          }
+        }
+      },
+      "FacilityEquipmentScrapFinanceRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityEquipmentScrapFinanceRequest"
+            }
+          }
+        }
+      },
       "FacilityWorkOrderRequest": {
         "required": true,
         "content": {
@@ -67608,6 +69901,16 @@
           }
         }
       },
+      "FacilityWorkOrderReassignRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderReassignRequest"
+            }
+          }
+        }
+      },
       "FacilityWorkOrderActionRequest": {
         "required": true,
         "content": {
@@ -67624,6 +69927,86 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/FacilityWorkOrderPolicyRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderConfirmerRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderConfirmerRequest"
+            }
+          }
+        }
+      },
+      "FacilityAlarmPolicyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityAlarmPolicyRequest"
+            }
+          }
+        }
+      },
+      "FacilityAlarmDutyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityAlarmDutyRequest"
+            }
+          }
+        }
+      },
+      "FacilityAlarmDutyCancelRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityAlarmDutyCancelRequest"
+            }
+          }
+        }
+      },
+      "FacilityAlarmTakeOverRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityAlarmTakeOverRequest"
+            }
+          }
+        }
+      },
+      "FacilityAlarmDispositionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityAlarmDispositionRequest"
+            }
+          }
+        }
+      },
+      "FacilityFaultRuleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityFaultRuleRequest"
+            }
+          }
+        }
+      },
+      "FacilityFaultRuleActionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityFaultRuleActionRequest"
             }
           }
         }
@@ -73252,7 +75635,8 @@
               "video",
               "device",
               "retail",
-              "catering"
+              "catering",
+              "parking"
             ],
             "maxLength": 64
           },
@@ -78686,7 +81070,7 @@
           },
           "status": {
             "type": "string",
-            "description": "目标状态。",
+            "description": "目标状态；retired 不能经此接口直接设置，报废须走报废申请审批。",
             "enum": [
               "normal",
               "alarm",
@@ -78708,6 +81092,108 @@
             "type": "string",
             "description": "告警说明。",
             "maxLength": 1000
+          },
+          "priority": {
+            "type": "string",
+            "description": "优先级；status=alarm 或 fault 时必填，由上报人或物联网当场选，决定接警响应时限。",
+            "enum": [
+              "urgent",
+              "high",
+              "normal"
+            ]
+          }
+        }
+      },
+      "FacilityEquipmentScrapCreateRequest": {
+        "type": "object",
+        "description": "设备报废申请。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "reason",
+          "disposal_method"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "description": "报废原因。",
+            "maxLength": 1000
+          },
+          "disposal_method": {
+            "type": "string",
+            "description": "处置方式。",
+            "maxLength": 1000
+          },
+          "final_approver_id": {
+            "type": "string",
+            "description": "最终审批人 user_id；可空，按审批档位沿直接上级链生成。",
+            "maxLength": 64
+          }
+        }
+      },
+      "FacilityEquipmentScrapDisposalRequest": {
+        "type": "object",
+        "description": "设备报废实际处置登记。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "evidence_attachment_ids"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "实际处置凭证附件 ID 列表（须已上传并绑定本报废单）。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "disposal_note": {
+            "type": "string",
+            "description": "处置说明。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "FacilityEquipmentScrapFinanceRequest": {
+        "type": "object",
+        "description": "设备报废残值或损失财务登记；两项可同时有，都为 0 表示无残值无损失。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "residual_amount_cent": {
+            "type": "integer",
+            "description": "残值金额（单位：分，禁止浮点）",
+            "minimum": 0,
+            "maximum": 999999999999
+          },
+          "residual_counterparty_id": {
+            "type": "string",
+            "description": "残值回收方；残值大于 0 时必填。",
+            "maxLength": 64
+          },
+          "loss_amount_cent": {
+            "type": "integer",
+            "description": "损失金额（单位：分，禁止浮点）",
+            "minimum": 0,
+            "maximum": 999999999999
           }
         }
       },
@@ -78779,7 +81265,7 @@
           },
           "reporter_id": {
             "type": "string",
-            "description": "报修人/上报人 id。",
+            "description": "报修人/上报人 id。reporter_type=staff 时以当前登录员工为准，不取此值（第十二批操作员裁决第 15 条）。",
             "maxLength": 64
           },
           "reporter_type": {
@@ -78824,9 +81310,36 @@
           }
         }
       },
+      "FacilityWorkOrderReassignRequest": {
+        "type": "object",
+        "description": "工单转派请求（已派单或处理中改派他人，原因必填）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "assignee_id",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "assignee_id": {
+            "type": "string",
+            "description": "新处理人 user_id。",
+            "maxLength": 64
+          },
+          "reason": {
+            "type": "string",
+            "description": "转派原因。",
+            "maxLength": 1000
+          }
+        }
+      },
       "FacilityWorkOrderActionRequest": {
         "type": "object",
-        "description": "工单开始/完成/验收/回访/挂起/恢复动作请求。完成动作必须填写 resolution；验收/回访 satisfaction 为 1-5。",
+        "description": "工单开始/完成/验收/回访/挂起/恢复/退回返工动作请求。完成动作必须填写 resolution；验收/回访 satisfaction 为 1-5；退回返工 note 必填（不通过原因）。",
         "additionalProperties": false,
         "required": [
           "idempotency_key"
@@ -78910,7 +81423,7 @@
           },
           "acceptance_by": {
             "type": "string",
-            "description": "验收方。",
+            "description": "验收方：handler 处理人完成即结、supervisor 主管验收、reporter 提单方确认。关联了设备的报修单不看此项，一律主管验收＋提单方确认两道、两项齐全才关闭（第十二批操作员裁决第 12 条「关联设备的报修才两道」）。",
             "enum": [
               "handler",
               "supervisor",
@@ -78920,6 +81433,250 @@
           "active": {
             "type": "boolean",
             "description": "是否启用。"
+          }
+        }
+      },
+      "FacilityWorkOrderConfirmerRequest": {
+        "type": "object",
+        "description": "指定自动大型维修工单的提单确认人。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "confirmer_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "confirmer_id": {
+            "type": "string",
+            "description": "被指定的提单确认人 user_id。",
+            "maxLength": 64
+          },
+          "note": {
+            "type": "string",
+            "description": "指定说明。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "FacilityAlarmPolicyRequest": {
+        "type": "object",
+        "description": "设备告警响应时限矩阵一格（告警类型×优先级）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "alarm_type",
+          "priority",
+          "response_minutes"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "alarm_type": {
+            "type": "string",
+            "description": "告警类型＝设备四组台账（电梯扶梯/暖通空调/配电供电/给排水消防）。",
+            "enum": [
+              "elevator",
+              "hvac",
+              "power",
+              "water_fire"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "description": "优先级（紧急/高/普通）。",
+            "enum": [
+              "urgent",
+              "high",
+              "normal"
+            ]
+          },
+          "response_minutes": {
+            "type": "integer",
+            "description": "响应时限分钟：超过仍无人明确接手即升级。",
+            "minimum": 1
+          },
+          "active": {
+            "type": "boolean",
+            "description": "是否启用；不传为启用。"
+          }
+        }
+      },
+      "FacilityAlarmDutyRequest": {
+        "type": "object",
+        "description": "接警值守安排：在已发布班次上指定接警角色与联系电话。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "shift_id",
+          "duty_role",
+          "contact_phone"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "shift_id": {
+            "type": "string",
+            "description": "已发布且未结束的班次 id。",
+            "maxLength": 64
+          },
+          "duty_role": {
+            "type": "string",
+            "description": "接警角色：主接/备用/物业主管/项目负责人/专业处置人员。",
+            "enum": [
+              "primary",
+              "backup",
+              "supervisor",
+              "project_lead",
+              "specialist"
+            ]
+          },
+          "contact_phone": {
+            "type": "string",
+            "description": "联系电话（短信与语音呼叫用）。",
+            "maxLength": 32
+          }
+        }
+      },
+      "FacilityAlarmDutyCancelRequest": {
+        "type": "object",
+        "description": "撤销接警值守安排。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "description": "撤销原因。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "FacilityAlarmTakeOverRequest": {
+        "type": "object",
+        "description": "设备告警明确接手（已收到并接手）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "note": {
+            "type": "string",
+            "description": "接手备注。",
+            "maxLength": 1000
+          }
+        }
+      },
+      "FacilityAlarmDispositionRequest": {
+        "type": "object",
+        "description": "设备告警处置要求记录：applied_rule_id 与 judgement 二选一。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "applied_rule_id": {
+            "type": "string",
+            "description": "所按的生效故障处置规则 id（须覆盖该设备）。",
+            "maxLength": 64
+          },
+          "judgement": {
+            "type": "string",
+            "description": "当班专业处置人员的判定（如停用或继续使用）。",
+            "maxLength": 2000
+          }
+        }
+      },
+      "FacilityFaultRuleRequest": {
+        "type": "object",
+        "description": "设备故障处置规则登记：equipment_id 与 project_id＋equipment_type 二选一。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "fault_scenario",
+          "handling_requirement"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "description": "项目 id；按分类通用登记时必填。",
+            "maxLength": 64
+          },
+          "equipment_id": {
+            "type": "string",
+            "description": "设备 id；按单台设备登记时填，项目与分类取设备台账。",
+            "maxLength": 64
+          },
+          "equipment_type": {
+            "type": "string",
+            "description": "设备四组台账分类；按分类通用登记时必填。",
+            "enum": [
+              "elevator",
+              "hvac",
+              "power",
+              "water_fire"
+            ]
+          },
+          "fault_scenario": {
+            "type": "string",
+            "description": "故障场景。",
+            "maxLength": 1000
+          },
+          "handling_requirement": {
+            "type": "string",
+            "description": "处置要求（停用或继续使用等）。",
+            "maxLength": 2000
+          }
+        }
+      },
+      "FacilityFaultRuleActionRequest": {
+        "type": "object",
+        "description": "设备故障处置规则确认或停用。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "note": {
+            "type": "string",
+            "description": "备注。",
+            "maxLength": 1000
           }
         }
       },

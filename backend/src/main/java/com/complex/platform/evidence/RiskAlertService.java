@@ -1,5 +1,7 @@
 package com.complex.platform.evidence;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -57,7 +59,7 @@ public class RiskAlertService {
 
     private static final Set<String> SOURCE_DOMAINS = Set.of(
             "ticketing", "bar", "amusement", "inventory", "finance",
-            "wecom", "device", "thirdparty", "analytics", "platform"
+            "wecom", "device", "thirdparty", "analytics", "platform", "parking"
     );
     private static final Set<String> RISK_LEVELS = Set.of("normal", "suspicious", "high", "critical");
 
@@ -285,6 +287,26 @@ public class RiskAlertService {
         String id = requireText(alertId, "alert_id");
         RiskAlertRecord alert = requireScopedAlert(id);
         return new RiskAlertDetail(alert, repository.listActions(id));
+    }
+
+    /**
+     * HP-P01：业务服务在自身已鉴权的动作里（或第三方签名回写里，无登录人）直接把异常放进统一队列。
+     * reporterId 为操作人或系统标识；同一 alertId 已入队即返回原预警（回写重放不重复入队）。
+     */
+    @Transactional
+    public RiskAlertRecord recordSystemAlert(String alertId, String sourceDomain, String sourceRef, String alertType,
+            String riskLevel, String summary, String projectId, String reporterId) {
+        Optional<RiskAlertRecord> existing = repository.findById(alertId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        Instant now = Instant.now();
+        RiskAlertRecord alert = new RiskAlertRecord(alertId, requireDomain(sourceDomain), sourceRef, alertType,
+                requireRiskLevel(riskLevel), "open", summary, reporterId, null, null, null, null, projectId, null,
+                alertId, now, now);
+        repository.saveAlert(alert);
+        appendAction(alertId, "report", reporterId, null, "open", summary, List.of(), now);
+        return alert;
     }
 
     // ── 内部 ──────────────────────────────────────────────────────────────────

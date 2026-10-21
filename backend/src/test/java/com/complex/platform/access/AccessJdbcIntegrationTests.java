@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -144,6 +144,8 @@ class AccessJdbcIntegrationTests {
                  ORDER BY permission_code
                 """, String.class)).containsExactly(
                 "facility.equipment.view",
+                // HP-F01 V530：维保单位一侧确认故障处置规则，同样只经外包限时模板授予。
+                "facility.fault_rule.confirm",
                 "facility.work_order.process_assigned",
                 "facility.work_order.view_assigned"
         );

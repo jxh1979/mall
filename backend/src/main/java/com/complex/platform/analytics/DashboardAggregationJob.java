@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.02
+// 文件版本：V0.03
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
@@ -64,6 +64,12 @@ public class DashboardAggregationJob {
     static final String OCC_LEASED_AREA = "occupancy.leased_area";
     static final String OCC_SIGNED_PENDING_AREA = "occupancy.signed_pending_area";
     static final String OCC_PARKING_RATE = "occupancy.parking_rate";
+    // HP-P01 停车场（BSM「停车场」章「连接经营看板」；第十二批操作员裁决补充第 6、7 条），与车位出租率并列，平台口径、分母 0 不产出。
+    static final String PARKING_UTILIZATION_RATE = "parking.utilization_rate";   // 车位使用率＝当日回传在场合计÷车位合计
+    static final String PARKING_DAILY_TURNOVER = "parking.daily_turnover";       // 日周转次数＝当日入场车次÷最近一次回传车位数
+    static final String PARKING_REVENUE = "parking.revenue";                     // 停车收入＝临停停车费实收＋当期车位月租账单金额（分）
+    static final String PARKING_CREDIT_SHARE = "parking.credit_share";           // 抵免占比＝用了消费抵免的临停离场车次÷临停离场车次
+    static final String PARKING_AVG_STAY_MINUTES = "parking.avg_stay_minutes";   // 平均停留时长（分钟）＝离场停留分钟合计÷离场车次
     static final String CONTRACT_EXPIRING_90D = "contract.expiring_90d";
     // V220 招商漏斗/租售比(平台口径;integration_order_syncs 无 merchant_id → rent_to_sales 仅平台级):
     static final String LEASING_LEAD_COUNT = "leasing.lead_count";                     // 招商·新增线索数(落窗)
@@ -90,7 +96,7 @@ public class DashboardAggregationJob {
     public static final java.util.List<String> MONTHLY_SUM_KEYS = java.util.List.of(
             REVENUE_NET, REVENUE_TICKET, REVENUE_BAR, "revenue.contract_rent", MEMBER_NEW, "verify.done",
             "traffic.amusement", "energy.total_electricity", "energy.total_water", "energy.total_gas",
-            "energy.total_heat_cold", LEASING_LEAD_COUNT);
+            "energy.total_heat_cold", LEASING_LEAD_COUNT, PARKING_REVENUE);
     public static final java.util.List<String> MONTHLY_LAST_KEYS = java.util.List.of(
             AR_BALANCE, AR_AGING_90P, AR_COLLECTION_RATE_MTD, OCC_RATE, OCC_PARKING_RATE,
             OCC_SIGNED_PENDING_AREA, CONTRACT_EXPIRING_90D, WO_BACKLOG, MWO_BACKLOG);
@@ -136,6 +142,39 @@ public class DashboardAggregationJob {
         this.clock = clock;
         this.businessDayResolver = businessDayResolver;
         this.scheduledEnabled = scheduledEnabled;
+    }
+
+    /** HP-P01：五项停车指标按各项目当日事实合计后求比（无停车数据不产出）。 */
+    private void upsertParking(LocalDate businessDate, Instant now, Map<String, BigDecimal> platformTotals) {
+        java.util.Collection<AnalyticsRecords.ParkingDayFacts> facts = repository.parkingDayFacts(businessDate).values();
+        if (facts.isEmpty()) {
+            return;
+        }
+        long occupied = 0, spaces = 0, entries = 0, latest = 0, temporary = 0, credited = 0, exits = 0, stay = 0, revenue = 0;
+        for (AnalyticsRecords.ParkingDayFacts f : facts) {
+            occupied += f.snapshotOccupied();
+            spaces += f.snapshotSpaces();
+            entries += f.entries();
+            latest += f.latestSpaces();
+            temporary += f.temporaryExits();
+            credited += f.creditExits();
+            exits += f.exits();
+            stay += f.stayMinutes();
+            revenue += f.revenueCent();
+        }
+        upsertRatio(PARKING_UTILIZATION_RATE, occupied, spaces, 4, businessDate, now, platformTotals);
+        upsertRatio(PARKING_DAILY_TURNOVER, entries, latest, 4, businessDate, now, platformTotals);
+        upsertPlatform(PARKING_REVENUE, "leasing", businessDate, BigDecimal.valueOf(revenue), now, platformTotals);
+        upsertRatio(PARKING_CREDIT_SHARE, credited, temporary, 4, businessDate, now, platformTotals);
+        upsertRatio(PARKING_AVG_STAY_MINUTES, stay, exits, 2, businessDate, now, platformTotals);
+    }
+
+    private void upsertRatio(String key, long numerator, long denominator, int scale, LocalDate businessDate, Instant now,
+            Map<String, BigDecimal> platformTotals) {
+        if (denominator > 0) {
+            upsertPlatform(key, "leasing", businessDate, BigDecimal.valueOf(numerator)
+                    .divide(BigDecimal.valueOf(denominator), scale, java.math.RoundingMode.HALF_UP), now, platformTotals);
+        }
     }
 
     /** @Scheduled 薄包装：默认关闭，仅在 analytics.dashboard-etl.scheduled.enabled=true 时注册。 */
@@ -281,12 +320,13 @@ public class DashboardAggregationJob {
             upsertPlatform(OCC_RATE, "leasing", businessDate,
                     areas.leasedArea().divide(areas.totalArea(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
         }
-        if (areas.parkingRentableArea() != null && areas.parkingRentableArea().signum() > 0) {
+        if (areas.parkingSpaces() != null && areas.parkingSpaces().signum() > 0) {
             upsertPlatform(OCC_PARKING_RATE, "leasing", businessDate,
-                    areas.parkingLeasedArea().divide(areas.parkingRentableArea(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
+                    areas.parkingRentedSpaces().divide(areas.parkingSpaces(), 4, java.math.RoundingMode.HALF_UP), now, platformTotals);
         }
         upsertPlatform(CONTRACT_EXPIRING_90D, "leasing", businessDate,
                 BigDecimal.valueOf(repository.countExpiringContracts(businessDate, 90)), now, platformTotals);
+        upsertParking(businessDate, now, platformTotals);
 
         // S4 工单时效:P50 落窗;超时率分母=处理时限落窗的单(分母0不产出);积压=时点存量。
         AnalyticsRecords.WorkOrderSla workOrderSla = repository.workOrderSla(

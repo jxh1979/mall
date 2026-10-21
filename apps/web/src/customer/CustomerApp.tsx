@@ -1,6 +1,7 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import {
   CalendarOutlined,
+  CarOutlined,
   GiftOutlined,
   HomeOutlined,
   ShoppingOutlined,
@@ -33,6 +34,7 @@ import { BuyTicketPage } from "./pages/BuyTicketPage";
 import { DeregisterPage } from "./pages/DeregisterPage";
 import { HomePage } from "./pages/HomePage";
 import { MyOrdersPage } from "./pages/MyOrdersPage";
+import { ParkingPage } from "./pages/ParkingPage";
 import { PointsPage } from "./pages/PointsPage";
 import { TicketTransferPage } from "./pages/TicketTransferPage";
 import { WalletPage } from "./pages/WalletPage";
@@ -44,9 +46,9 @@ dayjs.locale("zh-cn");
 
 const { Header, Content, Sider } = Layout;
 
-type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "vouchers" | "transfer" | "deregister";
+type PageKey = "home" | "buy" | "reserve" | "invitation" | "scan" | "orders" | "points" | "wallet" | "vouchers" | "transfer" | "parking" | "deregister";
 
-const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "vouchers", "transfer", "deregister"];
+const PAGE_KEYS: readonly PageKey[] = ["home", "buy", "reserve", "invitation", "scan", "orders", "points", "wallet", "vouchers", "transfer", "parking", "deregister"];
 
 // 页面标题单一来源：侧栏菜单与每页 h1（语义地标）共用。
 const PAGE_TITLES: Record<PageKey, string> = {
@@ -60,6 +62,8 @@ const PAGE_TITLES: Record<PageKey, string> = {
   wallet: "储值 / 会员",
   vouchers: "我的券包",
   transfer: "门票转赠",
+  // HP-P01：停车缴费（出口二维码带 ?page=parking&project_id=…&code=… 直达本页）。
+  parking: "停车缴费",
   // TK-21-R3：客人自助注销（预览余额、放弃余额或生成待退事项）。
   deregister: "注销账号",
 };
@@ -201,6 +205,7 @@ export default function CustomerApp(): React.ReactElement {
               { key: "wallet", icon: <WalletOutlined />, label: PAGE_TITLES.wallet },
               { key: "vouchers", icon: <GiftOutlined />, label: PAGE_TITLES.vouchers },
               { key: "transfer", icon: <ShoppingOutlined />, label: PAGE_TITLES.transfer },
+              { key: "parking", icon: <CarOutlined />, label: PAGE_TITLES.parking },
               { key: "deregister", icon: <UnorderedListOutlined />, label: PAGE_TITLES.deregister },
             ]}
             onClick={(info) => goTo(info.key as PageKey)}
@@ -228,6 +233,9 @@ export default function CustomerApp(): React.ReactElement {
             {page === "wallet" ? <WalletPage service={service} /> : null}
             {page === "vouchers" ? <VoucherWalletPage service={service} /> : null}
             {page === "transfer" ? <TicketTransferPage service={service} /> : null}
+            {page === "parking" ? <ParkingPage service={service}
+              initialProjectId={new URLSearchParams(window.location.search).get("project_id") ?? undefined}
+              initialCode={new URLSearchParams(window.location.search).get("code") ?? undefined} /> : null}
             {page === "deregister" ? <DeregisterPage service={service} onDeregistered={onLogout} /> : null}
           </Content>
         </Layout>

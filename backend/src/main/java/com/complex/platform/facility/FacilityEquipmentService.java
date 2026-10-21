@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -200,7 +202,7 @@ public class FacilityEquipmentService {
         return rec;
     }
 
-    /** 状态变更/告警上报：置 alarm 须带 source(manual|iot)；离开 alarm 清告警字段。 */
+    /** 状态变更/告警上报：置 alarm 须带 source(manual|iot)；置 alarm/fault 须带优先级；离开 alarm 清告警字段。 */
     @Transactional
     public FacilityEquipmentRecord changeStatus(String id, FacilityEquipmentStatusRequest request) {
         authorizationService.requirePlatformScope();
@@ -209,6 +211,11 @@ public class FacilityEquipmentService {
         }
         FacilityEquipmentRecord cur = load(id);
         String target = request.status();
+        // HP-F03（BSM L1408「楼宇设备报废由设备所有权主体确认，沿现有审批流程办理」）：报废只经报废申请审批后置；已报废不得改回。
+        if ("retired".equals(target)) {
+            throw ApiException.conflict("FACILITY_EQUIPMENT_SCRAP_APPROVAL_REQUIRED", "报废须提交报废申请并经审批");
+        }
+        requireNotRetired(cur);
         String alarmSource = null;
         String alarmNote = null;
         Instant alarmRaisedAt = null;
@@ -220,6 +227,11 @@ public class FacilityEquipmentService {
             alarmNote = request.alarmNote();
             alarmRaisedAt = Instant.now();
         }
+        if (WORK_ORDER_TRIGGER_STATUSES.contains(target)
+                && (request.priority() == null || !FacilityWorkOrderService.PRIORITIES.contains(request.priority()))) {
+            // HP-F01（2026-10-21 操作员裁决补充第 1 条）：优先级由上报人（或物联网上报）当场选，决定接警响应时限。
+            throw ApiException.badRequest("VALIDATION_FAILED", "告警或故障上报须选择优先级：紧急（urgent）、高（high）或普通（normal）");
+        }
         FacilityEquipmentRecord rec = withStatus(cur, target, alarmSource, alarmNote, alarmRaisedAt,
                 cur.lastMaintenanceAt(), cur.nextMaintenanceDue());
         repository.updateEquipment(rec);
@@ -227,7 +239,8 @@ public class FacilityEquipmentService {
                 null, request.idempotencyKey(), Map.of("status", target));
         if (WORK_ORDER_TRIGGER_STATUSES.contains(target)) {
             eventPublisher.publishEvent(new FacilityEquipmentAlarmedEvent(id, rec.name(),
-                    request.alarmSource(), request.alarmNote()));
+                    request.alarmSource(), request.alarmNote(), rec.projectId(), rec.spaceId(), rec.equipmentType(),
+                    rec.responsibleUserId(), request.priority()));
         }
         return rec;
     }
@@ -237,6 +250,7 @@ public class FacilityEquipmentService {
     public FacilityEquipmentRecord recordMaintenanceDone(String id, String idempotencyKey) {
         authorizationService.requirePlatformScope();
         FacilityEquipmentRecord cur = load(id);
+        requireNotRetired(cur);
         Instant now = Instant.now();
         LocalDate nextDue = computeNextDue(cur.installDate(), now, cur.maintenanceCycleDays());
         FacilityEquipmentRecord rec = withStatus(cur, "normal", null, null, null, now, nextDue);
@@ -249,6 +263,12 @@ public class FacilityEquipmentService {
     private FacilityEquipmentRecord load(String id) {
         return repository.findEquipmentById(id)
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "设施设备不存在或已被删除"));
+    }
+
+    private void requireNotRetired(FacilityEquipmentRecord cur) {
+        if ("retired".equals(cur.status())) {
+            throw ApiException.conflict("FACILITY_EQUIPMENT_RETIRED", "设备已报废，不能改回在用");
+        }
     }
 
     private void validateType(String type) {

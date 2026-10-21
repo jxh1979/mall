@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -150,5 +151,41 @@ describe("VendorWorkOrdersPage 副资源降级（AUD-032）", () => {
     expect(screen.queryByTestId("vendor-work-order-equipment-table")).toBeNull();
     expect(screen.queryByTestId("admin-error")).toBeNull();
     expect(props.setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+});
+
+describe("VendorWorkOrdersPage 故障处置规则确认（HP-F01）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/work-orders");
+  });
+
+  it("维保单位对待确认规则点「确认」→ POST fault-rules/{id}/confirm；已确认过的不再给按钮", async () => {
+    const rules = [
+      { id: "ffr-1", project_id: "p-1", equipment_type: "elevator", fault_scenario: "轿厢困人", handling_requirement: "停用并到场", status: "pending_confirmation" },
+      { id: "ffr-2", project_id: "p-1", equipment_type: "hvac", fault_scenario: "主机停机", handling_requirement: "到场检查", status: "pending_confirmation", vendor_confirmed_at: "2026-10-21T01:00:00Z" },
+    ];
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/fault-rules")) return Promise.resolve(envelope(rules));
+      if (url.includes("/work-orders")) return Promise.resolve(envelope(WORK_ORDERS));
+      return Promise.resolve(envelope([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "vendor", accountType: "outsourced_vendor" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+    };
+    render(<VendorWorkOrdersPage {...props} />);
+
+    await waitFor(() => expect(screen.queryByTestId("vendor-fault-rule-confirm-ffr-1")).not.toBeNull());
+    expect(screen.queryByTestId("vendor-fault-rule-confirm-ffr-2")).toBeNull();
+    fireEvent.click(screen.getByTestId("vendor-fault-rule-confirm-ffr-1"));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/api/v1/facility/fault-rules/ffr-1/confirm")
+      && (init as RequestInit | undefined)?.method === "POST")).toBe(true));
   });
 });

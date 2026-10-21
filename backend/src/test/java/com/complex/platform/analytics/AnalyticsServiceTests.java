@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1530,6 +1530,10 @@ class AnalyticsServiceTests {
 
         public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {
             return occupancy;
+        }
+
+        public Map<String, AnalyticsRecords.ParkingDayFacts> parkingDayFacts(LocalDate businessDate) {
+            return Map.of();
         }
 
         public long countExpiringContracts(LocalDate asOf, int windowDays) {

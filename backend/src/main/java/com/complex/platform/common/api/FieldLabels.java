@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -152,6 +152,7 @@ public final class FieldLabels {
         p("actor_user_id", "操作人");
         p("operator_note", "操作说明");
         p("assignee_id", "处理人");
+        p("confirmer_id", "提单确认人");
         p("target_handler_id", "目标处理人");
         p("target_user_id", "目标用户");
         p("viewer_user_id", "查看人");
@@ -408,6 +409,36 @@ public final class FieldLabels {
         p("inspection_id", "巡检单号");
         p("equipment_name", "设备名称");
         p("equipment_type", "设备类型");
+        p("disposal_method", "处置方式");
+        p("scrap_id", "报废单");
+        p("residual_counterparty_id", "残值回收方");
+        p("alarm_type", "告警类型");
+        p("priority", "优先级");
+        p("duty_role", "接警值守角色");
+        p("fault_scenario", "故障场景");
+        p("handling_requirement", "处置要求");
+        p("judgement", "处置判定");
+        // HP-P01 停车场
+        p("plate_no", "车牌");
+        p("temp_code", "临时码");
+        p("vehicle_kind", "车辆类型");
+        p("parking_session_id", "停车记录");
+        p("session_ref", "停车系统记录号");
+        p("payment_ref", "停车系统缴费单号");
+        p("entered_at", "入场时间");
+        p("exited_at", "出场时间");
+        p("paid_at", "缴费时间");
+        p("reported_at", "回传时间");
+        p("total_spaces", "车位总数");
+        p("occupied_total", "在场车辆数");
+        p("occupied_monthly", "在场月租车辆数");
+        p("occupied_staff", "在场员工车辆数");
+        p("fee_cent", "停车费");
+        p("paid_cent", "已缴金额");
+        p("release_reason", "放行原因");
+        p("waive_type", "免费或减免");
+        p("reduction_cent", "减免金额");
+        p("provider_entity_id", "提供主体");
         p("meter_id", "表计");
         p("parent_meter_id", "上级表计");
         p("meter_type", "表计类型");

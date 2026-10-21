@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -15,6 +17,11 @@ public interface FacilityWorkOrderRepository {
     void updateWorkOrder(FacilityWorkOrderRecord record);
 
     Optional<FacilityWorkOrderRecord> findById(String id);
+
+    /** HP-F02 双闸两方各自写入同一工单：读时锁行（Jdbc 为 SELECT … FOR UPDATE），在调用方事务内串行。 */
+    default Optional<FacilityWorkOrderRecord> findByIdForUpdate(String id) {
+        return findById(id);
+    }
 
     List<FacilityWorkOrderRecord> list();
 
@@ -36,8 +43,8 @@ public interface FacilityWorkOrderRepository {
         return result;
     }
 
-    /** BYOD 一期:按处理人列工单(不限 project,员工自有手机「我的工单」只读视图;最近 200 条)。 */
-    List<FacilityWorkOrderRecord> listAssignedToMe(String assigneeId);
+    /** BYOD 一期:员工自有手机「我的工单」——派给本人的，加待本人提单确认的（第十二批裁决第 13 条）；不限 project，最近 200 条。 */
+    List<FacilityWorkOrderRecord> listAssignedToMe(String userId);
 
     default List<FacilityWorkOrderRecord> listAssignedTo(String assigneeId, String projectId) {
         return list().stream()

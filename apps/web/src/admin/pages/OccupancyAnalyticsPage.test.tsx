@@ -1,9 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OccupancyAnalyticsPage } from "./OccupancyAnalyticsPage";
+import { formatMetricName } from "../i18n/metricLabels";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
@@ -17,6 +18,11 @@ const DASHBOARD = {
     "occupancy.signed_pending_area": { value: 300 },
     "occupancy.parking_rate": { value: 0.65 },
     "contract.expiring_90d": { value: 2 },
+    "parking.utilization_rate": { value: 0.6 },
+    "parking.daily_turnover": { value: 0.2667 },
+    "parking.revenue": { value: 2100000 },
+    "parking.credit_share": { value: 0.25 },
+    "parking.avg_stay_minutes": { value: 84 },
   },
 };
 const VACANT = [
@@ -75,6 +81,21 @@ describe("OccupancyAnalyticsPage KPI 聚焦视图", () => {
     await waitFor(() => expect(screen.getByTestId("occupancy-rate")).toBeTruthy());
     expect(screen.getByTestId("occupancy-rate").parentElement?.textContent).toContain("铺位总面积 12,000");
     expect(screen.getByTestId("occupancy-kpi-vacant").textContent).toContain("1,800");
+  });
+
+  // HP-P01（BSM「停车场」章「连接经营看板，车位使用率、日周转次数、停车收入、抵免占比、平均停留时长与车位出租率并列」）：
+  // occupancy.parking_rate 是车位出租率（原误标为车位使用率），五项停车指标与之并列。
+  it("parkingRateLabeledRentalAndFiveParkingKpisShown：车位出租率正名，五项停车指标并列展示", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId("occupancy-parking-utilization")).not.toBeNull());
+    expect(formatMetricName("occupancy.parking_rate")).toBe("车位出租率");
+    expect(formatMetricName("parking.utilization_rate")).toBe("车位使用率");
+    expect(screen.getByTestId("occupancy-parking-rate").textContent).toBe("65.00%");
+    expect(screen.getByTestId("occupancy-parking-utilization").textContent).toBe("60.00%");
+    expect(screen.getByTestId("occupancy-parking-turnover").textContent).toBe("0.27 次");
+    expect(screen.getByTestId("occupancy-parking-revenue").textContent).toBe("21,000.00 元");
+    expect(screen.getByTestId("occupancy-parking-credit-share").textContent).toBe("25.00%");
+    expect(screen.getByTestId("occupancy-parking-avg-stay").textContent).toBe("84.0 分钟");
   });
 
   it("点“空置面积”→ URL 带 ?kpi=vacant，聚焦只剩空置铺位表", async () => {

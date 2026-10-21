@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -17,6 +17,7 @@ const ROUTE_LABELS: Record<string, string> = {
   single_bar_service_fee: "单店门票综合服务费",
   compensation_fulfillment: "补偿新增履约结算",
   compensation_fulfillment_recovery: "补偿应付已付追收",
+  parking_credit_cost: "停车抵免成本",
 };
 const STATUS_LABELS: Record<string, string> = { pending: "待审批", approved: "已批准", rejected: "已驳回" };
 

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.analytics.OperatingParamsService;
 import com.complex.platform.common.Hashing;
@@ -378,8 +378,14 @@ public class SettlementConfigWriteService {
     public String saveInternalPriceItem(InternalPriceItemRequest request, String actorId) {
         InternalPriceItemRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
-        String merchantId = requireText(req.merchantId(), "merchant_id");
-        rejectSentinel(merchantId, "merchant_id");
+        // HP-P01：提供方可为经营主体（城市项目公司经营停车，BSM「内部结算价目录」「实际提供商品或服务的主体提交价格」），与商户二选一。
+        String providerEntityId = trimToNull(req.providerEntityId());
+        String merchantId = providerEntityId == null ? requireText(req.merchantId(), "merchant_id") : trimToNull(req.merchantId());
+        if (merchantId != null && providerEntityId != null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "提供方须二选一：提供商家或提供主体");
+        }
+        String provider = merchantId != null ? merchantId : providerEntityId;
+        rejectSentinel(provider, merchantId != null ? "merchant_id" : "provider_entity_id");
         String category = requireText(req.category(), "category");
         String itemName = requireText(req.itemName(), "item_name");
         Long price = req.priceCent();
@@ -387,24 +393,28 @@ public class SettlementConfigWriteService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "price_cent 必填且 ≥0(0=商户让利型合法价;没配价请不要建条目)");
         }
-        if (!writeRepository.merchantExists(merchantId)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id 对应商户不存在:" + merchantId);
+        if (merchantId != null) {
+            if (!writeRepository.merchantExists(merchantId)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "merchant_id 对应商户不存在:" + merchantId);
+            }
+            requireSupervisingCompanyWhenOther(merchantId);
+        } else if (!writeRepository.businessEntityExists(providerEntityId)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "provider_entity_id 对应经营主体不存在:" + providerEntityId);
         }
-        requireSupervisingCompanyWhenOther(merchantId);
         String itemCode = trimToNull(req.itemCode());
         if (itemCode == null) {
-            itemCode = "sku_" + Hashing.idempotencyCode(merchantId + "|" + itemName + "|" + idem);
+            itemCode = "sku_" + Hashing.idempotencyCode(provider + "|" + itemName + "|" + idem);
         } else {
             String boundMerchant = writeRepository.catalogItemMerchant(itemCode);
-            if (boundMerchant != null && !boundMerchant.equals(merchantId)) {
+            if (boundMerchant != null && !boundMerchant.equals(provider)) {
                 throw ApiException.badRequest("CATALOG_ITEM_MERCHANT_IMMUTABLE",
                         "目录条目的绑定商户不可更改;要换提供方请新建条目并重新引用");
             }
         }
         String landedId = writeRepository.upsertInternalPriceItemDraft(
-                draftId("ipc_d_", itemCode, idem), itemCode, merchantId, category, itemName, price, actorId);
+                draftId("ipc_d_", itemCode, idem), itemCode, merchantId, providerEntityId, category, itemName, price, actorId);
         audit("settlement.config.internal_price_catalog.updated", "internal_price_catalog", landedId, idem,
-                Map.of("item_code", itemCode, "merchant_id", merchantId, "category", category,
+                Map.of("item_code", itemCode, merchantId != null ? "merchant_id" : "provider_entity_id", provider, "category", category,
                         "item_name", itemName, "price_cent", String.valueOf(price)));
         return itemCode;
     }
