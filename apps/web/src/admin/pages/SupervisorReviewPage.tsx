@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -28,6 +28,8 @@ const REVIEW_LABELS: Record<string, string> = {
   "staff.payroll.adjustment.appeal": "员工扣罚申诉", staff_profile: "员工档案", staff_payroll_adjustment: "员工奖惩记录",
   staff_payroll_adjustment_appeal: "员工扣罚申诉单",
   contract: "合同", bar_bill: "酒吧账单", access_grant_request: "权限授权申请",
+  "facility.equipment.scrap": "楼宇设备报废", facility_equipment_scrap: "楼宇设备报废单",
+  "parking.release.waive": "停车免费放行与减免", parking_manual_release: "停车人工放行",
 };
 
 function formatReviewValue(value?: string | null) {

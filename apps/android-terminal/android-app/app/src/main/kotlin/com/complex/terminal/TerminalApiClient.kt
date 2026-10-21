@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -229,7 +229,21 @@ class TerminalApiClient(
 
   fun listMyWorkOrders(): List<MyWorkOrderRecord> = get<Page<MyWorkOrderRecord>>("/api/v1/facility/work-orders/assigned-to-me").items
 
+  /** 第十二批裁决第 13 条：我的工单里「待我提单确认」的单——确认（/review）与退回返工（/rework，带不通过原因）。 */
+  fun confirmWorkOrder(id: String, request: WorkOrderConfirmationRequest): MyWorkOrderRecord =
+    post("/api/v1/facility/work-orders/${urlEncode(id)}/review", request)
+
+  fun reworkWorkOrder(id: String, request: WorkOrderConfirmationRequest): MyWorkOrderRecord =
+    post("/api/v1/facility/work-orders/${urlEncode(id)}/rework", request)
+
   fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get<Page<BarTableAvailabilityRow>>("/api/v1/bar/tables/availability").items
+
+  /** HP-F01 我的接警：本人此刻当班可接的待接手告警与本人已接手未结的告警（只读，查看不等于接手）。 */
+  fun listMyFacilityAlarms(): List<FacilityAlarmRecord> = get<Page<FacilityAlarmRecord>>("/api/v1/facility/alarms/mine").items
+
+  /** HP-F01 明确接手（「已收到并接手」）：唯一改变接警状态的动作。 */
+  fun takeOverFacilityAlarm(id: String, request: FacilityAlarmTakeOverRequest): FacilityAlarmRecord =
+    post("/api/v1/facility/alarms/${urlEncode(id)}/take-over", request)
 
   // ── 图形化点单 POS 目录（V256/V257）──
   fun listBarCategories(barId: String): List<BarProductCategory> =

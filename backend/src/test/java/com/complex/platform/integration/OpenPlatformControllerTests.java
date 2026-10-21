@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.integration;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -119,6 +119,11 @@ class OpenPlatformControllerTests {
         @Bean
         IntegrationService integrationService() {
             return Mockito.mock(IntegrationService.class);
+        }
+
+        @Bean
+        com.complex.platform.parking.ParkingVendorService parkingVendorService() {
+            return Mockito.mock(com.complex.platform.parking.ParkingVendorService.class);
         }
 
         @Bean

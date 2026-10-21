@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -22,6 +23,9 @@ type FacilityEquipmentRow = {
 type FacilityWorkOrderRow = {
   id: string; code?: string; workOrderType: string; priority: string; status: string; title: string;
   equipmentId?: string | null; assigneeId?: string | null; satisfaction?: number | null; overtime?: boolean;
+  // HP-F02 双闸：主管／物业验收与提单方确认分别留存；confirmerId＝自动大型维修工单或员工手工建的关联设备报修单（裁决第 15 条）的提单确认承接人。
+  source?: string | null; reporterType?: string | null; confirmerId?: string | null; verifierId?: string | null; verifiedAt?: string | null;
+  reporterConfirmedAt?: string | null; reporterConfirmedBy?: string | null;
 };
 type FacilityWorkOrderPolicyRow = {
   id: string; workOrderType: string; priority: string; responseMinutes: number; handleMinutes: number;
@@ -34,11 +38,42 @@ type InspectionTaskRow = {
   id: string; templateId?: string | null; inspectionType: string; status: string; title: string;
   scheduleMode: string; assigneeId?: string | null; scheduledDate?: string | null; dueDate?: string | null; workOrderId?: string | null;
 };
+// HP-F01 设备告警接警（BSM「楼宇运营」告警条 L1417）：接警单、逐次联系、值守安排、故障处置规则。
+type FacilityAlarmRow = {
+  id: string; equipmentId: string; workOrderId?: string; projectId?: string | null; alarmType: string; priority: string;
+  status: string; responseDueAt?: string | null; escalationRound?: number; holderUserId?: string | null; takenOverAt?: string | null;
+  uncovered?: boolean; appliedRuleId?: string | null; dispositionNote?: string | null; dispositionBy?: string | null;
+};
+type FacilityAlarmAttemptRow = { id: string; round: number; userId: string; dutyRole: string; channel: string; outcome: string; attemptedAt?: string | null };
+type FacilityFaultRuleRow = {
+  id: string; projectId: string; equipmentId?: string | null; equipmentType: string; faultScenario: string; handlingRequirement: string;
+  status: string; specialistConfirmedAt?: string | null; vendorConfirmedAt?: string | null;
+};
+type FacilityAlarmDetailRow = { alarm: FacilityAlarmRow; attempts?: FacilityAlarmAttemptRow[]; takeovers?: { userId: string; kind: string; takenOverAt?: string | null }[]; rules?: FacilityFaultRuleRow[] };
+type FacilityAlarmDutyRow = { id: string; projectId: string; shiftId: string; shiftUserId?: string | null; shiftStartAt?: string | null; shiftEndAt?: string | null; dutyRole: string; contactPhone: string; cancelledAt?: string | null };
+type FacilityAlarmPolicyRow = { alarmType: string; priority: string; responseMinutes: number; active: boolean };
+// HP-F03 楼宇设备报废单（BSM「楼宇机电设备」L1408）：审批、实物处置、款项三项事实分开。
+type FacilityScrapRow = {
+  id: string; equipmentId: string; equipmentName?: string | null; reason?: string | null; disposalMethod: string;
+  approvalStatus: string; approvedBy?: string | null; approvedAt?: string | null; disposalStatus: string; disposalCompletedAt?: string | null;
+  residualAmountCent?: number | null; residualCounterpartyId?: string | null; lossAmountCent?: number | null; moneyStatus: string; completed: boolean;
+};
 type InspectionRecordRow = { id: string; taskId: string; result: string; inspectorId?: string | null; abnormalNote?: string | null; recordedAt?: string | null };
 
 const EQUIPMENT = ["facility.equipment.manage"];
 const WORK_ORDER = ["facility.work_order.manage"];
 const INSPECTION = ["facility.inspection.manage"];
+const ALARM_MANAGE = ["facility.alarm.manage"];
+const TAKE_OVER = ["facility.alarm.take_over"];
+const RULE_CONFIRM = ["facility.fault_rule.confirm"];
+const FINANCE_AR_AP = ["finance.ar_ap.manage"];
+// 报废单三项事实中文（与上方同名键 pending 等语义不同，单列）。
+const SCRAP_LABELS: Record<string, string> = {
+  pending_approval: "待审批", approved: "已批准", rejected: "已驳回", pending: "待处置", completed: "已处置",
+  pending_finance: "待财务登记", residual_pending_collection: "残值待收", settled: "已结清",
+};
+const scrapZh = (v?: string | null) => (v == null || v === "" ? "-" : (SCRAP_LABELS[v] ?? v));
+const DUTY_ROLES = [["primary", "主接"], ["backup", "备用"], ["supervisor", "物业主管"], ["project_lead", "项目负责人"], ["specialist", "专业处置人员"]];
 const EQUIPMENT_TYPES = [
   ["elevator", "电梯扶梯"], ["hvac", "暖通空调"], ["power", "配电供电"], ["water_fire", "给排水消防"],
 ];
@@ -62,12 +97,22 @@ const LABELS: Record<string, string> = {
   abnormal: "异常", // 巡检结果（normal=正常，已在设备状态里）
   // 工单/巡检状态枚举中文（statusBadge 与行明细共用；normal/alarm/fault/maintenance/disabled/retired 已在设备状态里）：
   pending_assign: "待派单", assigned: "已派单", processing: "处理中",
-  pending_acceptance: "待验收", pending_review: "待回访", closed: "已关闭",
+  pending_acceptance: "待验收", pending_review: "待回访", accepted: "已验收", closed: "已关闭",
   suspended: "已挂起", overdue: "已逾期",
   pending: "待巡检", rectifying: "整改中", rechecked: "已复检",
   confirmed: "已确认", completed: "已完成",
 };
 const zh = (v?: string | null) => (v == null || v === "" ? "-" : (LABELS[v] ?? v));
+// 接警区枚举中文（与上方同名键如 supervisor/retired 语义不同，单列）。接听、已读都不等于明确接手。
+const ALARM_LABELS: Record<string, string> = {
+  ...Object.fromEntries(DUTY_ROLES), equipment_owner: "设备负责人",
+  awaiting_takeover: "待明确接手", taken_over: "已明确接手",
+  pending_confirmation: "待两方确认", active: "已生效", retired: "已停用",
+  system_message: "系统消息", sms: "短信", voice: "语音",
+  sent: "已发送", failed: "失败", placed: "已拨出", answered: "已接听（不等于接手）", throttled: "已限流", skipped_switch_off: "通道关闭未发",
+  first: "首接", handover: "换班接手",
+};
+const alarmZh = (v?: string | null) => (v == null || v === "" ? "-" : (ALARM_LABELS[v] ?? zh(v)));
 const DEFAULT_POLICIES: FacilityWorkOrderPolicyRow[] = [
   { id: "fwop_repair_urgent", workOrderType: "repair", priority: "urgent", responseMinutes: 30, handleMinutes: 240, requiresAcceptance: true, acceptanceBy: "supervisor", active: true },
   { id: "fwop_repair_high", workOrderType: "repair", priority: "high", responseMinutes: 60, handleMinutes: 720, requiresAcceptance: true, acceptanceBy: "supervisor", active: true },
@@ -99,7 +144,7 @@ function statusBadge(status?: string | null) {
   return <span className={`admin-badge ${kind}`}>{zh(value)}</span>;
 }
 
-export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [equipment, setEquipment] = React.useState<FacilityEquipmentRow[]>([]);
   const [maintenanceDue, setMaintenanceDue] = React.useState<FacilityEquipmentRow[]>([]);
   const [workOrders, setWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
@@ -112,9 +157,24 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [inspectionRecords, setInspectionRecords] = React.useState<InspectionRecordRow[]>([]);
   const [policyRows, setPolicyRows] = React.useState<FacilityWorkOrderPolicyRow[]>(DEFAULT_POLICIES);
   const [equipmentForm, setEquipmentForm] = React.useState({ name: "", equipmentType: "elevator", brand: "", responsibleUserId: "", maintenanceCycleDays: "90", spaceId: "" });
-  const [statusForm, setStatusForm] = React.useState({ equipmentId: "", status: "normal", alarmSource: "manual", alarmNote: "" });
+  const [statusForm, setStatusForm] = React.useState({ equipmentId: "", status: "normal", alarmSource: "manual", alarmNote: "", priority: "" });
+  const [alarmRows, setAlarmRows] = React.useState<FacilityAlarmDetailRow[]>([]);
+  const [myAlarms, setMyAlarms] = React.useState<FacilityAlarmRow[]>([]);
+  const [dutyRows, setDutyRows] = React.useState<FacilityAlarmDutyRow[]>([]);
+  const [faultRules, setFaultRules] = React.useState<FacilityFaultRuleRow[]>([]);
+  const [alarmNotice, setAlarmNotice] = React.useState<string | null>(null);
+  const [alarmPolicies, setAlarmPolicies] = React.useState<FacilityAlarmPolicyRow[]>([]);
+  const [dutyForm, setDutyForm] = React.useState({ shiftId: "", dutyRole: "primary", contactPhone: "", cancelReason: "" });
+  const [alarmPolicyForm, setAlarmPolicyForm] = React.useState({ alarmType: "elevator", priority: "urgent", responseMinutes: "" });
+  const [ruleForm, setRuleForm] = React.useState({ projectId: "", equipmentId: "", equipmentType: "elevator", faultScenario: "", handlingRequirement: "" });
+  const [dispositionForm, setDispositionForm] = React.useState({ alarmId: "", appliedRuleId: "", judgement: "" });
+  const [scrapRows, setScrapRows] = React.useState<FacilityScrapRow[]>([]);
+  const [scrapNotice, setScrapNotice] = React.useState<string | null>(null);
+  const [scrapForm, setScrapForm] = React.useState({ equipmentId: "", reason: "", disposalMethod: "", finalApproverId: "" });
+  const [scrapDisposal, setScrapDisposal] = React.useState<{ scrapId: string; note: string; proofs: { id: string; name: string }[] }>({ scrapId: "", note: "", proofs: [] });
+  const [scrapFinance, setScrapFinance] = React.useState({ scrapId: "", residual: "", counterparty: "", loss: "" });
   const [workOrderForm, setWorkOrderForm] = React.useState({ workOrderType: "repair", priority: "normal", title: "", equipmentId: "", spaceId: "", reporterId: "", reporterType: "staff", source: "platform" });
-  const [workOrderAction, setWorkOrderAction] = React.useState({ assigneeId: "", resolution: "现场处理完成", satisfaction: "5", note: "" });
+  const [workOrderAction, setWorkOrderAction] = React.useState({ assigneeId: "", resolution: "现场处理完成", satisfaction: "5", note: "", confirmerId: "", reassignReason: "" });
   const [policyForm, setPolicyForm] = React.useState({ workOrderType: "repair", priority: "normal", responseMinutes: "60", handleMinutes: "720", requiresAcceptance: true, acceptanceBy: "supervisor", active: true });
   const [templateForm, setTemplateForm] = React.useState({ name: "", inspectionType: "security", cycleDays: "7", abnormalMode: "light", checklist: "现场照片,关键设备状态", scopeNote: "" });
   const [taskForm, setTaskForm] = React.useState({ templateId: "", inspectionType: "security", title: "", scheduleMode: "manual", assigneeId: "", scheduledDate: "", dueDate: "", spaceId: "" });
@@ -128,16 +188,32 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
 
   // 无权限副资源不请求（根因修）：超期工单端点需 facility.work_order.manage，页面基础权限 facility.equipment.manage 不含之。
   const canWorkOrderManage = hasPermissions(effectivePermissions, ["facility.work_order.manage"]);
+  const canAlarmManage = hasPermissions(effectivePermissions, ALARM_MANAGE);
+  const canTakeOver = hasPermissions(effectivePermissions, TAKE_OVER);
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [equipmentRows, dueRows, orderRows, overdueRows, templateRows, taskRows] = await Promise.all([
+      const [alarmList, mineList, dutyList, ruleList] = await Promise.all([
+        loadSecondaryIfPermitted(canAlarmManage, () => api.get<FacilityAlarmDetailRow[]>("/api/v1/facility/alarms"), [] as FacilityAlarmDetailRow[]),
+        loadSecondaryIfPermitted(canTakeOver, () => api.get<FacilityAlarmRow[]>("/api/v1/facility/alarms/mine"), [] as FacilityAlarmRow[]),
+        loadSecondaryIfPermitted(canAlarmManage, () => api.get<FacilityAlarmDutyRow[]>("/api/v1/facility/alarm-duties"), [] as FacilityAlarmDutyRow[]),
+        loadSecondaryIfPermitted(canAlarmManage, () => api.get<FacilityFaultRuleRow[]>("/api/v1/facility/fault-rules"), [] as FacilityFaultRuleRow[]),
+      ]);
+      setAlarmRows(alarmList.data ?? []);
+      setMyAlarms(mineList.data ?? []);
+      setDutyRows(dutyList.data ?? []);
+      setFaultRules(ruleList.data ?? []);
+      setAlarmNotice(alarmList.notice ?? mineList.notice ?? dutyList.notice ?? ruleList.notice);
+      const [equipmentRows, dueRows, orderRows, overdueRows, templateRows, taskRows, scrapList] = await Promise.all([
         api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment"),
         loadSecondary(() => api.get<FacilityEquipmentRow[]>("/api/v1/facility/equipment/maintenance-due"), [] as FacilityEquipmentRow[]),
         api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders"),
         loadSecondaryIfPermitted(canWorkOrderManage, () => api.get<FacilityWorkOrderRow[]>("/api/v1/facility/work-orders/overdue"), [] as FacilityWorkOrderRow[]),
         api.get<InspectionTemplateRow[]>("/api/v1/facility/inspections/templates"),
         api.get<InspectionTaskRow[]>("/api/v1/facility/inspections/tasks"),
+        loadSecondary(() => api.get<FacilityScrapRow[]>("/api/v1/facility/equipment-scraps"), [] as FacilityScrapRow[]),
       ]);
+      setScrapRows(scrapList.data ?? []);
+      setScrapNotice(scrapList.notice);
       setEquipment(equipmentRows ?? []);
       setMaintenanceDue(dueRows.data);
       setMaintenanceDueNotice(dueRows.notice);
@@ -179,12 +255,185 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
       setGlobalError("先选择或填写设备 id");
       return;
     }
+    // HP-F01（2026-10-21 操作员裁决补充第 1 条）：告警/故障由上报人当场选优先级（决定接警响应时限）。
+    const needsPriority = statusForm.status === "alarm" || statusForm.status === "fault";
+    if (needsPriority && !statusForm.priority) {
+      setGlobalError("告警或故障上报须当场选择优先级（紧急 / 高 / 普通）");
+      return;
+    }
     await api.post(`/api/v1/facility/equipment/${encodeURIComponent(statusForm.equipmentId.trim())}/status`, {
       status: statusForm.status,
       alarmSource: statusForm.status === "alarm" ? statusForm.alarmSource : undefined,
       alarmNote: statusForm.alarmNote.trim() || undefined,
+      priority: needsPriority ? statusForm.priority : undefined,
     });
     setActionResult({ action: "facility_equipment_status_changed", equipmentId: statusForm.equipmentId.trim(), status: statusForm.status });
+    await reload();
+  }
+
+  // ---- HP-F01 设备接警 ----
+  async function takeOverAlarm(id: string) {
+    await api.post(`/api/v1/facility/alarms/${encodeURIComponent(id)}/take-over`, {});
+    setActionResult({ action: "facility_alarm_taken_over", alarmId: id });
+    await reload();
+  }
+
+  async function recordDisposition() {
+    const alarmId = dispositionForm.alarmId.trim();
+    const appliedRuleId = dispositionForm.appliedRuleId.trim();
+    const judgement = dispositionForm.judgement.trim();
+    if (!alarmId || (!appliedRuleId && !judgement)) {
+      setGlobalError("记录处置要求需选择告警，并填写所按的故障处置规则或专业处置判定");
+      return;
+    }
+    await api.post(`/api/v1/facility/alarms/${encodeURIComponent(alarmId)}/disposition`, {
+      appliedRuleId: appliedRuleId || undefined,
+      judgement: judgement || undefined,
+    });
+    setActionResult({ action: "facility_alarm_disposition_recorded", alarmId });
+    setDispositionForm({ alarmId: "", appliedRuleId: "", judgement: "" });
+    await reload();
+  }
+
+  async function assignDuty() {
+    if (!dutyForm.shiftId.trim() || !dutyForm.contactPhone.trim()) {
+      setGlobalError("接警值守安排需填写班次与联系电话");
+      return;
+    }
+    await api.post("/api/v1/facility/alarm-duties", {
+      shiftId: dutyForm.shiftId.trim(),
+      dutyRole: dutyForm.dutyRole,
+      contactPhone: dutyForm.contactPhone.trim(),
+    });
+    setActionResult({ action: "facility_alarm_duty_assigned", shiftId: dutyForm.shiftId.trim(), dutyRole: dutyForm.dutyRole });
+    setDutyForm({ ...dutyForm, shiftId: "", contactPhone: "" });
+    await reload();
+  }
+
+  async function cancelDuty(id: string) {
+    if (!dutyForm.cancelReason.trim()) {
+      setGlobalError("撤销接警值守安排须填写原因");
+      return;
+    }
+    await api.post(`/api/v1/facility/alarm-duties/${encodeURIComponent(id)}/cancel`, { reason: dutyForm.cancelReason.trim() });
+    setActionResult({ action: "facility_alarm_duty_cancelled", dutyId: id });
+    await reload();
+  }
+
+  async function saveAlarmPolicy() {
+    const responseMinutes = positiveInt(alarmPolicyForm.responseMinutes);
+    if (!responseMinutes) {
+      setGlobalError("响应时限须填写正整数分钟");
+      return;
+    }
+    const saved = await api.post<FacilityAlarmPolicyRow>("/api/v1/facility/alarms/policies", {
+      alarmType: alarmPolicyForm.alarmType, priority: alarmPolicyForm.priority, responseMinutes, active: true,
+    });
+    setAlarmPolicies((current) => [...current.filter((row) => row.alarmType !== saved.alarmType || row.priority !== saved.priority), saved]);
+    setActionResult({ action: "facility_alarm_policy_saved", alarmType: saved.alarmType, priority: saved.priority });
+  }
+
+  async function createFaultRule() {
+    if ((!ruleForm.equipmentId.trim() && !ruleForm.projectId.trim()) || !ruleForm.faultScenario.trim() || !ruleForm.handlingRequirement.trim()) {
+      setGlobalError("故障处置规则需填写项目（或设备）、故障场景与处置要求");
+      return;
+    }
+    await api.post("/api/v1/facility/fault-rules", {
+      projectId: ruleForm.projectId.trim() || undefined,
+      equipmentId: ruleForm.equipmentId.trim() || undefined,
+      equipmentType: ruleForm.equipmentType,
+      faultScenario: ruleForm.faultScenario.trim(),
+      handlingRequirement: ruleForm.handlingRequirement.trim(),
+    });
+    setActionResult({ action: "facility_fault_rule_created", faultScenario: ruleForm.faultScenario.trim() });
+    setRuleForm({ ...ruleForm, faultScenario: "", handlingRequirement: "" });
+    await reload();
+  }
+
+  async function faultRuleAction(id: string, action: "confirm" | "retire") {
+    await api.post(`/api/v1/facility/fault-rules/${encodeURIComponent(id)}/${action}`, {});
+    setActionResult({ action: `facility_fault_rule_${action}`, ruleId: id });
+    await reload();
+  }
+
+  function openAlarmDetail(row: FacilityAlarmDetailRow) {
+    const a = row.alarm;
+    setDetail({
+      title: `接警明细 · ${a.id}`,
+      fields: [
+        { label: "设备", value: a.equipmentId },
+        { label: "告警类型 / 优先级", value: `${zh(a.alarmType)} / ${zh(a.priority)}` },
+        { label: "状态", value: alarmZh(a.status) },
+        { label: "响应时限", value: cnDate(a.responseDueAt) },
+        { label: "升级轮次", value: String(a.escalationRound ?? 0) },
+        { label: "接手人", value: userTrace(a.holderUserId) },
+        { label: "故障处置规则", value: a.uncovered ? "未覆盖（转当班专业处置人员判定）" : (row.rules ?? []).map((r) => `${r.faultScenario}：${r.handlingRequirement}`).join("；") || "-" },
+        { label: "处置要求", value: a.dispositionNote ?? (a.appliedRuleId ? `按规则 ${a.appliedRuleId}` : "-") },
+        { label: "联系记录", value: (row.attempts ?? []).map((t) => `第${t.round}轮 ${alarmZh(t.dutyRole)} ${t.userId} ${alarmZh(t.channel)}：${alarmZh(t.outcome)}`).join("；") || "-" },
+        { label: "接手记录", value: (row.takeovers ?? []).map((t) => `${alarmZh(t.kind)} ${t.userId} ${cnDate(t.takenOverAt)}`).join("；") || "-" },
+      ],
+    });
+  }
+
+  // ---- HP-F03 设备报废：申请走所有权主体审批；实物处置与款项分别登记 ----
+  async function requestScrap() {
+    if (!scrapForm.reason.trim() || !scrapForm.disposalMethod.trim()) {
+      setGlobalError("报废申请须填写报废原因与处置方式");
+      return;
+    }
+    await api.post(`/api/v1/facility/equipment/${encodeURIComponent(scrapForm.equipmentId)}/scrap-requests`, {
+      reason: scrapForm.reason.trim(),
+      disposalMethod: scrapForm.disposalMethod.trim(),
+      finalApproverId: scrapForm.finalApproverId.trim() || undefined,
+    });
+    setActionResult({ action: "facility_equipment_scrap_requested", equipmentId: scrapForm.equipmentId });
+    setScrapForm({ equipmentId: "", reason: "", disposalMethod: "", finalApproverId: "" });
+    await reload();
+  }
+
+  async function uploadScrapEvidence(files: FileList | null) {
+    if (!files?.length || !api.postForm) return;
+    for (const file of Array.from(files)) {
+      const form = new FormData();
+      form.append("file", file); form.append("business_type", "facility_equipment_scrap");
+      form.append("business_id", scrapDisposal.scrapId); form.append("attachment_role", "other");
+      const proof = await api.postForm<{ id: string }>("/api/v1/evidence/attachments/upload", form);
+      setScrapDisposal((current) => ({ ...current, proofs: [...current.proofs, { id: proof.id, name: file.name }] }));
+    }
+  }
+
+  async function completeScrapDisposal() {
+    if (!scrapDisposal.proofs.length) {
+      setGlobalError("登记实际处置须先上传处置凭证");
+      return;
+    }
+    await api.post(`/api/v1/facility/equipment-scraps/${encodeURIComponent(scrapDisposal.scrapId)}/disposal`, {
+      evidenceAttachmentIds: scrapDisposal.proofs.map((p) => p.id),
+      disposalNote: scrapDisposal.note.trim() || undefined,
+    });
+    setActionResult({ action: "facility_equipment_scrap_disposal_completed", scrapId: scrapDisposal.scrapId });
+    setScrapDisposal({ scrapId: "", note: "", proofs: [] });
+    await reload();
+  }
+
+  async function recordScrapFinance() {
+    const residualAmountCent = Math.round(Number(scrapFinance.residual || "0") * 100);
+    const lossAmountCent = Math.round(Number(scrapFinance.loss || "0") * 100);
+    if (!Number.isFinite(residualAmountCent) || !Number.isFinite(lossAmountCent) || residualAmountCent < 0 || lossAmountCent < 0) {
+      setGlobalError("残值与损失须填写不小于 0 的金额（元）");
+      return;
+    }
+    if (residualAmountCent > 0 && !scrapFinance.counterparty.trim()) {
+      setGlobalError("有残值须填写回收方");
+      return;
+    }
+    await api.post(`/api/v1/facility/equipment-scraps/${encodeURIComponent(scrapFinance.scrapId)}/finance`, {
+      residualAmountCent,
+      residualCounterpartyId: scrapFinance.counterparty.trim() || undefined,
+      lossAmountCent,
+    });
+    setActionResult({ action: "facility_equipment_scrap_finance_recorded", scrapId: scrapFinance.scrapId });
+    setScrapFinance({ scrapId: "", residual: "", counterparty: "", loss: "" });
     await reload();
   }
 
@@ -224,13 +473,47 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
     await reload();
   }
 
-  async function workOrderActionPost(id: string, action: "start" | "complete" | "accept" | "review" | "suspend" | "resume") {
+  // 第十二批操作员裁决第 9 条「补转派」：已派单或处理中改派他人，处理时限不重算；原因必填并留痕。
+  async function reassignWorkOrder(id: string) {
+    if (!workOrderAction.assigneeId.trim() || !workOrderAction.reassignReason.trim()) {
+      setGlobalError("转派需填写新处理人 id 和转派原因");
+      return;
+    }
+    await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/reassign`, {
+      assigneeId: workOrderAction.assigneeId.trim(),
+      reason: workOrderAction.reassignReason.trim(),
+    });
+    setActionResult({ action: "facility_work_order_reassigned", workOrderId: id });
+    await reload();
+  }
+
+  async function workOrderActionPost(id: string, action: "start" | "complete" | "accept" | "review" | "suspend" | "resume" | "rework") {
+    // 第十二批操作员裁决第 2 条：验收或提单确认不通过，须填不通过原因后退回原维修人返工。
+    if (action === "rework" && !workOrderAction.note.trim()) {
+      setGlobalError("退回返工须在备注里填写不通过原因");
+      return;
+    }
     await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/${action}`, {
       resolution: action === "complete" ? workOrderAction.resolution.trim() || "已处理" : undefined,
       satisfaction: action === "accept" || action === "review" ? positiveInt(workOrderAction.satisfaction) : undefined,
       note: workOrderAction.note.trim() || undefined,
     });
     setActionResult({ action: `facility_work_order_${action}`, workOrderId: id });
+    await reload();
+  }
+
+  // HP-F02：自动生成的大型维修工单，设备责任人不在岗或本人维修时由物业主管指定提单确认人（留痕）；员工手工建的关联设备报修单，
+  // 提单人就是本次维修人时同此（裁决第 15 条）。
+  async function designateConfirmer(id: string) {
+    if (!workOrderAction.confirmerId.trim()) {
+      setGlobalError("指定提单确认人需填写确认人 id");
+      return;
+    }
+    await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/confirmer`, {
+      confirmerId: workOrderAction.confirmerId.trim(),
+      note: workOrderAction.note.trim() || undefined,
+    });
+    setActionResult({ action: "facility_work_order_confirmer_designated", workOrderId: id });
     await reload();
   }
 
@@ -376,6 +659,9 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         { label: "是否逾期", value: row.overtime ? "已逾期" : "未逾期" },
         { label: "关联设备", value: row.equipmentId ?? "-" },
         { label: "处理人", value: userTrace(row.assigneeId) },
+        { label: "主管验收人 / 时间", value: <>{userTrace(row.verifierId)} {cnDate(row.verifiedAt)}</> },
+        { label: "提单确认承接人", value: userTrace(row.confirmerId) },
+        { label: "提单确认人 / 时间", value: <>{userTrace(row.reporterConfirmedBy)} {cnDate(row.reporterConfirmedAt)}</> },
         { label: "满意度", value: row.satisfaction != null ? `${row.satisfaction} 分` : "-" },
       ],
     });
@@ -481,11 +767,22 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
                 <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`facility-equipment-select-${row.id}`} onClick={() => setStatusForm({ ...statusForm, equipmentId: row.id })}>选中</button>
                   <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-maintenance-done-${row.id}`} onClick={() => void maintenanceDone(row.id)}>维保完成</PermissionButton>
+                  {row.status !== "retired" ? <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-scrap-open-${row.id}`} onClick={() => setScrapForm({ equipmentId: row.id, reason: "", disposalMethod: "", finalApproverId: "" })}>申请报废</PermissionButton> : null}
                 </td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看设备详情" onClick={(event) => { event.stopPropagation(); openEquipmentDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>
+        {scrapForm.equipmentId ? (
+          <div className="admin-inline-form" data-testid="facility-scrap-request-form">
+            <span>申请报废 {scrapForm.equipmentId}（经所有权主体审批后才置报废）</span>
+            <input data-testid="facility-scrap-reason" aria-label="报废原因" placeholder="报废原因" value={scrapForm.reason} onChange={(event) => setScrapForm({ ...scrapForm, reason: event.target.value })} />
+            <input data-testid="facility-scrap-method" aria-label="处置方式" placeholder="处置方式" value={scrapForm.disposalMethod} onChange={(event) => setScrapForm({ ...scrapForm, disposalMethod: event.target.value })} />
+            <input data-testid="facility-scrap-approver" aria-label="最终审批人" placeholder="最终审批人 id（可空）" value={scrapForm.finalApproverId} onChange={(event) => setScrapForm({ ...scrapForm, finalApproverId: event.target.value })} />
+            <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-scrap-submit" onClick={() => void requestScrap()}>提交报废申请</PermissionButton>
+            <button type="button" onClick={() => setScrapForm({ equipmentId: "", reason: "", disposalMethod: "", finalApproverId: "" })}>取消</button>
+          </div>
+        ) : null}
         {/* 引导式流程 phase-2：新增设备入口按钮（权限门在入口），点击弹出分步引导。其余表单（状态变更等）保持不变。 */}
         <div className="admin-form-row">
           <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-equipment-create-open" onClick={() => { setEquipmentError(""); setCreateOpen(true); }}>＋ 新增设备</PermissionButton>
@@ -535,8 +832,9 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
         />
         <div className="admin-inline-form" data-testid="facility-equipment-status-form">
           <input data-testid="facility-equipment-status-id" aria-label="状态设备 id" placeholder="设备 id" value={statusForm.equipmentId} onChange={(event) => setStatusForm({ ...statusForm, equipmentId: event.target.value })} />
-          <select data-testid="facility-equipment-status" aria-label="设备状态" value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })}>{EQUIPMENT_STATUSES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <select data-testid="facility-equipment-status" aria-label="设备状态" value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })}>{EQUIPMENT_STATUSES.filter(([value]) => value !== "retired").map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select data-testid="facility-equipment-alarm-source" aria-label="告警源" value={statusForm.alarmSource} onChange={(event) => setStatusForm({ ...statusForm, alarmSource: event.target.value })}><option value="manual">手工</option><option value="iot">物联网</option></select>
+          <select data-testid="facility-equipment-status-priority" aria-label="告警优先级" value={statusForm.priority} onChange={(event) => setStatusForm({ ...statusForm, priority: event.target.value })}><option value="">告警/故障须选优先级</option>{PRIORITIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-equipment-alarm-note" aria-label="告警说明" placeholder="告警说明" value={statusForm.alarmNote} onChange={(event) => setStatusForm({ ...statusForm, alarmNote: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-equipment-status-change" onClick={() => void changeEquipmentStatus()}>状态变更/告警上报</PermissionButton>
         </div>
@@ -564,7 +862,9 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
           <input data-testid="facility-work-order-assignee" aria-label="派单处理人" placeholder="处理人 id" value={workOrderAction.assigneeId} onChange={(event) => setWorkOrderAction({ ...workOrderAction, assigneeId: event.target.value })} />
           <input data-testid="facility-work-order-resolution" aria-label="处理结果" placeholder="处理结果" value={workOrderAction.resolution} onChange={(event) => setWorkOrderAction({ ...workOrderAction, resolution: event.target.value })} />
           <input data-testid="facility-work-order-satisfaction" aria-label="满意度" type="number" min="1" max="5" value={workOrderAction.satisfaction} onChange={(event) => setWorkOrderAction({ ...workOrderAction, satisfaction: event.target.value })} />
-          <input data-testid="facility-work-order-note" aria-label="操作备注" placeholder="备注" value={workOrderAction.note} onChange={(event) => setWorkOrderAction({ ...workOrderAction, note: event.target.value })} />
+          <input data-testid="facility-work-order-note" aria-label="操作备注" placeholder="备注（退回返工填不通过原因）" value={workOrderAction.note} onChange={(event) => setWorkOrderAction({ ...workOrderAction, note: event.target.value })} />
+          <input data-testid="facility-work-order-confirmer" aria-label="提单确认人" placeholder="指定提单确认人 id" value={workOrderAction.confirmerId} onChange={(event) => setWorkOrderAction({ ...workOrderAction, confirmerId: event.target.value })} />
+          <input data-testid="facility-work-order-reassign-reason" aria-label="转派原因" placeholder="转派原因（转派必填，新处理人填在处理人 id）" value={workOrderAction.reassignReason} onChange={(event) => setWorkOrderAction({ ...workOrderAction, reassignReason: event.target.value })} />
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-table">
@@ -580,8 +880,20 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
                     if (row.status === "pending_assign") wo.push({ key: "assign", label: "派单", permissions: WORK_ORDER, onClick: () => void assignWorkOrder(row.id), testId: `facility-work-order-assign-${row.id}` });
                     if (row.status === "assigned") wo.push({ key: "start", label: "开始", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "start"), testId: `facility-work-order-start-${row.id}` });
                     if (row.status === "processing") wo.push({ key: "complete", label: "完成", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "complete"), testId: `facility-work-order-complete-${row.id}` });
+                    if (row.status === "assigned" || row.status === "processing") wo.push({ key: "reassign", label: "转派", permissions: WORK_ORDER, onClick: () => void reassignWorkOrder(row.id), testId: `facility-work-order-reassign-${row.id}` });
                     if (row.status === "pending_acceptance") wo.push({ key: "accept", label: "验收", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "accept"), testId: `facility-work-order-accept-${row.id}` });
                     if (row.status === "pending_review") wo.push({ key: "review", label: "回访", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "review"), testId: `facility-work-order-review-${row.id}` });
+                    // HP-F02 双闸（裁决第 12 条：关联设备的报修才两道）：已验收或待验收且提单方未确认 → 提单确认；任一方不通过 → 退回返工。
+                    const dualPending = row.workOrderType === "repair" && !!row.equipmentId && (row.status === "pending_acceptance" || row.status === "accepted");
+                    // 告警单与裁决第 15 条员工手工建的关联设备报修单（提单员工就是承接人）：只给承接人本人且不是本次维修人时显示「提单确认」，
+                    // 持 manage 的旁人不能代点；承接人本人负责维修时由物业主管「指定确认人」。
+                    const staffReported = row.workOrderType === "repair" && !!row.equipmentId && row.reporterType === "staff";
+                    const confirmerOnly = row.source === "equipment_alarm" || staffReported;
+                    const confirmerSelf = row.confirmerId === user?.id && row.assigneeId !== user?.id;
+                    if (dualPending && !row.reporterConfirmedAt && (!confirmerOnly || confirmerSelf)) wo.push({ key: "confirm", label: "提单确认", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "review"), testId: `facility-work-order-review-${row.id}` });
+                    // 裁决第 16 条「只许承接人本人」：这类单主管已验收后只剩提单确认这一道，「退回返工」也只给承接人本人且其不是本次维修人。
+                    if (dualPending && (row.status !== "accepted" || !confirmerOnly || confirmerSelf)) wo.push({ key: "rework", label: "退回返工", permissions: WORK_ORDER, danger: true, onClick: () => void workOrderActionPost(row.id, "rework"), testId: `facility-work-order-rework-${row.id}` });
+                    if ((row.source === "equipment_alarm" || staffReported) && row.status !== "closed" && !row.reporterConfirmedAt) wo.push({ key: "confirmer", label: "指定确认人", permissions: WORK_ORDER, onClick: () => void designateConfirmer(row.id), testId: `facility-work-order-designate-confirmer-${row.id}` });
                     if (row.status !== "closed" && row.status !== "suspended") wo.push({ key: "suspend", label: "挂起", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "suspend"), testId: `facility-work-order-suspend-${row.id}` });
                     if (row.status === "suspended") wo.push({ key: "resume", label: "恢复", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "resume"), testId: `facility-work-order-resume-${row.id}` });
                     return <RowActions actions={wo} permissionsState={effectivePermissions} testId={`facility-work-order-actions-${row.id}`} />;
@@ -678,6 +990,145 @@ export function FacilityWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <tbody>{inspectionRecords.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-record-${row.id}`} onClick={() => openInspectionRecordDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionRecordDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.taskId}</td><td>{zh(row.result)}</td><td>{row.inspectorId ?? "-"}</td><td>{row.abnormalNote ?? "-"}</td><td>{cnDate(row.recordedAt)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检记录详情" onClick={(event) => { event.stopPropagation(); openInspectionRecordDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
+          </>) },
+          { key: "alarms", label: "④ 设备接警", forceRender: true, children: (<>
+        <h3>我的接警</h3>
+        <div className="admin-preview" data-testid="facility-alarm-guide">当班且承担接警任务的人员须点「已收到并接手」才算明确接手；消息送达、已读、语音拨通或接听都不算。超过响应时限无人接手的，系统向此刻当班的备用、物业主管、项目负责人升级，不呼叫休息人员；换班时未结告警须下一班再次明确接手。</div>
+        {alarmNotice ? <div className="admin-state" data-testid="facility-alarms-degraded">{alarmNotice}</div> : null}
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="facility-my-alarms-table">
+            <thead><tr><th>设备</th><th>告警类型/优先级</th><th>状态</th><th>响应时限</th><th>故障处置规则</th><th>操作</th></tr></thead>
+            <tbody>{myAlarms.map((row) => (
+              <tr key={row.id} data-testid={`facility-my-alarm-${row.id}`}>
+                <td>{row.equipmentId}</td><td>{zh(row.alarmType)} / {zh(row.priority)}</td><td>{alarmZh(row.status)}</td><td>{cnDate(row.responseDueAt)}</td>
+                <td>{row.uncovered ? "未覆盖，待专业处置人员判定" : "按已确认规则处理"}</td>
+                <td>
+                  {row.status === "awaiting_takeover" ? <PermissionButton permissionsState={effectivePermissions} permissions={TAKE_OVER} data-testid={`facility-alarm-take-over-${row.id}`} onClick={() => void takeOverAlarm(row.id)}>已收到并接手</PermissionButton> : null}
+                  {!row.dispositionNote && !row.appliedRuleId ? <PermissionButton permissionsState={effectivePermissions} permissions={TAKE_OVER} data-testid={`facility-alarm-dispose-${row.id}`} onClick={() => setDispositionForm({ ...dispositionForm, alarmId: row.id })}>记录处置要求</PermissionButton> : null}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <div className="admin-inline-form" data-testid="facility-alarm-disposition-form">
+          <input data-testid="facility-alarm-disposition-alarm" aria-label="接警单" placeholder="接警单 id" value={dispositionForm.alarmId} onChange={(event) => setDispositionForm({ ...dispositionForm, alarmId: event.target.value })} />
+          <input data-testid="facility-alarm-disposition-rule" aria-label="所按故障处置规则" placeholder="所按规则 id（按已确认规则处理时填）" value={dispositionForm.appliedRuleId} onChange={(event) => setDispositionForm({ ...dispositionForm, appliedRuleId: event.target.value })} />
+          <input data-testid="facility-alarm-disposition-judgement" aria-label="专业处置判定" placeholder="专业处置判定（如停用或继续使用）" value={dispositionForm.judgement} onChange={(event) => setDispositionForm({ ...dispositionForm, judgement: event.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={TAKE_OVER} data-testid="facility-alarm-disposition-submit" onClick={() => void recordDisposition()}>记录处置要求（不远程停机）</PermissionButton>
+        </div>
+        <h3>接警记录</h3>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="facility-alarms-table">
+            <thead><tr><th>设备</th><th>告警类型/优先级</th><th>状态</th><th>响应时限/升级轮次</th><th>接手人</th><th>联系次数</th><th>故障处置规则</th><th>详情</th></tr></thead>
+            <tbody>{alarmRows.map((row) => (
+              <tr key={row.alarm.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-alarm-${row.alarm.id}`} onClick={() => openAlarmDetail(row)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAlarmDetail(row); } }}>
+                <td>{row.alarm.equipmentId}</td><td>{zh(row.alarm.alarmType)} / {zh(row.alarm.priority)}</td><td>{alarmZh(row.alarm.status)}</td>
+                <td>{cnDate(row.alarm.responseDueAt)} / 第 {row.alarm.escalationRound ?? 0} 轮</td>
+                <td onClick={(event) => event.stopPropagation()}>{userTrace(row.alarm.holderUserId)}</td>
+                <td>{(row.attempts ?? []).length}</td>
+                <td>{row.alarm.uncovered ? "未覆盖" : `${(row.rules ?? []).length} 条`}</td>
+                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看接警详情" onClick={(event) => { event.stopPropagation(); openAlarmDetail(row); }}>查看详情</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <h3>接警值守安排</h3>
+        <div className="admin-inline-form" data-testid="facility-alarm-duty-form">
+          <input data-testid="facility-alarm-duty-shift" aria-label="班次" placeholder="已发布班次 id" value={dutyForm.shiftId} onChange={(event) => setDutyForm({ ...dutyForm, shiftId: event.target.value })} />
+          <select data-testid="facility-alarm-duty-role" aria-label="接警角色" value={dutyForm.dutyRole} onChange={(event) => setDutyForm({ ...dutyForm, dutyRole: event.target.value })}>{DUTY_ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <input data-testid="facility-alarm-duty-phone" aria-label="联系电话" placeholder="联系电话" value={dutyForm.contactPhone} onChange={(event) => setDutyForm({ ...dutyForm, contactPhone: event.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={ALARM_MANAGE} data-testid="facility-alarm-duty-assign" onClick={() => void assignDuty()}>安排接警值守</PermissionButton>
+          <input data-testid="facility-alarm-duty-cancel-reason" aria-label="撤销原因" placeholder="撤销原因" value={dutyForm.cancelReason} onChange={(event) => setDutyForm({ ...dutyForm, cancelReason: event.target.value })} />
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="facility-alarm-duties-table">
+            <thead><tr><th>班次</th><th>班次人员</th><th>时段</th><th>接警角色</th><th>联系电话</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>{dutyRows.map((row) => (
+              <tr key={row.id} data-testid={`facility-alarm-duty-${row.id}`}>
+                <td>{row.shiftId}</td><td>{userTrace(row.shiftUserId)}</td><td>{cnDate(row.shiftStartAt)} ~ {cnDate(row.shiftEndAt)}</td>
+                <td>{alarmZh(row.dutyRole)}</td><td>{row.contactPhone}</td><td>{row.cancelledAt ? "已撤销" : "有效"}</td>
+                <td>{row.cancelledAt ? null : <PermissionButton permissionsState={effectivePermissions} permissions={ALARM_MANAGE} data-testid={`facility-alarm-duty-cancel-${row.id}`} onClick={() => void cancelDuty(row.id)}>撤销</PermissionButton>}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <h3>告警响应时限（告警类型 × 优先级）</h3>
+        <div className="admin-inline-form" data-testid="facility-alarm-policy-form">
+          <select data-testid="facility-alarm-policy-type" aria-label="告警类型" value={alarmPolicyForm.alarmType} onChange={(event) => setAlarmPolicyForm({ ...alarmPolicyForm, alarmType: event.target.value })}>{EQUIPMENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <select data-testid="facility-alarm-policy-priority" aria-label="告警优先级" value={alarmPolicyForm.priority} onChange={(event) => setAlarmPolicyForm({ ...alarmPolicyForm, priority: event.target.value })}>{PRIORITIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <input data-testid="facility-alarm-policy-minutes" aria-label="响应时限分钟" type="number" min="1" placeholder="响应时限（分钟）" value={alarmPolicyForm.responseMinutes} onChange={(event) => setAlarmPolicyForm({ ...alarmPolicyForm, responseMinutes: event.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={ALARM_MANAGE} data-testid="facility-alarm-policy-save" onClick={() => void saveAlarmPolicy()}>保存响应时限</PermissionButton>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="facility-alarm-policies-table">
+            <thead><tr><th>告警类型</th><th>优先级</th><th>响应时限</th></tr></thead>
+            <tbody>{alarmPolicies.map((row) => <tr key={`${row.alarmType}-${row.priority}`}><td>{zh(row.alarmType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} 分钟</td></tr>)}</tbody>
+          </table>
+        </div>
+        <h3>故障处置规则（专业负责人＋维保单位两方确认后生效）</h3>
+        <div className="admin-inline-form" data-testid="facility-fault-rule-form">
+          <input data-testid="facility-fault-rule-project" aria-label="项目" placeholder="项目 id（按分类通用时填）" value={ruleForm.projectId} onChange={(event) => setRuleForm({ ...ruleForm, projectId: event.target.value })} />
+          <input data-testid="facility-fault-rule-equipment" aria-label="设备" placeholder="设备 id（按单台设备时填）" value={ruleForm.equipmentId} onChange={(event) => setRuleForm({ ...ruleForm, equipmentId: event.target.value })} />
+          <select data-testid="facility-fault-rule-type" aria-label="设备分类" value={ruleForm.equipmentType} onChange={(event) => setRuleForm({ ...ruleForm, equipmentType: event.target.value })}>{EQUIPMENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <input data-testid="facility-fault-rule-scenario" aria-label="故障场景" placeholder="故障场景" value={ruleForm.faultScenario} onChange={(event) => setRuleForm({ ...ruleForm, faultScenario: event.target.value })} />
+          <input data-testid="facility-fault-rule-requirement" aria-label="处置要求" placeholder="处置要求（停用或继续使用等）" value={ruleForm.handlingRequirement} onChange={(event) => setRuleForm({ ...ruleForm, handlingRequirement: event.target.value })} />
+          <PermissionButton permissionsState={effectivePermissions} permissions={ALARM_MANAGE} data-testid="facility-fault-rule-create" onClick={() => void createFaultRule()}>登记故障处置规则</PermissionButton>
+        </div>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="facility-fault-rules-table">
+            <thead><tr><th>规则</th><th>项目/设备</th><th>分类</th><th>故障场景</th><th>处置要求</th><th>状态</th><th>专业负责人/维保单位</th><th>操作</th></tr></thead>
+            <tbody>{faultRules.map((row) => (
+              <tr key={row.id} data-testid={`facility-fault-rule-${row.id}`}>
+                <td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.projectId} / {row.equipmentId ?? "本分类通用"}</td><td>{zh(row.equipmentType)}</td>
+                <td>{row.faultScenario}</td><td>{row.handlingRequirement}</td><td>{alarmZh(row.status)}</td>
+                <td>{row.specialistConfirmedAt ? "已确认" : "未确认"} / {row.vendorConfirmedAt ? "已确认" : "未确认"}</td>
+                <td>
+                  {row.status === "pending_confirmation" && !row.specialistConfirmedAt ? <PermissionButton permissionsState={effectivePermissions} permissions={RULE_CONFIRM} data-testid={`facility-fault-rule-confirm-${row.id}`} onClick={() => void faultRuleAction(row.id, "confirm")}>专业负责人确认</PermissionButton> : null}
+                  {row.status !== "retired" ? <PermissionButton permissionsState={effectivePermissions} permissions={ALARM_MANAGE} data-testid={`facility-fault-rule-retire-${row.id}`} onClick={() => void faultRuleAction(row.id, "retire")}>停用</PermissionButton> : null}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+          </>) },
+          { key: "scraps", label: "⑤ 报废处置", forceRender: true, children: (<>
+        <h3>设备报废处置（审批、实物处置、款项分别收尾）</h3>
+        {scrapNotice ? <div className="admin-preview">{scrapNotice}</div> : null}
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="facility-scrap-table">
+            <thead><tr><th>设备</th><th>处置方式</th><th>审批</th><th>批准人</th><th>实物处置</th><th>款项</th><th>收尾</th><th>操作</th></tr></thead>
+            <tbody>{scrapRows.map((row) => (
+              <tr key={row.id} data-testid={`facility-scrap-${row.id}`}>
+                <td>{row.equipmentName ?? row.equipmentId}</td><td>{row.disposalMethod}</td><td>{scrapZh(row.approvalStatus)}</td>
+                <td>{row.approvedBy ?? "-"}</td><td>{scrapZh(row.disposalStatus)}</td><td>{scrapZh(row.moneyStatus)}</td>
+                <td>{row.completed ? "已全部收尾" : "未收尾"}</td>
+                <td>
+                  {row.approvalStatus === "approved" && row.disposalStatus === "pending" ? <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-scrap-dispose-open-${row.id}`} onClick={() => setScrapDisposal({ scrapId: row.id, note: "", proofs: [] })}>登记实际处置</PermissionButton> : null}
+                  {row.approvalStatus === "approved" && row.moneyStatus === "pending_finance" ? <PermissionButton permissionsState={effectivePermissions} permissions={FINANCE_AR_AP} data-testid={`facility-scrap-finance-open-${row.id}`} onClick={() => setScrapFinance({ scrapId: row.id, residual: "", counterparty: "", loss: "" })}>财务登记残值/损失</PermissionButton> : null}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        {scrapDisposal.scrapId ? (
+          <div className="admin-inline-form" data-testid="facility-scrap-disposal-form">
+            <span>登记实际处置 {scrapDisposal.scrapId}</span>
+            <input data-testid="facility-scrap-evidence" aria-label="处置凭证" type="file" multiple onChange={(event) => void uploadScrapEvidence(event.target.files)} />
+            <span>{scrapDisposal.proofs.map((p) => p.name).join("、") || "未上传凭证"}</span>
+            <input data-testid="facility-scrap-disposal-note" aria-label="处置说明" placeholder="处置说明" value={scrapDisposal.note} onChange={(event) => setScrapDisposal({ ...scrapDisposal, note: event.target.value })} />
+            <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-scrap-disposal-submit" onClick={() => void completeScrapDisposal()}>提交实际处置</PermissionButton>
+          </div>
+        ) : null}
+        {scrapFinance.scrapId ? (
+          <div className="admin-inline-form" data-testid="facility-scrap-finance-form">
+            <span>财务登记 {scrapFinance.scrapId}</span>
+            <input data-testid="facility-scrap-residual" aria-label="残值（元）" type="number" min="0" step="0.01" placeholder="残值（元）" value={scrapFinance.residual} onChange={(event) => setScrapFinance({ ...scrapFinance, residual: event.target.value })} />
+            <input data-testid="facility-scrap-counterparty" aria-label="残值回收方" placeholder="残值回收方" value={scrapFinance.counterparty} onChange={(event) => setScrapFinance({ ...scrapFinance, counterparty: event.target.value })} />
+            <input data-testid="facility-scrap-loss" aria-label="损失（元）" type="number" min="0" step="0.01" placeholder="损失（元）" value={scrapFinance.loss} onChange={(event) => setScrapFinance({ ...scrapFinance, loss: event.target.value })} />
+            <PermissionButton permissionsState={effectivePermissions} permissions={FINANCE_AR_AP} data-testid="facility-scrap-finance-submit" onClick={() => void recordScrapFinance()}>提交财务登记</PermissionButton>
+          </div>
+        ) : null}
           </>) },
         ]}
       />

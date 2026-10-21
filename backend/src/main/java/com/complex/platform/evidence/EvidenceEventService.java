@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -77,6 +77,8 @@ public class EvidenceEventService {
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.inventory.PurchaseWorkflowService> purchaseWorkflows;
     @org.springframework.beans.factory.annotation.Autowired
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.amusement.AmusementSessionLifecycleService> amusementSessions;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.facility.FacilityEquipmentScrapService> facilityScraps;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -493,6 +495,11 @@ public class EvidenceEventService {
             energy.requireEvidenceScope(businessId, evidencePermission);
             return Optional.empty();
         }
+        if ("facility_equipment_scrap".equals(type)) {
+            // HP-F03（BSM L1408「记录……实际处置凭证」）：报废单凭证按报废单项目定界，只收真实文件上传。
+            facilityScraps.getObject().requireEvidenceScope(businessId, evidencePermission);
+            return Optional.empty();
+        }
         if ("inventory_quarantine".equals(type)) {
             quarantines.requireEvidenceScope(businessId, evidencePermission);
             return authorizationService.currentMerchantIdQuietly();
@@ -618,7 +625,7 @@ public class EvidenceEventService {
     }
 
     private void requireDirectUpload(String businessType) {
-        if (java.util.Set.of("supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution", "amusement_session", "amusement_business_day_config", "dealer_delivery", "dealer_return", "dealer_invoice", "energy_meter", "payroll_tax_version", "payroll_tax_assessment", "staff_payroll_scheme", "staff_payroll_calendar", "staff_payroll_period", "staff_performance_rule", "bar_payroll_rule", "staff_payroll_payment", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract").contains(businessType == null ? "" : businessType.trim())) {
+        if (java.util.Set.of("supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution", "amusement_session", "amusement_business_day_config", "dealer_delivery", "dealer_return", "dealer_invoice", "energy_meter", "payroll_tax_version", "payroll_tax_assessment", "staff_payroll_scheme", "staff_payroll_calendar", "staff_payroll_period", "staff_performance_rule", "bar_payroll_rule", "staff_payroll_payment", "facility_site_entry_report", "inventory_quarantine", "ticket_sales_contract", "facility_equipment_scrap").contains(businessType == null ? "" : businessType.trim())) {
             throw ApiException.badRequest("REAL_UPLOAD_REQUIRED", "该业务凭证须通过文件上传接口提交实际文件");
         }
     }

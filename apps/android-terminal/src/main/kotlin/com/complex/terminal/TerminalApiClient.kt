@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.net.URI
 import java.net.URLEncoder
@@ -255,8 +255,23 @@ class TerminalApiClient(
   fun acknowledgeStaffNotice(id: String, request: NoticeAcknowledgeRequest): EmployeeNoticeRecord =
     post("/api/v1/staff/notices/$id/acknowledge", request)
 
-  /** 我的工单:只看流转到自己的(view_assigned,只读)。 */
-  fun listMyWorkOrders(): List<MyWorkOrderRecord> = get("/api/v1/facility/work-orders/assigned-to-me")
+  /** 我的工单(view_assigned):流转到自己的，加待我提单确认的(第十二批裁决第 13 条)。 */
+  fun listMyWorkOrders(): List<MyWorkOrderRecord> = get<MyWorkOrderPage>("/api/v1/facility/work-orders/assigned-to-me").items
+
+  /** 我的工单「确认」：待我提单确认的单做提单确认（既有 /review，服务层对承接人放行）。 */
+  fun confirmWorkOrder(id: String, request: WorkOrderConfirmationRequest): MyWorkOrderRecord =
+    post("/api/v1/facility/work-orders/${urlEncode(id)}/review", request)
+
+  /** 我的工单「退回返工」：提单确认不通过，填原因退回原维修人（既有 /rework）。 */
+  fun reworkWorkOrder(id: String, request: WorkOrderConfirmationRequest): MyWorkOrderRecord =
+    post("/api/v1/facility/work-orders/${urlEncode(id)}/rework", request)
+
+  /** HP-F01 我的接警：本人此刻当班可接的待接手告警与本人已接手未结的告警（只读，查看不等于接手）。 */
+  fun listMyFacilityAlarms(): List<FacilityAlarmRecord> = get<FacilityAlarmPage>("/api/v1/facility/alarms/mine").items
+
+  /** HP-F01 明确接手（「已收到并接手」）：唯一改变接警状态的动作。 */
+  fun takeOverFacilityAlarm(id: String, request: FacilityAlarmTakeOverRequest): FacilityAlarmRecord =
+    post("/api/v1/facility/alarms/${urlEncode(id)}/take-over", request)
 
   /** 酒吧空位视图(桌位+活跃预订占用标记,帮客人订位用)。 */
   fun listBarTableAvailability(): List<BarTableAvailabilityRow> = get("/api/v1/bar/tables/availability")
@@ -388,3 +403,9 @@ class TerminalApiClient(
 
 @Serializable
 private data class PayrollPage(val items: List<PayrollStatementRow>)
+
+@Serializable
+private data class FacilityAlarmPage(val items: List<FacilityAlarmRecord> = emptyList())
+
+@Serializable
+private data class MyWorkOrderPage(val items: List<MyWorkOrderRecord> = emptyList())

@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -21,7 +23,7 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
             id, code, work_order_type, priority, status, title, description, source, space_id, equipment_id,
             reporter_id, reporter_type, assignee_id, response_due_at, handle_due_at, assigned_at, responded_at,
             completed_at, verified_at, verifier_id, satisfaction, overtime, resolution, project_id, merchant_id,
-            created_at, updated_at
+            created_at, updated_at, confirmer_id, reporter_confirmed_at, reporter_confirmed_by
             """;
     private static final String POLICY_COLS = """
             id, work_order_type, priority, response_minutes, handle_minutes, requires_acceptance, acceptance_by,
@@ -68,11 +70,13 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
                 INSERT INTO facility_work_orders (id, code, work_order_type, priority, status, title, description,
                     source, space_id, equipment_id, reporter_id, reporter_type, assignee_id, response_due_at,
                     handle_due_at, assigned_at, responded_at, completed_at, verified_at, verifier_id, satisfaction,
-                    overtime, resolution, project_id, merchant_id, created_at, updated_at)
+                    overtime, resolution, project_id, merchant_id, created_at, updated_at, confirmer_id,
+                    reporter_confirmed_at, reporter_confirmed_by)
                 VALUES (:id, :code, :work_order_type, :priority, :status, :title, :description,
                     :source, :space_id, :equipment_id, :reporter_id, :reporter_type, :assignee_id, :response_due_at,
                     :handle_due_at, :assigned_at, :responded_at, :completed_at, :verified_at, :verifier_id,
-                    :satisfaction, :overtime, :resolution, :project_id, :merchant_id, :created_at, :updated_at)
+                    :satisfaction, :overtime, :resolution, :project_id, :merchant_id, :created_at, :updated_at,
+                    :confirmer_id, :reporter_confirmed_at, :reporter_confirmed_by)
                 """, workOrderParams(r));
     }
 
@@ -86,7 +90,8 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
                     assigned_at=:assigned_at, responded_at=:responded_at, completed_at=:completed_at,
                     verified_at=:verified_at, verifier_id=:verifier_id, satisfaction=:satisfaction,
                     overtime=:overtime, resolution=:resolution, project_id=:project_id, merchant_id=:merchant_id,
-                    updated_at=:updated_at
+                    updated_at=:updated_at, confirmer_id=:confirmer_id, reporter_confirmed_at=:reporter_confirmed_at,
+                    reporter_confirmed_by=:reporter_confirmed_by
                  WHERE id=:id
                 """, workOrderParams(r));
     }
@@ -94,6 +99,12 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
     @Override
     public Optional<FacilityWorkOrderRecord> findById(String id) {
         return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + " FROM facility_work_orders WHERE id = :id",
+                new MapSqlParameterSource("id", id), this::mapWorkOrder).stream().findFirst();
+    }
+
+    @Override
+    public Optional<FacilityWorkOrderRecord> findByIdForUpdate(String id) {
+        return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + " FROM facility_work_orders WHERE id = :id FOR UPDATE",
                 new MapSqlParameterSource("id", id), this::mapWorkOrder).stream().findFirst();
     }
 
@@ -122,13 +133,16 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
     }
 
     @Override
-    public List<FacilityWorkOrderRecord> listAssignedToMe(String assigneeId) {
+    public List<FacilityWorkOrderRecord> listAssignedToMe(String userId) {
+        // 第十二批操作员裁决第 13 条：派给本人的，加「待我提单确认」的（关联设备的报修＝两道，提单确认未做，待验收或已验收）。
         return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + """
                  FROM facility_work_orders
-                 WHERE assignee_id = :assignee_id
+                 WHERE assignee_id = :user_id
+                    OR (confirmer_id = :user_id AND work_order_type = 'repair' AND equipment_id IS NOT NULL
+                        AND reporter_confirmed_at IS NULL AND status IN ('pending_acceptance','accepted'))
                  ORDER BY created_at DESC, id
                  LIMIT 200
-                """, new MapSqlParameterSource("assignee_id", assigneeId), this::mapWorkOrder);
+                """, new MapSqlParameterSource("user_id", userId), this::mapWorkOrder);
     }
 
     @Override
@@ -146,7 +160,7 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
         return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + """
                  FROM facility_work_orders
                  WHERE handle_due_at IS NOT NULL AND handle_due_at < :now AND overtime = false
-                   AND status IN ('pending_assign','assigned','processing','pending_review','pending_acceptance')
+                   AND status IN ('pending_assign','assigned','processing','pending_review','pending_acceptance','accepted')
                  ORDER BY handle_due_at ASC, id
                 """, new MapSqlParameterSource("now", timestampWithTimeZone(now)), this::mapWorkOrder);
     }
@@ -169,7 +183,10 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
                 .addValue("overtime", r.overtime()).addValue("resolution", r.resolution())
                 .addValue("project_id", r.projectId()).addValue("merchant_id", r.merchantId())
                 .addValue("created_at", timestampWithTimeZone(r.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(r.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(r.updatedAt()))
+                .addValue("confirmer_id", r.confirmerId())
+                .addValue("reporter_confirmed_at", timestampWithTimeZone(r.reporterConfirmedAt()))
+                .addValue("reporter_confirmed_by", r.reporterConfirmedBy());
     }
 
     private MapSqlParameterSource policyParams(FacilityWorkOrderPolicyRecord r) {
@@ -193,7 +210,9 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
                 nullableInstant(rs, "responded_at"), nullableInstant(rs, "completed_at"),
                 nullableInstant(rs, "verified_at"), rs.getString("verifier_id"), nullableInt(rs, "satisfaction"),
                 rs.getBoolean("overtime"), rs.getString("resolution"), rs.getString("project_id"),
-                rs.getString("merchant_id"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+                rs.getString("merchant_id"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"),
+                rs.getString("confirmer_id"), nullableInstant(rs, "reporter_confirmed_at"),
+                rs.getString("reporter_confirmed_by"));
     }
 
     private FacilityWorkOrderPolicyRecord mapPolicy(ResultSet rs, int n) throws SQLException {

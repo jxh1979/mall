@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.07·据需求重建）
+# 楼宇运营业务域 PRD（V1.08·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -27,9 +27,9 @@
 | 设施设备 `facility_equipment` | `alarm_source` | `manual` / `iot` | 人工上报 / 远程或物联自动采集；仅告警时填写 |
 | 工单策略 `facility_work_order_policy`、工单 `facility_work_orders` | `work_order_type` | `repair` / `cleaning` / `complaint` / `rectification` / `inspection` / `other`（V166 与 `FacilityWorkOrderService.TYPES` 均为 6 值） | **业务目标（ENUM「物业工单类型」）**：报修、保洁、投诉、整改、巡检、**内部协作工单**（内部部门间发起与流转）、其他服务请求。待实现：V166 的两处 CHECK、服务校验与策略种子补内部协作工单；本轮不改迁移或代码。 |
 | 工单策略/工单 | `priority` | `urgent` / `high` / `normal` | 用于匹配 SLA「类型 × 优先级」 |
-| 工单策略 | `acceptance_by` | `handler` / `supervisor` / `reporter` | 处理人完成即结 / 主管验收 / 提单方确认。**（2026-08-04 口径，对齐 BSM「运营细则（已确认）」条）复杂类（大型设备报修）须「主管/物业验收**并且**提单方确认」双闸**——当前 3 值枚举**表达不了该组合，实现待对齐**（二选一：枚举扩展一个 `supervisor_and_reporter` 值，或在策略表加独立标志位 `require_reporter_confirm`）；本轮**不改 DB CHECK**，见 §3 默认策略与 §6 待建一览 |
+| 工单策略 | `acceptance_by` | `handler` / `supervisor` / `reporter` | 处理人完成即结 / 主管验收 / 提单方确认。复杂类（大型设备报修）的主管验收＋提单方确认两道不是可配的验收方式：关联了设备的报修单一律两道，没关联设备的普通报修按此配置（HP-F02，V531；第十二批操作员裁决 2026-10-21 第 12 条，见 §3） |
 | 工单 `facility_work_orders` | `source` | `merchant_self` / `platform` / `equipment_alarm` / `inspection`（V166 当前 CHECK；**不含** `customer`） | **目标待建值**：补 `customer`，使客人端投诉由客人自行提交、客人即提单方且关闭须其确认。`customer` 不是当前 DB 原值；CHECK 扩值列入排期，见 §6 E。 |
-| 工单 `facility_work_orders` | `status` | `pending_assign` / `assigned` / `processing` / `pending_review` / `pending_acceptance` / `accepted` / `closed` / `suspended` / `overtime` | 待派单 / 已派单 / 处理中 / 待回访 / 待验收 / 已验收 / 已关闭 / 已挂起 / 已超时；`accepted` 为 DB 保留值，当前服务验收后直接写 `closed`。**（2026-08-04 第三轮用户裁决 UD-05 / DEC-R6-13 定稿）** 九态**按工单类型分支适用，不是全类顺序链**——①**保洁等无争议类**：处理人完成即结（`processing` → `closed`）；②**投诉类**：须**提单方确认**（`processing` → `pending_review` → `closed`），客人端投诉的提单方即客人；③**复杂类**（大型设备报修等）：须**主管验收 ＋ 提单方确认双闸**（`processing` → `pending_acceptance` → `accepted` → `pending_review` → `closed`），`accepted` 在复杂类分支下**可达**。原「待回访 → 待验收全类顺序链」读法作废。**`acceptance_by` 扩双闸取值与「复杂类」判定口径列入排期**，见 §6 待建一览 B 项 |
+| 工单 `facility_work_orders` | `status` | `pending_assign` / `assigned` / `processing` / `pending_review` / `pending_acceptance` / `accepted` / `closed` / `suspended` / `overtime` | 待派单 / 已派单 / 处理中 / 待回访 / 待验收 / 已验收 / 已关闭 / 已挂起 / 已超时；`accepted`＝主管已验收、待提单方确认（HP-F02，V531 起可达）。**（2026-08-04 第三轮用户裁决 UD-05 / DEC-R6-13 定稿）** 九态**按工单类型分支适用，不是全类顺序链**——①**保洁等无争议类**：处理人完成即结（`processing` → `closed`）；②**投诉类**：须**提单方确认**（`processing` → `pending_review` → `closed`），客人端投诉的提单方即客人；③**复杂类**（大型设备报修等）：须**主管验收 ＋ 提单方确认双闸**——现行实现：关联设备的报修完工进 `pending_acceptance`，主管验收与提单方确认先后不限，主管先验收为 `accepted`，两项齐全才 `closed`，不经 `pending_review`。原「待回访 → 待验收全类顺序链」读法作废。「复杂类」判定口径按第十二批操作员裁决 2026-10-21 第 12 条为关联设备的报修，见 §3 |
 | 巡检模板/任务 | `inspection_type` | `security` / `fire` / `facility` / `environment` | 安防 / 消防 / 设施设备 / 环境卫生；**能耗抄表不属巡检类型**，走能耗域独立抄表流程（2026-08-04 第三轮用户裁决 UD-04 / DEC-R6-12 定稿为四类，ENUM「楼宇巡检类型」条已同批改为四类，见 §0）。DB CHECK 4 值与裁决一致，无需改造 |
 | 巡检模板 | `abnormal_mode` | `light` / `to_work_order` | 轻记录闭环 / 转整改工单闭环 |
 | 巡检任务 `facility_inspection_tasks` | `status` | `pending` / `in_progress` / `normal` / `abnormal` / `rectifying` / `rechecked` / `closed` | 待执行 / 执行中 / 正常 / 发现异常 / 整改中 / 已复检 / 已关闭 |
@@ -52,9 +52,14 @@
 - 每台设备单独配置 `maintenance_cycle_days`。下次维保到期 `next_maintenance_due` 由 `install_date` 或最近一次 `last_maintenance_at` 加周期派生并固化；`GET /maintenance-due` 读取到期清单。
 - **到期维保单业务目标**：到期提醒自动生成维保单。当前 `FacilityEquipmentService` 只提供到期清单查询和 `maintenance-done` 回写，未见到期扫描/自动创建设施工单的服务或定时任务，列入 §6 I 待建。
 - 状态改为 `alarm` 时必须带 `alarm_source=manual|iot`；离开 `alarm` 会清空告警源、备注和告警时间。
-- 状态改为 `alarm` 或 `fault` 时发布 `FacilityEquipmentAlarmedEvent`，工单服务监听后自动生成 `repair/high` 工单，`source=equipment_alarm`，标题为“设备告警: 设备名”。
+- 状态改为 `alarm` 或 `fault` 时必须带优先级 `priority=urgent|high|normal`（紧急/高/普通，由上报人或物联网上报当场选；第十二批操作员裁决 2026-10-21 第 1 条），缺失或取值不对拒绝（`VALIDATION_FAILED`）。
+- 状态改为 `alarm` 或 `fault` 时发布 `FacilityEquipmentAlarmedEvent`（带设备项目、位置、四组台账分类、负责人与上报优先级），工单服务监听后自动生成 `repair` 工单：优先级取上报优先级，项目与位置取设备台账，`source=equipment_alarm`，标题为“设备告警: 设备名”；同一事务落接警单并首次派发（见 §3「自动告警接警」实现现状）。
 - 维保完成调用 `maintenance-done`：写 `last_maintenance_at=now`，状态回 `normal`，按维保周期重算 `next_maintenance_due`。
-- **设备报废业务目标**：由所有权主体确认并按原审批办理，记录批准人、处置方式与实际处置凭证，残值或损失由财务关联原设备记录。报废状态不表示实物已处置或款项已结清；借入设备仍须双方确认，实物与赔偿款分别收尾。
+- **设备报废（HP-F03，V532）**：BSM「楼宇设备报废由设备所有权主体确认」。报废不能经状态变更直接置（`FACILITY_EQUIPMENT_SCRAP_APPROVAL_REQUIRED`），须提交报废申请（报废原因、处置方式，可指定最终审批人）进统一审批（`action_type=facility.equipment.scrap`，审批策略 `facility_equipment_scrap` 恒阻断、发起人沿直接上级链到其指定的最终审批人；设备台账只由平台／项目物业方维护，所有权主体即该方）；审批通过才把设备置 `retired` 并记批准人（终审人），驳回设备照常在用、可重新申请；同一设备同时只能有一张待审批申请。已报废设备不能经状态变更、维保完成或维修工单关闭改回在用（`FACILITY_EQUIPMENT_RETIRED`）。
+  - 报废单 `facility_equipment_scraps` 分别记三项事实：审批（状态、批准人、批准时间、处置方式）；实物处置（批准后单独登记，须附已上传且绑定本报废单的凭证，`EVIDENCE_REQUIRED` / `EVIDENCE_BINDING_MISMATCH`，凭证只收真实文件上传）；款项（批准后财务登记一次残值与损失：残值记对回收方的应收 `source_type=facility_equipment_scrap`，收款走应收应付既有登记收付款，收足才算结清；损失记内部核算 `source_type=facility_equipment_scrap_loss`，登记即确认；两项均关联本报废单并归原设备项目）。清单按审批／实物处置／款项分列，实物已处置且款项已结清才算全部收尾；标报废不等于实物处置或款项完成。
+  - 借入设备的报废按库存借用流程（FS-019）的双方确认、实物归还与赔偿款分别收尾办理，不进本表。
+  - 后台楼宇运营工作台：设备行「申请报废」，状态变更下拉不再提供「报废」；「⑤ 报废处置」页签列审批、实物处置、款项与是否全部收尾，可登记实际处置（先上传凭证）与财务登记残值／损失（按元录入，`finance.ar_ap.manage`）；审批人待办识别「楼宇设备报废」。
+  - 依据：BSM「楼宇设备报废由设备所有权主体确认」；ENUM「设备报废的审批、实际处置及款项记录，按业务系统地图的楼宇机电设备报废规则执行」；决策台账 2026-10-17 第 13 项 Q19。
 
 **关键端点（实际 Controller）**
 - `GET /api/v1/facility/equipment`
@@ -63,25 +68,46 @@
 - `POST /api/v1/facility/equipment/{equipment_id}`
 - `POST /api/v1/facility/equipment/{equipment_id}/status`
 - `POST /api/v1/facility/equipment/{equipment_id}/maintenance-done?idempotency_key=...`
+- `POST /api/v1/facility/equipment/{equipment_id}/scrap-requests`（报废申请，`facility.equipment.manage`）
+- `GET /api/v1/facility/equipment-scraps`（报废处置清单，`facility.equipment.manage` 或 `finance.ar_ap.manage`）
+- `POST /api/v1/facility/equipment-scraps/{scrap_id}/disposal`（登记实际处置，`facility.equipment.manage`）
+- `POST /api/v1/facility/equipment-scraps/{scrap_id}/finance`（财务登记残值／损失，`finance.ar_ap.manage`）
 
 **迁移 / 表 / 权限**
-- 迁移：`V165__facility_equipment.sql`
-- 表：`facility_equipment`
+- 迁移：`V165__facility_equipment.sql`；报废 `V532__facility_equipment_scraps.sql`
+- 表：`facility_equipment`；报废单 `facility_equipment_scraps`
 - 权限：`facility.equipment.manage`（`domain=platform`、`risk_level=medium`、`requires_approval=false`）
 
 ## 3. 设施工单（V166）
 **业务规则**
 - **自动告警接警与休息边界**：当班且承担接警任务的人员主动确认“已收到并接手”，送达、响铃或接听均不等于确认；未确认按已配置告警类型、优先级和当班名单升级，自动语音仅催接正在当班且承担该任务的人。设备负责人休息时只收系统消息，下一工作时段确认，休息期间不计响应超时、不电话催促。设备停用或继续使用按专业负责人及维保单位预先确认的故障规则处理，未覆盖由当班专业人员判定；不等于授权平台直接远程停机。涉及人身安全立即按应急流程处置，不等待负责人上班或系统确认。接警后继续派修和跟踪，换班未结事项由下一班明确接手。
+  - **实现现状（HP-F01，V529）**：
+    - 接警单：告警自动建工单的同一事务内落 `facility_alarms`（待明确接手 `awaiting_takeover` / 已明确接手 `taken_over`）。响应时限按「告警类型×优先级」矩阵 `facility_alarm_response_policies` 计：告警类型＝设备四组台账（电梯扶梯/暖通空调/配电供电/给排水消防），优先级紧急/高/普通，后台逐格配置（不预置出厂数值；保存按幂等键，失败记 `facility.alarm_policy_save_failed`）；该格未配置时拒绝上报（`POLICY_NOT_FOUND`）。
+    - 接警值守安排：`facility_alarm_duty_assignments` 在已发布且未结束的班次上指定主接、备用、物业主管、项目负责人、专业处置人员及联系电话，项目取班次所属项目，同班同角色只能有一条有效安排；当班人沿顶班记录解析为此刻实际当班的人（与夜班值班经理同一份顶班解析），班次未开始或已结束＝休息，不联系。不做全天覆盖或缺岗补位。
+    - 首次派发：当班主接逐人发员工系统消息、短信（`NotificationService`）并经外部语音服务端口 `VoiceCallSender` 呼叫（真实供应商接入前为占位实现），三条逐次写入 `facility_alarm_contact_attempts`、结果取通道真实返回（系统消息里优先级写紧急／高／普通，响应时限按本地时间显示）；此刻无当班主接，或每个主接短信未送出且语音呼叫失败，同一次上报内立即转当班备用并记转备用时间。设备负责人只收一条系统消息，不发短信、不打语音。
+    - 明确接手：`POST /api/v1/facility/alarms/{alarm_id}/take-over` 是唯一改变接警状态的动作，只有此刻当班的主接、备用、物业主管或项目负责人可接，写 `facility_alarm_takeovers`（确认人、班次、角色、时间）；消息送达或已读、拨通、响铃、接听都不改接警状态。接手不改工单状态，接手人按原派单流程派维修；接警单仍待明确接手（含换班后回到待接手、须下一班明确接手）时，该自动工单拒绝派单（`ALARM_TAKEOVER_REQUIRED`，被拒记 `facility.work_order_assign_failed`，依据 BSM「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」）。
+    - 超时升级（V529＋定时作业 `FacilityAlarmEscalationJob`，prod 开启、默认每分钟一轮）：待接手且已到响应时限的，轮次加一，向此刻当班的主接、备用、物业主管、项目负责人发系统消息＋短信＋语音，响应时限按同一格顺延，下一轮按届时的当班范围继续升级；值守安排内此刻无人当班的，不联系安排外的人、不叫醒休息人员，只留「无人接手」事实（`facility.alarm_unclaimed`）。任何一轮都不把告警或工单置为已响应、已完成。
+    - 换班交接：已接手的告警，接手人那一段班次（原班或顶班时段）结束，或领班给那一段追加了此刻生效的临时顶班（班中顶班）而工单未关闭的，回到待明确接手、清持有人（接手历史留在 `facility_alarm_takeovers`），重新计响应时限并向此刻当班主接派发（失败转当班备用）；下一班须经「已收到并接手」明确接手（记为换班接手），查看清单不算接手。工单已关闭的不进交接。
+    - 故障处置规则（V530 `facility_fault_handling_rules`）：按单台设备或按项目×设备四组台账分类登记故障场景与处置要求，须设备专业负责人（平台员工）与维保单位（外包维保账号，限本项目）两方确认才生效，可停用。告警落单时无生效规则覆盖的标「未覆盖」，并向此刻当班的专业处置人员发系统消息＋短信（不在语音催接之列）。处置要求记录 `POST /api/v1/facility/alarms/{alarm_id}/disposition`：按覆盖该设备的生效规则处理的由此刻当班的接警值守人员记所按规则，未按已确认规则处理的须由此刻当班的专业处置人员记判定（停用或继续使用等）；每张接警单只记一次，只落记录，不调用任何设备控制、不改设备状态，不等于授权平台远程停机。
+    - 前端与手机入口：后台楼宇运营工作台「④ 设备接警」页签含我的接警（「已收到并接手」、记录处置要求）、接警记录（联系与接手明细、覆盖规则）、接警值守安排、告警类型×优先级响应时限、故障处置规则登记/专业负责人确认/停用；设备状态变更表单在告警/故障时须当场选优先级。外包维保工单页可对本项目待确认规则作维保单位确认。员工手机首页「我的接警（已收到并接手）」列出待接手与本人持有的告警并可明确接手，待办与消息中心列待接警；公告「确认已读」不触发接手。
+    - 依据：BSM「连接物业服务，设备告警与巡检异常自动生成物业工单，派单到人」条；第十二批操作员裁决 2026-10-21 第 1 条。
 - **系统事件提单确认**：设备或点位在岗责任人承接确认；责任人不在岗或本人负责此次维修，由物业主管指定其他人员并留痕。复杂工单仍须主管／物业验收与提单责任人确认两项通过才关闭；接警不等于维修完成。
 - 当前设施工单类型为 6 类、优先级 3 类；内部协作工单是 §1 所列业务目标及待建缺口。SLA 不硬编码在服务里，按 `facility_work_order_policy(work_order_type, priority)` 查响应时限和处理时限，唯一约束 `uq_fwop_type_priority`。
 - 默认策略（**2026-08-04 对齐 BSM「运营细则（已确认）」条**）：保洁/巡检/其他按**处理人完成即结**（无争议类）；投诉按**提单方确认**（一律须提单方确认才能关闭）；**报修/整改按主管验收**，其中**复杂类（大型设备报修）须「主管/物业验收**并且**提单方确认」双闸——两者都通过才能关闭，缺任一不得关闭**。后台可通过 `POST /policies` 调整。
-  - **（实现待对齐）** 当前 `acceptance_by` 为 `handler`/`supervisor`/`reporter` **三选一**，表达不了「主管验收 + 提单方确认」的与关系；落地二选一：**扩展枚举加 `supervisor_and_reporter`**，或**在 `facility_work_order_policy` 加独立标志位 `require_reporter_confirm`（与 `acceptance_by` 正交）**。本轮**不改 DB CHECK、不改服务分流**，只把口径与缺口写实（见 §1 `acceptance_by` 行、§6 待建一览）；「复杂类」的判定口径（按工单类型 × 设备大类，还是按策略行显式勾选）随该项一并定案。
+  - **实现现状（HP-F02，V531；第十二批操作员裁决 2026-10-21 第 12 条「关联设备的报修才两道」）**：关联了设备（`equipment_id` 非空）的报修单（含设备告警自动生成的）一律走主管验收＋提单方确认两道，不看所配验收方式；没关联设备的普通报修按后台配置的 `acceptance_by`（种子为主管验收），`POST /policies` 的验收方式只收 `handler`／`supervisor`／`reporter`；整改维持主管验收。两道工单完工进 `pending_acceptance`；主管／物业验收（`verified_at`/`verifier_id`）与提单方确认（`reporter_confirmed_at`/`reporter_confirmed_by`，满意度由提单方评）分别留存、先后不限：主管先验收为 `accepted`（已验收、待提单确认），两项齐全才 `closed` 并回写设备；提单方确认只能一次。`accepted` 计入活动态，未关闭的继续按原处理时限标超时；每次完工开始新一轮验收，旧确认作废。
+  - 自动生成的大型维修工单（`source=equipment_alarm`）提单确认承接人 `confirmer_id` 取设备（点位）责任人，提单方仍记为系统；确认时承接人须为本项目在岗员工（有效员工账号且停岗／离职未生效，休息不算不在岗）、不是本次维修人，并由其本人确认（否则 `CONFIRMER_DESIGNATION_REQUIRED` / `CONFIRMER_MISMATCH`）；承接人缺失、不在岗或就是本次维修人时，物业主管经 `POST /{work_order_id}/confirmer` 指定本项目其他在岗员工并留痕（审计记原承接人（设备未登记责任人时无原承接人）、新承接人与原因），其余情形不允许另行指定（`CONFIRMER_DESIGNATION_NOT_ALLOWED`）。提单确认（`/review`）与退回返工（`/rework`）：持 `facility.work_order.manage`，或本人即该自动工单（或下条员工手工建的关联设备报修单）的提单确认承接人（凭承接身份，不需另持 manage）；两者都不是的 403（提单确认被拒记 `facility.work_order_review_failed`）。退回返工、指定确认人按幂等键防重，同键重放返回第一次的结果。主管验收、提单确认、退回返工、指定确认人以及开始、完成、挂起、恢复、转派读工单时都锁行，同时操作串行、后提交的一方按最新处理人与状态校验，不以旧数据覆盖转派等改动。
+  - 员工手工建的关联设备报修单（第十二批操作员裁决 2026-10-21 第 15 条「提单员工本人（推荐）」：「和告警单一样，提单员工就是承接人，在手机「我的工单」里确认或退回；提单人就是本次维修人时，由物业主管指定他人并留痕」）：后台建单（`POST /api/v1/facility/work-orders`）为关联设备的报修、提单方类型为员工（`reporter_type=staff`）的，提单员工＝在后台点「新建工单」的当前登录员工（服务端取当前登录账号记为 `reporter_id`，不取请求体里的 `reporter_id`；后台建单表单本无提单人输入），建单即记为提单确认承接人 `confirmer_id`；承接人在岗按工单项目判，建单未带项目的同告警单取设备台账的项目。此类单与自动工单同一套承接规则：提单确认只许承接人本人做（持 manage 的旁人 `CONFIRMER_MISMATCH`），主管验收照旧；承接人不在岗或就是本次维修人（派单或转派给提单人本人）时须由物业主管经 `/confirmer` 指定本项目其他在岗员工并留痕（`CONFIRMER_DESIGNATION_REQUIRED`，审计原因 `is_repairer`／`not_on_duty`／`missing`）；进承接人手机「我的工单」的待我提单确认。实现：`FacilityWorkOrderService.create`／`createInternal`／`confirmerBound`／`review`／`rework`／`designateConfirmer`。
+  - 员工自有手机「我的工单」（第十二批操作员裁决 2026-10-21 第 13 条）：`GET /api/v1/facility/work-orders/assigned-to-me`（`facility.work_order.view_assigned`）在派给本人的工单之外，一并列出「待我提单确认」的单（本人是提单确认承接人、关联设备的报修、提单确认未做、待验收或已验收）；点选后带「确认」「退回返工」两个按钮，分别调 `/review`（提单确认）与 `/rework`（须填不通过原因），承接人凭承接身份即可操作，做完即不再列出。
+  - 验收不通过（第十二批操作员裁决 2026-10-21 第 2 条「退回原维修人返工」）：待验收或已验收时经 `POST /{work_order_id}/rework` 填不通过原因，工单回 `processing` 由原维修人继续修，另一方已做的确认作废，修好后两方重新确认；处理时限不重算、超时照常升级。裁决所称换人用「转派」（见下条）。第十二批操作员裁决 2026-10-21 第 16 条「只许承接人本人（推荐）」：设备告警自动工单与员工手工建的关联设备报修单主管已验收（`accepted`）后只剩提单确认这一道，退回返工也只许承接人本人（同提单确认的承接人校验：旁人 403 `CONFIRMER_MISMATCH`，承接人不在岗或就是本次维修人 409 `CONFIRMER_DESIGNATION_REQUIRED`），被拒记 `facility.work_order_rework_failed`；待验收时主管验收不通过的退回照旧。实现：`FacilityWorkOrderService.rework`。
+  - 转派（第十二批操作员裁决 2026-10-21 第 9 条「补转派」）：已派单或处理中时，物业主管（持 `facility.work_order.manage`）经 `POST /{work_order_id}/reassign` 填新处理人与原因（原因必填）改派他人；只换处理人，状态、响应／处理时限、派单时间与超时标记都不动（时限不重算、超时照常升级）；按幂等键防重，成功留痕原处理人、新处理人和原因（`facility.work_order_reassigned`），被拒记 `facility.work_order_reassign_failed`；不能改派给原处理人。后台工单行在已派单／处理中显示「转派」，新处理人填在处理人 id、原因填在转派原因。依据：BSM「派单、转派、升级、关闭都要留痕」。
+  - 后台工作台：验收方下拉为处理人／主管／报告人（报修默认主管）；工单行按状态显示验收，关联设备的报修另显示提单确认、退回返工，设备告警自动工单与员工手工建的关联设备报修单另显示指定确认人；设备告警自动工单与员工手工建的关联设备报修单的「提单确认」只给承接人本人且其不是本次维修人时显示，持 manage 的旁人与身兼本次维修人的承接人不显示（后端对其分别 403 `CONFIRMER_MISMATCH`、409 `CONFIRMER_DESIGNATION_REQUIRED`，后者由物业主管指定确认人；BSM L1385、裁决第 15 条）；这两类单已验收后的「退回返工」同样只给不是本次维修人的承接人本人显示，待验收时照常显示（裁决第 16 条）；明细列主管验收人／时间、提单确认承接人、提单确认人／时间。
+  - 依据：BSM「复杂类（大型设备报修）需主管/物业验收，并且一律须提单方确认才能关闭」；ENUM「复杂类（大型设备报修等）须主管验收＋提单方确认双闸」；DEC-R3B-2026-08-04-25、DEC-R6-13；决策台账 2026-10-17 第 12 项 Q17；第十二批操作员裁决 2026-10-21 第 2、12、13、15、16 条。
 - 创建工单时根据策略写 `response_due_at`、`handle_due_at`；当前 `mark-overdue` 仅扫描超期未关闭设施工单并置 `overtime=true`。**业务目标**是按响应/处理时限超时后自动通知并升级主管；当前缺通知、主管接收人解析、升级留痕和设施工单定时触发，列入 §6 H 待建。
 - 设施工单的 `source` 当前仍允许 `merchant_self`；但现行业务裁决是商户服务工单由 V022 独立表承接，设施工单与商户服务工单彻底分表、各自状态链。故 `merchant_self` 在 V166 的当前允许值是待对齐缺口，不把它作为同表承接的业务口径；整改与巡检仍由平台、设备告警或巡检异常发起。
-- 主流程：`pending_assign` → `assigned` → `processing`。完成时按 `acceptance_by` 分流：`handler` 直接 `closed`，`supervisor` 进 `pending_acceptance`，`reporter` 进 `pending_review`。
-- `accept` / `review` 可记录 `satisfaction` 1-5，关闭时写 `verified_at`、`verifier_id`，并对关联 `equipment_id` 的设备回写 `normal`。
-- 支持 `suspend` / `resume`；只有活动态可挂起，挂起后恢复为 `processing`。
-- 事件解耦：设备 `alarm/fault` 自动转 `repair/high`；巡检异常 `to_work_order` 自动转 `rectification/normal` 并把 `work_order_id` 回写巡检任务。
+- 主流程：`pending_assign` → `assigned` → `processing`。完成时关联了设备的报修单一律进 `pending_acceptance`（两道：主管先验收为 `accepted`，两项齐全才关闭）；其余按 `acceptance_by` 分流：`handler` 直接 `closed`，`supervisor` 进 `pending_acceptance`，`reporter` 进 `pending_review`。
+- 单闸下 `accept` / `review` 可记录 `satisfaction` 1-5，关闭时写 `verified_at`、`verifier_id`；两道（关联设备的报修）下主管验收（`accept`）写 `verified_at`／`verifier_id`、不评满意度，提单确认（`review`）写 `reporter_confirmed_at`／`reporter_confirmed_by` 并由提单方评满意度。关闭时对关联 `equipment_id` 的设备回写 `normal`。
+- 支持 `suspend` / `resume`；只有活动态可挂起。恢复时有处理人的回 `processing`；待派单时挂起、没有处理人的回 `pending_assign`，派单仍只走 `assign`（设备告警自动工单仍须接警单明确接手才能派单）。
+- 事件解耦：设备 `alarm/fault` 自动转 `repair`（优先级取上报优先级，项目与位置取设备台账）并落接警单；巡检异常 `to_work_order` 自动转 `rectification/normal` 并把 `work_order_id` 回写巡检任务。
 
 **工单用料与费用承担方（2026-08-04 对齐 BSM「派单到具体人员或班组」条）**
 - 工单**用料必须从指定库房出库**，并**按当前平均进货价计成本**（平均进货价口径：每次新进货后把新到的货与原有库存合并算出新的平均单价，出库即按该均价计成本）。
@@ -100,23 +126,36 @@
 **关键端点（实际 Controller）**
 - `GET /api/v1/facility/work-orders`
 - `GET /api/v1/facility/work-orders/overdue`
+- `GET /api/v1/facility/work-orders/assigned-to-me`（员工自有手机「我的工单」，`facility.work_order.view_assigned`；含待我提单确认的单）
 - `GET /api/v1/facility/work-orders/{work_order_id}`
 - `POST /api/v1/facility/work-orders`
-- `POST /api/v1/facility/work-orders/{work_order_id}/assign`
+- `POST /api/v1/facility/work-orders/{work_order_id}/assign`（设备告警自动工单须接警单已明确接手）
+- `POST /api/v1/facility/work-orders/{work_order_id}/reassign`（已派单或处理中转派，`facility.work_order.manage`）
 - `POST /api/v1/facility/work-orders/{work_order_id}/start`
 - `POST /api/v1/facility/work-orders/{work_order_id}/complete`
 - `POST /api/v1/facility/work-orders/{work_order_id}/accept`
-- `POST /api/v1/facility/work-orders/{work_order_id}/review`
+- `POST /api/v1/facility/work-orders/{work_order_id}/review`（单闸回访；双闸下为提单方确认）
+- `POST /api/v1/facility/work-orders/{work_order_id}/rework`（验收或提单确认不通过退回返工，`facility.work_order.manage`，或本人即设备告警自动工单、员工手工建的关联设备报修单的提单确认承接人；这两类单已验收后只许承接人本人，第十二批操作员裁决第 16 条）
+- `POST /api/v1/facility/work-orders/{work_order_id}/confirmer`（指定提单确认人，`facility.work_order.manage`）
 - `POST /api/v1/facility/work-orders/{work_order_id}/suspend`
 - `POST /api/v1/facility/work-orders/{work_order_id}/resume`
 - `POST /api/v1/facility/work-orders/mark-overdue`
 - `POST /api/v1/facility/work-orders/policies`
+- `POST /api/v1/facility/alarms/policies`（告警响应时限一格，`facility.alarm.manage`）
+- `GET /api/v1/facility/alarms`（接警记录带逐次联系与接手明细，`facility.alarm.manage`）
+- `GET /api/v1/facility/alarms/mine`（我的接警，`facility.alarm.take_over`）
+- `POST /api/v1/facility/alarms/{alarm_id}/take-over`（明确接手，`facility.alarm.take_over`）
+- `GET /api/v1/facility/alarm-duties`、`POST /api/v1/facility/alarm-duties`、`POST /api/v1/facility/alarm-duties/{duty_id}/cancel`（接警值守安排，`facility.alarm.manage`）
+- `POST /api/v1/facility/alarms/{alarm_id}/disposition`（处置要求记录，`facility.alarm.take_over`）
+- `GET /api/v1/facility/fault-rules`（平台侧 `facility.alarm.manage`；维保单位 `facility.fault_rule.confirm`，只看本项目）、`POST /api/v1/facility/fault-rules`、`POST /api/v1/facility/fault-rules/{rule_id}/retire`（`facility.alarm.manage`）、`POST /api/v1/facility/fault-rules/{rule_id}/confirm`（`facility.fault_rule.confirm`）
 
 **迁移 / 表 / 权限**
-- 迁移：`V166__facility_work_orders.sql`
+- 迁移：`V166__facility_work_orders.sql`；双闸 `V531__facility_work_order_dual_confirmation.sql`（`facility_work_orders` 加 `confirmer_id`、`reporter_confirmed_at`、`reporter_confirmed_by`；验收策略不改）
 - 表：`facility_work_order_policy`、`facility_work_orders`
 - **商户服务工单表（分表，2026-08-04 第三轮用户裁决 UD-06 / DEC-R6-26）**：`merchant_service_work_orders` / `merchant_service_work_order_actions`（V022）是**商户服务工单的主写表**，与设施工单彻底分表、各自状态链；商户专区「我的工单」ADM-MER-004 继续走 `/api/v1/merchant-service/work-orders`（`MerchantServiceController` → V022），**不向 `/api/v1/facility/work-orders` 收敛**。V022 的 7 值 CHECK 已存在；应用可达状态仅六个（`created`/`assigned`/`processing`/`pending_merchant`/`resolved`/`closed`），`MerchantServiceService` 已实现创建、派单、处理、待商户确认、已处理待关闭、关闭和逾期打标/动作留痕；`cancelled` 只被识别为终态，无取消入口、当前不可达。仍待补齐 `cancelled` 的合法取消入口，并对齐 V166 现仍接受 `merchant_self`、其历史迁移注释还称 V022 停止写入、设施/商户工单看板分行对照及商户工单不显示首次响应指标。本轮只改 PRD 口径，**不改 CSV、不改代码、不改迁移**。
 - 权限：`facility.work_order.manage`（`domain=platform`、`risk_level=medium`、`requires_approval=false`）
+- 接警（V529 `V529__facility_alarm_takeover.sql`）：表 `facility_alarm_response_policies`、`facility_alarms`、`facility_alarm_duty_assignments`、`facility_alarm_contact_attempts`、`facility_alarm_takeovers`；权限 `facility.alarm.manage`、`facility.alarm.take_over`（`domain=facility`、`risk_level=medium`，授予现持 `facility.work_order.manage` 的角色与权限模板）
+- 故障处置规则（V530 `V530__facility_alarm_fault_rules.sql`）：表 `facility_fault_handling_rules`，`facility_alarms` 加 `applied_rule_id`、`disposition_note`、`disposition_by`、`disposition_at`；权限 `facility.fault_rule.confirm`（`domain=facility`、`risk_level=medium`，授予现持 `facility.work_order.manage` 的角色与权限模板，另进外包维保权限模板 `tpl_outsourced_facility`（本项目范围，按 V181 限时授权范式））
 
 ## 4. 楼宇巡检（V167）
 **业务规则**
@@ -191,11 +230,11 @@
 | 编号 | 待建/待对齐项 | 现状 | 需要的动作 | 依据 |
 |---|---|---|---|---|
 | A | **电损、水损归入物业费** | HP-E01 已停止单列公摊应收 | 保持物业费按原合同处理，独表实费与物业费分开；不补造历史事实（见§5） | Q21；现行能源与物业费 HTML 条款 |
-| B | **复杂类工单「主管验收 + 提单方确认」双闸** | `acceptance_by` 三选一，表达不了与关系 | 枚举扩 `supervisor_and_reporter` 或加独立标志位 `require_reporter_confirm`，并定「复杂类」判定口径（见 §1/§3） | BSM「运营细则（已确认）」条 |
+| B | **复杂类工单「主管验收 + 提单方确认」双闸** | HP-F02（V531）已实现：关联设备的报修单一律双闸，没关联设备的普通报修按配置验收（第十二批操作员裁决 2026-10-21 第 12 条） | 无（见 §3 实现现状） | BSM「运营细则（已确认）」条 |
 | C | **商户服务工单分表独立七态**（2026-08-04 裁决改向：原「收敛到 V166」已撤销） | V022 的 7 值 CHECK 已存在；应用可达状态仅六个（`created`/`assigned`/`processing`/`pending_merchant`/`resolved`/`closed`）；`cancelled` 只被识别为终态，无取消入口、当前不可达 | 补齐 `cancelled` 的合法取消入口；对齐 V166 `merchant_self` 当前仍可写入、V166 历史注释称 V022 停止写入，以及设施/商户看板分行对照与商户单不显示首次响应指标（见 §3） | M08-CX-019/020；ENUM「商户服务工单状态」「工单时效」条 |
 | D | **能源代收依据** | 写入、结算及 V480 DB CHECK 已收敛为 none/by_contract；后者仅独表实费 | 不自动改判历史合同，实际费用仍须真实独表与单据（见§5） | UD-07 / DEC-R6-28；HP-E01 |
 | E | **工单来源补 `customer`** | `facility_work_orders.source` CHECK 现 4 值、无 `customer` | CHECK 扩 `customer`；客人端投诉直接落工单、客人为提单方、关闭须其确认（见 §1 `source` 行） | 第三轮用户裁决 UD-03 / DEC-R6-14；BSM 物业服务章·主要功能 |
-| F | **工单九态分支语义落地** | `acceptance_by` 三选一，表达不了「主管验收 ＋ 提单方确认」双闸；`accepted` 现不可达 | 按 UD-05 / DEC-R6-13 三类分支实现：无争议类完成即结、投诉类提单方确认、复杂类双闸；并定「复杂类」判定口径（与本表 B 项同一改造） | 第三轮用户裁决 UD-05 / DEC-R6-13；ENUM「物业工单状态」条 |
+| F | **工单九态分支语义落地** | HP-F02（V531）已实现复杂类双闸，`accepted` 可达（主管已验收、待提单确认） | 无（与本表 B 项同一改造，见 §3） | 第三轮用户裁决 UD-05 / DEC-R6-13；ENUM「物业工单状态」条 |
 | G | **设备维保五类及记录承载** | V165 / `FacilityEquipmentRequest` 无 `maintenance_type` 字段、CHECK、维保记录或工单关联 | 按 ENUM 逐字补定期保养、例行巡检、故障维修、安全检测、部件更换的字段、值域与维保记录/工单关联 | GROK-M08-028；ENUM「设备维保类型」条 |
 | H | **设施工单超时通知与升级主管** | `FacilityWorkOrderService.markOverdue` 仅置 `overtime=true`，无设施工单定时触发、通知、主管解析或升级留痕 | 补按响应/处理时限自动通知并升级主管的定时/服务/留痕链路 | GROK-M08-029；BSM「按响应时限和处理时限统计时效，超时自动升级通知主管」条 |
 | I | **设备到期自动生成维保单** | `FacilityEquipmentService` 仅有 `maintenance-due` 查询与 `maintenance-done` 回写，无到期扫描/自动创建设施工单 | 补到期扫描、按设备生成维保单及幂等/留痕链路 | GROK-M08-030；PGM「设备分电梯扶梯、暖通空调、配电供电、给排水消防四组台账」条 |
@@ -229,3 +268,13 @@
 | 2026-09-01 | 改 | 全文版本、§6 范围声明 | 版本升至 V1.02；范围声明改为不改代码、迁移与 OpenAPI，CSV/业务 HTML 仅限 James V0.06 已批准内容及机械镜像 | M08-FINAL-CX-02；Grok 交叉确认 |
 | 2026-09-01 | 改 | 全文版本、§0、§3、§6 C/裁决 4 | 版本升至 V1.03；将 V022 当前实现校正为 7 值 CHECK 已存在、应用仅六态可达，`cancelled` 无取消入口并列入待建 | M08 最终双席复核（二次） |
 | 2026-09-02 | 改 | 全文版本、重建动因 | 版本升至 V1.04；将 V165–V168 从“独立闭环”校正为独立领域骨架，并明确尚不等于权威业务闭环全部完成 | M08 Codex/Grok 全量终审双确认 |
+| 2026-10-21 | 改 | 全文版本、§2、§3 | 版本升至 V1.08；告警/故障上报须当场选优先级，自动工单取上报优先级与设备项目、位置；登记接警单、告警类型×优先级响应时限、接警值守安排、首次派发留痕与转备用、明确接手、超时只在当班范围升级、换班须下一班明确接手、故障处置规则两方确认与未覆盖转当班专业处置人员判定、处置要求只记录不远程停机，及后台接警页签、外包维保规则确认与员工手机接手入口的实现现状 | HP-F01；BSM「连接物业服务，设备告警与巡检异常自动生成物业工单，派单到人」条；决策台账 2026-10-17 第 12 项 Q17A/B、Q17C、Q17D；第十二批操作员裁决 2026-10-21 第 1 条 |
+| 2026-10-21 | 改 | §1、§3、§6 B/F | 同批 V1.08；复杂类大型设备报修「主管验收＋提单方确认」双闸（报修类一律）、两项分别留存齐全才关闭、已验收仍按原时效升级、自动大型维修工单提单确认由设备在岗责任人承接及物业主管指定确认人留痕、验收不通过退回原维修人返工的实现现状 | HP-F02；BSM「复杂类（大型设备报修）需主管/物业验收，并且一律须提单方确认才能关闭」；第十二批操作员裁决 2026-10-21 第 2 条 |
+| 2026-10-21 | 改 | §2 | 同批 V1.08；设备报废须所有权主体审批后才置报废、禁止直接改报废与报废后复活，报废单分记审批、实物处置凭证与残值／损失款项，财务关联原报废单与设备项目，后台报废处置页签的实现现状 | HP-F03；BSM「楼宇设备报废由设备所有权主体确认」；决策台账 2026-10-17 第 13 项 Q19 |
+| 2026-10-21 | 改 | §2、§3 | 同批 V1.08（复核修正）：接手人班中被临时顶班即进换班交接；响应时限保存接幂等与失败审计；接警消息优先级与时限改中文／本地时间；自动大型维修工单的提单确认承接人不持 manage 也可确认与退回返工；双闸写操作锁行；故障处置规则确认权限对外包维保的授予方式写实为权限模板 | HP-F01、HP-F02 复核；BSM「换班时未结告警须由下一班明确确认接手」「由该设备或点位的在岗责任人承接提单确认」；第十二批操作员裁决 2026-10-21 第 1、2 条 |
+| 2026-10-21 | 改 | §3 | 同批 V1.08：补设施工单转派（已派单或处理中由物业主管改派他人，原因必填，处理时限不重算、超时照常升级，留痕原处理人、新处理人和原因）；设备告警自动工单在接警单被明确接手前不派单；设备未登记责任人时物业主管指定提单确认人的留痕不含原承接人 | HP-F02、HP-F01 复核；BSM「派单、转派、升级、关闭都要留痕」「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」；第十二批操作员裁决 2026-10-21 第 9 条 |
+| 2026-10-21 | 改 | §1、§3、§6 B | 同批 V1.08：改为关联设备的报修单（含设备告警自动工单）才走主管验收＋提单方确认两道，没关联设备的普通报修按后台配置验收，验收方式不再有「主管验收＋提单方确认」可选、V531 不再改报修策略；员工自有手机「我的工单」一并列出待我提单确认的单，可确认或退回返工 | HP-F02；第十二批操作员裁决 2026-10-21 第 12、13 条 |
+| 2026-10-21 | 改 | §1、§3 | 同批 V1.08（复核修正）：§1 工单状态行按现行实现改写（`accepted`＝主管已验收、待提单确认，两道先后不限、两项齐全才关闭、不经 `pending_review`，复杂类判定口径已定）；§3 两道下主管验收与提单确认分写字段；待派单时挂起的工单恢复回待派单（派单仍须过告警接手闸）；开始、完成、挂起、恢复与转派同锁工单行；派单、提单确认被拒留失败审计；退回返工、指定确认人同键重放返回首次结果；端点清单退回返工补承接人本人 | HP-F02 复核；BSM「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」；BSM「派单、转派、升级、关闭都要留痕」；第十二批操作员裁决 2026-10-21 第 2、9、12 条 |
+| 2026-10-21 | 改 | §3 | 同批 V1.08：员工在后台手工建的关联设备报修单，提单员工即提单确认承接人（建单即记，建单未带项目的取设备台账项目），提单确认与提单确认不通过退回只许承接人本人做、主管验收照旧，进其手机「我的工单」待我提单确认；提单人就是本次维修人时由物业主管指定他人并留痕；后台工作台对此类单只给承接人本人显示「提单确认」，另显示指定确认人 | HP-F02；第十二批操作员裁决 2026-10-21 第 15 条「提单员工本人（推荐）」 |
+| 2026-10-21 | 改 | §3 | 同批 V1.08（复核修正）：提单员工＝在后台点「新建工单」的当前登录员工，服务端取当前登录账号记为 `reporter_id`（后台建单表单本无提单人输入，不取请求体里的值），建单即记为提单确认承接人；后台工作台的「提单确认」对设备告警自动工单与员工手工建的关联设备报修单只给不是本次维修人的承接人本人显示 | HP-F02；第十二批操作员裁决 2026-10-21 第 15 条「和告警单一样，提单员工就是承接人」；BSM L1385 |
+| 2026-10-21 | 改 | §3 | 同批 V1.08：设备告警自动工单与员工手工建的关联设备报修单主管已验收后，退回返工只许承接人本人（旁人 403 `CONFIRMER_MISMATCH` 并记失败审计），待验收时主管验收不通过的退回照旧；后台工作台对这类已验收单的「退回返工」只给不是本次维修人的承接人本人显示；端点清单同步 | HP-F02；第十二批操作员裁决 2026-10-21 第 16 条「只许承接人本人（推荐）」 |

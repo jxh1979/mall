@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
@@ -125,6 +125,11 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
   const leased = num(metrics["occupancy.leased_area"]);
   const signedPending = num(metrics["occupancy.signed_pending_area"]);
   const parkingRate = num(metrics["occupancy.parking_rate"]);
+  const parkingUtilization = num(metrics["parking.utilization_rate"]);
+  const parkingTurnover = num(metrics["parking.daily_turnover"]);
+  const parkingRevenue = num(metrics["parking.revenue"]);
+  const parkingCreditShare = num(metrics["parking.credit_share"]);
+  const parkingAvgStay = num(metrics["parking.avg_stay_minutes"]);
   const expiring90 = num(metrics["contract.expiring_90d"]);
   const vacantArea = rentable !== null && leased !== null ? rentable - leased : null;
 
@@ -294,7 +299,13 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>空置面积</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-vacant" onClick={() => enterKpiFocus("vacant")}>{sqm(vacantArea)}</button><small>可招商,查看空置铺位</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>已签待交</span><button type="button" className="admin-kpi-value" data-testid="occupancy-signed-pending" onClick={() => navigateTo?.("ADM-LEASE-002")}>{sqm(signedPending)}</button><small>签约未生效,不计已租，查看租赁状态看板</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>90 天内到期</span><button type="button" className="admin-kpi-value" data-testid="occupancy-kpi-expiring" onClick={() => enterKpiFocus("expiring")}>{expiring90 === null ? "—" : expiring90}</button><small>生效合同,查看到期预警</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>车位出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-parking-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(parkingRate)}</button><small>单列口径,不与铺位混算，查看租赁状态看板</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>车位出租率</span><button type="button" className="admin-kpi-value" data-testid="occupancy-parking-rate" onClick={() => navigateTo?.("ADM-LEASE-002")}>{pct(parkingRate)}</button><small>单列口径,不与铺位混算（月租车位与在职员工登记车辆计入），查看租赁状态看板</small></div>
+              {/* HP-P01（BSM「停车场」章「连接经营看板」）：停车场五项与车位出租率并列。 */}
+              <div className="admin-kpi-card"><span>车位使用率</span><strong className="admin-kpi-value" data-testid="occupancy-parking-utilization">{pct(parkingUtilization)}</strong><small>停车系统回传在场车辆÷车位</small></div>
+              <div className="admin-kpi-card"><span>日周转次数</span><strong className="admin-kpi-value" data-testid="occupancy-parking-turnover">{parkingTurnover === null ? "—" : `${parkingTurnover.toFixed(2)} 次`}</strong><small>当日入场车次÷车位</small></div>
+              <div className="admin-kpi-card"><span>停车收入</span><strong className="admin-kpi-value" data-testid="occupancy-parking-revenue">{money(parkingRevenue)}</strong><small>临停停车费实收＋当期车位月租账单</small></div>
+              <div className="admin-kpi-card"><span>抵免占比</span><strong className="admin-kpi-value" data-testid="occupancy-parking-credit-share">{pct(parkingCreditShare)}</strong><small>用了消费抵免的临停离场车次÷临停离场车次</small></div>
+              <div className="admin-kpi-card"><span>平均停留时长</span><strong className="admin-kpi-value" data-testid="occupancy-parking-avg-stay">{parkingAvgStay === null ? "—" : `${parkingAvgStay.toFixed(1)} 分钟`}</strong><small>当日离场车辆</small></div>
             </div>
             {vacantSection}
             {expiringSection}

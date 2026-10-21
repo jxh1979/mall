@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -153,6 +153,9 @@ public interface AnalyticsRepository {
      * 已租=有生效合同覆盖当日;已签待交=pending_effective 绑定(不算已租,单列)。
      */
     AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf);
+
+    /** HP-P01：各项目该营业日的停车看板事实（无停车数据的项目不出现）。 */
+    Map<String, AnalyticsRecords.ParkingDayFacts> parkingDayFacts(LocalDate businessDate);
 
     /** S3:90 天内到期的生效合同数(到期预警 KPI)。 */
     long countExpiringContracts(LocalDate asOf, int windowDays);

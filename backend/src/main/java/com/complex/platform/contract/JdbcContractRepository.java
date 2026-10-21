@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -595,7 +595,7 @@ class JdbcContractRepository implements ContractRepository {
     @Override
     public ContractRentBillRecord insertRentBill(ContractRentBillRecord b, LocalDate dueDate) {
         Instant now = Instant.now();
-        String sourceType = "contract_" + b.feeType();          // contract_rent / contract_property_fee / contract_energy_fee
+        String sourceType = "contract_" + b.feeType();          // contract_rent / contract_property_fee / contract_energy_fee / contract_parking_monthly
         // 第五轮裁决第 2 条：租金调整在同一合同上重排——该 (合同,期,费目) 已有作废账单时，新应收的来源单号/单据号带重排序号，避开被作废原行仍占着的
         // 「一个来源单据一条台账」唯一键（V344 uq_ar_ap_items_direction_source）与单据号唯一键；来源单号仍以「合同 id|」起头（未清应收按前缀汇总）。
         Integer rebill = jdbcTemplate.queryForObject("SELECT count(*) FROM contract_rent_bills WHERE contract_id = :cid AND period = :p"
@@ -667,6 +667,7 @@ class JdbcContractRepository implements ContractRepository {
         List<String> chain = contractChainIds(c);
         Map<String, Object> rt = c.rentTerms() == null ? Map.of() : c.rentTerms();
         long propertyFee = rt.get("propertyFeeCent") instanceof Number n ? n.longValue() : 0L;
+        long parkingMonthly = rt.get("parkingMonthlyCent") instanceof Number n ? n.longValue() : 0L;
         boolean energyByContract = "by_contract".equals(c.energyFeeBasis());
         List<String> missing = new java.util.ArrayList<>();
         for (java.time.YearMonth ym = java.time.YearMonth.from(c.effectiveDate()); !ym.isAfter(through); ym = ym.plusMonths(1)) {
@@ -676,6 +677,9 @@ class JdbcContractRepository implements ContractRepository {
             }
             if (propertyFee > 0 && !billExistsInChain(chain, period, "property_fee")) {
                 missing.add(period + ":property_fee");
+            }
+            if (parkingMonthly > 0 && !billExistsInChain(chain, period, "parking_monthly")) {
+                missing.add(period + ":parking_monthly");
             }
             if (energyByContract && merchantEnergyChargeUnbilled(c.merchantId(), c.projectId(), period)) {
                 missing.add(period + ":energy_fee");

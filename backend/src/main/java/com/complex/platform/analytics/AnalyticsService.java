@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -76,6 +76,8 @@ public class AnalyticsService {
 
     private static final String MERCHANT_SCOPE_UNAVAILABLE =
             "source table has no merchant_id; merchant-scoped value not available";
+    private static final String PARKING_NOTE =
+            "parking metrics are platform-scope only (parking tables have no merchant_id; not emitted when denominator is zero)";
 
     /**
      * T12 看板七类指标目录（与 r5-aggregation-metrics-draft §2 / DashboardAggregationJob 对齐）。
@@ -127,7 +129,13 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.OCC_LEASED_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.OCC_SIGNED_PENDING_AREA, "leasing", "sqm", true, MERCHANT_SCOPE_UNAVAILABLE),
             new MetricCatalogEntry(DashboardAggregationJob.OCC_PARKING_RATE, "leasing", "rate", true,
-                    "parking occupancy is platform-scope only (not emitted when parking area is zero)"),
+                    "parking rental rate counts spaces (contract-let spaces + registered active staff vehicles); not emitted when no parking spaces"),
+            // HP-P01 停车场五项（与车位出租率并列为地产指标，平台口径）：
+            new MetricCatalogEntry(DashboardAggregationJob.PARKING_UTILIZATION_RATE, "leasing", "rate", true, PARKING_NOTE),
+            new MetricCatalogEntry(DashboardAggregationJob.PARKING_DAILY_TURNOVER, "leasing", "rate", true, PARKING_NOTE),
+            new MetricCatalogEntry(DashboardAggregationJob.PARKING_REVENUE, "leasing", "cent", true, PARKING_NOTE),
+            new MetricCatalogEntry(DashboardAggregationJob.PARKING_CREDIT_SHARE, "leasing", "rate", true, PARKING_NOTE),
+            new MetricCatalogEntry(DashboardAggregationJob.PARKING_AVG_STAY_MINUTES, "leasing", "minutes", true, PARKING_NOTE),
             new MetricCatalogEntry(DashboardAggregationJob.CONTRACT_EXPIRING_90D, "leasing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
             // V220 招商漏斗/租售比(平台口径;integration_order_syncs 无 merchant_id → rent_to_sales 仅平台级):
             new MetricCatalogEntry(DashboardAggregationJob.LEASING_LEAD_COUNT, "leasing", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
@@ -436,6 +444,7 @@ public class AnalyticsService {
             new MonthlyMetricEntry(DashboardAggregationJob.AR_COLLECTION_RATE_MTD, "当月回款率", "finance", "rate"),
             new MonthlyMetricEntry(DashboardAggregationJob.OCC_RATE, "出租率", "leasing", "rate"),
             new MonthlyMetricEntry(DashboardAggregationJob.OCC_PARKING_RATE, "车位出租率", "leasing", "rate"),
+            new MonthlyMetricEntry(DashboardAggregationJob.PARKING_REVENUE, "停车收入", "leasing", "cent"),
             new MonthlyMetricEntry(DashboardAggregationJob.OCC_SIGNED_PENDING_AREA, "已签待交面积", "leasing", "sqm"),
             new MonthlyMetricEntry(DashboardAggregationJob.CONTRACT_EXPIRING_90D, "90天内到期合同", "leasing", "count"),
             new MonthlyMetricEntry(DashboardAggregationJob.WO_BACKLOG, "工单积压", "facility", "count"));

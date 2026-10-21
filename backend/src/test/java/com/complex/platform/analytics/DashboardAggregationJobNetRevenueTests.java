@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -59,6 +59,33 @@ class DashboardAggregationJobNetRevenueTests {
         new DashboardAggregationJob(zero).refreshSnapshots(BUSINESS_DATE);
         assertThat(zero.upserts).doesNotContainKey(DashboardAggregationJob.OCC_RATE + "|platform");
         assertThat(zero.upserts).doesNotContainKey(DashboardAggregationJob.OCC_PARKING_RATE + "|platform");
+    }
+
+    /**
+     * HP-P01 R10（BSM「停车场」章「连接经营看板」、BSM「出租」条「车位出租率单独列（月租和员工车位占用计入）」；第十二批操作员裁决补充第 5～7 条）：
+     * 五项停车指标按各项目当日事实合计后求比，分母为 0 不产出；车位出租率按车位个数（合同已租＋在职员工登记车辆）÷车位个数。
+     */
+    @Test
+    void parkingMetricsEmittedFromDayFactsAndRentalRateCountsSpaces() {
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.occupancy = new AnalyticsRecords.OccupancyAreas(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                new BigDecimal("10"), new BigDecimal("4"), BigDecimal.ZERO);
+        repository.parkingFacts = Map.of(
+                "p1", new AnalyticsRecords.ParkingDayFacts(100, 200, 30, 100, 3, 1, 4, 390, 20_800),
+                "p2", new AnalyticsRecords.ParkingDayFacts(50, 50, 10, 50, 1, 0, 1, 30, 200));
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.upserts.get("parking.utilization_rate|platform")).isEqualByComparingTo("0.6000");
+        assertThat(repository.upserts.get("parking.daily_turnover|platform")).isEqualByComparingTo("0.2667");
+        assertThat(repository.upserts.get("parking.revenue|platform")).isEqualByComparingTo("21000");
+        assertThat(repository.upserts.get("parking.credit_share|platform")).isEqualByComparingTo("0.2500");
+        assertThat(repository.upserts.get("parking.avg_stay_minutes|platform")).isEqualByComparingTo("84.00");
+        assertThat(repository.upserts.get(DashboardAggregationJob.OCC_PARKING_RATE + "|platform")).isEqualByComparingTo("0.4000");
+
+        CapturingAnalyticsRepository zero = new CapturingAnalyticsRepository();
+        new DashboardAggregationJob(zero).refreshSnapshots(BUSINESS_DATE);
+        assertThat(zero.upserts.keySet()).noneMatch(key -> key.startsWith("parking."));
     }
 
     @Test
@@ -506,6 +533,12 @@ class DashboardAggregationJobNetRevenueTests {
 
         public AnalyticsRecords.OccupancyAreas occupancyAreas(LocalDate asOf) {
             return occupancy;
+        }
+
+        Map<String, AnalyticsRecords.ParkingDayFacts> parkingFacts = Map.of();
+
+        public Map<String, AnalyticsRecords.ParkingDayFacts> parkingDayFacts(LocalDate businessDate) {
+            return parkingFacts;
         }
 
         public long countExpiringContracts(LocalDate asOf, int windowDays) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // fix/ui-pages 经营指标码 → 业务指标名（展示层翻译，接口仍用原码）。
 // 未知码原样返回，新增指标逐步补此表。
 const METRIC_LABELS: Record<string, string> = {
@@ -30,7 +30,14 @@ const METRIC_LABELS: Record<string, string> = {
   "occupancy.rentable_area": "可租面积",
   "occupancy.total_area": "铺位总面积",
   "occupancy.signed_pending_area": "已签待入驻面积",
-  "occupancy.parking_rate": "车位使用率",
+  // HP-P01：occupancy.parking_rate 是车位出租率（月租与员工车位占用计入），车位使用率是停车场另列的指标。
+  "occupancy.parking_rate": "车位出租率",
+  // 停车场（BSM「停车场」章「连接经营看板」，与车位出租率并列）
+  "parking.utilization_rate": "车位使用率",
+  "parking.daily_turnover": "日周转次数",
+  "parking.revenue": "停车收入",
+  "parking.credit_share": "抵免占比",
+  "parking.avg_stay_minutes": "平均停留时长",
   // 招商漏斗 / 租售比(V220)
   "leasing.lead_count": "新增招商线索",
   "leasing.intent_conversion_rate": "线索转意向率",

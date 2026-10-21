@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -53,21 +55,37 @@ class FacilityEquipmentServiceTests {
     void changeStatus_alarmRequiresSourceThenSetsAlarmFields() {
         FacilityEquipmentRecord rec = service.create(req("hvac", null, null));
         assertThatThrownBy(() -> service.changeStatus(rec.id(),
-                new FacilityEquipmentStatusRequest("alarm", null, "温度异常", null)))
+                new FacilityEquipmentStatusRequest("alarm", null, "温度异常", "high", null)))
                 .isInstanceOf(ApiException.class);
         FacilityEquipmentRecord alarmed = service.changeStatus(rec.id(),
-                new FacilityEquipmentStatusRequest("alarm", "iot", "温度异常", null));
+                new FacilityEquipmentStatusRequest("alarm", "iot", "温度异常", "high", null));
         assertThat(alarmed.status()).isEqualTo("alarm");
         assertThat(alarmed.alarmSource()).isEqualTo("iot");
         assertThat(alarmed.alarmRaisedAt()).isNotNull();
     }
 
+    /** HP-F01（2026-10-21 操作员裁决补充第 1 条）：告警/故障上报须当场选优先级（紧急/高/普通），否则拒绝。 */
+    @Test
+    void changeStatus_alarmOrFaultRequiresPriority() {
+        FacilityEquipmentRecord rec = service.create(req("elevator", null, null));
+        for (String status : List.of("alarm", "fault")) {
+            for (String priority : java.util.Arrays.asList(null, "", "critical")) {
+                assertThatThrownBy(() -> service.changeStatus(rec.id(),
+                        new FacilityEquipmentStatusRequest(status, "manual", "困人", priority, null)))
+                        .isInstanceOfSatisfying(ApiException.class,
+                                e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+            }
+        }
+        assertThat(service.changeStatus(rec.id(),
+                new FacilityEquipmentStatusRequest("maintenance", null, null, null, null)).status()).isEqualTo("maintenance");
+    }
+
     @Test
     void changeStatus_leavingAlarmClearsAlarmFields() {
         FacilityEquipmentRecord rec = service.create(req("power", null, null));
-        service.changeStatus(rec.id(), new FacilityEquipmentStatusRequest("alarm", "manual", "跳闸", null));
+        service.changeStatus(rec.id(), new FacilityEquipmentStatusRequest("alarm", "manual", "跳闸", "urgent", null));
         FacilityEquipmentRecord cleared = service.changeStatus(rec.id(),
-                new FacilityEquipmentStatusRequest("normal", null, null, null));
+                new FacilityEquipmentStatusRequest("normal", null, null, null, null));
         assertThat(cleared.status()).isEqualTo("normal");
         assertThat(cleared.alarmSource()).isNull();
         assertThat(cleared.alarmRaisedAt()).isNull();
@@ -77,14 +95,14 @@ class FacilityEquipmentServiceTests {
     void changeStatus_rejectsUnknownStatus() {
         FacilityEquipmentRecord rec = service.create(req("water_fire", null, null));
         assertThatThrownBy(() -> service.changeStatus(rec.id(),
-                new FacilityEquipmentStatusRequest("broken", null, null, null)))
+                new FacilityEquipmentStatusRequest("broken", null, null, null, null)))
                 .isInstanceOf(ApiException.class);
     }
 
     @Test
     void maintenanceDone_resetsToNormalAndRecomputesDueFromNow() {
         FacilityEquipmentRecord rec = service.create(req("elevator", 30, LocalDate.parse("2025-01-01")));
-        service.changeStatus(rec.id(), new FacilityEquipmentStatusRequest("fault", null, null, null));
+        service.changeStatus(rec.id(), new FacilityEquipmentStatusRequest("fault", null, null, "normal", null));
         FacilityEquipmentRecord done = service.recordMaintenanceDone(rec.id(), "k_done");
         assertThat(done.status()).isEqualTo("normal");
         assertThat(done.lastMaintenanceAt()).isNotNull();
@@ -96,7 +114,12 @@ class FacilityEquipmentServiceTests {
     void maintenanceDue_filtersOverdueAndExcludesRetired() {
         FacilityEquipmentRecord due = service.create(req("elevator", 10, LocalDate.now().minusDays(40)));
         FacilityEquipmentRecord notDue = service.create(req("hvac", 10, LocalDate.now().plusDays(40)));
-        service.changeStatus(due.id(), new FacilityEquipmentStatusRequest("retired", null, null, null));
+        // HP-F03：报废只能经报废审批落库（不再走状态变更），这里直接置内存仓。
+        FacilityEquipmentRecord d = repo.store.get(due.id());
+        repo.updateEquipment(new FacilityEquipmentRecord(d.id(), d.name(), d.equipmentType(), d.spaceId(), d.brand(),
+                d.model(), d.vendor(), d.responsibleUserId(), "retired", d.maintenanceCycleDays(), d.lastMaintenanceAt(),
+                d.nextMaintenanceDue(), d.installDate(), d.warrantyUntil(), null, null, null, d.projectId(),
+                d.merchantId(), d.createdAt(), d.updatedAt()));
         // due 已报废 -> 不应出现；notDue 未到期 -> 不应出现
         assertThat(service.listMaintenanceDue().items()).extracting(FacilityEquipmentRecord::id)
                 .doesNotContain(due.id(), notDue.id());

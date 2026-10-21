@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import java.util.List;
 
 /**
@@ -137,7 +139,14 @@ public final class SettlementConfigWriteRequests {
      * priceCent 必填 ≥0(0=商户让利型合法价,S5 同一套 0/NULL 语义)。
      */
     public record InternalPriceItemRequest(String idempotencyKey, String itemCode, String merchantId,
-                                           String category, String itemName, Long priceCent) {
+                                           String category, String itemName, Long priceCent, String providerEntityId) {
+        /**
+         * HP-P01：提供方为经营主体（如城市项目公司经营的停车，品类 parking_credit「停车抵免（每小时）」）时填 providerEntityId、merchantId 留空，二者恰填其一。
+         */
+        public InternalPriceItemRequest(String idempotencyKey, String itemCode, String merchantId, String category, String itemName,
+                                        Long priceCent) {
+            this(idempotencyKey, itemCode, merchantId, category, itemName, priceCent, null);
+        }
     }
 
     /** 软删 body(§2 软删铁律):archive_reason 必填。 */

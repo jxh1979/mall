@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -25,7 +25,7 @@ function shortId(id: string | null | undefined): string {
 type ContractRow = {
   id: string; merchantId: string; lifecycleStatus: string;
   effectiveDate?: string; expiryDate?: string; commissionMode?: string | null; projectId?: string | null;
-  rentTerms?: { businessScope?: string; allowedCategories?: string[]; rentMode?: string; rentBillingMode?: string; baseRentCent?: number; perSqmRentCent?: number; depositAdjustment?: DepositAdjustment | null } | null;
+  rentTerms?: { businessScope?: string; allowedCategories?: string[]; rentMode?: string; rentBillingMode?: string; baseRentCent?: number; perSqmRentCent?: number; parkingMonthlyCent?: number; depositAdjustment?: DepositAdjustment | null } | null;
   reviewId?: string | null;   // HP-C01：提交审批开的统一审批复核单（空=未提交）
   depositCent?: number | null;   // HP-C03：押金由后端按「收取月数×月租」计算，前端只读
 };
@@ -100,12 +100,15 @@ const RENT_BILLING_MODES = [
   { v: "fixed_only", l: "纯月租（只收月租）" }, { v: "turnover_only", l: "纯提成（只按营业额提成）" },
   { v: "higher_of", l: "取高（月租与提成谁高收谁）" }, { v: "sum", l: "叠加（月租 + 提成都收）" },
 ];
-type RentTermsForm = { rentMode: string; rentBillingMode: string; baseRentYuan: string; perSqmYuan: string };
-// 起草与草稿编辑共用：租金口径＋收租方式＋月租或每平米单价（元→分，空/0 不带）。
+type RentTermsForm = { rentMode: string; rentBillingMode: string; baseRentYuan: string; perSqmYuan: string; parkingMonthlyYuan?: string };
+// 起草与草稿编辑共用：租金口径＋收租方式＋月租或每平米单价（元→分，空/0 不带）；
+// HP-P01（BSM L1437「商户月租车位按合同约定、按月出账，账单类型为「车位月租」」）：约定的车位月租（元/月→分，空/0 不带）。
 function rentTermsOf(f: RentTermsForm): Record<string, unknown> {
   const rentTerms: Record<string, unknown> = { rentMode: f.rentMode, rentBillingMode: f.rentBillingMode };
   const cent = Math.round(Number(f.rentMode === "per_sqm" ? f.perSqmYuan : f.baseRentYuan) * 100);
   if (Number.isFinite(cent) && cent > 0) rentTerms[f.rentMode === "per_sqm" ? "perSqmRentCent" : "baseRentCent"] = cent;
+  const parking = Math.round(Number(f.parkingMonthlyYuan ?? "") * 100);
+  if (Number.isFinite(parking) && parking > 0) rentTerms.parkingMonthlyCent = parking;
   return rentTerms;
 }
 // 第三轮控制席约定：齐单核对与「终审自动落账」只作用于落账前的「待结算」；押金抵扣中/欠费追缴中已落账。
@@ -146,7 +149,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
   const [configNotice, setConfigNotice] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState({
     merchantId: "", contractSubjectId: "", settlementSubjectId: "", effectiveDate: "", expiryDate: "",
-    baseRentYuan: "", perSqmYuan: "", rentMode: "monthly_fixed", rentBillingMode: "fixed_only",
+    baseRentYuan: "", perSqmYuan: "", parkingMonthlyYuan: "", rentMode: "monthly_fixed", rentBillingMode: "fixed_only",
     commissionMode: "fixed_ratio", energyFeeBasis: "none",
     businessScope: "", allowedCategories: [] as string[],
     depositYuan: "",   // 第三轮裁决第 1 条：纯提成合同录入的合同约定押金（元）
@@ -285,7 +288,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         depositCent: draft.rentBillingMode === "turnover_only" ? Math.round(Number(draft.depositYuan) * 100) : undefined,
       });
       setActionResult({ action: "contract_drafted", merchantId: draft.merchantId.trim() });
-      setDraft({ ...draft, merchantId: "", baseRentYuan: "", perSqmYuan: "", businessScope: "", allowedCategories: [], depositYuan: "" });
+      setDraft({ ...draft, merchantId: "", baseRentYuan: "", perSqmYuan: "", parkingMonthlyYuan: "", businessScope: "", allowedCategories: [], depositYuan: "" });
       setCreateOpen(false);
       reload();
     } catch (createError) {
@@ -342,6 +345,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     setTermsEdit({
       id: row.id, rentMode: rt.rentMode ?? "monthly_fixed", rentBillingMode: rt.rentBillingMode ?? "fixed_only",
       baseRentYuan: rt.baseRentCent ? String(rt.baseRentCent / 100) : "", perSqmYuan: rt.perSqmRentCent ? String(rt.perSqmRentCent / 100) : "",
+      parkingMonthlyYuan: rt.parkingMonthlyCent ? String(rt.parkingMonthlyCent / 100) : "",
       depositYuan: rt.rentBillingMode === "turnover_only" && row.depositCent ? String(row.depositCent / 100) : "",
     });
   }
@@ -748,6 +752,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
             <label>收租方式<select aria-label="编辑-收租方式" value={termsEdit.rentBillingMode} onChange={(e) => setTermsEdit({ ...termsEdit, rentBillingMode: e.target.value })}>
               {RENT_BILLING_MODES.map((m) => <option key={m.v} value={m.v}>{m.l}</option>)}
             </select></label>
+            <label>车位月租（元/月）<input aria-label="编辑-车位月租（元/月）" type="number" min="0" placeholder="未约定月租车位留空" value={termsEdit.parkingMonthlyYuan ?? ""} onChange={(e) => setTermsEdit({ ...termsEdit, parkingMonthlyYuan: e.target.value })} /></label>
             {termsEdit.rentBillingMode === "turnover_only" ? (
               <label>押金（元）<input aria-label="编辑-押金（元）" type="number" min="0" placeholder="合同约定押金（元）" value={termsEdit.depositYuan} onChange={(e) => setTermsEdit({ ...termsEdit, depositYuan: e.target.value })} /></label>
             ) : <small style={{ color: "var(--adm-text-3)" }}>押金＝收取月数×月租，保存后由系统按公式重算。</small>}
@@ -827,6 +832,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                     </select>
                   </label>
                   {draft.rentBillingMode !== "fixed_only" ? <small style={{ color: "var(--adm-text-3)" }}>提成规则（阶梯档位）在合同生效后于「审批与配置」页按合同配置。</small> : null}
+                  <label>车位月租（元/月）<input aria-label="车位月租（元/月）" type="number" min="0" placeholder="未约定月租车位留空" value={draft.parkingMonthlyYuan} onChange={(e) => setDraft({ ...draft, parkingMonthlyYuan: e.target.value })} /></label>
                   {/* 第三轮裁决第 1 条：纯提成合同没有月租，押金按合同约定金额录入（不走月数公式），必填且不得为零。 */}
                   {draft.rentBillingMode === "turnover_only" ? (
                     <label>押金（元）<input aria-label="押金（元）" type="number" min="0" placeholder="合同约定押金（元）" value={draft.depositYuan} onChange={(e) => setDraft({ ...draft, depositYuan: e.target.value })} /></label>

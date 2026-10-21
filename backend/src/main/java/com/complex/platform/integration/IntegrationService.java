@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.integration.IntegrationValidation.*;
 
 import com.complex.platform.common.api.ApiException;
@@ -33,6 +35,13 @@ public class IntegrationService {
     private final IntegrationOrderSyncService orderSyncService;
     private final IntegrationReconciliationService reconciliationService;
     private final ThirdPartyScaffoldingService thirdPartyService;
+    // HP-P01：停车系统回写（适配器类型 parking 且字段映射成功时落停车业务）。可选注入，单测 new 构造不传即只留信封。
+    private com.complex.platform.parking.ParkingVendorService parkingVendorService;
+
+    @Autowired(required = false)
+    public void setParkingVendorService(com.complex.platform.parking.ParkingVendorService parkingVendorService) {
+        this.parkingVendorService = parkingVendorService;
+    }
 
     @Autowired
     public IntegrationService(
@@ -156,6 +165,12 @@ public class IntegrationService {
                         String eventId = eventId(payload);
                         Map<String, Object> safePayload = payload == null ? Map.of() : Map.copyOf(payload);
                         WebhookMapping mappingResult = mapPayload(provider, endpoint, safePayload);
+                        // HP-P01（BSM L1444「停车系统回传入出场记录、缴费结果和车位占用」）：停车适配器映射成功即同步落停车业务；
+                        // 落不下（端点未绑定项目、事件不支持、会话不存在）整笔拒收、信封不留，停车系统按同一幂等键重试。
+                        if (parkingVendorService != null && "mapped".equals(mappingResult.processStatus())
+                                && "parking".equals(mappingResult.adapterType())) {
+                            parkingVendorService.ingest(endpointKey, provider, event, mappingResult.mapping());
+                        }
                         Map<String, Object> resultJson = new java.util.LinkedHashMap<>();
                         resultJson.put("accepted", true);
                         resultJson.put("payload_hash", payloadHash);
@@ -260,7 +275,7 @@ public class IntegrationService {
                     projection.put("status", platformStatus);
                 }
             }
-            return WebhookMapping.mapped(projection);
+            return WebhookMapping.mapped(projection, adapter.adapterType());
         } catch (RuntimeException exception) {
             return WebhookMapping.mapFailed(exception.getClass().getSimpleName() + ": " + exception.getMessage());
         }
@@ -284,17 +299,17 @@ public class IntegrationService {
         return current;
     }
 
-    private record WebhookMapping(String processStatus, Map<String, Object> mapping, String failureReason) {
+    private record WebhookMapping(String processStatus, Map<String, Object> mapping, String failureReason, String adapterType) {
         static WebhookMapping accepted() {
-            return new WebhookMapping("accepted", Map.of(), null);
+            return new WebhookMapping("accepted", Map.of(), null, null);
         }
 
-        static WebhookMapping mapped(Map<String, Object> projection) {
-            return new WebhookMapping("mapped", Map.copyOf(projection), null);
+        static WebhookMapping mapped(Map<String, Object> projection, String adapterType) {
+            return new WebhookMapping("mapped", Map.copyOf(projection), null, adapterType);
         }
 
         static WebhookMapping mapFailed(String reason) {
-            return new WebhookMapping("map_failed", Map.of("reason_code", "WEBHOOK_MAP_FAILURE", "error", reason), reason);
+            return new WebhookMapping("map_failed", Map.of("reason_code", "WEBHOOK_MAP_FAILURE", "error", reason), reason, null);
         }
     }
 
@@ -519,6 +534,24 @@ public class IntegrationService {
     /** 视频锚点调阅：敏感操作，需 integration.video.view 权限 + 写 integration_video_access_audits。 */
     public PageResponse<VideoAnchorRecord> listVideoAnchors(String viewerUserId, String approvalRef) {
         return thirdPartyService.listVideoAnchors(viewerUserId, approvalRef);
+    }
+
+    /**
+     * HP-P01（BSM L1511「第三方可以在身份核验后读取或回写平台数据」）：第三方按开放平台签名读取平台下发的数据，身份核验与留痕同事件结果查询。
+     */
+    public <T> T openRead(String endpointKey, String businessType, OpenSignatureRequest request,
+            java.util.function.Supplier<T> read) {
+        try {
+            OpenAppCredentialRecord credential = verifyOpenSignature(request, endpointKey, true);
+            T result = read.get();
+            auditEventService.recordSuccess("api_call.logged", OPEN_PERMISSION, businessType, endpointKey, requestId(), null,
+                    Map.of("app_key", credential.appKey(), "endpoint_key", endpointKey));
+            return result;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("api_call.rejected", OPEN_PERMISSION, businessType, blankToUnknown(endpointKey),
+                    requestId(), null, errorCode(exception));
+            throw exception;
+        }
     }
 
     private OpenAppCredentialRecord verifyOpenSignature(OpenSignatureRequest request, String endpointKey, boolean reserveNonce) {

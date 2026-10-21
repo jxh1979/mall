@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V528**，发现 **224** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V534**，发现 **240** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -158,7 +158,11 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `evidence_events` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `evidence_reviews` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `external_partner_orgs` | `project_id` | direct | V183 | `V183__external_partner_org_self_service.sql` |
+| `facility_alarm_duty_assignments` | `project_id` | direct | V529 | `V529__facility_alarm_takeover.sql` |
+| `facility_alarms` | `project_id` | direct | V529 | `V529__facility_alarm_takeover.sql` |
 | `facility_equipment` | `merchant_id` + `project_id` + `space_id` | direct | V165 | `V165__facility_equipment.sql` |
+| `facility_equipment_scraps` | `merchant_id` + `project_id` | direct | V532 | `V532__facility_equipment_scraps.sql` |
+| `facility_fault_handling_rules` | `project_id` | direct | V530 | `V530__facility_alarm_fault_rules.sql` |
 | `facility_inspection_tasks` | `project_id` + `space_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_inspection_templates` | `project_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_work_orders` | `merchant_id` + `project_id` + `space_id` | direct | V166 | `V166__facility_work_orders.sql` |
@@ -202,6 +206,18 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
 | `merchants` | `project_id` | direct | V432 | `V432__m009_project_profiles_and_associations.sql` |
+| `parking_credit_components` | `merchant_id` | direct | V534 | `V534__parking_consumption_credits.sql` |
+| `parking_credit_cost_allocations` | `merchant_id` + `project_id` | direct | V534 | `V534__parking_consumption_credits.sql` |
+| `parking_credit_cost_months` | `merchant_id` + `project_id` | direct | V534 | `V534__parking_consumption_credits.sql` |
+| `parking_credits` | `project_id` | direct | V534 | `V534__parking_consumption_credits.sql` |
+| `parking_manual_releases` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
+| `parking_occupancy_snapshots` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
+| `parking_payments` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
+| `parking_policies` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
+| `parking_sessions` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
+| `parking_staff_vehicles` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
+| `parking_vendor_bindings` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
+| `parking_vendor_payments` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
 | `pass_gift_cost_configs` | `project_id` | direct | V373 | `V373__pass_gift_cost_configs.sql` |
 | `pass_gift_cost_variance_ledger` | `project_id` | direct | V377 | `V377__pass_gift_variance_ledger.sql` |
 | `payroll_tax_assessments` | `merchant_id` + `project_id` | direct | V477 | `V477__payroll_tax_approved_versions.sql` |

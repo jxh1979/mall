@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.25
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.26
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1053 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 394 | 人工权限矩阵正文未覆盖 293 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2106 | 人工事件矩阵正文未覆盖 2061 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1053 | 人工任务映射正文未逐项覆盖 1047 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 640 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1090 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 401 | 人工权限矩阵正文未覆盖 300 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2180 | 人工事件矩阵正文未覆盖 2135 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1090 | 人工任务映射正文未逐项覆盖 1084 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 662 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -215,7 +215,10 @@
 | `evidence.event.view` | staff-token | project-object | 1 | listEvidenceEvents | 已在权限矩阵正文出现 |
 | `evidence.review.create` | staff-token | project-object | 1 | createEvidenceReview | 已在权限矩阵正文出现 |
 | `evidence.timeline.view` | staff-token | merchant, project-object | 3 | getEvidenceTimeline, getTraceabilityAutoCaptureRate, readEvidenceAttachmentFile | 已在权限矩阵正文出现 |
-| `facility.equipment.manage` | staff-token | platform | 6 | listFacilityEquipment, createFacilityEquipment, listFacilityMaintenanceDueEquipment, updateFacilityEquipment, changeFacilityEquipmentStatus, recordFacilityEquipmentMaintenanceDone | OpenAPI 补充，以本附录为准 |
+| `facility.alarm.manage` | staff-token | platform, project | 8 | saveFacilityAlarmResponsePolicy, listFacilityAlarms, listFacilityAlarmDuties, assignFacilityAlarmDuty, cancelFacilityAlarmDuty, listFacilityFaultRules, createFacilityFaultRule, retireFacilityFaultRule | OpenAPI 补充，以本附录为准 |
+| `facility.alarm.take_over` | staff-token | platform | 3 | listMyFacilityAlarms, takeOverFacilityAlarm, recordFacilityAlarmDisposition | OpenAPI 补充，以本附录为准 |
+| `facility.equipment.manage` | staff-token | platform | 9 | listFacilityEquipment, createFacilityEquipment, listFacilityMaintenanceDueEquipment, updateFacilityEquipment, changeFacilityEquipmentStatus, recordFacilityEquipmentMaintenanceDone, createFacilityEquipmentScrapRequest, listFacilityEquipmentScraps, completeFacilityEquipmentScrapDisposal | OpenAPI 补充，以本附录为准 |
+| `facility.fault_rule.confirm` | staff-token | project | 1 | confirmFacilityFaultRule | OpenAPI 补充，以本附录为准 |
 | `facility.inspection.manage` | staff-token | platform | 10 | listFacilityInspectionTemplates, createFacilityInspectionTemplate, listFacilityInspectionTasks, createFacilityInspectionTask, getFacilityInspectionTask, startFacilityInspectionTask, listFacilityInspectionRecords, submitFacilityInspectionRecord, recheckFacilityInspectionTask, confirmFacilityInspectionSupervisor | OpenAPI 补充，以本附录为准 |
 | `facility.inspection.report_exception_assigned` | staff-token | self | 1 | reportInspectionException | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.accept` | staff-token | platform | 1 | acceptSiteEntryReport | OpenAPI 补充，以本附录为准 |
@@ -224,10 +227,10 @@
 | `facility.site_entry.submit_assigned` | staff-token | self | 1 | submitSiteEntryReport | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.upload_completion_assigned` | staff-token | project-assignee, self | 2 | uploadSiteEntryCompletion, uploadSiteEntryAttachment | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.view_assigned` | staff-token | project-assignee, self | 4 | listSiteEntryReports, getSiteEntryReport, listSiteEntryHistory, readSiteEntryAttachment | OpenAPI 补充，以本附录为准 |
-| `facility.work_order.manage` | staff-token | platform | 14 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, suspendFacilityWorkOrder, resumeFacilityWorkOrder, markFacilityWorkOrdersOverdue ... | OpenAPI 补充，以本附录为准 |
+| `facility.work_order.manage` | staff-token | platform | 17 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, reassignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, reworkFacilityWorkOrder, designateFacilityWorkOrderConfirmer ... | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.view_assigned` | staff-token | platform | 1 | listWorkOrdersAssignedToMe | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
-| `finance.ar_ap.manage` | staff-token | platform, project, project-entity, project-merchant | 7 | createArApItem, reviewTransferDisposition, generateContractRentBill, generateContractPeriodBills, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
+| `finance.ar_ap.manage` | staff-token | platform, project, project-entity, project-merchant | 8 | createArApItem, reviewTransferDisposition, generateContractRentBill, generateContractPeriodBills, recordFacilityEquipmentScrapFinance, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | platform, project-entity, project-merchant, project-order | 7 | listArApItems, listArApPayments, getInternalPayableExecution, listFinanceRefunds, listArOverdueDebtors, getFinanceRefund, queryFinanceRefund | 已在权限矩阵正文出现 |
 | `finance.daily_close.lock` | staff-token | project-entity | 1 | createDailyClose | 已在权限矩阵正文出现 |
 | `finance.daily_close.manage` | staff-token | project-entity | 1 | listDailyCloseSummaries | OpenAPI 补充，以本附录为准 |
@@ -335,10 +338,14 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 49 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 55 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr ... | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
+| `parking.config.manage` | staff-token | project | 1 | saveParkingPolicy | OpenAPI 补充，以本附录为准 |
+| `parking.ops.view` | staff-token | project | 3 | getParkingPolicy, getParkingOverview, listParkingCredits | OpenAPI 补充，以本附录为准 |
+| `parking.release.record` | staff-token | project | 2 | listParkingManualReleases, recordParkingManualRelease | OpenAPI 补充，以本附录为准 |
+| `parking.vehicle.manage` | staff-token | project | 6 | listParkingMonthlyVehicles, registerParkingMonthlyVehicle, revokeParkingMonthlyVehicle, listParkingStaffVehicles, registerParkingStaffVehicle, revokeParkingStaffVehicle | OpenAPI 补充，以本附录为准 |
 | `partner.org.manage` | staff-token | platform | 3 | createPartnerOrg, bindUserToPartnerOrg, unbindUserFromPartnerOrg | OpenAPI 补充，以本附录为准 |
 | `partner.org.view` | staff-token | platform | 1 | listPartnerOrgs | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.manage` | staff-token | self | 2 | createPartnerSubordinate, disablePartnerSubordinate | OpenAPI 补充，以本附录为准 |
@@ -722,8 +729,12 @@
 | `analytics.vacant_spaces.view_failed` | failure | `listVacantSpaces` | `GET` | `/api/v1/analytics/occupancy/vacant-spaces` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
 | `analytics.vacant_spaces.viewed` | success | `listVacantSpaces` | `GET` | `/api/v1/analytics/occupancy/vacant-spaces` | ANA-风控分析 | `contract.view` | 接口级事件，以本附录为准 |
 | `api_call.logged` | success | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `api_call.logged` | success | `getOpenParkingConfig` | `GET` | `/api/open/d/{endpoint_key}/parking/config` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `api_call.logged` | success | `listOpenParkingPayments` | `GET` | `/api/open/d/{endpoint_key}/parking/payments` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `api_call.logged` | success | `receiveOpenWebhook` | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `api_call.rejected` | failure | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `api_call.rejected` | failure | `getOpenParkingConfig` | `GET` | `/api/open/d/{endpoint_key}/parking/config` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `api_call.rejected` | failure | `listOpenParkingPayments` | `GET` | `/api/open/d/{endpoint_key}/parking/payments` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `api_call.rejected` | failure | `receiveOpenWebhook` | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | OPEN-开放平台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `ar_ap_payment.list_failed` | failure | `listArApPayments` | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `ar_ap_payment.listed` | success | `listArApPayments` | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
@@ -1375,10 +1386,34 @@
 | `exception.resolved` | success | `resolveEvidenceRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | EVD-事件证据 | `risk_alert.resolve` | 接口级事件，以本附录为准 |
 | `exception.transfer_failed` | failure | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | EVD-事件证据 | `risk_alert.transfer` | 接口级事件，以本附录为准 |
 | `exception.transferred` | success | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | EVD-事件证据 | `risk_alert.transfer` | 接口级事件，以本附录为准 |
+| `facility.alarm_disposition_failed` | failure | `recordFacilityAlarmDisposition` | `POST` | `/api/v1/facility/alarms/{alarm_id}/disposition` | P0-待归类 | `facility.alarm.take_over` | 接口级事件，以本附录为准 |
+| `facility.alarm_disposition_recorded` | success | `recordFacilityAlarmDisposition` | `POST` | `/api/v1/facility/alarms/{alarm_id}/disposition` | P0-待归类 | `facility.alarm.take_over` | 接口级事件，以本附录为准 |
+| `facility.alarm_duty_assign_failed` | failure | `assignFacilityAlarmDuty` | `POST` | `/api/v1/facility/alarm-duties` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_duty_assigned` | success | `assignFacilityAlarmDuty` | `POST` | `/api/v1/facility/alarm-duties` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_duty_cancel_failed` | failure | `cancelFacilityAlarmDuty` | `POST` | `/api/v1/facility/alarm-duties/{duty_id}/cancel` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_duty_cancelled` | success | `cancelFacilityAlarmDuty` | `POST` | `/api/v1/facility/alarm-duties/{duty_id}/cancel` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_duty.view_failed` | failure | `listFacilityAlarmDuties` | `GET` | `/api/v1/facility/alarm-duties` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_duty.viewed` | success | `listFacilityAlarmDuties` | `GET` | `/api/v1/facility/alarm-duties` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_mine.view_failed` | failure | `listMyFacilityAlarms` | `GET` | `/api/v1/facility/alarms/mine` | P0-待归类 | `facility.alarm.take_over` | 接口级事件，以本附录为准 |
+| `facility.alarm_mine.viewed` | success | `listMyFacilityAlarms` | `GET` | `/api/v1/facility/alarms/mine` | P0-待归类 | `facility.alarm.take_over` | 接口级事件，以本附录为准 |
+| `facility.alarm_policy_save_failed` | failure | `saveFacilityAlarmResponsePolicy` | `POST` | `/api/v1/facility/alarms/policies` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_policy_saved` | success | `saveFacilityAlarmResponsePolicy` | `POST` | `/api/v1/facility/alarms/policies` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm_take_over_failed` | failure | `takeOverFacilityAlarm` | `POST` | `/api/v1/facility/alarms/{alarm_id}/take-over` | P0-待归类 | `facility.alarm.take_over` | 接口级事件，以本附录为准 |
+| `facility.alarm_taken_over` | success | `takeOverFacilityAlarm` | `POST` | `/api/v1/facility/alarms/{alarm_id}/take-over` | P0-待归类 | `facility.alarm.take_over` | 接口级事件，以本附录为准 |
+| `facility.alarm.view_failed` | failure | `listFacilityAlarms` | `GET` | `/api/v1/facility/alarms` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.alarm.viewed` | success | `listFacilityAlarms` | `GET` | `/api/v1/facility/alarms` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment_create_failed` | failure | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment_created` | success | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment_maintain_failed` | failure | `recordFacilityEquipmentMaintenanceDone` | `POST` | `/api/v1/facility/equipment/{equipment_id}/maintenance-done` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment_maintained` | success | `recordFacilityEquipmentMaintenanceDone` | `POST` | `/api/v1/facility/equipment/{equipment_id}/maintenance-done` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scrap_disposal_complete_failed` | failure | `completeFacilityEquipmentScrapDisposal` | `POST` | `/api/v1/facility/equipment-scraps/{scrap_id}/disposal` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scrap_disposal_completed` | success | `completeFacilityEquipmentScrapDisposal` | `POST` | `/api/v1/facility/equipment-scraps/{scrap_id}/disposal` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scrap_finance_record_failed` | failure | `recordFacilityEquipmentScrapFinance` | `POST` | `/api/v1/facility/equipment-scraps/{scrap_id}/finance` | P0-待归类 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scrap_finance_recorded` | success | `recordFacilityEquipmentScrapFinance` | `POST` | `/api/v1/facility/equipment-scraps/{scrap_id}/finance` | P0-待归类 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scrap_request_failed` | failure | `createFacilityEquipmentScrapRequest` | `POST` | `/api/v1/facility/equipment/{equipment_id}/scrap-requests` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scrap_requested` | success | `createFacilityEquipmentScrapRequest` | `POST` | `/api/v1/facility/equipment/{equipment_id}/scrap-requests` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scraps_view_failed` | failure | `listFacilityEquipmentScraps` | `GET` | `/api/v1/facility/equipment-scraps` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.equipment_scraps_viewed` | success | `listFacilityEquipmentScraps` | `GET` | `/api/v1/facility/equipment-scraps` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment_status_change_failed` | failure | `changeFacilityEquipmentStatus` | `POST` | `/api/v1/facility/equipment/{equipment_id}/status` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment_status_changed` | success | `changeFacilityEquipmentStatus` | `POST` | `/api/v1/facility/equipment/{equipment_id}/status` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment_update_failed` | failure | `updateFacilityEquipment` | `POST` | `/api/v1/facility/equipment/{equipment_id}` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
@@ -1387,6 +1422,14 @@
 | `facility.equipment.maintenance_due_viewed` | success | `listFacilityMaintenanceDueEquipment` | `GET` | `/api/v1/facility/equipment/maintenance-due` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment.view_failed` | failure | `listFacilityEquipment` | `GET` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `facility.equipment.viewed` | success | `listFacilityEquipment` | `GET` | `/api/v1/facility/equipment` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
+| `facility.fault_rule_confirm_failed` | failure | `confirmFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules/{rule_id}/confirm` | P0-待归类 | `facility.fault_rule.confirm` | 接口级事件，以本附录为准 |
+| `facility.fault_rule_confirmed` | success | `confirmFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules/{rule_id}/confirm` | P0-待归类 | `facility.fault_rule.confirm` | 接口级事件，以本附录为准 |
+| `facility.fault_rule_create_failed` | failure | `createFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.fault_rule_created` | success | `createFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.fault_rule_retire_failed` | failure | `retireFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules/{rule_id}/retire` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.fault_rule_retired` | success | `retireFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules/{rule_id}/retire` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.fault_rule.view_failed` | failure | `listFacilityFaultRules` | `GET` | `/api/v1/facility/fault-rules` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
+| `facility.fault_rule.viewed` | success | `listFacilityFaultRules` | `GET` | `/api/v1/facility/fault-rules` | P0-待归类 | `facility.alarm.manage` | 接口级事件，以本附录为准 |
 | `facility.inspection_exception_report_failed` | failure | `reportInspectionException` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/report-exception` | P0-待归类 | `facility.inspection.report_exception_assigned` | 接口级事件，以本附录为准 |
 | `facility.inspection_exception_reported` | success | `reportInspectionException` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/report-exception` | P0-待归类 | `facility.inspection.report_exception_assigned` | 接口级事件，以本附录为准 |
 | `facility.inspection_record_submit_failed` | failure | `submitFacilityInspectionRecord` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/records` | P0-待归类 | `facility.inspection.manage` | 接口级事件，以本附录为准 |
@@ -1435,16 +1478,22 @@
 | `facility.work_order_assigned_list.viewed` | success | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | P0-待归类 | `facility.work_order.view_assigned` | 接口级事件，以本附录为准 |
 | `facility.work_order_complete_failed` | failure | `completeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/complete` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_completed` | success | `completeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/complete` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `facility.work_order_confirmer_designate_failed` | failure | `designateFacilityWorkOrderConfirmer` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/confirmer` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `facility.work_order_confirmer_designated` | success | `designateFacilityWorkOrderConfirmer` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/confirmer` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_create_failed` | failure | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_created` | success | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_overdue_mark_failed` | failure | `markFacilityWorkOrdersOverdue` | `POST` | `/api/v1/facility/work-orders/mark-overdue` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_overdue_marked` | success | `markFacilityWorkOrdersOverdue` | `POST` | `/api/v1/facility/work-orders/mark-overdue` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_policy_save_failed` | failure | `saveFacilityWorkOrderPolicy` | `POST` | `/api/v1/facility/work-orders/policies` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_policy_saved` | success | `saveFacilityWorkOrderPolicy` | `POST` | `/api/v1/facility/work-orders/policies` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `facility.work_order_reassign_failed` | failure | `reassignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/reassign` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `facility.work_order_reassigned` | success | `reassignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/reassign` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_resume_failed` | failure | `resumeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/resume` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_resumed` | success | `resumeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/resume` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_review_failed` | failure | `reviewFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/review` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_reviewed` | success | `reviewFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/review` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `facility.work_order_rework_failed` | failure | `reworkFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/rework` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `facility.work_order_rework_requested` | success | `reworkFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/rework` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_start_failed` | failure | `startFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/start` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_started` | success | `startFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/start` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `facility.work_order_suspend_failed` | failure | `suspendFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/suspend` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
@@ -1909,18 +1958,33 @@
 | `merchant.viewed` | success | `getMerchantPendingClearAlert` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `listMerchants` | `GET` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `findCustomerParkingSession` | `GET` | `/api/v1/customer/parking/sessions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `findCustomerParkingSession` | `GET` | `/api/v1/customer/parking/sessions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getContractDepositMonths` | `GET` | `/api/v1/contracts/deposit-months` | P0-待归类 | `contract.deposit_months.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getContractDepositMonths` | `GET` | `/api/v1/contracts/deposit-months` | P0-待归类 | `contract.deposit_months.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | P0-待归类 | `contract.deposit_refund_wait.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | P0-待归类 | `contract.deposit_refund_wait.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listParkingCredits` | `GET` | `/api/v1/parking/credits` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listParkingCredits` | `GET` | `/api/v1/parking/credits` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listParkingManualReleases` | `GET` | `/api/v1/parking/manual-releases` | P0-待归类 | `parking.release.record` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listParkingManualReleases` | `GET` | `/api/v1/parking/manual-releases` | P0-待归类 | `parking.release.record` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listParkingMonthlyVehicles` | `GET` | `/api/v1/parking/monthly-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listParkingMonthlyVehicles` | `GET` | `/api/v1/parking/monthly-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | P0-待归类 | `dealer.return.refund.execute` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
@@ -1931,6 +1995,23 @@
 | `operating_params.changed` | success | `upsertOperatingParams` | `POST` | `/api/v1/analytics/operating-params` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
 | `operation_handover.created` | success | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `operation_handover.failed` | failure | `scanTraceCodeHandover` | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `parking.credit.granted` | success | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `parking.manual_release_record_failed` | failure | `recordParkingManualRelease` | `POST` | `/api/v1/parking/manual-releases` | P0-待归类 | `parking.release.record` | 接口级事件，以本附录为准 |
+| `parking.manual_release_recorded` | success | `recordParkingManualRelease` | `POST` | `/api/v1/parking/manual-releases` | P0-待归类 | `parking.release.record` | 接口级事件，以本附录为准 |
+| `parking.monthly_vehicle_register_failed` | failure | `registerParkingMonthlyVehicle` | `POST` | `/api/v1/parking/contracts/{contract_id}/vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `parking.monthly_vehicle_registered` | success | `registerParkingMonthlyVehicle` | `POST` | `/api/v1/parking/contracts/{contract_id}/vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `parking.monthly_vehicle_revoke_failed` | failure | `revokeParkingMonthlyVehicle` | `POST` | `/api/v1/parking/monthly-vehicles/{vehicle_id}/revoke` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `parking.monthly_vehicle_revoked` | success | `revokeParkingMonthlyVehicle` | `POST` | `/api/v1/parking/monthly-vehicles/{vehicle_id}/revoke` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `parking.payment_confirm_failed` | failure | `confirmCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments/{payment_id}/confirm` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `parking.payment_create_failed` | failure | `createCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `parking.payment_created` | success | `createCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `parking.payment_paid` | success | `confirmCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments/{payment_id}/confirm` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `parking.policy_save_failed` | failure | `saveParkingPolicy` | `PUT` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.config.manage` | 接口级事件，以本附录为准 |
+| `parking.policy_saved` | success | `saveParkingPolicy` | `PUT` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.config.manage` | 接口级事件，以本附录为准 |
+| `parking.staff_vehicle_register_failed` | failure | `registerParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `parking.staff_vehicle_registered` | success | `registerParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `parking.staff_vehicle_revoke_failed` | failure | `revokeParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles/{vehicle_id}/revoke` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `parking.staff_vehicle_revoked` | success | `revokeParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles/{vehicle_id}/revoke` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `partner_org.update_failed` | failure | `createPartnerOrg` | `POST` | `/api/v1/partner/orgs` | P0-待归类 | `partner.org.manage` | 接口级事件，以本附录为准 |
 | `partner_org.updated` | success | `createPartnerOrg` | `POST` | `/api/v1/partner/orgs` | P0-待归类 | `partner.org.manage` | 接口级事件，以本附录为准 |
 | `partner_org.view_failed` | failure | `listPartnerOrgs` | `GET` | `/api/v1/partner/orgs` | P0-待归类 | `partner.org.view` | 接口级事件，以本附录为准 |
@@ -2795,8 +2876,10 @@
 | CUS-客人端 | `configureStoredValueBonusPolicy` | `POST` | `/api/v1/loyalty/stored-value/bonus-policies` | 配置综合体通用卡充值赠送比例（仅平台，按项目，须同时配置上下限） | `customer.stored_value.refund` | `stored_value.bonus_policy_configured` / `stored_value.bonus_policy_config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `customer.stored_value.refund` | `stored_value.merchant_card_configured` / `stored_value.merchant_card_config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
+| CUS-客人端 | `confirmCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments/{payment_id}/confirm` | 客人停车缴费确认 | `not_applicable` | `parking.payment_paid` / `parking.payment_confirm_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `counterRefundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | 会员储值到店柜台退款（商户预收卡唯一可达退款路径） | `customer.stored_value.refund` | `stored_value.counter_refund` / `stored_value.counter_refund_failed` | web | operation 级补充 |
 | CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `createCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments` | 客人停车缴费下单 | `not_applicable` | `parking.payment_created` / `parking.payment_create_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `createVoucherDefinition` | `POST` | `/api/v1/vouchers/definitions` | 新建券定义（商户折扣券/店内实物券；外部伙伴券仍配置在通票权益模板 V282） | `customer.voucher.manage` | `voucher.definition_created` / `voucher.definition_create_failed` | web | operation 级补充 |
 | CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | 客人登出（清除免登录会话 cookie） | `public` | `customer.logged_out` / `customer.logout_failed` | web, miniapp, app, kiosk | operation 级补充 |
@@ -2809,8 +2892,10 @@
 | CUS-客人端 | `customerVoucherWallet` | `GET` | `/api/v1/customer/vouchers` | 我的券包（客人端只读：积分兑换券/营销赠券/通票第三方券聚合，按状态分组展示） | `customer.voucher.view` | `voucher.customer_wallet_viewed` / `voucher.customer_wallet_view_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | 客人自助注销本人账号（注销后登录/动作被拒，历史数据物理保留但客人不可见） | `not_applicable` | `customer.account.deregistered` / `customer.account.deregister_failed` | miniapp, web | operation 级补充 |
 | CUS-客人端 | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | 手动触发会员等级评估 | `customer.loyalty.evaluate` | `member.level_changed` / `customer.level_evaluate_failed` | web | operation 级补充 |
+| CUS-客人端 | `findCustomerParkingSession` | `GET` | `/api/v1/customer/parking/sessions` | 客人按车牌或临时码查在场车辆停车费 | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | 冻结会员积分账户 | `customer.points.freeze` | `customer.points.frozen` / `customer.points.freeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | 冻结会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.frozen` / `stored_value.frozen_failed` | web | operation 级补充 |
+| CUS-客人端 | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | 客人查看本日停车消费抵免 | `not_applicable` | `parking.credit.granted` / `not_applicable` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | web, miniapp, app | 已在任务映射正文出现 |
 | CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp, web | operation 级补充 |
 | CUS-客人端 | `getCustomerSavedBottlePickupCode` | `GET` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/pickup-code` | 官方动态取酒码（按当前持有人签发，窗口=全场统一刷新间隔，转让后原持有人码作废） | `not_applicable` | `bar.saved_bottle.pickup_code_issued` / `bar.saved_bottle.pickup_code_issue_failed` | web, miniapp, app | operation 级补充 |
@@ -3119,6 +3204,8 @@
 | INV-库存存酒 | `transferSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/transfer` | 存酒转让（出让人短信验证码确认，验证成功即换持有人、整瓶转让、原持有人动态取酒码作废） | `bar.saved_bottle.manage` | `bar.saved_bottle_transferred` / `bar.saved_bottle.transfer_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | 调拨库存流水 | `inventory.stock.move` | `inventory.stock_transfer.created` / `inventory.stock_transfer.created_failed` | web | operation 级补充 |
 | OPEN-开放平台 | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | 回调处理结果查询 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
+| OPEN-开放平台 | `getOpenParkingConfig` | `GET` | `/api/open/d/{endpoint_key}/parking/config` | 停车系统拉取平台下发配置 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
+| OPEN-开放平台 | `listOpenParkingPayments` | `GET` | `/api/open/d/{endpoint_key}/parking/payments` | 停车系统拉取平台已收停车费 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
 | OPEN-开放平台 | `receiveOpenWebhook` | `POST` | `/api/open/d/{endpoint_key}/webhooks/{provider}/{event}` | 第三方或供应商回调 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
 | OPS-生产前置 | `createProductionReadinessCheck` | `POST` | `/api/v1/ops/production-readiness/checks` | 执行生产前置准入检查 | `ops.production_readiness.check` | `production_readiness.checked` / `production_readiness.check_failed` | web, mobile_admin | 已在任务映射正文出现 |
 | OPS-生产前置 | `listProductionReadinessItems` | `GET` | `/api/v1/ops/production-readiness/items` | 查询生产前置责任状态 | `ops.production_readiness.view` | `production_readiness.viewed` / `production_readiness.view_failed` | web, mobile_admin | 已在任务映射正文出现 |
@@ -3134,22 +3221,26 @@
 | P0-待归类 | `advanceLeasingIntent` | `POST` | `/api/v1/leasing/intents/{intent_id}/advance` | 意向阶段推进(5 阶段) | `leasing.intent.manage` | `leasing.intent.advanced` / `leasing.intent.advance_failed` | web | operation 级补充 |
 | P0-待归类 | `approveMerchantPortalPayeeAccountChange` | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | 收款方财务负责人审批更换收款账户 | `merchant.portal.payee_account.approve` | `merchant_portal.payee_account.approved` / `merchant_portal.payee_account.approve_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `assignEnergyVerifier` | `POST` | `/api/v1/energy/readings/{reading_id}/assignment` | 已配置主管指派真实复抄人员 | `energy.reading.approve` | `energy.verifier_assigned` / `energy.verifier_assigned_failed` | web | operation 级补充 |
+| P0-待归类 | `assignFacilityAlarmDuty` | `POST` | `/api/v1/facility/alarm-duties` | 安排接警值守（挂已发布班次） | `facility.alarm.manage` | `facility.alarm_duty_assigned` / `facility.alarm_duty_assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/assign` | 工单派单 | `facility.work_order.manage` | `facility.work_order_assigned` / `facility.work_order_assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignLeasingLead` | `POST` | `/api/v1/leasing/leads/{lead_id}/assign` | 招商线索派单(主管手动指派) | `leasing.lead.manage` | `leasing.lead.assigned` / `leasing.lead.assign_failed` | web | operation 级补充 |
 | P0-待归类 | `assignMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | Assign merchant service work order | `merchant.service_work_order.assign` | `merchant_service.assignMerchantServiceWorkOrder.succeeded` / `merchant_service.assignMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `bindUserToPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/bind-user` | 账号绑定外部协作机构 | `partner.org.manage` | `partner.org.user_bound` / `partner.org.user_bind_failed` | web | operation 级补充 |
 | P0-待归类 | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | 品牌拉黑/解黑(高危需审批) | `leasing.brand.blacklist` | `leasing.brand.blacklist_changed` / `leasing.brand.blacklist_change_failed` | web | operation 级补充 |
+| P0-待归类 | `cancelFacilityAlarmDuty` | `POST` | `/api/v1/facility/alarm-duties/{duty_id}/cancel` | 撤销接警值守安排 | `facility.alarm.manage` | `facility.alarm_duty_cancelled` / `facility.alarm_duty_cancel_failed` | web | operation 级补充 |
 | P0-待归类 | `cancelServiceOrder` | `POST` | `/api/v1/services/orders/{id}/cancel` | 取消服务单(履约前;留原因) | `service.order.create` | `service.order.cancelled` / `service.order.cancel_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `changeFacilityEquipmentStatus` | `POST` | `/api/v1/facility/equipment/{equipment_id}/status` | 变更设备状态/上报告警 | `facility.equipment.manage` | `facility.equipment_status_changed` / `facility.equipment_status_change_failed` | web | operation 级补充 |
 | P0-待归类 | `changeSettlementInvoiceItemStatus` | `POST` | `/api/v1/settlement/invoice-items/{id}/status` | 流转开票状态 | `settlement.invoice.manage` | `settlement.invoice.status_changed` / `settlement.invoice.status_change_failed` | web | operation 级补充 |
 | P0-待归类 | `checkContractSettlementDocuments` | `POST` | `/api/v1/contracts/settlements/{settlement_id}/documents-check` | 退租结算齐单核对（缺单保持待处理） | `contract.settlement.manage` | `contract.settlement_documents_checked` / `contract.settlement_documents_check_failed` | web | operation 级补充 |
 | P0-待归类 | `closeMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | Close merchant service work order | `merchant.service_work_order.close` | `merchant_service.closeMerchantServiceWorkOrder.succeeded` / `merchant_service.closeMerchantServiceWorkOrder.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `completeDealerDeliveryPhysical` | `POST` | `/api/v1/dealers/delivery/resolutions/{id}/physical-completion` | 确认差异实物实际处理 | `dealer.order.ship` | `dealer.delivery.physical_completed` / `dealer.delivery.physical_complete_failed` | web | operation 级补充 |
+| P0-待归类 | `completeFacilityEquipmentScrapDisposal` | `POST` | `/api/v1/facility/equipment-scraps/{scrap_id}/disposal` | 登记设备报废实际处置 | `facility.equipment.manage` | `facility.equipment_scrap_disposal_completed` / `facility.equipment_scrap_disposal_complete_failed` | web | operation 级补充 |
 | P0-待归类 | `completeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/complete` | 完成工单处理 | `facility.work_order.manage` | `facility.work_order_completed` / `facility.work_order_complete_failed` | web | operation 级补充 |
 | P0-待归类 | `completeServiceOrder` | `POST` | `/api/v1/services/orders/{id}/complete` | 完成履约(公司代收:管理费归公司,应得月结进薪资) | `service.order.create` | `service.order.completed` / `service.order.complete_failed` | staff_work_phone, web | operation 级补充 |
 | P0-待归类 | `configureEnergyReviewSettings` | `POST` | `/api/v1/energy/projects/{project_id}/review-settings` | 申请项目核实期限及上下限配置 | `energy.meter.manage` | `energy.review_settings_submitted` / `energy.review_settings_submitted_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmDealerOverpaymentUse` | `POST` | `/api/v1/dealers/overpayments/{id}/use` | 确认超收用途 | `dealer.order.payment.verify` | `dealer.order.overpayment_use_confirmed` / `dealer.order.overpayment_use_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmDealerReturnFreight` | `POST` | `/api/v1/dealers/returns/{id}/freight-confirmation` | 确认退回运费承担方 | `dealer.return.manage` | `dealer.return.freight_confirmed` / `dealer.return.freight_confirm_failed` | web | operation 级补充 |
+| P0-待归类 | `confirmFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules/{rule_id}/confirm` | 确认设备故障处置规则 | `facility.fault_rule.confirm` | `facility.fault_rule_confirmed` / `facility.fault_rule_confirm_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmFacilityInspectionSupervisor` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/supervisor-confirm` | 主管确认巡检任务关闭 | `facility.inspection.manage` | `facility.inspection_task_closed` / `facility.inspection_task_close_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmMediaPerformanceFulfillment` | `POST` | `/api/v1/settlement/media-shows/{id}/fulfillment/confirm` | 确认实际履约 | `media.performance.fulfillment.confirm` | `media_fulfillment.confirmed` / `media_fulfillment.confirm_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
@@ -3165,6 +3256,8 @@
 | P0-待归类 | `createDealerPriceCatalogDraft` | `POST` | `/api/v1/dealers/contracts/{id}/price-catalogs` | 新建价格目录草稿版本 | `dealer.price_catalog.edit` | `dealer.price_catalog.drafted` / `dealer.price_catalog.draft_failed` | web | operation 级补充 |
 | P0-待归类 | `createEnergyMeter` | `POST` | `/api/v1/energy/meters` | 创建能源表计 | `energy.meter.manage` | `energy.meter_saved` / `energy.meter_save_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityEquipment` | `POST` | `/api/v1/facility/equipment` | 创建设备台账 | `facility.equipment.manage` | `facility.equipment_created` / `facility.equipment_create_failed` | web | operation 级补充 |
+| P0-待归类 | `createFacilityEquipmentScrapRequest` | `POST` | `/api/v1/facility/equipment/{equipment_id}/scrap-requests` | 申请设备报废 | `facility.equipment.manage` | `facility.equipment_scrap_requested` / `facility.equipment_scrap_request_failed` | web | operation 级补充 |
+| P0-待归类 | `createFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules` | 登记设备故障处置规则 | `facility.alarm.manage` | `facility.fault_rule_created` / `facility.fault_rule_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks` | 创建巡检任务 | `facility.inspection.manage` | `facility.inspection_task_created` / `facility.inspection_task_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityInspectionTemplate` | `POST` | `/api/v1/facility/inspections/templates` | 创建巡检模板 | `facility.inspection.manage` | `facility.inspection_template_created` / `facility.inspection_template_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | 创建维保/物业工单 | `facility.work_order.manage` | `facility.work_order_created` / `facility.work_order_create_failed` | web | operation 级补充 |
@@ -3206,6 +3299,7 @@
 | P0-待归类 | `decideDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | 审批价格目录 | `dealer.price_catalog.approve` | `dealer.price_catalog.decided` / `dealer.price_catalog.decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideDealerReturn` | `POST` | `/api/v1/dealers/returns/{id}/decision` | 审批经销退货 | `dealer.return.review` | `dealer.return.decided` / `dealer.return.decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules/{rule_id}/decision` | 审批付账日配置(提交人不得自审) | `settlement.config.manage` | `settlement.internal_pay_day_rule.approved` / `settlement.internal_pay_day_rule.decision_failed` | web | operation 级补充 |
+| P0-待归类 | `designateFacilityWorkOrderConfirmer` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/confirmer` | 指定提单确认人 | `facility.work_order.manage` | `facility.work_order_confirmer_designated` / `facility.work_order_confirmer_designate_failed` | web | operation 级补充 |
 | P0-待归类 | `disablePartnerSubordinate` | `POST` | `/api/v1/partner/subordinates/{user_id}/disable` | 停用下属账号 | `partner.subordinate.manage` | `partner_subordinate.disabled` / `partner_subordinate.disable_failed` | web | operation 级补充 |
 | P0-待归类 | `disputeMediaPerformanceFulfillment` | `POST` | `/api/v1/settlement/media-shows/{id}/fulfillment/dispute` | 对实际履约提出争议 | `media.performance.fulfillment.confirm` | `media_fulfillment.disputed` / `media_fulfillment.dispute_failed` | web | operation 级补充 |
 | P0-待归类 | `draftServiceCatalogFeeChange` | `POST` | `/api/v1/services/catalog/{id}/fee-draft` | 提交服务目录项管理费变更草案(指定生效日) | `service.catalog.manage` | `service.catalog.fee_drafted` / `service.catalog.fee_draft_failed` | web | operation 级补充 |
@@ -3236,6 +3330,8 @@
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getLeasingLeadContactPhone` | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | 查看某一条招商线索的完整联系人手机号 | `leasing.lead.manage` | `leasing.lead.contact_phone_viewed` / `leasing.lead.contact_phone_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getMediaPerformanceShow` | `GET` | `/api/v1/settlement/media-shows/{id}` | 逐场演出合同详情（含履约事实与三项结算） | `media.performance.view` | `media_show.viewed` / `media_show.view_failed` | web | operation 级补充 |
+| P0-待归类 | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | 在场与出场记录及车位占用 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | 查看本项目停车业务参数 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | 公司统一收款码(下单出示用) | `service.order.create` | `service.pay_config.viewed` / `service.pay_config.view_failed` | staff_private_phone, web, tablet | operation 级补充 |
 | P0-待归类 | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | 查非积分商户账单异议期(按项目) | `settlement.config.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getSiteEntryReport` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}` | 查看单个进场报备单 | `facility.site_entry.view_assigned` | `facility.site_entry.viewed` / `facility.site_entry.view_failed` | web | operation 级补充 |
@@ -3273,7 +3369,11 @@
 | P0-待归类 | `listEnergyMeters` | `GET` | `/api/v1/energy/meters` | 表计列表 | `energy.meter.manage` | `energy.meter.viewed` / `energy.meter.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listEnergyReadings` | `GET` | `/api/v1/energy/readings` | 抄表读数列表 | `energy.reading.manage` | `energy.reading.viewed` / `energy.reading.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listEnergyReviewSettings` | `GET` | `/api/v1/energy/projects/{project_id}/review-settings` | 查看项目期限配置审批记录 | `energy.meter.manage` | `energy.settings_viewed` / `energy.settings_viewed_failed` | web | operation 级补充 |
+| P0-待归类 | `listFacilityAlarmDuties` | `GET` | `/api/v1/facility/alarm-duties` | 接警值守安排列表 | `facility.alarm.manage` | `facility.alarm_duty.viewed` / `facility.alarm_duty.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listFacilityAlarms` | `GET` | `/api/v1/facility/alarms` | 设备告警接警记录 | `facility.alarm.manage` | `facility.alarm.viewed` / `facility.alarm.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityEquipment` | `GET` | `/api/v1/facility/equipment` | 设备台账列表 | `facility.equipment.manage` | `facility.equipment.viewed` / `facility.equipment.view_failed` | web | operation 级补充 |
+| P0-待归类 | `listFacilityEquipmentScraps` | `GET` | `/api/v1/facility/equipment-scraps` | 设备报废处置清单 | `facility.equipment.manage` | `facility.equipment_scraps_viewed` / `facility.equipment_scraps_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listFacilityFaultRules` | `GET` | `/api/v1/facility/fault-rules` | 设备故障处置规则列表 | `facility.alarm.manage` | `facility.fault_rule.viewed` / `facility.fault_rule.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityInspectionRecords` | `GET` | `/api/v1/facility/inspections/tasks/{task_id}/records` | 巡检记录列表 | `facility.inspection.manage` | `facility.inspection_record.viewed` / `facility.inspection_record.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityInspectionTasks` | `GET` | `/api/v1/facility/inspections/tasks` | 巡检任务列表 | `facility.inspection.manage` | `facility.inspection_task.viewed` / `facility.inspection_task.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityInspectionTemplates` | `GET` | `/api/v1/facility/inspections/templates` | 巡检模板列表 | `facility.inspection.manage` | `facility.inspection_template.viewed` / `facility.inspection_template.view_failed` | web | operation 级补充 |
@@ -3295,7 +3395,12 @@
 | P0-待归类 | `listMerchantPortalSettlements` | `GET` | `/api/v1/merchant-portal/settlements` | 商户专区·我的对账(结算单只读) | `merchant.portal.settlement.view` | `merchant_portal.settlement.viewed` / `merchant_portal.settlement.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
+| P0-待归类 | `listMyFacilityAlarms` | `GET` | `/api/v1/facility/alarms/mine` | 我的接警 | `facility.alarm.take_over` | `facility.alarm_mine.viewed` / `facility.alarm_mine.view_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | P0-待归类 | `listMyServiceOrders` | `GET` | `/api/v1/services/orders/assigned-to-me` | 我的服务任务(履约人手机) | `service.order.perform` | `service.order.mine_viewed` / `service.order.mine_view_failed` | staff_private_phone, web | operation 级补充 |
+| P0-待归类 | `listParkingCredits` | `GET` | `/api/v1/parking/credits` | 停车消费抵免台账 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `listParkingManualReleases` | `GET` | `/api/v1/parking/manual-releases` | 人工放行记录 | `parking.release.record` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `listParkingMonthlyVehicles` | `GET` | `/api/v1/parking/monthly-vehicles` | 月租车牌清单 | `parking.vehicle.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | 员工车辆清单 | `parking.vehicle.manage` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listPartnerOrgs` | `GET` | `/api/v1/partner/orgs` | 外部协作机构列表 | `partner.org.view` | `partner_org.viewed` / `partner_org.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listPartnerSubordinates` | `GET` | `/api/v1/partner/subordinates` | 本机构下属账号列表 | `partner.subordinate.view` | `partner_subordinate.viewed` / `partner_subordinate.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listServiceCatalog` | `GET` | `/api/v1/services/catalog` | 服务目录(上架项,下单用) | `service.order.create` | `service.catalog.viewed` / `service.catalog.view_failed` | staff_private_phone, web, tablet, app | operation 级补充 |
@@ -3334,16 +3439,22 @@
 | P0-待归类 | `readDealerDeliveryEvidence` | `GET` | `/api/v1/dealer-portal/orders/{id}/delivery-evidence/{attachmentId}` | 受控读取本企业订单交接原文件 | `dealer_portal.order.manage` | `dealer.portal.delivery_evidence_viewed` / `dealer.portal.delivery_evidence_view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `readEnergyMeterAttachment` | `GET` | `/api/v1/energy/meters/{meter_id}/attachments/{attachment_id}/file` | 受控读取本表计及换表关联原件 | `energy.meter.manage` | `energy.attachment_viewed` / `energy.attachment_viewed_failed` | web | operation 级补充 |
 | P0-待归类 | `readSiteEntryAttachment` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}/attachments/{attachment_id}/file` | 受控读取本报备完工文件 | `facility.site_entry.view_assigned` | `facility.site_entry.attachment_accessed` / `facility.site_entry.attachment_access_failed` | web | operation 级补充 |
+| P0-待归类 | `reassignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/reassign` | 工单转派 | `facility.work_order.manage` | `facility.work_order_reassigned` / `facility.work_order_reassign_failed` | web | operation 级补充 |
 | P0-待归类 | `receiveDealerReturn` | `POST` | `/api/v1/dealers/returns/{id}/receive` | 退货收货 | `dealer.return.inspect` | `dealer.return.received` / `dealer.return.receive_failed` | web | operation 级补充 |
 | P0-待归类 | `recheckFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/recheck` | 复查整改后的巡检任务 | `facility.inspection.manage` | `facility.inspection_task_rechecked` / `facility.inspection_task_recheck_failed` | web | operation 级补充 |
 | P0-待归类 | `recordDealerInvoiceReversalResult` | `POST` | `/api/v1/dealers/invoices/{id}/reversal-result` | 登记发票真实红冲结果 | `dealer.invoice.manage` | `dealer.invoice.reversal_result_recorded` / `dealer.invoice.reversal_result_failed` | web | operation 级补充 |
 | P0-待归类 | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | 登记退货退款执行结果 | `dealer.return.refund.execute` | `not_applicable` / `dealer.return.refund_execute_failed` | web | operation 级补充 |
 | P0-待归类 | `recordEnergyActualCharge` | `POST` | `/api/v1/energy/actual-charges` | 核对供能单据登记实际费用 | `energy.reading.manage` | `energy.actual_charge_recorded` / `energy.actual_charge_recorded_failed` | web | operation 级补充 |
 | P0-待归类 | `recordEnergyReading` | `POST` | `/api/v1/energy/readings` | 录入抄表读数 | `energy.reading.manage` | `energy.reading_recorded` / `energy.reading_recorded_failed` | web | operation 级补充 |
+| P0-待归类 | `recordFacilityAlarmDisposition` | `POST` | `/api/v1/facility/alarms/{alarm_id}/disposition` | 记录设备告警处置要求 | `facility.alarm.take_over` | `facility.alarm_disposition_recorded` / `facility.alarm_disposition_failed` | web | operation 级补充 |
 | P0-待归类 | `recordFacilityEquipmentMaintenanceDone` | `POST` | `/api/v1/facility/equipment/{equipment_id}/maintenance-done` | 记录设备维保完成 | `facility.equipment.manage` | `facility.equipment_maintained` / `facility.equipment_maintain_failed` | web | operation 级补充 |
+| P0-待归类 | `recordFacilityEquipmentScrapFinance` | `POST` | `/api/v1/facility/equipment-scraps/{scrap_id}/finance` | 财务登记设备报废残值或损失 | `finance.ar_ap.manage` | `facility.equipment_scrap_finance_recorded` / `facility.equipment_scrap_finance_record_failed` | web | operation 级补充 |
 | P0-待归类 | `recordMediaPerformanceFulfillment` | `POST` | `/api/v1/settlement/media-shows/{id}/fulfillment` | 传媒经办登记实际履约 | `media.performance.fulfillment.record` | `media_fulfillment.recorded` / `media_fulfillment.record_failed` | web | operation 级补充 |
 | P0-待归类 | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | 记录账单催收 | `merchant.billing.dunning.record` | `merchant.billing.dunning.record` / `merchant.billing.dunning.record_failed` | web | operation 级补充 |
+| P0-待归类 | `recordParkingManualRelease` | `POST` | `/api/v1/parking/manual-releases` | 当班保安登记人工放行 | `parking.release.record` | `parking.manual_release_recorded` / `parking.manual_release_record_failed` | web | operation 级补充 |
 | P0-待归类 | `registerDealerOrderPayment` | `POST` | `/api/v1/dealers/orders/{id}/payments` | 登记经销订单到账 | `dealer.order.manage` | `dealer.order.payment_registered` / `dealer.order.payment_register_failed` | web | operation 级补充 |
+| P0-待归类 | `registerParkingMonthlyVehicle` | `POST` | `/api/v1/parking/contracts/{contract_id}/vehicles` | 为合同登记月租车牌 | `parking.vehicle.manage` | `parking.monthly_vehicle_registered` / `parking.monthly_vehicle_register_failed` | web | operation 级补充 |
+| P0-待归类 | `registerParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles` | 所属主体登记员工车辆 | `parking.vehicle.manage` | `parking.staff_vehicle_registered` / `parking.staff_vehicle_register_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `rejectMerchantPortalSettlementResolution` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/reject-resolution` | 商户专区·不接受主管裁决 | `merchant.portal.settlement.dispute` | `merchant_portal.settlement.resolution_rejected` / `merchant_portal.settlement.resolution_reject_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `replaceEnergyMeter` | `POST` | `/api/v1/energy/meters/{meter_id}/replacement` | 登记旧终值、新初值与实际换表交接 | `energy.meter.manage` | `energy.meter_replaced` / `energy.meter_replaced_failed` | web | operation 级补充 |
 | P0-待归类 | `reportInspectionException` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/report-exception` | 外包对被指派巡检任务上报异常 | `facility.inspection.report_exception_assigned` | `facility.inspection_exception_reported` / `facility.inspection_exception_report_failed` | web | operation 级补充 |
@@ -3356,18 +3467,24 @@
 | P0-待归类 | `resolveMediaPerformanceDispute` | `POST` | `/api/v1/settlement/media-shows/{id}/fulfillment/dispute/resolve` | 主管裁决履约争议 | `media.performance.dispute.resolve` | `media_fulfillment.dispute_resolved` / `media_fulfillment.dispute_resolve_failed` | web | operation 级补充 |
 | P0-待归类 | `resumeFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/resume` | 恢复工单 | `facility.work_order.manage` | `facility.work_order_resumed` / `facility.work_order_resume_failed` | web | operation 级补充 |
 | P0-待归类 | `retireEnergyMeter` | `POST` | `/api/v1/energy/meters/{meter_id}/retirement` | 登记真实终段读数并永久停用表计 | `energy.meter.manage` | `energy.meter_retired` / `energy.meter_retired_failed` | web | operation 级补充 |
+| P0-待归类 | `retireFacilityFaultRule` | `POST` | `/api/v1/facility/fault-rules/{rule_id}/retire` | 停用设备故障处置规则 | `facility.alarm.manage` | `facility.fault_rule_retired` / `facility.fault_rule_retire_failed` | web | operation 级补充 |
 | P0-待归类 | `reverseDealerInvoice` | `POST` | `/api/v1/dealers/returns/{id}/invoice-reversal` | 红冲原发票并按最新未退金额重开 | `dealer.invoice.manage` | `dealer.invoice.reversal_requested` / `dealer.invoice.reverse_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewDealer` | `POST` | `/api/v1/dealers/{id}/review` | 经销商准入审核 | `dealer.review` | `dealer.reviewed` / `dealer.review_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewDealerOrder` | `POST` | `/api/v1/dealers/orders/{id}/review` | 经销订单审核（通过即预留库存并通知付款） | `dealer.order.review` | `dealer.order.reviewed` / `dealer.order.review_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewEnergyReading` | `POST` | `/api/v1/energy/readings/{reading_id}/review` | 复核异常抄表读数 | `energy.reading.manage` | `energy.reading_reviewed` / `energy.reading_reviewed_failed` | web | operation 级补充 |
-| P0-待归类 | `reviewFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/review` | 报修方回访工单 | `facility.work_order.manage` | `facility.work_order_reviewed` / `facility.work_order_review_failed` | web | operation 级补充 |
+| P0-待归类 | `reviewFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/review` | 报修方回访工单 | `facility.work_order.manage` | `facility.work_order_reviewed` / `facility.work_order_review_failed` | web, staff_private_phone | operation 级补充 |
 | P0-待归类 | `reviewSiteEntryReport` | `POST` | `/api/v1/facility/site-entry-reports/{report_id}/review` | 物业审核进场报备（平台侧） | `facility.site_entry.review` | `facility.site_entry.review` / `facility.site_entry.review_failed` | web | operation 级补充 |
 | P0-待归类 | `reviewWecomRiskHit` | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | 复核处置企微违规命中 | `wecom.risk_hit.review` | `wecom.risk_hit.review` / `wecom.risk_hit.review_failed` | web | operation 级补充 |
+| P0-待归类 | `revokeParkingMonthlyVehicle` | `POST` | `/api/v1/parking/monthly-vehicles/{vehicle_id}/revoke` | 撤销月租车牌 | `parking.vehicle.manage` | `parking.monthly_vehicle_revoked` / `parking.monthly_vehicle_revoke_failed` | web | operation 级补充 |
+| P0-待归类 | `revokeParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles/{vehicle_id}/revoke` | 撤销员工车辆 | `parking.vehicle.manage` | `parking.staff_vehicle_revoked` / `parking.staff_vehicle_revoke_failed` | web, merchant_portal | operation 级补充 |
+| P0-待归类 | `reworkFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/rework` | 验收或提单确认不通过退回返工 | `facility.work_order.manage` | `facility.work_order_rework_requested` / `facility.work_order_rework_failed` | web, staff_private_phone | operation 级补充 |
 | P0-待归类 | `saveContractApprovalFlow` | `POST` | `/api/v1/contracts/approval-flow` | 配置审批流程模板(按合同类型,按综合体覆盖) | `contract.approval.flow.manage` | `contract.approval_flow_saved` / `contract.approval_flow_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveContractDepositMonths` | `POST` | `/api/v1/contracts/deposit-months` | 配置押金收取月数及上下限(全平台统一) | `contract.deposit_months.manage` | `contract.deposit_months_configured` / `contract.deposit_months_config_failed` | web | operation 级补充 |
 | P0-待归类 | `saveContractDepositRefundWait` | `POST` | `/api/v1/contracts/deposit-refund-wait` | 配置押金退还等待期及上下限(按项目) | `contract.deposit_refund_wait.manage` | `contract.deposit_refund_wait_configured` / `contract.deposit_refund_wait_config_failed` | web | operation 级补充 |
+| P0-待归类 | `saveFacilityAlarmResponsePolicy` | `POST` | `/api/v1/facility/alarms/policies` | 保存设备告警响应时限（告警类型×优先级一格） | `facility.alarm.manage` | `facility.alarm_policy_saved` / `facility.alarm_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFacilityWorkOrderPolicy` | `POST` | `/api/v1/facility/work-orders/policies` | 保存工单 SLA/验收策略 | `facility.work_order.manage` | `facility.work_order_policy_saved` / `facility.work_order_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | 保存平面图图形 | `floor_plan.manage` | `floor_plan.shape.save` / `floor_plan.shape.save_failed` | web | operation 级补充 |
+| P0-待归类 | `saveParkingPolicy` | `PUT` | `/api/v1/parking/policies/{project_id}` | 配置本项目停车业务参数（值与上下限同配） | `parking.config.manage` | `parking.policy_saved` / `parking.policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveSettlementObjectionPeriod` | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | 配置非积分商户账单异议期及上下限(按项目) | `settlement.config.manage` | `settlement.objection_period.configured` / `settlement.objection_period.config_failed` | web | operation 级补充 |
 | P0-待归类 | `saveSpaceExpiryColorRule` | `POST` | `/api/v1/contracts/expiry-color-rules` | 配置到期着色分类(颜色+提前天数) | `contract.space.color.manage` | `contract.color_rule_saved` / `contract.color_rule_save_failed` | web | operation 级补充 |
 | P0-待归类 | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | 触发合规提醒扫描 | `compliance.reminder.scan` | `compliance.reminder.scan` / `compliance.reminder.scan_failed` | web | operation 级补充 |
@@ -3423,6 +3540,7 @@
 | P0-待归类 | `suspendFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/suspend` | 挂起工单 | `facility.work_order.manage` | `facility.work_order_suspended` / `facility.work_order_suspend_failed` | web | operation 级补充 |
 | P0-待归类 | `swapStaffWorkPhone` | `POST` | `/api/v1/terminals/devices/work-phone-swap` | 夜班值班经理确认同班故障换机 | `terminal.work_phone.swap` | `terminal.work_phone.swapped` / `terminal.work_phone.swap_failed` | web, staff_work_phone | operation 级补充 |
 | P0-待归类 | `syncWecomConversation` | `POST` | `/api/v1/compliance/wecom/conversations/sync` | 企微会话同步入站（PIPL 合规，开关门控） | `wecom.sync` | `wecom.conversation_synced` / `wecom.conversation_sync_failed` | <br>channel: provider-webhook | operation 级补充 |
+| P0-待归类 | `takeOverFacilityAlarm` | `POST` | `/api/v1/facility/alarms/{alarm_id}/take-over` | 设备告警明确接手（已收到并接手） | `facility.alarm.take_over` | `facility.alarm_taken_over` / `facility.alarm_take_over_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | P0-待归类 | `unbindUserFromPartnerOrg` | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | 账号解绑外部协作机构 | `partner.org.manage` | `partner.org.user_unbound` / `partner.org.user_unbind_failed` | web | operation 级补充 |
 | P0-待归类 | `updateDealerContractTerms` | `POST` | `/api/v1/dealers/contracts/{id}/terms` | 合同付款条款与运费模板 | `dealer.manage` | `dealer.contract_terms_updated` / `dealer.contract_terms_update_failed` | web | operation 级补充 |
 | P0-待归类 | `updateEnergyMeter` | `POST` | `/api/v1/energy/meters/{meter_id}` | 更新能源表计 | `energy.meter.manage` | `energy.meter_saved` / `energy.meter_save_failed` | web | operation 级补充 |

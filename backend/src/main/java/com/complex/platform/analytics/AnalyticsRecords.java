@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,10 +17,20 @@ public final class AnalyticsRecords {
             java.math.BigDecimal rentableArea,
             java.math.BigDecimal leasedArea,
             java.math.BigDecimal signedPendingArea,
-            java.math.BigDecimal parkingRentableArea,
-            java.math.BigDecimal parkingLeasedArea,
+            // HP-P01（第十二批操作员裁决补充第 5 条）：车位按个数计——车位个数（不可租除外）与已租个数（合同已租车位＋已登记且在职的员工车辆）。
+            java.math.BigDecimal parkingSpaces,
+            java.math.BigDecimal parkingRentedSpaces,
             java.math.BigDecimal totalArea
     ) {
+    }
+
+    /**
+     * HP-P01 停车看板单项目一个营业日的事实（BSM「停车场」章「连接经营看板」；第十二批操作员裁决补充第 6、7 条）：
+     * 车位占用回传的在场合计与车位合计、当日最近一次回传的车位数、入场车次、离场车次（其中临停、临停用了消费抵免）、离场停留分钟合计、
+     * 停车收入（临停停车费实收＋当期车位月租账单金额）。
+     */
+    public record ParkingDayFacts(long snapshotOccupied, long snapshotSpaces, long entries, long latestSpaces, long temporaryExits,
+            long creditExits, long exits, long stayMinutes, long revenueCent) {
     }
 
     public record VacantSpaceRow(

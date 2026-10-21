@@ -1,19 +1,27 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.facility.dto.FacilityWorkOrderActionRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderConfirmerRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderPolicyRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderReassignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,10 +38,16 @@ public class FacilityWorkOrderService {
     static final Set<String> TYPES = Set.of("repair", "cleaning", "complaint", "rectification", "inspection", "other");
     static final Set<String> PRIORITIES = Set.of("urgent", "high", "normal");
     static final Set<String> SOURCES = Set.of("merchant_self", "platform", "equipment_alarm", "inspection");
+    /**
+     * 验收方式（后台按类型×优先级配置）。HP-F02 主管／物业验收＋提单方确认双闸不是可配的验收方式：第十二批操作员裁决第 12 条
+     * 「关联设备的报修才两道」——关联了设备的报修单（含设备告警自动生成的）一律两道，没关联设备的普通报修按这里配置的方式（见 {@link #dual}）。
+     */
     static final Set<String> ACCEPTANCE_BY = Set.of("handler", "supervisor", "reporter");
     static final Set<String> MERCHANT_SELF_TYPES = Set.of("repair", "cleaning", "complaint", "other");
     static final Set<String> ACTIVE_STATUSES =
-            Set.of("pending_assign", "assigned", "processing", "pending_review", "pending_acceptance");
+            Set.of("pending_assign", "assigned", "processing", "pending_review", "pending_acceptance", "accepted");
+    /** 双闸下可做主管验收、提单确认或退回返工的状态（已验收＝主管已验收、待提单方确认）。 */
+    private static final Set<String> DUAL_PENDING_STATUSES = Set.of("pending_acceptance", "accepted");
     private static final String PERM = "facility.work_order.manage";
     private static final String BUSINESS_TYPE = "facility_work_order";
     private static final String INSPECTION_PERM = "facility.inspection.manage";
@@ -44,21 +58,43 @@ public class FacilityWorkOrderService {
     private final FacilityInspectionRepository inspectionRepository;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    private final FacilityAlarmService alarmService;
+    private final AccessRepository accessRepository;
+    private final IdempotencyService idempotencyService;
 
     @Autowired
     public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
             AuditEventService auditEventService, AuthorizationService authorizationService,
-            FacilityInspectionRepository inspectionRepository) {
+            FacilityInspectionRepository inspectionRepository, FacilityAlarmService alarmService,
+            AccessRepository accessRepository, IdempotencyService idempotencyService) {
         this.repository = repository;
         this.facilityRepository = facilityRepository;
         this.inspectionRepository = inspectionRepository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
+        this.alarmService = alarmService;
+        this.accessRepository = accessRepository;
+        this.idempotencyService = idempotencyService;
+    }
+
+    public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
+            AuditEventService auditEventService, AuthorizationService authorizationService,
+            FacilityInspectionRepository inspectionRepository) {
+        this(repository, facilityRepository, auditEventService, authorizationService, inspectionRepository, null, null,
+                null);
     }
 
     public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
             AuditEventService auditEventService, AuthorizationService authorizationService) {
-        this(repository, facilityRepository, auditEventService, authorizationService, null);
+        this(repository, facilityRepository, auditEventService, authorizationService, null, null, null, null);
+    }
+
+    /** 测试与内部装配用：带在岗判定所需的账号仓储（无接警服务）。 */
+    public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
+            AuditEventService auditEventService, AuthorizationService authorizationService,
+            AccessRepository accessRepository) {
+        this(repository, facilityRepository, auditEventService, authorizationService, null, null, accessRepository,
+                null);
     }
 
     public PageResponse<FacilityWorkOrderRecord> list() {
@@ -69,7 +105,10 @@ public class FacilityWorkOrderService {
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
-    /** BYOD 一期(2026-07-02):员工自有手机「我的工单」——凭 view_assigned 只看流转到自己的,不见别人。 */
+    /**
+     * BYOD 一期(2026-07-02):员工自有手机「我的工单」——凭 view_assigned 只看流转到自己的,不见别人；第十二批操作员裁决第 13 条：
+     * 一并列出「待我提单确认」的单（本人是提单确认承接人、走两道、提单确认未做、待验收或已验收），确认与退回返工走 /review、/rework。
+     */
     public PageResponse<FacilityWorkOrderRecord> listAssignedToMe() {
         authorizationService.requirePermission("facility.work_order.view_assigned");
         AccessActor actor = authorizationService.currentActor();
@@ -93,35 +132,92 @@ public class FacilityWorkOrderService {
     @Transactional
     public FacilityWorkOrderRecord create(FacilityWorkOrderRequest request) {
         authorizationService.requirePlatformScope();
-        return createInternal(require(request), request == null ? null : request.idempotencyKey());
+        FacilityWorkOrderRequest r = require(request);
+        // 第十二批操作员裁决第 15 条「提单员工就是承接人」：员工建单的提单员工＝在后台点「新建工单」的当前登录员工，不取客户端传的 reporter_id。
+        if ("staff".equals(trimToNull(r.reporterType()))) {
+            r = new FacilityWorkOrderRequest(r.workOrderType(), r.priority(), r.title(), r.description(), r.source(), r.spaceId(),
+                    r.equipmentId(), authorizationService.currentActor().id(), r.reporterType(), r.projectId(), r.merchantId(),
+                    r.idempotencyKey());
+        }
+        return createInternal(r, r.idempotencyKey(), null);
     }
 
     @Transactional
     public FacilityWorkOrderRecord assign(String id, FacilityWorkOrderAssignRequest request) {
-        authorizationService.requirePlatformScope();
-        if (request == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            FacilityWorkOrderRecord cur = load(id);
+            requireStatus(cur, "pending_assign", "只有待派单的工单才能派单");
+            if ("equipment_alarm".equals(cur.source()) && alarmService != null) {
+                alarmService.requireTakenOverBeforeDispatch(cur.id());
+            }
+            Instant now = Instant.now();
+            FacilityWorkOrderRecord assigned = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
+                    cur.priority(), "assigned", cur.title(), cur.description(), cur.source(), cur.spaceId(),
+                    cur.equipmentId(), cur.reporterId(), cur.reporterType(), requireText(request.assigneeId(), "assignee_id"),
+                    cur.responseDueAt(), cur.handleDueAt(), now, cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
+                    cur.verifierId(), cur.satisfaction(), cur.overtime(), cur.resolution(), cur.projectId(),
+                    cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
+                    cur.reporterConfirmedBy());
+            repository.updateWorkOrder(assigned);
+            audit("facility.work_order_assigned", assigned.id(), request.idempotencyKey(),
+                    Map.of("status", assigned.status(), "assignee_id", assigned.assigneeId()));
+            return assigned;
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_assign_failed", id, request == null ? null : request.idempotencyKey(), exception);
+            throw exception;
         }
-        FacilityWorkOrderRecord cur = load(id);
-        requireStatus(cur, "pending_assign", "只有待派单的工单才能派单");
-        Instant now = Instant.now();
-        FacilityWorkOrderRecord assigned = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
-                cur.priority(), "assigned", cur.title(), cur.description(), cur.source(), cur.spaceId(),
-                cur.equipmentId(), cur.reporterId(), cur.reporterType(), requireText(request.assigneeId(), "assignee_id"),
-                cur.responseDueAt(), cur.handleDueAt(), now, cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
-                cur.verifierId(), cur.satisfaction(), cur.overtime(), cur.resolution(), cur.projectId(),
-                cur.merchantId(), cur.createdAt(), now);
-        repository.updateWorkOrder(assigned);
-        audit("facility.work_order_assigned", assigned.id(), request.idempotencyKey(),
-                Map.of("status", assigned.status(), "assignee_id", assigned.assigneeId()));
-        return assigned;
+    }
+
+    /**
+     * 第十二批操作员裁决第 9 条「补转派」：已派单或处理中时，由物业主管改派给他人；处理时限不重算（只换处理人，状态、响应／处理时限、
+     * 派单时间与超时标记都不动，超时照常升级）；留痕原处理人、新处理人和原因（原因必填）。
+     */
+    @Transactional
+    public FacilityWorkOrderRecord reassign(String id, FacilityWorkOrderReassignRequest request) {
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            return idempotencyService.execute("facilityWorkOrderReassign:" + id, request.idempotencyKey(), request, () -> {
+                String assignee = requireText(request.assigneeId(), "assignee_id");
+                String reason = requireText(request.reason(), "reason");
+                FacilityWorkOrderRecord cur = loadForUpdate(id);
+                if (!Set.of("assigned", "processing").contains(cur.status())) {
+                    throw ApiException.badRequest("INVALID_STATE", "只有已派单或处理中的工单才能转派");
+                }
+                if (assignee.equals(cur.assigneeId())) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "转派须改派给原处理人以外的人员");
+                }
+                FacilityWorkOrderRecord moved = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
+                        cur.priority(), cur.status(), cur.title(), cur.description(), cur.source(), cur.spaceId(),
+                        cur.equipmentId(), cur.reporterId(), cur.reporterType(), assignee, cur.responseDueAt(),
+                        cur.handleDueAt(), cur.assignedAt(), cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
+                        cur.verifierId(), cur.satisfaction(), cur.overtime(), cur.resolution(), cur.projectId(),
+                        cur.merchantId(), cur.createdAt(), Instant.now(), cur.confirmerId(), cur.reporterConfirmedAt(),
+                        cur.reporterConfirmedBy());
+                repository.updateWorkOrder(moved);
+                audit("facility.work_order_reassigned", moved.id(), request.idempotencyKey(), Map.of("status", moved.status(),
+                        "previous_assignee_id", cur.assigneeId(), "assignee_id", assignee, "reason", reason));
+                return moved;
+            }, FacilityWorkOrderRecord.class);
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_reassign_failed", id, request == null ? null : request.idempotencyKey(),
+                    exception);
+            throw exception;
+        }
     }
 
     @Transactional
     public FacilityWorkOrderRecord start(String id, FacilityWorkOrderActionRequest request) {
         AccessActor actor = requireScopeActor();
         FacilityWorkOrderActionRequest r = requireAction(request);
-        FacilityWorkOrderRecord cur = load(id);
+        // 与转派同锁工单行：转派与原处理人「开始」「完成」并发时串行，后者按最新处理人与状态校验，不以旧快照整行写回覆盖转派。
+        FacilityWorkOrderRecord cur = loadForUpdate(id);
         enforceAssignedScope(actor, cur);
         requireStatus(cur, "assigned", "只有已派单的工单才能开始处理");
         Instant now = Instant.now();
@@ -130,7 +226,8 @@ public class FacilityWorkOrderService {
                 cur.equipmentId(), cur.reporterId(), cur.reporterType(), cur.assigneeId(), cur.responseDueAt(),
                 cur.handleDueAt(), cur.assignedAt(), now, cur.completedAt(), cur.verifiedAt(), cur.verifierId(),
                 cur.satisfaction(), cur.overtime(), cur.resolution(), cur.projectId(), cur.merchantId(),
-                cur.createdAt(), now);
+                cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
+                cur.reporterConfirmedBy());
         repository.updateWorkOrder(processing);
         audit("facility.work_order_started", processing.id(), r.idempotencyKey(), metadata(processing, r.note()));
         return processing;
@@ -140,11 +237,13 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord complete(String id, FacilityWorkOrderActionRequest request) {
         AccessActor actor = requireScopeActor();
         FacilityWorkOrderActionRequest r = requireAction(request);
-        FacilityWorkOrderRecord cur = load(id);
+        FacilityWorkOrderRecord cur = loadForUpdate(id);
         enforceAssignedScope(actor, cur);
         requireStatus(cur, "processing", "只有处理中的工单才能完成");
-        String acceptanceBy = policy(cur.workOrderType(), cur.priority()).acceptanceBy();
-        String nextStatus = switch (acceptanceBy) {
+        // 双闸（关联设备的报修）完工即进待验收，不看配置的验收方式；每次完工开始新一轮验收：之前的主管验收、提单确认与评分作废
+        // （挂起→恢复→再完工同此）。
+        boolean fresh = dual(cur);
+        String nextStatus = fresh ? "pending_acceptance" : switch (policy(cur.workOrderType(), cur.priority()).acceptanceBy()) {
             case "handler" -> "closed";
             case "supervisor" -> "pending_acceptance";
             case "reporter" -> "pending_review";
@@ -154,9 +253,10 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderRecord completed = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
                 cur.priority(), nextStatus, cur.title(), cur.description(), cur.source(), cur.spaceId(),
                 cur.equipmentId(), cur.reporterId(), cur.reporterType(), cur.assigneeId(), cur.responseDueAt(),
-                cur.handleDueAt(), cur.assignedAt(), cur.respondedAt(), now, cur.verifiedAt(), cur.verifierId(),
-                cur.satisfaction(), cur.overtime(), requireText(r.resolution(), "resolution"), cur.projectId(),
-                cur.merchantId(), cur.createdAt(), now);
+                cur.handleDueAt(), cur.assignedAt(), cur.respondedAt(), now, fresh ? null : cur.verifiedAt(),
+                fresh ? null : cur.verifierId(), fresh ? null : cur.satisfaction(), cur.overtime(),
+                requireText(r.resolution(), "resolution"), cur.projectId(), cur.merchantId(), cur.createdAt(), now,
+                cur.confirmerId(), fresh ? null : cur.reporterConfirmedAt(), fresh ? null : cur.reporterConfirmedBy());
         repository.updateWorkOrder(completed);
         resetEquipmentIfClosed(cur, completed);
         audit("facility.work_order_completed", completed.id(), r.idempotencyKey(), metadata(completed, r.note()));
@@ -168,9 +268,14 @@ public class FacilityWorkOrderService {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
         validateSatisfaction(r.satisfaction());
-        FacilityWorkOrderRecord cur = load(id);
+        FacilityWorkOrderRecord cur = loadForUpdate(id);
         requireStatus(cur, "pending_acceptance", "只有待验收的工单才能验收");
-        FacilityWorkOrderRecord closed = verifyClosed(cur, r);
+        Instant now = Instant.now();
+        // 双闸：主管验收只记验收事实（不评满意度，满意度由提单方评）；提单方已确认才关闭，否则为「已验收」待提单确认。
+        FacilityWorkOrderRecord closed = dual(cur)
+                ? withConfirmations(cur, cur.reporterConfirmedAt() != null ? "closed" : "accepted", cur.completedAt(),
+                        now, actorId(), cur.satisfaction(), cur.reporterConfirmedAt(), cur.reporterConfirmedBy(), now)
+                : verifyClosed(cur, r);
         repository.updateWorkOrder(closed);
         resetEquipmentIfClosed(cur, closed);
         audit("facility.work_order_accepted", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
@@ -179,23 +284,141 @@ public class FacilityWorkOrderService {
 
     @Transactional
     public FacilityWorkOrderRecord review(String id, FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePlatformScope();
-        FacilityWorkOrderActionRequest r = requireAction(request);
-        validateSatisfaction(r.satisfaction());
-        FacilityWorkOrderRecord cur = load(id);
-        requireStatus(cur, "pending_review", "只有待审核的工单才能审核");
-        FacilityWorkOrderRecord closed = verifyClosed(cur, r);
-        repository.updateWorkOrder(closed);
-        resetEquipmentIfClosed(cur, closed);
-        audit("facility.work_order_reviewed", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
-        return closed;
+        try {
+            authorizationService.requirePlatformScope();
+            FacilityWorkOrderActionRequest r = requireAction(request);
+            validateSatisfaction(r.satisfaction());
+            FacilityWorkOrderRecord cur = loadForUpdate(id);
+            if (!confirmerSelf(cur)) {
+                authorizationService.requirePermission(PERM);
+            }
+            FacilityWorkOrderRecord closed;
+            if (dual(cur)) {
+                // 双闸的提单方确认：主管验收前后都可确认；只确认一次；两项齐全才关闭。
+                if (!DUAL_PENDING_STATUSES.contains(cur.status())) {
+                    throw ApiException.badRequest("INVALID_STATE", "只有待验收或已验收的工单才能做提单确认");
+                }
+                if (cur.reporterConfirmedAt() != null) {
+                    throw ApiException.badRequest("INVALID_STATE", "提单方已确认");
+                }
+                if (confirmerBound(cur)) {
+                    requireConfirmer(cur);
+                }
+                Instant now = Instant.now();
+                closed = withConfirmations(cur, cur.verifiedAt() != null ? "closed" : cur.status(), cur.completedAt(),
+                        cur.verifiedAt(), cur.verifierId(), r.satisfaction(), now, actorId(), now);
+            } else {
+                requireStatus(cur, "pending_review", "只有待审核的工单才能审核");
+                closed = verifyClosed(cur, r);
+            }
+            repository.updateWorkOrder(closed);
+            resetEquipmentIfClosed(cur, closed);
+            audit("facility.work_order_reviewed", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
+            return closed;
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_review_failed", id, request == null ? null : request.idempotencyKey(), exception);
+            throw exception;
+        }
+    }
+
+    /**
+     * 第十二批操作员裁决第 2 条「退回原维修人返工」：主管验收或提单确认不通过，填原因后回「处理中」由原维修人继续修；
+     * 另一方已做的确认作废，修好后两方重新确认；时效不重算、超时照常升级（处理时限与超时标记不动）；换人用既有转派。
+     * 第十二批操作员裁决第 16 条「只许承接人本人（推荐）」：绑定承接人的两道单（{@link #confirmerBound}）主管已验收（accepted）后
+     * 只剩提单确认这一道，退回也只许承接人本人（同提单确认的承接人校验，旁人 403 CONFIRMER_MISMATCH）；待验收时主管验收不通过的退回照旧。
+     */
+    @Transactional
+    public FacilityWorkOrderRecord rework(String id, FacilityWorkOrderActionRequest request) {
+        try {
+            authorizationService.requirePlatformScope();
+            FacilityWorkOrderActionRequest r = requireAction(request);
+            return idempotencyService.execute("facilityWorkOrderRework:" + id, r.idempotencyKey(), r, () -> {
+                String reason = trimToNull(r.note());
+                if (reason == null) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "验收或提单确认不通过须填写原因");
+                }
+                FacilityWorkOrderRecord cur = loadForUpdate(id);
+                if (confirmerSelf(cur) || ("accepted".equals(cur.status()) && confirmerBound(cur))) {
+                    requireConfirmer(cur);
+                } else {
+                    authorizationService.requirePermission(PERM);
+                }
+                if (!DUAL_PENDING_STATUSES.contains(cur.status()) || !dual(cur)) {
+                    throw ApiException.badRequest("INVALID_STATE", "只有待验收或已验收的大型维修工单才能退回返工");
+                }
+                Instant now = Instant.now();
+                FacilityWorkOrderRecord reworked = withConfirmations(cur, "processing", null, null, null, null, null, null, now);
+                repository.updateWorkOrder(reworked);
+                audit("facility.work_order_rework_requested", reworked.id(), r.idempotencyKey(), metadata(reworked, reason));
+                return reworked;
+            }, FacilityWorkOrderRecord.class);
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_rework_failed", id, request == null ? null : request.idempotencyKey(),
+                    exception);
+            throw exception;
+        }
+    }
+
+    /**
+     * HP-F02（BSM L1385「自动生成的大型维修工单，由该设备或点位的在岗责任人承接提单确认；责任人不在岗或本人负责此次维修时，
+     * 由物业主管指定其他人员并留痕」）：仅在现承接人缺失、不在岗或就是本次维修人时可指定；被指定人须为本项目在岗员工且不是维修人。
+     * 员工手工建的关联设备报修单同此（第十二批操作员裁决第 15 条「提单人就是本次维修人时，由物业主管指定他人并留痕」）。
+     */
+    @Transactional
+    public FacilityWorkOrderRecord designateConfirmer(String id, FacilityWorkOrderConfirmerRequest request) {
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            return idempotencyService.execute("facilityWorkOrderConfirmer:" + id, request.idempotencyKey(), request, () -> {
+                FacilityWorkOrderRecord cur = loadForUpdate(id);
+                if (!confirmerBound(cur) || "closed".equals(cur.status()) || cur.reporterConfirmedAt() != null) {
+                    throw ApiException.badRequest("INVALID_STATE",
+                            "只有未关闭且未做提单确认的设备告警自动工单或员工手工建的关联设备报修单才能指定提单确认人");
+                }
+                String previous = cur.confirmerId();
+                String reason = previous == null ? "missing"
+                        : previous.equals(cur.assigneeId()) ? "is_repairer"
+                        : !onDuty(previous, cur.projectId()) ? "not_on_duty" : null;
+                if (reason == null) {
+                    throw ApiException.conflict("CONFIRMER_DESIGNATION_NOT_ALLOWED", "提单确认承接人在岗且不是本次维修人，由其承接提单确认，不需另行指定");
+                }
+                String confirmer = requireText(request.confirmerId(), "confirmer_id");
+                if (confirmer.equals(cur.assigneeId()) || !onDuty(confirmer, cur.projectId())) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "提单确认人须为本项目在岗员工，且不是本次维修人");
+                }
+                FacilityWorkOrderRecord designated = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
+                        cur.priority(), cur.status(), cur.title(), cur.description(), cur.source(), cur.spaceId(),
+                        cur.equipmentId(), cur.reporterId(), cur.reporterType(), cur.assigneeId(), cur.responseDueAt(),
+                        cur.handleDueAt(), cur.assignedAt(), cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
+                        cur.verifierId(), cur.satisfaction(), cur.overtime(), cur.resolution(), cur.projectId(),
+                        cur.merchantId(), cur.createdAt(), Instant.now(), confirmer, null, null);
+                repository.updateWorkOrder(designated);
+                Map<String, Object> metadata = new LinkedHashMap<>();
+                if (previous != null) {
+                    metadata.put("previous_confirmer_id", previous);
+                }
+                metadata.put("confirmer_id", confirmer);
+                metadata.put("reason", reason);
+                if (trimToNull(request.note()) != null) {
+                    metadata.put("note", trimToNull(request.note()));
+                }
+                audit("facility.work_order_confirmer_designated", designated.id(), request.idempotencyKey(), metadata);
+                return designated;
+            }, FacilityWorkOrderRecord.class);
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_confirmer_designate_failed", id,
+                    request == null ? null : request.idempotencyKey(), exception);
+            throw exception;
+        }
     }
 
     @Transactional
     public FacilityWorkOrderRecord suspend(String id, FacilityWorkOrderActionRequest request) {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
-        FacilityWorkOrderRecord cur = load(id);
+        FacilityWorkOrderRecord cur = loadForUpdate(id);
         if (!ACTIVE_STATUSES.contains(cur.status())) {
             throw ApiException.badRequest("INVALID_STATE", "只有进行中的工单才能挂起");
         }
@@ -209,12 +432,14 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord resume(String id, FacilityWorkOrderActionRequest request) {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
-        FacilityWorkOrderRecord cur = load(id);
+        FacilityWorkOrderRecord cur = loadForUpdate(id);
         requireStatus(cur, "suspended", "只有已挂起的工单才能恢复");
-        FacilityWorkOrderRecord processing = withStatus(cur, "processing", Instant.now());
-        repository.updateWorkOrder(processing);
-        audit("facility.work_order_resumed", processing.id(), r.idempotencyKey(), metadata(processing, r.note()));
-        return processing;
+        // 待派单时挂起的（没有处理人）恢复回待派单：派单仍只走 assign 及其告警接手闸（BSM L1417「接手后派相应维修人员」），
+        // 不会出现没有处理人的处理中工单。
+        FacilityWorkOrderRecord resumed = withStatus(cur, cur.assigneeId() == null ? "pending_assign" : "processing", Instant.now());
+        repository.updateWorkOrder(resumed);
+        audit("facility.work_order_resumed", resumed.id(), r.idempotencyKey(), metadata(resumed, r.note()));
+        return resumed;
     }
 
     @Transactional
@@ -228,7 +453,8 @@ public class FacilityWorkOrderService {
                     cur.equipmentId(), cur.reporterId(), cur.reporterType(), cur.assigneeId(), cur.responseDueAt(),
                     cur.handleDueAt(), cur.assignedAt(), cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
                     cur.verifierId(), cur.satisfaction(), true, cur.resolution(), cur.projectId(), cur.merchantId(),
-                    cur.createdAt(), now));
+                    cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
+                cur.reporterConfirmedBy()));
         }
         auditEventService.recordSuccess("facility.work_order_overdue_marked", PERM, BUSINESS_TYPE, "all",
                 null, idempotencyKey, Map.of("count", overdue.size()));
@@ -256,17 +482,22 @@ public class FacilityWorkOrderService {
         return saved;
     }
 
-    // ponytail: 刻意同步 @EventListener，跑在发布者(changeStatus)事务内——告警与自动工单 either-both-or-neither，
+    // ponytail: 刻意同步 @EventListener，跑在发布者(changeStatus)事务内——告警、自动工单与接警单 either-both-or-neither，
     // 避免孤儿工单/静默丢失，失败可见可重试。升级路径(若要求告警必须独立于工单创建留存)：
     // 改 @TransactionalEventListener(AFTER_COMMIT) + @Transactional(REQUIRES_NEW) + 失败落 outbox 重试。
     @EventListener
     @Transactional
     public void onEquipmentAlarmed(FacilityEquipmentAlarmedEvent event) {
         authorizationService.requirePlatformScope();
-        FacilityWorkOrderRequest request = new FacilityWorkOrderRequest("repair", "high",
+        // HP-F01：优先级取上报时当场选的告警优先级；项目与位置取设备台账（当班接警按项目解析）。
+        FacilityWorkOrderRequest request = new FacilityWorkOrderRequest("repair", event.priority(),
                 "设备告警: " + requireText(event.equipmentName(), "equipment_name"), event.note(),
-                "equipment_alarm", null, event.equipmentId(), "system", "system", null, null, null);
-        createInternal(request, null);
+                "equipment_alarm", event.spaceId(), event.equipmentId(), "system", "system", event.projectId(), null, null);
+        // HP-F02：提单确认承接人取设备（点位）责任人；提单方仍记为系统。
+        FacilityWorkOrderRecord workOrder = createInternal(request, null, event.responsibleUserId());
+        if (alarmService != null) {
+            alarmService.open(event, workOrder);
+        }
     }
 
     // ponytail: 同上——刻意同步同事务原子(巡检异常与自动整改工单 either-both-or-neither)；
@@ -280,7 +511,7 @@ public class FacilityWorkOrderService {
                 "巡检异常整改: " + requireText(event.title(), "title"), event.abnormalNote(),
                 "inspection", event.spaceId(), null, trimToNull(event.inspectorId()), "staff",
                 event.projectId(), null, null);
-        FacilityWorkOrderRecord workOrder = createInternal(request, null);
+        FacilityWorkOrderRecord workOrder = createInternal(request, null, null);
         if (inspectionRepository != null) {
             inspectionRepository.updateTaskWorkOrderId(taskId, workOrder.id(), Instant.now());
             auditEventService.recordSuccess("facility.inspection_work_order_linked", INSPECTION_PERM,
@@ -288,8 +519,19 @@ public class FacilityWorkOrderService {
         }
     }
 
-    private FacilityWorkOrderRecord createInternal(FacilityWorkOrderRequest request, String idempotencyKey) {
+    private FacilityWorkOrderRecord createInternal(FacilityWorkOrderRequest request, String idempotencyKey,
+            String confirmerId) {
         String type = normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
+        String equipmentId = trimToNull(request.equipmentId());
+        String projectId = trimToNull(request.projectId());
+        // 第十二批操作员裁决第 15 条「和告警单一样，提单员工就是承接人」：员工手工建的关联设备报修单（两道），提单员工记为提单确认
+        // 承接人；承接人在岗按工单项目判，后台建单不带项目时同告警单取设备台账的项目。
+        if (confirmerId == null && "repair".equals(type) && equipmentId != null && "staff".equals(trimToNull(request.reporterType()))) {
+            confirmerId = request.reporterId();
+            if (projectId == null) {
+                projectId = facilityRepository.findEquipmentById(equipmentId).map(FacilityEquipmentRecord::projectId).orElse(null);
+            }
+        }
         String priority = normalizeAllowed(defaultValue(request.priority(), "normal"), "priority", PRIORITIES);
         String source = normalizeAllowed(defaultValue(request.source(), "platform"), "source", SOURCES);
         if ("merchant_self".equals(source) && !MERCHANT_SELF_TYPES.contains(type)) {
@@ -301,11 +543,12 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderRecord rec = new FacilityWorkOrderRecord("fwo_" + UUID.randomUUID(),
                 "FWO-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase(Locale.ROOT),
                 type, priority, "pending_assign", requireText(request.title(), "title"), request.description(),
-                source, trimToNull(request.spaceId()), trimToNull(request.equipmentId()),
+                source, trimToNull(request.spaceId()), equipmentId,
                 trimToNull(request.reporterId()), trimToNull(request.reporterType()), null,
                 now.plus(policy.responseMinutes(), ChronoUnit.MINUTES),
                 now.plus(policy.handleMinutes(), ChronoUnit.MINUTES), null, null, null, null, null, null,
-                false, null, trimToNull(request.projectId()), trimToNull(request.merchantId()), now, now);
+                false, null, projectId, trimToNull(request.merchantId()), now, now,
+                trimToNull(confirmerId), null, null);
         repository.insertWorkOrder(rec);
         audit("facility.work_order_created", rec.id(), idempotencyKey,
                 Map.of("type", rec.workOrderType(), "priority", rec.priority(), "source", rec.source()));
@@ -318,7 +561,8 @@ public class FacilityWorkOrderService {
                 cur.title(), cur.description(), cur.source(), cur.spaceId(), cur.equipmentId(), cur.reporterId(),
                 cur.reporterType(), cur.assigneeId(), cur.responseDueAt(), cur.handleDueAt(), cur.assignedAt(),
                 cur.respondedAt(), cur.completedAt(), now, actorId(), r.satisfaction(), cur.overtime(),
-                cur.resolution(), cur.projectId(), cur.merchantId(), cur.createdAt(), now);
+                cur.resolution(), cur.projectId(), cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
+                cur.reporterConfirmedBy());
     }
 
     private FacilityWorkOrderRecord withStatus(FacilityWorkOrderRecord cur, String status, Instant now) {
@@ -326,14 +570,84 @@ public class FacilityWorkOrderService {
                 cur.title(), cur.description(), cur.source(), cur.spaceId(), cur.equipmentId(), cur.reporterId(),
                 cur.reporterType(), cur.assigneeId(), cur.responseDueAt(), cur.handleDueAt(), cur.assignedAt(),
                 cur.respondedAt(), cur.completedAt(), cur.verifiedAt(), cur.verifierId(), cur.satisfaction(),
-                cur.overtime(), cur.resolution(), cur.projectId(), cur.merchantId(), cur.createdAt(), now);
+                cur.overtime(), cur.resolution(), cur.projectId(), cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
+                cur.reporterConfirmedBy());
+    }
+
+    /** 只改验收/确认相关事实与状态的副本（其余字段原样，含处理时限与超时标记）。 */
+    private FacilityWorkOrderRecord withConfirmations(FacilityWorkOrderRecord cur, String status, Instant completedAt,
+            Instant verifiedAt, String verifierId, Integer satisfaction, Instant reporterConfirmedAt,
+            String reporterConfirmedBy, Instant now) {
+        return new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(), cur.priority(), status,
+                cur.title(), cur.description(), cur.source(), cur.spaceId(), cur.equipmentId(), cur.reporterId(),
+                cur.reporterType(), cur.assigneeId(), cur.responseDueAt(), cur.handleDueAt(), cur.assignedAt(),
+                cur.respondedAt(), completedAt, verifiedAt, verifierId, satisfaction, cur.overtime(), cur.resolution(),
+                cur.projectId(), cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), reporterConfirmedAt,
+                reporterConfirmedBy);
+    }
+
+    /** 第十二批操作员裁决第 12 条「关联设备的报修才两道」：关联了设备的报修单（含设备告警自动生成的）走主管验收＋提单方确认。 */
+    private boolean dual(FacilityWorkOrderRecord cur) {
+        return "repair".equals(cur.workOrderType()) && !isBlank(cur.equipmentId());
+    }
+
+    /**
+     * 只许提单确认承接人本人做提单确认的两道单：设备告警自动工单（BSM L1385「由该设备或点位的在岗责任人承接提单确认」），
+     * 以及员工手工建的关联设备报修单（第十二批操作员裁决第 15 条「和告警单一样，提单员工就是承接人」）。
+     */
+    private boolean confirmerBound(FacilityWorkOrderRecord cur) {
+        return dual(cur) && ("equipment_alarm".equals(cur.source()) || "staff".equals(cur.reporterType()));
+    }
+
+    /**
+     * 本人即上述两道单的提单确认承接人：凭承接身份做提单确认或退回返工，不需另持 facility.work_order.manage；其余调用方须持该权限。
+     */
+    private boolean confirmerSelf(FacilityWorkOrderRecord cur) {
+        return confirmerBound(cur) && cur.confirmerId() != null && cur.confirmerId().equals(actorId());
+    }
+
+    /** 承接人确认的两道单的提单确认：承接人须在岗、不是本次维修人，且由其本人确认。 */
+    private void requireConfirmer(FacilityWorkOrderRecord cur) {
+        String confirmer = cur.confirmerId();
+        if (confirmer == null || confirmer.equals(cur.assigneeId()) || !onDuty(confirmer, cur.projectId())) {
+            throw ApiException.conflict("CONFIRMER_DESIGNATION_REQUIRED",
+                    "提单确认承接人不在岗或本人负责此次维修，须由物业主管指定提单确认人");
+        }
+        if (!confirmer.equals(actorId())) {
+            throw ApiException.forbidden("CONFIRMER_MISMATCH", "只能由提单确认承接人确认");
+        }
+    }
+
+    /**
+     * 「在岗」沿用仓内口径（StaffHandoverService、EnergyWorkflowRepository.activeStaff）：本项目有效员工账号且停岗/离职未生效。
+     * 休息、不当班不算不在岗。无账号仓储时按不在岗处理（fail-closed）。
+     */
+    private boolean onDuty(String userId, String projectId) {
+        if (accessRepository == null || userId == null) {
+            return false;
+        }
+        return accessRepository.findUserById(userId)
+                .filter(u -> "staff".equals(u.accountType()) && "active".equals(u.status())
+                        && Objects.equals(u.organizationId(), projectId))
+                .isPresent() && !accessRepository.isEmploymentBusinessBlocked(userId, Instant.now());
+    }
+
+    private void recordFailure(String event, String id, String idempotencyKey, RuntimeException error) {
+        try {
+            auditEventService.recordFailure(event, PERM, BUSINESS_TYPE, id, null, idempotencyKey,
+                    error instanceof ApiException api ? api.code() : error.getClass().getSimpleName());
+        } catch (RuntimeException auditError) {
+            error.addSuppressed(auditError);
+        }
     }
 
     private void resetEquipmentIfClosed(FacilityWorkOrderRecord before, FacilityWorkOrderRecord after) {
         if ("closed".equals(before.status()) || !"closed".equals(after.status()) || isBlank(after.equipmentId())) {
             return;
         }
-        facilityRepository.findEquipmentById(after.equipmentId()).ifPresent(e -> facilityRepository.updateEquipment(
+        // HP-F03：维修中经审批报废的设备，工单关闭也不改回在用。
+        facilityRepository.findEquipmentById(after.equipmentId()).filter(e -> !"retired".equals(e.status()))
+                .ifPresent(e -> facilityRepository.updateEquipment(
                 new FacilityEquipmentRecord(e.id(), e.name(), e.equipmentType(), e.spaceId(), e.brand(), e.model(),
                         e.vendor(), e.responsibleUserId(), "normal", e.maintenanceCycleDays(), e.lastMaintenanceAt(),
                         e.nextMaintenanceDue(), e.installDate(), e.warrantyUntil(), null, null, null,
@@ -342,6 +656,11 @@ public class FacilityWorkOrderService {
 
     private FacilityWorkOrderRecord load(String id) {
         return repository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "设施工单不存在或已被删除"));
+    }
+
+    private FacilityWorkOrderRecord loadForUpdate(String id) {
+        return repository.findByIdForUpdate(id)
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "设施工单不存在或已被删除"));
     }
 

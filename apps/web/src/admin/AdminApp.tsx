@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -78,6 +78,8 @@ const TicketRewardConfigPage = React.lazy(() => import("./pages/TicketRewardConf
 const TicketPointsBillingPage = React.lazy(() => import("./pages/TicketPointsBillingPage").then((m) => ({ default: m.TicketPointsBillingPage })));
 const SiteEntryPropertyPage = React.lazy(() => import("./pages/SiteEntryPropertyPage").then((m) => ({ default: m.SiteEntryPropertyPage })));
 const FacilityWorkbenchPage = React.lazy(() => import("./pages/FacilityWorkbenchPage").then((m) => ({ default: m.FacilityWorkbenchPage })));
+const ParkingWorkbenchPage = React.lazy(() => import("./pages/ParkingWorkbenchPage").then((m) => ({ default: m.ParkingWorkbenchPage })));
+const MerchantZoneStaffVehiclesPage = React.lazy(() => import("./pages/ParkingWorkbenchPage").then((m) => ({ default: m.MerchantZoneStaffVehiclesPage })));
 const EnergyWorkbenchPage = React.lazy(() => import("./pages/EnergyWorkbenchPage").then((m) => ({ default: m.EnergyWorkbenchPage })));
 const GovernanceTopologyPage = React.lazy(() => import("./pages/GovernanceTopologyPage").then((m) => ({ default: m.GovernanceTopologyPage })));
 const OrganizationMerchantPage = React.lazy(() => import("./pages/OrganizationMerchantPage").then((m) => ({ default: m.OrganizationMerchantPage })));
@@ -330,6 +332,10 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <LeasingWorkbenchPage {...props} />;
     case "ADM-FAC-001":
       return <FacilityWorkbenchPage {...props} />;
+    case "ADM-PARK-001":
+      return <ParkingWorkbenchPage {...props} />;
+    case "ADM-MER-009":
+      return <MerchantZoneStaffVehiclesPage {...props} />;
     case "ADM-FAC-002":
       return <SiteEntryPropertyPage {...props} stage="review" />;
     case "ADM-FAC-003":

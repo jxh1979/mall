@@ -185,7 +185,14 @@ evidence_attachments,direct,merchant_id,merchant_id column on evidence_attachmen
 evidence_events,direct,merchant_id,merchant_id column on evidence_events,ready for project/merchant scoped query enforcement,V0.07,covered
 evidence_reviews,direct,merchant_id,merchant_id column on evidence_reviews,ready for project/merchant scoped query enforcement,V0.07,covered
 external_partner_orgs,direct,project_id,project_id column on external_partner_orgs,ready for project/merchant scoped query enforcement,V0.07,covered
+facility_alarm_contact_attempts,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+facility_alarm_duty_assignments,direct,project_id,project_id column on facility_alarm_duty_assignments,ready for project/merchant scoped query enforcement,V0.07,covered
+facility_alarm_response_policies,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+facility_alarm_takeovers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+facility_alarms,direct,project_id,project_id column on facility_alarms,ready for project/merchant scoped query enforcement,V0.07,covered
 facility_equipment,direct,project_id,project_id column on facility_equipment,ready for project/merchant scoped query enforcement,V0.07,covered
+facility_equipment_scraps,direct,project_id,project_id column on facility_equipment_scraps,ready for project/merchant scoped query enforcement,V0.07,covered
+facility_fault_handling_rules,direct,project_id,project_id column on facility_fault_handling_rules,ready for project/merchant scoped query enforcement,V0.07,covered
 facility_inspection_records,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 facility_inspection_tasks,direct,project_id,project_id column on facility_inspection_tasks,ready for project/merchant scoped query enforcement,V0.07,covered
 facility_inspection_templates,direct,project_id,project_id column on facility_inspection_templates,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -292,6 +299,19 @@ open_app_nonce_replays,inherited,open app/endpoint key,open app/endpoint key -> 
 open_app_tokens,inherited,open app/endpoint key,open app/endpoint key -> provider/project integration scope,must join through scope path before multi-complex rollout,V0.07,covered
 open_endpoint_configs,inherited,open app/endpoint key,open app/endpoint key -> provider/project integration scope,must join through scope path before multi-complex rollout,V0.07,covered
 org_hierarchy,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+parking_credit_components,direct,merchant_id,merchant_id column on parking_credit_components,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_credit_cost_allocations,direct,project_id,project_id column on parking_credit_cost_allocations,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_credit_cost_months,direct,project_id,project_id column on parking_credit_cost_months,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_credits,direct,project_id,project_id column on parking_credits,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_manual_releases,direct,project_id,project_id column on parking_manual_releases,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_monthly_vehicles,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+parking_occupancy_snapshots,direct,project_id,project_id column on parking_occupancy_snapshots,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_payments,direct,project_id,project_id column on parking_payments,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_policies,direct,project_id,project_id column on parking_policies,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_sessions,direct,project_id,project_id column on parking_sessions,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_staff_vehicles,direct,project_id,project_id column on parking_staff_vehicles,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_vendor_bindings,direct,project_id,project_id column on parking_vendor_bindings,ready for project/merchant scoped query enforcement,V0.07,covered
+parking_vendor_payments,direct,project_id,project_id column on parking_vendor_payments,ready for project/merchant scoped query enforcement,V0.07,covered
 partner_voucher_configs,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 partner_voucher_redemptions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 pass_gift_cost_configs,direct,project_id,project_id column on pass_gift_cost_configs,ready for project/merchant scoped query enforcement,V0.07,covered

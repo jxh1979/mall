@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -686,13 +686,13 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate, String windowDomain) {
-        // P1-C：合同租金/物业/能源应收按 due_date 当日（期首）逐期确认收入，并入商户行级 revenue.net 租金分量。
+        // P1-C：合同租金/物业/能源/车位月租应收按 due_date 当日（期首）逐期确认收入，并入商户行级 revenue.net 租金分量（车位月租照旧是合同账单，第十二批裁决补充第 7 条）。
         // 用 amount_cent（已挂账应收，权责发生制确认），与酒吧/售票的现金口径合并入 net（任务要求接 ar_ap receivable）。
         return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(amount_cent), 0) AS total
                   FROM ar_ap_items
                  WHERE direction = 'receivable'
-                   AND source_type IN ('contract_rent', 'contract_property_fee', 'contract_energy_fee')
+                   AND source_type IN ('contract_rent', 'contract_property_fee', 'contract_energy_fee', 'contract_parking_monthly')
                    AND due_date = :business_date
                  GROUP BY merchant_id
                 """, new MapSqlParameterSource("business_date", businessDate));
@@ -893,10 +893,11 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                       AND s.status <> 'unavailable' AND EXISTS (
                       SELECT 1 FROM contract_spaces cs2 JOIN contracts c2 ON c2.id = cs2.contract_id
                        WHERE cs2.space_id = s.id AND c2.lifecycle_status = 'pending_effective')), 0) AS signed_pending,
-                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'
-                      AND s.status <> 'unavailable'), 0) AS parking_rentable,
-                  COALESCE(SUM(s.area_square_meter) FILTER (WHERE s.space_type = 'parking'
-                      AND s.status <> 'unavailable' AND __IS_LET__), 0) AS parking_leased
+                  COUNT(*) FILTER (WHERE s.space_type = 'parking' AND s.status <> 'unavailable') AS parking_rentable,
+                  COUNT(*) FILTER (WHERE s.space_type = 'parking' AND s.status <> 'unavailable' AND __IS_LET__)
+                      -- HP-P01（第十二批操作员裁决补充第 5 条）：员工按已登记且在职的员工车辆数计入，一辆算一个车位。
+                      + (SELECT COUNT(*) FROM parking_staff_vehicles v JOIN access_users u ON u.id = v.user_id
+                          WHERE v.status = 'active' AND u.status = 'active') AS parking_leased
                   FROM spaces s
                   LEFT JOIN LATERAL (__LATEST__) l ON true
                 """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
@@ -904,6 +905,58 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         return jdbcTemplate.queryForObject(sql, params, (rs, n) -> new AnalyticsRecords.OccupancyAreas(
                 rs.getBigDecimal("rentable"), rs.getBigDecimal("leased"), rs.getBigDecimal("signed_pending"),
                 rs.getBigDecimal("parking_rentable"), rs.getBigDecimal("parking_leased"), rs.getBigDecimal("total")));
+    }
+
+    /**
+     * HP-P01 停车看板事实（BSM「停车场」章「连接经营看板」）：车位占用取停车系统当日回传；入场、离场按营业日窗口；
+     * 临停用了消费抵免＝离场的临停车次在该次停车上用掉了抵免（第十二批操作员裁决补充第 6 条）；停车收入＝临停停车费实收（平台收的停车费＋停车系统自收，
+     * 回报里平台已收的不重复计；只计停车记录车辆类型为临停的，员工车辆折扣缴费不计入；停车系统自收而回报没带停车记录号的按临停计）＋当日到期的车位月租账单（第 7 条，只是看板口径，合同收入归集不变）。
+     */
+    @Override
+    public Map<String, AnalyticsRecords.ParkingDayFacts> parkingDayFacts(LocalDate businessDate) {
+        MapSqlParameterSource params = dayRange(businessDate).addValue("day", businessDate);
+        Map<String, AnalyticsRecords.ParkingDayFacts> out = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                WITH snap AS (
+                    SELECT project_id, SUM(occupied_total) AS occupied, SUM(total_spaces) AS spaces FROM parking_occupancy_snapshots
+                     WHERE reported_at >= :start AND reported_at < :end GROUP BY project_id),
+                latest AS (
+                    SELECT DISTINCT ON (project_id) project_id, total_spaces FROM parking_occupancy_snapshots
+                     WHERE reported_at < :end ORDER BY project_id, reported_at DESC),
+                entered AS (
+                    SELECT project_id, COUNT(*) AS n FROM parking_sessions WHERE entered_at >= :start AND entered_at < :end GROUP BY project_id),
+                exited AS (
+                    SELECT s.project_id, COUNT(*) AS n, COUNT(*) FILTER (WHERE s.vehicle_kind = 'temporary') AS temporary_n,
+                           COUNT(*) FILTER (WHERE s.vehicle_kind = 'temporary' AND EXISTS (
+                               SELECT 1 FROM parking_credits c WHERE c.session_id = s.id AND c.status = 'used')) AS credit_n,
+                           COALESCE(ROUND(SUM(EXTRACT(EPOCH FROM (s.exited_at - s.entered_at)) / 60)), 0) AS stay
+                      FROM parking_sessions s WHERE s.exited_at >= :start AND s.exited_at < :end GROUP BY s.project_id),
+                revenue AS (
+                    SELECT project_id, SUM(amount_cent) AS cent FROM (
+                        SELECT p.project_id, p.amount_cent FROM parking_payments p JOIN parking_sessions s ON s.id = p.session_id
+                         WHERE p.status = 'paid' AND p.paid_at >= :start AND p.paid_at < :end AND s.vehicle_kind = 'temporary'
+                        UNION ALL
+                        SELECT v.project_id, v.amount_cent FROM parking_vendor_payments v LEFT JOIN parking_sessions s ON s.id = v.session_id
+                         WHERE v.platform_payment_id IS NULL AND v.paid_at >= :start AND v.paid_at < :end
+                           AND COALESCE(s.vehicle_kind, 'temporary') = 'temporary'
+                        UNION ALL
+                        SELECT b.project_id, b.amount_cent FROM contract_rent_bills b JOIN ar_ap_items i ON i.id = b.ar_ap_item_id
+                         WHERE b.fee_type = 'parking_monthly' AND b.voided_at IS NULL AND i.due_date = :day) r
+                     WHERE project_id IS NOT NULL GROUP BY project_id),
+                p AS (SELECT project_id FROM snap UNION SELECT project_id FROM entered UNION SELECT project_id FROM exited
+                      UNION SELECT project_id FROM revenue)
+                SELECT p.project_id, COALESCE(snap.occupied, 0) AS occupied, COALESCE(snap.spaces, 0) AS spaces,
+                       COALESCE(entered.n, 0) AS entries, COALESCE(latest.total_spaces, 0) AS latest_spaces,
+                       COALESCE(exited.temporary_n, 0) AS temporary_exits, COALESCE(exited.credit_n, 0) AS credit_exits,
+                       COALESCE(exited.n, 0) AS exits, COALESCE(exited.stay, 0) AS stay, COALESCE(revenue.cent, 0) AS revenue
+                  FROM p LEFT JOIN snap USING (project_id) LEFT JOIN latest USING (project_id) LEFT JOIN entered USING (project_id)
+                  LEFT JOIN exited USING (project_id) LEFT JOIN revenue USING (project_id)
+                """, params, (java.sql.ResultSet rs) -> {
+            out.put(rs.getString("project_id"), new AnalyticsRecords.ParkingDayFacts(rs.getLong("occupied"), rs.getLong("spaces"),
+                    rs.getLong("entries"), rs.getLong("latest_spaces"), rs.getLong("temporary_exits"), rs.getLong("credit_exits"),
+                    rs.getLong("exits"), rs.getLong("stay"), rs.getLong("revenue")));
+        });
+        return out;
     }
 
     @Override

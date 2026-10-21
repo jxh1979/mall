@@ -1,4 +1,4 @@
-# 文件版本：V0.02
+# 文件版本：V0.03
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -56,3 +56,5 @@ access.device_credential.enforcement.web: enforce
 amusement.concurrent-reset.scheduled.enabled: true           # 场次结束自动清空该场次与项目并发维、营业日结束自动清零在玩人数(留痕 amusement_concurrent_reset_log)
 dealer.order.deadline.scheduled.enabled: true                # E-13 首付款截止未达门槛自动取消并释放预留、已收款进既有退款审批;尾款逾期标记与暂停账期订单
 bar.pending-clear-alert.scheduled.enabled: true              # TK-27 待清台超时提醒本酒吧此刻有排班且持 bar.table.open_close 的员工(每台位每次待清台只发一次,默认 60s 一轮)
+facility.alarm-escalation.scheduled.enabled: true            # HP-F01 设备告警超时只在当班范围升级、换班未结告警须下一班明确接手(BSM「楼宇运营」告警条,默认 60s 一轮)
+parking.credit-cost.scheduled.enabled: true                 # HP-P01 停车消费抵免成本按月合并为城市项目公司对承担商户的普通内部结算应收(付款时点按付账日规则固化,每日一轮处理已结束月份)

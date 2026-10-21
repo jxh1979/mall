@@ -1,6 +1,9 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -14,6 +17,8 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.facility.dto.FacilityWorkOrderActionRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderConfirmerRequest;
+import com.complex.platform.facility.dto.FacilityWorkOrderReassignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -97,5 +102,31 @@ class FacilityWorkOrderControllerTests {
                 new FacilityWorkOrderActionRequest(null, null, "hold", "k_suspend")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+        // 第十二批裁决第 9 条：转派由物业主管（持 facility.work_order.manage）操作。
+        assertThatThrownBy(() -> controller.reassign("wo_1",
+                new FacilityWorkOrderReassignRequest("usr_vendor_b", "换人", "k_reassign")))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+    }
+
+    /**
+     * HP-F02：指定提单确认人是物业侧动作，外包供应商只持处理权限，被 facility.work_order.manage 拒。
+     * 提单确认与退回返工的权限闸在服务层（持 manage，或本人即设备告警自动工单的提单确认承接人），控制器不先按 manage 拦。
+     */
+    @Test
+    void designateConfirmerRequiresManageButReviewAndReworkGateInService() {
+        doThrow(ApiException.forbidden("PERMISSION_DENIED", "permission denied: facility.work_order.manage"))
+                .when(authorizationService).requirePermission("facility.work_order.manage");
+
+        assertThatThrownBy(() -> controller.designateConfirmer("wo_1",
+                new FacilityWorkOrderConfirmerRequest("usr_b", "责任人即维修人", "k_des")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PERMISSION_DENIED"));
+        FacilityWorkOrderActionRequest rework = new FacilityWorkOrderActionRequest(null, null, "仍漏水", "k_rw");
+        FacilityWorkOrderActionRequest review = new FacilityWorkOrderActionRequest(null, 5, null, "k_rv");
+        assertThatCode(() -> controller.rework("wo_1", rework)).doesNotThrowAnyException();
+        assertThatCode(() -> controller.review("wo_1", review)).doesNotThrowAnyException();
+        verify(service).rework("wo_1", rework);
+        verify(service).review("wo_1", review);
+        verify(authorizationService, times(1)).requirePermission("facility.work_order.manage");
     }
 }

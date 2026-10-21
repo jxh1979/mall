@@ -1,4 +1,4 @@
-# 商户侧与商户专区产品口径 PRD V0.15
+# 商户侧与商户专区产品口径 PRD V0.16
 
 > 版本：V0.15 ｜ 最后更新：2026-10-19 ｜ 状态：现行 PRD
 > 业务最终解释权：三份业务 HTML。本文同时记录当前实现；当前页面、接口或终端不足时，标为实现差距，不能据此缩小 HTML 的商户侧能力。
@@ -55,6 +55,7 @@ HTML 明列两类商户终端：
 | 费用通知 | 默认发给商户主要联系人，商户可在后台改为指定接收人并维护手机号。房租/水电/物业账单与催缴、合同即将到期的续约提醒均须支持短信；此外，结算出账与调整、对账差异、押金抵扣与退还、违约金计提、分红出单与发放等商户应收应付金额变化一律短信通知，通知写明金额、原因与异议截止日期，且不得按类或按条关闭。续约提醒不属于金额变化强制通知，不强制携带金额与异议截止日期，可按后台提醒短信配置决定是否发送 | ADM-MER-007；当前后端只配置 `rent/utilities/property/renewal` 四类事件，其余金额变化事件与短信正文要素尚未完整承载。`NotificationSwitchResolver` 的第一道 `sms_notification` 总闸缺行时默认关闭，V177 也将其出厂设为关闭；其后 `sms.notify.merchant_fee` 域开关及 `rent/utilities/property` 分项开关仍可关闭金额变化通知，均会使通知落为 `skipped_switch_off`，与 HTML 不得关闭的要求冲突；`renewal` 分项开关可继续按普通提醒配置 |
 | 我的分红 | 查看每期基数、比例、扣税、实发、状态和逐行算式，只看不改 | ADM-MER-008；主理人还应能查看本商户全部经营数据，包括人工成本明细、本店员工姓名和具体工资，当前专区未完整承载 |
 | 我的证照 | 查看本商户全部证照、资质、保险到期情况、预警和宽限状态 | 尚无商户侧只读端点和页面 |
+| 员工车辆 | 为本商户员工登记车牌，停车场按项目配置免费或折扣（BSM「商户与员工车位：商户月租车位按合同约定」） | ADM-MER-009（HP-P01 第一组）：只能登记、撤销本商户员工车辆；员工离职或停用后不再下发 |
 
 ### 3.3 账单十一类
 
@@ -120,8 +121,9 @@ HTML 明列两类商户终端：
 | ADM-MER-006 | `/admin/merchant-zone/contracts` | `contract.view` | 我的合同只读 |
 | ADM-MER-007 | `/admin/merchant-zone/fee-recipients` | `merchant.portal.fee_recipient.manage` | 费用接收人维护 |
 | ADM-MER-008 | `/admin/merchant-zone/dividends` | `finance.dividend.view` | 我的分红只读 |
+| ADM-MER-009 | `/admin/merchant-zone/staff-vehicles` | `parking.vehicle.manage` | 员工车辆登记与撤销（本商户员工） |
 
-`docs/full-admin-ui-acceptance-matrix-v0.1.md` 已存在 UI-ADM-MER-003..008 六行；不得再写成矩阵缺失。
+`docs/full-admin-ui-acceptance-matrix-v0.1.md` 已存在 UI-ADM-MER-003..009 七行；不得再写成矩阵缺失。
 
 `GET /api/v1/merchant-portal/contracts` 与 `GET /api/v1/merchant-portal/settlements` 默认 `page=1/size=500`；后端按当前账号的商户范围取回本商户全部记录后切片，`total` 为本商户记录的真实总数；当前账号没有商户范围时一律拒绝（403 `MERCHANT_SCOPE_REQUIRED`），不提供平台全量口径。
 

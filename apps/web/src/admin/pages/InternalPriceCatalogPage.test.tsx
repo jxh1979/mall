@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -79,6 +80,29 @@ describe("InternalPriceCatalogPage 内部结算价目录(ADM-STL-003)", () => {
         itemCode: null, merchantId: "m_bar_1", category: "spirit", itemName: "新款金酒",
         priceCent: 6800, idempotencyKey: expect.any(String),
       }),
+    ));
+  });
+
+  // HP-P01（BSM「内部结算价目录」「实际提供商品或服务的主体提交价格」；第十二批操作员裁决补充第 4 条「每小时内部价」）：
+  // 停车由城市项目公司经营，停车抵免每小时内部结算价的提供方是经营主体而非商户，提供商家与提供主体二选一。
+  it("提供方为经营主体：只填提供主体，POST 带 providerEntityId、merchantId 为空；两者都填被拦", async () => {
+    const post = vi.fn().mockResolvedValue("sku_pk_1");
+    renderPage(makeApi(vi.fn().mockResolvedValue([]), post));
+    await waitFor(() => expect(screen.queryByTestId("ipc-form-entity")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("ipc-form-merchant"), { target: { value: "m_bar_1" } });
+    fireEvent.change(screen.getByTestId("ipc-form-entity"), { target: { value: "be_cpc_1" } });
+    fireEvent.change(screen.getByTestId("ipc-form-category"), { target: { value: "parking_credit" } });
+    fireEvent.change(screen.getByTestId("ipc-form-name"), { target: { value: "停车抵免（每小时）" } });
+    fireEvent.change(screen.getByTestId("ipc-form-price"), { target: { value: "8" } });
+    fireEvent.click(screen.getByTestId("ipc-form-submit"));
+    await waitFor(() => expect(screen.getByTestId("ipc-form-error").textContent).toContain("二选一"));
+    expect(post).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId("ipc-form-merchant"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("ipc-form-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/internal-price-item",
+      expect.objectContaining({ merchantId: null, providerEntityId: "be_cpc_1", category: "parking_credit", priceCent: 800 }),
     ));
   });
 

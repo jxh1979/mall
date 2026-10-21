@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -112,6 +112,13 @@ public class SupervisorReviewService {
             // 双方确认后，确认人上级主管复核；通过后进财务复核。
             new SupervisorReviewPolicyRecord("inventory_transfer_unreturnable", "inventory.transfer_order.unreturnable", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
+            // HP-F03（BSM L1408「楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证」）：
+            // 恒阻断；发起人沿直接上级链到其指定的最终审批人（设备台账仅平台／项目物业方可写，所有权主体即该方）。
+            new SupervisorReviewPolicyRecord("facility_equipment_scrap", "facility.equipment.scrap", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // HP-P01（BSM L1438「免费放行和减免须经物业主管审批」）：恒阻断；最终审批人须经角色持有停车减免审批权限（物业主管）。
+            new SupervisorReviewPolicyRecord("parking_release_waive", "parking.release.waive", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "parking.release.approve"),
             new SupervisorReviewPolicyRecord("ticket_reward_rule", "ticket.reward.rule", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "ticket.reward.rule.approve"),
             new SupervisorReviewPolicyRecord("ticket_reward_national", "ticket.reward.national", 0, 1, true,

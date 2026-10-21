@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -55,8 +55,9 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(areas.totalArea().subtract(baseline.totalArea())).isEqualByComparingTo("700");
         assertThat(areas.leasedArea().subtract(baseline.leasedArea())).isEqualByComparingTo("100");
         assertThat(areas.signedPendingArea().subtract(baseline.signedPendingArea())).isEqualByComparingTo("40");
-        assertThat(areas.parkingRentableArea().subtract(baseline.parkingRentableArea())).isEqualByComparingTo("20");
-        assertThat(areas.parkingLeasedArea().subtract(baseline.parkingLeasedArea())).isEqualByComparingTo("20");
+        // HP-P01（第十二批操作员裁决补充第 5 条）：车位按个数计——合同已租车位个数÷车位个数。
+        assertThat(areas.parkingSpaces().subtract(baseline.parkingSpaces())).isEqualByComparingTo("1");
+        assertThat(areas.parkingRentedSpaces().subtract(baseline.parkingRentedSpaces())).isEqualByComparingTo("1");
 
         java.util.List<AnalyticsRecords.VacantSpaceRow> vacant = repository.listVacantSpaces(asOf, 200, 0).stream()
                 .filter(row -> row.spaceId().startsWith("sp_s3_")).toList();

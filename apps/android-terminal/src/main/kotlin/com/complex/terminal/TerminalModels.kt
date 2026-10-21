@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -509,6 +509,26 @@ data class NoticeAcknowledgeRequest(
   val idempotencyKey: String,
 )
 
+/** HP-F01 我的接警（GET /api/v1/facility/alarms/mine）：status awaiting_takeover＝待明确接手，taken_over＝已明确接手。 */
+@Serializable
+data class FacilityAlarmRecord(
+  val id: String? = null,
+  val equipmentId: String? = null,
+  val alarmType: String? = null,
+  val priority: String? = null,
+  val status: String? = null,
+  val responseDueAt: String? = null,
+  val holderUserId: String? = null,
+  val uncovered: Boolean? = null,
+)
+
+/** HP-F01 明确接手（「已收到并接手」）；查看列表、公告确认已读都不等于接手。 */
+@Serializable
+data class FacilityAlarmTakeOverRequest(
+  val idempotencyKey: String,
+  val note: String? = null,
+)
+
 @Serializable
 data class MyWorkOrderRecord(
   val id: String? = null,
@@ -517,6 +537,25 @@ data class MyWorkOrderRecord(
   val status: String? = null,
   val priority: String? = null,
   val handleDueAt: String? = null,
+  // 第十二批操作员裁决第 13 条：我的工单一并列出「待我提单确认」的单。
+  val assigneeId: String? = null,
+  val confirmerId: String? = null,
+  val reporterConfirmedAt: String? = null,
+) {
+  /**
+   * 本人是提单确认承接人、不是本次维修人、尚未确认、待验收或已验收＝「待我提单确认」（可「确认」「退回返工」）。
+   * 本人即本次维修人的，按 BSM L1385「本人负责此次维修时，由物业主管指定其他人员」不由本人确认，只作派给我的单列出。
+   */
+  fun awaitsConfirmationBy(userId: String?): Boolean =
+    userId != null && confirmerId == userId && assigneeId != userId && reporterConfirmedAt == null &&
+      status in setOf("pending_acceptance", "accepted")
+}
+
+/** 我的工单「确认」（POST /review）与「退回返工」（POST /rework，note＝不通过原因，必填）。 */
+@Serializable
+data class WorkOrderConfirmationRequest(
+  val idempotencyKey: String,
+  val note: String? = null,
 )
 
 // ---------------------------------------------------------------------------
