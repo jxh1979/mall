@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -210,6 +210,14 @@ public class FinanceService implements TerminationSettlementPort {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.evidence.EvidenceAttachmentValidator refundEvidenceValidator;
+
+    // ROOT-04-R4：锁账补录改写过去到期日的合同应收（看板按 due_date 并入收入，同 JdbcAnalyticsRepository.sumContractRentReceivableByMerchant）。
+    // 可为 null（单测手工构造）＝不登记。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks;
+
+    private static final java.util.Set<String> CONTRACT_REVENUE_SOURCE_TYPES = java.util.Set.of(
+            "contract_rent", "contract_property_fee", "contract_energy_fee", "contract_parking_monthly");
 
     private org.springframework.transaction.support.TransactionTemplate refundTransactions;
 
@@ -1403,6 +1411,11 @@ public class FinanceService implements TerminationSettlementPort {
             // 与登记收付款同一事务回调合同域复核退租结算单（回调入参＝重述行）。
             if (settlementProgress != null) {
                 settlementProgress.onArApItemPaid(restated);
+            }
+            // ROOT-04-R4：派生行沿用原到期日，合同应收按到期日并入该日收入；同事务登记原到期日重算该日收入快照与当月月度行。
+            if (revenueRefreshMarks != null && "receivable".equals(item.direction())
+                    && CONTRACT_REVENUE_SOURCE_TYPES.contains(item.sourceType()) && item.dueDate() != null) {
+                revenueRefreshMarks.mark(List.of(item.dueDate()));
             }
         }
         // reject：不改账，只标状态。

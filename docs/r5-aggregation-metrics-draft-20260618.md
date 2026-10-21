@@ -54,7 +54,7 @@
 | 酒吧收入 | revenue.bar | Σ 已结算账单实收分（**仅现场消费实收**） | bar_bills/bar_bill_settlements |
 | 通票酒吧分摊 | revenue.ticket_bar_share | Σ 当日发放、业态映射到酒吧的权益分配收入（**展示口径，不并入 net**） | issued_entitlements.allocated_revenue_cent |
 | 通票游乐分摊 | revenue.ticket_amusement_share | Σ 当日发放、业态映射到游乐的权益分配收入（**展示口径，不并入 net**） | issued_entitlements.allocated_revenue_cent |
-| 第三方回流收入 | revenue.thirdparty | Σ 回流 accepted 分 | integration_order_syncs |
+| 第三方回流收入 | revenue.thirdparty | Σ 餐饮/零售已入账（`status='synced'`、`sync_type='order'`）且已按门店映射落商户的回流订单分；映射缺失挂差异不计，渠道团购票已本地出票计入售票收入不再计；按回流落库时间落商户营业日（10:00 起算）（**单列，不并入 net**，见 §四） | integration_order_syncs |
 | 退款 | revenue.refund | Σ 退款分 | ticket_refunds/finance_refunds/bar_bill_adjustments |
 | 净收入 | revenue.net | 售票 + 酒吧 − 退款（**不含第三方回流，不含通票分摊**） | 派生 |
 
@@ -90,7 +90,7 @@
 ### 2.5 供应链
 | 指标 | metric_code | 聚合 | 源表 | 备注 |
 |---|---|---|---|---|
-| 采购到货 | supply.received | Σ 入库确认 | inventory_purchase_requests | **当前仅"申请"，依赖 T6 采购周期落地** |
+| 采购到货 | supply.received | 按商品及单位分列 Σ 合格接收（入库确认）、实到、拒收与到货次数，**不同单位不相加、不出合计数** | purchase_receipts（采购收货登记，一次实际到货一行） | 实施台账裁决 M01「采购到货按商品及单位分别显示」；按实际到货时间落库存营业日；实时查询，不写快照 |
 | 库存余额 | supply.balance | Σ on_hand | inventory_stock_balances | — |
 | 吧台消耗 | supply.consumed | Σ(sale/pour/redeem_consume) | inventory_stock_movements | — |
 | 缺货预警 | supply.low_stock | count(SKU 可用量 < 该 SKU 安全库存阈值) | inventory_items.min_quantity + inventory_stock_balances | **已定稿**：绝对值阈值/SKU 可配（复用 `inventory_items.min_quantity`，绝对值/SKU）；阈值 ≤ 0 视为不预警；已接入 ETL（平台+商户口径） |
@@ -102,7 +102,7 @@
 |---|---|---|---|---|
 | 待复核 | risk.pending_review | count(pending) | supervisor_review_decisions+evidence_reviews+inventory_risk_alerts | — |
 | 异常事件 | risk.incidents | count | amusement_incidents+analytics_risk_alerts | 通用异常链依赖 P1 risk_alerts |
-| 补录数量 | risk.manual_backfill | count(补录) | — | **当前无补录字段，依赖 P1 留痕接线** |
+| 补录数量 | risk.manual_backfill | count(补录申请)：提交即计一笔，状态（待审/已通过/已驳回）另列；审批与同一提交重放不重复计 | ar_ap_adjustments（锁账后补录）+ staff_attendance_receipt_reviews（无可信领取时刻补证） | 实施台账裁决 M02「补录提交即计数，状态另列」；按提交时间落治理营业日 |
 | 第三方差异 | risk.thirdparty_diff | count | integration_reconciliation_differences | — |
 
 ### 2.7 财务
@@ -142,3 +142,4 @@
 | 2026-06-19 | **定稿（待确认项#1）**：游乐通票收入业态拆分——组合票按打折比例（各分项单价比例）拆分计入酒吧/游乐（法律双实体），支持手动输入分项单价。迁移 V078 加 `ticket_type_entitlements.component_price_cent` + `issued_entitlements.allocated_revenue_cent`；出票按比例逐张拆分（最大余数补尾）落 `allocated_revenue_cent`，全空回退均摊、无订单不拆分。T12 新增展示口径 `revenue.ticket_bar_share`/`revenue.ticket_amusement_share`（按业态/商户汇总），**不并入 net**（硬约束：净收入不重复）。配置入口（#3）：`TicketTypeEntitlementRequest.num_people/component_price_cent`、`EntitlementTemplateRequest.bar_item_ref/merchant_id/venue_id/point_id` 经 `TicketCatalogService` 透传 + OpenAPI 同步 | 2026-06-19 财务确认；代码：`TicketOrderService.allocateRevenue/issueEntitlements`、`TicketCatalogService`、`JdbcTicketing*`、`DashboardAggregationJob`、`JdbcAnalyticsRepository.sumTicket*ShareCentsByMerchant`、V078 |
 | 2026-06-19 | **RC1 第二阶段（落代码）**：①酒吧退款（V079 `bar_bill_adjustments.adjustment_type='refund'`）联动 finance ar_ap 台账——过账为 `direction='payable'`/`source_type='refund'`/`source_id`=退款调整记录 id 的应付项，与退款主流程同事务（过账失败回滚退款），**无新迁移**（`ar_ap_items` 无 `item_type` CHECK，`source_type='refund'` 本就在允许集）。②统一净收入派生指标 `revenue.net` 接入 T12 ETL：平台 = `revenue.ticket`+Σ`revenue.bar`−售票退款−Σ`revenue.bar_refund`；商户行级 = 酒吧实收−酒吧退款；第三方回流不计；退款按经营日冲减当日；新增单列 `revenue.ticket_refund`（平台口径，`ticket_refunds` 按 `created_at` 落经营日窗口）。null 安全（分量缺失按 0）。 | 2026-06-19；代码：`BarReceivableLedgerService.createRefundPayable`、`FinanceBarReceivableLedgerService`、`BarBillingService.applyBillAdjustment`(refund 分支)、`DashboardAggregationJob.upsertNetRevenue`、`AnalyticsRepository/JdbcAnalyticsRepository.sumTicketRefundCents`、`AnalyticsService.METRIC_CATALOG`；测试：`FinanceBarReceivableLedgerServiceTests.refundPostsPayableRefundItemToArApLedger`、`BarServiceTests.refundReducesPayableAfterSettlementAndRecordsRefundTimestamp`、`DashboardAggregationJobNetRevenueTests` |
 | 2026-06-19 | **RC1 第二阶段·清单#4（落代码）**：商户级完整 `revenue.net` 纳入售票分量。商户行级 net = 本商户售票分量（`issued_entitlements.allocated_revenue_cent` 按 `merchant_id`/V075 归集，`created_at` 落经营日窗口）+ 酒吧实收 − 售票退款分摊 − 酒吧退款。售票退款分摊：`ticket_refunds`（与平台 `revenue.ticket_refund` 同 population/窗口）关联订单各权益 `allocated` 占比把退款逐笔分摊到 merchant（最大余数补尾，Σ=退款额）；订单无 `allocated` 权益（direct 出票/历史）保守不归任何商户。**平台口径维持现有**（售票实付全额，不改用 allocated）；一致性：`allocateRevenue` 保证 Σallocated==订单实付，平台与商户各用各自来源各算一次、无重复，唯一差额=direct 出票（平台≥Σ商户）。**无新迁移**（纯聚合，复用 V075/V078）。 | 2026-06-19；代码：`DashboardAggregationJob.upsertNetRevenue`（新增售票分量+退款分摊入参）、`AnalyticsRepository/JdbcAnalyticsRepository.sumTicketAllocatedRevenueByMerchant`+`sumTicketRefundByMerchant`（含 `distributeRefundsByMerchant` 最大余数分摊）、`AnalyticsService.METRIC_CATALOG`（net 口径注释）；测试：`DashboardAggregationJobNetRevenueTests.merchantNetIncludesTicketAllocatedShareAndRefundShare`/`merchantNetTicketShareCanCoverMerchantWithoutBarActivity`/`platformNetIgnoresDirectIssuanceGapButStaysConsistentForAllocatedOrders`、`AnalyticsJdbcIntegrationTests.ticketAllocatedRevenueAndRefundAreAggregatedAndDistributedByMerchant`/`ticketRefundForOrderWithoutAllocatedEntitlementsIsNotAttributedToAnyMerchant` |
+| 2026-10-21 | **第十三批 ROOT-04**：§2.1 第三方回流收入、§2.5 采购到货、§2.6 补录数量改为现行来源与口径；收入类快照补历史营业日重算——跨期月结（服务费扣留按原营业日）、服务费退款后重算、第三方回流后到/改额在唯一写点登记原营业日（`analytics_revenue_refresh_dates`，V536），看板定时刷新逐日只重算收入类快照、项目段与该月月度累计行，不动存量类快照、月度期末值、异常提醒与商户汇总；全局 04:00 换日后至各收入窗昨日收尾（酒吧 06:00、商户 10:00）期间每轮重算昨日收入 | 实施台账 latestConfirmedDecisions M01、M02 与 ROOT-04 batch6_dependency_note；BSM「月度对比」「异常提醒」「卡片明细对账」条 |

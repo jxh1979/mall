@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -60,6 +62,9 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String projectA = "prj_m737_a_" + suffix;
@@ -306,7 +311,82 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         assertReviewLocksDenied("vendor", grantedReviewLock("vendor", "outsourced_vendor", null), "外包供应商无权查看平台级数据");
     }
 
+    // ROOT-04-R2（BSM「采购、库管和酒吧店长看采购周期……」；BSM「项目级操作人员只看自己所在项目范围内的 KPI 和明细」；裁决 M01）：
+    // A、B 各一次到货，A 的普通员工按前端真实请求只拿到 A 的到货行与按商品及单位的分组。修复前该指标未登记，400（第一处断言即红）。
+    @Test
+    void receivedDetailByRealQueryShapeOnlyShowsReachableProject() throws Exception {
+        java.time.LocalDate day = java.time.LocalDate.of(2098, 3, 10);
+        java.time.Instant at = businessDayResolver.startInstant("inventory", day).plusSeconds(3600);
+        String receiptA = purchaseReceipt("a", projectA, 12, 10, 2, at);
+        purchaseReceipt("b", projectB, 3, 3, 0, at);
+        RequestPostProcessor plain = staffOfA("plain", plainRole("plain", "analytics.dashboard.view", "inventory.purchase_request.view"));
+
+        mockMvc.perform(get("/api/v1/analytics/metric-detail?metric=supply.received&from=" + day + "&to=" + day + "&page=1&size=20").with(plain))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total_rows").value(1))
+                .andExpect(jsonPath("$.data.rows[0].id").value(receiptA))
+                .andExpect(jsonPath("$.data.rows[0].projectId").value(projectA))
+                .andExpect(jsonPath("$.data.group_columns[0].key").value("itemName"))
+                .andExpect(jsonPath("$.data.groups.length()").value(1))
+                .andExpect(jsonPath("$.data.groups[0].acceptedQuantity").value(10))
+                .andExpect(jsonPath("$.data.groups[0].rejectedQuantity").value(2));
+    }
+
+    // ROOT-04-R3（BSM「风险：待复核、异常事件、补录数量、第三方差异。」；裁决 M02「补录提交即计数，状态另列」）：
+    // A、B 各一笔锁账后补录，A 的普通员工按前端真实请求只拿到 A 的一笔。修复前该指标未登记，400（第一处断言即红）。
+    @Test
+    void manualBackfillDetailByRealQueryShapeOnlyShowsReachableProject() throws Exception {
+        java.time.LocalDate day = java.time.LocalDate.of(2098, 3, 10);
+        java.time.Instant at = businessDayResolver.startInstant("governance", day).plusSeconds(3600);
+        String backfillA = lockedBackfill("a", projectA, at);
+        lockedBackfill("b", projectB, at);
+        RequestPostProcessor plain = staffOfA("plain", plainRole("plain", "analytics.dashboard.view", "governance.supervisor_review.view"));
+
+        mockMvc.perform(get("/api/v1/analytics/metric-detail?metric=risk.manual_backfill&from=" + day + "&to=" + day + "&page=1&size=20").with(plain))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.summary_value").value(1))
+                .andExpect(jsonPath("$.data.rows[0].id").value(backfillA))
+                .andExpect(jsonPath("$.data.rows[0].sourceType").value("locked_backfill"))
+                .andExpect(jsonPath("$.data.rows[0].status").value("pending"));
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
+
+    /** 一次实际到货（V485 purchase_receipts 一行），返回到货记录编号。 */
+    private String purchaseReceipt(String tag, String projectId, int arrived, int accepted, int rejected, java.time.Instant at) {
+        String s = tag + "_" + suffix;
+        jdbcTemplate.update("INSERT INTO inventory_suppliers (id, supplier_name, status, created_at, updated_at) VALUES (?, '供应商', 'active', now(), now())", "sup_" + s);
+        jdbcTemplate.update("INSERT INTO inventory_items (id, item_name, item_type, unit, status, created_at, updated_at) VALUES (?, '酒', 'beverage', '瓶', 'active', now(), now())", "item_" + s);
+        jdbcTemplate.update("INSERT INTO warehouses (id, project_id, warehouse_type, name, status) VALUES (?, ?, 'main', '主仓', 'active')", "wh_" + s, projectId);
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, status, created_at) VALUES (?, ?, 'staff', ?, 'active', now())", "usr_rcv_" + s, "usr_rcv_" + s, projectId);
+        jdbcTemplate.update("INSERT INTO inventory_purchase_requests (id, request_no, supplier_id, item_id, quantity, status, project_id, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, 'arrived', ?, now(), now())", "pr_" + s, "pr_" + s, "sup_" + s, "item_" + s, arrived, projectId);
+        jdbcTemplate.update("""
+                INSERT INTO purchase_receipts (id, purchase_id, project_id, supplier_id, item_id, warehouse_id, location_id,
+                        arrived_quantity, accepted_quantity, rejected_quantity, unit_cost_cent, received_at, received_by, evidence_attachment_ids)
+                VALUES (?, ?, ?, ?, ?, ?, 'loc_main', ?, ?, ?, 100, ?, ?, '[]'::jsonb)
+                """, "prec_" + s, "pr_" + s, projectId, "sup_" + s, "item_" + s, "wh_" + s, arrived, accepted, rejected,
+                java.sql.Timestamp.from(at), "usr_rcv_" + s);
+        return "prec_" + s;
+    }
+
+    /** 一笔待审的锁账后补录（应收挂在给定项目、已锁账），返回补录编号。 */
+    private String lockedBackfill(String tag, String projectId, java.time.Instant at) {
+        String s = tag + "_" + suffix;
+        jdbcTemplate.update("INSERT INTO finance_daily_closes (id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at) "
+                + "VALUES (?, DATE '2098-03-10', 'project', ?, FALSE, 'locked', now(), now())", "close_" + s, projectId);
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, status, created_at, updated_at, project_id, locked_day_close_id)
+                VALUES (?, ?, 'receivable', 'cp', 'manual', ?, 100, 0, 100, 'CNY', DATE '2098-03-10', 'pending_collection', now(), now(), ?, ?)
+                """, "ar_bf_" + s, "ar_bf_" + s, "ar_bf_" + s, projectId, "close_" + s);
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_adjustments (id, ar_ap_item_id, locked_day_close_id, adjustment_amount_cent, approval_status,
+                        requested_by, reason, created_at)
+                VALUES (?, ?, ?, 30, 'pending', 'usr_bf', '核实少记', ?)
+                """, "adj_" + s, "ar_bf_" + s, "close_" + s, java.sql.Timestamp.from(at));
+        return "adj_" + s;
+    }
 
     /** 一张今天到期、已标超时的商户服务工单（超时明细取当日窗口）。 */
     private String overdueMerchantWorkOrder(String tag, String merchantId) {

@@ -1,4 +1,4 @@
-# 交付总闸口与上线准入验证 V0.12
+# 交付总闸口与上线准入验证 V0.13
 
 ## 1. 定位
 
@@ -124,6 +124,8 @@ npm run verify:delivery-gates
 | OpenAPI 变更 | 先跑 `npm run docs:openapi-closure`，再跑 `npm run verify:p0-contract` |
 | 生产运维前置 | `npm run verify:ops160-recovery`、`npm run verify:nas-it-handoff`、`npm run verify:nas-diagnostics`、`npm run verify:nas-current-state-drift`，并回填真实证据 |
 | 安全发布前 | Semgrep、差异审计、密钥扫描、人工 code review |
+
+统一安装包（ROOT-06，2026-10-21）：出包命令 `npm run release:package`（工作区须干净；先跑与 `ops/160/complex-deploy-api.sh` 同一份 15 项部署门禁，再构建后端、网页和各环境员工 App），产出 `dist/release/complex-<版本>-<提交>.tar.gz`。某环境进包的条件：`ops/release/environments.json` 中该环境的对外地址、员工 App 服务地址与允许访问地址、证书与证书私钥路径登记齐，且该环境员工 App 已产出（生产员工 App 须由 IT 以四个 `COMPLEX_ANDROID_SIGNING_*` 环境变量提供正式签名，缺则包不支持生产，原因写入包内 `manifest.json` 的 `excluded`）。包内根目录放安装向导 `安装.sh` 与 `U盘首次制钥.sh`，教程在 `教程/使用教程.html`。安装时插了授权 U 盘即装生产、否则装测试（第十三批操作员裁决第 6 条），已装环境与本次识别不一致即停止。沙箱演练 `npm run verify:release-package`（不碰本机系统、不需数据库与 Maven）。160 不由安装器接管，继续用 `ops/160` 脚本部署。真机安装演练与外部资料（各环境地址与证书、正式签名、客人 iPhone App 与小程序入口）到位前，不得判定交付完成。
 
 ## 5. 失败处理
 

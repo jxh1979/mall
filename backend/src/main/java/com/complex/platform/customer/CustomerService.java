@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarOrderRecord;
@@ -55,6 +55,9 @@ public class CustomerService {
 
     @org.springframework.beans.factory.annotation.Autowired
     private PointsRecoveryService pointsRecoveries;
+
+    /** ROOT-05-R3：登录短信验证码场景（取码与核验同一场景）。 */
+    static final String LOGIN_OTP_SCENE = "customer.login";
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -178,6 +181,25 @@ public class CustomerService {
         return customer;
     }
 
+    /**
+     * ROOT-05-R3 登录取码（BSM 第 886 行「登录可支持手机号短信验证码」）：经短信端口签发 {@link #LOGIN_OTP_SCENE} 场景验证码，
+     * 与 {@link #phoneLogin} 核验同一场景；短信服务未配置时如实 409，不假成功。
+     */
+    public Map<String, Object> requestLoginCode(String phone) {
+        String number;
+        try {
+            number = requireText(phone, "phone");
+            enforceOtpRateLimit(number);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("customer.otp_request_failed", "public", "customer_otp", null, null, null,
+                    codeOf(exception));
+            throw exception;
+        }
+        // 下发失败的 customer.otp_request_failed 由验证码服务记录（带该次发码记录 id），此处不重复记。
+        otpVerifier.requestCode(number, LOGIN_OTP_SCENE);
+        return Map.of("phone_masked", maskPhone(number), "requested_at", clock.instant());
+    }
+
     @Transactional
     public CustomerLoginResponse phoneLogin(CustomerPhoneLoginRequest request) {
         try {
@@ -185,7 +207,8 @@ public class CustomerService {
             String phone = requireText(actual.phone(), "phone");
             String smsCode = requireText(actual.smsCode(), "sms_code");
             enforceOtpRateLimit(phone);
-            otpVerifier.verify(phone, smsCode, actual.scene());
+            // 核验场景固定 customer.login（与登录取码一致）；请求里的 scene 只作会话渠道。
+            otpVerifier.verify(phone, smsCode, LOGIN_OTP_SCENE);
             Instant now = Instant.now();
             CustomerRecord customer = repository.findCustomerByPhone(phone)
                     .map(existing -> {

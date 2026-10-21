@@ -1,5 +1,5 @@
 package com.complex.platform.compliance;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -25,6 +26,8 @@ import com.complex.platform.evidence.RiskAlertService;
 import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -36,6 +39,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import javax.crypto.spec.SecretKeySpec;
 import org.mockito.Mockito;
 
 class WecomConversationServiceTests {
@@ -70,6 +74,9 @@ class WecomConversationServiceTests {
                 riskAlertService,
                 // M723-F14：项目范围取自登录主体；这里的桩返回空范围＝全量（平台管理员口径），项目校验的回归在真库接口用例里
                 Mockito.mock(AuthorizationService.class),
+                // 固定 32 字节测试密钥（同 PiiCipherTests），不经 KeyVault 配置。
+                new PiiCipher(purpose -> new SecretKeySpec(
+                        "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.UTF_8), "AES")),
                 FIXED
         );
     }
@@ -128,7 +135,7 @@ class WecomConversationServiceTests {
 
     @Test
     void syncStoresRedactedDisplayContentAndKeepsRawReference() {
-        // 开关开（mock 默认不抛）→ 落库脱敏：展示内容无明文手机号/身份证，原文以引用形式保留。
+        // 开关开（mock 默认不抛）→ 落库脱敏：展示内容无明文手机号/身份证，原文加密保留。
         WecomSyncResult result = service.syncConversation(
                 syncRequest("ext-2", "我的电话 13800001111 身份证 11010119900307123X"));
 
@@ -137,7 +144,7 @@ class WecomConversationServiceTests {
         assertThat(stored.contentRedacted()).doesNotContain("13800001111");
         assertThat(stored.contentRedacted()).doesNotContain("11010119900307123X");
         assertThat(stored.contentRedacted()).contains("[PHONE_REDACTED]");
-        assertThat(stored.contentRawRef()).startsWith("wecom-raw:");
+        assertThat(stored.contentRawRef()).startsWith("enc:v1:").doesNotContain("13800001111");
         assertThat(auditRepository.names()).contains("wecom.conversation_synced");
     }
 
@@ -396,6 +403,32 @@ class WecomConversationServiceTests {
     }
 
     @Test
+    void syncStoresOriginalEncryptedAndApprovedRawViewReturnsIt() throws Exception {
+        // ROOT-05 R4（BSM「已拍板：企业微信会话原文永久保存」条）：同步请求按真实蛇形报文反序列化；原文加密落库，
+        // 审批后的原文调阅返回真实原文，脱敏调阅不返回原文。
+        WecomConversationSyncRequest request = new ObjectMapper()
+                .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+                .findAndRegisterModules()
+                .readValue("""
+                        {"idempotency_key":"idem-raw-1","external_conversation_id":"ext-raw-1","project_id":"proj_1",
+                         "owner_staff_id":"staff_1","customer_ref":"cust_1",
+                         "messages":[{"external_message_id":"msg-raw-1","sender_ref":"staff_1",
+                                      "content":"加我微信 13800138000","sent_at":"2026-06-18T08:00:00Z"}]}
+                        """, WecomConversationSyncRequest.class);
+
+        service.syncConversation(request);
+
+        WecomMessageRecord stored = repository.messages.get(0);
+        assertThat(stored.contentRawRef()).startsWith("enc:v1:").doesNotContain("13800138000");
+        String conversationId = repository.conversations.get(0).id();
+        assertThat(service.viewMessages(conversationId, "raw", "user_view", "approval-raw-1").items().get(0).rawContent())
+                .isEqualTo("加我微信 13800138000");
+        WecomMessageView redacted = service.viewMessages(conversationId, "redacted", "user_view", null).items().get(0);
+        assertThat(redacted.rawContent()).isNull();
+        assertThat(redacted.content()).doesNotContain("13800138000").contains("[PHONE_REDACTED]");
+    }
+
+    @Test
     void viewRawWithoutApprovalIsRejected() {
         service.syncConversation(syncRequest("ext-6", "电话 13800001111"));
         String conversationId = repository.conversations.get(0).id();
@@ -416,7 +449,7 @@ class WecomConversationServiceTests {
         PageResponse<WecomMessageView> view =
                 service.viewMessages(conversationId, "raw", "user_view", "approval-123");
 
-        assertThat(view.items().get(0).rawContent()).startsWith("wecom-raw:");
+        assertThat(view.items().get(0).rawContent()).isEqualTo("电话 13800001111");
         assertThat(repository.audits)
                 .singleElement()
                 .satisfies(audit -> {

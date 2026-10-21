@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 plugins {
   id("com.android.application")
   id("org.jetbrains.kotlin.android")
@@ -20,6 +21,26 @@ android {
 
   buildFeatures {
     buildConfig = true
+  }
+
+  // ROOT-06 R5：生产员工 App 用正式签名。签名库与口令由 IT 在出包机上用四个 COMPLEX_ANDROID_SIGNING_* 环境变量指向（不入仓库），
+  // 四个都在才挂到 release；缺任一项不签名，出包脚本 tools/release/build-release-package.mjs 据此不出生产员工 App。
+  val signing = listOf("STORE_FILE", "STORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD")
+    .associateWith { System.getenv("COMPLEX_ANDROID_SIGNING_$it").orEmpty() }
+  if (signing.values.all { it.isNotBlank() }) {
+    signingConfigs {
+      create("release") {
+        storeFile = file(signing.getValue("STORE_FILE"))
+        storePassword = signing.getValue("STORE_PASSWORD")
+        keyAlias = signing.getValue("KEY_ALIAS")
+        keyPassword = signing.getValue("KEY_PASSWORD")
+      }
+    }
+    buildTypes {
+      getByName("release") {
+        signingConfig = signingConfigs.getByName("release")
+      }
+    }
   }
 
   // 直接复用已实现的端侧业务层（apps/android-terminal/src/main），不重复造：

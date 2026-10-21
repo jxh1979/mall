@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import type { AdminApiClient, MetricDetailPayload } from "../types";
 
@@ -46,6 +47,8 @@ export type MetricKpiState = {
   /** ready=统一端点取数成功；fallback=失败（含无权限），页面回退既有取值，体验不降级。 */
   status: "loading" | "ready" | "fallback";
   value: number | null;
+  /** ROOT-04：分组合计（采购到货按商品及单位分列）；无分组的指标与 loading/fallback 为 null。 */
+  groups: Array<Record<string, unknown>> | null;
 };
 
 /**
@@ -58,14 +61,14 @@ export function useMetricKpiValue(
   metric: string,
   opts: { from?: string | null; to?: string | null; enabled?: boolean },
 ): MetricKpiState {
-  const [state, setState] = React.useState<MetricKpiState>({ status: "loading", value: null });
+  const [state, setState] = React.useState<MetricKpiState>({ status: "loading", value: null, groups: null });
   const { from, to } = opts;
   const enabled = opts.enabled !== false;
   React.useEffect(() => {
     // 禁用时须重置为 loading（非 ready），否则 enabled 由 true→false（如核销页从无筛选转筛选态）
     // 会残留上次的 {ready, 全量值}，令卡片继续显示全量并保留「完整明细」入口 → 回退本地筛选值失效。
     if (!enabled) {
-      setState({ status: "loading", value: null });
+      setState({ status: "loading", value: null, groups: null });
       return;
     }
     let cancelled = false;
@@ -77,10 +80,10 @@ export function useMetricKpiValue(
       .then((payload) => {
         if (cancelled) return;
         const raw = payload?.summaryValue;
-        setState({ status: "ready", value: raw === null || raw === undefined ? null : Number(raw) });
+        setState({ status: "ready", value: raw === null || raw === undefined ? null : Number(raw), groups: payload?.groups ?? null });
       })
       .catch(() => {
-        if (!cancelled) setState({ status: "fallback", value: null });
+        if (!cancelled) setState({ status: "fallback", value: null, groups: null });
       });
     return () => {
       cancelled = true;

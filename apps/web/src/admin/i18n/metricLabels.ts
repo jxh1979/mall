@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // fix/ui-pages 经营指标码 → 业务指标名（展示层翻译，接口仍用原码）。
 // 未知码原样返回，新增指标逐步补此表。
 const METRIC_LABELS: Record<string, string> = {
@@ -10,7 +10,7 @@ const METRIC_LABELS: Record<string, string> = {
   "revenue.bar": "酒吧收入",
   "revenue.bar_refund": "酒吧退款",
   "revenue.contract_rent": "合同租金",
-  "revenue.thirdparty": "第三方收入",
+  "revenue.thirdparty": "第三方回流收入",
   "revenue.net": "净收入",
   "revenue.per_sqm": "坪效",
   // 客流 / 核销
@@ -23,7 +23,7 @@ const METRIC_LABELS: Record<string, string> = {
   "member.level_changed": "会员升降级",
   // 风险
   "risk.pending_review": "待复核",
-  "risk.manual_backfill": "人工补录",
+  "risk.manual_backfill": "补录数量",
   // 出租 / 面积
   "occupancy.rate": "出租率",
   "occupancy.leased_area": "已租面积",
@@ -66,7 +66,7 @@ const METRIC_LABELS: Record<string, string> = {
   "energy.abnormal_count": "能耗异常数",
   // 供应链
   "supply.balance": "库存结余",
-  "supply.received": "入库数量",
+  "supply.received": "采购到货",
   // 物业工单时效
   "wo.response_hours_p50": "工单响应时长中位",
   "wo.handle_hours_p50": "工单处理时长中位",

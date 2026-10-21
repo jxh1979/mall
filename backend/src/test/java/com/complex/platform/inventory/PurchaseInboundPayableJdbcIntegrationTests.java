@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.access.AccessActor;
@@ -42,6 +42,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Autowired SupervisorReviewService reviews;
  @Autowired EvidenceEventService evidence;
  @Autowired JdbcTemplate jdbc;
+ @Autowired com.complex.platform.analytics.AnalyticsRepository analytics;
  String suffix,project,merchant,item,supplier,entity,warehouse,location,requestor,manager,finance,business,legal,role;
 
  @BeforeEach void seed(){
@@ -114,6 +115,17 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThat(number("SELECT quantity FROM inventory_purchase_requests WHERE id=?",purchase)).isEqualTo(100);
   assertThat(string("SELECT status FROM inventory_purchase_requests WHERE id=?",purchase)).isEqualTo("received");
   assertThat(jdbc.queryForObject("SELECT due_date FROM ar_ap_items WHERE id=?",LocalDate.class,payable)).isEqualTo(today().plusDays(30));
+ }
+
+ /** ROOT-04-R2（BSM「逐次记录采购、实到、合格接收和拒收数量」；裁决 M01「采购到货按商品及单位分别显示」）：采购收货唯一写点写出的这一次到货，就是经营看板「采购到货」按商品及单位分列的数量。 */
+ @Test void realReceiveIsWhatPurchaseReceivedMetricGroupsByItemAndUnit(){
+  String purchase=ordered("credit_term","each_receipt",30,100);
+  Instant from=Instant.now().minusSeconds(1);
+  receive(purchase,12,10,2,1500L);
+  var groups=analytics.purchaseReceivedGroups(from,Instant.now().plusSeconds(1),List.of(project),null);
+  assertThat(groups).hasSize(1);
+  assertThat(groups.getFirst()).containsEntry("itemId",item).containsEntry("unit","包").containsEntry("acceptedQuantity",10L)
+   .containsEntry("arrivedQuantity",12L).containsEntry("rejectedQuantity",2L).containsEntry("receiptCount",1L);
  }
 
  @Test void receiveCreatesSupplierPayableAndReplayDoesNotDuplicate(){

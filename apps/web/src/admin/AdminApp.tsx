@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -104,6 +104,7 @@ const IntegrationSwitchesPage = React.lazy(() => import("./pages/IntegrationSwit
 const IntegrationChannelMapsPage = React.lazy(() => import("./pages/IntegrationChannelMapsPage").then((m) => ({ default: m.IntegrationChannelMapsPage })));
 const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitchMatrixPage").then((m) => ({ default: m.TerminalSwitchMatrixPage })));
 const TerminalDevicesPage = React.lazy(() => import("./pages/TerminalDevicesPage").then((m) => ({ default: m.TerminalDevicesPage })));
+const MdmWhitelistPage = React.lazy(() => import("./pages/MdmWhitelistPage").then((m) => ({ default: m.MdmWhitelistPage })));
 const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
 const MemberLoyaltyConfigPage = React.lazy(() => import("./pages/MemberLoyaltyConfigPage").then((m) => ({ default: m.MemberLoyaltyConfigPage })));
 const StoredValueRulesPage = React.lazy(() => import("./pages/StoredValueRulesPage").then((m) => ({ default: m.StoredValueRulesPage })));
@@ -262,6 +263,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <TerminalSwitchMatrixPage {...props} />;
     case "ADM-TER-002":
       return <TerminalDevicesPage {...props} />;
+    case "ADM-TER-003":
+      return <MdmWhitelistPage {...props} />;
     case "ADM-CUS-001":
       return <CustomerAccountsPage {...props} />;
     case "ADM-FIN-003":

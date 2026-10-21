@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.bar.BarOrderRecord;
@@ -57,6 +57,12 @@ public class CustomerController {
         httpResponse.addHeader("Set-Cookie",
                 sessionCookie(login.customerToken(), Math.max(0, maxAge), forceSecureCookie || httpRequest.isSecure()));
         return ApiResponse.ok(login);
+    }
+
+    /** ROOT-05-R3 登录取码：公开端点，请求体只有 phone；短信服务未配置时 409，不假成功。 */
+    @PostMapping("/auth/sms-codes")
+    public ApiResponse<java.util.Map<String, Object>> requestLoginSmsCode(@RequestBody java.util.Map<String, String> request) {
+        return ApiResponse.ok(service.requestLoginCode(request.get("phone")));
     }
 
     /** 3.3 免登录：登出——撤销服务端会话（AUD-030）并清除会话 cookie；端点幂等（无 token 也返回成功）。 */

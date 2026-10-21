@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -597,12 +597,19 @@ public final class AnalyticsRecords {
     ) {
     }
 
-    /** KPI 统一明细（指标登记簿）：仓储层返回 当前页明细行 + 总行数 + 合计校验值（同一谓词同源）。 */
+    /**
+     * KPI 统一明细（指标登记簿）：仓储层返回 当前页明细行 + 总行数 + 合计校验值（同一谓词同源）。
+     * groups：按维度分列、不出标量的指标（采购到货按商品及单位，ROOT-04 裁决 M01）的分组合计，与明细同谓词、不分页；其余为 null。
+     */
     public record MetricDetailRows(
             java.util.List<java.util.Map<String, Object>> rows,
             long totalRows,
-            BigDecimal summaryValue
+            BigDecimal summaryValue,
+            java.util.List<java.util.Map<String, Object>> groups
     ) {
+        public MetricDetailRows(java.util.List<java.util.Map<String, Object>> rows, long totalRows, BigDecimal summaryValue) {
+            this(rows, totalRows, summaryValue, null);
+        }
     }
 
     /**
@@ -631,7 +638,9 @@ public final class AnalyticsRecords {
             int size,
             long totalRows,
             String traceLinkPageId,
-            String traceLinkColumnKey
+            String traceLinkColumnKey,
+            java.util.List<MetricRegistry.MetricColumn> groupColumns,
+            java.util.List<java.util.Map<String, Object>> groups
     ) {
     }
 }

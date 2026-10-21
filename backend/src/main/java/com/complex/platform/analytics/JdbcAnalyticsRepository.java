@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -3220,6 +3220,183 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 SELECT COUNT(*) AS total_rows, COUNT(*) AS summary
                   FROM ( %s ) u
                 """.formatted(union), params));
+    }
+
+    // ==== ROOT-04：第三方回流收入 / 采购到货 / 补录数量（各用一个谓词常量，卡片、快照与明细同源）====
+
+    // 第三方回流收入（r5-aggregation-metrics-draft「第三方回流仅计商户结算口径，不计平台净收入」定稿；第三方源只指餐饮/零售 POS）：
+    // 只计已入账订单（sync_type='order'、status='synced'，ENUM「回流结果状态」已入账口径；与日结第三方源、租售比分母同谓词）；
+    // 渠道团购票（business_type='ticket'）已本地出票计入售票收入，不再计；门店映射缺失（merchant_id 为空）按 BSM 挂差异、不得入账。
+    // 同一外部订单表内只有一行（V030 自然键唯一＋V109 渠道单号唯一、saveOrderSync 按自然键 upsert），不另去重。
+    private static final String THIRDPARTY_REVENUE_WHERE = """
+              FROM integration_order_syncs
+             WHERE sync_type = 'order' AND status = 'synced'
+               AND business_type IN ('catering', 'retail')
+               AND merchant_id IS NOT NULL
+               AND created_at >= :start AND created_at < :end
+            """;
+
+    @Override
+    public Map<String, BigDecimal> sumThirdpartyRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
+        return keyTotals("SELECT merchant_id, COALESCE(SUM(amount_cent), 0)\n" + THIRDPARTY_REVENUE_WHERE + " GROUP BY merchant_id",
+                dayRange(windowDomain, businessDate));
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows thirdpartyRevenueDetail(Instant start, Instant end, int limit, int offset) {
+        MapSqlParameterSource params = pagedRangeParams(start, end, limit, offset);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query(
+                "SELECT id, provider_code, channel, business_type, external_business_id, external_channel_order_id, merchant_id, amount_cent, created_at\n"
+                        + THIRDPARTY_REVENUE_WHERE + " ORDER BY created_at, id LIMIT :limit OFFSET :offset", params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("providerCode", rs.getString("provider_code"));
+            row.put("channel", rs.getString("channel"));
+            row.put("businessType", rs.getString("business_type"));
+            row.put("externalBusinessId", rs.getString("external_business_id"));
+            row.put("externalChannelOrderId", rs.getString("external_channel_order_id"));
+            row.put("merchantId", rs.getString("merchant_id"));
+            row.put("amountCent", rs.getLong("amount_cent"));
+            row.put("createdAt", instant(rs, "created_at"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap(
+                "SELECT COUNT(*) AS total_rows, COALESCE(SUM(amount_cent), 0) AS summary\n" + THIRDPARTY_REVENUE_WHERE, params));
+    }
+
+    // 采购到货（BSM 采购条「逐次记录采购、实到、合格接收和拒收数量，只有合格部分进入可用库存」；裁决 M01「采购到货按商品及单位分别显示」；
+    // r5「Σ 入库确认」）：只计采购收货登记 purchase_receipts（一次实际到货一行，PurchaseWorkflowService.receive 是唯一写点），
+    // 按实际到货时刻 received_at 落窗；调拨、退供、盘点、借调回库不在此表。按商品及单位分组，不产出任何跨单位标量。
+    // 项目作用域同其他明细：null 不过滤，非 null 只出项目落在集合内的行（空集合一行不出）。
+    private static String purchaseReceivedWhere(String merchantId) {
+        return """
+                  FROM purchase_receipts r
+                  JOIN inventory_items i ON i.id = r.item_id
+                 WHERE r.received_at >= :start AND r.received_at < :end
+                   AND (:all_projects OR r.project_id IN (:project_ids))
+                """ + (merchantId == null ? "" : "   AND r.merchant_id = :merchant_id\n");
+    }
+
+    @Override
+    public java.util.List<Map<String, Object>> purchaseReceivedGroups(Instant start, Instant end,
+            java.util.Collection<String> projectScope, String merchantId) {
+        if (projectScope != null && projectScope.isEmpty()) {
+            return List.of();
+        }
+        MapSqlParameterSource params = withProjects(new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end))
+                .addValue("merchant_id", merchantId), projectScope);
+        return jdbcTemplate.query("""
+                SELECT r.item_id, i.item_name, i.unit, SUM(r.accepted_quantity) AS accepted, SUM(r.arrived_quantity) AS arrived,
+                       SUM(r.rejected_quantity) AS rejected, COUNT(*) AS receipts
+                """ + purchaseReceivedWhere(merchantId) + """
+                 GROUP BY r.item_id, i.item_name, i.unit
+                 ORDER BY i.item_name, r.item_id
+                """, params, (rs, n) -> {
+            Map<String, Object> group = new LinkedHashMap<>();
+            group.put("itemId", rs.getString("item_id"));
+            group.put("itemName", rs.getString("item_name"));
+            group.put("unit", rs.getString("unit"));
+            group.put("acceptedQuantity", rs.getLong("accepted"));
+            group.put("arrivedQuantity", rs.getLong("arrived"));
+            group.put("rejectedQuantity", rs.getLong("rejected"));
+            group.put("receiptCount", rs.getLong("receipts"));
+            return group;
+        });
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows purchaseReceivedDetail(Instant start, Instant end, int limit, int offset,
+            java.util.Collection<String> projectScope) {
+        if (projectScope != null && projectScope.isEmpty()) {
+            return new AnalyticsRecords.MetricDetailRows(List.of(), 0, null, List.of());
+        }
+        MapSqlParameterSource params = withProjects(pagedRangeParams(start, end, limit, offset), projectScope);
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
+                SELECT r.id, r.purchase_id, i.item_name, i.unit, r.arrived_quantity, r.accepted_quantity, r.rejected_quantity,
+                       r.warehouse_id, r.received_at, r.received_by, r.project_id, r.merchant_id
+                """ + purchaseReceivedWhere(null) + " ORDER BY r.received_at, r.id LIMIT :limit OFFSET :offset", params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", rs.getString("id"));
+            row.put("purchaseId", rs.getString("purchase_id"));
+            row.put("itemName", rs.getString("item_name"));
+            row.put("unit", rs.getString("unit"));
+            row.put("arrivedQuantity", rs.getInt("arrived_quantity"));
+            row.put("acceptedQuantity", rs.getInt("accepted_quantity"));
+            row.put("rejectedQuantity", rs.getInt("rejected_quantity"));
+            row.put("warehouseId", rs.getString("warehouse_id"));
+            row.put("receivedAt", instant(rs, "received_at"));
+            row.put("receivedBy", rs.getString("received_by"));
+            row.put("projectId", rs.getString("project_id"));
+            row.put("merchantId", rs.getString("merchant_id"));
+            return row;
+        });
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*)\n" + purchaseReceivedWhere(null), params, Long.class);
+        // 不出标量合计（不同单位不相加）：summaryValue=null，合计看同谓词的按商品及单位分组。
+        return new AnalyticsRecords.MetricDetailRows(rows, total == null ? 0 : total, null,
+                purchaseReceivedGroups(start, end, projectScope, null));
+    }
+
+    // 补录数量（BSM「记录缺失时允许人工补录……补录一律进入主管复核队列，复核通过才生效……」；BSM「锁定后补录须上级审批」；
+    // 裁决 M02「补录提交即计数，状态另列」）：当前已接入两类补录申请——锁账后补录（ar_ap_adjustments，项目/商户取所补的应收应付）
+    // 与无可信领取时刻补证（staff_attendance_receipt_reviews，项目取所属排班，无商户）。一条申请计一笔，按提交时刻 created_at 落窗；
+    // 批准、驳回只改状态，同一提交编号重放不新建行，驳回后重新提交是新申请。不出补录原因原文。
+    private static final String MANUAL_BACKFILL_SOURCE = """
+            (SELECT 'locked_backfill' AS source_type, a.id, a.ar_ap_item_id AS object_id, a.requested_by AS initiated_by,
+                    a.approval_status AS status, a.created_at, a.decided_at, i.project_id, i.merchant_id
+               FROM ar_ap_adjustments a
+               JOIN ar_ap_items i ON i.id = a.ar_ap_item_id
+             UNION ALL
+             SELECT 'attendance_receipt', r.id, r.event_id, r.initiated_by, r.status, r.created_at, r.decided_at, s.project_id, NULL
+               FROM staff_attendance_receipt_reviews r
+               JOIN staff_shift_schedules s ON s.id = r.shift_id) b
+             WHERE b.created_at >= :start AND b.created_at < :end
+            """;
+
+    @Override
+    public Map<String, BigDecimal> countManualBackfillByMerchant(LocalDate businessDate, String windowDomain) {
+        return keyTotals("SELECT b.merchant_id, COUNT(*)\n  FROM " + MANUAL_BACKFILL_SOURCE + " GROUP BY b.merchant_id",
+                dayRange(windowDomain, businessDate));
+    }
+
+    @Override
+    public Map<String, Long> manualBackfillStatusCounts(Instant start, Instant end, String merchantId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("start", timestampWithTimeZone(start))
+                .addValue("end", timestampWithTimeZone(end))
+                .addValue("merchant_id", merchantId);
+        Map<String, Long> counts = new LinkedHashMap<>();
+        jdbcTemplate.query("SELECT b.status, COUNT(*)\n  FROM " + MANUAL_BACKFILL_SOURCE
+                        + (merchantId == null ? "" : "   AND b.merchant_id = :merchant_id\n") + " GROUP BY b.status ORDER BY b.status",
+                params, (org.springframework.jdbc.core.RowCallbackHandler) rs -> counts.put(rs.getString(1), rs.getLong(2)));
+        return counts;
+    }
+
+    @Override
+    public AnalyticsRecords.MetricDetailRows manualBackfillDetail(Instant start, Instant end, int limit, int offset,
+            java.util.Collection<String> projectScope) {
+        if (projectScope != null && projectScope.isEmpty()) {
+            return new AnalyticsRecords.MetricDetailRows(List.of(), 0, BigDecimal.ZERO);
+        }
+        MapSqlParameterSource params = withProjects(pagedRangeParams(start, end, limit, offset), projectScope);
+        String where = MANUAL_BACKFILL_SOURCE + "   AND (:all_projects OR b.project_id IN (:project_ids))\n";
+        java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query(
+                "SELECT b.source_type, b.id, b.object_id, b.initiated_by, b.status, b.created_at, b.decided_at, b.project_id\n  FROM "
+                        + where + " ORDER BY b.created_at, b.id LIMIT :limit OFFSET :offset", params, (rs, n) -> {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("sourceType", rs.getString("source_type"));
+            row.put("objectId", rs.getString("object_id"));
+            row.put("initiatedBy", rs.getString("initiated_by"));
+            row.put("status", rs.getString("status"));
+            row.put("createdAt", instant(rs, "created_at"));
+            row.put("decidedAt", instant(rs, "decided_at"));
+            row.put("projectId", rs.getString("project_id"));
+            row.put("id", rs.getString("id"));
+            return row;
+        });
+        return metricDetailRows(rows, jdbcTemplate.queryForMap(
+                "SELECT COUNT(*) AS total_rows, COUNT(*) AS summary\n  FROM " + where, params));
     }
 
     private java.util.Map<String, Object> ticketVerificationRow(java.sql.ResultSet rs) throws java.sql.SQLException {

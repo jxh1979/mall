@@ -1,0 +1,22 @@
+# 文件版本：V0.01
+# 安装向导（安装.sh 第 6 步）生成 /etc/systemd/system/complex-api.service 的模板；@JAVA@ 换成本机 java 路径。
+# 测试与生产两种环境都以 prod profile 运行（complex.env），密钥、数据库与首装管理员分文件存放。
+[Unit]
+Description=综合体管理系统后端
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=complex
+WorkingDirectory=/opt/complex/api/current
+EnvironmentFile=/etc/complex/complex.env
+EnvironmentFile=/etc/complex/secrets.env
+EnvironmentFile=/etc/complex/db.env
+EnvironmentFile=-/etc/complex/initial-admin.env
+ExecStart=@JAVA@ -jar /opt/complex/api/current/complex-api.jar
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target

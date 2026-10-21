@@ -1,11 +1,10 @@
 package com.complex.platform.customer;
 
-import com.complex.platform.common.api.ApiException;
-import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Component;
+// 文件版本：V0.01
 
-@Component
-@Profile("prod")
+import com.complex.platform.common.api.ApiException;
+
+/** 测试替身：短信服务未配置的验证码端口（ROOT-05-R3 起生产由 SmsCustomerOtpService 接管，本类只供测试构造「未配置」场景）。 */
 class FailClosedCustomerOtpVerifier implements CustomerOtpVerifier {
 
     @Override

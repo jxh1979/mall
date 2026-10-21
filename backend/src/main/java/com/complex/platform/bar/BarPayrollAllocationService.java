@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.bar.BarPayrollRequests.*;
@@ -34,9 +34,12 @@ public class BarPayrollAllocationService {
     private final AuditEventService audit;
     private final BarPayrollRefundService refunds;
     private final FinanceRepository finance;
+    private final com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks;
     public BarPayrollAllocationService(BarPayrollSupport p,BarPayrollRuleService rules,
-            BarServiceResponsibilityService responsibilities,IdempotencyService idem,AuditEventService audit,BarPayrollRefundService refunds,FinanceRepository finance) {
+            BarServiceResponsibilityService responsibilities,IdempotencyService idem,AuditEventService audit,BarPayrollRefundService refunds,FinanceRepository finance,
+            com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks) {
         this.p=p;this.rules=rules;this.responsibilities=responsibilities;this.idem=idem;this.audit=audit;this.refunds=refunds;this.finance=finance;
+        this.revenueRefreshMarks=revenueRefreshMarks;
     }
     record Component(String id,String bill,String session,String table,String project,String merchant,LocalDate date,
             String type,long amount,String chargeRule,String crewSnapshot) {}
@@ -299,6 +302,8 @@ public class BarPayrollAllocationService {
         String id=id("bprun");
         p.jdbc.update("INSERT INTO bar_payroll_runs(id,project_id,merchant_id,month,source_fingerprint,source_snapshot,collected_tip_cent,collected_service_fee_cent,payable_tip_cent,payable_service_fee_cent,withheld_service_fee_cent,rounding_residual_cent,settlement_entity_id,status,created_by,created_at) VALUES(?,?,?,?,?,?::jsonb,?,?,?,?,?,?,?,'confirmed',?,clock_timestamp())",
             id,c.project(),c.merchant(),c.month(),fingerprint,p.encode(c.facts()),c.tips(),c.fees(),c.tipPayable(),c.feePayable(),c.withheld(),c.residual(),c.settlementCompany(),p.auth.currentActor().id());
+        // ROOT-04-R4：服务费扣留按原营业日计酒吧收入（BarRevenueSourceService.withheldServiceFees），跨期月结与服务费退款后重算都在此出新原件，登记原营业日待看板重算。
+        revenueRefreshMarks.mark(p.jdbc.queryForList("SELECT DISTINCT business_date FROM bar_payroll_bill_components WHERE source_bill_id=? AND component_type='service_fee'",LocalDate.class,c.bill()));
         Set<Key> keys=new HashSet<>(before.keySet());keys.addAll(c.amounts().keySet());
         Instant now=Instant.now();
         for(var k:keys) {

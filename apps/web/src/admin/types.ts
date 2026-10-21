@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 export type AdminUser = {
   id: string;
   username: string;
@@ -1312,6 +1312,9 @@ export type MetricDetailPayload = {
   totalRows: number;
   traceLinkPageId?: string | null;
   traceLinkColumnKey?: string | null;
+  // ROOT-04：按维度分列、不出标量的指标（采购到货按商品及单位，裁决 M01）的分组表头与分组合计；其余为 null。
+  groupColumns?: MetricDetailColumn[] | null;
+  groups?: Array<Record<string, unknown>> | null;
 };
 
 // ── 积分/券统一台账（V301 方案A）：定义/实例/核销记录/全部券聚合 ──────────

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.26
+  version: V0.27
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -1519,7 +1519,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: M737。平台管理员与经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。
+      description: M737。平台管理员与经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view 的人得平台口径；带商户归属的账号只看本商户；其余人 403（MERCHANT_SCOPE_REQUIRED）。 ROOT-04：revenue.thirdparty 为餐饮/零售已入账回流订单金额（分），不计入 revenue.net；supply.received 的 value 为空，dimension.groups 按商品及单位分列当日合格接收、实到、拒收与到货次数（不跨单位相加）；risk.manual_backfill 的 value 为当日提交的补录笔数，dimension.statusCounts 按状态分列。
   /api/v1/analytics/dashboards/{domain}:
     get:
       tags:
@@ -1724,7 +1724,7 @@ paths:
         finance.ar_balance=finance.ar_ap.view)。project_id/merchant_id 为预留维度参数, 首批平台口径指标不支持, 传入即 VALIDATION_FAILED。未登记
         metric 亦为 VALIDATION_FAILED(fail-closed)。 M737：可触及项目取 analytics.dashboard.view
         与登记项权限码两项的交集。登记了项目列的指标：平台管理员看全量，其余人只出可触及项目内的行与合计。没有项目列的指标：平台管理员与两项权限都经勾选了「可以查看全部项目」的角色持有的人看平台全量，其余人
-        403（PLATFORM_METRIC_PROJECT_FORBIDDEN）。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。"
+        403（PLATFORM_METRIC_PROJECT_FORBIDDEN）。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。 ROOT-04：另登记 revenue.thirdparty（第三方回流收入，登记项权限 analytics.dashboard.view，平台口径）、supply.received（采购到货，登记项权限 inventory.purchase_request.view，按项目列过滤）、risk.manual_backfill（补录数量，登记项权限 governance.supervisor_review.view，按项目列过滤）；supply.received 按商品及单位分列、summary_value 为空，另返回 group_columns（分组表头）与 groups（按商品及单位的合格接收、实到、拒收与到货次数，与明细同谓词），其余指标这两项为空。"
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -2744,6 +2744,38 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "400":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: public
+  /api/v1/customer/auth/sms-codes:
+    post:
+      tags:
+        - customer
+      operationId: requestCustomerLoginSmsCode
+      summary: 客人登录取短信验证码
+      description: ROOT-05-R3：平台签发 customer.login 场景 6 位短信验证码（有效 5 分钟、一次性使用、错 5 次失效、重新取码成功下发后旧码作废），经短信供应商下发；库里只存手机号与验证码的盲索引，下发结果与失败原因留存。成功返回 phone_masked、requested_at。短信供应商未配置时 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE（不假成功），下发失败 409 CUSTOMER_OTP_SEND_FAILED；按手机号与来源 IP 限速，超限 429。本地开发与自动化测试（非 prod profile）为固定验证码、不下发；安装包装出的测试环境与生产同为 prod profile，短信未配置时同样返回 409。
+      security: []
+      x-permission: public
+      x-data-scope: customer
+      x-terminal-allowed:
+        - web
+        - miniapp
+        - app
+        - kiosk
+      x-idempotency-required: false
+      x-audit-event-success: customer.otp_requested
+      x-audit-event-failure: customer.otp_request_failed
+      requestBody:
+        $ref: "#/components/requestBodies/CustomerLoginSmsCodeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -11727,8 +11759,8 @@ paths:
       operationId: syncWecomConversation
       summary: 企微会话同步入站（PIPL 合规，开关门控）
       description: R5 T8：企微会话同步入站（webhook/拉取）。受 T2 终端能力开关 integration.wecom.sync 编程式门控（默认关→TERMINAL_DISABLED，不落库）。落库时调
-        PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 content_raw_ref 引用/密文保留；基础关键词质检命中写 risk_flags 进复核。retention_until
-        按生效留存策略（默认180天）推算。
+        PiiTextRedactor 生成展示用脱敏文本（手机号/身份证/银行卡等正则），原文以 PII 密钥加密落 content_raw_ref、永久保存；基础关键词质检命中写 risk_flags 进复核。retention_until
+        留空（永久保存，不自动到期）。
       x-permission: wecom.sync
       x-data-scope: open-endpoint
       x-terminal-allowed: []
@@ -11791,7 +11823,7 @@ paths:
       operationId: viewWecomConversationMessages
       summary: 分级查看企微会话消息（脱敏/原文，原文需审批+审计）
       description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 +
-        approval_ref 审批引用）返回原文引用/密文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件
+        approval_ref 审批引用）返回解密后的会话原文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件
         wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
       x-permission: wecom.view_raw
       x-data-scope: project
@@ -49138,6 +49170,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/CustomerPhoneLoginRequest"
+    CustomerLoginSmsCodeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CustomerLoginSmsCodeRequest"
     CustomerConsentRequest:
       required: true
       content:
@@ -52779,6 +52817,18 @@ components:
           type: string
           description: 责任主体（主体主数据中在用的法律主体）：退款时为退款责任主体；多次通票恢复次数时即承担新增实际履约费用的具体域主管公司。
           maxLength: 64
+    CustomerLoginSmsCodeRequest:
+      type: object
+      description: 请求载荷 `CustomerLoginSmsCodeRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
+      additionalProperties: false
+      required:
+        - phone
+      properties:
+        phone:
+          type: string
+          description: 手机号字段；用于客人或员工身份匹配，保存和展示必须遵守脱敏规则。
+          maxLength: 20
+          pattern: ^\+?[0-9]{6,20}$
     CustomerPhoneLoginRequest:
       type: object
       description: 请求载荷 `CustomerPhoneLoginRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。

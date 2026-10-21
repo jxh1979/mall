@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -50,6 +51,10 @@ const CATALOG: Array<{ key: string; name: string; sourcePageId: string; sourceLa
   { key: "staff.payroll_statement_count", name: "薪资单数", sourcePageId: "ADM-STF-002", sourceLabel: "薪酬与请假" },
   { key: "staff.pending_leave_count", name: "待审请假数", sourcePageId: "ADM-STF-002", sourceLabel: "薪酬与请假" },
   { key: "staff.active_headcount", name: "在职员工数", sourcePageId: "ADM-ACC-001", sourceLabel: "员工账号" },
+  // ROOT-04（总控驾驶舱）
+  { key: "revenue.thirdparty", name: "第三方回流收入", sourcePageId: "ADM-OV-001", sourceLabel: "总控驾驶舱" },
+  { key: "supply.received", name: "采购到货", sourcePageId: "ADM-OV-001", sourceLabel: "总控驾驶舱" },
+  { key: "risk.manual_backfill", name: "补录数量", sourcePageId: "ADM-OV-001", sourceLabel: "总控驾驶舱" },
 ];
 
 const VALUE_TYPE_LABELS: Record<string, string> = { additive: "可加（区间求和）", ratio: "比率（分子/分母）", balance: "余额（区间末值）" };
@@ -155,6 +160,9 @@ export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectI
   const isRatio = data?.valueType === "ratio";
   const pageCount = data ? Math.max(1, Math.ceil(data.totalRows / PAGE_SIZE)) : 1;
   const columns = data?.columns ?? [];
+  // ROOT-04：按维度分列、不出标量的指标（采购到货按商品及单位，裁决 M01）在合计区列分组合计，不显示标量合计。
+  const groups = data?.groups ?? null;
+  const groupColumns = data?.groupColumns ?? [];
 
   return (
     <section data-testid="metric-detail-page">
@@ -188,11 +196,28 @@ export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectI
           {data ? (
             <>
               <div className="admin-kpi-grid" data-testid="metric-detail-summary-panel">
-                <div className="admin-kpi-card">
-                  <span>{data.name}（{VALUE_TYPE_LABELS[data.valueType] ?? data.valueType}）</span>
-                  <strong data-testid="metric-detail-summary">{formatNumber(data.summaryValue)} {data.unit}</strong>
-                  <small>合计校验值：与明细行同一查询同源，逐页累加应恒等于此数</small>
-                </div>
+                {groups ? (
+                  <div className="admin-table-scroll">
+                    <span>{data.name}（{data.unit}）分组合计：与明细行同一查询同源，不同单位不相加</span>
+                    <table className="admin-table" data-testid="metric-detail-groups">
+                      <thead>
+                        <tr>{groupColumns.map((column) => <th key={column.key}>{column.label}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {groups.map((group, index) => (
+                          <tr key={index}>{groupColumns.map((column) => <td key={column.key}>{formatCell(group[column.key])}</td>)}</tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {groups.length === 0 ? <div className="admin-state">当前区间没有分组合计。</div> : null}
+                  </div>
+                ) : (
+                  <div className="admin-kpi-card">
+                    <span>{data.name}（{VALUE_TYPE_LABELS[data.valueType] ?? data.valueType}）</span>
+                    <strong data-testid="metric-detail-summary">{formatNumber(data.summaryValue)} {data.unit}</strong>
+                    <small>合计校验值：与明细行同一查询同源，逐页累加应恒等于此数</small>
+                  </div>
+                )}
                 {isRatio ? (
                   <div className="admin-kpi-card">
                     <span>分子 / 分母</span>

@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -239,14 +239,23 @@ class AnalyticsServiceTests {
 
         var merchantA = service.overview(Optional.of("merchant_a"));
 
-        // 数据源未就绪的指标不伪造：value=null + note。
-        assertThat(merchantA.metrics().get("supply.received").value()).isNull();
-        assertThat(merchantA.metrics().get("supply.received").note()).contains("T6");
-        assertThat(merchantA.metrics().get("risk.manual_backfill").value()).isNull();
+        // ROOT-04：第三方回流按商户快照读，本商户当日无快照 → null + 说明（不伪造）。
         assertThat(merchantA.metrics().get("revenue.thirdparty").value()).isNull();
+        assertThat(merchantA.metrics().get("revenue.thirdparty").note()).contains("third-party reflow");
+        // 采购到货按商品及单位分列、不出标量：当日无到货 → 空分组 + 说明。
+        assertThat(merchantA.metrics().get("supply.received").value()).isNull();
+        assertThat(merchantA.metrics().get("supply.received").dimension()).containsEntry("groups", List.of());
+        assertThat(merchantA.metrics().get("supply.received").note()).isEqualTo("当日无采购到货");
+        // 补录数量提交即计数、实时取：当日无补录 → 0 笔，状态分列为空。
+        assertThat(merchantA.metrics().get("risk.manual_backfill").value()).isEqualByComparingTo("0");
+        assertThat(merchantA.metrics().get("risk.manual_backfill").dimension()).containsEntry("statusCounts", Map.of());
         // 源表无 merchant_id 的指标在商户口径下无快照行 → null（不伪造），带 scope note。
         assertThat(merchantA.metrics().get("revenue.ticket").value()).isNull();
         assertThat(merchantA.metrics().get("revenue.ticket").note()).contains("merchant_id");
+
+        // 有本商户第三方回流快照时返回该值。
+        analyticsRepository.upsertMetricSnapshot(metricKey("revenue.thirdparty", "merchant", "merchant_a"), new BigDecimal("3000"), "etl_aggregate", Instant.now(FIXED_CLOCK));
+        assertThat(service.overview(Optional.of("merchant_a")).metrics().get("revenue.thirdparty").value()).isEqualByComparingTo("3000");
     }
 
     @Test

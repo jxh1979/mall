@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -263,6 +263,9 @@ const STATUS_LABELS: Record<string, string> = {
   // 支付渠道
   cash: "现金",
   pos: "POS刷卡",
+  // 补录数量明细的补录类型（ROOT-04）
+  locked_backfill: "锁账后补录",
+  attendance_receipt: "领取时刻补证",
 };
 
 export function formatBusinessStatus(code: string | null | undefined): string {

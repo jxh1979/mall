@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
@@ -20,5 +22,13 @@ class FixedCustomerOtpVerifier implements CustomerOtpVerifier {
         if (!expectedCode.equals(smsCode)) {
             throw ApiException.unauthorized("CUSTOMER_OTP_INVALID", "短信验证码不正确或已过期");
         }
+    }
+
+    /**
+     * 固定码环境不下发短信（ROOT-05-R3）：取码直接返回，使登录、储值、存酒取码在本地开发与自动化测试（非 prod profile）中可走通。
+     * 安装包装出的测试环境与生产同为 prod profile，走 {@link SmsCustomerOtpService}，短信未配置时同样返回 409。
+     */
+    @Override
+    public void requestCode(String phone, String scene) {
     }
 }

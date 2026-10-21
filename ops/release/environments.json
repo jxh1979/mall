@@ -1,0 +1,26 @@
+{
+  "文件版本": "V0.01",
+  "说明": "统一发布包出包登记（ROOT-06；BSM「能自动识别环境的安装包 + 内附教程」条）。只放出包必需的非密信息：对外地址、员工 App 服务地址与允许访问地址、证书与证书私钥在目标机上的存放路径（只写路径不写内容）、客人 iPhone App 与微信小程序的发布入口。安装时插了授权 U 盘即装生产、否则装测试（第十三批操作员裁决第 6 条），识别不靠本表。字段由 IT 登记；某环境未登记齐，该环境不进安装包。",
+  "environments": [
+    {
+      "env": "test",
+      "label": "测试环境",
+      "public_host": "",
+      "api_base_url": "",
+      "allowed_hosts": "",
+      "tls_cert": "",
+      "tls_key": "",
+      "guest_entries": { "ios": null, "wechat": null }
+    },
+    {
+      "env": "prod",
+      "label": "生产环境",
+      "public_host": "",
+      "api_base_url": "",
+      "allowed_hosts": "",
+      "tls_cert": "",
+      "tls_key": "",
+      "guest_entries": { "ios": null, "wechat": null }
+    }
+  ]
+}

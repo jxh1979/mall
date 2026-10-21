@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -6,6 +6,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import { MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { formatBusinessStatus } from "../i18n/statusLabels";
 import type { AdminPageProps, OverviewPayload } from "../types";
 
 function metricValue(data: OverviewPayload | null, metricCode: string): number | null {
@@ -21,6 +22,9 @@ const REVENUE_BARS: Array<{ code: string; label: string }> = [
   { code: "revenue.ticket", label: "票务" },
   { code: "revenue.bar", label: "酒吧" },
 ];
+// ROOT-04 补录数量的状态另列（裁决 M02「补录提交即计数，状态另列」）。
+const BACKFILL_STATUSES = ["pending", "approved", "rejected"];
+
 const VOLUME_BARS: Array<{ code: string; label: string }> = [
   { code: "traffic.amusement", label: "游乐核销" },
   { code: "verify.done", label: "票务核销" },
@@ -73,6 +77,17 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
   const verifyDisplay = verifyKpi.status === "ready" && verifyKpi.value !== null ? verifyKpi.value : metricValue(data, "verify.done");
   const memberDisplay = memberKpi.status === "ready" && memberKpi.value !== null ? memberKpi.value : metricValue(data, "member.new");
   const riskDisplay = riskKpi.status === "ready" && riskKpi.value !== null ? riskKpi.value : metricValue(data, "risk.pending_review");
+  // ROOT-04：第三方回流收入（单列，不计入净收入）、采购到货（按商品及单位分列、不出合计，裁决 M01）、补录数量（提交即计数、状态另列，裁决 M02）。
+  // 同上：统一明细端点优先，失败（含无权限）回退总览值并隐藏「完整明细」入口。
+  const thirdpartyKpi = useMetricKpiValue(api, "revenue.thirdparty", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
+  const receivedKpi = useMetricKpiValue(api, "supply.received", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
+  const backfillKpi = useMetricKpiValue(api, "risk.manual_backfill", { from: asOfDay, to: asOfDay, enabled: !!asOfDay });
+  const thirdpartyDisplay = thirdpartyKpi.status === "ready" && thirdpartyKpi.value !== null ? thirdpartyKpi.value : metricValue(data, "revenue.thirdparty");
+  const receivedGroups = (receivedKpi.status === "ready" && receivedKpi.groups
+    ? receivedKpi.groups
+    : (data?.metrics?.["supply.received"]?.dimension?.groups as Array<Record<string, unknown>> | undefined)) ?? [];
+  const backfillValue = metricValue(data, "risk.manual_backfill");
+  const backfillStatusCounts = (data?.metrics?.["risk.manual_backfill"]?.dimension?.statusCounts ?? {}) as Record<string, unknown>;
 
   const revenueValues = REVENUE_BARS.map((item) =>
     (item.code === "revenue.ticket" ? ticketDisplay : item.code === "revenue.bar" ? barDisplay : metricValue(data, item.code)) ?? 0);
@@ -105,6 +120,13 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-member"><span>新增会员</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-member-value" onClick={() => navigateTo?.("ADM-CUS-001")}>{memberDisplay === null ? "—" : String(memberDisplay)}</button><small>当日新建，查看客人账号管理{memberKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="member.new" from={asOfDay} to={asOfDay} testid="overview-metric-detail-member" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-risk"><span>待复核</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-risk-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{riskDisplay === null ? "—" : String(riskDisplay)}</button><small>复核 + 风险预警，查看主管复核{riskKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="risk.pending_review" to={asOfDay} testid="overview-metric-detail-risk" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-ar"><span>应收欠费余额</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-ar-value" onClick={() => navigateTo?.("ADM-ANA-004")}>{arDisplay === null ? "—" : String(arDisplay)}</button><small>逾期未清应收（分），查看欠费与回款{arKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance" to={asOfDay} testid="overview-metric-detail-ar" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-thirdparty"><span>第三方回流收入</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-thirdparty-value" onClick={() => navigateTo?.("ADM-INT-002")}>{thirdpartyDisplay === null ? "—" : String(thirdpartyDisplay)}</button><small>餐饮/零售已入账回流订单（分）；渠道团购票已计入票务收入；不计入净收入{thirdpartyKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="revenue.thirdparty" from={asOfDay} to={asOfDay} testid="overview-metric-detail-thirdparty" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-received"><span>采购到货</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-received-value" onClick={() => navigateTo?.("ADM-INV-003")}>{receivedGroups.length === 0 ? "当日无采购到货" : receivedGroups.map((group, index) => {
+            const unit = String(group.unit ?? "");
+            const rejected = Number(group.rejectedQuantity ?? 0);
+            return <span key={String(group.itemId ?? index)} style={{ display: "block" }}>{`${String(group.itemName ?? "")} ${Number(group.acceptedQuantity ?? 0)}${unit}`}{rejected > 0 ? `（拒收 ${rejected}${unit}）` : null}</span>;
+          })}</button><small>按商品及单位分列合格接收，不同单位不相加，查看采购单{receivedKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="supply.received" from={asOfDay} to={asOfDay} testid="overview-metric-detail-received" /></> : null}</small></div>
+          <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-backfill"><span>补录数量</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-backfill-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{backfillValue === null ? "—" : String(backfillValue)}</button><small data-testid="overview-kpi-backfill-status">{BACKFILL_STATUSES.map((status) => `${formatBusinessStatus(status)} ${Number(backfillStatusCounts[status] ?? 0)}`).join(" · ")}</small><small>提交即计一笔（锁账后补录、领取时刻补证），查看主管复核{backfillKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="risk.manual_backfill" from={asOfDay} to={asOfDay} testid="overview-metric-detail-backfill" /></> : null}</small></div>
         </div>
         {hasRevenue || hasVolume ? (
           <div className="admin-chart-panel" data-testid="overview-charts">

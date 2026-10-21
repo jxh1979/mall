@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -686,6 +686,46 @@ public interface AnalyticsRepository {
 
     /** risk.pending_review 明细：待复核主管审批（review_status='pending_review'）+ 未处置风险预警（status='open'），产生时间早于截至日窗末，合计=COUNT(*)。谓词同 ETL countPendingReview。 */
     default AnalyticsRecords.MetricDetailRows pendingReviewDetail(LocalDate asOf, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    // ==== ROOT-04（BSM「经营看板」章「主要指标」：收入「第三方回流收入」、供应链「采购到货」、风险「补录数量」）====
+
+    /** revenue.thirdparty ETL：餐饮/零售已入账回流订单（sync_type='order'、status='synced'、已落商户）按商户合计（分），按回流落库时刻落窗。 */
+    default Map<String, BigDecimal> sumThirdpartyRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    /** revenue.thirdparty 明细：与 ETL 同谓词的回流订单逐笔，合计=金额（分）之和。 */
+    default AnalyticsRecords.MetricDetailRows thirdpartyRevenueDetail(java.time.Instant start, java.time.Instant end, int limit, int offset) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
+    }
+
+    /** supply.received：采购收货登记按商品及单位分组（合格接收/实到/拒收/到货次数），不跨单位合计。projectScope 语义同其他明细；merchantId 非空只算该商户。 */
+    default java.util.List<Map<String, Object>> purchaseReceivedGroups(java.time.Instant start, java.time.Instant end,
+            java.util.Collection<String> projectScope, String merchantId) {
+        return java.util.List.of();
+    }
+
+    /** supply.received 明细：每一次到货一行，合计不出标量（summaryValue=null），groups=同谓词分组合计。 */
+    default AnalyticsRecords.MetricDetailRows purchaseReceivedDetail(java.time.Instant start, java.time.Instant end, int limit, int offset,
+            java.util.Collection<String> projectScope) {
+        return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, null, java.util.List.of());
+    }
+
+    /** risk.manual_backfill ETL：补录申请（锁账后补录、无可信领取时刻补证）按提交时刻落窗、按商户计笔数（无商户的并入平台）。 */
+    default Map<String, BigDecimal> countManualBackfillByMerchant(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    /** risk.manual_backfill 总览：同谓词按当前状态分列笔数；merchantId 非空只算该商户。 */
+    default Map<String, Long> manualBackfillStatusCounts(java.time.Instant start, java.time.Instant end, String merchantId) {
+        return Map.of();
+    }
+
+    /** risk.manual_backfill 明细：每笔补录申请一行（不出原因原文），合计=COUNT(*)。 */
+    default AnalyticsRecords.MetricDetailRows manualBackfillDetail(java.time.Instant start, java.time.Instant end, int limit, int offset,
+            java.util.Collection<String> projectScope) {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, BigDecimal.ZERO);
     }
 }

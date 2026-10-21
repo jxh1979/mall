@@ -1,6 +1,6 @@
 package com.complex.platform.common.ratelimit;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,6 +36,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             // U07-004：公开自助注册入口按认证类频控（PGM L579 设备绑定契约落地前后均须防刷）。
             new Rule("/api/v1/staff/self-registrations", Category.AUTH),
             new Rule("/api/v1/customer/auth/phone-login", Category.AUTH),
+            new Rule("/api/v1/customer/auth/sms-codes", Category.AUTH),
             new Rule("/api/v1/finance/payment-intents", Category.PAYMENT),
             new Rule("/api/v1/finance/payments/*/confirm-offline", Category.PAYMENT),
             new Rule("/api/v1/finance/ar-ap-items/*/payments", Category.PAYMENT),
