@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -529,7 +529,8 @@ class JdbcBarRepository implements BarRepository {
                     updated_at = EXCLUDED.updated_at,
                     order_type = EXCLUDED.order_type,
                     -- V231：结账回填的订单 paid_at 随 upsert 落库；stampOrderPaidAt 只在为空时首次写。
-                    paid_at = EXCLUDED.paid_at
+                    -- 第十一批 TK-04-R3：已付时点一经写入不被后续状态写（如结账后出品送达用旧构造器存单）抹空（BSM L831 支付成功时点锁定）。
+                    paid_at = COALESCE(EXCLUDED.paid_at, bar_orders.paid_at)
                 """, parameterSource.orderParameters(order));
         return order;
     }

@@ -1,11 +1,12 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,6 +18,8 @@ import com.complex.platform.amusement.dto.CompensationPolicyRequest;
 import com.complex.platform.amusement.dto.ParkWideFaultConfirmRequest;
 import com.complex.platform.amusement.dto.ParkWideFaultInitiateRequest;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.customer.CustomerRepository;
+import com.complex.platform.customer.CustomerSessionRecord;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.InternalPayableExecutionService;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
@@ -59,8 +62,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * CG-08b 全园故障补偿通票（ENUM「全园故障与补偿通票」）：补偿对象快照（已入场核销且本场次受影响 / 尚未核销但仍在有效期内）、
- * 仍在原票下办理（延长原核销权不增加次数 / 另补一次完整票面权益）、同一故障同一人份只补一次、批量发放前双岗位确认、
+ * CG-08b 全园故障补偿通票（ENUM「全园故障与补偿通票」）：补偿对象快照（只取故障时已入场核销且本场次受影响的人份；
+ * 2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」：故障期间未入场的有效未核票不建延期项）、
+ * 仍在原票下另补一次完整票面权益（TK-10：按票面绑定份数与单次份次数）、同一故障同一人份只补一次、批量发放前双岗位确认、
  * 补偿有效期参数（出厂默认一年，上下限须同时配置）、补偿机会用一次即用尽且履约锁定到补偿记录。
  * FS-012：补偿新增实际履约逐笔记录并锁定履约时目录生效价与版本、按承担主体对实际提供方形成补偿应付、不进普通结算事实与赠饮应付、
  * 承担主体须为在用法律主体、冲正时对冲承担方应付。
@@ -99,6 +103,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     @Autowired private FinanceService financeService;
     @Autowired private InternalPayableExecutionService internalPayableExecution;
     @Autowired private CompensationFulfillmentPort compensationFulfillmentPort;
+    @Autowired private CustomerRepository customerRepository;
 
     private String suffix;
     private String projectId;
@@ -185,9 +190,14 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         TestSecurityActors.clear();
     }
 
-    /** 快照：已入场核销人份 → 另补完整票面；尚未核销且在有效期内 → 延长核销权；过期票、非游乐权益不进；同一故障只补一次；双岗位确认。 */
+    /**
+     * 快照：已入场核销人份 → 另补完整票面；过期票、非游乐权益不进；同一故障只补一次；双岗位确认。
+     * TK-09（2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」，ENUM L148「故障发生时持有效未核票不作为保留资格或延期的理由」）：
+     * 故障期间未入场、持有效未核票的人份（B）不进补偿、原票照原有效期使用。
+     */
     @Test
     void snapshotThenSecondRoleConfirmIssuesCompensationOnce() {
+        Instant unverifiedValidTo = ticketingRepository.findIssuedEntitlementById(unverifiedEntitlementId).orElseThrow().validTo();
         AmusementParkWideFaultRecord fault = activateFault();
         actAs(bothRolesUser);
         AmusementFaultCompensationBatchRecord batch = compensationService.initiateBatch(fault.id(),
@@ -198,9 +208,9 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         List<Map<String, Object>> pending = jdbcTemplate.queryForList(
                 "SELECT entitlement_id, kind, status, original_session_id, original_entry_verification_id, share_count"
                         + " FROM amusement_fault_compensation_items WHERE batch_id = ? ORDER BY kind", batch.id());
-        assertThat(pending).hasSize(2);
         assertThat(pending).extracting(r -> r.get("entitlement_id") + ":" + r.get("kind"))
-                .containsExactlyInAnyOrder(unverifiedEntitlementId + ":extend", verifiedEntitlementId + ":full_reissue");
+                .as("没来的一律不延期：只补故障时已入场的人份")
+                .containsExactly(verifiedEntitlementId + ":full_reissue");
         Map<String, Object> reissue = pending.stream().filter(r -> "full_reissue".equals(r.get("kind"))).findFirst().orElseThrow();
         assertThat(reissue.get("original_session_id")).isEqualTo(sessionId);
         assertThat(reissue.get("original_entry_verification_id")).isEqualTo(entryVerificationId);
@@ -223,17 +233,16 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 new CompensationBatchConfirmRequest("cg08b-ok-" + suffix, ENG, "工程岗确认发放"));
         assertThat(issued.status()).isEqualTo("issued");
         assertThat(issued.confirmedBy()).isEqualTo(engineeringUser);
-        assertThat(issued.extendCount()).isEqualTo(1);
         assertThat(issued.reissueCount()).isEqualTo(1);
         Instant validUntil = issued.validUntil();
         assertThat(validUntil).isCloseTo(Instant.now().plus(365, ChronoUnit.DAYS), within(1, ChronoUnit.HOURS));
 
-        // B：只延长原核销权到补偿有效期，不增加次数。
+        // B：原票照原有效期使用，不延期、不增加次数。
         Map<String, Object> b = jdbcTemplate.queryForMap("SELECT total_times, used_times, valid_to FROM issued_entitlements WHERE id = ?",
                 unverifiedEntitlementId);
         assertThat(b.get("total_times")).isEqualTo(1);
         assertThat(b.get("used_times")).isEqualTo(0);
-        assertThat(((Timestamp) b.get("valid_to")).toInstant()).isEqualTo(validUntil);
+        assertThat(((Timestamp) b.get("valid_to")).toInstant()).isCloseTo(unverifiedValidTo, within(1, ChronoUnit.MILLIS));
         // A：原行不回改；原票下补发完整票面权益（游乐 + 酒水各一次），标记补偿记录。
         Map<String, Object> a = jdbcTemplate.queryForMap("SELECT total_times, used_times, valid_to FROM issued_entitlements WHERE id = ?",
                 verifiedEntitlementId);
@@ -386,8 +395,6 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         Instant now = Instant.now();
         assertThat(compensationRepository.listVerifiedAffectedShares("missing-" + suffix, projectId, now.minusSeconds(60), now))
                 .noneMatch(row -> verifiedEntitlementId.equals(row.get("entitlement_id")));
-        assertThat(compensationRepository.listUnverifiedAffectedShares("missing-" + suffix, projectId, now))
-                .noneMatch(row -> unverifiedEntitlementId.equals(row.get("entitlement_id")));
     }
 
     @Test
@@ -406,8 +413,6 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         Instant now = Instant.now();
         assertThat(compensationRepository.listVerifiedAffectedShares("other-" + suffix, other, now.minusSeconds(60), now))
                 .noneMatch(row -> verifiedEntitlementId.equals(row.get("entitlement_id")));
-        assertThat(compensationRepository.listUnverifiedAffectedShares("other-" + suffix, other, now))
-                .noneMatch(row -> unverifiedEntitlementId.equals(row.get("entitlement_id")));
     }
 
     /**
@@ -674,6 +679,64 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 String.class, fault.id())).isEqualTo(BEARER);
     }
 
+    /**
+     * TK-10（ENUM L148「另补一次完整票面权益」「家庭票、多人票和多次票只对受影响的对应人份或次份办理补偿，不增加未受影响的剩余人数或次数」）：
+     * 完整补偿按票面绑定的份数与次数补发受影响这一人份——酒水绑定 2 份×每份 2 次 → 补发 2 行各 2 次；
+     * 多人票绑定（num_people=3）不按人数展开，只补受影响人份（原座次）1 行。
+     */
+    @Test
+    void fullReissueHonoursBindingQuantityAndTimes() {
+        jdbcTemplate.update("UPDATE ticket_type_entitlements SET quantity = 2, total_times = 2 WHERE id = ?",
+                "bind_tpl_cg08b_bar_drink_" + suffix);
+        jdbcTemplate.update("UPDATE ticket_type_entitlements SET num_people = 3 WHERE id = ?", "bind_tpl_cg08b_amusement_pass_" + suffix);
+        String itemId = issueFullReissue();
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT entitlement_type, total_times, slot_index FROM issued_entitlements"
+                + " WHERE compensation_item_id = ? ORDER BY entitlement_type", itemId);
+        assertThat(rows).extracting(r -> r.get("entitlement_type") + ":" + r.get("total_times") + ":" + r.get("slot_index"))
+                .containsExactly("amusement_pass:1:1", "bar_drink:2:1", "bar_drink:2:1");
+    }
+
+    /**
+     * TK-10（ENUM L46「多次票每完成一次检票环节消耗一次入场次数并开启一个独立场次窗口，该窗口内附带权益按完整一份配足」；
+     * ENUM L148 只补受影响的对应次份）：3 次票只补 1 个次份——各绑定次数按单次份折算（3 次 ÷ 3 = 1）。
+     */
+    @Test
+    void fullReissueForMultiUseTicketCoversOneShare() {
+        jdbcTemplate.update("UPDATE ticket_type_entitlements SET total_times = 3 WHERE ticket_type_id = ?", ticketTypeId);
+        jdbcTemplate.update("UPDATE issued_entitlements SET total_times = 3 WHERE id = ?", verifiedEntitlementId);
+        String itemId = issueFullReissue();
+        assertThat(jdbcTemplate.queryForList("SELECT total_times FROM issued_entitlements WHERE compensation_item_id = ?",
+                Integer.class, itemId)).containsExactly(1, 1);
+    }
+
+    /**
+     * TK-13（ENUM L148「“我的票”按对应人份或次份显示补偿标注及其实际有效期」；BSM L862）：客人按前端真实请求（客人 token、蛇形键响应）
+     * 查看订单票——完整补发行带补偿标注 compensation_kind=full_reissue、所属人份座次，valid_to 即该人份实际补偿有效期；原票行不带标注。
+     */
+    @Test
+    void customerOrderTicketsMarkCompensationPerShareWithActualValidity() throws Exception {
+        String itemId = issueFullReissue();
+        Instant validUntil = jdbcTemplate.queryForObject("SELECT new_valid_to FROM amusement_fault_compensation_items WHERE id = ?",
+                Timestamp.class, itemId).toInstant();
+        String customerId = "cus_cg08b_" + suffix;
+        String phone = "139" + String.format("%08d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100_000_000));
+        customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(customerId, phone,
+                "139****" + phone.substring(7), "active", null, null, Instant.now(), Instant.now()));
+        String token = "token_cg08b_" + suffix;
+        customerRepository.saveSession(new CustomerSessionRecord("session_cg08b_" + suffix, customerId, token, "web",
+                Instant.now(), Instant.now().plusSeconds(3600), "active"));
+        TestSecurityActors.clear();
+        String body = mockMvc.perform(get("/api/v1/customer/orders/" + orderId + "/tickets")
+                        .header("X-Customer-Token", token))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        List<Map<String, Object>> items = com.jayway.jsonpath.JsonPath.read(body, "$.data.items");
+        assertThat(items).filteredOn(r -> "full_reissue".equals(r.get("compensation_kind")))
+                .extracting(r -> r.get("entitlement_type") + ":" + r.get("slot_index") + ":" + Instant.parse((String) r.get("valid_to")))
+                .containsExactlyInAnyOrder("amusement_pass:1:" + validUntil, "bar_drink:1:" + validUntil);
+        assertThat(items).filteredOn(r -> r.get("compensation_kind") == null).extracting(r -> (String) r.get("id"))
+                .containsExactlyInAnyOrder(verifiedEntitlementId, unverifiedEntitlementId, expiredEntitlementId, drinkEntitlementId);
+    }
+
     // ---------- helpers ----------
 
     private void actAsVerifier() {
@@ -695,7 +758,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         Instant now = Instant.now();
         String id = "tpl_cg08b_" + type + "_" + suffix;
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(id, "权益-" + type, type, 1, valueCent, "active",
-                null, null, null, null, now, now, "virtual", null, "per_use", null, false));
+                null, null, null, null, now, now, "virtual", null, "per_use", null));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord("bind_" + id, ticketTypeId, id, 1, 1,
                 valueCent, "default", 1, valueCent, now, now));
         return id;
@@ -781,7 +844,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         Instant now = Instant.now();
         String id = "tpl_cg08b_gift_" + suffix;
         ticketingRepository.saveEntitlementTemplate(new EntitlementTemplateRecord(id, "权益-赠饮", "gift_drink", 1, 0L, "active",
-                null, null, null, productId, now, now, "physical", null, "per_use", null, false));
+                null, null, null, productId, now, now, "physical", null, "per_use", null));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord("bind_" + id, ticketTypeId, id, 1, 1,
                 0L, "default", 1, 0L, now, now));
         return code;

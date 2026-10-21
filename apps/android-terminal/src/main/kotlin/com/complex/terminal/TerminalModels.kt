@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -105,6 +105,8 @@ data class PreviewResponse(
   val allowed: Boolean = false,
   val reason: String = "",
   val entitlement: OfflineEntitlement? = null,
+  // TK-06：一人多次票且人脸供应商可用时，capture=本次首次留脸（须客人同意并拍照），match=按留存人脸比对（须拍照）；其余为空。
+  val faceBinding: String? = null,
 )
 
 @Serializable
@@ -115,6 +117,9 @@ data class VerificationRequest(
   val deviceId: String,
   val pointId: String,
   val businessContext: Map<String, String> = emptyMap(),
+  // TK-06：一人多次票入场拍下的人脸（base64）与首次留脸时客人的单独同意；其余入场不带（空值不上送）。
+  val faceCapture: String? = null,
+  val faceConsentAccepted: Boolean? = null,
 )
 
 @Serializable
@@ -811,6 +816,8 @@ data class ServiceActionReq(
 data class ServiceMarkPaidReq(
   val idempotencyKey: String,
   val payMethod: String? = null,
+  // 第十一批 TK-04-R2（BSM L822、PGM L878）：收款时录入会员号（注册手机号），选填；后端走客人查询专门通道留痕。
+  val memberPhone: String? = null,
 )
 
 @Serializable

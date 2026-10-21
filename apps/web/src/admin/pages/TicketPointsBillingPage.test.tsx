@@ -1,5 +1,5 @@
-// 文件版本：V0.01
-import { fireEvent, render, screen } from "@testing-library/react";
+// 文件版本：V0.02
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TicketPointsBillingPage } from "./TicketPointsBillingPage";
 import { AdminApi } from "../client/adminClient";
@@ -27,4 +27,19 @@ it("商户只查看自身账单及原人次费用，不显示全国账期配置"
   expect(screen.getByText(/当时未付 0.60 元/)).toBeInTheDocument();
   expect(screen.getByText(/可付日 2026-02-16 → 2026-02-25/)).toBeInTheDocument();
   expect(urls.some(url=>url.endsWith("/rules"))).toBe(false);
+});
+
+// 第十一批 TK-04-b（ENUM L84「各自全额挂账」；BSM L823「只有转为可用才产生商户积分发行费」）：商户积分发行费单独出账，明细取来源消费单据。
+it("商户积分发行费账单标明费用类别，明细显示来源消费单据",async()=>{
+  vi.stubGlobal("fetch",vi.fn(async(input:RequestInfo|URL)=>{
+    const url=String(input);let data:unknown=[];
+    if(url.endsWith("/bills"))data=[{id:"bill2",billing_month:"2026-10-01",seller_entity_id:"一号酒吧合同主体",receiver_entity_id:"积分中心",project_id:"p1",amount_cent:60,paid_amount_cent:0,unpaid_amount_cent:60,visible_at:"2026-11-01T08:00:00Z",payment_status:"awaiting_objection_period",open_objections:0,fee_kind:"merchant"}];
+    if(url.endsWith("/items"))data=[{reward_id:"mcr1",parent_ticket_id:null,slot_index:0,use_index:0,points:30,unit_price_cent:2,amount_cent:60,confirmed_at:"2026-10-21T14:00:00Z",source_type:"bar_bill",source_id:"bill-001"}];
+    return new Response(JSON.stringify({success:true,code:"OK",data}),{headers:{"Content-Type":"application/json"}});
+  }));
+  const props:AdminPageProps={api:new AdminApi("test"),user:{id:"u",username:"merchant",accountType:"merchant"},setActionResult:vi.fn(),setGlobalError:vi.fn(),effectivePermissions:{status:"ready",value:{grants:["ticket.points.billing.view"],denies:[],wildcard:false}}};
+  render(<TicketPointsBillingPage {...props}/>);
+  await waitFor(()=>expect(screen.getByText(/一号酒吧合同主体/)).toHaveTextContent("商户积分发行费"));
+  fireEvent.click(screen.getByText("查看明细和异议"));
+  await waitFor(()=>expect(screen.getByText(/消费单据 bill-001/)).toBeInTheDocument());
 });

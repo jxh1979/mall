@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,6 +48,7 @@ class TicketRefundStoredValueJdbcIntegrationTests {
     private String orderId;
     private String instA;
     private String instB;
+    private String entityId;
 
     @BeforeEach
     void seed() {
@@ -74,7 +75,7 @@ class TicketRefundStoredValueJdbcIntegrationTests {
         String templateId = "tpl_tk20r3_" + suffix;
         repository.saveEntitlementTemplate(new EntitlementTemplateRecord(
                 templateId, "Entry", "entry", 1, 9900L, "active", null, null, null, null, now, now,
-                null, null, null, null, false));
+                null, null, null, null));
         repository.saveTicketInstance(new TicketInstanceRecord(
                 instA, "TN-A-" + suffix, orderId, ticketTypeId, 1, 1, 1, customerId, customerId, "active", null, null, now, now));
         repository.saveTicketInstance(new TicketInstanceRecord(
@@ -87,6 +88,10 @@ class TicketRefundStoredValueJdbcIntegrationTests {
                 "ent_tk20r3_b_" + suffix, "EB-" + suffix, ticketTypeId, orderId, templateId, "entry",
                 null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, 9900L,
                 null, null, null, null, instB, 2, null, null));
+        // BSM:806 每笔退款须写明责任主体（主体主数据中在用的法律主体）。
+        entityId = "be_tk20r3_" + suffix;
+        jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES (?, '退票责任主体', 'project_company', 'active', now(), now())", entityId);
         TestSecurityActors.asPlatformAdmin("usr_tk20r3_requester");
     }
 
@@ -166,8 +171,8 @@ class TicketRefundStoredValueJdbcIntegrationTests {
     }
 
     private TicketRefundRecord requestRefund(String instanceId, String key) {
-        return refundService.requestRefund(TicketRefundRequest.ofTicketInstances(
-                key, "refund", List.of(), orderId, null, "客人退票", "original", List.of(instanceId)));
+        return refundService.requestRefund(new TicketRefundRequest(
+                key, "refund", List.of(), orderId, null, "客人退票", "original", null, List.of(instanceId), "ticket_type_rule", entityId));
     }
 
     private Map<String, Object> account() {

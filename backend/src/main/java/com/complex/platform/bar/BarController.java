@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -173,6 +173,14 @@ public class BarController {
     public ApiResponse<PageResponse<BarBillOperationRecord>> listBillOperations(@PathVariable("bill_id") String billId) {
         authorizationService.requirePermission("bar.bill.split_merge");
         return ApiResponse.ok(service.listBillOperations(billId));
+    }
+
+    /** 第十一批 TK-04-R5（ENUM L77）：从账单反查本单产生的商户消费积分与成长值。 */
+    @GetMapping("/bills/{bill_id}/rewards")
+    public ApiResponse<PageResponse<com.complex.platform.customer.MerchantConsumptionRewardService.RewardView>> listBillRewards(
+            @PathVariable("bill_id") String billId) {
+        authorizationService.requirePermission("bar.order.view");
+        return ApiResponse.ok(service.listBillRewards(billId));
     }
 
     @PostMapping("/bills/{bill_id}/split")

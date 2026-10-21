@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -60,6 +60,9 @@ public class BarBillingService {
     // 字段注入免改构造点（同上各例）；null＝旧构造/单测未注入，带券结账即拒绝。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.voucher.VoucherService voucherService;
+    // 第十一批 TK-04-a：结账识别会员、结清后（已全部送达时）生成商户消费待确认积分与成长值。null＝旧构造/单测未注入，不生成。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.customer.MerchantConsumptionRewardService merchantRewards;
 
     public BarBillingService(
             BarRepository repository,
@@ -231,6 +234,13 @@ public class BarBillingService {
             }
         }
         requireText(actual.paymentId(), "payment_id");
+        // 第十一批 TK-04-R2（BSM L822「POS、现金等其他付款方式，由收银在收款时现场录入会员号累计」；PGM L878）：
+        // 录入会员手机号即发起一次客人查询，留痕；查无会员整笔结账拒绝（不代建会员）。
+        String memberPhone = trimToNull(actual.memberPhone());
+        if (memberPhone != null) {
+            merchantRewards.identifyByPhone(com.complex.platform.customer.MerchantConsumptionRewardService.BAR_BILL, bill.id(),
+                    memberPhone, "finance.payment.register", actual.idempotencyKey());
+        }
         // 第十批 TK-28-R1：本次结账带一张本商户折扣券 → 同事务核销并抵扣应付（ENUM L81；PGM L303 任一步失败整体回滚、券回 issued）。
         // 抵扣上限＝应付−已付（不含小费：服务费/小费基数不受扣券影响，BSM L1076）；面值多出部分不找零（ENUM L83）；
         // 抵扣进 discount_amount_cent：提成基数=subtotal−discount（ENUM L108），低消进度看 subtotal 不看 discount（BSM L1064）。
@@ -288,6 +298,7 @@ public class BarBillingService {
                                 o.orderSource(), o.status(), o.totalAmountCent(), o.currency(), o.createdTerminal(),
                                 o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), closeNow)));
             }
+            if (merchantRewards != null) merchantRewards.tryCreateForBarBill(bill.id());
             return closedBill;
         }
         long settlementAmount = actual.settlementAmountCent() == null
@@ -319,6 +330,9 @@ public class BarBillingService {
                     resolveBillCustomerId(bill), actual.phone(), actual.smsCode()).id();
             storedValueService.consumeInternal(svCustomerId, null, bill.merchantId(), settlementAmount,
                     "酒吧结账-储值支付 账单" + bill.id(), "barsv_" + slug(actual.idempotencyKey()));
+            if (memberPhone == null && merchantRewards != null) {
+                merchantRewards.bindIfAbsent(com.complex.platform.customer.MerchantConsumptionRewardService.BAR_BILL, bill.id(), svCustomerId);
+            }
         }
         repository.saveBillSettlement(new BarBillSettlementRecord(
                 "settle_" + slug(actual.idempotencyKey()),
@@ -363,7 +377,28 @@ public class BarBillingService {
                             o.orderSource(), o.status(), o.totalAmountCent(), o.currency(), o.createdTerminal(),
                             o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), now)));
         }
+        // 第十一批 TK-04-R3（BSM L823「仅完成支付都不视为……履约完成」）：结清时若出品已全部送达才生成，否则待最后一项送达。
+        if ("settled".equals(settledBill.settlementStatus()) && merchantRewards != null) {
+            merchantRewards.tryCreateForBarBill(bill.id());
+        }
         return settledBill;
+    }
+
+    /**
+     * 第十一批 TK-04-b（BSM L823「退款成功时取消对应尚待确认积分」「已可用积分后来发生特殊退款的，仍按原追回及待追回积分规则处理」）：
+     * 退款调整生效后对本单商户消费奖励对账；应付尚未实际退出时奖励不动，待财务结清时再对账。
+     */
+    private void reconcileRewards(String billId) {
+        if (merchantRewards != null) merchantRewards.reconcileBarBill(billId);
+    }
+
+    /** 第十一批 TK-04-R5（ENUM L77「从消费单据可以反查该单产生的积分与成长值记录」）：账单端查看本单商户消费奖励，限本商户。 */
+    java.util.List<com.complex.platform.customer.MerchantConsumptionRewardService.RewardView> listBillRewards(String billId) {
+        BarBillRecord bill = repository.findBillById(billId)
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
+        checkMerchantOwnership(bill.merchantId());
+        return merchantRewards == null ? java.util.List.of()
+                : merchantRewards.listForSource(com.complex.platform.customer.MerchantConsumptionRewardService.BAR_BILL, bill.id());
     }
 
     /** 结账-储值支付：账单本身不带 customerId，经链上订单解析下单客人。 */
@@ -437,7 +472,9 @@ public class BarBillingService {
                 amount -= retained;
                 refundLines = reduceGoodsLines(refundLines, retained);
                 if (amount == 0L) {
-                    return saveMinSpendRetained(bill, retained, beforePayable, reason, requestedBy, actual.idempotencyKey(), Instant.now());
+                    BarBillAdjustmentRecord kept = saveMinSpendRetained(bill, retained, beforePayable, reason, requestedBy, actual.idempotencyKey(), Instant.now());
+                    reconcileRewards(bill.id());
+                    return kept;
                 }
             }
             afterTip = Math.subtractExact(bill.tipAmountCent(), tipRefund);
@@ -516,6 +553,7 @@ public class BarBillingService {
         ));
         if ("refund".equals(type) && payrollRefunds != null) payrollRefunds.record(savedAdjustment, refundLines);
         if (retained > 0) saveMinSpendRetained(bill, retained, afterPayable, reason, requestedBy, actual.idempotencyKey(), now);
+        if ("refund".equals(type)) reconcileRewards(bill.id());
         // 第十批 TK-24-R3（BSM L1064「结账补足的差额按普通消费计入」）：补足后重判台组进度，达标即退定金。
         if ("min_spend_top_up".equals(type) && depositSettlements != null) depositSettlements.evaluateForOrder(bill.orderId());
         return savedAdjustment;

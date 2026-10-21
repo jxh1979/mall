@@ -1,4 +1,7 @@
 package com.complex.platform.ticketing;
+
+// 文件版本：V0.01
+
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -11,7 +14,6 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
-import com.complex.platform.ticketing.dto.FacePhotoConsentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
@@ -21,6 +23,7 @@ import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
+import com.complex.platform.ticketing.dto.VerificationAnomalyResolveRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.complex.platform.ticketing.dto.VerificationReverseRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,14 +41,10 @@ public class TicketingController {
 
     private final TicketingService service;
     private final AuthorizationService authorizationService;
-    // 批3-6：人脸照存档服务(取照端点授权+解密+审计在服务内)。
-    private final TicketFacePhotoService facePhotoService;
 
-    public TicketingController(TicketingService service, AuthorizationService authorizationService,
-                              TicketFacePhotoService facePhotoService) {
+    public TicketingController(TicketingService service, AuthorizationService authorizationService) {
         this.service = service;
         this.authorizationService = authorizationService;
-        this.facePhotoService = facePhotoService;
     }
 
     @GetMapping("/ticketing/ticket-types")
@@ -360,17 +359,6 @@ public class TicketingController {
         return ApiResponse.ok(maskBuyerPhone(service.cancelTicketOrder(orderId, request)));
     }
 
-    /** R-005：柜台散客出票前留存人脸照同意（客人在柜台设备勾选后由出票人员提交），返回同意 id 供出票请求 face_consent_id 使用。 */
-    @PostMapping("/ticketing/orders/{order_id}/face-photo-consent")
-    public ApiResponse<TicketFacePhotoService.FaceConsentView> recordFacePhotoConsent(
-            @PathVariable("order_id") String orderId,
-            @RequestBody @jakarta.validation.Valid FacePhotoConsentRequest request
-    ) {
-        authorizationService.requirePermission("ticket.ticket.issue");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.recordFacePhotoConsent(orderId, request));
-    }
-
     @PostMapping("/ticketing/orders/{order_id}/issue")
     public ApiResponse<IssuedTicketResponse> issueTicketOrder(
             @PathVariable("order_id") String orderId,
@@ -430,6 +418,32 @@ public class TicketingController {
         return ApiResponse.ok(service.listTicketRefunds());
     }
 
+    /** TK-05-R2/R3 登记通票安全事件（BSM:804 通票安全例外）。 */
+    @PostMapping("/ticketing/safety-events")
+    public ApiResponse<TicketSafetyEventRecord> requestTicketSafetyEvent(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.ticketing.dto.TicketSafetyEventRequest request) {
+        authorizationService.requirePermission("ticket.refund.request");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestTicketSafetyEvent(request));
+    }
+
+    /** TK-05-R2/R3 夜班值班经理及以上批准通票安全事件。 */
+    @PostMapping("/ticketing/safety-events/{safety_event_id}/approve")
+    public ApiResponse<TicketSafetyEventRecord> approveTicketSafetyEvent(
+            @PathVariable("safety_event_id") String safetyEventId,
+            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("ticket.refund.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.approveTicketSafetyEvent(safetyEventId, request));
+    }
+
+    @GetMapping("/ticketing/safety-events")
+    public ApiResponse<PageResponse<TicketSafetyEventRecord>> listTicketSafetyEvents() {
+        authorizationService.requirePermission("ticket.refund.view");
+        return ApiResponse.ok(service.listTicketSafetyEvents());
+    }
+
     @GetMapping("/ticketing/refunds/{refund_id}/lines")
     public ApiResponse<PageResponse<TicketRefundLineRecord>> listTicketRefundLines(
             @PathVariable("refund_id") String refundId
@@ -475,15 +489,6 @@ public class TicketingController {
         return ApiResponse.ok(service.listVerifications());
     }
 
-    // 批3-6(用户2026-07-04)：核销页取某权益的人脸照(解密返回 base64)。授权限核销/运营(verification.view)+每次查看写审计,
-    //   均在 facePhotoService.getForVerification 内。核销主链不改,照片仅核销页附带展示。
-    @GetMapping("/ticketing/issued-entitlements/{entitlement_id}/face-photo")
-    // M723：核销预检附带显示的人脸照不消耗单次授权（操作员 2026-10-04）
-    public ApiResponse<TicketFacePhotoService.FacePhotoView> getEntitlementFacePhoto(
-            @PathVariable("entitlement_id") String entitlementId) {
-        return ApiResponse.ok(facePhotoService.getForVerification(entitlementId));
-    }
-
     @PostMapping("/ticketing/verifications/{id}/reverse")
     public ApiResponse<VerificationResponse> reverseVerification(
             @PathVariable String id,
@@ -492,6 +497,27 @@ public class TicketingController {
         authorizationService.requirePermission("ticket.verify.reverse");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reverseVerification(id, request, resolveReversedBy()));
+    }
+
+    // TK-14：已成功扣次的核销提起异常复核（现场核销同权限），主管再二选一处置。
+    @PostMapping("/ticketing/verifications/{id}/anomaly")
+    public ApiResponse<VerificationRecord> raiseVerificationAnomaly(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid VerificationReverseRequest request
+    ) {
+        authorizationService.requirePermission("verification.execute");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.raiseVerificationAnomaly(id, request, resolveReversedBy()));
+    }
+
+    @PostMapping("/ticketing/verification-anomalies/{id}/resolve")
+    public ApiResponse<VerificationRecord> resolveVerificationAnomaly(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid VerificationAnomalyResolveRequest request
+    ) {
+        authorizationService.requirePermission("ticket.verify.anomaly.resolve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.resolveVerificationAnomaly(id, request, resolveReversedBy()));
     }
 
     @PostMapping("/terminals/sync-tasks")

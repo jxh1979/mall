@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
@@ -21,10 +21,11 @@ public class PointsRecoveryService {
     public long consume(String customerId,long awarded,long balanceAfter,String source,Instant now){
         long left=awarded;
         record Recovery(String id,long remaining){}
-        List<Recovery> rows=jdbc.query("SELECT reward_id,remaining_points FROM customer_points_recoveries WHERE customer_id=? AND status='pending' ORDER BY created_at,reward_id FOR UPDATE",(rs,n)->new Recovery(rs.getString(1),rs.getLong(2)),customerId);
+        // 第十一批 TK-04-b：待追回同时承接门票（reward_id）与商户消费（merchant_reward_id）两类来源，二者恰有其一、编号前缀互不相同。
+        List<Recovery> rows=jdbc.query("SELECT COALESCE(reward_id,merchant_reward_id),remaining_points FROM customer_points_recoveries WHERE customer_id=? AND status='pending' ORDER BY created_at,COALESCE(reward_id,merchant_reward_id) FOR UPDATE",(rs,n)->new Recovery(rs.getString(1),rs.getLong(2)),customerId);
         for(Recovery row:rows){
             long paid=Math.min(left,row.remaining());if(paid==0)break;left-=paid;
-            jdbc.update("UPDATE customer_points_recoveries SET remaining_points=?,status=?,updated_at=? WHERE reward_id=?",row.remaining()-paid,row.remaining()==paid?"recovered":"pending",Timestamp.from(now),row.id());
+            jdbc.update("UPDATE customer_points_recoveries SET remaining_points=?,status=?,updated_at=? WHERE reward_id=? OR merchant_reward_id=?",row.remaining()-paid,row.remaining()==paid?"recovered":"pending",Timestamp.from(now),row.id(),row.id());
             customers.savePointsLedger(new CustomerPointsLedgerRecord("ledger_recover_"+UUID.randomUUID().toString().replace("-",""),customerId,-paid,balanceAfter,"deduct",row.id(),"后续积分抵扣待追回："+source,null,null,false,now,"deduct","confirmed","ticket_points_recovery",UUID.randomUUID().toString()));
         }
         return awarded-left;

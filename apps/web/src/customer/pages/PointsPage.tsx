@@ -1,12 +1,13 @@
 import { Alert, Button, Card, Empty, List, Space, Spin, Statistic, Tag, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 
-// 文件版本：V0.01
-import type { CustomerService, TicketRewardSummary, TicketRewardRule } from "../client/customerService";
+// 文件版本：V0.02
+import type { CustomerService, MerchantConsumptionReward, TicketRewardSummary, TicketRewardRule } from "../client/customerService";
 import type { CheckInRecord, PointsRedemption, PointsSummary, RedemptionItem } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const { Paragraph, Text } = Typography;
+const REWARD_STATUS: Record<string, string> = { pending: "待确认", confirmed: "已确认", cancelled: "已取消", reversed: "已冲回" };
 
 // ⑤ 积分摘要 + 等级（GET /customer/points）+ 连续签到（POST /customer/check-ins, V089）
 export function PointsPage({ service }: { service: CustomerService }): React.ReactElement {
@@ -25,6 +26,8 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
   const [ticketNotice, setTicketNotice] = useState<string | null>(null);
   const [rules, setRules] = useState<TicketRewardRule[]>([]);
   const [ruleNotice, setRuleNotice] = useState<string | null>(null);
+  const [merchantRewards, setMerchantRewards] = useState<MerchantConsumptionReward[]>([]);
+  const [merchantNotice, setMerchantNotice] = useState<string | null>(null);
 
   const reload = () => {
     // 主资源=积分摘要(getPoints)决定页面级错误；签到/兑换目录/兑换历史为副资源，各自 .catch 降级为空+局部提示，不拖垮积分余额。
@@ -34,6 +37,7 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
     setRedemptionsNotice(null);
     setTicketNotice(null);
     setRuleNotice(null);
+    setMerchantNotice(null);
     Promise.all([
       service.getPoints(),
       service.listCheckIns().catch(() => { setCheckInsNotice("签到记录暂时加载失败，不影响积分与兑换"); return [] as CheckInRecord[]; }),
@@ -41,14 +45,16 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
       service.listRedemptions().catch(() => { setRedemptionsNotice("兑换记录暂时加载失败，可稍后重试"); return [] as PointsRedemption[]; }),
       service.listTicketRewards().catch(() => { setTicketNotice("门票奖励及待追回积分暂时加载失败，请稍后重试"); return null; }),
       service.listTicketRewardRules().catch(() => { setRuleNotice("门票奖励公告暂时加载失败，请稍后重试"); return [] as TicketRewardRule[]; }),
+      service.listMerchantRewards().catch(() => { setMerchantNotice("消费积分与成长值暂时加载失败，请稍后重试"); return [] as MerchantConsumptionReward[]; }),
     ])
-      .then(([points, records, catalog, history, rewards, announcements]) => {
+      .then(([points, records, catalog, history, rewards, announcements, consumption]) => {
         setSummary(points);
         setCheckIns(records ?? []);
         setItems(catalog ?? []);
         setRedemptions(history ?? []);
         setTicketRewards(rewards);
         setRules(announcements);
+        setMerchantRewards(consumption);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "积分加载失败"))
       .finally(() => setLoading(false));
@@ -109,7 +115,21 @@ export function PointsPage({ service }: { service: CustomerService }): React.Rea
           <List.Item key={reward.id}>
             <Space direction="vertical">
               <Text>第 {reward.slotIndex} 人份 · 第 {reward.useIndex} 次 · {reward.points} 积分 · {reward.growth} 成长值</Text>
-              <Text type="secondary">{({ pending: "待确认", confirmed: "已确认", cancelled: "已取消", reversed: "已冲回" } as Record<string, string>)[reward.status] ?? reward.status}{reward.status === "pending" ? ` · 原等待期至 ${new Date(reward.availableAt).toLocaleString("zh-CN")}，退款处理期间不发放` : ""}</Text>
+              <Text type="secondary">{REWARD_STATUS[reward.status] ?? reward.status}{reward.status === "pending" ? ` · 原等待期至 ${new Date(reward.availableAt).toLocaleString("zh-CN")}，退款处理期间不发放` : ""}</Text>
+            </Space>
+          </List.Item>
+        )} />
+      </Card>
+
+      {/* 第十一批 TK-04-R5（BSM L877 客人端只展示结果；ENUM L77 与消费单据双向可查）：商户消费积分与成长值，显示来源单号。 */}
+      <Card title="消费积分与成长值" style={{ marginTop: 16 }} data-testid="merchant-rewards">
+        <Paragraph type="secondary">商户消费在整笔消费全部完成后计算；积分等待期内有退款待处理时继续等待，已退款部分不计。</Paragraph>
+        {merchantNotice ? <Alert type="warning" message={merchantNotice} /> : null}
+        <List dataSource={merchantRewards} locale={{ emptyText: "暂无消费奖励记录" }} renderItem={(reward) => (
+          <List.Item key={reward.id}>
+            <Space direction="vertical">
+              <Text>{reward.merchantName} · 单号 {reward.sourceNo} · {reward.points} 积分 · {reward.growth} 成长值</Text>
+              <Text type="secondary">{REWARD_STATUS[reward.status] ?? reward.status}{reward.status === "pending" && reward.availableAt ? ` · 等待期至 ${new Date(reward.availableAt).toLocaleString("zh-CN")}，退款处理期间不发放` : ""}</Text>
             </Space>
           </List.Item>
         )} />

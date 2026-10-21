@@ -1,5 +1,7 @@
 package com.complex.platform.entry;
 
+// 文件版本：V0.01
+
 import com.complex.platform.terminal.TerminalCapabilitySwitchRecord;
 import com.complex.platform.terminal.TerminalDeviceRepository;
 import java.util.LinkedHashMap;
@@ -69,5 +71,15 @@ public class FaceVerificationRouter implements FaceVerificationPort {
     @Override
     public FaceVerificationResult verifyEntry(FaceVerificationRequest request) {
         return active().verifyEntry(request);
+    }
+
+    @Override
+    public boolean holderMatchAvailable() {
+        return active().holderMatchAvailable();
+    }
+
+    @Override
+    public FaceVerificationResult matchHolder(String storedPhotoBase64, String capturedPhotoBase64) {
+        return active().matchHolder(storedPhotoBase64, capturedPhotoBase64);
     }
 }

@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing.dto;
 
+// 文件版本：V0.01
+
 import java.util.List;
 
 public record EntitlementTemplateRequest(
@@ -17,8 +19,6 @@ public record EntitlementTemplateRequest(
         String merchantId,
         String venueId,
         String pointId,
-        // 结算重构批3-6(用户2026-07-04)：模板级开关——购买/发放时是否要求拍脸照存档(可空=false，游乐默认开走 V229 种子回填)。
-        Boolean requireFacePhoto,
         // ⚠️ 批10/E(V380)起本字段已封写:内部结算价唯一可编辑处 = 内部结算 SKU 目录(草案→他人复核转正)。
         //   请求携带非空值一律 400(防"以为改好了"的无声空转);模板上的 agreement_price_cent 只是目录价快照。
         Long agreementPriceCent,
@@ -34,27 +34,19 @@ public record EntitlementTemplateRequest(
     public EntitlementTemplateRequest(
             String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds, String name,
             String entitlementType, Integer defaultTotalTimes, Long defaultValueCent, String status,
-            String barItemRef, String merchantId, String venueId, String pointId, Boolean requireFacePhoto,
+            String barItemRef, String merchantId, String venueId, String pointId,
             Long agreementPriceCent, String exclusiveMerchantId) {
         this(idempotencyKey, operatorNote, evidenceAttachmentIds, name, entitlementType, defaultTotalTimes,
-                defaultValueCent, status, barItemRef, merchantId, venueId, pointId, requireFacePhoto,
+                defaultValueCent, status, barItemRef, merchantId, venueId, pointId,
                 agreementPriceCent, exclusiveMerchantId, null);
     }
-    // ponytail: 向后兼容构造——批3-6 前的调用点(既有测试/前端)不带 requireFacePhoto，默认 null(=false 不要脸照)。
+
+    // ponytail: 餐饮结算前不带内部结算价/专属商户的调用点默认 null(=非餐饮,走现状)。
     public EntitlementTemplateRequest(
             String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds, String name,
             String entitlementType, Integer defaultTotalTimes, Long defaultValueCent, String status,
             String barItemRef, String merchantId, String venueId, String pointId) {
         this(idempotencyKey, operatorNote, evidenceAttachmentIds, name, entitlementType, defaultTotalTimes,
-                defaultValueCent, status, barItemRef, merchantId, venueId, pointId, null, null, null);
-    }
-
-    // ponytail: 餐饮结算前带 requireFacePhoto 但不带内部结算价/专属商户的调用点默认 null(=非餐饮,走现状)。
-    public EntitlementTemplateRequest(
-            String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds, String name,
-            String entitlementType, Integer defaultTotalTimes, Long defaultValueCent, String status,
-            String barItemRef, String merchantId, String venueId, String pointId, Boolean requireFacePhoto) {
-        this(idempotencyKey, operatorNote, evidenceAttachmentIds, name, entitlementType, defaultTotalTimes,
-                defaultValueCent, status, barItemRef, merchantId, venueId, pointId, requireFacePhoto, null, null);
+                defaultValueCent, status, barItemRef, merchantId, venueId, pointId, null, null);
     }
 }

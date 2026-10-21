@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,10 +8,10 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 const FAULTS = [{ id: "f-1", project_id: "prj-1", status: "lifted", reason: "供电故障", activated_at: "2026-10-17T10:00:00Z", lifted_at: "2026-10-17T12:00:00Z" }];
 const POLICY = { project_id: "__global__", validity_days: 365, min_days: 1, max_days: 3650 };
-const PENDING = [{ id: "b-1", fault_id: "f-1", project_id: "prj-1", status: "pending_confirmation", reason: "供电故障补偿", bearer_company_id: "ent-amu", validity_days: 365, window_from: "2026-10-17T10:00:00Z", window_to: "2026-10-17T12:00:00Z", initiated_by: "u-head", initiated_role: "amusement_head", initiated_at: "2026-10-17T13:00:00Z", item_count: 2, extend_count: 1, reissue_count: 1 }];
+const PENDING = [{ id: "b-1", fault_id: "f-1", project_id: "prj-1", status: "pending_confirmation", reason: "供电故障补偿", bearer_company_id: "ent-amu", validity_days: 365, window_from: "2026-10-17T10:00:00Z", window_to: "2026-10-17T12:00:00Z", initiated_by: "u-head", initiated_role: "amusement_head", initiated_at: "2026-10-17T13:00:00Z", item_count: 1, reissue_count: 1 }];
 // TK18-R2-COMP（2026-10-18 操作员裁决补充第 3 条）：场次提前结束时已入场客人的补偿批次由系统生成（无发起岗位），
 // 发放前须游乐公司负责人与工程或安全岗位共同确认，沿用同一确认入口。
-const SESSION_BATCHES = [{ id: "sb-1", event_type: "session_early_end", ending_id: "end-1", session_id: "ses-9", project_id: "prj-1", status: "pending_confirmation", reason: "场次提前结束：设备临时停机", bearer_company_id: "be_amusement", validity_days: 365, window_from: "2026-10-17T20:00:00Z", window_to: "2026-10-17T22:00:00Z", item_count: 1, extend_count: 0, reissue_count: 1 }];
+const SESSION_BATCHES = [{ id: "sb-1", event_type: "session_early_end", ending_id: "end-1", session_id: "ses-9", project_id: "prj-1", status: "pending_confirmation", reason: "场次提前结束：设备临时停机", bearer_company_id: "be_amusement", validity_days: 365, window_from: "2026-10-17T20:00:00Z", window_to: "2026-10-17T22:00:00Z", item_count: 1, reissue_count: 1 }];
 // FS-012-R4（ENUM L148「发放记录须明确该公司的具体法律主体」）：承担主体从主体主数据选择，只列在用主体。
 const ENTITIES = [
   { id: "be_amusement", entity_name: "游乐公司", status: "active" },
@@ -19,7 +19,6 @@ const ENTITIES = [
 ];
 const ITEMS = [
   { id: "i-1", entitlement_id: "ent-a", parent_ticket_id: "tkt-1", slot_index: 1, customer_id: "cus-1", kind: "full_reissue", share_count: 1, original_session_id: "ses-1", status: "pending", compensation_entitlement_ids: [] },
-  { id: "i-2", entitlement_id: "ent-b", parent_ticket_id: "tkt-1", slot_index: 2, customer_id: "cus-1", kind: "extend", share_count: 1, status: "pending", compensation_entitlement_ids: [] },
 ];
 
 function dataEnvelope(data: unknown): Response {
@@ -63,13 +62,15 @@ function bodyOf(fetchMock: ReturnType<typeof vi.fn>, predicate: (url: string, in
 describe("AmusementFaultCompensationPage 全园故障补偿（CG-08b，ENUM「全园故障与补偿通票」）", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("待确认批次：显示快照记录（延长 / 完整补发）与出厂有效期，另一岗位确认发放调后端", async () => {
+  // TK-09（2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」）：全园故障补偿只补发故障时已入场的人份，页面不再出现延期计数与文案。
+  it("待确认批次：显示快照记录（完整补发）与出厂有效期，不再出现延期计数，另一岗位确认发放调后端", async () => {
     const fetchMock = stubFetch(PENDING);
     const setActionResult = renderPage();
     await waitFor(() => expect(screen.getByTestId("compensation-batch-status-b-1").textContent).toBe("待第二岗位确认"));
     expect(screen.getByTestId("compensation-policy-current").textContent).toContain("365 天");
     await waitFor(() => expect(screen.getByTestId("compensation-item-kind-i-1").textContent).toBe("另补一次完整票面权益"));
-    expect(screen.getByTestId("compensation-item-kind-i-2").textContent).toBe("延长原核销权");
+    expect(screen.getByTestId("compensation-batch-table").textContent).not.toContain("延长");
+    expect(screen.getByTestId("amusement-fault-compensation-page").textContent).not.toContain("延长原核销权");
     expect(screen.queryByTestId("compensation-initiate")).toBeNull();
     fireEvent.change(screen.getByTestId("compensation-role"), { target: { value: "engineering_safety" } });
     fireEvent.change(screen.getByTestId("compensation-note"), { target: { value: "工程岗确认发放" } });

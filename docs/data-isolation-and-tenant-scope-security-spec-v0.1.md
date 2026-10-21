@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V523**，发现 **221** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V528**，发现 **224** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -194,8 +194,10 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_bill_disputes` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bill_dunning_records` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bills` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
+| `merchant_consumption_rewards` | `merchant_id` + `project_id` | direct | V527 | `V527__merchant_consumption_rewards.sql` |
 | `merchant_expense_entries` | `merchant_id` | direct | V297 | `V297__merchant_expense_ledger.sql` |
 | `merchant_fee_notification_recipient` | `merchant_id` | direct | V182 | `V182__merchant_fee_notification_recipient.sql` |
+| `merchant_points_issuance_fees` | `project_id` | direct | V528 | `V528__merchant_reward_release_refund_and_issuance_fee.sql` |
 | `merchant_projects` | `merchant_id` + `project_id` | direct | V441 | `V441__m736_role_viewable_projects_and_merchant_projects.sql` |
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
@@ -269,6 +271,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `ticket_points_issuance_fees` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_refunds` | `merchant_id` | direct | V220 | `V220__ticket_refunds_merchant_id.sql` |
 | `ticket_reward_config_versions` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
+| `ticket_safety_events` | `project_id` | direct | V526 | `V526__ticket_refund_reasons_and_safety_exception.sql` |
 | `ticket_use_rewards` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |
 | `turnover_rent_rules` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |

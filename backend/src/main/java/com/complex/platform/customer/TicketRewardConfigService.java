@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -33,6 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class TicketRewardConfigService {
     public static final String VIEW = "ticket.reward.config.view";
     public static final String MANAGE = "ticket.reward.config.manage";
+    /** 第十一批 TK-04-a：按商户业态全国生效的商户消费积分获取率与成长值规则（BSM L822；操作员 2026-10-21 裁决补充第 4 条）。 */
+    static final Set<String> MERCHANT_KINDS = Set.of("merchant_points","merchant_growth");
+    private static final Set<String> BUSINESS_FORMATS = Set.of("bar","catering","retail","amusement","media","other");
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final AuthorizationService auth;
@@ -61,24 +64,25 @@ public class TicketRewardConfigService {
             throw invalid("须填写规则内容及未来生效时间");
         scope(r.projectId(),MANAGE);
         String kind=requireText(r.kind(),"kind");
-        if(!Set.of("points","growth","national","sales_contract","recovery_waiver").contains(kind)) throw invalid("不支持的奖励配置类型");
+        if(!Set.of("points","growth","national","sales_contract","recovery_waiver","merchant_points","merchant_growth").contains(kind)) throw invalid("不支持的奖励配置类型");
         validate(r);
         requireApproverScope(r);
         return idempotency.execute("ticketRewardConfig",requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
-            String key=kind+":"+Objects.toString(r.projectId(),"")+":"+Objects.toString(r.ticketTypeId(),"");
+            String format=MERCHANT_KINDS.contains(kind)?r.businessFormat():null;
+            String key=kind+":"+Objects.toString(r.projectId(),"")+":"+Objects.toString(r.ticketTypeId(),"")+":"+Objects.toString(format,"");
             jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", rs -> {}, key);
-            int seq=jdbc.queryForObject("SELECT count(*)+1 FROM ticket_reward_config_versions WHERE kind=? AND project_id IS NOT DISTINCT FROM ? AND ticket_type_id IS NOT DISTINCT FROM ?",Integer.class,kind,r.projectId(),r.ticketTypeId());
+            int seq=jdbc.queryForObject("SELECT count(*)+1 FROM ticket_reward_config_versions WHERE kind=? AND project_id IS NOT DISTINCT FROM ? AND ticket_type_id IS NOT DISTINCT FROM ? AND business_format IS NOT DISTINCT FROM ?",Integer.class,kind,r.projectId(),r.ticketTypeId(),format);
             String id="trc_"+UUID.randomUUID().toString().replace("-","");
             Instant now=Instant.now();
-            jdbc.update("INSERT INTO ticket_reward_config_versions(id,kind,ticket_type_id,project_id,version,payload,effective_at,status,created_by,created_at) VALUES(?,?,?,?,?,?::jsonb,?,'pending_review',?,?)",
-                    id,kind,r.ticketTypeId(),r.projectId(),"V"+(seq/100)+"."+String.format("%02d",seq%100),encode(r.values()),Timestamp.from(r.effectiveAt()),auth.currentActor().id(),Timestamp.from(now));
+            jdbc.update("INSERT INTO ticket_reward_config_versions(id,kind,ticket_type_id,project_id,version,payload,effective_at,status,created_by,created_at,business_format) VALUES(?,?,?,?,?,?::jsonb,?,'pending_review',?,?,?)",
+                    id,kind,r.ticketTypeId(),r.projectId(),"V"+(seq/100)+"."+String.format("%02d",seq%100),encode(r.values()),Timestamp.from(r.effectiveAt()),auth.currentActor().id(),Timestamp.from(now),format);
             String action="ticket.reward."+switch(kind){case "national","recovery_waiver" -> "national";case "sales_contract" -> "sales_contract";default -> "rule";};
             SupervisorReviewDecisionRecord review=reviews.evaluate(new SupervisorReviewEvaluateRequest(
                     r.idempotencyKey()+":review",requireText(r.reason(),"reason"),r.values().attachmentIds(),action,
                     "ticket_reward_config",id,0L,r.reason(),r.finalApproverId(),r.parallelLines()));
             if(!"pending_review".equals(review.reviewStatus())) throw ApiException.conflict("TICKET_REWARD_APPROVAL_REQUIRED","规则须进入审批，不得直接生效");
             jdbc.update("UPDATE ticket_reward_config_versions SET review_id=? WHERE id=?",review.reviewId(),id);
-            audit.recordSuccess("ticket.reward.config.submitted",MANAGE,"ticket_reward_config",id,null,r.idempotencyKey(),Map.of("kind",kind,"review_id",review.reviewId()));
+            audit.recordSuccess("ticket.reward.config.submitted",MANAGE,"ticket_reward_config",id,null,r.idempotencyKey(),Map.of("kind",kind,"review_id",review.reviewId(),"business_format",Objects.toString(format,"")));
             return find(id);
         },TicketRewardConfig.class);
     }
@@ -98,7 +102,7 @@ public class TicketRewardConfigService {
     @Transactional
     public TicketRewardConfig publish(String id, TicketRewardConfig.PublishRequest r) {
         TicketRewardConfig original=find(id); scope(original.projectId(),MANAGE);
-        if(!Set.of("national","recovery_waiver").contains(original.kind()))requireEvidenceScope(original.projectId()+":"+original.ticketTypeId(),false);
+        if(!Set.of("national","recovery_waiver","merchant_points","merchant_growth").contains(original.kind()))requireEvidenceScope(original.projectId()+":"+original.ticketTypeId(),false);
         if(r==null) throw invalid("请填写发布说明");
         requireText(r.reason(),"reason");
         return idempotency.execute("publishTicketRewardConfig:"+id,requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
@@ -113,9 +117,12 @@ public class TicketRewardConfigService {
     }
 
     TicketRewardConfig effective(String kind,String ticketType,String project,Instant at) {
-        List<TicketRewardConfig> rows=jdbc.query("SELECT * FROM ticket_reward_config_versions WHERE kind=? AND ticket_type_id IS NOT DISTINCT FROM ? AND project_id IS NOT DISTINCT FROM ? AND status='approved' AND published_at<effective_at AND effective_at<=? ORDER BY effective_at DESC LIMIT 1",this::map,kind,ticketType,project,Timestamp.from(at));
-        if(rows.isEmpty()) throw ApiException.conflict("TICKET_REWARD_CONFIG_REQUIRED","缺少已审批、公告且生效的门票奖励或销售合同配置");
-        return rows.getFirst();
+        return effectiveOptional(kind,ticketType,project,null,at).orElseThrow(()->ApiException.conflict("TICKET_REWARD_CONFIG_REQUIRED","缺少已审批、公告且生效的门票奖励或销售合同配置"));
+    }
+
+    /** 某时点已审批、已提前公告且已生效的最新版本；商户业态规则按 businessFormat 取，缺规则返回空由调用方 fail-closed。 */
+    java.util.Optional<TicketRewardConfig> effectiveOptional(String kind,String ticketType,String project,String businessFormat,Instant at) {
+        return jdbc.query("SELECT * FROM ticket_reward_config_versions WHERE kind=? AND ticket_type_id IS NOT DISTINCT FROM ? AND project_id IS NOT DISTINCT FROM ? AND business_format IS NOT DISTINCT FROM ? AND status='approved' AND published_at<effective_at AND effective_at<=? ORDER BY effective_at DESC LIMIT 1",this::map,kind,ticketType,project,businessFormat,Timestamp.from(at)).stream().findFirst();
     }
 
     public List<TicketRewardConfig> publishedRules(String ticketType,String project) {
@@ -136,10 +143,20 @@ public class TicketRewardConfigService {
             range(v.fixedValue(),v.minimumValue(),v.maximumValue());
             return;
         }
+        if(MERCHANT_KINDS.contains(r.kind())) {
+            if(r.projectId()!=null || r.ticketTypeId()!=null) throw invalid("商户业态规则全国生效，不可限定项目或票种");
+            if(!BUSINESS_FORMATS.contains(requireText(r.businessFormat(),"business_format"))) throw invalid("不支持的商户业态");
+            range(v.fixedValue(),v.minimumValue(),v.maximumValue());
+            if(v.minimumValue()<=0) throw invalid("每产生 1 积分或记 1 成长值所需消费金额及其下限须大于 0");
+            return;
+        }
         if("national".equals(r.kind())) {
             if(r.projectId()!=null || r.ticketTypeId()!=null) throw invalid("全国参数不可限定项目或票种");
             range(v.waitingHours()==null?24L:v.waitingHours().longValue(),v.minimumWaitingHours()==null?null:v.minimumWaitingHours().longValue(),v.maximumWaitingHours()==null?null:v.maximumWaitingHours().longValue());
             if(v.waitingHours()==null) throw invalid("等待时长须明确填写，初始建议24小时");
+            // BSM L823：商户消费等待期全国统一配置、须同时配置上下限；与门票核销等待期分开填写。
+            if(v.merchantWaitingHours()!=null || v.minimumMerchantWaitingHours()!=null || v.maximumMerchantWaitingHours()!=null)
+                range(v.merchantWaitingHours()==null?null:v.merchantWaitingHours().longValue(),v.minimumMerchantWaitingHours()==null?null:v.minimumMerchantWaitingHours().longValue(),v.maximumMerchantWaitingHours()==null?null:v.maximumMerchantWaitingHours().longValue());
             if(v.issuancePriceCent()==null || v.minimumPriceCent()==null || v.maximumPriceCent()==null || v.minimumPriceCent().signum()<=0 || v.issuancePriceCent().compareTo(v.minimumPriceCent())<0 || v.issuancePriceCent().compareTo(v.maximumPriceCent())>0 || v.issuancePriceCent().scale()>6)
                 throw invalid("积分发行单价及正数上下限须完整填写，精度最多六位小数分");
             entity(v.receiverEntityId());
@@ -199,13 +216,30 @@ public class TicketRewardConfigService {
         return owners;
     }
 
+    /** 业态对应域主管公司：该业态在营商户当前有效绑定的经营主体（缺绑定取商户档案主体），且为在用的域主管公司。 */
+    private List<String> formatDomainCompanies(String format) {
+        return jdbc.queryForList("""
+            SELECT DISTINCT e.id FROM merchants m
+            LEFT JOIN LATERAL (SELECT operation_entity_id FROM business_entity_bindings
+              WHERE merchant_id=m.id AND status='active' AND effective_from<=CURRENT_DATE
+                AND (effective_to IS NULL OR effective_to>=CURRENT_DATE) ORDER BY created_at DESC LIMIT 1) b ON TRUE
+            JOIN business_entities e ON e.id=COALESCE(b.operation_entity_id,m.business_entity_id)
+            WHERE m.merchant_type=? AND m.status='active' AND e.status='active' AND e.entity_role='management_company'
+            """,String.class,format);
+    }
+
     private void requireApproverScope(TicketRewardConfig.Request r) {
         String approver=requireText(r.finalApproverId(),"final_approver_id");
         // user_position_assignments.user_id 为主键且无 status/effective 列；任命时间不得在未来，已停岗档案不可回退到用户组织。
         List<String> companies=jdbc.queryForList("SELECT COALESCE((SELECT company_id FROM staff_profiles WHERE user_id=u.id AND status='active' AND registration_status='approved' ORDER BY updated_at DESC LIMIT 1),(SELECT organization_id FROM user_position_assignments WHERE user_id=u.id AND assigned_at<=now()),u.organization_id) FROM access_users u WHERE u.id=? AND u.status='active' AND NOT EXISTS(SELECT 1 FROM staff_profiles s WHERE s.user_id=u.id AND (s.status<>'active' OR s.registration_status<>'approved'))",String.class,approver);
         if(companies.size()!=1 || companies.getFirst()==null)throw invalid("最终审批人尚无有效的所属公司");
         String company=companies.getFirst();
-        boolean nationwide=Set.of("national","recovery_waiver").contains(r.kind());
+        // 成长值基础规则由全国平台审批（会员与等级 PRD §4）；业态积分获取率由该业态对应域主管公司审批（DEC-R8-93）。
+        boolean nationwide=Set.of("national","recovery_waiver","merchant_growth").contains(r.kind());
+        if("merchant_points".equals(r.kind())) {
+            if(!formatDomainCompanies(r.businessFormat()).contains(company))throw invalid("最终审批人须属于该商户业态对应的域主管公司");
+            return;
+        }
         List<String> domains=nationwide?List.of():domainCompanies(r.ticketTypeId(),r.projectId());
         boolean platform=nationwide || domains.size()>1;
         if(platform) {
@@ -228,7 +262,7 @@ public class TicketRewardConfigService {
     }
     TicketRewardConfig map(ResultSet rs,int row) throws SQLException {
         try {
-            return new TicketRewardConfig(rs.getString("id"),rs.getString("kind"),rs.getString("ticket_type_id"),rs.getString("project_id"),rs.getString("version"),json.readValue(rs.getString("payload"),TicketRewardConfig.Values.class),rs.getTimestamp("effective_at").toInstant(),instant(rs,"published_at"),rs.getString("status"),rs.getString("review_id"),rs.getString("created_by"),rs.getTimestamp("created_at").toInstant(),instant(rs,"approved_at"));
+            return new TicketRewardConfig(rs.getString("id"),rs.getString("kind"),rs.getString("ticket_type_id"),rs.getString("project_id"),rs.getString("version"),json.readValue(rs.getString("payload"),TicketRewardConfig.Values.class),rs.getTimestamp("effective_at").toInstant(),instant(rs,"published_at"),rs.getString("status"),rs.getString("review_id"),rs.getString("created_by"),rs.getTimestamp("created_at").toInstant(),instant(rs,"approved_at"),rs.getString("business_format"));
         } catch(java.io.IOException e) {throw new IllegalStateException("奖励配置内容无法读取",e);}
     }
     private String encode(Object v) {try{return json.writeValueAsString(v);}catch(java.io.IOException e){throw new IllegalStateException(e);}}

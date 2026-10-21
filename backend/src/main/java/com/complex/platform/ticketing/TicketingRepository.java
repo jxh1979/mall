@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.util.List;
 import java.util.Optional;
@@ -70,14 +70,6 @@ public interface TicketingRepository {
 
     List<TicketTypeEntitlementRecord> listTicketTypeEntitlements(String ticketTypeId);
 
-    /**
-     * V359：绑了 require_face_photo=TRUE 权益模板的票种 id 集合。客人端购票页据此才向购票人要人脸照，
-     * 不需要的票种一律不问（生物识别信息最小必要）。default 返回空集=都不要照，既有假实现零改动；Jdbc 覆写。
-     */
-    default java.util.Set<String> listTicketTypeIdsRequiringFacePhoto() {
-        return java.util.Set.of();
-    }
-
     IssuedEntitlementRecord saveIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
     Optional<IssuedEntitlementRecord> findIssuedEntitlementByCode(String entitlementCode);
@@ -123,6 +115,11 @@ public interface TicketingRepository {
     /** 方案2 复核驳回：退款单 requested→rejected（CAS，返回命中行数）。default 返回 0。 */
     default int markTicketRefundRejected(String refundId, String rejectedBy, java.time.Instant rejectedAt) {
         return 0;
+    }
+
+    /** TK-05（BSM:806「记录退款原因、责任主体」）：主体主数据中在用（active）的法律主体。default false（无库支撑=不放行）。 */
+    default boolean isActiveBusinessEntity(String id) {
+        return false;
     }
 
     /**
@@ -216,11 +213,6 @@ public interface TicketingRepository {
 
     IssuedEntitlementRecord updateIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
-    /** CG-08b 全园故障补偿「只延长原核销权」：valid_to 取较晚者，不增加次数。返回受影响行数；default 0 兼容内存测试双子。 */
-    default int extendIssuedEntitlementValidTo(String id, java.time.Instant newValidTo, java.time.Instant now) {
-        return 0;
-    }
-
     List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit);
 
     VerificationRecord saveVerification(VerificationRecord verification);
@@ -269,6 +261,17 @@ public interface TicketingRepository {
     // 才翻转并记 reversed_by/reversed_at，返回受影响行数。并发两路冲正只有一路得 1（CAS 胜出方），另一路得 0 →
     // 调用方据此判定"已被并发冲正"拒绝，杜绝同一核销被重复冲正、used_times 被多次回滚（多次票尤甚）。
     int markVerificationReversed(String id, String reversedBy, java.time.Instant reversedAt);
+
+    /** TK-14：该原核销是否有待处置的异常复核。default 无库替身视为没有；Jdbc 覆写。 */
+    default boolean openVerificationAnomalyExists(String verificationId) {
+        return false;
+    }
+
+    /** TK-14：异常复核处置 CAS（仅待处置的 anomaly 记录得 1）。default 返回 0（无库替身不支持处置）；Jdbc 覆写。 */
+    default int markVerificationAnomalyResolved(String anomalyId, String resolution, String resolvedBy,
+                                                java.time.Instant resolvedAt, String reason) {
+        return 0;
+    }
 
     /** F-TXN-04 退款审批状态 CAS：仅当退款单仍为 requested 才翻转 approved，返回受影响行数（并发只一路得 1，防双拨付）。 */
     int markTicketRefundApproved(String refundId, String approvedBy, java.time.Instant approvedAt);

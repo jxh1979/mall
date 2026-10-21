@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -11,7 +12,7 @@ const MANAGE = ["platform.notification_window.manage"];
 
 /**
  * 提醒与留存天数配置页(ADM-ANA-011, V219/V353):维护「按天计」的运营参数——
- * 提醒类(续约提醒/存酒临期/招商跟进)与留存类(游乐票人脸照留存天数,V353);
+ * 提醒类(续约提醒/存酒临期/招商跟进)等;游乐票人脸照留存天数已由 V525 撤销(TK-06:人脸在该票用完或到期后删除,不再多留 N 天);
  * 改配置不改代码;仅 platform.notification_window.manage 可改,每次改动写审计。
  */
 export function NotificationWindowsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
@@ -43,7 +44,7 @@ export function NotificationWindowsPage({ api, setActionResult, setGlobalError, 
     <section data-testid="notification-windows-page">
       <AdminPageHeader
         title="提醒与留存天数配置"
-        description="维护按天计的运营参数:提醒类(续约提醒/存酒临期/招商跟进)的提前天数,与留存类(游乐票人脸照)的留存天数。改配置不改代码;仅平台管理员可改,每次改动留审计。人脸照留存天数涉个人信息保护——调小=照片提前销毁核销无据可对,调大=生物识别信息超期留存,请按合规口径设定。"
+        description="维护按天计的运营参数:提醒类(续约提醒/存酒临期/招商跟进)的提前天数等。改配置不改代码;仅平台管理员可改,每次改动留审计。"
       />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">

@@ -1,11 +1,11 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
-type Bill = { id: string; billingMonth: string; sellerEntityId: string; receiverEntityId: string; projectId: string; amountCent: number; visibleAt: string; objectionDeadline?: string; dueDate?: string; paymentStatus: string; paidAmountCent: number; unpaidAmountCent: number; openObjections: number };
-type Fee = { rewardId: string; parentTicketId: string; slotIndex: number; useIndex: number; points: number; unitPriceCent: number; amountCent: number; confirmedAt: string };
+type Bill = { id: string; billingMonth: string; sellerEntityId: string; receiverEntityId: string; projectId: string; amountCent: number; visibleAt: string; objectionDeadline?: string; dueDate?: string; paymentStatus: string; paidAmountCent: number; unpaidAmountCent: number; openObjections: number; feeKind?: string };
+type Fee = { rewardId: string; parentTicketId: string | null; slotIndex: number; useIndex: number; points: number; unitPriceCent: number; amountCent: number; confirmedAt: string; sourceType?: string; sourceId?: string };
 type Objection = { id: string; reason: string; status: string; resolution?: string };
 type Rule = { id: string; version: string; effectiveMonth: string; statementDay: number; objectionWorkingDays: number; payDays: number[]; status: string };
 type CalendarCase = { id: string; days: string; sourceNote: string; status: string; reviewId: string };
@@ -16,6 +16,9 @@ const MANAGE=["ticket.points.billing.manage"];
 const VIEW=["ticket.points.billing.view"];
 const state: Record<string,string>={pending_review:"待审批",approved:"已批准",rejected:"已驳回",open:"未解决",resolved:"已复核解决",awaiting_publication:"待公布",awaiting_objection_period:"等待异议期及到期日确定",pending_collection:"待收款",settled:"已结清",partial_paid:"部分收款"};
 const yuan=(cent:number)=>(cent/100).toFixed(2);
+// 第十一批 TK-04-b（ENUM L84「各自全额挂账」；BSM L823「只有转为可用才产生商户积分发行费」）：门票与商户消费积分发行费各自出账。
+const feeKind=(kind?:string)=>kind==="merchant"?"商户积分发行费":"门票积分发行费";
+const feeSource=(i:Fee)=>i.sourceType&&i.sourceType!=="ticket_use"?`消费单据 ${i.sourceId}`:`${i.parentTicketId} · ${i.slotIndex} · ${i.useIndex}`;
 
 export function TicketPointsBillingPage({api,effectivePermissions,setGlobalError,setActionResult}:AdminPageProps){
   const canManage=useCan(effectivePermissions,MANAGE);
@@ -40,11 +43,11 @@ export function TicketPointsBillingPage({api,effectivePermissions,setGlobalError
     return api.post(`${BASE}/calendars`,{...note(),days,sourceNote:calendarSource});
   }
   return <section data-testid="ticket-points-billing-page">
-    <AdminPageHeader title="门票积分发行费月结" description="自然月归集、次月出账。异议期从账单可查看日的次日起算；收款结果沿财务往来台账显示。" />
+    <AdminPageHeader title="门票积分发行费月结" description="自然月归集、次月出账，门票积分发行费与商户积分发行费各自出账。异议期从账单可查看日的次日起算；收款结果沿财务往来台账显示。" />
     {error&&<p role="alert">{error}</p>}
     <button onClick={()=>void load().catch(e=>setError(e.message))}>刷新账单</button>
-    <table className="admin-table"><thead><tr><th>计费月／销售方</th><th>收款主体</th><th>应收／已收／未收（元）</th><th>可查看日期／异议截止／付款日</th><th>状态</th><th>明细</th></tr></thead><tbody>{bills.map(b=><tr key={b.id}><td>{b.billingMonth} · {b.sellerEntityId}</td><td>{b.receiverEntityId}</td><td>{yuan(b.amountCent)}／{yuan(b.paidAmountCent)}／{yuan(b.unpaidAmountCent)}</td><td>{b.visibleAt?new Date(b.visibleAt).toLocaleDateString("zh-CN"):"待承担方查看权限开通"}／{b.objectionDeadline??"核算中"}／{b.dueDate??"尚未形成应收"}</td><td>{state[b.paymentStatus]??b.paymentStatus}{b.openObjections>0?`；${b.openObjections}项异议待处理`:""}</td><td><button onClick={()=>void select(b)}>查看明细和异议</button></td></tr>)}</tbody></table>
-    {selected&&<section><h3>账单履约明细</h3><table className="admin-table"><thead><tr><th>原票／人份／次份</th><th>转可用积分</th><th>发行单价（分）</th><th>发行费（元）</th><th>确认时间</th></tr></thead><tbody>{items.map(i=><tr key={i.rewardId}><td>{i.parentTicketId} · {i.slotIndex} · {i.useIndex}</td><td>{i.points}</td><td>{i.unitPriceCent}</td><td>{yuan(i.amountCent)}</td><td>{new Date(i.confirmedAt).toLocaleString("zh-CN")}</td></tr>)}</tbody></table>
+    <table className="admin-table"><thead><tr><th>计费月／费用类别／承担方</th><th>收款主体</th><th>应收／已收／未收（元）</th><th>可查看日期／异议截止／付款日</th><th>状态</th><th>明细</th></tr></thead><tbody>{bills.map(b=><tr key={b.id}><td>{b.billingMonth} · {feeKind(b.feeKind)} · {b.sellerEntityId}</td><td>{b.receiverEntityId}</td><td>{yuan(b.amountCent)}／{yuan(b.paidAmountCent)}／{yuan(b.unpaidAmountCent)}</td><td>{b.visibleAt?new Date(b.visibleAt).toLocaleDateString("zh-CN"):"待承担方查看权限开通"}／{b.objectionDeadline??"核算中"}／{b.dueDate??"尚未形成应收"}</td><td>{state[b.paymentStatus]??b.paymentStatus}{b.openObjections>0?`；${b.openObjections}项异议待处理`:""}</td><td><button onClick={()=>void select(b)}>查看明细和异议</button></td></tr>)}</tbody></table>
+    {selected&&<section><h3>账单履约明细</h3><table className="admin-table"><thead><tr><th>原票／人份／次份或消费单据</th><th>转可用积分</th><th>发行单价（分）</th><th>发行费（元）</th><th>确认时间</th></tr></thead><tbody>{items.map(i=><tr key={i.rewardId}><td>{feeSource(i)}</td><td>{i.points}</td><td>{i.unitPriceCent}</td><td>{yuan(i.amountCent)}</td><td>{new Date(i.confirmedAt).toLocaleString("zh-CN")}</td></tr>)}</tbody></table>
       <label>异议内容／复核说明<input aria-label="异议内容／复核说明" value={reason} onChange={e=>setReason(e.target.value)}/></label><PermissionButton permissionsState={effectivePermissions} permissions={VIEW} disabled={busy||!reason.trim()} onClick={()=>void action(()=>api.post(`${BASE}/bills/${selected.id}/objections`,note()))}>提交账单异议</PermissionButton>
       {objections.map(o=><p key={o.id}>{o.reason} · {state[o.status]??o.status} · {o.resolution??""}{canManage&&o.status==="open"&&<PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} disabled={busy||!reason.trim()||!approver.trim()} onClick={()=>void action(()=>api.post(`${BASE}/objections/${o.id}/confirm-unchanged`,{...note(),resolution:reason}))}>提交“原金额无误”复核</PermissionButton>}</p>)}
       {adjustments.length>0&&<section><h4>付款期限调整记录</h4><p>原账单与已完成的付款保留，延期仅针对当时未付部分。</p>{adjustments.map(a=><p key={a.id}>已核实整日门户故障：异议截止 {a.previousObjectionDeadline} → {a.objectionDeadline}；可付日 {a.previousDueDate} → {a.dueDate}；当时未付 {yuan(a.unpaidAmountCent)} 元。</p>)}</section>}

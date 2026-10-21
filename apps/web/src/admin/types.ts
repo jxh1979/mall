@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 export type AdminUser = {
   id: string;
   username: string;
@@ -194,6 +194,28 @@ export type TicketRefundRow = {
   approvedAt?: string;
   createdAt?: string;
   merchantId?: string;
+  // TK-05（BSM:804/806）：退款理由类别（五种情形 / 最高权限逐笔放行 / 通票安全例外）与责任主体。
+  reasonCode?: string;
+  responsibleEntityId?: string;
+};
+
+// TK-05 通票安全事件（BSM:804 通票安全例外）：outcome=refund 退该人份票款，restore 恢复本次 1 次完整补偿使用机会。
+export type TicketSafetyEventRow = {
+  id: string;
+  orderId?: string;
+  parentTicketId?: string;
+  slotIndex?: number;
+  reason?: string;
+  situation?: string;
+  responsibleEntityId?: string;
+  outcome?: string;
+  status?: string;
+  requestedBy?: string;
+  requestedAt?: string;
+  approvedBy?: string;
+  approverBasis?: string;
+  refundId?: string;
+  compensationBatchId?: string;
 };
 
 export type TicketIssuedEntitlementRow = {
@@ -213,6 +235,13 @@ export type TicketVerificationRow = {
   status?: string;
   source?: string;
   createdAt?: string;
+  resultReason?: string;
+  // TK-14：status=anomaly 的异常复核记录指向的原成功核销；处置（restored / voided_reversed）、处置人、时间、原因，待处置时为空。
+  anomalyOfVerificationId?: string;
+  anomalyResolution?: string;
+  anomalyResolvedBy?: string;
+  anomalyResolvedAt?: string;
+  anomalyResolutionReason?: string;
 };
 
 export type TicketDynamicPricingRuleRow = {

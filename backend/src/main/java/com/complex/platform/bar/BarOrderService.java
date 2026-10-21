@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -36,6 +36,9 @@ public class BarOrderService {
     // 第十批 TK-24-R3：落单后按台组低消进度判定金达标退回（字段注入免改构造点；单测手工置位）。
     @Autowired(required = false)
     BarDepositSettlementService depositSettlements;
+    // 第十一批 TK-04-R3：全部送达时为已结清账单生成商户消费待确认积分与成长值（字段注入免改构造点；单测未注入即不生成）。
+    @Autowired(required = false)
+    com.complex.platform.customer.MerchantConsumptionRewardService merchantRewards;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -654,6 +657,8 @@ public class BarOrderService {
                 now
         ));
         markProductionTicketDelivered(order.id(), actual, actorId, deliveryEvidenceAttachmentIds, now);
+        // 第十一批 TK-04-R3（BSM L823「按整笔有效消费全部实际履约完成的时点统一起算」）：最后一项送达后，已结清账单生成待确认积分与成长值。
+        if (merchantRewards != null) merchantRewards.tryCreateForBarOrder(order.id());
         // B1 留痕接线（REQ-34/37）：出品送达写服务责任链记录（merchant 由 token 注入）。
         traceabilityService.recordResponsibility(new TraceabilityResponsibilityRecord(
                 null, order.id(), order.tableId(), order.customerId(), null,
@@ -1338,6 +1343,8 @@ public class BarOrderService {
                 current.highValueThresholdCent(),
                 effectsAppliedAt);
         BarOrderItemVoidRecord saved = repository.saveOrderItemVoid(resolved);
+        // 第十一批 TK-04-b（BSM L823）：已结账单的退品审批结束（通过即退款生效、驳回即确定不退），对本单商户消费奖励对账。
+        if (saved.billId() != null && merchantRewards != null) merchantRewards.reconcileBarBill(saved.billId());
 
         auditEventService.recordSuccess(
                 "bar.order_item_void_decided",

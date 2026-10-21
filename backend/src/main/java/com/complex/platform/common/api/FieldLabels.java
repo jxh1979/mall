@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -72,6 +72,13 @@ public final class FieldLabels {
         p("supplier_bill_reference", "供能账单编号");
         p("transaction_basis", "交易认定依据");
         p("verifier_id", "核实人员");
+        // ── 第十一批 TK-05 通票安全例外 ──────────────────
+        p("responsible_entity_id", "责任主体");
+        p("safety_event_id", "安全事件");
+        p("situation", "当时情形");
+        p("ticket_instance_id", "票");
+        // ── 第十一批 TK-04 商户消费奖励 ──────────────────
+        p("business_format", "商户业态");
         // ── 第十批（储值 / 酒吧台位 / 传媒演出）复核 html B2a 补齐 ──────────────────
         p("adjust_reason", "调整理由");
         p("adjusting_settlement_id", "调整结算行");

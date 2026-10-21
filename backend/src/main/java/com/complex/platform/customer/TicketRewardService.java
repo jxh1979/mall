@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
@@ -110,7 +110,7 @@ public class TicketRewardService {
         TicketUseRewardRecord initial=find(id);lockParent(initial.parentTicketId());
         TicketUseRewardRecord r=locked(id);
         if(!"pending".equals(r.status()) || at.isBefore(r.availableAt()))return false;
-        List<String> refunds=refundStatuses(r.parentTicketId());
+        List<String> refunds=refundStatuses(r.parentTicketId(),r.slotIndex());
         if(refunds.contains("success")){reverse(r,"ticket_refund",at);return false;}
         if(refunds.stream().anyMatch(s->!s.equals("rejected")&&!s.equals("cancelled")&&!s.equals("withdrawn")))return false;
         CustomerPointsAccountRecord a=account(r.customerId(),at);
@@ -142,8 +142,9 @@ public class TicketRewardService {
     @Transactional
     public void refunded(TicketRewardFacts.Refunded e){
         if(!"success".equals(jdbc.queryForObject("SELECT status FROM ticket_refunds WHERE id=?",String.class,e.refundId()))) return;
-        List<String> parents=jdbc.queryForList("SELECT DISTINCT ie.parent_ticket_id FROM ticket_refund_lines l JOIN issued_entitlements ie ON ie.id=l.entitlement_id WHERE l.refund_id=? ORDER BY ie.parent_ticket_id",String.class,e.refundId());
-        for(String parent:parents){lockParent(parent);for(TicketUseRewardRecord r:jdbc.query("SELECT * FROM ticket_use_rewards WHERE parent_ticket_id=? AND status IN ('pending','confirmed') ORDER BY id FOR UPDATE",this::map,parent)) reverse(r,"ticket_refund:"+e.refundId(),Instant.now());}
+        // TK-05-R2（2026-10-21 操作员裁决补充第 5 条）：多人通票安全例外只退出事一人份——只冲回所退人份的奖励，同票他人份不动。
+        List<Map<String,Object>> shares=jdbc.queryForList("SELECT DISTINCT ie.parent_ticket_id,ie.slot_index FROM ticket_refund_lines l JOIN issued_entitlements ie ON ie.id=l.entitlement_id WHERE l.refund_id=? AND ie.parent_ticket_id IS NOT NULL ORDER BY ie.parent_ticket_id,ie.slot_index",e.refundId());
+        for(Map<String,Object> share:shares){String parent=(String)share.get("parent_ticket_id");lockParent(parent);for(TicketUseRewardRecord r:jdbc.query("SELECT * FROM ticket_use_rewards WHERE parent_ticket_id=? AND slot_index=? AND status IN ('pending','confirmed') ORDER BY id FOR UPDATE",this::map,parent,share.get("slot_index"))) reverse(r,"ticket_refund:"+e.refundId(),Instant.now());}
     }
 
     @EventListener
@@ -173,7 +174,8 @@ public class TicketRewardService {
         audit.recordSuccess("ticket.reward.reversed","not_applicable","ticket_use_reward",r.id(),null,source,Map.of("recovered_points",debit,"pending_recovery",pendingDebt,"cancelled_recovery",deregistered?debt:0));
     }
     public List<TicketUseRewardRecord> list(String customerId){return jdbc.query("SELECT * FROM ticket_use_rewards WHERE customer_id=? ORDER BY verified_at DESC,id",this::map,customerId);}
-    private List<String> refundStatuses(String parent){return jdbc.queryForList("SELECT DISTINCT r.status FROM ticket_refunds r JOIN ticket_refund_lines l ON l.refund_id=r.id JOIN issued_entitlements e ON e.id=l.entitlement_id WHERE e.parent_ticket_id=?",String.class,parent);}
+    /** BSM:822 只看本条奖励所在人份的退款行：普通退款覆盖整张票全部人份照样命中；安全例外只退一人份，不卡、不冲同票他人份。 */
+    private List<String> refundStatuses(String parent,int slot){return jdbc.queryForList("SELECT DISTINCT r.status FROM ticket_refunds r JOIN ticket_refund_lines l ON l.refund_id=r.id JOIN issued_entitlements e ON e.id=l.entitlement_id WHERE e.parent_ticket_id=? AND e.slot_index=?",String.class,parent,slot);}
     private void lockParent(String parent){if(jdbc.queryForList("SELECT id FROM ticket_instances WHERE id=? FOR UPDATE",String.class,parent).isEmpty())throw ApiException.conflict("TICKET_PARENT_REQUIRED","缺少原票人次来源");}
     private CustomerPointsAccountRecord account(String customer,Instant at){
         jdbc.update("INSERT INTO customer_points_accounts(id,customer_id,balance,level,recent_summary,frozen_points,account_status,level_period_start,keep_threshold_progress,check_in_streak,created_at,updated_at) VALUES(?,?,0,'base','{}',0,'active',?,0,0,?,?) ON CONFLICT(customer_id) DO NOTHING","points_"+customer,customer,Timestamp.from(at),Timestamp.from(at),Timestamp.from(at));

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +12,7 @@ function makeApi(postSpy: ReturnType<typeof vi.fn>, putSpy?: ReturnType<typeof v
     get: vi.fn(async (path: string) => {
       if (path.includes("/entitlement-templates")) {
         return { items: [{ id: "tpl-1", name: "门票权益", entitlementType: "entry", status: "active",
-          entitlementKind: "virtual", agreementPriceCent: 8000, requireFacePhoto: false }] } as unknown;
+          entitlementKind: "virtual", agreementPriceCent: 8000 }] } as unknown;
       }
       if (path.includes("/qr-refresh-config")) {
         return { refreshIntervalSeconds: 15 } as unknown;
@@ -117,7 +118,7 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
   });
 
   // 配置中心批5三个尾项：后端早就有、运营在后台点不到的三个配置项补上入口。
-  it("建票能选分类、建权益模板能勾人脸照、签约价能改", async () => {
+  it("建票能选分类、建权益模板不设人脸照开关、签约价能改", async () => {
     const postSpy = vi.fn(async (path: string, _body?: unknown) => {
       if (path.endsWith("/ticketing/ticket-types")) return { id: "tt-new" } as unknown;
       return {} as unknown;
@@ -146,13 +147,14 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
       expect(((createCall?.[1] ?? {}) as Record<string, unknown>).ticket_category).toBe("student");
     });
 
-    // ② 建权益模板勾「需要人脸照」：随建模板载荷发到后端（V229 require_face_photo）。
+    // ② TK-06（BSM:843「不设需要人脸照的票种」）：建权益模板没有「需要人脸照」开关，载荷也不带该字段。
     fireEvent.change(screen.getByLabelText("模板名称"), { target: { value: "游乐入场" } });
-    fireEvent.click(screen.getByTestId("entitlement-template-require-face-photo"));
+    expect(screen.queryByTestId("entitlement-template-require-face-photo")).toBeNull();
     fireEvent.click(screen.getByTestId("entitlement-template-create"));
     await waitFor(() => {
       const tplCall = postSpy.mock.calls.find((c) => String(c[0]).endsWith("/ticketing/entitlement-templates"));
-      expect(((tplCall?.[1] ?? {}) as Record<string, unknown>).require_face_photo).toBe(true);
+      expect(tplCall).toBeTruthy();
+      expect((tplCall?.[1] ?? {}) as Record<string, unknown>).not.toHaveProperty("require_face_photo");
     });
 
     // ③ 批10/E：模板侧改价入口已下线——页面明说唯一可改价处 = 内部结算价目录（草案→他人复核转正），

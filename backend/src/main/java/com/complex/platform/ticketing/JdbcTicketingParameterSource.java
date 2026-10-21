@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -68,7 +68,6 @@ final class JdbcTicketingParameterSource {
                 .addValue("agreement_price_cent", template.agreementPriceCent())
                 .addValue("consumption_window", template.consumptionWindow())
                 .addValue("exclusive_merchant_id", template.exclusiveMerchantId())
-                .addValue("require_face_photo", template.requireFacePhoto())
                 .addValue("archived_at", timestampWithTimeZone(template.archivedAt()))
                 .addValue("archived_by", template.archivedBy())
                 .addValue("delete_status", template.deleteStatus())
@@ -312,7 +311,10 @@ final class JdbcTicketingParameterSource {
                 .addValue("approved_at", timestampWithTimeZone(refund.approvedAt()))
                 .addValue("created_at", timestampWithTimeZone(refund.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(refund.updatedAt()))
-                .addValue("merchant_id", refund.merchantId());
+                .addValue("merchant_id", refund.merchantId())
+                .addValue("reason_code", refund.reasonCode())
+                .addValue("responsible_entity_id", refund.responsibleEntityId())
+                .addValue("ticket_type_refundable_snapshot", refund.ticketTypeRefundableSnapshot());
     }
 
     MapSqlParameterSource ticketRefundLineParameters(TicketRefundLineRecord line) {

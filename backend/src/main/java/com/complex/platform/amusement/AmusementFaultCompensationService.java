@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.amusement.AmusementParkWideFaultService.roleLabel;
 
@@ -20,22 +20,22 @@ import com.complex.platform.ticketing.TicketingRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * CG-08b 全园故障补偿通票（ENUM「全园故障与补偿通票」）：
- * 发起＝按全园故障发生时间快照受影响人份/次份（已入场核销且本场次受影响 → 另补一次完整票面权益；尚未核销但仍在有效期内 → 只延长原核销权）；
- * 另一岗位、另一人确认＝实际发放。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次；全程留痕。
+ * 发起＝按全园故障发生时间快照受影响人份/次份（已入场核销且本场次受影响 → 另补一次完整票面权益）；
+ * TK-09（2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」）：故障期间没入场的持票人一律不延期，原票照原有效期使用，
+ * 补偿只给故障时已入场受影响的人份——不再建未核延期（extend）项。另一岗位、另一人确认＝实际发放。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次；全程留痕。
  * TK-18（2026-10-18 操作员裁决补充第 3 条）：场次提前结束时已入场（已扣次）的客人比照同一规则——结束事务生成 session_early_end
  * 批次（{@link #createSessionEndBatch}），发放前仍经 {@link #confirmBatch} 同一入口由两岗位先后确认；未入场的票不补偿。
+ * TK-05-R3：多次通票安全事件恢复的 1 次比照同一完整补偿规则（{@link #createSafetyRestoreBatch}，安全事件批准即发放）。
  */
 @Service
 public class AmusementFaultCompensationService {
@@ -147,16 +147,15 @@ public class AmusementFaultCompensationService {
                     throw ApiException.conflict("COMPENSATION_NO_ELIGIBLE_SHARES",
                             "该故障下没有可补偿的人份或次份（已补偿、不在有效期内或无入场核销）");
                 }
-                int extend = (int) items.stream().filter(i -> AmusementFaultCompensationItemRecord.KIND_EXTEND.equals(i.kind())).count();
                 AmusementFaultCompensationBatchRecord batch = repository.insertBatch(new AmusementFaultCompensationBatchRecord(
                         batchId, fault.id(), fault.projectId(), STATUS_PENDING, reason, bearer, policy.validityDays(),
                         windowFrom, windowTo, null, actor.id(), role, now, null, null, null,
-                        items.size(), extend, items.size() - extend, now, now,
+                        items.size(), items.size(), now, now,
                         AmusementFaultCompensationBatchRecord.EVENT_PARK_WIDE_FAULT, null, null));
                 items.forEach(repository::insertItem);
                 auditEventService.recordSuccess("amusement.fault_compensation.batch_initiated", permission, TARGET_TYPE, batchId,
                         null, request.idempotencyKey(), Map.of("fault_id", fault.id(), "role", role, "items", items.size(),
-                                "extend", extend, "full_reissue", items.size() - extend, "bearer_company_id", bearer));
+                                "full_reissue", items.size(), "bearer_company_id", bearer));
                 return batch;
             }, AmusementFaultCompensationBatchRecord.class);
         } catch (RuntimeException exception) {
@@ -166,7 +165,7 @@ public class AmusementFaultCompensationService {
         }
     }
 
-    /** 第二岗位确认并发放：须与发起人不同人、另一岗位；延长核销权 / 另补完整票面权益，有效期自发放之日起算。 */
+    /** 第二岗位确认并发放：须与发起人不同人、另一岗位；另补完整票面权益，有效期自发放之日起算。 */
     @Transactional
     public AmusementFaultCompensationBatchRecord confirmBatch(String batchId, CompensationBatchConfirmRequest request) {
         String permission = request == null ? AmusementParkWideFaultService.PERMISSION_VIEW
@@ -192,15 +191,15 @@ public class AmusementFaultCompensationService {
                 AmusementParkWideFaultService.requireSecondPerson(batch.initiatedBy(), batch.initiatedRole(), actor, role);
                 // 截断到毫秒：与库内 timestamptz（微秒）往返一致，便于对账比对。
                 Instant validUntil = now.plus(batch.validityDays(), ChronoUnit.DAYS).truncatedTo(ChronoUnit.MILLIS);
-                int[] counts = issueItems(batch, validUntil, now);
+                int reissued = issueItems(batch, validUntil, now);
                 if (batch.endingId() != null) {
                     repository.completeSessionEndFollowups(batch.id(), actor.id(), now);
                 }
                 AmusementFaultCompensationBatchRecord issued = repository.updateBatch(
-                        batch.withIssued(actor.id(), role, now, validUntil, counts[0], counts[1]));
+                        batch.withIssued(actor.id(), role, now, validUntil, reissued));
                 auditEventService.recordSuccess("amusement.fault_compensation.batch_issued", permission, TARGET_TYPE, batchId, null,
                         request.idempotencyKey(), details(issued, Map.of("role", role, "initiated_by", batch.initiatedBy(),
-                                "initiated_role", batch.initiatedRole(), "extend", counts[0], "full_reissue", counts[1],
+                                "initiated_role", batch.initiatedRole(), "full_reissue", reissued,
                                 "valid_until", validUntil.toString())));
                 return issued;
             }, AmusementFaultCompensationBatchRecord.class);
@@ -247,7 +246,7 @@ public class AmusementFaultCompensationService {
         AmusementCompensationPolicyRecord policy = resolvePolicy(complexId);
         AmusementFaultCompensationBatchRecord batch = repository.insertBatch(new AmusementFaultCompensationBatchRecord(
                 batchId, null, complexId, STATUS_PENDING, reason, BEARER_AMUSEMENT_COMPANY, policy.validityDays(),
-                windowFrom, windowTo, null, null, null, null, null, null, null, rows.size(), 0, rows.size(), now, now,
+                windowFrom, windowTo, null, null, null, null, null, null, null, rows.size(), rows.size(), now, now,
                 AmusementFaultCompensationBatchRecord.EVENT_SESSION_EARLY_END, endingId, sessionId));
         for (Map<String, Object> row : rows) {
             repository.insertItem(item(batchId, null, endingId, complexId, row, AmusementFaultCompensationItemRecord.KIND_FULL_REISSUE,
@@ -256,6 +255,39 @@ public class AmusementFaultCompensationService {
         auditEventService.recordSuccess("amusement.fault_compensation.batch_initiated", AmusementSessionLifecycleService.END,
                 TARGET_TYPE, batchId, null, null, details(batch, Map.of("items", rows.size(), "bearer_company_id", BEARER_AMUSEMENT_COMPANY)));
         return batch;
+    }
+
+    /**
+     * TK-05-R3（BSM:804「多次通票在本次入场发生上述安全事件并获批准的，不退现金，只恢复本次入场已消耗的 1 次使用机会……恢复的 1 次在原票下
+     * 关联本次事件、对应次份与原场次，作为一次完整补偿使用机会，自该机会发放之日起适用……补偿有效期」「新增实际履约费用由决定恢复次数的具体域主管公司
+     * 承担」「同一事件对该次份只恢复一次」；台账 §33 Q30B1/Q30B2；CG #42）：安全事件经夜班值班经理及以上批准后由票务侧调用，
+     * 直接生成并发放一条 full_reissue 记录（原票下补发完整票面一份，带补偿标记：使用不重复积分成长值、新增履约向承担方结算），
+     * 不回改原核销与已用次数。返回已发放的批次。
+     */
+    public AmusementFaultCompensationBatchRecord createSafetyRestoreBatch(String safetyEventId, String projectId,
+            String entitlementId, String customerId, String sessionId, String entryVerificationId, String reason,
+            String bearerCompanyId, String requestedBy, String approvedBy, Instant now) {
+        IssuedEntitlementRecord original = ticketingRepository.findIssuedEntitlementById(entitlementId)
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "原票权益不存在：" + entitlementId));
+        AmusementCompensationPolicyRecord policy = resolvePolicy(projectId);
+        String batchId = "afcb_" + UUID.randomUUID().toString().replace("-", "");
+        AmusementFaultCompensationBatchRecord batch = repository.insertBatch(new AmusementFaultCompensationBatchRecord(
+                batchId, null, projectId, STATUS_PENDING, reason, bearerCompanyId, policy.validityDays(), now, now, null,
+                requestedBy, null, now, null, null, null, 1, 1, now, now,
+                AmusementFaultCompensationBatchRecord.EVENT_SAFETY_RESTORE, null, sessionId));
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("entitlement_id", original.id());
+        row.put("order_id", original.orderId());
+        row.put("ticket_type_id", original.ticketTypeId());
+        row.put("parent_ticket_id", original.parentTicketId());
+        row.put("slot_index", original.slotIndex());
+        row.put("customer_id", customerId);
+        row.put("valid_to", original.validTo() == null ? null : java.sql.Timestamp.from(original.validTo()));
+        repository.insertItem(item(batchId, null, null, projectId, row, AmusementFaultCompensationItemRecord.KIND_FULL_REISSUE,
+                sessionId, entryVerificationId, now), safetyEventId);
+        Instant validUntil = now.plus(batch.validityDays(), ChronoUnit.DAYS).truncatedTo(ChronoUnit.MILLIS);
+        int reissued = issueItems(batch, validUntil, now);
+        return repository.updateBatch(batch.withIssued(approvedBy, null, now, validUntil, reissued));
     }
 
     public PageResponse<AmusementFaultCompensationItemRecord> listItems(String batchId) {
@@ -270,31 +302,16 @@ public class AmusementFaultCompensationService {
     // ---------- 快照与发放 ----------
 
     /**
-     * 受影响人份/次份快照（以全园故障发生时间与原票核销状态、有效期判定）：
-     * ① 故障发生时已完成入场核销、且本场次履约受影响 → full_reissue（另补一次完整票面权益），记原场次与原入场核销；
-     * ② 故障发生时尚未核销、但游乐权益仍在有效期内 → extend（只延长原核销权，不增加次数；多次票只补受影响的 1 次份）。
-     * 排除补偿补发行与同故障已补偿的人份（同一故障同一人份只补偿一次）。
+     * 受影响人份/次份快照：故障发生时已完成入场核销、且本场次履约受影响 → full_reissue（另补一次完整票面权益），记原场次与原入场核销；
+     * 排除补偿补发行与同故障已补偿的人份（同一故障同一人份只补偿一次；取数已按权益去重）。
+     * TK-09（2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」）：故障时持有效未核票的人份不进快照。
      */
     List<AmusementFaultCompensationItemRecord> snapshotAffectedShares(String batchId, AmusementParkWideFaultRecord fault,
             Instant windowFrom, Instant windowTo, Instant now) {
-        List<AmusementFaultCompensationItemRecord> items = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (Map<String, Object> row : repository.listVerifiedAffectedShares(fault.id(), fault.projectId(), windowFrom, windowTo)) {
-            String entitlementId = (String) row.get("entitlement_id");
-            if (!seen.add(entitlementId)) {
-                continue;
-            }
-            items.add(item(batchId, fault.id(), null, fault.projectId(), row, AmusementFaultCompensationItemRecord.KIND_FULL_REISSUE,
-                    (String) row.get("session_id"), (String) row.get("entry_verification_id"), now));
-        }
-        for (Map<String, Object> row : repository.listUnverifiedAffectedShares(fault.id(), fault.projectId(), windowFrom)) {
-            String entitlementId = (String) row.get("entitlement_id");
-            if (!seen.add(entitlementId)) {
-                continue;
-            }
-            items.add(item(batchId, fault.id(), null, fault.projectId(), row, AmusementFaultCompensationItemRecord.KIND_EXTEND, null, null, now));
-        }
-        return items;
+        return repository.listVerifiedAffectedShares(fault.id(), fault.projectId(), windowFrom, windowTo).stream()
+                .map(row -> item(batchId, fault.id(), null, fault.projectId(), row, AmusementFaultCompensationItemRecord.KIND_FULL_REISSUE,
+                        (String) row.get("session_id"), (String) row.get("entry_verification_id"), now))
+                .toList();
     }
 
     private AmusementFaultCompensationItemRecord item(String batchId, String faultId, String endingId, String projectId,
@@ -325,30 +342,20 @@ public class AmusementFaultCompensationService {
     }
 
     /**
-     * 实际发放（第二岗位确认后）：extend → 原权益 valid_to 延长到补偿有效期截止（取较晚者），次数不变；
-     * full_reissue → 原票下按票种完整票面（各权益模板各一次，含酒水、礼品）补发权益行，标记补偿记录，有效期自发放之日起算。
-     * 返回 {extend 数, full_reissue 数}。
+     * 实际发放（第二岗位确认后）：原票下按票种完整票面（含酒水、礼品）补发受影响这一人份/次份的权益行，标记补偿记录，
+     * 有效期自发放之日起算。返回补发的补偿记录数。
      */
-    int[] issueItems(AmusementFaultCompensationBatchRecord batch, Instant validUntil, Instant now) {
-        int extend = 0;
+    int issueItems(AmusementFaultCompensationBatchRecord batch, Instant validUntil, Instant now) {
         int reissue = 0;
         for (AmusementFaultCompensationItemRecord item : repository.listItems(batch.id())) {
             if (!"pending".equals(item.status())) {
                 continue;
             }
-            if (AmusementFaultCompensationItemRecord.KIND_EXTEND.equals(item.kind())) {
-                ticketingRepository.extendIssuedEntitlementValidTo(item.entitlementId(), validUntil, now);
-                Instant newValidTo = item.originalValidTo() != null && item.originalValidTo().isAfter(validUntil)
-                        ? item.originalValidTo() : validUntil;
-                repository.markItemIssued(item.id(), newValidTo, List.of(), now);
-                extend++;
-            } else {
-                List<String> ids = reissueFullTicketFace(item, validUntil, now);
-                repository.markItemIssued(item.id(), validUntil, ids, now);
-                reissue++;
-            }
+            List<String> ids = reissueFullTicketFace(item, validUntil, now);
+            repository.markItemIssued(item.id(), validUntil, ids, now);
+            reissue++;
         }
-        return new int[] {extend, reissue};
+        return reissue;
     }
 
     private List<String> reissueFullTicketFace(AmusementFaultCompensationItemRecord item, Instant validUntil, Instant now) {
@@ -361,9 +368,13 @@ public class AmusementFaultCompensationService {
             ids.add(issueCompensationEntitlement(original, original.entitlementTemplateId(), original.entitlementType(),
                     original.merchantId(), original.venueId(), original.pointId(), original.valueAmountCent(),
                     original.entitlementKind(), original.agreementPriceCent(), original.consumptionWindow(),
-                    original.exclusiveMerchantId(), item.id(), validUntil, now));
+                    original.exclusiveMerchantId(), 1, item.id(), validUntil, now));
             return ids;
         }
+        // TK-10（ENUM L148「另补一次完整票面权益」「只对受影响的对应人份或次份办理补偿」；ENUM L46「该窗口内附带权益按完整一份配足」）：
+        // 每条绑定按票面份数（quantity）补发，人数不展开（只补受影响这一人份、沿用原座次）；每行次数＝该绑定一个次份的次数——
+        // 原票为多次票（受影响原权益 E 次）时按 E 折算为单次份，单次票取绑定全部次数。
+        int entries = original.totalTimes();
         for (TicketTypeEntitlementRecord binding : bindings) {
             EntitlementTemplateRecord template = ticketingRepository.findEntitlementTemplateById(binding.entitlementTemplateId())
                     .orElse(null);
@@ -371,22 +382,25 @@ public class AmusementFaultCompensationService {
                 continue;
             }
             String merchantId = template.merchantId() != null ? template.merchantId() : original.merchantId();
-            ids.add(issueCompensationEntitlement(original, template.id(), template.entitlementType(), merchantId,
-                    template.venueId(), template.pointId(), binding.valueAmountCent(), template.entitlementKind(),
-                    template.agreementPriceCent(), template.consumptionWindow(), template.exclusiveMerchantId(),
-                    item.id(), validUntil, now));
+            int times = entries <= 1 ? binding.totalTimes() : Math.max(1, binding.totalTimes() / entries);
+            for (int i = 0; i < binding.quantity(); i++) {
+                ids.add(issueCompensationEntitlement(original, template.id(), template.entitlementType(), merchantId,
+                        template.venueId(), template.pointId(), binding.valueAmountCent(), template.entitlementKind(),
+                        template.agreementPriceCent(), template.consumptionWindow(), template.exclusiveMerchantId(),
+                        times, item.id(), validUntil, now));
+            }
         }
         return ids;
     }
 
     private String issueCompensationEntitlement(IssuedEntitlementRecord original, String templateId, String entitlementType,
             String merchantId, String venueId, String pointId, Long valueAmountCent, String entitlementKind,
-            Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId, String itemId,
+            Long agreementPriceCent, String consumptionWindow, String exclusiveMerchantId, int totalTimes, String itemId,
             Instant validUntil, Instant now) {
         String id = "ent_" + UUID.randomUUID().toString().replace("-", "");
         String code = "CP-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(id, code, original.ticketTypeId(), original.orderId(),
-                templateId, entitlementType, merchantId, venueId, pointId, 1, 0, valueAmountCent, "active", now, validUntil,
+                templateId, entitlementType, merchantId, venueId, pointId, totalTimes, 0, valueAmountCent, "active", now, validUntil,
                 now, now, 1, 0L, entitlementKind, agreementPriceCent, consumptionWindow, exclusiveMerchantId,
                 original.parentTicketId(), original.slotIndex(), original.barId(), null, itemId));
         return id;

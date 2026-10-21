@@ -1,5 +1,7 @@
 package com.complex.terminal
 
+// 文件版本：V0.01
+
 import java.util.UUID
 
 class TerminalWorkflow(
@@ -74,7 +76,11 @@ class TerminalWorkflow(
     )
   }
 
-  fun verifyOnline(entitlementCode: String): VerificationResponse {
+  fun verifyOnline(
+    entitlementCode: String,
+    faceCapture: String? = null,
+    faceConsentAccepted: Boolean? = null,
+  ): VerificationResponse {
     requireOnline()
     val session = requireNotNull(store.session) { "terminal session is missing" }
     val binding = requireNotNull(store.binding) { "device binding is missing" }
@@ -88,6 +94,8 @@ class TerminalWorkflow(
           "scenario" to "ticket_checkin",
           "staff_id" to session.staffId,
         ),
+        faceCapture = faceCapture,
+        faceConsentAccepted = faceConsentAccepted,
       ),
     )
     store.addEvent(

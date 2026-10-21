@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -38,6 +38,9 @@ public class ServiceOrderService {
     private final com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
     private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
     private final com.complex.platform.notification.NotificationService notificationService;
+    // 第十一批 TK-04-a：收款时识别会员、完成履约时生成商户消费待确认积分与成长值（字段注入免改构造点；单测未注入即不生成）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.customer.MerchantConsumptionRewardService merchantRewards;
 
     public ServiceOrderService(JdbcServiceOrderRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService,
@@ -379,6 +382,12 @@ public class ServiceOrderService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "订单当前状态为 " + current.status() + "，只有新建状态可执行此操作");
         }
+        // 第十一批 TK-04-R2（BSM L822、PGM L878）：收款时录入会员号（注册手机号）识别本单会员，走客人查询专门通道留痕；查无即拒。
+        String memberPhone = request == null ? null : trimToNull(request.memberPhone());
+        if (memberPhone != null) {
+            merchantRewards.identifyByPhone(com.complex.platform.customer.MerchantConsumptionRewardService.SERVICE_ORDER,
+                    current.id(), memberPhone, "service.order.create", request.idempotencyKey());
+        }
         var actor = authorizationService.currentActor();
         Instant now = Instant.now();
         ServiceOrderRecord saved = repository.saveOrder(new ServiceOrderRecord(
@@ -454,6 +463,8 @@ public class ServiceOrderService {
         String month = settlementMonth(businessDayResolver, now);
         staffRepository.insertCommission("cml_" + UUID.randomUUID(), current.performerUserId(), month,
                 "service_order", current.id(), dancerShare, current.itemName(), now);
+        // 第十一批 TK-04-R3（BSM L823「人员服务取既有实际完成履约记录及完成时点」）：已识别会员的服务单完成即生成待确认积分与成长值。
+        if (merchantRewards != null) merchantRewards.tryCreateForServiceOrder(current.id());
         ServiceOrderRecord saved = new ServiceOrderRecord(
                 current.id(), current.catalogItemId(), current.itemName(), current.priceCent(),
                 current.barId(), current.tableId(), current.performerUserId(), current.orderedBy(),

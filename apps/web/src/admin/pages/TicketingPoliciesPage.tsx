@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -44,7 +45,6 @@ type EntitlementTemplateRow = {
   // 配置中心批5：签约价（=内部结算价）与结算类别贯通到列表/详情，改价前运营先看得见现值。
   entitlementKind?: string | null;
   agreementPriceCent?: number | null;
-  requireFacePhoto?: boolean;
 };
 type PriceRuleRow = {
   id: string;
@@ -177,7 +177,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [createOpen, setCreateOpen] = React.useState(false);
 
   // 区2 新建权益模板
-  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", requireFacePhoto: false });
+  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "" });
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
   // 区3 通票组装（票种绑权益）
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "" });
@@ -257,7 +257,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         { label: "模板名称", value: row.name },
         { label: "权益类型", value: formatBusinessStatus(row.entitlementType) },
         { label: "签约价", value: row.agreementPriceCent != null ? `¥${yuan(row.agreementPriceCent)}` : "未设（按面值结算）" },
-        { label: "需要人脸照", value: row.requireFacePhoto ? "需要" : "不需要" },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "模板编号", value: row.id },
       ],
@@ -457,11 +456,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       default_total_times: Number(tplForm.totalTimes) || 1,
       default_value_cent: tplForm.valueYuan.trim() ? Math.round(Number(tplForm.valueYuan) * 100) : null,
       status: "active",
-      // 批3-6（V229）：拍脸照存档开关——建模板时就能勾，不必事后改库。
-      require_face_photo: tplForm.requireFacePhoto,
     });
     setActionResult({ action: "entitlement_template_created", name: tplForm.name.trim() });
-    setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", requireFacePhoto: false });
+    setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "" });
     reload();
   }
 
@@ -1193,7 +1190,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
               <th>模板名称</th>
               <th>权益类型</th>
               <th>签约价</th>
-              <th>需要人脸照</th>
               <th>状态</th>
               <th>详情</th>
             </tr>
@@ -1206,7 +1202,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                 <td>{row.name}</td>
                 <td>{formatBusinessStatus(row.entitlementType)}</td>
                 <td>{row.agreementPriceCent != null ? `¥${yuan(row.agreementPriceCent)}` : "未设（按面值结算）"}</td>
-                <td>{row.requireFacePhoto ? "需要" : "不需要"}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看权益模板详情" onClick={(event) => { event.stopPropagation(); openTemplateDetail(row); }}>查看详情</button></td>
               </tr>
@@ -1223,11 +1218,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </select>
         <input aria-label="默认次数" type="number" min={1} value={tplForm.totalTimes} onChange={(event) => setTplForm({ ...tplForm, totalTimes: event.target.value })} placeholder="默认次数" />
         <input aria-label="默认面值（元）" type="number" min={0} step="0.01" value={tplForm.valueYuan} onChange={(event) => setTplForm({ ...tplForm, valueYuan: event.target.value })} placeholder="默认面值（元，可空）" />
-        <label>
-          <input data-testid="entitlement-template-require-face-photo" type="checkbox" aria-label="需要人脸照"
-            checked={tplForm.requireFacePhoto} onChange={(event) => setTplForm({ ...tplForm, requireFacePhoto: event.target.checked })} />
-          需要人脸照（购票时拍一张存档，核销时核销员比对本人，防转票；游乐票建议勾）
-        </label>
         <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.entitlement.manage"]} data-testid="entitlement-template-create" onClick={() => void createTemplate()}>
           新建模板
         </PermissionButton>

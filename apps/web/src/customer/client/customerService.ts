@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 // 客人端业务服务层：封装 P0 客旅用到的真实端点（全部 /api/v1/customer/* 与 finance/ticketing）
 // 所有接口均在 docs/openapi/openapi-p0.json 契约内；P1 能力（积分明细/礼物兑换）不在此暴露。
 
@@ -30,6 +30,8 @@ import type {
 
 export type TicketUseReward = { id: string; parentTicketId: string; slotIndex: number; useIndex: number; points: number; growth: number; waitingHours: number; verifiedAt: string; availableAt: string; status: string };
 export type TicketRewardSummary = { rewards: TicketUseReward[]; pendingRecovery: number };
+// 第十一批 TK-04-R5（BSM L877 客人端只展示结果；ENUM L77 与消费单据双向可查）：商户消费积分与成长值结果（已扣除已退部分）。
+export type MerchantConsumptionReward = { id: string; sourceType: string; sourceId: string; sourceNo: string; merchantName: string; points: number; growth: number; status: string; completedAt: string; availableAt: string | null; confirmedAt: string | null };
 export type TicketRewardRule = { id: string; ticketTypeId: string; ticketName: string; projectId: string; projectName: string; kind: string; version: string; fixedValue: number; effectiveAt: string; publishedAt: string };
 
 export class CustomerService {
@@ -41,6 +43,10 @@ export class CustomerService {
 
   listTicketRewards(): Promise<TicketRewardSummary> {
     return this.api.get<TicketRewardSummary>("/api/v1/customer/ticket-rewards");
+  }
+
+  listMerchantRewards(): Promise<MerchantConsumptionReward[]> {
+    return this.api.get<MerchantConsumptionReward[]>("/api/v1/customer/merchant-rewards");
   }
 
   listTicketRewardRules(): Promise<TicketRewardRule[]> {
@@ -62,11 +68,6 @@ export class CustomerService {
     buyerNote?: string;
     // AUD-076 单店票挂酒吧：单店票必填该票所属酒吧 id（通票不传）；请求体自动 snake_case 为 bar_id。
     barId?: string;
-    // V359：需拍照的票种带上每张票的入场人脸照（base64，不含 data URI 前缀）；其余票种不传。
-    facePhotos?: string[];
-    // V368：拍照前那块告知上勾的同意。带照片就必须为 true——服务端据此往同意台账落一条留痕，
-    //   没勾同意直接拒（没有同意就不该有照片）。
-    faceConsent?: boolean;
   }): Promise<TicketOrder> {
     return this.api.post<TicketOrder>("/api/v1/customer/ticket-orders", payload);
   }
