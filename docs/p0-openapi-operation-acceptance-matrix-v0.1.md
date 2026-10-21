@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.26
+# P0 OpenAPI Operation 验收矩阵 V0.27
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1090 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1091 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -115,6 +115,7 @@
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/open` | `openBarTable` | 开台 | `OpenBarTableRequest` | `bar.table.open_close` | `staff-token` | `project-bar` | tablet, web | 是 | `bar.table.opened` | `bar.table.open_failed` |
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/clear` | `clearBarTable` | 清台登记恢复空闲 | `object` | `bar.table.open_close` | `staff-token` | `project-bar` | tablet, web | 是 | `bar.table.cleared` | `bar.table.clear_failed` |
 | customer | `POST` | `/api/v1/customer/auth/phone-login` | `customerPhoneLogin` | 客人手机号登录 | `CustomerPhoneLoginRequest` | `public` | `public` | `customer` | web, miniapp, app, kiosk | 否 | `customer.auth.login` | `customer.auth.login_failed` |
+| customer | `POST` | `/api/v1/customer/auth/sms-codes` | `requestCustomerLoginSmsCode` | 客人登录取短信验证码 | `CustomerLoginSmsCodeRequest` | `public` | `public` | `customer` | web, miniapp, app, kiosk | 否 | `customer.otp_requested` | `customer.otp_request_failed` |
 | customer | `POST` | `/api/v1/customer/auth/logout` | `customerLogout` | 客人登出（清除免登录会话 cookie） | `-` | `public` | `public` | `customer` | web, miniapp, app, kiosk | 否 | `customer.logged_out` | `customer.logout_failed` |
 | customer | `GET` | `/api/v1/customer/session` | `getCustomerSession` | 客人会话恢复（免登录） | `-` | `not_applicable` | `customer-token` | `customer` | web, miniapp, app, kiosk | 否 | `customer.session_viewed` | `customer.session_view_failed` |
 | customer | `GET` | `/api/v1/customer/bar-reservation-options` | `listCustomerBarReservationOptions` | 客人可订台资源 | `-` | `not_applicable` | `customer-token` | `public-project-bar` | web, miniapp, app, kiosk | 否 | `customer.bar_reservation_options_viewed` | `customer.bar_reservation_options_view_failed` |

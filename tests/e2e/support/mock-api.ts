@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -288,6 +288,12 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/integration/devices/offline-sync-batches": empty,
     "/api/v1/terminals/devices": [
       { id: "device-navigation-1", device_code: "WORK-001", terminal_type: "staff_work_phone", merchant_id: "merchant-1", location_point_id: "point-1", staff_id: null, status: "returned", bound_at: null, updated_at: now },
+    ],
+    "/api/v1/terminals/mdm/app-whitelist": [
+      { id: "mdm_app_1", package_name: "com.tencent.wework", app_label: "企业微信", scope_type: "global", scope_id: "global", enabled: true, reason: null, created_at: now, updated_at: now },
+    ],
+    "/api/v1/terminals/mdm/site-whitelist": [
+      { id: "mdm_site_1", domain: "work.weixin.qq.com", description: "企业微信网页", scope_type: "global", scope_id: "global", enabled: true, reason: null, created_at: now, updated_at: now },
     ],
     "/api/v1/terminals/capability-switches": [
       { id: "tcs_term_web", terminalType: "web", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global", enabled: true, reason: "Web 前端总开关" },

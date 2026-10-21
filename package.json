@@ -2,7 +2,7 @@
   "name": "entertainment-complex-management",
   "private": true,
   "version": "0.1.0",
-  "documentVersion": "V0.01",
+  "documentVersion": "V0.02",
   "type": "module",
   "workspaces": [
     "apps/web"
@@ -50,6 +50,8 @@
     "android:p0:build": "node tools/run-android-gradle.mjs --project apps/android-terminal clean build",
     "android:p0:smoke": "node tools/run-android-p0-smoke.mjs",
     "android:p0:apk": "node tools/run-android-gradle.mjs --project apps/android-terminal/android-app --require-android-sdk :app:assembleDebug",
+    "release:package": "node tools/release/build-release-package.mjs",
+    "verify:release-package": "node --test tools/release/release-package.test.mjs",
     "verify:p0": "npm run verify:coding-host-protection && npm run verify:p0-contract && npm run verify:security-baseline && npm run test:backend && npm run build && npm run verify:android-env && npm run android:p0:build && npm run verify:android-p0-smoke-wrapper && npm run android:p0:smoke && npm run android:p0:apk",
     "verify:no-legacy-api-prototype": "node tools/verify-no-legacy-api-prototype.mjs",
     "verify:coding-host-protection": "node tools/verify-coding-host-protection.mjs",

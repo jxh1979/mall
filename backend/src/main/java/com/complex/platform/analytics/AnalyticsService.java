@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -81,7 +81,7 @@ public class AnalyticsService {
 
     /**
      * T12 看板七类指标目录（与 r5-aggregation-metrics-draft §2 / DashboardAggregationJob 对齐）。
-     * ready=false 的指标数据源未就绪，按"不伪造"返回 null + note（采购到货依赖 T6；补录依赖 P1 留痕；第三方回流依赖开关接线）。
+     * ready=false 的指标数据源未就绪，按"不伪造"返回 null + note。
      */
     static final List<MetricCatalogEntry> METRIC_CATALOG = List.of(
             new MetricCatalogEntry(DashboardAggregationJob.REVENUE_TICKET, "finance", "cent", true,
@@ -167,13 +167,14 @@ public class AnalyticsService {
             new MetricCatalogEntry(DashboardAggregationJob.ENERGY_ELECTRICITY_PER_SQM, "energy", "kwh_per_sqm", true,
                     "per-sqm uses rentable area as denominator (not emitted when rentable area is zero)"),
             new MetricCatalogEntry(DashboardAggregationJob.ENERGY_ABNORMAL_COUNT, "energy", "count", true, MERCHANT_SCOPE_UNAVAILABLE),
-            // 数据源未就绪（不伪造）：
-            new MetricCatalogEntry("revenue.thirdparty", "finance", "cent", false,
-                    "third-party reflow depends on integration capability switch wiring (not yet aggregated)"),
-            new MetricCatalogEntry("supply.received", "inventory", "count", false,
-                    "purchase receipt depends on T6 procurement cycle (data source not ready)"),
-            new MetricCatalogEntry("risk.manual_backfill", "governance", "count", false,
-                    "manual backfill count depends on P1 audit-trail wiring (data source not ready)")
+            // ROOT-04（BSM「经营看板」章「主要指标」）：第三方回流收入单列、不并入净收入；采购到货按商品及单位分列、不出标量快照
+            // （裁决 M01）；补录数量提交即计数、状态另列（裁决 M02）。
+            new MetricCatalogEntry(DashboardAggregationJob.REVENUE_THIRDPARTY, "finance", "cent", true,
+                    "no booked third-party reflow for merchant on business date"),
+            new MetricCatalogEntry("supply.received", "inventory", "quantity_by_item_unit", true,
+                    "按商品及单位分列，不出标量快照"),
+            new MetricCatalogEntry(DashboardAggregationJob.RISK_MANUAL_BACKFILL, "governance", "count", true,
+                    "补录申请提交即计数（锁账后补录、无可信领取时刻补证），状态另列")
     );
 
     /**
@@ -825,6 +826,24 @@ public class AnalyticsService {
             }
             if (!entry.ready()) {
                 metrics.put(entry.metricCode(), MetricValue.unavailable(entry.note()));
+                continue;
+            }
+            if ("supply.received".equals(entry.metricCode())) {
+                // ROOT-04-R2：按商品及单位分列（裁决 M01），不出标量、不写快照；实时取，与明细同谓词。
+                List<Map<String, Object>> groups = repository.purchaseReceivedGroups(
+                        businessDayResolver.startInstant(entry.domain(), businessDate),
+                        businessDayResolver.endInstant(entry.domain(), businessDate), null, scopeValue);
+                metrics.put(entry.metricCode(), new MetricValue(null, entry.unit(),
+                        groups.isEmpty() ? "当日无采购到货" : null, Map.of("groups", groups)));
+                continue;
+            }
+            if (DashboardAggregationJob.RISK_MANUAL_BACKFILL.equals(entry.metricCode())) {
+                // ROOT-04-R3：提交即计数、状态另列（裁决 M02）；实时取，卡片与明细同谓词（快照只供月度对比与异常提醒）。
+                Map<String, Long> statusCounts = repository.manualBackfillStatusCounts(
+                        businessDayResolver.startInstant(entry.domain(), businessDate),
+                        businessDayResolver.endInstant(entry.domain(), businessDate), scopeValue);
+                BigDecimal total = BigDecimal.valueOf(statusCounts.values().stream().mapToLong(Long::longValue).sum());
+                metrics.put(entry.metricCode(), new MetricValue(total, entry.unit(), null, Map.of("statusCounts", statusCounts)));
                 continue;
             }
             BigDecimal value = snapshots.get(entry.metricCode());
@@ -1918,6 +1937,10 @@ public class AnalyticsService {
             case "traffic.amusement" -> repository.amusementVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
             case "verify.done" -> repository.ticketVerificationSuccessDetail(windowStart, windowEnd, safeSize, offset);
             case "member.new" -> repository.newMemberDetail(windowStart, windowEnd, safeSize, offset);
+            // ROOT-04：第三方回流收入（平台口径）；采购到货（按商品及单位分组、不出标量）；补录数量（提交即计数）。
+            case "revenue.thirdparty" -> repository.thirdpartyRevenueDetail(windowStart, windowEnd, safeSize, offset);
+            case "supply.received" -> repository.purchaseReceivedDetail(windowStart, windowEnd, safeSize, offset, scope);
+            case "risk.manual_backfill" -> repository.manualBackfillDetail(windowStart, windowEnd, safeSize, offset, scope);
             default -> throw ApiException.badRequest("VALIDATION_FAILED",
                     "指标已登记但明细查询未接线：" + definition.metricKey());
         };
@@ -1961,7 +1984,9 @@ public class AnalyticsService {
                 size,
                 detail.totalRows(),
                 rowTraceLinkable ? definition.traceLinkPageId() : null,
-                rowTraceLinkable ? definition.traceLinkColumnKey() : null);
+                rowTraceLinkable ? definition.traceLinkColumnKey() : null,
+                detail.groups() == null ? null : MetricRegistry.groupColumns(definition.metricKey()),
+                detail.groups());
     }
 
 }

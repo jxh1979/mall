@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.customer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -496,6 +496,24 @@ class CustomerControllerTests {
                 .andExpect(jsonPath("$.data.status").value("deregistered"));
 
         verify(service).deregisterAccount("cust_token_1", true);
+    }
+
+    /** ROOT-05-R3：登录取码公开端点，请求体按前端真实形状（蛇形键，只有 phone）委派服务层。 */
+    @Test
+    void requestLoginSmsCodeAcceptsSnakeCaseBodyAndDelegates() throws Exception {
+        when(service.requestLoginCode("13800138000")).thenReturn(Map.of(
+                "phone_masked", "138****8000", "requested_at", "2026-10-21T00:00:00Z"));
+
+        mockMvc.perform(post("/api/v1/customer/auth/sms-codes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone": "13800138000"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.phone_masked").value("138****8000"));
+
+        verify(service).requestLoginCode("13800138000");
+        verify(authorizationService, never()).requirePermission(any(String.class));
     }
 
     @TestConfiguration

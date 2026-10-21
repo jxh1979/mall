@@ -1,15 +1,17 @@
 package com.complex.platform.notification;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.evidence.AuditEventService;
 import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +27,19 @@ class NotificationServiceTest {
     private NotificationService notificationService;
 
     @Autowired
-    private MutableSmsSender smsSender;
+    private ScaffoldSmsSender smsSender;
+
+    @Autowired
+    private JdbcNotificationRepository notificationRepository;
+
+    @Autowired
+    private NotificationSwitchResolver switchResolver;
+
+    @Autowired
+    private IdempotencyService idempotencyService;
+
+    @Autowired
+    private AuditEventService auditEventService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -40,6 +54,12 @@ class NotificationServiceTest {
         setSwitch("sms_notification", false);
         setSwitch("sms.notify.stored_wine", true);
         setSwitch("sms.notify.stored_wine.deposit", true);
+    }
+
+    @AfterEach
+    void resetSharedSender() {
+        // 替身是测试上下文共享的单例：复位，免得失败模式漏到复用同一上下文的其它测试类。
+        smsSender.reset();
     }
 
     @Test
@@ -59,7 +79,7 @@ class NotificationServiceTest {
         NotificationSendLogRecord result = notifyStoredWineDeposit("sms-all-on");
 
         assertThat(result.status()).isEqualTo("sent");
-        assertThat(result.providerRef()).isEqualTo("test-sms-sms-all-on");
+        assertThat(result.providerRef()).isEqualTo("scaffold-sms-sms-all-on");
         assertThat(result.reason()).isNull();
         assertThat(smsSender.sendCount()).isEqualTo(1);
         assertThat(logCount("sms-all-on")).isEqualTo(1);
@@ -89,6 +109,27 @@ class NotificationServiceTest {
         assertThat(result.providerRef()).isNull();
         assertThat(smsSender.sendCount()).isEqualTo(1);
         assertThat(logCount("sms-failed")).isEqualTo(1);
+    }
+
+    @Test
+    void notificationServiceWithUnconfiguredSenderWritesFailedLogAndFailureAudit() {
+        // ROOT-05 R1：生产发送器（未接短信供应商）下，总开关开也只记失败，不出现「已发送」。
+        setSwitch("sms_notification", true);
+        NotificationService unconfigured = new NotificationService(
+                notificationRepository, switchResolver, new UnconfiguredSmsSender(), idempotencyService, auditEventService);
+
+        NotificationSendLogRecord result = unconfigured.notify(
+                "stored_wine", "deposit", "+15551234567", "stored_wine_deposit",
+                Map.of("ticket_no", "SW-002"), "sms-unconfigured");
+
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(result.reason()).isEqualTo("SMS_PROVIDER_NOT_CONFIGURED");
+        assertThat(result.providerRef()).isNull();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM notification_send_log WHERE request_id = ?", String.class, "sms-unconfigured"))
+                .isEqualTo("failed");
+        assertThat(auditCount("sms.notification.failed", result.id())).isEqualTo(1);
+        assertThat(auditCount("sms.notification.sent", result.id())).isZero();
     }
 
     private NotificationSendLogRecord notifyStoredWineDeposit(String requestId) {
@@ -128,44 +169,13 @@ class NotificationServiceTest {
         return count == null ? 0 : count;
     }
 
-    @TestConfiguration
-    static class SmsSenderConfig {
-
-        @Bean
-        @Primary
-        MutableSmsSender mutableSmsSender() {
-            return new MutableSmsSender();
-        }
-    }
-
-    static class MutableSmsSender implements SmsSender {
-
-        private int sendCount;
-        private String status = "sent";
-        private String reason;
-
-        @Override
-        public SmsSendResult send(SmsMessage message) {
-            sendCount++;
-            if ("sent".equals(status)) {
-                return new SmsSendResult("sent", "test-sms-" + message.requestId(), null);
-            }
-            return new SmsSendResult(status, null, reason);
-        }
-
-        void reset() {
-            sendCount = 0;
-            status = "sent";
-            reason = null;
-        }
-
-        void fail(String reason) {
-            this.status = "failed";
-            this.reason = reason;
-        }
-
-        int sendCount() {
-            return sendCount;
-        }
+    private int auditCount(String eventName, String businessId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = ? AND business_id = ?",
+                Integer.class,
+                eventName,
+                businessId
+        );
+        return count == null ? 0 : count;
     }
 }

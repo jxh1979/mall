@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -368,7 +368,9 @@ class MetricDetailServiceTests {
                         "staff.payroll_net_total", "staff.payroll_statement_count",
                         "staff.pending_leave_count", "staff.active_headcount",
                         // P0总览剩余四卡
-                        "traffic.amusement", "verify.done", "member.new", "risk.pending_review");
+                        "traffic.amusement", "verify.done", "member.new", "risk.pending_review",
+                        // ROOT-04：第三方回流收入、采购到货、补录数量
+                        "revenue.thirdparty", "supply.received", "risk.manual_backfill");
         assertThat(MetricRegistry.all()).extracting(MetricRegistry.MetricDefinition::valueType)
                 .contains(MetricRegistry.TYPE_ADDITIVE, MetricRegistry.TYPE_RATIO, MetricRegistry.TYPE_BALANCE);
         assertThat(MetricRegistry.require("finance.recon_diff_count").permission()).isEqualTo("finance.reconciliation.view");
@@ -402,6 +404,10 @@ class MetricDetailServiceTests {
         assertThat(MetricRegistry.require("staff.payroll_statement_count").permission()).isEqualTo("staff.payroll.manage");
         assertThat(MetricRegistry.require("staff.pending_leave_count").permission()).isEqualTo("staff.shift.manage");
         assertThat(MetricRegistry.require("staff.active_headcount").permission()).isEqualTo("access.user.view");
+        // ROOT-04：收入卡同码；采购到货按采购页既有域权限；补录数量同待复核。
+        assertThat(MetricRegistry.require("revenue.thirdparty").permission()).isEqualTo("analytics.dashboard.view");
+        assertThat(MetricRegistry.require("supply.received").permission()).isEqualTo("inventory.purchase_request.view");
+        assertThat(MetricRegistry.require("risk.manual_backfill").permission()).isEqualTo("governance.supervisor_review.view");
         // 每条登记必须有中文名/口径说明/数据源说明/列定义（明细页顶部展示，业务中文）。
         for (MetricRegistry.MetricDefinition definition : MetricRegistry.all()) {
             assertThat(definition.name()).isNotBlank();
@@ -585,7 +591,8 @@ class MetricDetailServiceTests {
         for (String k : List.of("finance.ar_balance", "finance.ap_balance", "finance.ar_balance_aging90p",
                 "settlement.transaction_count", "settlement.verified_amount", "settlement.verified_count",
                 "staff.shift_count", "staff.attendance_count", "staff.attendance_late_count",
-                "staff.payroll_net_total", "staff.payroll_statement_count", "staff.pending_leave_count")) {
+                "staff.payroll_net_total", "staff.payroll_statement_count", "staff.pending_leave_count",
+                "supply.received", "risk.manual_backfill")) {
             expectedScoped.put(k, "project_id");
         }
         expectedScoped.put("staff.active_headcount", "organization_id");
@@ -607,7 +614,7 @@ class MetricDetailServiceTests {
                 assertThat(MetricRegistry.isProjectScoped(def)).isFalse();
             }
         }
-        assertThat(expectedScoped).hasSize(22);
+        assertThat(expectedScoped).hasSize(24);
     }
 
     private static Map<String, Object> row(Object... kv) {

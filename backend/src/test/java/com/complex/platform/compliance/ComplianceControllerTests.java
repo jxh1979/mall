@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.compliance;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -266,7 +266,7 @@ class ComplianceControllerTests {
                     new com.complex.platform.evidence.AuditEventService(
                             new com.complex.platform.support.InMemoryAuditEventRepository()),
                     terminalSwitchGuard, null, new com.fasterxml.jackson.databind.ObjectMapper(),
-                    null, authorizationService);
+                    null, authorizationService, null);
         }
 
         @Bean

@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -245,12 +245,34 @@ class DashboardAggregationJobNetRevenueTests {
         assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("80000");
     }
 
+    /**
+     * ROOT-04-R1（BSM「主要指标」收入「第三方回流收入」单列；r5-aggregation-metrics-draft「第三方回流仅计商户结算口径，不计平台净收入」定稿）：
+     * 第三方回流按商户写快照、平台＝商户合计、按商户营业日窗取数；不并入任何商户或平台的净收入；与补录数量一并进月累计（流量类）。
+     */
+    @Test
+    void thirdpartyRevenueSnapshottedPerMerchantButExcludedFromNet() {
+        CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
+        repository.barRevenue = orderedMap("merchant_a", "80000");
+        repository.thirdpartyRevenue = orderedMap("merchant_a", "10000", "merchant_b", "5000");
+
+        new DashboardAggregationJob(repository).refreshSnapshots(BUSINESS_DATE);
+
+        assertThat(repository.upserts.get("revenue.thirdparty|merchant_a")).isEqualByComparingTo("10000");
+        assertThat(repository.upserts.get("revenue.thirdparty|merchant_b")).isEqualByComparingTo("5000");
+        assertThat(repository.upserts.get("revenue.thirdparty|platform")).isEqualByComparingTo("15000");
+        assertThat(repository.thirdpartyWindow).isEqualTo("merchant");
+        assertThat(repository.upserts.get(netKey("merchant_a"))).isEqualByComparingTo("80000");
+        assertThat(repository.upserts).doesNotContainKey(netKey("merchant_b"));
+        assertThat(repository.upserts.get(netKey("platform"))).isEqualByComparingTo("80000");
+        assertThat(repository.rolledUpSumKeys).contains("revenue.thirdparty", "risk.manual_backfill");
+    }
+
     @Test
     void platformNetIsTicketPlusBarMinusRefundsAndExcludesThirdParty() {
         CapturingAnalyticsRepository repository = new CapturingAnalyticsRepository();
         // 自营售票实付 100000，售票退款 10000；
         // 酒吧实收 merchant_a=80000 / merchant_b=20000，酒吧退款 merchant_a=5000；
-        // 第三方回流（revenue.thirdparty 未就绪 / 不参与聚合）即便存在也不计入 net。
+        // 第三方回流（revenue.thirdparty 单列）不计入 net。
         repository.ticketRevenue = new BigDecimal("100000");
         repository.ticketRefund = new BigDecimal("10000");
         // 2d-3：售票分摊到商户（生产中 paid 订单出票必分摊到 entitlement.merchant）；平台 net 取 Σ商户 net（防漂移）。
@@ -486,6 +508,15 @@ class DashboardAggregationJobNetRevenueTests {
     }
 
     private static final class CapturingAnalyticsRepository implements AnalyticsRepository {
+        Map<String, BigDecimal> thirdpartyRevenue = Map.of();
+        String thirdpartyWindow;
+
+        @Override
+        public Map<String, BigDecimal> sumThirdpartyRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
+            this.thirdpartyWindow = windowDomain;
+            return thirdpartyRevenue;
+        }
+
         // V220 招商漏斗 fake:默认空漏斗 + 零营业额(比率分母 0 → ETL 不产出比率行)。
         public AnalyticsRecords.LeasingFunnel leasingFunnel(LocalDate businessDate, String windowDomain) {
             return new AnalyticsRecords.LeasingFunnel(0, 0, 0);

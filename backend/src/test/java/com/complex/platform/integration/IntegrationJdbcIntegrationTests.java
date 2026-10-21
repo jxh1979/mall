@@ -1,9 +1,13 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import com.complex.platform.common.BusinessDayResolver;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +37,38 @@ class IntegrationJdbcIntegrationTests {
 
     @Autowired
     private FinanceRepository financeRepository;
+
+    @Autowired
+    private BusinessDayResolver businessDayResolver;
+
+    /**
+     * ROOT-04-R4：餐饮/零售回流后到入账（或改额、补门店映射后重跑）改写的是首次落库那一商户营业日的第三方回流收入，
+     * 登记该营业日待看板重算（实施台账 ROOT-04「第三方回流后到/改额」；ENUM 第 187 行「全系统的钱账统一按「营业日」归集」）。
+     * 当日回流由当日刷新覆盖不登记；渠道团购票已计入售票收入，不登记。
+     */
+    @Test
+    void lateSyncedReflowMarksOriginalMerchantBusinessDate() {
+        jdbcTemplate.update("DELETE FROM analytics_revenue_refresh_dates");
+        Instant twoDaysAgo = Instant.now().minus(2, ChronoUnit.DAYS);
+        LocalDate original = businessDayResolver.businessDate("merchant", twoDaysAgo);
+        jdbcTemplate.update("""
+                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, external_business_id, status,
+                        amount_cent, created_at, updated_at)
+                VALUES ('sync_late', 'pos-late', 'catering', 'order', 'ext-late', 'received', 5000, ?, ?)
+                """, java.sql.Timestamp.from(twoDaysAgo), java.sql.Timestamp.from(twoDaysAgo));
+        Instant now = Instant.now();
+        repository.saveOrderSync(orderSync("sync_late_again", "catering", "ext-late", 6000L, now));
+        repository.saveOrderSync(orderSync("sync_today", "retail", "ext-today", 3000L, now));
+        repository.saveOrderSync(orderSync("sync_ticket", "ticket", "ext-ticket", 9000L, now.minus(3, ChronoUnit.DAYS)));
+
+        assertThat(jdbcTemplate.queryForList("SELECT business_date FROM analytics_revenue_refresh_dates", LocalDate.class))
+                .containsExactly(original);
+    }
+
+    private static IntegrationOrderSyncRecord orderSync(String id, String businessType, String externalId, long cent, Instant at) {
+        return new IntegrationOrderSyncRecord(id, "pos-late", businessType, "order", externalId, "synced", cent, "CNY",
+                "meituan", null, null, Map.of(), at, at);
+    }
 
     @Test
     void migrationCreatesIntegrationTablesAndSeedsPermissions() {

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.analytics;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -248,7 +248,7 @@ class AnalyticsControllerTests {
                 new BigDecimal("3"), null, null, null,
                 List.of(new MetricRegistry.MetricColumn("id", "差异号")),
                 List.of(Map.of("id", "diff-1")),
-                1, 20, 3, "ADM-FIN-002", "id");
+                1, 20, 3, "ADM-FIN-002", "id", null, null);
     }
 
     @ParameterizedTest

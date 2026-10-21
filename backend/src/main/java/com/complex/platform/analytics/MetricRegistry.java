@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import java.util.Collection;
@@ -815,6 +815,87 @@ public final class MetricRegistry {
                 "id",
                 pendingReviewColumns(),
                 null));
+        // ROOT-04-R1 第三方回流收入：谓词同 ETL sumThirdpartyRevenueCentsByMerchant（同一谓词常量）。
+        register(registry, new MetricDefinition(
+                "revenue.thirdparty",
+                "第三方回流收入",
+                TYPE_ADDITIVE,
+                "分",
+                "餐饮/零售商户 POS 已入账回流订单金额合计（分）：只计回流结果为已入账的订单，不含退款回流、未入账与异常回流；"
+                        + "门店映射缺失、认定不到商户的回流单挂差异、不入账；渠道团购票已在本平台出票并计入票务收入，不再计入。"
+                        + "单列展示，不并入净收入（只计商户结算口径）。可加口径=区间求和：按回流落库时间落商户营业日窗（10:00 起算）；"
+                        + "与总控驾驶舱「第三方回流收入」卡及看板 ETL（revenue.thirdparty）同一谓词同源。平台口径。",
+                "第三方回流台账（integration_order_syncs，实时查询）。",
+                "analytics.dashboard.view",
+                "merchant",
+                false,
+                false,
+                "ADM-OV-001",
+                "ADM-INT-002",
+                "id",
+                List.of(
+                        new MetricColumn("externalBusinessId", "外部订单号"),
+                        new MetricColumn("channel", "渠道"),
+                        new MetricColumn("businessType", "业态"),
+                        new MetricColumn("merchantId", "商户"),
+                        new MetricColumn("amountCent", "金额（分）"),
+                        new MetricColumn("createdAt", "落库时间"),
+                        new MetricColumn("id", "记录编号")),
+                null));
+        // ROOT-04-R2 采购到货：按商品及单位分列（裁决 M01），明细到每一次到货；分组表头见 groupColumns。
+        register(registry, new MetricDefinition(
+                "supply.received",
+                "采购到货",
+                TYPE_ADDITIVE,
+                "按商品及单位",
+                "按商品及单位分列合格接收、实到、拒收数量与到货次数，不同单位不相加、不出合计数；合格接收即入库确认的数量。"
+                        + "只计采购收货登记（调拨、退供、盘点、借调回库不计）。按实际到货时间落库存营业日窗；明细逐次列出每一次到货。",
+                "采购收货登记（purchase_receipts，实时查询）。",
+                "inventory.purchase_request.view",
+                "inventory",
+                false,
+                false,
+                "ADM-OV-001",
+                "ADM-INV-003",
+                "purchaseId",
+                List.of(
+                        new MetricColumn("itemName", "商品"),
+                        new MetricColumn("unit", "单位"),
+                        new MetricColumn("arrivedQuantity", "实到"),
+                        new MetricColumn("acceptedQuantity", "合格接收"),
+                        new MetricColumn("rejectedQuantity", "拒收"),
+                        new MetricColumn("warehouseId", "库房"),
+                        new MetricColumn("receivedAt", "实际到货时间"),
+                        new MetricColumn("receivedBy", "收货人"),
+                        new MetricColumn("projectId", "项目"),
+                        new MetricColumn("purchaseId", "采购单")),
+                null));
+        // ROOT-04-R3 补录数量：提交即计数、状态另列（裁决 M02）；谓词同 ETL countManualBackfillByMerchant（同一来源常量）。
+        register(registry, new MetricDefinition(
+                "risk.manual_backfill",
+                "补录数量",
+                TYPE_ADDITIVE,
+                "笔",
+                "补录申请逐笔计数：提交即计一笔，状态另列（待审、已通过、已驳回）；审批通过或驳回不重复计，同一提交重放不重复计，"
+                        + "驳回后重新提交另计一笔。当前已接入：锁账后补录、无可信领取时刻补证。可加口径=区间求和：按提交时间落治理营业日窗。",
+                "锁账补录台账＋领取时刻补证台账（ar_ap_adjustments / staff_attendance_receipt_reviews，实时查询）。",
+                "governance.supervisor_review.view",
+                "governance",
+                false,
+                false,
+                "ADM-OV-001",
+                null,
+                null,
+                List.of(
+                        new MetricColumn("sourceType", "补录类型"),
+                        new MetricColumn("objectId", "补录对象"),
+                        new MetricColumn("status", "状态"),
+                        new MetricColumn("initiatedBy", "提交人"),
+                        new MetricColumn("createdAt", "提交时间"),
+                        new MetricColumn("decidedAt", "审批时间"),
+                        new MetricColumn("projectId", "项目"),
+                        new MetricColumn("id", "补录编号")),
+                null));
         return registry;
     }
 
@@ -1074,7 +1155,24 @@ public final class MetricRegistry {
             Map.entry("staff.payroll_statement_count", "project_id"),
             Map.entry("staff.pending_leave_count", "project_id"),
             // 员工账号（access_users.organization_id=综合体，AccessService.listUsers(organizationId) 同谓词）。
-            Map.entry("staff.active_headcount", "organization_id"));
+            Map.entry("staff.active_headcount", "organization_id"),
+            // ROOT-04：采购收货登记（purchase_receipts.project_id，V485 NOT NULL）；补录申请取所补应收应付的 project_id / 所属排班的 project_id。
+            Map.entry("supply.received", "project_id"),
+            Map.entry("risk.manual_backfill", "project_id"));
+
+    /** 分组表头（ROOT-04 裁决 M01「采购到货按商品及单位分别显示」）：只有不出标量、按维度分列的指标有；其余 null。 */
+    public static List<MetricColumn> groupColumns(String metricKey) {
+        if (!"supply.received".equals(metricKey)) {
+            return null;
+        }
+        return List.of(
+                new MetricColumn("itemName", "商品"),
+                new MetricColumn("unit", "单位"),
+                new MetricColumn("acceptedQuantity", "合格接收"),
+                new MetricColumn("arrivedQuantity", "实到"),
+                new MetricColumn("rejectedQuantity", "拒收"),
+                new MetricColumn("receiptCount", "到货次数"));
+    }
 
     /** 指标的项目作用域列名（project_id/organization_id）；空=平台口径（platform_only，项目级不可下钻）。 */
     public static java.util.Optional<String> projectScopeColumn(String metricKey) {

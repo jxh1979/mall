@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.26
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.27
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1090 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1091 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 401 | 人工权限矩阵正文未覆盖 300 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2180 | 人工事件矩阵正文未覆盖 2135 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1090 | 人工任务映射正文未逐项覆盖 1084 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 662 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2182 | 人工事件矩阵正文未覆盖 2137 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1091 | 人工任务映射正文未逐项覆盖 1085 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 663 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -351,7 +351,7 @@
 | `partner.subordinate.manage` | staff-token | self | 2 | createPartnerSubordinate, disablePartnerSubordinate | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.view` | staff-token | self | 2 | listPartnerSubordinates, listSubordinateCompletion | OpenAPI 补充，以本附录为准 |
 | `platform.notification_window.manage` | staff-token | platform | 1 | upsertNotificationWindow | OpenAPI 补充，以本附录为准 |
-| `public` | public | customer, none, public-project, self | 7 | login, customerPhoneLogin, customerLogout, listCustomerTicketProducts, getSystemHealth, listStaffRegistrationCompanies, submitStaffSelfRegistration | 已在权限矩阵正文出现 |
+| `public` | public | customer, none, public-project, self | 8 | login, customerPhoneLogin, requestCustomerLoginSmsCode, customerLogout, listCustomerTicketProducts, getSystemHealth, listStaffRegistrationCompanies, submitStaffSelfRegistration | 已在权限矩阵正文出现 |
 | `refund.authority.manage` | staff-token | project | 2 | upsertRefundAuthorityLimit, upsertRefundAutoRule | OpenAPI 补充，以本附录为准 |
 | `refund.authority.view` | staff-token | project | 2 | listRefundAuthorityLimits, listRefundAutoRules | OpenAPI 补充，以本附录为准 |
 | `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
@@ -1063,6 +1063,8 @@
 | `customer.order_tickets_viewed` | success | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_view_failed` | failure | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_viewed` | success | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.otp_request_failed` | failure | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `customer.otp_requested` | success | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.points_view_failed` | failure | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points_viewed` | success | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points.freeze_failed` | failure | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
@@ -2925,6 +2927,7 @@
 | CUS-客人端 | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | 会员储值退卡/退余额（后台） | `customer.stored_value.refund` | `stored_value.refund` / `stored_value.refund_failed` | web | operation 级补充 |
 | CUS-客人端 | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | 恢复客人账号为正常（解封/解黑） | `customer.account.manage` | `customer.account.reinstated` / `customer.account.reinstate_failed` | web | operation 级补充 |
 | CUS-客人端 | `renewCustomerSavedBottle` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renew` | 客人本人转存（延期）：短信验证码确认即从当前到期日顺延（转存次数不超上限、只能在到期日前办理） | `not_applicable` | `bar.saved_bottle.renewed` / `bar.saved_bottle.renew_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | 客人登录取短信验证码 | `public` | `customer.otp_requested` / `customer.otp_request_failed` | web, miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `requestCustomerSavedBottleRenewalCode` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renewal-code` | 客人本人转存发码（只对当前持有人本人，发到本人手机） | `not_applicable` | `bar.saved_bottle.verification_code_requested` / `bar.saved_bottle.verification_code_request_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `revokeCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `voucher_transfer.revoked` / `voucher_transfer.revoke_failed` | web, miniapp, app | operation 级补充 |
 | CUS-客人端 | `revokeVoucher` | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | 作废券（仅未核销可作废；理由必填进审计留痕） | `customer.voucher.manage` | `voucher.revoked` / `voucher.revoke_failed` | web | operation 级补充 |

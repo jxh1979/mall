@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.03
+// 文件版本：V0.04
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
@@ -41,6 +41,8 @@ public class DashboardAggregationJob {
     // 待确认项#1：通票售票收入的业态拆分展示口径（不并入 net，仅展示）。
     static final String REVENUE_TICKET_BAR_SHARE = "revenue.ticket_bar_share";             // 收入·通票酒吧分摊
     static final String REVENUE_TICKET_AMUSEMENT_SHARE = "revenue.ticket_amusement_share"; // 收入·通票游乐分摊
+    // ROOT-04-R1：收入·第三方回流（餐饮/零售已入账回流订单，单列，不并入 net——r5-aggregation-metrics-draft 定稿）。
+    static final String REVENUE_THIRDPARTY = "revenue.thirdparty";
     static final String TRAFFIC_AMUSEMENT = "traffic.amusement"; // 客流
     static final String VERIFY_DONE = "verify.done";            // 核销
     static final String REDEMPTION_RATE = "verify.redemption_rate"; // 核销·券核销率（派生：核销数/发放数）
@@ -48,6 +50,7 @@ public class DashboardAggregationJob {
     static final String SUPPLY_BALANCE = "supply.balance";      // 供应链
     static final String SUPPLY_LOW_STOCK = "supply.low_stock";  // 供应链·缺货预警
     static final String RISK_PENDING_REVIEW = "risk.pending_review"; // 风险
+    static final String RISK_MANUAL_BACKFILL = "risk.manual_backfill"; // 风险·补录数量（ROOT-04-R3，提交即计数：裁决 M02）
     // S2 财务应收(2026-07-02 拍板,地产 BI MVP):欠费/账龄为 as-of 时点存量(期末口径),回款为月内累计。
     static final String AR_BALANCE = "ar.balance";                   // 欠费总额(逾期未清)
     static final String AR_AGING_0_30 = "ar.aging_0_30";
@@ -96,7 +99,7 @@ public class DashboardAggregationJob {
     public static final java.util.List<String> MONTHLY_SUM_KEYS = java.util.List.of(
             REVENUE_NET, REVENUE_TICKET, REVENUE_BAR, "revenue.contract_rent", MEMBER_NEW, "verify.done",
             "traffic.amusement", "energy.total_electricity", "energy.total_water", "energy.total_gas",
-            "energy.total_heat_cold", LEASING_LEAD_COUNT, PARKING_REVENUE);
+            "energy.total_heat_cold", LEASING_LEAD_COUNT, PARKING_REVENUE, REVENUE_THIRDPARTY, RISK_MANUAL_BACKFILL);
     public static final java.util.List<String> MONTHLY_LAST_KEYS = java.util.List.of(
             AR_BALANCE, AR_AGING_90P, AR_COLLECTION_RATE_MTD, OCC_RATE, OCC_PARKING_RATE,
             OCC_SIGNED_PENDING_AREA, CONTRACT_EXPIRING_90D, WO_BACKLOG, MWO_BACKLOG);
@@ -117,6 +120,13 @@ public class DashboardAggregationJob {
     private final Clock clock;
     private final BusinessDayResolver businessDayResolver;
     private final boolean scheduledEnabled;
+    // ROOT-04-R4：历史营业日收入重算标记（跨期月结、服务费退款后的原营业日、第三方回流后到/改额）；构造器族不变，setter 注入。
+    private com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks;
+
+    @Autowired(required = false)
+    void setRevenueRefreshMarks(com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks) {
+        this.revenueRefreshMarks = revenueRefreshMarks;
+    }
 
     @Autowired
     public DashboardAggregationJob(AnalyticsRepository repository, BusinessDayResolver businessDayResolver,
@@ -184,8 +194,32 @@ public class DashboardAggregationJob {
         if (!scheduledEnabled) {
             return;
         }
-        refreshSnapshots(today());
+        LocalDate today = today();
+        refreshSnapshots(today);
+        // ROOT-04-R4 昨日尾段：全局 04:00 换日后，酒吧（06:00 起算）、商户（10:00 起算）等收入窗的昨日仍在收尾，收尾期间每轮重算昨日收入。
+        LocalDate yesterday = today.minusDays(1);
+        Instant tailEnd = REVENUE_WINDOW_DOMAINS.stream()
+                .map(domain -> businessDayResolver.endInstant(domain, yesterday))
+                .max(Instant::compareTo).orElseThrow();
+        if (Instant.now(clock).isBefore(tailEnd.plus(java.time.Duration.ofMinutes(10)))) {
+            refreshRevenueMetrics(yesterday);
+        }
+        if (revenueRefreshMarks == null) {
+            return;
+        }
+        // 跨期月结、服务费退款后的原营业日、第三方回流后到/改额登记的历史营业日：逐日只重算收入类。
+        // ponytail: 每轮最多 31 天，积压时下一轮继续。
+        for (com.complex.platform.common.RevenueRefreshMarks.Mark mark : revenueRefreshMarks.pending(31)) {
+            if (mark.businessDate().isBefore(today)) {
+                refreshRevenueMetrics(mark.businessDate());
+            }
+            revenueRefreshMarks.clear(mark.businessDate(), mark.requestedAt());
+        }
     }
+
+    /** 收入段各指标落窗所用的营业日域（昨日尾段取其中最晚收尾的一个）。 */
+    private static final java.util.List<String> REVENUE_WINDOW_DOMAINS =
+            java.util.List.of("ticketing", "bar", "platform", "finance", "merchant");
 
     /** 直接可调用的聚合入口：聚合 businessDate 当日七类指标并 upsert 快照。 */
     // 2d-4：整批 upsert 包一个事务，避免并发/中途失败造成快照集撕裂（平台/商户/project 行跨运行不一致）。
@@ -205,54 +239,8 @@ public class DashboardAggregationJob {
         // 单综合体默认全部经营归一个 project（值=平台口径合计，口径与现状一致、不伪造多 project）。
         Map<String, BigDecimal> platformTotals = new java.util.LinkedHashMap<>();
 
-        // 收入·售票：ticket_orders 无 merchant_id → 仅平台口径。
-        upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate, "ticketing"), now, platformTotals);
-
-        // 酒吧商品按整单付清时点、服务费扣留按原经营日；代收小费及员工应发不计收入。
-        // 只汇总已确认部分，待结状态在明细列示；不含通票分摊。
-        upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate, "bar"), now, platformTotals);
-
-        // 商品退款按真实应付足额付款时点及退款分项；服务费退款另调整原经营日扣留。
-        upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate, "bar"), now, platformTotals);
-
-        // RC1②：收入·自营售票退款展示行 REVENUE_TICKET_REFUND 取平台退款总额（sumTicketRefundCents，平台口径）；
-        //        商户维退款分量见下方 ticketRefundByMerchant(V220 直连) 并入商户行级 net。
-        // 商品收退款按 platform 窗对齐；服务费扣留按其原经营日标签，不按月结运行时点。
-        BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate, "platform"));
-        BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate, "platform"));
-        upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate,
-                nonNull(repository.sumTicketRefundCents(businessDate, "ticketing")), now, platformTotals);
-
-        // RC1② 统一净收入 revenue.net（派生指标，财务确认口径 2026-06-18）：
-        //   net = 自营售票实付(revenue.ticket) + 酒吧已确认收入(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
-        //   第三方回流不计入平台净收入；退款按经营日（BusinessDayResolver）窗口冲减当日。
-        //
-        // 清单#4：商户行级 net 纳入售票分量（V075 merchant 归属 + V078 allocated_revenue_cent）：
-        //   商户 net = 本商户售票分量(Σ allocated) + 本商户已确认商品及服务费扣留 − 本商户售票退款分摊 − 本商户酒吧退款。
-        //   平台 net 保持现有口径（售票实付全额 + Σ酒吧已确认收入 − 售票退款 − Σ酒吧退款），不改用 allocated，
-        //   避免 direct 出票/无 allocated 订单造成平台口径漂移。两者一致性：allocateRevenue 保证同一订单
-        //   Σallocated==订单实付，故"有发券且有 allocated"的订单其商户分量 Σ 等于平台售票分量的对应部分；
-        //   仅 direct 出票/历史无 allocated 的订单不进商户行（保守不归任何商户），是平台≥Σ商户的唯一差额来源——
-        //   因平台与商户用各自来源各算一次，无重复计入。
-        Map<String, BigDecimal> barRevenue = repository.sumBarRevenueCentsByMerchant(businessDate, "platform");
-        Map<String, BigDecimal> barRefund = repository.sumBarRefundCentsByMerchant(businessDate, "platform");
-        Map<String, BigDecimal> ticketAllocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate, "platform");
-        Map<String, BigDecimal> ticketRefundByMerchant = repository.sumTicketRefundByMerchant(businessDate, "platform");
-        // P1-C 收入闭环：合同租金/物业/能源应收（ar_ap_items receivable）按 due_date 当日确认，
-        // 单列 revenue.contract_rent 展示行（平台+商户），并入商户行级 net 的租金分量。
-        Map<String, BigDecimal> contractRent = repository.sumContractRentReceivableByMerchant(businessDate, "platform");
-        upsertByMerchant(REVENUE_CONTRACT_RENT, "finance", businessDate,
-                repository.sumContractRentReceivableByMerchant(businessDate, "finance"), now, platformTotals);
-        upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund,
-                ticketAllocated, ticketRefundByMerchant, contractRent, now, platformTotals);
-
-        // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
-        // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
-        // 按酒吧/游乐业态拆出展示行，与 revenue.bar（商品及服务费扣留）口径区分，避免重复计净收入。
-        upsertByMerchant(REVENUE_TICKET_BAR_SHARE, "ticketing", businessDate,
-                repository.sumTicketBarShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
-        upsertByMerchant(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
-                repository.sumTicketAmusementShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
+        // ROOT-04-R4：收入段抽出与历史营业日重算共用（今日口径不变）。
+        upsertRevenueMetrics(businessDate, now, platformTotals);
 
         // 客流·游乐：amusement_verifications 无 merchant_id → 仅平台口径。
         upsertPlatform(TRAFFIC_AMUSEMENT, "amusement", businessDate, repository.countAmusementVerificationSuccess(businessDate), now, platformTotals);
@@ -278,15 +266,10 @@ public class DashboardAggregationJob {
         // 风险·待复核：supervisor_review_decisions / analytics_risk_alerts 无 merchant_id → 仅平台口径。
         upsertPlatform(RISK_PENDING_REVIEW, "governance", businessDate, repository.countPendingReview(), now, platformTotals);
 
-        // T4.2 坪效（派生）：净收入 / 可经营面积（综合体主数据，complex_operating_params）。
-        // 面积未配置/≤0 → 不产出（诚实空缺，AnalyticsService 目录注 unavailable，不伪造、不除零）。
-        // 单综合体：净收入取平台口径合计，面积取 DEFAULT_PROJECT_ID；多综合体启用后按真实 project 各自面积派生。
-        BigDecimal netForPerSqm = platformTotals.getOrDefault(REVENUE_NET + "|finance", BigDecimal.ZERO);
-        repository.findOperatingParams(DEFAULT_PROJECT_ID)
-                .map(OperatingParamsRecord::operatingAreaSqm)
-                .filter(area -> area != null && area.signum() > 0)
-                .ifPresent(area -> upsertPlatform(REVENUE_PER_SQM, "finance", businessDate,
-                        netForPerSqm.divide(area, 2, java.math.RoundingMode.HALF_UP), now, platformTotals));
+        // ROOT-04-R3 风险·补录数量：补录申请按提交时刻落治理营业日、按商户计笔数（无商户的只并入平台）；提交时刻不回改，不需历史重算。
+        // 快照供月度对比与异常提醒（BSM「月度对比」「异常提醒」）；总控卡片与明细实时取同谓词。
+        upsertByMerchant(RISK_MANUAL_BACKFILL, "governance", businessDate,
+                repository.countManualBackfillByMerchant(businessDate, "governance"), now, platformTotals);
 
         // S2 财务应收:账龄桶(as-of=businessDate 期末存量)+欠费总额+月内回款。
         Map<String, Map<String, BigDecimal>> aging = repository.arOverdueAgingByMerchant(businessDate);
@@ -410,6 +393,92 @@ public class DashboardAggregationJob {
 
         // M4:商户经营汇总真管道(每商户一行最新态;收入与看板同源、单量=当日核销、风险=open 告警数)。
         repository.refreshMerchantSummaries(businessDate, now);
+    }
+
+    /**
+     * 收入段（售票、酒吧、两类退款、合同租金、净收入、通票两项分摊、第三方回流、坪效）：当日刷新与历史营业日重算共用。
+     */
+    private void upsertRevenueMetrics(LocalDate businessDate, Instant now, Map<String, BigDecimal> platformTotals) {
+        // 收入·售票：ticket_orders 无 merchant_id → 仅平台口径。
+        upsertPlatform(REVENUE_TICKET, "finance", businessDate, repository.sumTicketRevenueCents(businessDate, "ticketing"), now, platformTotals);
+
+        // 酒吧商品按整单付清时点、服务费扣留按原经营日；代收小费及员工应发不计收入。
+        // 只汇总已确认部分，待结状态在明细列示；不含通票分摊。
+        upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate, "bar"), now, platformTotals);
+
+        // 商品退款按真实应付足额付款时点及退款分项；服务费退款另调整原经营日扣留。
+        upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate, "bar"), now, platformTotals);
+
+        // RC1②：收入·自营售票退款展示行 REVENUE_TICKET_REFUND 取平台退款总额（sumTicketRefundCents，平台口径）；
+        //        商户维退款分量见下方 ticketRefundByMerchant(V220 直连) 并入商户行级 net。
+        // 商品收退款按 platform 窗对齐；服务费扣留按其原经营日标签，不按月结运行时点。
+        BigDecimal ticketRevenue = nonNull(repository.sumTicketRevenueCents(businessDate, "platform"));
+        BigDecimal ticketRefund = nonNull(repository.sumTicketRefundCents(businessDate, "platform"));
+        upsertPlatform(REVENUE_TICKET_REFUND, "finance", businessDate,
+                nonNull(repository.sumTicketRefundCents(businessDate, "ticketing")), now, platformTotals);
+
+        // RC1② 统一净收入 revenue.net（派生指标，财务确认口径 2026-06-18）：
+        //   net = 自营售票实付(revenue.ticket) + 酒吧已确认收入(revenue.bar) − 售票退款(ticket_refund) − 酒吧退款(bar_refund)。
+        //   第三方回流不计入平台净收入；退款按经营日（BusinessDayResolver）窗口冲减当日。
+        //
+        // 清单#4：商户行级 net 纳入售票分量（V075 merchant 归属 + V078 allocated_revenue_cent）：
+        //   商户 net = 本商户售票分量(Σ allocated) + 本商户已确认商品及服务费扣留 − 本商户售票退款分摊 − 本商户酒吧退款。
+        //   平台 net 保持现有口径（售票实付全额 + Σ酒吧已确认收入 − 售票退款 − Σ酒吧退款），不改用 allocated，
+        //   避免 direct 出票/无 allocated 订单造成平台口径漂移。两者一致性：allocateRevenue 保证同一订单
+        //   Σallocated==订单实付，故"有发券且有 allocated"的订单其商户分量 Σ 等于平台售票分量的对应部分；
+        //   仅 direct 出票/历史无 allocated 的订单不进商户行（保守不归任何商户），是平台≥Σ商户的唯一差额来源——
+        //   因平台与商户用各自来源各算一次，无重复计入。
+        Map<String, BigDecimal> barRevenue = repository.sumBarRevenueCentsByMerchant(businessDate, "platform");
+        Map<String, BigDecimal> barRefund = repository.sumBarRefundCentsByMerchant(businessDate, "platform");
+        Map<String, BigDecimal> ticketAllocated = repository.sumTicketAllocatedRevenueByMerchant(businessDate, "platform");
+        Map<String, BigDecimal> ticketRefundByMerchant = repository.sumTicketRefundByMerchant(businessDate, "platform");
+        // P1-C 收入闭环：合同租金/物业/能源应收（ar_ap_items receivable）按 due_date 当日确认，
+        // 单列 revenue.contract_rent 展示行（平台+商户），并入商户行级 net 的租金分量。
+        Map<String, BigDecimal> contractRent = repository.sumContractRentReceivableByMerchant(businessDate, "platform");
+        upsertByMerchant(REVENUE_CONTRACT_RENT, "finance", businessDate,
+                repository.sumContractRentReceivableByMerchant(businessDate, "finance"), now, platformTotals);
+        upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund,
+                ticketAllocated, ticketRefundByMerchant, contractRent, now, platformTotals);
+
+        // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
+        // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
+        // 按酒吧/游乐业态拆出展示行，与 revenue.bar（商品及服务费扣留）口径区分，避免重复计净收入。
+        upsertByMerchant(REVENUE_TICKET_BAR_SHARE, "ticketing", businessDate,
+                repository.sumTicketBarShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
+        upsertByMerchant(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
+                repository.sumTicketAmusementShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
+
+        // ROOT-04-R1 收入·第三方回流：餐饮/零售已入账、已落商户的回流订单按商户营业日（10:00 起算）落窗，按商户写快照；
+        // 单列展示，不并入 revenue.net（r5-aggregation-metrics-draft「第三方回流仅计商户结算口径，不计平台净收入」定稿；V221 thirdparty 默认 exclude）。
+        upsertByMerchant(REVENUE_THIRDPARTY, "finance", businessDate,
+                repository.sumThirdpartyRevenueCentsByMerchant(businessDate, "merchant"), now, platformTotals);
+
+        // T4.2 坪效（派生）：净收入 / 可经营面积（综合体主数据，complex_operating_params）。
+        // 面积未配置/≤0 → 不产出（诚实空缺，AnalyticsService 目录注 unavailable，不伪造、不除零）。
+        // 单综合体：净收入取平台口径合计，面积取 DEFAULT_PROJECT_ID；多综合体启用后按真实 project 各自面积派生。
+        BigDecimal netForPerSqm = platformTotals.getOrDefault(REVENUE_NET + "|finance", BigDecimal.ZERO);
+        repository.findOperatingParams(DEFAULT_PROJECT_ID)
+                .map(OperatingParamsRecord::operatingAreaSqm)
+                .filter(area -> area != null && area.signum() > 0)
+                .ifPresent(area -> upsertPlatform(REVENUE_PER_SQM, "finance", businessDate,
+                        netForPerSqm.divide(area, 2, java.math.RoundingMode.HALF_UP), now, platformTotals));
+    }
+
+    /**
+     * ROOT-04-R4：只重算某营业日的收入类快照（平台、商户、项目段）并重卷该月月度累计行。
+     * 不碰存量类快照（库存余额、欠费、出租率、积压等只代表当前时点）、月度期末值、异常提醒与商户汇总
+     *（实施台账 ROOT-04「不能用全量历史 refreshSnapshots 破坏存量类快照」）。
+     */
+    @Transactional
+    public void refreshRevenueMetrics(LocalDate businessDate) {
+        Instant now = Instant.now(clock);
+        Map<String, BigDecimal> platformTotals = new java.util.LinkedHashMap<>();
+        upsertRevenueMetrics(businessDate, now, platformTotals);
+        upsertByProject(businessDate, platformTotals, now);
+        LocalDate monthEnd = businessDate.withDayOfMonth(businessDate.lengthOfMonth());
+        LocalDate today = today();
+        repository.rollupMonthlySnapshots(businessDate.withDayOfMonth(1), monthEnd.isBefore(today) ? monthEnd : today,
+                MONTHLY_SUM_KEYS, java.util.List.of(), now);
     }
 
     /** M3:mtd 类月初天然重置会跳变,不做环比检测。 */
@@ -631,7 +700,7 @@ public class DashboardAggregationJob {
         merchantIds.addAll(ticketRefundByMerchant.keySet());
         merchantIds.addAll(contractRentByMerchant.keySet());
         // V221 去硬编码:各收入来源(ticket/bar/contract_rent)的计入方式由 merchant_revenue_attribution_rules 决定,
-        // 而非固定 "售票分量+酒吧实收+租金−售票退款−酒吧退款"。thirdparty 目前无数据源(排除,预留)。
+        // 而非固定 "售票分量+酒吧实收+租金−售票退款−酒吧退款"。第三方回流单列 revenue.thirdparty，不并入 net（r5 定稿）。
         // 种子=复现现有口径(ticket share_bps=10000 全额+退款净扣 / bar gross+退款净扣 / rent gross+退款忽略),故 net 值不变。
         AnalyticsRecords.MerchantRevenueAttributionRule ticketRule = repository.findDefaultAttributionRule("ticket");
         AnalyticsRecords.MerchantRevenueAttributionRule barRule = repository.findDefaultAttributionRule("bar");
@@ -658,7 +727,7 @@ public class DashboardAggregationJob {
         }
         // 2d-3（用户裁定：平台=Σ商户防漂移）：平台 net 取 Σ各商户 net，确保平台与商户口径强一致，
         // 消除"direct 出票 / 无 merchant 归属售票造成平台 ≥ Σ商户"的漂移。
-        // §8B 六源含第三方：第三方回流目前尚未聚合（无独立数据源），纳入为预留（第三方=0），接入后并入各商户 net。
+        // 第三方回流单列 revenue.thirdparty，不并入 net（r5-aggregation-metrics-draft「第三方回流仅计商户结算口径，不计平台净收入」定稿）。
         BigDecimal platformNet = platformNetFromMerchants;
         repository.upsertMetricSnapshot(
                 new MetricSnapshotKey(REVENUE_NET, "finance", PERIOD_DAILY, businessDate, SEGMENT_PLATFORM, null),

@@ -1,5 +1,7 @@
 package com.complex.platform.analytics;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricDetailRows;
@@ -40,6 +42,24 @@ class MetricDetailProjectScopeJdbcIntegrationTests {
 
     @Autowired
     private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private AnalyticsService service;
+
+    @Test
+    void thirdpartyRevenueIsPlatformOnlyForProjectStaff() {
+        // ROOT-04-R1：回流行与门店映射都没有项目列，第三方回流收入与票务、酒吧收入一样是平台口径，项目级下钻 403。
+        LocalDate day = LocalDate.parse("2026-06-20");
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        try {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                            service.metricDetail("revenue.thirdparty", null, day, day, 1, 20, java.util.List.of(proj("tpA"))))
+                    .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                            e -> assertThat(e.code()).isEqualTo("PLATFORM_METRIC_PROJECT_FORBIDDEN"));
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
+    }
 
     @Test
     void staffShiftDetailIsolatesByProjectId() {

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -156,6 +156,50 @@ class CustomerServiceTests {
         assertThat(order.customerId()).isEqualTo(customerId);
         Mockito.verify(barOrderService)
                 .placeCustomerScanOrder(Mockito.eq("session_s1"), Mockito.any(), Mockito.eq(customerId));
+    }
+
+    /** ROOT-05-R3：登录核验场景固定 customer.login（与登录取码同一场景），请求里的 scene 只作会话渠道。 */
+    @Test
+    void phoneLoginVerifiesWithLoginSceneRegardlessOfClientScene() {
+        List<String> calls = new ArrayList<>();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "otpVerifier", new CustomerOtpVerifier() {
+            @Override
+            public void verify(String phone, String smsCode, String scene) {
+                calls.add("verify:" + scene);
+            }
+
+            @Override
+            public void requestCode(String phone, String scene) {
+                calls.add("request:" + scene);
+            }
+        });
+
+        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+
+        assertThat(calls).containsExactly("verify:customer.login");
+        assertThat(customerRepository.findSessionByToken(login.customerToken()))
+                .get().extracting(CustomerSessionRecord::scene).isEqualTo("miniapp");
+
+        Map<String, Object> receipt = service.requestLoginCode("13800138000");
+        assertThat(calls).containsExactly("verify:customer.login", "request:customer.login");
+        assertThat(receipt).containsEntry("phone_masked", "138****8000").containsKey("requested_at");
+    }
+
+    /** ROOT-05-R3：登录取码缺手机号（400）与按单号超限（429）都记 customer.otp_request_failed（OpenAPI 声明的失败审计）。 */
+    @Test
+    void requestLoginCodeRecordsFailureAuditOnMissingPhoneAndRateLimit() {
+        assertThatThrownBy(() -> service.requestLoginCode(" "))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.status().value()).isEqualTo(400));
+        for (int i = 0; i < 5; i++) {
+            service.requestLoginCode("13800138000");
+        }
+        assertThatThrownBy(() -> service.requestLoginCode("13800138000"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_OTP_RATE_LIMITED"));
+
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "customer.otp_request_failed".equals(event.eventName()))
+                .extracting(event -> event.metadata().get("error_code"))
+                .containsExactly("VALIDATION_FAILED", "CUSTOMER_OTP_RATE_LIMITED");
     }
 
     @Test

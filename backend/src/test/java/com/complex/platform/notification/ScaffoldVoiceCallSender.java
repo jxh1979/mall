@@ -1,11 +1,16 @@
 package com.complex.platform.notification;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-/** 语音呼叫占位实现：真实语音供应商适配器接入前只返回确定的占位结果，供接警流程与测试使用。 */
+/**
+ * 测试替身（只在 test-classes，交付物不含）：组件扫描进测试上下文并以 @Primary 顶替生产的 {@link UnconfiguredVoiceCallSender}，
+ * 按 {@link Mode} 返回确定结果，供接警流程用例覆盖已拨出、已接听、呼叫失败各分支。
+ */
 @Component
+@Primary
 public class ScaffoldVoiceCallSender implements VoiceCallSender {
 
     public enum Mode {

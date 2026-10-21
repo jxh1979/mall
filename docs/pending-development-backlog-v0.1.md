@@ -124,7 +124,7 @@ P1/P2/P3 已依次逐项完成并测试闭环（提交见 git log）：
 
 | 项 | 状态 |
 |---|---|
-| 真实短信供应商适配器 | ⏸ `notification` 包只有 `SmsSender`（接口）+ `ScaffoldSmsSender`（脚手架）。**等报备模板 ID，外部条件未满足，非欠功能** |
+| 真实短信供应商适配器 | ⏸ `notification` 包只有 `SmsSender`（接口）+ `UnconfiguredSmsSender`（未接供应商时恒记发送失败 `SMS_PROVIDER_NOT_CONFIGURED`）。**等报备模板 ID，外部条件未满足，非欠功能** |
 | IoT / 远程表硬件门控 | ⏸ `FacilityEquipmentService:31` 已有 `ALARM_SOURCES = Set.of("manual","iot")`，告警源枚举与结构预留就绪。**等网关/设备** |
 | 第三方聚合支付 / 视频监控 / 团购渠道 / 税务开票 | ⏸ 预留接口 + 开关默认关，开通即生效 |
 | 平板装机 | ⏸ 等硬件 |

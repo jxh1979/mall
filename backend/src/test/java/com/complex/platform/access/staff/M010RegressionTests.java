@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -39,6 +39,7 @@ class M010RegressionTests {
     @Autowired com.complex.platform.governance.review.SupervisorReviewService reviewService;
     @Autowired AccessRepository access;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.complex.platform.analytics.AnalyticsRepository analyticsRepository;
     String registrationMerchant;
     @Autowired StaffRegistrationService registrations;
     @Autowired com.complex.platform.governance.PlatformRepository platform;
@@ -1037,6 +1038,34 @@ class M010RegressionTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM staff_attendance_records WHERE user_id=? AND punch_type='check_in'",Long.class,value.employee().userId())).isEqualTo(1);
         assertThatThrownBy(()->receiptReviews.submit(value.event().id(),receiptReviewRequest(value))).isInstanceOfSatisfying(ApiException.class,
                 e->assertThat(e.code()).isEqualTo("RECEIPT_ALREADY_RESOLVED"));
+    }
+
+    /** ROOT-04-R3（BSM「补录一律进入主管复核队列，复核通过才生效」；裁决 M02「补录提交即计数，状态另列」）：
+     *  无可信领取时刻补证一提交即计一笔「补录数量」；驳回不减笔数、状态另列；驳回后重新提交是新的一笔。 */
+    @Test void receiptReviewSubmissionCountsAsManualBackfillAtSubmission() {
+        var value=pendingReceipt();String boss=shiftReviewer();
+        Instant from=Instant.now().minusSeconds(1);
+        var first=receiptReviews.submit(value.event().id(),receiptReviewRequest(value));
+        assertThat(backfillStatuses(value,from)).containsExactly(Map.entry(first.id(),"pending"));
+        actor(boss,"staff",null);
+        reviewService.approve(first.reviewId(),new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(key(),"证据待补",List.of(),null,"rejected","尚需核对原交接人"));
+        actor(manager,"platform_admin",null);
+        assertThat(backfillStatuses(value,from)).containsExactly(Map.entry(first.id(),"rejected"));
+        var second=receiptReviews.submit(value.event().id(),new StaffAttendanceReceiptReviewService.Request(key(),value.shift().id(),value.event().receivedAt(),
+                "补充原交接人核实结果","原交接人已补充确认，领用设备及实际领取时刻一致"));
+        assertThat(backfillStatuses(value,from)).containsOnly(Map.entry(first.id(),"rejected"),Map.entry(second.id(),"pending"));
+    }
+
+    /** 本用例员工这条领取事件的补录数量明细行：补录编号 → 状态（来源均为领取时刻补证）。 */
+    Map<String,String> backfillStatuses(PendingReceipt value,Instant from) {
+        Map<String,String> statuses=new java.util.LinkedHashMap<>();
+        for (var row : analyticsRepository.manualBackfillDetail(from,Instant.now().plusSeconds(1),200,0,null).rows()) {
+            if (value.event().id().equals(row.get("objectId"))) {
+                assertThat(row).containsEntry("sourceType","attendance_receipt");
+                statuses.put((String) row.get("id"),(String) row.get("status"));
+            }
+        }
+        return statuses;
     }
 
     @Test void rejectedReceiptReviewRemainsUnresolvedAndCanBeResubmittedWithHistory() {

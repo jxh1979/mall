@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -48,6 +48,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-STL-002", label: "开票清单", route: "/admin/settlement/invoice-items" },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", route: "/admin/terminals/switch-matrix" },
   { pageId: "ADM-TER-002", label: "终端设备", route: "/admin/terminals/devices" },
+  { pageId: "ADM-TER-003", label: "工作手机白名单", route: "/admin/terminals/mdm-whitelist" },
   { pageId: "ADM-TKT-002", label: "动态定价", route: "/admin/ticketing/dynamic-pricing" },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", route: "/admin/ticketing/orders" },
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", route: "/admin/bar/orders" },
@@ -826,6 +827,12 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("terminal-devices-table")).toContainText("所属商户");
         await expect(page.getByTestId("terminal-devices-table")).toContainText("WORK-001");
         await expect(page.getByTestId("terminal-devices-table")).toContainText("改绑商户");
+        continue;
+      }
+      if (spec.pageId === "ADM-TER-003") {
+        // ROOT-05 R5：工作手机预装软件清单与网站白名单后台维护。
+        await expect(page.getByTestId("mdm-app-whitelist-table")).toContainText("com.tencent.wework");
+        await expect(page.getByTestId("mdm-site-whitelist-table")).toContainText("work.weixin.qq.com");
         continue;
       }
       if (spec.pageId === "ADM-FIN-002") {

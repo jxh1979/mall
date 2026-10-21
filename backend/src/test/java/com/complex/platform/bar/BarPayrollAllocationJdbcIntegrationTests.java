@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.access.*;
@@ -303,6 +303,25 @@ class BarPayrollAllocationJdbcIntegrationTests {
         assertThat(allocations.confirmedAllocations(second,"2026-09")).singleElement().extracting(BarPayrollAllocation::amountCent).isEqualTo(10000L);
     }
     @Test void approvedServiceFeeUsesActualCoverFractionsAndWithheldRevenue() throws Exception {
+        approvedServiceFeeSource();
+        assertThat(revenue.withheldServiceFees(merchant,LocalDate.parse("2026-09-01"),LocalDate.parse("2026-10-01")))
+            .singleElement().satisfies(r->{assertThat(r.status()).isEqualTo("pending");assertThat(r.amountCent()).isNull();});
+        assertThat(close()).singleElement().satisfies(r->{
+            assertThat(r.status()).isEqualTo("confirmed");assertThat(r.withheldServiceFeeCent()).isEqualTo(2000);assertThat(r.payableServiceFeeCent()).isEqualTo(8000);
+        });
+        assertThat(allocations.confirmedAllocations(first,"2026-09")).singleElement().extracting(BarPayrollAllocation::amountCent).isEqualTo(2000L);
+        assertThat(allocations.confirmedAllocations(second,"2026-09")).singleElement().extracting(BarPayrollAllocation::amountCent).isEqualTo(6000L);
+        assertThat(revenue.withheldServiceFees(merchant,LocalDate.parse("2026-09-01"),LocalDate.parse("2026-10-01")))
+            .singleElement().satisfies(r->{assertThat(r.status()).isEqualTo("confirmed");assertThat(r.amountCent()).isEqualTo(2000);});
+    }
+    /** ROOT-04-R4：跨期月结确认的服务费扣留按原营业日计酒吧收入，月结时登记该原营业日待看板重算（实施台账 ROOT-04「跨期月结、退费后的原经营日」）。 */
+    @Test void monthCloseMarksOriginalServiceFeeBusinessDates() throws Exception {
+        approvedServiceFeeSource();
+        jdbc.update("DELETE FROM analytics_revenue_refresh_dates WHERE business_date='2026-09-01'");
+        assertThat(close()).singleElement().extracting(BarPayrollRequests.MonthRun::status).isEqualTo("confirmed");
+        assertThat(jdbc.queryForList("SELECT business_date FROM analytics_revenue_refresh_dates",LocalDate.class)).contains(LocalDate.parse("2026-09-01"));
+    }
+    void approvedServiceFeeSource() throws Exception {
         String original=shift(first,point(),start,end);
         String replacement=shift(second,point(),start.plusSeconds(2*3600),end);
         cover(original,replacement,start.plusSeconds(2*3600),end);
@@ -318,15 +337,6 @@ class BarPayrollAllocationJdbcIntegrationTests {
         jdbc.update("UPDATE bar_bills SET payable_amount_cent=110000,tip_amount_cent=0,paid_amount_cent=110000 WHERE id=?",bill);
         jdbc.update("UPDATE bar_bill_settlements SET settlement_amount_cent=110000 WHERE bill_id=?",bill);
         sources.recordComponent(bars.findBillById(bill).orElseThrow(),"service_fee",10000,id());
-        assertThat(revenue.withheldServiceFees(merchant,LocalDate.parse("2026-09-01"),LocalDate.parse("2026-10-01")))
-            .singleElement().satisfies(r->{assertThat(r.status()).isEqualTo("pending");assertThat(r.amountCent()).isNull();});
-        assertThat(close()).singleElement().satisfies(r->{
-            assertThat(r.status()).isEqualTo("confirmed");assertThat(r.withheldServiceFeeCent()).isEqualTo(2000);assertThat(r.payableServiceFeeCent()).isEqualTo(8000);
-        });
-        assertThat(allocations.confirmedAllocations(first,"2026-09")).singleElement().extracting(BarPayrollAllocation::amountCent).isEqualTo(2000L);
-        assertThat(allocations.confirmedAllocations(second,"2026-09")).singleElement().extracting(BarPayrollAllocation::amountCent).isEqualTo(6000L);
-        assertThat(revenue.withheldServiceFees(merchant,LocalDate.parse("2026-09-01"),LocalDate.parse("2026-10-01")))
-            .singleElement().satisfies(r->{assertThat(r.status()).isEqualTo("confirmed");assertThat(r.amountCent()).isEqualTo(2000);});
     }
     @Test void transferRequiresPublishedTargetDutyAndRecognizesRealCoverInsteadOfOriginalWorker() {
         String original=shift(first,point(),start,end);

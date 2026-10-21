@@ -1,4 +1,5 @@
 package com.complex.platform.integration;
+// 文件版本：V0.01
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -17,11 +18,14 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final JdbcIntegrationRowMapper rowMapper;
+    private final com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks;
 
-    JdbcIntegrationRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcIntegrationRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+            com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
         this.rowMapper = new JdbcIntegrationRowMapper(this.objectMapper);
+        this.revenueRefreshMarks = revenueRefreshMarks;
     }
 
     @Override
@@ -207,7 +211,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
 
     @Override
     public IntegrationOrderSyncRecord saveOrderSync(IntegrationOrderSyncRecord record) {
-        jdbcTemplate.update("""
+        java.time.OffsetDateTime firstLanded = jdbcTemplate.queryForObject("""
                 INSERT INTO integration_order_syncs (
                     id, provider_code, business_type, sync_type, external_business_id,
                     status, amount_cent, currency, channel, external_channel_order_id,
@@ -227,7 +231,12 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                     merchant_id = EXCLUDED.merchant_id,
                     provider_payload_json = EXCLUDED.provider_payload_json,
                     updated_at = EXCLUDED.updated_at
-                """, orderSyncParameters(record));
+                RETURNING created_at
+                """, orderSyncParameters(record), java.time.OffsetDateTime.class);
+        // ROOT-04-R4：第三方回流收入按首次落库时刻落商户营业日；后到入账、改额、补门店映射后重跑改写的是那一营业日，登记待看板重算。
+        if ("order".equals(record.syncType()) && ("catering".equals(record.businessType()) || "retail".equals(record.businessType()))) {
+            revenueRefreshMarks.markAt("merchant", firstLanded.toInstant());
+        }
         return record;
     }
 

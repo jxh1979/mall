@@ -1,10 +1,11 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.compliance;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PiiTextRedactor;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
 import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
@@ -40,7 +41,8 @@ import static com.complex.platform.common.Strings.requireText;
  *
  * <ul>
  *   <li><b>同步入站</b>：受 T2 终端能力开关 {@code integration.wecom.sync} 编程式门控（默认关→拒绝、不落库）；
- *       开关关时不阻塞其它功能。落库时调 {@link PiiTextRedactor} 生成展示用脱敏文本，原文落 content_raw_ref（引用/密文）。
+ *       开关关时不阻塞其它功能。落库时调 {@link PiiTextRedactor} 生成展示用脱敏文本，原文经 {@link PiiCipher}
+ *       加密落 content_raw_ref（永久保存），仅审批后的原文调阅解密返回。
  *   <li><b>分级查看</b>：普通展示返回脱敏文本并写 redacted 审计；查看原文需 wecom.view_raw + 审批引用，
  *       返回原文并写 raw 审计 + 事件 wecom.raw_viewed / sensitive.viewed。
  *   <li><b>永久留存</b>：不自动到期处理；手动清理由最高权限本人逐次授权。
@@ -100,6 +102,8 @@ public class WecomConversationService {
     private final RiskAlertService riskAlertService;
     // M723-F14：调阅人的项目范围取自登录主体（平台管理员全量，D-032）。
     private final AuthorizationService authorizationService;
+    // ROOT-05 R4：会话原文以 PII 密钥加密落库，审批后的原文调阅解密返回。
+    private final PiiCipher piiCipher;
     private final Clock clock;
 
     @Autowired
@@ -111,10 +115,11 @@ public class WecomConversationService {
             WecomQcPort wecomQcPort,
             ObjectMapper objectMapper,
             RiskAlertService riskAlertService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            PiiCipher piiCipher
     ) {
         this(repository, idempotencyService, auditEventService, terminalSwitchGuard,
-                wecomQcPort, objectMapper, riskAlertService, authorizationService, Clock.systemUTC());
+                wecomQcPort, objectMapper, riskAlertService, authorizationService, piiCipher, Clock.systemUTC());
     }
 
     WecomConversationService(
@@ -126,6 +131,7 @@ public class WecomConversationService {
             ObjectMapper objectMapper,
             RiskAlertService riskAlertService,
             AuthorizationService authorizationService,
+            PiiCipher piiCipher,
             Clock clock
     ) {
         this.repository = repository;
@@ -137,6 +143,7 @@ public class WecomConversationService {
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper.copy().findAndRegisterModules();
         this.riskAlertService = riskAlertService;
         this.authorizationService = authorizationService;
+        this.piiCipher = piiCipher;
         this.clock = clock;
     }
 
@@ -219,9 +226,8 @@ public class WecomConversationService {
                     messageId,
                     conversation.id(),
                     trimToNull(message.senderRef()),
-                    // 原文以引用/密文形式落库（本期占位引用；真实密文待企微 SDK 对接）。
-                    "wecom-raw:" + (message.externalMessageId() == null ? UUID.randomUUID().toString()
-                            : message.externalMessageId().trim()),
+                    // 原文加密落库、永久保存（BSM「已拍板：企业微信会话原文永久保存」条）；空内容不落密文。
+                    content.isEmpty() ? null : piiCipher.encrypt(content),
                     redacted,
                     riskFlags,
                     false,
@@ -328,7 +334,7 @@ public class WecomConversationService {
                     message.conversationId(),
                     message.senderRef(),
                     message.contentRedacted(),
-                    raw ? message.contentRawRef() : null,
+                    raw ? piiCipher.decrypt(message.contentRawRef()) : null,
                     message.riskFlags(),
                     message.anonymized(),
                     message.sentAt(),
