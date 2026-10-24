@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -87,11 +89,12 @@ class TicketTransferJdbcIntegrationTests {
     }
 
     @Test
-    void initiateRejectsDuplicatePending() {
+    void initiateAgainVoidsPreviousPending() {
         Fixture f = seedSinglePerson();
+        TicketTransferResponse first = transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null));
         transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null));
-        assertApiCode(() -> transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null)),
-                "TICKET_TRANSFER_ALREADY_PENDING");
+        assertThat(repository.findTicketTransferById(first.id()).orElseThrow().status()).isEqualTo("voided");
+        assertThat(repository.existsPendingTransferForSlot(f.parent, 1)).isTrue();
     }
 
     @Test
@@ -193,28 +196,26 @@ class TicketTransferJdbcIntegrationTests {
         assertThat(verificationService.refreshCredential(entId, f.receiver)).isNotNull();
     }
 
-    // ── 冻结:等待期间不可核销 ────────────────────────────────────────────────
+    // ── 不冻结:等待期间原持有人仍可核销,核销即作废在途转赠 ──────────────────────
     @Test
-    void pendingTransferBlocksConsumption() {
+    void pendingTransferDoesNotBlockConsumption() {
         Fixture f = seedSinglePerson();
         String entId = firstEntitlementId(f.parent, 1);
         TicketTransferResponse r = transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, null));
-        assertThat(repository.atomicUseEntitlement(entId, now)).isEmpty(); // 冻结:所有消费路径 NOT EXISTS 拦截
-        transferService.claim(f.receiver, f.receiverPhone, r.id(), r.claimCode());
-        assertThat(repository.atomicUseEntitlement(entId, now)).isPresent(); // 领取后归受赠人可核销
+        assertThat(repository.atomicUseEntitlement(entId, now)).isPresent();
+        assertThat(repository.findTicketTransferById(r.id()).orElseThrow().status()).isEqualTo("voided");
+        assertApiCode(() -> transferService.claim(f.receiver, f.receiverPhone, r.id(), r.claimCode()), "TICKET_TRANSFER_VOIDED");
     }
 
-    // ── 多人票:只冻结在转 slot,其他 slot 不受影响 ──────────────────────────────
+    // ── 多人票:核销只作废本人份的在途转赠,其他人份不受影响 ──────────────────────
     @Test
-    void multiPersonFreezesOnlyTransferredSlot() {
+    void multiPersonConsumptionVoidsOnlyOwnSlotTransfer() {
         Fixture f = seedMultiPerson(2);
         transferService.initiate(f.buyer, f.buyerPhone, link(f.parent, 1));
-        assertThat(repository.existsPendingTransferForSlot(f.parent, 1)).isTrue();
-        assertThat(repository.existsPendingTransferForSlot(f.parent, 2)).isFalse();
-        // slot2 权益仍可核销
         assertThat(repository.atomicUseEntitlement(firstEntitlementId(f.parent, 2), now)).isPresent();
-        // slot1 权益被冻结
-        assertThat(repository.atomicUseEntitlement(firstEntitlementId(f.parent, 1), now)).isEmpty();
+        assertThat(repository.existsPendingTransferForSlot(f.parent, 1)).isTrue();
+        assertThat(repository.atomicUseEntitlement(firstEntitlementId(f.parent, 1), now)).isPresent();
+        assertThat(repository.existsPendingTransferForSlot(f.parent, 1)).isFalse();
     }
 
     // ── 领取后可再转(链式两跳) ──────────────────────────────────────────────

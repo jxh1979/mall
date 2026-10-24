@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -332,8 +332,24 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("merchant_id"),
                 resultSet.getString("reason_code"),
                 resultSet.getString("responsible_entity_id"),
-                (Boolean) resultSet.getObject("ticket_type_refundable_snapshot")
+                (Boolean) resultSet.getObject("ticket_type_refundable_snapshot"),
+                payoutItems(resultSet.getString("payout_items"))
         );
+    }
+
+    /** ROOT-03-R20 退款单待打款明细（[{channel, amount_cent}]）；未分笔为空。 */
+    private List<TicketRefundRecord.PayoutItem> payoutItems(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() { }).stream()
+                    .map(item -> new TicketRefundRecord.PayoutItem((String) item.get("channel"),
+                            ((Number) item.get("amount_cent")).longValue()))
+                    .toList();
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("ticket_refunds.payout_items is not valid json", exception);
+        }
     }
 
     TicketRefundLineRecord mapTicketRefundLine(ResultSet resultSet, int rowNumber) throws SQLException {

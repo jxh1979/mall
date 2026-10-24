@@ -1,6 +1,6 @@
 package com.complex.platform.customer.dto;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.inventory.SavedBottleRecord;
 import java.time.Instant;
@@ -19,11 +19,13 @@ public record CustomerSavedBottleResponse(
         String status,
         String bottleLabelValue,
         String pickupLocation,
-        boolean handedOverToPlatform
+        boolean handedOverToPlatform,
+        // ROOT-03-R30（BSM 第 867 行「每条记录标明所属酒吧」）：所属酒吧名称。
+        String barName
 ) {
-    public static CustomerSavedBottleResponse from(SavedBottleRecord bottle) {
+    public static CustomerSavedBottleResponse from(SavedBottleRecord bottle, String barName) {
         return new CustomerSavedBottleResponse(bottle.id(), bottle.barProjectId(), bottle.bottleName(),
                 bottle.remainingQuantity(), bottle.unit(), bottle.expireAt(), bottle.status(), bottle.bottleLabelValue(),
-                bottle.pickupLocation(), bottle.custodianEntityId() != null);
+                bottle.pickupLocation(), bottle.custodianEntityId() != null, barName);
     }
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -504,6 +504,26 @@ public class FinanceService implements TerminationSettlementPort {
 
     public Optional<PaymentIntentRecord> findPaymentIntentForUpdate(String paymentIntentId) {
         return repository.findPaymentIntentByIdForUpdate(paymentIntentId);
+    }
+
+    /**
+     * ROOT-03-R18 客人重新发起付款前查旧单（只读，不改任何记录）：待付单已有渠道单号且渠道查单报已收款＝true（调用方按到账处理、不作废）；
+     * 渠道未启用、付款单不存在或不在待付、尚无渠道单号（不可能付成）、渠道报未付＝false（可作废）。渠道查不了（未配置）照常抛出，调用方不作废、不重新拉起。
+     */
+    public boolean gatewayReportsPaid(String paymentIntentId) {
+        if (paymentGateway == null || !paymentGateway.isGatewayEnabled()) {
+            return false;
+        }
+        PaymentIntentRecord intent = repository.findPaymentIntentById(paymentIntentId).orElse(null);
+        if (intent == null || !"created".equals(intent.status()) || intent.gatewayRef() == null || intent.gatewayRef().isBlank()
+                || intent.gatewayProvider() == null || "reserved".equals(intent.gatewayProvider())) {
+            return false;
+        }
+        var result = paymentGateway.queryStatus(intent.gatewayRef());
+        if (result == null || result.requiresInternalFallback()) {
+            throw ApiException.conflict("PAYMENT_GATEWAY_UNAVAILABLE", "支付渠道未配置，暂不能重新发起付款");
+        }
+        return result.status() == com.complex.platform.finance.gateway.PaymentGatewayResult.Status.SUCCEEDED;
     }
 
     /** M006-027：仅信任已启用渠道的服务端查询结果，不能用内部成功标志代替收款。 */
@@ -1092,13 +1112,18 @@ public class FinanceService implements TerminationSettlementPort {
     public String recordRejectedTicketPaymentRefund(String sourceType, String sourceId, long amountCent,
             String channel, String originalPaymentRef, String merchantId, String originalBarId,
             String originalProjectId, String reason) {
-        String source = requireEnum(sourceType, Set.of("ticket_payment_rejection", "channel_ticket_rejection"), "退款来源");
+        // ROOT-03-R19 订台定金到账时台位已被先付者占（ENUM 第 100 行「冲突时先支付定金者得」）、ROOT-03-R7 扫码点单付款成功时该桌已结束接待
+        // （BSM 第 1025 行「付款成功订单才成立」）：同样只登记原路待退。
+        String source = requireEnum(sourceType, Set.of("ticket_payment_rejection", "channel_ticket_rejection",
+                "bar_deposit_rejection", "bar_scan_order_rejection"), "退款来源");
         String target = requireText(sourceId, "原付款记录");
         long amount = requirePositive(amountCent, "原收款金额");
         String route = requireText(channel, "原收款渠道");
         String reference = trimToNull(originalPaymentRef);
         String project = trimToNull(originalProjectId);
-        checkMerchantOwnership(merchantId);
+        // ROOT-03-R17/R20：客人确认付款（客人会话）与服务端结算/超时作业（无登录上下文）按原订单登记原路待退，不过员工的商户/项目范围闸。
+        String internalRequester = internalTicketRefundRequester();
+        if (internalRequester == null) checkMerchantOwnership(merchantId);
         String id = "refund_rejected_" + stableToken(source, target);
         repository.lockRefundSource(id);
         Optional<FinanceRefundRecord> existing = repository.findRefundById(id, true);
@@ -1110,7 +1135,7 @@ public class FinanceService implements TerminationSettlementPort {
                     || !java.util.Objects.equals(reference, original.originalPaymentRef())) {
                 throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "同一原付款的退款来源或金额不一致");
             }
-            checkProjectScope(original.projectId());
+            if (internalRequester == null) checkProjectScope(original.projectId());
             return original.id();
         }
         String originalScopeMerchant = trimToNull(originalBarId) != null ? originalBarId : merchantId;
@@ -1118,11 +1143,24 @@ public class FinanceService implements TerminationSettlementPort {
             List<String> projects = repository.listMerchantOperatingProjectIds(originalScopeMerchant);
             if (projects.size() == 1) project = projects.getFirst();
         }
-        checkProjectScope(project);
+        if (internalRequester == null) checkProjectScope(project);
         Instant now = Instant.now();
         return repository.saveRefund(new FinanceRefundRecord(id, target, amount, requireText(reason, "退款原因"),
                 route, "original", "requested", now, source, merchantId, project,
-                authorizationService.currentActor().id(), reference, null, null, now, null)).id();
+                internalRequester != null ? internalRequester : authorizationService.currentActor().id(),
+                reference, null, null, now, null)).id();
+    }
+
+    /** 客人会话 → 客人编号；无登录上下文（定时作业）→ system；员工 → null（照常过范围闸、记员工编号）。 */
+    private String internalTicketRefundRequester() {
+        com.complex.platform.access.AccessActor actor;
+        try {
+            actor = authorizationService.currentActor();
+        } catch (ApiException unauthenticated) {
+            if ("UNAUTHENTICATED".equals(unauthenticated.code())) return "system";
+            throw unauthenticated;
+        }
+        return "customer".equals(actor.accountType()) ? actor.id() : null;
     }
 
     /**
@@ -1804,10 +1842,13 @@ public class FinanceService implements TerminationSettlementPort {
         //   关 → 不调外部渠道，支付意图标 reserved（占位，由 markPaymentIntentSucceeded 内部确认，不阻塞）。
         //   开 → 路由到 PaymentGatewayPort（当前无真实厂商=占位 NOT_CONFIGURED，留接缝，不崩）。
         // AUD-013：网关请求携带收款商户与定格资金模式（无则为 null=平台收款），真实适配器据此路由收款主体。
+        // ROOT-03-R18：付款端取门禁派生的可信终端（客人会话锁定的登录端），只认 app、miniapp，供适配器签发对应端的拉起参数。
+        String terminal = com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(null);
         com.complex.platform.finance.gateway.PaymentGatewayResult gw = paymentGateway.initiatePayment(
                 new com.complex.platform.finance.gateway.PaymentGatewayRequest(
                         businessOrderType, businessOrderId, amountCent, currency, channel, null,
-                        trimToNull(actual.payeeMerchantId()), trimToNull(actual.fundMode())));
+                        trimToNull(actual.payeeMerchantId()), trimToNull(actual.fundMode()),
+                        "app".equals(terminal) || "miniapp".equals(terminal) ? terminal : null));
 
         return repository.savePaymentIntent(new PaymentIntentRecord(
                 "pay_intent_" + slug(actual.idempotencyKey()),
@@ -1822,8 +1863,20 @@ public class FinanceService implements TerminationSettlementPort {
                 gw.status().name(),
                 now,
                 now,
-                gw.requiresInternalFallback() ? null : gw.paymentUrl()
+                gw.requiresInternalFallback() ? null : gw.paymentUrl(),
+                gw.requiresInternalFallback() ? null : gw.clientLaunch()
         ));
+    }
+
+    /** ROOT-03-R18：客人换渠道重新发起时作废同一业务单尚未付款的旧意向（已成功或已作废的不动）；之后结算作业不再查它。 */
+    @Transactional
+    public boolean voidPendingPaymentIntent(String paymentIntentId) {
+        Optional<PaymentIntentRecord> pending = repository.findPaymentIntentByIdForUpdate(paymentIntentId)
+                .filter(intent -> "created".equals(intent.status()));
+        pending.ifPresent(intent -> repository.savePaymentIntent(new PaymentIntentRecord(intent.id(), intent.businessOrderType(),
+                intent.businessOrderId(), intent.amountCent(), intent.currency(), intent.channel(), "voided",
+                intent.gatewayProvider(), intent.gatewayRef(), intent.gatewayStatus(), intent.createdAt(), Instant.now())));
+        return pending.isPresent();
     }
 
     private OfflinePaymentConfirmationRecord confirmOffline(

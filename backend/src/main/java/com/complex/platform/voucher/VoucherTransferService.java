@@ -1,5 +1,7 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.BlindIndex;
 import com.complex.platform.common.crypto.PiiCipher;
@@ -17,25 +19,26 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
 
 /**
  * V313 券包会员间转赠状态机（TicketTransferService 同款范式，转赠单位＝单张统一台账券实例）。
- * 冻结＝该券存在 status='pending' 转赠记录（部分唯一索引 uq_voucher_transfers_pending 物理保证同券最多一笔在途）；
- * 撤回/领取全落同一行 CAS，先提交者赢（"以系统先成功者为准"）。核销侧冻结＝{@link VoucherService} redeem 前置
- * existsPendingForInstance 拒核 + 领取时复验券仍 issued 双闸。转赠不动库存（预占随实例走，归属变客人不变余额）。
- *
- * <p>🔴 业务口径提醒：业务 HTML 现措辞「积分不支持会员间转赠」。本能力面向「积分兑换出的券实例」，须经用户
- * 确认并同步业务 HTML 增补后方可对客上线（子代理不改业务 HTML）。
+ * 同券最多一笔在途（部分唯一索引 uq_voucher_transfers_pending）；撤回/领取全落同一行 CAS，先提交者赢。
+ * 操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」：
+ * 在途不冻结——原持有人照常出示动态码核销（核销成功即作废在途，{@link VoucherService}），再次转赠先作废前一笔；
+ * 发起、领取与核销争同一券实例行锁（{@link VoucherRepository#lockInstance}），后到者读到已作废或券已归对方即失效并提示。
+ * 转赠不动库存（预占随实例走，归属变客人不变余额）。
  */
 @Service
 public class VoucherTransferService {
 
     private static final String CHANNEL_PHONE = "phone";
     private static final String CHANNEL_LINK = "link";
+    /** 裁决第 9 条：在途转赠被原持有人的动作作废——核销（VoucherService 写入）、再次转赠。 */
+    static final String VOID_HOLDER_REDEEMED = "holder_redeemed";
+    private static final String VOID_HOLDER_RETRANSFERRED = "holder_retransferred";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final JdbcVoucherTransferRepository transfers;
@@ -87,6 +90,8 @@ public class VoucherTransferService {
         String channel = requireChannel(req.channel());
         Instant now = clock.instant();
 
+        // 裁决第 9 条「先成功的动作为准」：锁券行后再读持有人——与对方领取并发时等领取提交，券已归对方即本次改转失效。
+        vouchers.lockInstance(instanceId);
         VoucherInstanceRecord instance = vouchers.findInstanceById(instanceId)
                 .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
         // 只有当前持有人可转赠。
@@ -128,13 +133,9 @@ public class VoucherTransferService {
                 id, instanceId, initiator, channel,
                 receiverPhone, receiverPhoneHash, receiverPhoneMasked, claimCode, null,
                 "pending", null, now, null, null, null, now);
-        try {
-            transfers.save(record);
-        } catch (DuplicateKeyException duplicate) {
-            // 撞 uq_voucher_transfers_pending（同券已有在途）或 claim_code 唯一 → 视为已在途。
-            throw ApiException.conflict("VOUCHER_TRANSFER_ALREADY_PENDING",
-                    "该券已有一笔转赠在等待领取，请先撤回");
-        }
+        // 裁决第 9 条：原持有人再次转赠＝前一笔在途转赠作废（领取方锁同一券行，先提交者为准）。
+        transfers.voidPendingForInstance(instanceId, VOID_HOLDER_RETRANSFERRED, now);
+        transfers.save(record);
 
         if (CHANNEL_PHONE.equals(channel) && notificationService != null && plainReceiverPhone != null) {
             String voucherName = voucherName(instance);
@@ -149,8 +150,7 @@ public class VoucherTransferService {
                         "voucher_transfer", id, null, null, codeOf(smsError));
             }
         }
-        auditEventService.recordSuccess("voucher_transfer.created", "not_applicable", "voucher_transfer", id,
-                null, null, Map.of("voucher_instance_id", instanceId, "channel", channel));
+        // 成功/失败审计由调用方幂等写记（MemberWalletController，门票转赠同款）：voucher_transfer.created / create_failed。
         return VoucherTransferResponse.of(record, voucherName(instance), true);
     }
 
@@ -168,7 +168,7 @@ public class VoucherTransferService {
             return VoucherTransferResponse.of(transfer, voucherName(transfer.voucherInstanceId()), false);
         }
         if (!"pending".equals(transfer.status())) {
-            throw statusConflict(transfer.status());
+            throw statusConflict(transfer);
         }
         // 渠道授权：link 必带匹配 claim_code；phone 校验登录手机号盲索引=受赠手机号。
         if (CHANNEL_LINK.equals(transfer.channel())) {
@@ -181,6 +181,12 @@ public class VoucherTransferService {
             if (hash == null || !hash.equals(transfer.receiverPhoneHash())) {
                 throw ApiException.forbidden("VOUCHER_TRANSFER_RECEIVER_MISMATCH", "该转赠只指定手机号可领取");
             }
+        }
+        // 裁决第 9 条「先成功的动作为准」：锁券行后复读转赠——与原持有人核销、改转争同一行锁，后到的领取读到已作废即失效并提示。
+        vouchers.lockInstance(transfer.voucherInstanceId());
+        VoucherTransferRecord current = transfers.findById(id).orElse(transfer);
+        if (!"pending".equals(current.status())) {
+            throw statusConflict(current);
         }
         // 领取前复验：券仍 issued 且未过期（封堵竞态/历史残留的"已核销/过期券在途转赠"被领取）。
         Instant now = clock.instant();
@@ -201,15 +207,16 @@ public class VoucherTransferService {
             if ("claimed".equals(latest.status()) && claimer.equals(latest.receiverCustomerId())) {
                 return VoucherTransferResponse.of(latest, voucherName(latest.voucherInstanceId()), false);
             }
-            throw statusConflict(latest.status());
+            throw statusConflict(latest);
         }
         // 赢家：同事务原子改券归属＝受赠人（守卫 status='issued'）。0 行＝券在两次校验间被核销 → 抛错回滚整个领取。
+        // ROOT-03-R32（BSM 第 585 行「权益转赠一经完成，原持有人手里的码立即全部作废」）。
+        vouchers.revokeActiveRedeemCodes(transfer.voucherInstanceId());
         if (vouchers.updateInstanceCustomer(transfer.voucherInstanceId(), claimer, now) == 0) {
             throw ApiException.conflict("VOUCHER_TRANSFER_VOUCHER_NOT_CLAIMABLE",
                     "该券状态已变化，领取未完成");
         }
-        auditEventService.recordSuccess("voucher_transfer.claimed", "not_applicable", "voucher_transfer", id,
-                null, null, Map.of("voucher_instance_id", transfer.voucherInstanceId()));
+        // 成功/失败审计由调用方幂等写记（MemberWalletController）：voucher_transfer.claimed / claim_failed。
         VoucherTransferRecord claimed = transfers.findById(id).orElse(transfer);
         return VoucherTransferResponse.of(claimed, voucherName(transfer.voucherInstanceId()), false);
     }
@@ -227,7 +234,7 @@ public class VoucherTransferService {
             return VoucherTransferResponse.of(transfer, voucherName(transfer.voucherInstanceId()), true); // 幂等
         }
         if (!"pending".equals(transfer.status())) {
-            throw statusConflict(transfer.status());
+            throw statusConflict(transfer);
         }
         Instant now = clock.instant();
         int rows = transfers.revoke(id, me, now);
@@ -236,7 +243,7 @@ public class VoucherTransferService {
             if ("revoked".equals(latest.status())) {
                 return VoucherTransferResponse.of(latest, voucherName(latest.voucherInstanceId()), true);
             }
-            throw statusConflict(latest.status()); // 撤回时对方已先领 → 409 已被领取
+            throw statusConflict(latest); // 撤回时对方已先领 → 409 已被领取
         }
         auditEventService.recordSuccess("voucher_transfer.revoked", "not_applicable", "voucher_transfer", id,
                 null, null, Map.of("voucher_instance_id", transfer.voucherInstanceId()));
@@ -250,7 +257,7 @@ public class VoucherTransferService {
         VoucherTransferRecord transfer = transfers.findByClaimCode(code)
                 .orElseThrow(() -> ApiException.notFound("VOUCHER_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
         if (!"pending".equals(transfer.status())) {
-            throw statusConflict(transfer.status());
+            throw statusConflict(transfer);
         }
         return VoucherTransferResponse.of(transfer, voucherName(transfer.voucherInstanceId()), false);
     }
@@ -285,7 +292,12 @@ public class VoucherTransferService {
                 .map(VoucherDefinitionRecord::name).orElse(null);
     }
 
-    private ApiException statusConflict(String status) {
+    private ApiException statusConflict(VoucherTransferRecord transfer) {
+        String status = transfer.status();
+        if ("voided".equals(status) && (VOID_HOLDER_REDEEMED.equals(transfer.voidReason())
+                || VOID_HOLDER_RETRANSFERRED.equals(transfer.voidReason()))) {
+            return ApiException.conflict("VOUCHER_TRANSFER_VOIDED", "原持有人已使用或已改转他人，本次转赠已失效");
+        }
         return switch (status == null ? "" : status) {
             case "claimed" -> ApiException.conflict("VOUCHER_TRANSFER_ALREADY_CLAIMED", "该转赠已被领取");
             case "revoked" -> ApiException.conflict("VOUCHER_TRANSFER_ALREADY_REVOKED", "该转赠已被撤回");

@@ -1,8 +1,9 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
+import java.util.List;
 
 public record TicketRefundRecord(
         String id,
@@ -23,8 +24,15 @@ public record TicketRefundRecord(
         // 退款理由闭集码、责任主体（business_entities.id）、申请时票种是否允许退款的快照。旧行为空。
         String reasonCode,
         String responsibleEntityId,
-        Boolean ticketTypeRefundableSnapshot
+        Boolean ticketTypeRefundableSnapshot,
+        // ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）：批准时分到在线笔、待财务原路打款的各笔（渠道×金额）；储值笔当场回原卡，不在其中。
+        // 未分笔（批准前或只分到储值笔）为空。
+        List<PayoutItem> payoutItems
 ) {
+    /** 待财务原路打款的一笔：原收款渠道与本次分到的金额（分）。 */
+    public record PayoutItem(String channel, long amountCent) {
+    }
+
     /** V526 前的 12 参构造（既有测试/工具链）：理由、责任主体与规则快照为空。 */
     public TicketRefundRecord(String id, String targetId, long refundAmountCent, String reason, String refundChannel,
             String status, String requestedBy, String approvedBy, Instant approvedAt, Instant createdAt, Instant updatedAt,
@@ -33,9 +41,30 @@ public record TicketRefundRecord(
                 createdAt, updatedAt, merchantId, null, null, null);
     }
 
+    /** ROOT-03-R20 前的 15 参构造：待打款明细为空。 */
+    public TicketRefundRecord(String id, String targetId, long refundAmountCent, String reason, String refundChannel,
+            String status, String requestedBy, String approvedBy, Instant approvedAt, Instant createdAt, Instant updatedAt,
+            String merchantId, String reasonCode, String responsibleEntityId, Boolean ticketTypeRefundableSnapshot) {
+        this(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy, approvedAt,
+                createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot, null);
+    }
+
     /** 状态流转（批准/驳回/拨付确认）：其余字段原样带过。 */
     public TicketRefundRecord withStatus(String status, String approvedBy, Instant approvedAt, Instant updatedAt) {
         return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
-                approvedAt, createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot);
+                approvedAt, createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot,
+                payoutItems);
+    }
+
+    /** 操作员裁决第十三批第 11 条：批准时补填客人自助申请未填的责任主体。 */
+    public TicketRefundRecord withResponsibleEntityId(String entityId) {
+        return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
+                approvedAt, createdAt, updatedAt, merchantId, reasonCode, entityId, ticketTypeRefundableSnapshot, payoutItems);
+    }
+
+    public TicketRefundRecord withPayoutItems(List<PayoutItem> items) {
+        return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
+                approvedAt, createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot,
+                items);
     }
 }

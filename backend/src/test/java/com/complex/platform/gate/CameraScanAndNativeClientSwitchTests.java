@@ -1,5 +1,7 @@
 package com.complex.platform.gate;
 
+// 文件版本：V0.01
+
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -22,14 +24,13 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /**
- * V097：摄像头扫码（#2）+ 微信小程序/原生 App 客户端（#3）能力开关的 TerminalSwitchGuard 读取语义。
+ * V097：摄像头扫码（#2）能力开关的 TerminalSwitchGuard 读取语义（#3 原生客户端开关行已由 V537 退役，ROOT-03-R33）。
  * 证明：显式 enabled=false 行 → 拒绝（TERMINAL_DISABLED，留痕 disabled）；无显式行 → 默认开启（放行）。
  * 与 V093 payment.gateway / V096 wecom.ai_qc 同一范式（默认关须显式 seed false 行）。
  */
 class CameraScanAndNativeClientSwitchTests {
 
     private static final String CAMERA_SCAN = "terminal.camera_scan.enabled";
-    private static final String NATIVE_CLIENT = "customer.native_client.enabled";
 
     @Test
     void explicitFalseRowRejectsCameraScan() {
@@ -49,20 +50,7 @@ class CameraScanAndNativeClientSwitchTests {
     }
 
     @Test
-    void explicitFalseRowRejectsNativeClient() {
-        TerminalDeviceRepository repo = mock(TerminalDeviceRepository.class);
-        when(repo.resolveEffectiveSwitch(any(), eq(NATIVE_CLIENT), any()))
-                .thenReturn(Optional.of(offRow("tcs_native_client_off", NATIVE_CLIENT)));
-        TerminalSwitchGuard guard =
-                new TerminalSwitchGuard(repo, new AuditEventService(new InMemoryAuditEventRepository()));
-
-        assertThatThrownBy(() -> guard.check(NATIVE_CLIENT))
-                .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.code()).isEqualTo("TERMINAL_DISABLED"));
-    }
-
-    @Test
-    void absentRowDefaultsOpenForBothCapabilities() {
+    void absentRowDefaultsOpen() {
         TerminalDeviceRepository repo = mock(TerminalDeviceRepository.class);
         when(repo.resolveEffectiveSwitch(any(), any(), any())).thenReturn(Optional.empty());
         TerminalSwitchGuard guard =
@@ -70,7 +58,6 @@ class CameraScanAndNativeClientSwitchTests {
 
         // 无显式行 = 默认开启（opt-out 语义），不抛异常。
         assertThatCode(() -> guard.check(CAMERA_SCAN)).doesNotThrowAnyException();
-        assertThatCode(() -> guard.check(NATIVE_CLIENT)).doesNotThrowAnyException();
     }
 
     private static TerminalCapabilitySwitchRecord offRow(String id, String capability) {

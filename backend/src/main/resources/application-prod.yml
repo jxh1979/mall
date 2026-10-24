@@ -1,4 +1,4 @@
-# 文件版本：V0.03
+# 文件版本：V0.04
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -50,6 +50,17 @@ access.permission-expiry.scheduled.enabled: true
 # AUD-010: web 通道翻 enforce——拒「Authorization: Bearer 自报 web」走资金端点旁路
 # (合法后台走 Cookie 会话·无客户端依赖·可独立翻;设备绑定型/app 仍 grace 待 BYOD二期客户端签名)
 access.device_credential.enforcement.web: enforce
+# ROOT-03-R2（PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」）：客人 App、小程序翻 enforce——证明＝已验证客人会话，
+# 会话锁定登录端；无会话的写请求只放行取码、登录、注册、登出（DeviceCredentialVerifier）。
+access.device_credential.enforcement.app: enforce
+access.device_credential.enforcement.miniapp: enforce
+# ROOT-03-R22（ENUM 第 68 行「系统仅留存注销事件与该手机号的对应记录至一年统计窗口届满」）：每日删除已届满的注销记录。
+customer.deregistration-mark-purge.scheduled.enabled: true
+# ROOT-03-R18（BSM 第 859 行「客人付款成功后必须出票……支付渠道会校验出票状态」）：客人付完款未回前台也由服务端向渠道查单入账出票（默认 60s 一轮；
+# 支付渠道开关 payment.gateway.enabled 关时整轮跳过）。
+customer.payment.settle.scheduled.enabled: true
+# ROOT-03-R19（BSM 第 1062 行「超过最晚到店时间未到店的，系统自动释放该台位——已付定金的按爽约规则没收定金，未付定金的直接作废」）：默认 60s 一轮。
+bar.reservation-timeout.scheduled.enabled: true
 
 # 2026-10-18 CG-03 / CG-11b 批量发布配套(BSM「营业日结束时由系统自动清零在玩人数」「到首付款截止时仍未达到合同门槛的订单取消」为系统自动动作,
 # 同 AUD-033 先例 prod 开启;两作业均为薄 @Scheduled 包装,业务规则在服务层,默认间隔 60s / 300s):

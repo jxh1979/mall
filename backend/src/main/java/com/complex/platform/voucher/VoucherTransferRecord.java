@@ -1,10 +1,13 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 
 /**
  * V313 券包会员间转赠记录（状态机流水本身，不另建历史表）。范式对齐 V287 门票转赠：
- * status: pending（发起冻结）-> claimed（领取，券归属改受赠人）/ revoked（出让人撤回）/ voided（系统作废：券核销/作废/过期）。
+ * status: pending（在途，不冻结：操作员裁决第十三批第 9 条）-> claimed（领取，券归属改受赠人）/ revoked（出让人撤回）/
+ * voided（系统作废：原持有人核销 holder_redeemed、原持有人改转 holder_retransferred、券作废/过期）。
  * 并发裁决全落同一行 CAS（UPDATE ... WHERE status='pending'），数据库行锁天然串行化，先提交者赢。
  * 双花窗口＝同一券实例同时最多一笔 pending（部分唯一索引 uq_voucher_transfers_pending 物理保证）。
  */

@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.common.api.ApiException;
@@ -67,11 +69,11 @@ class TicketTransferConcurrencyJdbcIntegrationTests {
         }
     }
 
-    // ── AUD-018 发起转赠 vs 核销消费:恰一方赢,不允许"已用票 + 在途转赠"并存 ────────────
+    // ── clients-R40 发起转赠 vs 核销消费:不冻结、先成功者为准,但不允许"已用票 + 在途转赠"并存 ────────────
     // 发起方=真服务(@Transactional + FOR UPDATE 锁定 slot 权益行再检未用再插 pending);
-    // 核销方=仿 verifyEntitlement 事务语义(原子扣减 → 新语句新快照复检 pending → 命中即回滚)。
+    // 核销方=atomicUseEntitlement(消费成功同事务作废该人份在途转赠)。核销先提交→发起读到已用被拒;发起先提交→核销照常成功并作废它。
     @Test
-    void initiateVsVerifyConsumeExactlyOneWins() throws Exception {
+    void initiateVsConsumeNeverLeavesPendingOnUsedTicket() throws Exception {
         Ctx c = seedForInitiateRace();
         try {
             TransactionTemplate tx = new TransactionTemplate(txManager);
@@ -89,23 +91,55 @@ class TicketTransferConcurrencyJdbcIntegrationTests {
                             return 0; // 核销先提交,发起被拒
                         }
                     },
-                    () -> tx.execute(status -> {
-                        var used = repository.atomicUseEntitlement(c.entitlementId, Instant.now());
-                        if (used.isEmpty()) {
-                            return 0; // 发起先提交,NOT EXISTS 拦截
-                        }
-                        if (repository.existsPendingTransferForSlot(c.parent, 1)) {
-                            status.setRollbackOnly(); // 消费后复检命中 pending → 回滚(与核销主链同语义)
-                            return 0;
-                        }
-                        return 1;
-                    }));
-            assertThat(results.stream().filter(r -> r == 1).count()).isEqualTo(1L); // 恰一方赢
+                    () -> tx.execute(status -> repository.atomicUseEntitlement(c.entitlementId, Instant.now()).isPresent() ? 1 : 0));
+            assertThat(results.get(1)).isEqualTo(1); // 核销从不被在途转赠挡住
             boolean pending = repository.existsPendingTransferForSlot(c.parent, 1);
             Integer usedTimes = jdbcTemplate.queryForObject(
                     "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, c.entitlementId);
             assertThat(pending && usedTimes != null && usedTimes > 0).isFalse(); // 不变式:在途转赠 ⇒ 未核销
         } finally {
+            cleanup(c);
+        }
+    }
+
+    // ── BSM 第 809 行「接收人确认领取……原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效」：再次转赠在锁上等到对方领取提交后，
+    //    须按锁后的持有人重判——票已归对方，原持有人的再次转赠失效，不得留下一笔可被第三人领走的在途转赠。
+    @Test
+    void retransferWaitingBehindClaimRechecksHolderAfterLock() throws Exception {
+        Ctx c = seedForInitiateRace();
+        Instant now = Instant.now();
+        String claimCode = "clm_" + UUID.randomUUID().toString().replace("-", "");
+        c.transferId = "tkt_transfer_" + UUID.randomUUID().toString().replace("-", "");
+        repository.saveTicketTransfer(new TicketTransferRecord(c.transferId, c.parent, 1, c.initiator, "link",
+                null, null, null, claimCode, null, "pending", null, now, null, null, null, now));
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            TransactionTemplate tx = new TransactionTemplate(txManager);
+            java.util.concurrent.CountDownLatch claimHoldsLock = new java.util.concurrent.CountDownLatch(1);
+            Future<?> claim = pool.submit(() -> tx.executeWithoutResult(status -> {
+                transferService.claim(c.receiverA, null, c.transferId, claimCode);
+                claimHoldsLock.countDown();
+                try {
+                    Thread.sleep(3000); // 领取已改持有人、仍未提交，期间原持有人发起再次转赠
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(claimHoldsLock.await(30, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            Future<String> retransfer = pool.submit(() -> {
+                try {
+                    transferService.initiate(c.initiator, null, new CustomerTicketTransferRequest(
+                            UUID.randomUUID().toString(), c.parent, null, "link", null));
+                    return "created";
+                } catch (ApiException e) {
+                    return e.code();
+                }
+            });
+            claim.get();
+            assertThat(retransfer.get()).isEqualTo("TICKET_TRANSFER_NOT_HOLDER");
+            assertThat(repository.existsPendingTransferForSlot(c.parent, 1)).isFalse();
+        } finally {
+            pool.shutdownNow();
             cleanup(c);
         }
     }

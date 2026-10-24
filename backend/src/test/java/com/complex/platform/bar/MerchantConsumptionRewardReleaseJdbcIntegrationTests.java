@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -309,11 +309,11 @@ class MerchantConsumptionRewardReleaseJdbcIntegrationTests {
         rewards.tryCreateForBarBill(own);
         rewards.tryCreateForBarBill(theirs);
         String token = "token_mcr2_" + UUID.randomUUID();
-        customers.saveSession(new CustomerSessionRecord("session_mcr2_" + UUID.randomUUID(), member, token, "web", Instant.now(), Instant.now().plusSeconds(3600), "active"));
+        customers.saveSession(new CustomerSessionRecord("session_mcr2_" + UUID.randomUUID(), member, token, "miniapp", Instant.now(), Instant.now().plusSeconds(3600), "active"));
         SecurityContextHolder.clearContext();
 
         String body = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/customer/merchant-rewards")
-                        .header("X-Customer-Token", token).header("X-Terminal-Type", "web"))
+                        .header("X-Customer-Token", token).header("X-Terminal-Type", "miniapp"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode rows = json.readTree(body).path("data");

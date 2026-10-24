@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -669,7 +669,9 @@ public class AuthorizationService implements CallerScopeResolver {
     @Override
     public String legacyScope() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !auth.isAuthenticated()) {
+        // ROOT-03-R7（ENUM 第 129 行「非会员可以浏览、点单和付款」）：未登录访客（框架匿名令牌）同无认证，按原样 "" 归口。
+        if (auth == null || !auth.isAuthenticated()
+                || auth instanceof org.springframework.security.authentication.AnonymousAuthenticationToken) {
             return "";
         }
         AccessActor actor = currentActor();

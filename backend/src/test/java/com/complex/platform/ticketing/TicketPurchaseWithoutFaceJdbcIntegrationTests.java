@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -106,7 +106,7 @@ class TicketPurchaseWithoutFaceJdbcIntegrationTests {
                 "visit_date", LocalDate.now().toString(),
                 "contact_phone", "136" + digits));
         mockMvc.perform(post("/api/v1/customer/ticket-orders")
-                        .header("X-Terminal-Type", "web")
+                        .header("X-Terminal-Type", "miniapp")
                         .header("X-Customer-Token", token)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk())

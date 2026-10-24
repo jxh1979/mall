@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -6,6 +7,7 @@ import { TechDetails } from "../components/TechDetails";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, GovernanceSpaceRow } from "../types";
 import { PermissionButton } from "../security/Can";
+import { CustomerHomeContentSection } from "./CustomerFacingSettingsSections";
 
 // 营业时间行（后端 VenueBusinessHoursRecord，客户端 unwrap 已 camel 化）。
 type VenueBusinessHoursRow = {
@@ -143,6 +145,7 @@ export function VenueBusinessHoursPage({ api, setActionResult, setGlobalError, e
         title="场地营业时间"
         description="按场地配每个星期几的开业和歇业时刻。歇业时刻早于开业时刻表示营业到次日凌晨（如 20:00 至次日 02:00）。"
       />
+      <CustomerHomeContentSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
       <TechDetails>
         <div className="admin-generic-evidence" data-testid="venue-business-hours-evidence">
           接口证据：读取 /api/v1/platform/venue-business-hours；读取 /api/v1/platform/spaces；保存 POST /api/v1/platform/venue-business-hours。

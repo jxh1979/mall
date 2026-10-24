@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -194,7 +194,7 @@ class VoucherServiceTests {
                 rows.add(new VoucherOverviewRecord(i.id(), "unified", d == null ? "?" : d.name(),
                         d == null ? "?" : d.voucherKind(), i.customerId(), i.status(),
                         "issued".equals(i.status()) ? 1 : 0, i.expiresAt(),
-                        d == null ? null : d.faceValueCent(), d == null ? null : d.redeemMethod(), i.code()));
+                        d == null ? null : d.faceValueCent(), d == null ? null : d.redeemMethod(), i.code(), null, null, false));
             }
             partnerOverviewRows.stream()
                     .filter(r -> customerId == null || customerId.equals(r.customerId()))
@@ -394,7 +394,7 @@ class VoucherServiceTests {
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-d1");
 
         assertThatThrownBy(() -> service.redeem(
-                new VoucherRedeemRequest("redeem-d1", instance.code(), null, "结账抵扣")))
+                new VoucherRedeemRequest("redeem-d1", null, instance.id(), "结账抵扣")))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_REQUIRES_BILL"));
 
@@ -412,7 +412,7 @@ class VoucherServiceTests {
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-dc");
 
         org.assertj.core.api.Assertions.assertThatCode(
-                () -> service.redeem(new VoucherRedeemRequest("redeem-dc", instance.code(), null, "餐饮店核销")))
+                () -> service.redeem(new VoucherRedeemRequest("redeem-dc", null, instance.id(), "餐饮店核销")))
                 .doesNotThrowAnyException();
 
         assertThat(repository.redemptions).hasSize(1);
@@ -426,7 +426,7 @@ class VoucherServiceTests {
         VoucherInstanceRecord capped = issueTo("customer-1", definition, "issue-d2a");
         VoucherInstanceRecord full = issueTo("customer-1", definition, "issue-d2b");
 
-        VoucherRedemptionEntryRecord entry = service.redeemForBill(capped.code(), null, "merchant-1", "bar_bill", "bill_1", 3000L);
+        VoucherRedemptionEntryRecord entry = service.redeemForBill(null, capped.id(), "merchant-1", "bar_bill", "bill_1", 3000L);
         assertThat(entry.deductionAmountCent()).isEqualTo(3000L);
         assertThat(entry.billType()).isEqualTo("bar_bill");
         assertThat(entry.billId()).isEqualTo("bill_1");
@@ -436,7 +436,7 @@ class VoucherServiceTests {
         assertThat(entry2.deductionAmountCent()).isEqualTo(5000L);
 
         VoucherInstanceRecord other = issueTo("customer-1", discountDefinition("vdef_d3", "merchant-2"), "issue-d3");
-        assertThatThrownBy(() -> service.redeemForBill(other.code(), null, "merchant-1", "bar_bill", "bill_3", 30000L))
+        assertThatThrownBy(() -> service.redeemForBill(null, other.id(), "merchant-1", "bar_bill", "bill_3", 30000L))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_MERCHANT_MISMATCH"));
         assertThat(repository.instances.get(other.id()).status()).isEqualTo("issued");
@@ -491,7 +491,7 @@ class VoucherServiceTests {
                 "issued", t, null, null, null, null, false, t, t));
         when(inventoryService.availableStock("item_1", "loc_1")).thenReturn(1); // 需 2 件
 
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("redeem-g2b", "VCLEGACYG2B", null, null)))
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("redeem-g2b", null, "vi_legacy_g2b", null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_STOCK_INSUFFICIENT"));
         verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
@@ -508,20 +508,20 @@ class VoucherServiceTests {
         repository.insertInstance(new VoucherInstanceRecord(
                 "vi_expired", definition.id(), "customer-1", "VCEXPIRED", "marketing_grant", "g1",
                 "issued", past, past.plusSeconds(60), null, null, null, false, past, past));
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-exp", "VCEXPIRED", null, null)))
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-exp", null, "vi_expired", null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_EXPIRED"));
         assertThat(repository.instances.get("vi_expired").status()).isEqualTo("expired");
         // 已作废券拒绝。
         VoucherInstanceRecord revoked = issueTo("customer-1", definition, "issue-rv");
         service.revoke(revoked.id(), new VoucherRevokeRequest("rv-key", "活动取消"));
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-rv", revoked.code(), null, null)))
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-rv", null, revoked.id(), null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_REVOKED"));
         // 已核销券再核（换新幂等键）拒绝——双花闸。
         VoucherInstanceRecord redeemed = issueTo("customer-1", definition, "issue-rd");
-        service.redeem(new VoucherRedeemRequest("k-rd-1", redeemed.code(), null, null));
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-rd-2", redeemed.code(), null, null)))
+        service.redeem(new VoucherRedeemRequest("k-rd-1", null, redeemed.id(), null));
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-rd-2", null, redeemed.id(), null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_ALREADY_REDEEMED"));
         assertThat(repository.redemptions).hasSize(1);
@@ -533,14 +533,14 @@ class VoucherServiceTests {
         VoucherDefinitionRecord definition = goodsDefinition("vdef_d3", "merchant-1", null);
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-idem");
         VoucherRedemptionEntryRecord first = service.redeem(
-                new VoucherRedeemRequest("same-key", instance.code(), null, "第一次"));
+                new VoucherRedeemRequest("same-key", null, instance.id(), "第一次"));
         // 同键同载荷重放：返回首次核销记录，不产生第二行。
         VoucherRedemptionEntryRecord replay = service.redeem(
-                new VoucherRedeemRequest("same-key", instance.code(), null, "第一次"));
+                new VoucherRedeemRequest("same-key", null, instance.id(), "第一次"));
         assertThat(replay.id()).isEqualTo(first.id());
         assertThat(repository.redemptions).hasSize(1);
         // 同键不同载荷（note 不同）：载荷指纹冲突拒绝。
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("same-key", instance.code(), null, "换个理由")))
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("same-key", null, instance.id(), "换个理由")))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
     }
@@ -557,16 +557,16 @@ class VoucherServiceTests {
 
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant-scope"));
         // 他商户券：拒绝（CROSS_MERCHANT_FORBIDDEN），券保持可核。
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-x", otherInstance.code(), null, null)))
+        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-x", null, otherInstance.id(), null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
         assertThat(repository.instances.get(otherInstance.id()).status()).isEqualTo("issued");
         // 自家券：可核。
-        assertThat(service.redeem(new VoucherRedeemRequest("k-own", ownInstance.code(), null, null)).merchantId())
+        assertThat(service.redeem(new VoucherRedeemRequest("k-own", null, ownInstance.id(), null)).merchantId())
                 .isEqualTo("merchant-scope");
         // 平台通用券（定义无商户）：任意核销点可核，核销点商户记 scope。
         when(inventoryService.availableStock("item_1", "loc_1")).thenReturn(10);
-        assertThat(service.redeem(new VoucherRedeemRequest("k-platform", platformInstance.code(), null, null)).merchantId())
+        assertThat(service.redeem(new VoucherRedeemRequest("k-platform", null, platformInstance.id(), null)).merchantId())
                 .isEqualTo("merchant-scope");
     }
 
@@ -592,7 +592,7 @@ class VoucherServiceTests {
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_NOT_REVOCABLE"));
         // 已核销券不可作废。
         VoucherInstanceRecord redeemed = issueTo("customer-1", definition, "issue-rd2");
-        service.redeem(new VoucherRedeemRequest("k-rd", redeemed.code(), null, null));
+        service.redeem(new VoucherRedeemRequest("k-rd", null, redeemed.id(), null));
         assertThatThrownBy(() -> service.revoke(redeemed.id(), new VoucherRevokeRequest("k3", "想反悔")))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_NOT_REVOCABLE"));
@@ -671,7 +671,7 @@ class VoucherServiceTests {
         issueTo("customer-1", definition, "issue-ov");
         repository.partnerOverviewRows.add(new VoucherOverviewRecord(
                 "ie_1", "pass_partner", "餐厅第三方券", "external_partner", "customer-1", "active", 3,
-                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow", null));
+                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow", null, null, null, false));
 
         PageResponse<VoucherOverviewRecord> page = service.overview("customer-1", 1, 50);
 
@@ -692,7 +692,7 @@ class VoucherServiceTests {
         issueTo("customer-2", def, "cw-2");
         repository.partnerOverviewRows.add(new VoucherOverviewRecord(
                 "ie_cw", "pass_partner", "第三方券", "external_partner", "customer-2", "active", 2,
-                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow", null));
+                Instant.parse("2026-12-31T00:00:00Z"), null, "external_reflow", null, null, null, false));
 
         PageResponse<VoucherOverviewRecord> page = service.customerOverview("customer-1", 1, 50);
 
@@ -778,17 +778,16 @@ class VoucherServiceTests {
     // ── V313 核销转赠冻结 + V312 过期预占释放 ─────────────────────────────
 
     @Test
-    void redeemBlockedWhileTransferPending() {
+    void redeemWhileTransferPendingSucceedsAndVoidsTransfer() {
         // 第十批 TK-28：商户折扣券改为只在结账时抵扣核销（VOUCHER_REQUIRES_BILL），通用核销闸用例改用店内实物券承载。
         VoucherDefinitionRecord definition = goodsDefinition("vdef_tf", "merchant-1", null);
         VoucherInstanceRecord instance = issueTo("customer-1", definition, "issue-tf");
-        // 该券有在途转赠：核销冻结拒绝，券保持 issued，不产生核销记录。
+        // 操作员裁决第十三批第 9 条「和门票一致不冻结」：该券有在途转赠也照常核销，核销成功即作废在途转赠。
         when(transferRepository.existsPendingForInstance(instance.id())).thenReturn(true);
-        assertThatThrownBy(() -> service.redeem(new VoucherRedeemRequest("k-tf", instance.code(), null, null)))
-                .isInstanceOf(ApiException.class)
-                .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_TRANSFERRING"));
-        assertThat(repository.instances.get(instance.id()).status()).isEqualTo("issued");
-        assertThat(repository.redemptions).isEmpty();
+        org.assertj.core.api.Assertions.assertThatCode(
+                () -> service.redeem(new VoucherRedeemRequest("k-tf", null, instance.id(), null))).doesNotThrowAnyException();
+        assertThat(repository.instances.get(instance.id()).status()).isEqualTo("redeemed");
+        verify(transferRepository).voidPendingForInstance(eq(instance.id()), eq("holder_redeemed"), any());
     }
 
     @Test

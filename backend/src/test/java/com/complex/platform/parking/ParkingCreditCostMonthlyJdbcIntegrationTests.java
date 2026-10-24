@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -104,7 +104,7 @@ class ParkingCreditCostMonthlyJdbcIntegrationTests {
             f.barBill(bill.getKey(), c[0], null, bill.getValue(), entered.plus(Duration.ofMinutes(1)));
         }
         String session = f.session("M" + tag, plate, entered.toString());
-        mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "web").header("X-Customer-Token", c[1])
+        mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", c[1])
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"parking_session_id\":\"" + session + "\",\"idempotency_key\":\"pcm_" + tag + "_" + f.suffix + "\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("paid"));

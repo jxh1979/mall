@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.27
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.28
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1091 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 401 | 人工权限矩阵正文未覆盖 300 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2182 | 人工事件矩阵正文未覆盖 2137 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1091 | 人工任务映射正文未逐项覆盖 1085 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 663 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1143 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 406 | 人工权限矩阵正文未覆盖 305 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2286 | 人工事件矩阵正文未覆盖 2241 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1143 | 人工任务映射正文未逐项覆盖 1137 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 686 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -165,13 +165,16 @@
 | `contract.settlement.manage` | staff-token | platform | 3 | settleContract, listContractSettlements, checkContractSettlementDocuments | OpenAPI 补充，以本附录为准 |
 | `contract.space.color.manage` | staff-token | platform | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
 | `contract.view` | staff-token | merchant, platform | 4 | listMerchantPortalContracts, listVacantSpaces, listExpiringContracts, getRentToSales | 已在权限矩阵正文出现 |
-| `customer.account.manage` | staff-token | platform | 4 | lookupCustomerAccountByPhone, suspendCustomerAccount, blacklistCustomerAccount, reinstateCustomerAccount | OpenAPI 补充，以本附录为准 |
+| `customer.account.manage` | staff-token | platform, project | 7 | lookupCustomerAccountByPhone, suspendCustomerAccount, reinstateCustomerAccount, getCustomerRestrictionSetting, configureCustomerRestrictionSetting, getCustomerChurnAlertSetting, configureCustomerChurnAlertSetting | OpenAPI 补充，以本附录为准 |
+| `customer.blacklist.approve` | staff-token | project | 2 | approveCustomerBlacklistRequest, rejectCustomerBlacklistRequest | OpenAPI 补充，以本附录为准 |
+| `customer.blacklist.request` | staff-token | project | 2 | requestCustomerBlacklistChange, listCustomerBlacklistRequests | OpenAPI 补充，以本附录为准 |
+| `customer.home_content.manage` | staff-token | project | 2 | getCustomerHomeContent, publishCustomerHomeContent | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.evaluate` | staff-token | project | 1 | evaluateMemberLevel | OpenAPI 补充，以本附录为准 |
 | `customer.loyalty.view` | staff-token | project | 1 | listMemberLevels | OpenAPI 补充，以本附录为准 |
 | `customer.points.freeze` | staff-token | project | 2 | freezePointsAccount, unfreezePointsAccount | OpenAPI 补充，以本附录为准 |
-| `customer.stored_value.consume` | customer-token | customer | 1 | customerStoredValueConsume | OpenAPI 补充，以本附录为准 |
+| `customer.stored_value.consume` | customer-token | self | 1 | payCustomerTicketOrderWithStoredValue | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.freeze` | staff-token | project | 2 | freezeStoredValueAccount, unfreezeStoredValueAccount | OpenAPI 补充，以本附录为准 |
-| `customer.stored_value.refund` | staff-token | merchant, platform, project | 7 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule, configureStoredValueMerchantCard, configureStoredValueBonusPolicy, getStoredValueBonusPolicy, counterRefundStoredValueAccount | OpenAPI 补充，以本附录为准 |
+| `customer.stored_value.refund` | staff-token | merchant, platform, project | 9 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule, configureStoredValueMerchantCard, configureStoredValueBonusPolicy, getStoredValueBonusPolicy, counterRefundStoredValueAccount, getMerchantCardExitNoticePolicy, saveMerchantCardExitNoticePolicy | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.topup` | customer-token | customer | 2 | customerStoredValueTopup, customerStoredValueSettle | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.view` | customer-token | customer | 2 | customerStoredValueAccount, customerStoredValueAccounts | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.manage` | staff-token | merchant | 3 | createVoucherDefinition, issueVouchers, revokeVoucher | OpenAPI 补充，以本附录为准 |
@@ -227,7 +230,7 @@
 | `facility.site_entry.submit_assigned` | staff-token | self | 1 | submitSiteEntryReport | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.upload_completion_assigned` | staff-token | project-assignee, self | 2 | uploadSiteEntryCompletion, uploadSiteEntryAttachment | OpenAPI 补充，以本附录为准 |
 | `facility.site_entry.view_assigned` | staff-token | project-assignee, self | 4 | listSiteEntryReports, getSiteEntryReport, listSiteEntryHistory, readSiteEntryAttachment | OpenAPI 补充，以本附录为准 |
-| `facility.work_order.manage` | staff-token | platform | 17 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, reassignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, reworkFacilityWorkOrder, designateFacilityWorkOrderConfirmer ... | OpenAPI 补充，以本附录为准 |
+| `facility.work_order.manage` | staff-token | platform | 19 | listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, reassignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder, reviewFacilityWorkOrder, reworkFacilityWorkOrder, designateFacilityWorkOrderConfirmer ... | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.view_assigned` | staff-token | platform | 1 | listWorkOrdersAssignedToMe | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project, project-entity, project-merchant | 8 | createArApItem, reviewTransferDisposition, generateContractRentBill, generateContractPeriodBills, recordFacilityEquipmentScrapFinance, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
@@ -328,6 +331,7 @@
 | `merchant.billing.dunning.record` | staff-token | - | 1 | recordMerchantBillDunning | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.manage` | staff-token | - | 1 | createMerchantBill | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.view` | staff-token | project-merchant | 1 | listMerchantBills | OpenAPI 补充，以本附录为准 |
+| `merchant.portal.card_exit_notice.publish` | staff-token | merchant | 2 | listMyMerchantCardExitNotices, publishMerchantCardExitNotice | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.payee_account.approve` | staff-token | merchant | 1 | approveMerchantPortalPayeeAccountChange | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.dispute` | staff-token | merchant | 2 | submitMerchantPortalSettlementDispute, rejectMerchantPortalSettlementResolution | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.view` | staff-token | merchant | 2 | listMerchantPortalTicketSettlements, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
@@ -338,7 +342,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 55 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, createCustomerConsent, listCustomerOrders, getCustomerPoints, createCustomerTicketOrder, getCustomerTicketQr ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 75 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, listMyCustomerBarReservations, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, previewCustomerBarInvitation, removeCustomerBarInvitationMember, getCustomerBarInvitationEntryCode, createCustomerConsent ... | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
@@ -351,7 +355,7 @@
 | `partner.subordinate.manage` | staff-token | self | 2 | createPartnerSubordinate, disablePartnerSubordinate | OpenAPI 补充，以本附录为准 |
 | `partner.subordinate.view` | staff-token | self | 2 | listPartnerSubordinates, listSubordinateCompletion | OpenAPI 补充，以本附录为准 |
 | `platform.notification_window.manage` | staff-token | platform | 1 | upsertNotificationWindow | OpenAPI 补充，以本附录为准 |
-| `public` | public | customer, none, public-project, self | 8 | login, customerPhoneLogin, requestCustomerLoginSmsCode, customerLogout, listCustomerTicketProducts, getSystemHealth, listStaffRegistrationCompanies, submitStaffSelfRegistration | 已在权限矩阵正文出现 |
+| `public` | public | customer, none, public-project, self | 18 | login, customerPhoneLogin, requestCustomerLoginSmsCode, registerCustomerMember, getCustomerTerms, listCustomerEffectiveTerminalSwitches, customerLogout, listCustomerTicketProducts, getSystemHealth, listCustomerBarScanMenu, createCustomerBarScanOrder, confirmCustomerBarScanOrder ... | 已在权限矩阵正文出现 |
 | `refund.authority.manage` | staff-token | project | 2 | upsertRefundAuthorityLimit, upsertRefundAutoRule | OpenAPI 补充，以本附录为准 |
 | `refund.authority.view` | staff-token | project | 2 | listRefundAuthorityLimits, listRefundAutoRules | OpenAPI 补充，以本附录为准 |
 | `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
@@ -402,19 +406,20 @@
 | `ticket.entitlement.approve` | staff-token | project | 1 | approveDeleteEntitlementTemplate | OpenAPI 补充，以本附录为准 |
 | `ticket.entitlement.manage` | staff-token | project | 4 | createEntitlementTemplate, archiveEntitlementTemplate, unarchiveEntitlementTemplate, requestDeleteEntitlementTemplate | 已在权限矩阵正文出现 |
 | `ticket.entitlement.view` | staff-token | project | 1 | listEntitlementTemplates | 已在权限矩阵正文出现 |
-| `ticket.order.create` | staff-token | platform, project-channel | 2 | createTicketOrder, cancelTicketOrder | 已在权限矩阵正文出现 |
+| `ticket.order.create` | staff-token | platform, project-channel | 3 | createTicketOrder, cancelTicketOrder, requestKioskBindCode | 已在权限矩阵正文出现 |
 | `ticket.order.read` | staff-token | project | 1 | listTicketOrders | OpenAPI 补充，以本附录为准 |
 | `ticket.points.billing.manage` | staff-token | platform | 4 | submitTicketPointsBillingRule, submitTicketPointsCalendar, submitTicketPointsOutage, confirmTicketPointsBillUnchanged | OpenAPI 补充，以本附录为准 |
 | `ticket.points.billing.view` | staff-token | platform, project-merchant | 8 | listTicketPointsBillingRules, listTicketPointsCalendars, listTicketPointsOutages, listTicketPointsBills, listTicketPointsBillItems, listTicketPointsBillObjections, submitTicketPointsBillObjection, listTicketPointsBillScheduleAdjustments | OpenAPI 补充，以本附录为准 |
 | `ticket.price_variant.manage` | staff-token | project-channel | 1 | createTicketPriceRule | 已在权限矩阵正文出现 |
 | `ticket.price_variant.view` | staff-token | project-channel | 1 | listTicketPriceRules | 已在权限矩阵正文出现 |
-| `ticket.product.manage` | staff-token | platform, project | 5 | updateTicketQrRefreshConfig, createTicketType, bindTicketTypeEntitlement, publishTicketType, updateTicketTypePricing | 已在权限矩阵正文出现 |
-| `ticket.product.view` | staff-token | platform, project | 4 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, ticketTypePriceCheck | 已在权限矩阵正文出现 |
+| `ticket.product.manage` | staff-token | platform, project | 6 | updateTicketQrRefreshConfig, createTicketType, bindTicketTypeEntitlement, publishTicketType, updateTicketTypePricing, saveTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
+| `ticket.product.view` | staff-token | platform, project | 5 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
 | `ticket.refund.approve` | staff-token | project-order | 4 | confirmTicketRefundPayout, approveTicketRefund, approveTicketSafetyEvent, rejectTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 2 | requestTicketRefund, requestTicketSafetyEvent | 已在权限矩阵正文出现 |
 | `ticket.refund.view` | staff-token | -, project-order | 3 | listTicketRefunds, listTicketSafetyEvents, listTicketRefundLines | OpenAPI 补充，以本附录为准 |
 | `ticket.reward.config.manage` | staff-token | project-merchant | 2 | submitTicketRewardConfig, publishTicketRewardConfig | OpenAPI 补充，以本附录为准 |
 | `ticket.reward.config.view` | staff-token | project-merchant | 1 | listTicketRewardConfigs | OpenAPI 补充，以本附录为准 |
+| `ticket.student_cert.review` | staff-token | platform | 4 | listStudentCertifications, approveStudentCertification, rejectStudentCertification, readStudentCertificationFile | OpenAPI 补充，以本附录为准 |
 | `ticket.ticket.issue` | staff-token | project-order | 1 | issueTicket | 已在权限矩阵正文出现 |
 | `ticket.transfer.read` | staff-token | project | 1 | listTicketTransfers | OpenAPI 补充，以本附录为准 |
 | `ticket.verify.anomaly.resolve` | staff-token | project-merchant | 1 | resolveTicketVerificationAnomaly | OpenAPI 补充，以本附录为准 |
@@ -1018,8 +1023,6 @@
 | `contract.submitted` | success | `submitContract` | `POST` | `/api/v1/contracts/{contract_id}/submit` | P0-待归类 | `contract.draft.manage` | 已在事件矩阵正文出现 |
 | `contract.view_failed` | failure | `listContracts` | `GET` | `/api/v1/contracts` | P0-待归类 | `contract.draft.manage` | 接口级事件，以本附录为准 |
 | `contract.viewed` | success | `listContracts` | `GET` | `/api/v1/contracts` | P0-待归类 | `contract.draft.manage` | 接口级事件，以本附录为准 |
-| `customer.account.blacklist_failed` | failure | `blacklistCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
-| `customer.account.blacklisted` | success | `blacklistCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `customer.account.deregister_failed` | failure | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.account.deregister_preview_failed` | failure | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.account.deregister_previewed` | success | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -1034,22 +1037,47 @@
 | `customer.auth.login_failed` | failure | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.bar_invitation.confirm_failed` | failure | `confirmCustomerBarInvitation` | `POST` | `/api/v1/customer/bar-invitations/confirm` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_invitation.confirmed` | success | `confirmCustomerBarInvitation` | `POST` | `/api/v1/customer/bar-invitations/confirm` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_invitation.entry_code_failed` | failure | `getCustomerBarInvitationEntryCode` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}/entry-code` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_invitation.entry_code_issued` | success | `getCustomerBarInvitationEntryCode` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}/entry-code` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_invitation.member_remove_failed` | failure | `removeCustomerBarInvitationMember` | `POST` | `/api/v1/customer/bar-invitations/{reservation_id}/members/{member_id}/remove` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_invitation.member_removed` | success | `removeCustomerBarInvitationMember` | `POST` | `/api/v1/customer/bar-invitations/{reservation_id}/members/{member_id}/remove` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_invitation.preview_failed` | failure | `previewCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/preview` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_invitation.previewed` | success | `previewCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/preview` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_invitation.view_failed` | failure | `getCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_invitation.viewed` | success | `getCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation_options_view_failed` | failure | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation_options_viewed` | success | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation.create_failed` | failure | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.bar_reservation.created` | success | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.bar_scan_menu.view_failed` | failure | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-sessions/{session_id}/menu` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.bar_scan_menu.viewed` | success | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-sessions/{session_id}/menu` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.bar_scan_order.create_failed` | failure | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.bar_scan_order.created` | success | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_reservations.view_failed` | failure | `listMyCustomerBarReservations` | `GET` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_reservations.viewed` | success | `listMyCustomerBarReservations` | `GET` | `/api/v1/customer/bar-reservations` | CUS/BAR-客人订台 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_order.create_failed` | failure | `createCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-tables/{table_id}/scan-orders` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_order.created` | success | `createCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-tables/{table_id}/scan-orders` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_order.paid` | success | `confirmCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-tables/{table_id}/scan-orders/{scan_order_id}/confirm` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `customer.bar_scan_order.pay_failed` | failure | `confirmCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-tables/{table_id}/scan-orders/{scan_order_id}/confirm` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `customer.blacklist_requests_viewed` | success | `listCustomerBlacklistRequests` | `GET` | `/api/v1/customer-blacklist-requests` | CUS-客人端 | `customer.blacklist.request` | 接口级事件，以本附录为准 |
+| `customer.blacklist.approve_failed` | failure | `approveCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/approve` | CUS-客人端 | `customer.blacklist.approve` | 接口级事件，以本附录为准 |
+| `customer.blacklist.approved` | success | `approveCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/approve` | CUS-客人端 | `customer.blacklist.approve` | 接口级事件，以本附录为准 |
+| `customer.blacklist.reject_failed` | failure | `rejectCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/reject` | CUS-客人端 | `customer.blacklist.approve` | 接口级事件，以本附录为准 |
+| `customer.blacklist.rejected` | success | `rejectCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/reject` | CUS-客人端 | `customer.blacklist.approve` | 接口级事件，以本附录为准 |
+| `customer.blacklist.request_failed` | failure | `requestCustomerBlacklistChange` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist-requests` | CUS-客人端 | `customer.blacklist.request` | 接口级事件，以本附录为准 |
+| `customer.blacklist.requested` | success | `requestCustomerBlacklistChange` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist-requests` | CUS-客人端 | `customer.blacklist.request` | 接口级事件，以本附录为准 |
 | `customer.check_in_failed` | failure | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.check_ins_view_failed` | failure | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.check_ins_viewed` | success | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.checked_in` | success | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.churn_alert_setting.config_failed` | failure | `configureCustomerChurnAlertSetting` | `PUT` | `/api/v1/customer-churn-alert-setting` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.churn_alert_setting.configured` | success | `configureCustomerChurnAlertSetting` | `PUT` | `/api/v1/customer-churn-alert-setting` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.complaint_rate_failed` | failure | `rateCustomerComplaint` | `POST` | `/api/v1/customer/complaints/{work_order_id}/satisfaction` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.complaint_rated` | success | `rateCustomerComplaint` | `POST` | `/api/v1/customer/complaints/{work_order_id}/satisfaction` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.complaint_submit_failed` | failure | `submitCustomerComplaint` | `POST` | `/api/v1/customer/complaints` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.complaint_submitted` | success | `submitCustomerComplaint` | `POST` | `/api/v1/customer/complaints` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.complaints_view_failed` | failure | `listMyCustomerComplaints` | `GET` | `/api/v1/customer/complaints` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.complaints_viewed` | success | `listMyCustomerComplaints` | `GET` | `/api/v1/customer/complaints` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.consent.create_failed` | failure | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.consent.created` | success | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.home_content_publish_failed` | failure | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
+| `customer.home_content_published` | success | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
 | `customer.level_evaluate_failed` | failure | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
 | `customer.logged_out` | success | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.logout_failed` | failure | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
@@ -1064,7 +1092,19 @@
 | `customer.orders_view_failed` | failure | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_viewed` | success | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.otp_request_failed` | failure | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `customer.otp_request_failed` | failure | `requestCustomerStoredValueSmsCode` | `POST` | `/api/v1/customer/stored-value/sms` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.otp_request_failed` | failure | `requestKioskBindCode` | `POST` | `/api/v1/ticketing/kiosk-bind-codes` | TIC-票务权益 | `ticket.order.create` | 接口级事件，以本附录为准 |
 | `customer.otp_requested` | success | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `customer.otp_requested` | success | `requestCustomerStoredValueSmsCode` | `POST` | `/api/v1/customer/stored-value/sms` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.otp_requested` | success | `requestKioskBindCode` | `POST` | `/api/v1/ticketing/kiosk-bind-codes` | TIC-票务权益 | `ticket.order.create` | 接口级事件，以本附录为准 |
+| `customer.payment_confirm_failed` | failure | `confirmCustomerDepositPayment` | `POST` | `/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments/{payment_intent_id}/confirm` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.payment_confirm_failed` | failure | `confirmCustomerTicketPayment` | `POST` | `/api/v1/customer/orders/{order_id}/payments/{payment_intent_id}/confirm` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.payment_confirmed` | success | `confirmCustomerDepositPayment` | `POST` | `/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments/{payment_intent_id}/confirm` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.payment_confirmed` | success | `confirmCustomerTicketPayment` | `POST` | `/api/v1/customer/orders/{order_id}/payments/{payment_intent_id}/confirm` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.payment_create_failed` | failure | `startCustomerDepositPayment` | `POST` | `/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.payment_create_failed` | failure | `startCustomerTicketPayment` | `POST` | `/api/v1/customer/orders/{order_id}/payments` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.payment_created` | success | `startCustomerDepositPayment` | `POST` | `/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.payment_created` | success | `startCustomerTicketPayment` | `POST` | `/api/v1/customer/orders/{order_id}/payments` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points_view_failed` | failure | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points_viewed` | success | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points.freeze_failed` | failure | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
@@ -1079,28 +1119,45 @@
 | `customer.points.redemptions_viewed` | success | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.points.unfreeze_failed` | failure | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
 | `customer.points.unfrozen` | success | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | CUS-客人端 | `customer.points.freeze` | 接口级事件，以本附录为准 |
+| `customer.register_failed` | failure | `registerCustomerMember` | `POST` | `/api/v1/customer/auth/register` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `customer.registered` | success | `registerCustomerMember` | `POST` | `/api/v1/customer/auth/register` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `customer.restriction_setting.config_failed` | failure | `configureCustomerRestrictionSetting` | `PUT` | `/api/v1/customer-restriction-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.restriction_setting.configured` | success | `configureCustomerRestrictionSetting` | `PUT` | `/api/v1/customer-restriction-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `customer.session_view_failed` | failure | `getCustomerSession` | `GET` | `/api/v1/customer/session` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.session_viewed` | success | `getCustomerSession` | `GET` | `/api/v1/customer/session` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.stored_value_account_viewed` | success | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `customer.stored_value_account_viewed_failed` | failure | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `customer.stored_value_accounts_viewed` | success | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `customer.stored_value_accounts_viewed_failed` | failure | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
-| `customer.stored_value.consume` | success | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | CUS-客人端 | `customer.stored_value.consume` | 接口级事件，以本附录为准 |
-| `customer.stored_value.consume_failed` | failure | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | CUS-客人端 | `customer.stored_value.consume` | 接口级事件，以本附录为准 |
+| `customer.stored_value.pay_failed` | failure | `payCustomerTicketOrderWithStoredValue` | `POST` | `/api/v1/customer/orders/{order_id}/stored-value/pay` | CUS/TIC-客人购票 | `customer.stored_value.consume` | 接口级事件，以本附录为准 |
 | `customer.stored_value.settle` | success | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | CUS-客人端 | `customer.stored_value.topup` | 接口级事件，以本附录为准 |
 | `customer.stored_value.settle_failed` | failure | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | CUS-客人端 | `customer.stored_value.topup` | 接口级事件，以本附录为准 |
 | `customer.stored_value.topup` | success | `customerStoredValueTopup` | `POST` | `/api/v1/customer/stored-value/topup` | CUS-客人端 | `customer.stored_value.topup` | 接口级事件，以本附录为准 |
 | `customer.stored_value.topup_failed` | failure | `customerStoredValueTopup` | `POST` | `/api/v1/customer/stored-value/topup` | CUS-客人端 | `customer.stored_value.topup` | 接口级事件，以本附录为准 |
+| `customer.student_cert.applied` | success | `applyCustomerStudentCertification` | `POST` | `/api/v1/customer/student-certifications` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.student_cert.apply_failed` | failure | `applyCustomerStudentCertification` | `POST` | `/api/v1/customer/student-certifications` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.student_cert.approve_failed` | failure | `approveStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/approve` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
+| `customer.student_cert.approved` | success | `approveStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/approve` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
+| `customer.student_cert.reject_failed` | failure | `rejectStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/reject` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
+| `customer.student_cert.rejected` | success | `rejectStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/reject` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
+| `customer.student_certs_view_failed` | failure | `listStudentCertifications` | `GET` | `/api/v1/student-certifications` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
+| `customer.student_certs_viewed` | success | `listStudentCertifications` | `GET` | `/api/v1/student-certifications` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
 | `customer.ticket_order.create_failed` | failure | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_order.created` | success | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_view_failed` | failure | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_viewed` | success | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
+| `customer.ticket_refund.request_failed` | failure | `requestCustomerTicketRefund` | `POST` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_refund.requested` | success | `requestCustomerTicketRefund` | `POST` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_refunds_view_failed` | failure | `listCustomerTicketRefunds` | `GET` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_refunds_viewed` | success | `listCustomerTicketRefunds` | `GET` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_incoming_view_failed` | failure | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_incoming_viewed` | success | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_outgoing_view_failed` | failure | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_outgoing_viewed` | success | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_preview_view_failed` | failure | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_preview_viewed` | success | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_usages_view_failed` | failure | `listCustomerTicketUsages` | `GET` | `/api/v1/customer/tickets/{ticket_id}/usages` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.ticket_usages_viewed` | success | `listCustomerTicketUsages` | `GET` | `/api/v1/customer/tickets/{ticket_id}/usages` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.voucher_transfer_incoming_view_failed` | failure | `listIncomingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/incoming` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.voucher_transfer_incoming_viewed` | success | `listIncomingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/incoming` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.voucher_transfer_outgoing_view_failed` | failure | `listOutgoingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/outgoing` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -1966,19 +2023,58 @@
 | `not_applicable` | failure | `getContractDepositMonths` | `GET` | `/api/v1/contracts/deposit-months` | P0-待归类 | `contract.deposit_months.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | P0-待归类 | `contract.deposit_refund_wait.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | P0-待归类 | `contract.deposit_refund_wait.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getCustomerBarTableCurrentBill` | `GET` | `/api/v1/customer/bar-tables/{table_id}/current-bill` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerBarTableCurrentBill` | `GET` | `/api/v1/customer/bar-tables/{table_id}/current-bill` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getCustomerChurnAlertSetting` | `GET` | `/api/v1/customer-churn-alert-setting` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerChurnAlertSetting` | `GET` | `/api/v1/customer-churn-alert-setting` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getCustomerHomeContent` | `GET` | `/api/v1/home-contents/{project_id}` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerHomeContent` | `GET` | `/api/v1/home-contents/{project_id}` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getCustomerRestrictionSetting` | `GET` | `/api/v1/customer-restriction-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerRestrictionSetting` | `GET` | `/api/v1/customer-restriction-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getCustomerStoredValueTopupRules` | `GET` | `/api/v1/customer/stored-value/topup-rules` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerStoredValueTopupRules` | `GET` | `/api/v1/customer/stored-value/topup-rules` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getCustomerTerms` | `GET` | `/api/v1/customer/terms` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerTerms` | `GET` | `/api/v1/customer/terms` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getMerchantCardExitNoticePolicy` | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getMerchantCardExitNoticePolicy` | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getMyStudentCertification` | `GET` | `/api/v1/customer/student-certifications/current` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getMyStudentCertification` | `GET` | `/api/v1/customer/student-certifications/current` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerAmusementProjects` | `GET` | `/api/v1/customer/amusement/projects` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerAmusementProjects` | `GET` | `/api/v1/customer/amusement/projects` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-tables/{table_id}/menu` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-tables/{table_id}/menu` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerBlacklistRequests` | `GET` | `/api/v1/customer-blacklist-requests` | CUS-客人端 | `customer.blacklist.request` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerEffectiveTerminalSwitches` | `GET` | `/api/v1/customer/terminal-switches/effective` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerEffectiveTerminalSwitches` | `GET` | `/api/v1/customer/terminal-switches/effective` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerMerchantCardExitNotices` | `GET` | `/api/v1/customer/merchant-card-exit-notices` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerMerchantCardExitNotices` | `GET` | `/api/v1/customer/merchant-card-exit-notices` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerProjects` | `GET` | `/api/v1/customer/projects` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerProjects` | `GET` | `/api/v1/customer/projects` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerStoredValueTransactions` | `GET` | `/api/v1/customer/stored-value/accounts/{account_id}/transactions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerStoredValueTransactions` | `GET` | `/api/v1/customer/stored-value/accounts/{account_id}/transactions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerTicketChannels` | `GET` | `/api/v1/customer/ticket-channels` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerTicketChannels` | `GET` | `/api/v1/customer/ticket-channels` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerTicketExpiryReminders` | `GET` | `/api/v1/customer/ticket-expiry-reminders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerTicketExpiryReminders` | `GET` | `/api/v1/customer/ticket-expiry-reminders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listMyMerchantCardExitNotices` | `GET` | `/api/v1/merchant-portal/card-exit-notices` | P0-待归类 | `merchant.portal.card_exit_notice.publish` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listMyMerchantCardExitNotices` | `GET` | `/api/v1/merchant-portal/card-exit-notices` | P0-待归类 | `merchant.portal.card_exit_notice.publish` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listParkingCredits` | `GET` | `/api/v1/parking/credits` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listParkingCredits` | `GET` | `/api/v1/parking/credits` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listParkingManualReleases` | `GET` | `/api/v1/parking/manual-releases` | P0-待归类 | `parking.release.record` | 接口级事件，以本附录为准 |
@@ -1988,6 +2084,10 @@
 | `not_applicable` | success | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `readFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `readFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `readStudentCertificationFile` | `GET` | `/api/v1/student-certifications/{certification_id}/files/{index}` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `readStudentCertificationFile` | `GET` | `/api/v1/student-certifications/{certification_id}/files/{index}` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | P0-待归类 | `dealer.return.refund.execute` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `upsertPayrollTaxBracket` | `POST` | `/api/v1/staff/payroll/tax-brackets` | STAFF-员工 | `staff.tax_bracket.manage` | 接口级事件，以本附录为准 |
@@ -2371,8 +2471,13 @@
 | `stored_value.bonus_policy_configured` | success | `configureStoredValueBonusPolicy` | `POST` | `/api/v1/loyalty/stored-value/bonus-policies` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.bonus_policy_view_failed` | failure | `getStoredValueBonusPolicy` | `GET` | `/api/v1/loyalty/stored-value/bonus-policies/{project_id}` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.bonus_policy_viewed` | success | `getStoredValueBonusPolicy` | `GET` | `/api/v1/loyalty/stored-value/bonus-policies/{project_id}` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.consume` | success | `payCustomerTicketOrderWithStoredValue` | `POST` | `/api/v1/customer/orders/{order_id}/stored-value/pay` | CUS/TIC-客人购票 | `customer.stored_value.consume` | 接口级事件，以本附录为准 |
 | `stored_value.counter_refund` | success | `counterRefundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `stored_value.counter_refund_failed` | failure | `counterRefundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.exit_notice_policy_config_failed` | failure | `saveMerchantCardExitNoticePolicy` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.exit_notice_policy_configured` | success | `saveMerchantCardExitNoticePolicy` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `stored_value.exit_notice_publish_failed` | failure | `publishMerchantCardExitNotice` | `POST` | `/api/v1/merchant-portal/card-exit-notices` | P0-待归类 | `merchant.portal.card_exit_notice.publish` | 接口级事件，以本附录为准 |
+| `stored_value.exit_notice_published` | success | `publishMerchantCardExitNotice` | `POST` | `/api/v1/merchant-portal/card-exit-notices` | P0-待归类 | `merchant.portal.card_exit_notice.publish` | 接口级事件，以本附录为准 |
 | `stored_value.frozen` | success | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
 | `stored_value.frozen_failed` | failure | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | CUS-客人端 | `customer.stored_value.freeze` | 接口级事件，以本附录为准 |
 | `stored_value.merchant_card_config_failed` | failure | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
@@ -2513,6 +2618,8 @@
 | `ticket_transfer.revoked` | success | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `ticket_transfer.view_failed` | failure | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | TIC-票务权益 | `ticket.transfer.read` | 接口级事件，以本附录为准 |
 | `ticket_transfer.viewed` | success | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | TIC-票务权益 | `ticket.transfer.read` | 接口级事件，以本附录为准 |
+| `ticket.expiry_reminder_policy_update_failed` | failure | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
+| `ticket.expiry_reminder_policy_updated` | success | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.issue_failed` | failure | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
 | `ticket.issued` | success | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
 | `ticket.points.billing.bills.viewed` | success | `listTicketPointsBills` | `GET` | `/api/v1/loyalty/ticket-points-billing/bills` | P0-待归类 | `ticket.points.billing.view` | 接口级事件，以本附录为准 |
@@ -2589,6 +2696,8 @@
 | `voucher.issued` | success | `issueVouchers` | `POST` | `/api/v1/vouchers/instances` | CUS-客人端 | `customer.voucher.manage` | 接口级事件，以本附录为准 |
 | `voucher.overview_view_failed` | failure | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
 | `voucher.overview_viewed` | success | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
+| `voucher.redeem_code_issue_failed` | failure | `getCustomerVoucherRedeemCode` | `GET` | `/api/v1/customer/vouchers/{voucher_instance_id}/redeem-code` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `voucher.redeem_code_issued` | success | `getCustomerVoucherRedeemCode` | `GET` | `/api/v1/customer/vouchers/{voucher_instance_id}/redeem-code` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `voucher.redeem_failed` | failure | `redeemVoucher` | `POST` | `/api/v1/vouchers/redemptions` | CUS-客人端 | `customer.voucher.redeem` | 接口级事件，以本附录为准 |
 | `voucher.redeemed` | success | `redeemVoucher` | `POST` | `/api/v1/vouchers/redemptions` | CUS-客人端 | `customer.voucher.redeem` | 接口级事件，以本附录为准 |
 | `voucher.redemptions_view_failed` | failure | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | CUS-客人端 | `customer.voucher.view` | 接口级事件，以本附录为准 |
@@ -2873,86 +2982,131 @@
 | BAR-酒吧经营 | `verifyBarReservationEntryAllowance` | `POST` | `/api/v1/bar/reservations/{id}/entry-allowance/verify` | 卡座免通票入场名额校验 | `bar.table.guest_checkin` | `bar.table_guest.entry_allowance_verified` / `bar.table_guest.entry_allowance_verify_failed` | staff_work_phone, kiosk | operation 级补充 |
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | tablet, web | operation 级补充 |
-| CUS-客人端 | `blacklistCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist` | 拉黑客人账号（永久禁止使用服务，无到期） | `customer.account.manage` | `customer.account.blacklisted` / `customer.account.blacklist_failed` | web | operation 级补充 |
-| CUS-客人端 | `claimCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers/{transfer_id}/claim` | 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得) | `not_applicable` | `voucher_transfer.claimed` / `voucher_transfer.claim_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `applyCustomerStudentCertification` | `POST` | `/api/v1/customer/student-certifications` | 客人申请学生认证 | `not_applicable` | `customer.student_cert.applied` / `customer.student_cert.apply_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `approveCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/approve` | 批准黑名单申请的当前这一级（夜班值班经理批准 → 娱乐平台负责人终审，终审通过即执行） | `customer.blacklist.approve` | `customer.blacklist.approved` / `customer.blacklist.approve_failed` | web | operation 级补充 |
+| CUS-客人端 | `approveStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/approve` | 学生认证审核通过 | `ticket.student_cert.review` | `customer.student_cert.approved` / `customer.student_cert.approve_failed` | web | operation 级补充 |
+| CUS-客人端 | `claimCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers/{transfer_id}/claim` | 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得) | `not_applicable` | `voucher_transfer.claimed` / `voucher_transfer.claim_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `configureCustomerChurnAlertSetting` | `PUT` | `/api/v1/customer-churn-alert-setting` | 配置同号一年内注销与注册合计次数上限（全平台，值与上下限同配） | `customer.account.manage` | `customer.churn_alert_setting.configured` / `customer.churn_alert_setting.config_failed` | web | operation 级补充 |
+| CUS-客人端 | `configureCustomerRestrictionSetting` | `PUT` | `/api/v1/customer-restriction-settings/{project_id}` | 配置本项目会员受限时长（天数与上下限同配） | `customer.account.manage` | `customer.restriction_setting.configured` / `customer.restriction_setting.config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueBonusPolicy` | `POST` | `/api/v1/loyalty/stored-value/bonus-policies` | 配置综合体通用卡充值赠送比例（仅平台，按项目，须同时配置上下限） | `customer.stored_value.refund` | `stored_value.bonus_policy_configured` / `stored_value.bonus_policy_config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `customer.stored_value.refund` | `stored_value.merchant_card_configured` / `stored_value.merchant_card_config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
-| CUS-客人端 | `confirmCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments/{payment_id}/confirm` | 客人停车缴费确认 | `not_applicable` | `parking.payment_paid` / `parking.payment_confirm_failed` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `confirmCustomerDepositPayment` | `POST` | `/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments/{payment_intent_id}/confirm` | 客人回前台确认定金在线付款（查单） | `not_applicable` | `customer.payment_confirmed` / `customer.payment_confirm_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `confirmCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments/{payment_id}/confirm` | 客人停车缴费确认 | `not_applicable` | `parking.payment_paid` / `parking.payment_confirm_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `counterRefundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | 会员储值到店柜台退款（商户预收卡唯一可达退款路径） | `customer.stored_value.refund` | `stored_value.counter_refund` / `stored_value.counter_refund_failed` | web | operation 级补充 |
-| CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS-客人端 | `createCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments` | 客人停车缴费下单 | `not_applicable` | `parking.payment_created` / `parking.payment_create_failed` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | 隐私同意记录 | `not_applicable` | `customer.consent.created` / `customer.consent.create_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `createCustomerParkingPayment` | `POST` | `/api/v1/customer/parking/payments` | 客人停车缴费下单 | `not_applicable` | `parking.payment_created` / `parking.payment_create_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `createVoucherDefinition` | `POST` | `/api/v1/vouchers/definitions` | 新建券定义（商户折扣券/店内实物券；外部伙伴券仍配置在通票权益模板 V282） | `customer.voucher.manage` | `voucher.definition_created` / `voucher.definition_create_failed` | web | operation 级补充 |
-| CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | 客人登出（清除免登录会话 cookie） | `public` | `customer.logged_out` / `customer.logout_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS-客人端 | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | 客人手机号登录 | `public` | `customer.auth.login` / `customer.auth.login_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS-客人端 | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | 客人储值账户查询 | `customer.stored_value.view` | `customer.stored_value_account_viewed` / `customer.stored_value_account_viewed_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | 客人储值卡列表（我的全部卡：通用卡 + 各商户卡分别余额） | `customer.stored_value.view` | `customer.stored_value_accounts_viewed` / `customer.stored_value_accounts_viewed_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `customerStoredValueConsume` | `POST` | `/api/v1/customer/stored-value/consume` | 客人储值消费（余额扣减） | `customer.stored_value.consume` | `customer.stored_value.consume` / `customer.stored_value.consume_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | 客人储值充值入账（支付成功后） | `customer.stored_value.topup` | `customer.stored_value.settle` / `customer.stored_value.settle_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `customerStoredValueTopup` | `POST` | `/api/v1/customer/stored-value/topup` | 客人储值充值（绑支付意图） | `customer.stored_value.topup` | `customer.stored_value.topup` / `customer.stored_value.topup_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `customerVoucherWallet` | `GET` | `/api/v1/customer/vouchers` | 我的券包（客人端只读：积分兑换券/营销赠券/通票第三方券聚合，按状态分组展示） | `customer.voucher.view` | `voucher.customer_wallet_viewed` / `voucher.customer_wallet_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | 客人自助注销本人账号（注销后登录/动作被拒，历史数据物理保留但客人不可见） | `not_applicable` | `customer.account.deregistered` / `customer.account.deregister_failed` | miniapp, web | operation 级补充 |
+| CUS-客人端 | `customerCheckIn` | `POST` | `/api/v1/customer/check-ins` | 客人每日签到 | `not_applicable` | `customer.checked_in` / `customer.check_in_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerLogout` | `POST` | `/api/v1/customer/auth/logout` | 客人登出（清除免登录会话 cookie） | `public` | `customer.logged_out` / `customer.logout_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `customerPhoneLogin` | `POST` | `/api/v1/customer/auth/phone-login` | 客人手机号登录 | `public` | `customer.auth.login` / `customer.auth.login_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | 客人储值账户查询 | `customer.stored_value.view` | `customer.stored_value_account_viewed` / `customer.stored_value_account_viewed_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | 客人储值卡列表（我的全部卡：通用卡 + 各商户卡分别余额） | `customer.stored_value.view` | `customer.stored_value_accounts_viewed` / `customer.stored_value_accounts_viewed_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerStoredValueSettle` | `POST` | `/api/v1/customer/stored-value/settle` | 客人储值充值入账（支付成功后） | `customer.stored_value.topup` | `customer.stored_value.settle` / `customer.stored_value.settle_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerStoredValueTopup` | `POST` | `/api/v1/customer/stored-value/topup` | 客人储值充值（绑支付意图） | `customer.stored_value.topup` | `customer.stored_value.topup` / `customer.stored_value.topup_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `customerVoucherWallet` | `GET` | `/api/v1/customer/vouchers` | 我的券包（客人端只读：积分兑换券/营销赠券/通票第三方券聚合，按状态分组展示） | `customer.voucher.view` | `voucher.customer_wallet_viewed` / `voucher.customer_wallet_view_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `deregisterCustomerAccount` | `POST` | `/api/v1/customer/deregister` | 客人自助注销本人账号（个人信息删除、积分券清零、名下存酒须确认放弃） | `not_applicable` | `customer.account.deregistered` / `customer.account.deregister_failed` | miniapp | operation 级补充 |
 | CUS-客人端 | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | 手动触发会员等级评估 | `customer.loyalty.evaluate` | `member.level_changed` / `customer.level_evaluate_failed` | web | operation 级补充 |
-| CUS-客人端 | `findCustomerParkingSession` | `GET` | `/api/v1/customer/parking/sessions` | 客人按车牌或临时码查在场车辆停车费 | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `findCustomerParkingSession` | `GET` | `/api/v1/customer/parking/sessions` | 客人按车牌或临时码查在场车辆停车费 | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `freezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/freeze` | 冻结会员积分账户 | `customer.points.freeze` | `customer.points.frozen` / `customer.points.freeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | 冻结会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.frozen` / `stored_value.frozen_failed` | web | operation 级补充 |
-| CUS-客人端 | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | 客人查看本日停车消费抵免 | `not_applicable` | `parking.credit.granted` / `not_applicable` | app, miniapp, web | operation 级补充 |
-| CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | web, miniapp, app | 已在任务映射正文出现 |
-| CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp, web | operation 级补充 |
-| CUS-客人端 | `getCustomerSavedBottlePickupCode` | `GET` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/pickup-code` | 官方动态取酒码（按当前持有人签发，窗口=全场统一刷新间隔，转让后原持有人码作废） | `not_applicable` | `bar.saved_bottle.pickup_code_issued` / `bar.saved_bottle.pickup_code_issue_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `getCustomerSession` | `GET` | `/api/v1/customer/session` | 客人会话恢复（免登录） | `not_applicable` | `customer.session_viewed` / `customer.session_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS-客人端 | `getOwnMerchantConsumptionRewards` | `GET` | `/api/v1/customer/merchant-rewards` | 查看本人商户消费积分与成长值 | `not_applicable` | `merchant.reward.customer.viewed` / `merchant.reward.customer.viewed.failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `getCustomerChurnAlertSetting` | `GET` | `/api/v1/customer-churn-alert-setting` | 查同号注销与注册频次预警上限（全平台） | `customer.account.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| CUS-客人端 | `getCustomerHomeContent` | `GET` | `/api/v1/home-contents/{project_id}` | 查客人端首页已发布与待审批的综合体介绍与活动公告 | `customer.home_content.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| CUS-客人端 | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | 客人查看本日停车消费抵免 | `not_applicable` | `parking.credit.granted` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | miniapp, app | 已在任务映射正文出现 |
+| CUS-客人端 | `getCustomerPointsLedger` | `GET` | `/api/v1/customer/points/ledger` | 查询积分流水 | `not_applicable` | `customer.points.ledger_viewed` / `customer.points.ledger_view_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `getCustomerRestrictionSetting` | `GET` | `/api/v1/customer-restriction-settings/{project_id}` | 查本项目会员受限时长（未配置时回落出厂 90 天） | `customer.account.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| CUS-客人端 | `getCustomerSavedBottlePickupCode` | `GET` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/pickup-code` | 官方动态取酒码（按当前持有人签发，窗口=全场统一刷新间隔，转让后原持有人码作废） | `not_applicable` | `bar.saved_bottle.pickup_code_issued` / `bar.saved_bottle.pickup_code_issue_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `getCustomerSession` | `GET` | `/api/v1/customer/session` | 客人会话恢复（免登录） | `not_applicable` | `customer.session_viewed` / `customer.session_view_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `getCustomerStoredValueTopupRules` | `GET` | `/api/v1/customer/stored-value/topup-rules` | 充值前规则告知（扣款顺序、赠送金性质、退卡口径） | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `getCustomerTerms` | `GET` | `/api/v1/customer/terms` | 当前会员条款与隐私条款（匿名可读） | `public` | `not_applicable` / `not_applicable` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `getCustomerVoucherRedeemCode` | `GET` | `/api/v1/customer/vouchers/{voucher_instance_id}/redeem-code` | 我的券动态核销码（按全场统一刷新间隔过期） | `not_applicable` | `voucher.redeem_code_issued` / `voucher.redeem_code_issue_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `getMerchantCardExitNoticePolicy` | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | 查商户卡退出公示天数（全平台） | `customer.stored_value.refund` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| CUS-客人端 | `getMyStudentCertification` | `GET` | `/api/v1/customer/student-certifications/current` | 我的学生认证 | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `getOwnMerchantConsumptionRewards` | `GET` | `/api/v1/customer/merchant-rewards` | 查看本人商户消费积分与成长值 | `not_applicable` | `merchant.reward.customer.viewed` / `merchant.reward.customer.viewed.failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `getStoredValueBonusPolicy` | `GET` | `/api/v1/loyalty/stored-value/bonus-policies/{project_id}` | 查询综合体通用卡充值赠送比例（仅平台） | `customer.stored_value.refund` | `stored_value.bonus_policy_viewed` / `stored_value.bonus_policy_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `getStoredValueMerchantRefundRule` | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | 查询商户级储值卡退款规则 | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_viewed` / `stored_value.merchant_refund_rule_view_failed` | web | operation 级补充 |
-| CUS-客人端 | `initiateCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers` | 发起券转赠(手机号/微信链接/二维码) | `not_applicable` | `voucher_transfer.created` / `voucher_transfer.create_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `initiateCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers` | 发起券转赠(手机号/微信链接/二维码) | `not_applicable` | `voucher_transfer.created` / `voucher_transfer.create_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `issueVouchers` | `POST` | `/api/v1/vouchers/instances` | 营销赠发券（按定义给客人发放；商户 scope 只能发自家券） | `customer.voucher.manage` | `voucher.issued` / `voucher.issue_failed` | web | operation 级补充 |
-| CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS-客人端 | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | 查询积分兑换商品目录 | `not_applicable` | `customer.points.redemption_items_viewed` / `customer.points.redemption_items_view_failed` | app, miniapp, web | operation 级补充 |
-| CUS-客人端 | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | 查询我的积分兑换记录 | `not_applicable` | `customer.points.redemptions_viewed` / `customer.points.redemptions_view_failed` | app, miniapp, web | operation 级补充 |
-| CUS-客人端 | `listIncomingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/incoming` | 待我领取的转赠(手机号渠道) | `not_applicable` | `customer.voucher_transfer_incoming_viewed` / `customer.voucher_transfer_incoming_view_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `listCustomerAmusementProjects` | `GET` | `/api/v1/customer/amusement/projects` | 可预定游乐项目与场次（客人端只读） | `public` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `listCustomerBlacklistRequests` | `GET` | `/api/v1/customer-blacklist-requests` | 黑名单申请列表（待批准在前） | `customer.blacklist.request` | `customer.blacklist_requests_viewed` / `not_applicable` | web | operation 级补充 |
+| CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `listCustomerEffectiveTerminalSwitches` | `GET` | `/api/v1/customer/terminal-switches/effective` | 客人端读取本端已关闭的开关行（匿名可读） | `public` | `not_applicable` / `not_applicable` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `listCustomerMerchantCardExitNotices` | `GET` | `/api/v1/customer/merchant-card-exit-notices` | 商户储值卡退出公告（客人端） | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | 查询积分兑换商品目录 | `not_applicable` | `customer.points.redemption_items_viewed` / `customer.points.redemption_items_view_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `listCustomerPointsRedemptions` | `GET` | `/api/v1/customer/points/redemptions` | 查询我的积分兑换记录 | `not_applicable` | `customer.points.redemptions_viewed` / `customer.points.redemptions_view_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `listCustomerProjects` | `GET` | `/api/v1/customer/projects` | 综合体介绍、营业时间与活动公告（客人端首页） | `public` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `listCustomerStoredValueTransactions` | `GET` | `/api/v1/customer/stored-value/accounts/{account_id}/transactions` | 我的余额逐笔记录 | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `listIncomingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/incoming` | 待我领取的转赠(手机号渠道) | `not_applicable` | `customer.voucher_transfer_incoming_viewed` / `customer.voucher_transfer_incoming_view_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `listMemberLevels` | `GET` | `/api/v1/loyalty/member-levels` | 会员等级配置列表 | `customer.loyalty.view` | `customer.member_levels_viewed` / `customer.member_levels_view_failed` | web | operation 级补充 |
-| CUS-客人端 | `listMyCustomerSavedBottles` | `GET` | `/api/v1/customer/my-saved-bottles` | 我的存酒（本人名下全部存酒与到期日，跨店汇总，每条标明所属酒吧） | `not_applicable` | `customer.my_saved_bottles_viewed` / `customer.my_saved_bottles_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `listOutgoingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/outgoing` | 我发起的转赠(撤回入口/状态查看) | `not_applicable` | `customer.voucher_transfer_outgoing_viewed` / `customer.voucher_transfer_outgoing_view_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `listMyCustomerComplaints` | `GET` | `/api/v1/customer/complaints` | 我的投诉 | `not_applicable` | `customer.complaints_viewed` / `customer.complaints_view_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `listMyCustomerSavedBottles` | `GET` | `/api/v1/customer/my-saved-bottles` | 我的存酒（本人名下全部存酒与到期日，跨店汇总，每条标明所属酒吧） | `not_applicable` | `customer.my_saved_bottles_viewed` / `customer.my_saved_bottles_view_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `listOutgoingCustomerVoucherTransfers` | `GET` | `/api/v1/customer/voucher-transfers/outgoing` | 我发起的转赠(撤回入口/状态查看) | `not_applicable` | `customer.voucher_transfer_outgoing_viewed` / `customer.voucher_transfer_outgoing_view_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `listStudentCertifications` | `GET` | `/api/v1/student-certifications` | 学生认证审核列表（票务运营岗） | `ticket.student_cert.review` | `customer.student_certs_viewed` / `customer.student_certs_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listVoucherDefinitions` | `GET` | `/api/v1/vouchers/definitions` | 券定义列表（统一台账模板：类型/核销方式/结算口径；内部结算价按 voucher.internal_price.view 权限脱敏；每行带只读 merchant_type＝券定义商户业态） | `customer.voucher.view` | `voucher.definitions_viewed` / `voucher.definitions_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listVoucherInstances` | `GET` | `/api/v1/vouchers/instances` | 券实例台账（收编积分兑换券＋营销赠券；状态机 issued→redeemed/expired/revoked） | `customer.voucher.view` | `voucher.instances_viewed` / `voucher.instances_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | 全部券聚合（读层并入不搬表：统一台账 ∪ 通票第三方合作券 V282） | `customer.voucher.view` | `voucher.overview_viewed` / `voucher.overview_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏） | `customer.voucher.view` | `voucher.redemptions_viewed` / `voucher.redemptions_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | 按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
-| CUS-客人端 | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | 客人注销预览（提醒名下各储值卡本金/赠送金；供选择放弃余额或生成待退事项） | `not_applicable` | `customer.account.deregister_previewed` / `customer.account.deregister_preview_failed` | miniapp, web | operation 级补充 |
-| CUS-客人端 | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.voucher_transfer_preview_viewed` / `customer.voucher_transfer_preview_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | 提交积分兑换 | `not_applicable` | `customer.points.redeem` / `customer.points.redeem_failed` | app, miniapp, web | operation 级补充 |
+| CUS-客人端 | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | 客人注销预览（提醒名下各储值卡本金/赠送金、名下存酒与可退款的未用票） | `not_applicable` | `customer.account.deregister_previewed` / `customer.account.deregister_preview_failed` | miniapp | operation 级补充 |
+| CUS-客人端 | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.voucher_transfer_preview_viewed` / `customer.voucher_transfer_preview_view_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | 提交发布客人端首页综合体介绍与活动公告（审批后生效） | `customer.home_content.manage` | `customer.home_content_published` / `customer.home_content_publish_failed` | web | operation 级补充 |
+| CUS-客人端 | `rateCustomerComplaint` | `POST` | `/api/v1/customer/complaints/{work_order_id}/satisfaction` | 客人对本人投诉评满意度 | `not_applicable` | `customer.complaint_rated` / `customer.complaint_rate_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `readStudentCertificationFile` | `GET` | `/api/v1/student-certifications/{certification_id}/files/{index}` | 回读学生证件照片 | `ticket.student_cert.review` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| CUS-客人端 | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | 提交积分兑换 | `not_applicable` | `customer.points.redeem` / `customer.points.redeem_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `redeemVoucher` | `POST` | `/api/v1/vouchers/redemptions` | 统一核销（实物券扣库存＋内部结算价挂应付；酒吧商户（merchant_type=bar）的折扣券不在此核销——须在酒吧结账 settleBarBill 时抵扣核销，本端点返回 VOUCHER_REQUIRES_BILL；非酒吧商户的折扣券仍可在此独立核销（操作员裁决 2026-10-20 第三轮第 9 条）；每券一次；响应 settlement_amount_cent 按 voucher.internal_price.view 权限脱敏） | `customer.voucher.redeem` | `voucher.redeemed` / `voucher.redeem_failed` | web | operation 级补充 |
 | CUS-客人端 | `refundStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | 会员储值退卡/退余额（后台） | `customer.stored_value.refund` | `stored_value.refund` / `stored_value.refund_failed` | web | operation 级补充 |
-| CUS-客人端 | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | 恢复客人账号为正常（解封/解黑） | `customer.account.manage` | `customer.account.reinstated` / `customer.account.reinstate_failed` | web | operation 级补充 |
-| CUS-客人端 | `renewCustomerSavedBottle` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renew` | 客人本人转存（延期）：短信验证码确认即从当前到期日顺延（转存次数不超上限、只能在到期日前办理） | `not_applicable` | `bar.saved_bottle.renewed` / `bar.saved_bottle.renew_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | 客人登录取短信验证码 | `public` | `customer.otp_requested` / `customer.otp_request_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS-客人端 | `requestCustomerSavedBottleRenewalCode` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renewal-code` | 客人本人转存发码（只对当前持有人本人，发到本人手机） | `not_applicable` | `bar.saved_bottle.verification_code_requested` / `bar.saved_bottle.verification_code_request_failed` | web, miniapp, app | operation 级补充 |
-| CUS-客人端 | `revokeCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `voucher_transfer.revoked` / `voucher_transfer.revoke_failed` | web, miniapp, app | operation 级补充 |
+| CUS-客人端 | `registerCustomerMember` | `POST` | `/api/v1/customer/auth/register` | 客人注册会员（短信验证＋生日＋满 18 周岁＋同意当前会员条款与隐私条款） | `public` | `customer.registered` / `customer.register_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `reinstateCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/reinstate` | 提前解除受限（原因必填） | `customer.account.manage` | `customer.account.reinstated` / `customer.account.reinstate_failed` | web | operation 级补充 |
+| CUS-客人端 | `rejectCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/reject` | 驳回黑名单申请（由当前这一级有权批准的人驳回，账户不变） | `customer.blacklist.approve` | `customer.blacklist.rejected` / `customer.blacklist.reject_failed` | web | operation 级补充 |
+| CUS-客人端 | `rejectStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/reject` | 学生认证审核驳回 | `ticket.student_cert.review` | `customer.student_cert.rejected` / `customer.student_cert.reject_failed` | web | operation 级补充 |
+| CUS-客人端 | `renewCustomerSavedBottle` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renew` | 客人本人转存（延期）：短信验证码确认即从当前到期日顺延（转存次数不超上限、只能在到期日前办理） | `not_applicable` | `bar.saved_bottle.renewed` / `bar.saved_bottle.renew_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `requestCustomerBlacklistChange` | `POST` | `/api/v1/customer-accounts/{customer_id}/blacklist-requests` | 申请列入或解除黑名单（保安团队提交，待夜班值班经理与娱乐平台负责人两级批准） | `customer.blacklist.request` | `customer.blacklist.requested` / `customer.blacklist.request_failed` | web | operation 级补充 |
+| CUS-客人端 | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | 客人登录取短信验证码 | `public` | `customer.otp_requested` / `customer.otp_request_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS-客人端 | `requestCustomerSavedBottleRenewalCode` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renewal-code` | 客人本人转存发码（只对当前持有人本人，发到本人手机） | `not_applicable` | `bar.saved_bottle.verification_code_requested` / `bar.saved_bottle.verification_code_request_failed` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `requestCustomerStoredValueSmsCode` | `POST` | `/api/v1/customer/stored-value/sms` | 储值付款短信验证码 | `not_applicable` | `customer.otp_requested` / `customer.otp_request_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `revokeCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `voucher_transfer.revoked` / `voucher_transfer.revoke_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `revokeVoucher` | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | 作废券（仅未核销可作废；理由必填进审计留痕） | `customer.voucher.manage` | `voucher.revoked` / `voucher.revoke_failed` | web | operation 级补充 |
-| CUS-客人端 | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | 封禁客人账号（临时，到期客人再登录自动恢复正常；期内购买/使用被拒） | `customer.account.manage` | `customer.account.suspended` / `customer.account.suspend_failed` | web | operation 级补充 |
+| CUS-客人端 | `saveMerchantCardExitNoticePolicy` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | 配置商户卡退出公示天数及上下限（全平台） | `customer.stored_value.refund` | `stored_value.exit_notice_policy_configured` / `stored_value.exit_notice_policy_config_failed` | web | operation 级补充 |
+| CUS-客人端 | `startCustomerDepositPayment` | `POST` | `/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments` | 客人本人订台发起定金在线付款 | `not_applicable` | `customer.payment_created` / `customer.payment_create_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `submitCustomerComplaint` | `POST` | `/api/v1/customer/complaints` | 客人提交投诉（文字＋照片、视频、语音） | `not_applicable` | `customer.complaint_submitted` / `customer.complaint_submit_failed` | app, miniapp | operation 级补充 |
+| CUS-客人端 | `suspendCustomerAccount` | `POST` | `/api/v1/customer-accounts/{customer_id}/suspend` | 置为受限（只停自助订台与员工代订，到期自动恢复有效） | `customer.account.manage` | `customer.account.suspended` / `customer.account.suspend_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezePointsAccount` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/unfreeze` | 解冻会员积分账户 | `customer.points.freeze` | `customer.points.unfrozen` / `customer.points.unfreeze_failed` | web | operation 级补充 |
 | CUS-客人端 | `unfreezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/unfreeze` | 解冻会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.unfrozen` / `stored_value.unfrozen_failed` | web | operation 级补充 |
-| CUS/BAR-客人订台 | `confirmCustomerBarInvitation` | `POST` | `/api/v1/customer/bar-invitations/confirm` | 客人确认接受订卡邀请函 | `not_applicable` | `customer.bar_invitation.confirmed` / `customer.bar_invitation.confirm_failed` | web, miniapp, app | operation 级补充 |
-| CUS/BAR-客人订台 | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | 客人卡座预订 | `not_applicable` | `customer.bar_reservation.created` / `customer.bar_reservation.create_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS/BAR-客人订台 | `getCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}` | 客人查看自己的订卡邀请函 | `not_applicable` | `customer.bar_invitation.viewed` / `customer.bar_invitation.view_failed` | web, miniapp, app | operation 级补充 |
-| CUS/BAR-客人订台 | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | 客人可订台资源 | `not_applicable` | `customer.bar_reservation_options_viewed` / `customer.bar_reservation_options_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS/BAR-客人订台 | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-sessions/{session_id}/menu` | 客人扫码点单查看菜单 | `not_applicable` | `customer.bar_scan_menu.viewed` / `customer.bar_scan_menu.view_failed` | web, miniapp, app | operation 级补充 |
-| CUS/BAR-客人订台 | `placeCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-sessions/{session_id}/scan-orders` | 客人自助扫码点单 | `not_applicable` | `customer.bar_scan_order.created` / `customer.bar_scan_order.create_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `claimCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/claim` | 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得) | `not_applicable` | `ticket_transfer.claimed` / `ticket_transfer.claim_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | 客人自助购票下单 | `not_applicable` | `customer.ticket_order.created` / `customer.ticket_order.create_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `getCustomerTicketQr` | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 我的动态二维码 | `not_applicable` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `getOwnTicketUseRewards` | `GET` | `/api/v1/customer/ticket-rewards` | 查看本人实际使用门票奖励及待追回积分 | `not_applicable` | `ticket.reward.customer.viewed` / `ticket.reward.customer.viewed.failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `initiateCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers` | 发起门票转赠(手机号/微信链接/二维码) | `not_applicable` | `ticket_transfer.created` / `ticket_transfer.create_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id） | `not_applicable` | `customer.order_tickets_viewed` / `customer.order_tickets_view_failed` | miniapp, web | operation 级补充 |
-| CUS/TIC-客人购票 | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | 客人可购票种和票价 | `public` | `customer.ticket_products_viewed` / `customer.ticket_products_view_failed` | web, miniapp, app, kiosk | operation 级补充 |
-| CUS/TIC-客人购票 | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | 待我领取的转赠(手机号渠道) | `not_applicable` | `customer.ticket_transfer_incoming_viewed` / `customer.ticket_transfer_incoming_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `listMyTickets` | `GET` | `/api/v1/customer/my-tickets` | 我的票(持有人视角:自购未转+受赠,含转赠中标记) | `not_applicable` | `customer.my_tickets_viewed` / `customer.my_tickets_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | 我发起的转赠(撤回入口/状态查看) | `not_applicable` | `customer.ticket_transfer_outgoing_viewed` / `customer.ticket_transfer_outgoing_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `listPublishedTicketRewardRules` | `GET` | `/api/v1/customer/ticket-reward-rules` | 查看已公布门票积分及成长值规则 | `not_applicable` | `ticket.reward.rules.viewed` / `ticket.reward.rules.viewed.failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.ticket_transfer_preview_viewed` / `customer.ticket_transfer_preview_view_failed` | web, miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `ticket_transfer.revoked` / `ticket_transfer.revoke_failed` | web, miniapp, app | operation 级补充 |
+| CUS/BAR-客人订台 | `confirmCustomerBarInvitation` | `POST` | `/api/v1/customer/bar-invitations/confirm` | 客人确认接受订卡邀请函 | `not_applicable` | `customer.bar_invitation.confirmed` / `customer.bar_invitation.confirm_failed` | miniapp, app | operation 级补充 |
+| CUS/BAR-客人订台 | `confirmCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-tables/{table_id}/scan-orders/{scan_order_id}/confirm` | 扫码点单回前台确认付款（查单） | `public` | `customer.bar_scan_order.paid` / `customer.bar_scan_order.pay_failed` | app, miniapp | operation 级补充 |
+| CUS/BAR-客人订台 | `createCustomerBarReservation` | `POST` | `/api/v1/customer/bar-reservations` | 客人卡座预订 | `not_applicable` | `customer.bar_reservation.created` / `customer.bar_reservation.create_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS/BAR-客人订台 | `createCustomerBarScanOrder` | `POST` | `/api/v1/customer/bar-tables/{table_id}/scan-orders` | 扫码点单下单（即时付款） | `public` | `customer.bar_scan_order.created` / `customer.bar_scan_order.create_failed` | app, miniapp | operation 级补充 |
+| CUS/BAR-客人订台 | `getCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}` | 客人查看自己的订卡邀请函 | `not_applicable` | `customer.bar_invitation.viewed` / `customer.bar_invitation.view_failed` | miniapp, app | operation 级补充 |
+| CUS/BAR-客人订台 | `getCustomerBarInvitationEntryCode` | `GET` | `/api/v1/customer/bar-invitations/{reservation_id}/entry-code` | 本人动态入场码 | `not_applicable` | `customer.bar_invitation.entry_code_issued` / `customer.bar_invitation.entry_code_failed` | app, miniapp | operation 级补充 |
+| CUS/BAR-客人订台 | `getCustomerBarTableCurrentBill` | `GET` | `/api/v1/customer/bar-tables/{table_id}/current-bill` | 本桌当前账单 | `public` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS/BAR-客人订台 | `listCustomerBarReservationOptions` | `GET` | `/api/v1/customer/bar-reservation-options` | 客人可订台资源 | `not_applicable` | `customer.bar_reservation_options_viewed` / `customer.bar_reservation_options_view_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS/BAR-客人订台 | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-tables/{table_id}/menu` | 扫码点单查看菜单 | `public` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS/BAR-客人订台 | `listMyCustomerBarReservations` | `GET` | `/api/v1/customer/bar-reservations` | 我的订台 | `not_applicable` | `customer.bar_reservations.viewed` / `customer.bar_reservations.view_failed` | app, miniapp | operation 级补充 |
+| CUS/BAR-客人订台 | `previewCustomerBarInvitation` | `GET` | `/api/v1/customer/bar-invitations/preview` | 扫邀请函二维码预览 | `not_applicable` | `customer.bar_invitation.previewed` / `customer.bar_invitation.preview_failed` | app, miniapp | operation 级补充 |
+| CUS/BAR-客人订台 | `removeCustomerBarInvitationMember` | `POST` | `/api/v1/customer/bar-invitations/{reservation_id}/members/{member_id}/remove` | 开卡人移出尚未入场的被邀请人 | `not_applicable` | `customer.bar_invitation.member_removed` / `customer.bar_invitation.member_remove_failed` | app, miniapp | operation 级补充 |
+| CUS/TIC-客人购票 | `claimCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/claim` | 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得) | `not_applicable` | `ticket_transfer.claimed` / `ticket_transfer.claim_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `confirmCustomerTicketPayment` | `POST` | `/api/v1/customer/orders/{order_id}/payments/{payment_intent_id}/confirm` | 客人回前台确认在线付款（查单） | `not_applicable` | `customer.payment_confirmed` / `customer.payment_confirm_failed` | app, miniapp | operation 级补充 |
+| CUS/TIC-客人购票 | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | 客人自助购票下单 | `not_applicable` | `customer.ticket_order.created` / `customer.ticket_order.create_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `getCustomerTicketQr` | `GET` | `/api/v1/customer/tickets/{ticket_id}/qr` | 我的动态二维码 | `not_applicable` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `getOwnTicketUseRewards` | `GET` | `/api/v1/customer/ticket-rewards` | 查看本人实际使用门票奖励及待追回积分 | `not_applicable` | `ticket.reward.customer.viewed` / `ticket.reward.customer.viewed.failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `initiateCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers` | 发起门票转赠(手机号/微信链接/二维码) | `not_applicable` | `ticket_transfer.created` / `ticket_transfer.create_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id） | `not_applicable` | `customer.order_tickets_viewed` / `customer.order_tickets_view_failed` | miniapp | operation 级补充 |
+| CUS/TIC-客人购票 | `listCustomerTicketChannels` | `GET` | `/api/v1/customer/ticket-channels` | 第三方渠道接入状态（匿名可读，供客户端置灰） | `public` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS/TIC-客人购票 | `listCustomerTicketExpiryReminders` | `GET` | `/api/v1/customer/ticket-expiry-reminders` | 未核销票到期提醒（App/小程序启动与回前台拉取） | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
+| CUS/TIC-客人购票 | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | 客人可购票种和票价 | `public` | `customer.ticket_products_viewed` / `customer.ticket_products_view_failed` | miniapp, app, kiosk | operation 级补充 |
+| CUS/TIC-客人购票 | `listCustomerTicketRefunds` | `GET` | `/api/v1/customer/ticket-refunds` | 我的退票申请及其状态 | `not_applicable` | `customer.ticket_refunds_viewed` / `customer.ticket_refunds_view_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listCustomerTicketUsages` | `GET` | `/api/v1/customer/tickets/{ticket_id}/usages` | 我的票使用记录 | `not_applicable` | `customer.ticket_usages_viewed` / `customer.ticket_usages_view_failed` | app, miniapp | operation 级补充 |
+| CUS/TIC-客人购票 | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | 待我领取的转赠(手机号渠道) | `not_applicable` | `customer.ticket_transfer_incoming_viewed` / `customer.ticket_transfer_incoming_view_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listMyTickets` | `GET` | `/api/v1/customer/my-tickets` | 我的票(持有人视角:自购未转+受赠,含转赠中标记) | `not_applicable` | `customer.my_tickets_viewed` / `customer.my_tickets_view_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | 我发起的转赠(撤回入口/状态查看) | `not_applicable` | `customer.ticket_transfer_outgoing_viewed` / `customer.ticket_transfer_outgoing_view_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `listPublishedTicketRewardRules` | `GET` | `/api/v1/customer/ticket-reward-rules` | 查看已公布门票积分及成长值规则 | `not_applicable` | `ticket.reward.rules.viewed` / `ticket.reward.rules.viewed.failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `payCustomerTicketOrderWithStoredValue` | `POST` | `/api/v1/customer/orders/{order_id}/stored-value/pay` | 客人本人订单储值付款（可只付一部分） | `customer.stored_value.consume` | `stored_value.consume` / `customer.stored_value.pay_failed` | app, miniapp | operation 级补充 |
+| CUS/TIC-客人购票 | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.ticket_transfer_preview_viewed` / `customer.ticket_transfer_preview_view_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `requestCustomerTicketRefund` | `POST` | `/api/v1/customer/ticket-refunds` | 客人自助申请退票（只对本人名下、票种允许退款、整张未使用的票） | `not_applicable` | `customer.ticket_refund.requested` / `customer.ticket_refund.request_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `ticket_transfer.revoked` / `ticket_transfer.revoke_failed` | miniapp, app | operation 级补充 |
+| CUS/TIC-客人购票 | `startCustomerTicketPayment` | `POST` | `/api/v1/customer/orders/{order_id}/payments` | 客人本人订单发起在线付款 | `not_applicable` | `customer.payment_created` / `customer.payment_create_failed` | app, miniapp | operation 级补充 |
 | EVD-事件证据 | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | 关联证据附件到业务对象 | `evidence.attachment.create` | `evidence.attachment_bound` / `evidence.attachment_bind_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | EVD-事件证据 | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | 认领风险预警 | `risk_alert.claim` | `exception.claimed` / `exception.claim_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `completeEvidenceAttachmentUpload` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | 完成上传确认 | `evidence.attachment.create` | `evidence.attachment_completed` / `evidence.attachment_complete_failed` | web, staff_work_phone, tablet | operation 级补充 |
@@ -3382,6 +3536,7 @@
 | P0-待归类 | `listFacilityInspectionTemplates` | `GET` | `/api/v1/facility/inspections/templates` | 巡检模板列表 | `facility.inspection.manage` | `facility.inspection_template.viewed` / `facility.inspection_template.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityMaintenanceDueEquipment` | `GET` | `/api/v1/facility/equipment/maintenance-due` | 查询维保到期设备 | `facility.equipment.manage` | `facility.equipment.maintenance_due_viewed` / `facility.equipment.maintenance_due_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFacilityOverdueWorkOrders` | `GET` | `/api/v1/facility/work-orders/overdue` | 逾期工单列表 | `facility.work_order.manage` | `facility.work_order.overdue_viewed` / `facility.work_order.overdue_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media` | 客人投诉附件清单 | `facility.work_order.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listFacilityWorkOrders` | `GET` | `/api/v1/facility/work-orders` | 工单列表 | `facility.work_order.manage` | `facility.work_order.viewed` / `facility.work_order.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | 查询平面图导入任务 | `floor_plan.import.view` | `floor_plan.import_viewed` / `floor_plan.import_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | 查询 P1/P2 商场平面图 | `floor_plan.view` | `floor_plan.viewed` / `floor_plan.view_failed` | web | operation 级补充 |
@@ -3399,6 +3554,7 @@
 | P0-待归类 | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMyFacilityAlarms` | `GET` | `/api/v1/facility/alarms/mine` | 我的接警 | `facility.alarm.take_over` | `facility.alarm_mine.viewed` / `facility.alarm_mine.view_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
+| P0-待归类 | `listMyMerchantCardExitNotices` | `GET` | `/api/v1/merchant-portal/card-exit-notices` | 商户专区·本商户储值卡退出公告 | `merchant.portal.card_exit_notice.publish` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMyServiceOrders` | `GET` | `/api/v1/services/orders/assigned-to-me` | 我的服务任务(履约人手机) | `service.order.perform` | `service.order.mine_viewed` / `service.order.mine_view_failed` | staff_private_phone, web | operation 级补充 |
 | P0-待归类 | `listParkingCredits` | `GET` | `/api/v1/parking/credits` | 停车消费抵免台账 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listParkingManualReleases` | `GET` | `/api/v1/parking/manual-releases` | 人工放行记录 | `parking.release.record` | `not_applicable` / `not_applicable` | web | operation 级补充 |
@@ -3435,12 +3591,14 @@
 | P0-待归类 | `openDealerOrderRefundApproval` | `POST` | `/api/v1/dealers/refunds/{id}/approval` | 开启经销退款审批 | `dealer.order.payment.verify` | `dealer.order.refund_requested` / `dealer.order.refund_request_failed` | web | operation 级补充 |
 | P0-待归类 | `previewWecomCleanup` | `POST` | `/api/v1/compliance/wecom/cleanup-previews` | 创建逐条消息清理预览 | `wecom.retention.manage` | `wecom.cleanup_previewed` / `wecom.cleanup_preview_failed` | web | operation 级补充 |
 | P0-待归类 | `publishFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports/{importId}/publish` | 发布平面图导入候选 | `floor_plan.import.manage` | `floor_plan.import_published` / `floor_plan.import_publish_failed` | web | operation 级补充 |
+| P0-待归类 | `publishMerchantCardExitNotice` | `POST` | `/api/v1/merchant-portal/card-exit-notices` | 商户专区·发布本商户储值卡退出公告 | `merchant.portal.card_exit_notice.publish` | `stored_value.exit_notice_published` / `stored_value.exit_notice_publish_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `publishTicketRewardConfig` | `POST` | `/api/v1/loyalty/ticket-reward-configs/{id}/publish` | 公布已批准的门票奖励规则 | `ticket.reward.config.manage` | `ticket.reward.config.publish.completed` / `ticket.reward.config.publish.completed.failed` | web | operation 级补充 |
 | P0-待归类 | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | 跨对象查询操作留痕 | `audit.operation_log.view` | `audit.operation_log.viewed` / `audit.operation_log.view_failed` | web | operation 级补充 |
 | P0-待归类 | `quoteDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/quote` | 对询价报价 | `dealer.inquiry.quote` | `dealer.inquiry.quoted` / `dealer.inquiry.quote_failed` | web | operation 级补充 |
 | P0-待归类 | `raiseContractChange` | `POST` | `/api/v1/contracts/{contract_id}/changes` | 发起合同变更(6 类) | `contract.change.manage` | `contract.change_raised` / `contract.change_raise_failed` | web | operation 级补充 |
 | P0-待归类 | `readDealerDeliveryEvidence` | `GET` | `/api/v1/dealer-portal/orders/{id}/delivery-evidence/{attachmentId}` | 受控读取本企业订单交接原文件 | `dealer_portal.order.manage` | `dealer.portal.delivery_evidence_viewed` / `dealer.portal.delivery_evidence_view_failed` | dealer_portal | operation 级补充 |
 | P0-待归类 | `readEnergyMeterAttachment` | `GET` | `/api/v1/energy/meters/{meter_id}/attachments/{attachment_id}/file` | 受控读取本表计及换表关联原件 | `energy.meter.manage` | `energy.attachment_viewed` / `energy.attachment_viewed_failed` | web | operation 级补充 |
+| P0-待归类 | `readFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file` | 回读客人投诉附件 | `facility.work_order.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `readSiteEntryAttachment` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}/attachments/{attachment_id}/file` | 受控读取本报备完工文件 | `facility.site_entry.view_assigned` | `facility.site_entry.attachment_accessed` / `facility.site_entry.attachment_access_failed` | web | operation 级补充 |
 | P0-待归类 | `reassignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/reassign` | 工单转派 | `facility.work_order.manage` | `facility.work_order_reassigned` / `facility.work_order_reassign_failed` | web | operation 级补充 |
 | P0-待归类 | `receiveDealerReturn` | `POST` | `/api/v1/dealers/returns/{id}/receive` | 退货收货 | `dealer.return.inspect` | `dealer.return.received` / `dealer.return.receive_failed` | web | operation 级补充 |
@@ -3684,6 +3842,7 @@
 | TIC-票务权益 | `createTicketType` | `POST` | `/api/v1/ticketing/ticket-types` | 创建票种 | `ticket.product.manage` | `ticket_product.changed` / `ticket_product.change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | 正式核销 | `verification.execute` | `verification.succeeded` / `verification.failed` | staff_work_phone<br>device: verification-gate | operation 级补充 |
 | TIC-票务权益 | `getTicketCredential` | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | 获取动态二维码凭证 | `ticket.credential.view` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
+| TIC-票务权益 | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | 查未核销票到期提醒提前小时数（按项目） | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `getTicketQrRefreshConfig` | `GET` | `/api/v1/ticketing/qr-refresh-config` | 读全场统一动态码刷新间隔 | `ticket.product.view` | `ticket.qr_refresh_config.viewed` / `ticket.qr_refresh_config.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | 出票（含一体机辅助售票） | `ticket.ticket.issue` | `ticket.issued` / `ticket.issue_failed` | web, kiosk, miniapp, app | operation 级补充 |
 | TIC-票务权益 | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | 查询权益模板 | `ticket.entitlement.view` | `ticket_entitlement_template.viewed` / `ticket_entitlement_template.viewed_failed` | web | operation 级补充 |
@@ -3705,10 +3864,12 @@
 | TIC-票务权益 | `raiseTicketVerificationAnomaly` | `POST` | `/api/v1/ticketing/verifications/{id}/anomaly` | 核销提起异常复核 | `verification.execute` | `ticket.verification_anomaly_raised` / `ticket.verification_anomaly_raise_failed` | web | operation 级补充 |
 | TIC-票务权益 | `rejectTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/reject` | 退款驳回 | `ticket.refund.approve` | `ticket_refund.rejected` / `ticket_refund.reject_failed` | web | operation 级补充 |
 | TIC-票务权益 | `requestDeleteEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/delete-request` | 发起权益模板删除申请 | `ticket.entitlement.manage` | `ticket_entitlement_template.delete_requested` / `ticket_entitlement_template.delete_request_failed` | web | operation 级补充 |
+| TIC-票务权益 | `requestKioskBindCode` | `POST` | `/api/v1/ticketing/kiosk-bind-codes` | 一体机辅助购票给客人手机号发绑定验证码 | `ticket.order.create` | `customer.otp_requested` / `customer.otp_request_failed` | web, kiosk | operation 级补充 |
 | TIC-票务权益 | `requestTicketRefund` | `POST` | `/api/v1/ticketing/refunds` | 退款或撤销申请 | `ticket.refund.request` | `ticket_refund.requested` / `ticket_refund.request_failed` | web, merchant_portal | operation 级补充 |
 | TIC-票务权益 | `requestTicketSafetyEvent` | `POST` | `/api/v1/ticketing/safety-events` | 登记通票安全事件 | `ticket.refund.request` | `ticket_safety_event.requested` / `ticket_safety_event.request_failed` | web, merchant_portal | operation 级补充 |
 | TIC-票务权益 | `resolveTicketVerificationAnomaly` | `POST` | `/api/v1/ticketing/verification-anomalies/{id}/resolve` | 主管处置核销异常 | `ticket.verify.anomaly.resolve` | `ticket.verification_anomaly_resolved` / `ticket.verification_anomaly_resolve_failed` | web | operation 级补充 |
 | TIC-票务权益 | `reverseTicketVerification` | `POST` | `/api/v1/ticketing/verifications/{id}/reverse` | 核销冲正 | `ticket.verify.reverse` | `ticket.verification_reversed` / `ticket.verification_reverse_failed` | web, staff_work_phone, mobile_admin | operation 级补充 |
+| TIC-票务权益 | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | 配置未核销票到期提醒提前小时数及上下限（按项目） | `ticket.product.manage` | `ticket.expiry_reminder_policy_updated` / `ticket.expiry_reminder_policy_update_failed` | web | operation 级补充 |
 | TIC-票务权益 | `simulateTicketDynamicPricing` | `POST` | `/api/v1/ticketing/dynamic-pricing/simulations` | Simulate P2 ticket dynamic pricing without creating an order | `ticket.dynamic_pricing.simulate` | `ticket_dynamic_pricing.simulated.success` / `ticket_dynamic_pricing.simulated.failure` | web | operation 级补充 |
 | TIC-票务权益 | `ticketTypePriceCheck` | `GET` | `/api/v1/ticketing/ticket-types/{id}/price-check` | 票种定价核算（系统算出售价 vs 填的售价） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `unarchiveEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates/{id}/unarchive` | 取消存档权益模板 | `ticket.entitlement.manage` | `ticket_entitlement_template.unarchived` / `ticket_entitlement_template.unarchive_failed` | web | operation 级补充 |

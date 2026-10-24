@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -16,13 +16,88 @@ class JdbcTicketingRepository implements TicketingRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final JdbcTicketingRowMapper rowMapper;
     private final JdbcTicketingParameterSource parameterSource;
+    private final ObjectMapper jsonMapper;
+    // ROOT-03-R29：购票手机号盲索引（与 customers.phone_hash 同一函数），供未注册手机号注册后归集渠道票与一体机票。
+    private final com.complex.platform.common.crypto.BlindIndex blindIndex;
 
     JdbcTicketingRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
-            com.complex.platform.common.crypto.PiiCipher piiCipher) {
+            com.complex.platform.common.crypto.PiiCipher piiCipher, com.complex.platform.common.crypto.BlindIndex blindIndex) {
         this.jdbcTemplate = jdbcTemplate;
         var jdbcObjectMapper = objectMapper.copy().findAndRegisterModules();
+        this.jsonMapper = jdbcObjectMapper;
         this.rowMapper = new JdbcTicketingRowMapper(jdbcObjectMapper, piiCipher);
         this.parameterSource = new JdbcTicketingParameterSource(jdbcObjectMapper, piiCipher);
+        this.blindIndex = blindIndex;
+    }
+
+    @Override
+    public Optional<String> findMemberIdByPhone(String phone) {
+        String hash = blindIndex.hash(phone);
+        if (hash == null) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.queryForList("""
+                SELECT id FROM customers WHERE phone_hash = :hash AND status IN ('active', 'suspended')
+                """, Map.of("hash", hash), String.class).stream().findFirst();
+    }
+
+    @Override
+    public int linkUnclaimedOrdersToMember(String phone, String customerId, java.util.Set<String> salesChannels,
+            java.time.Instant now) {
+        String hash = blindIndex.hash(phone);
+        if (hash == null || salesChannels.isEmpty()) {
+            return 0;
+        }
+        MapSqlParameterSource params = new MapSqlParameterSource("hash", hash).addValue("customer_id", customerId)
+                .addValue("channels", salesChannels).addValue("now", java.sql.Timestamp.from(now));
+        List<String> orderIds = jdbcTemplate.queryForList("""
+                UPDATE ticket_orders SET customer_id = :customer_id, updated_at = :now
+                 WHERE customer_id IS NULL AND buyer_phone_hash = :hash AND sales_channel IN (:channels)
+                RETURNING id
+                """, params, String.class);
+        if (orderIds.isEmpty()) {
+            return 0;
+        }
+        params.addValue("order_ids", orderIds);
+        jdbcTemplate.update("""
+                UPDATE ticket_instances SET buyer_customer_id = :customer_id, current_holder_customer_id = :customer_id, updated_at = :now
+                 WHERE order_id IN (:order_ids) AND buyer_customer_id IS NULL
+                """, params);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_slot_holders (parent_ticket_id, slot_index, holder_customer_id, created_at, updated_at)
+                SELECT ti.id, slot, :customer_id, :now, :now
+                  FROM ticket_instances ti CROSS JOIN LATERAL generate_series(1, GREATEST(ti.num_people, 1)) AS slot
+                 WHERE ti.order_id IN (:order_ids)
+                ON CONFLICT (parent_ticket_id, slot_index) DO NOTHING
+                """, params);
+        return orderIds.size();
+    }
+
+    @Override
+    public List<CustomerTicketUsageResponse> listTicketUsages(String entitlementId) {
+        return jdbcTemplate.query("""
+                SELECT v.status, v.created_at, m.merchant_name
+                  FROM ticket_verifications v LEFT JOIN merchants m ON m.id = v.merchant_id
+                 WHERE v.entitlement_id = :id AND v.reverses_verification_id IS NULL AND v.status IN ('success', 'reversed')
+                 ORDER BY v.created_at DESC, v.id
+                """, Map.of("id", entitlementId), (rs, n) -> new CustomerTicketUsageResponse(rs.getString("status"),
+                "success".equals(rs.getString("status")) ? "成功" : "已冲正", rs.getTimestamp("created_at").toInstant(),
+                rs.getString("merchant_name")));
+    }
+
+    @Override
+    public boolean ticketChannelSyncEnabled() {
+        // V071 全局行出厂关闭；任一全局行关闭即关（取最严，与 TerminalSwitchGuard 口径一致），无行按开启。
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT NOT EXISTS (SELECT 1 FROM terminal_capability_switches
+                                    WHERE capability_code = 'integration.ticket_channel.sync' AND scope_type = 'global' AND enabled = FALSE)
+                """, Map.of(), Boolean.class));
+    }
+
+    @Override
+    public int clearBuyerPhonesOfCustomer(String customerId) {
+        return jdbcTemplate.update("UPDATE ticket_orders SET buyer_phone = NULL, buyer_phone_hash = NULL WHERE customer_id = :id",
+                Map.of("id", customerId));
     }
 
     @Override
@@ -711,10 +786,41 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
                        requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
-                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot
+                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items
                   FROM ticket_refunds
                  ORDER BY created_at DESC, id
                 """, Map.of(), rowMapper::mapTicketRefund);
+    }
+
+    @Override
+    public List<TicketRefundRecord> listTicketRefundsByRequester(String requestedBy) {
+        return jdbcTemplate.query("""
+                SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
+                       requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
+                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items
+                  FROM ticket_refunds
+                 WHERE requested_by = :requested_by
+                 ORDER BY created_at DESC, id
+                """, Map.of("requested_by", requestedBy), rowMapper::mapTicketRefund);
+    }
+
+    @Override
+    public int fillTicketRefundResponsibleEntity(String refundId, String responsibleEntityId) {
+        return jdbcTemplate.update(
+                "UPDATE ticket_refunds SET responsible_entity_id = :entity WHERE id = :id AND responsible_entity_id IS NULL",
+                Map.of("id", refundId, "entity", responsibleEntityId));
+    }
+
+    @Override
+    public void saveTicketRefundPayoutItems(String refundId, List<TicketRefundRecord.PayoutItem> items) {
+        List<Map<String, Object>> rows = items.stream()
+                .map(item -> Map.<String, Object>of("channel", item.channel(), "amount_cent", item.amountCent())).toList();
+        try {
+            jdbcTemplate.update("UPDATE ticket_refunds SET payout_items = CAST(:items AS jsonb) WHERE id = :id",
+                    Map.of("id", refundId, "items", jsonMapper.writeValueAsString(rows)));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("payout items not serializable", exception);
+        }
     }
 
     @Override
@@ -954,13 +1060,13 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
                     sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
                     dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at,
-                    merchant_id, paid_at, bar_id, project_id
+                    merchant_id, paid_at, bar_id, project_id, buyer_phone_hash
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
                     :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
                     :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at,
-                    :merchant_id, :paid_at, :bar_id, :project_id
+                    :merchant_id, :paid_at, :bar_id, :project_id, :buyer_phone_hash
                 )
                 -- merchant_id、bar_id 与 project_id 为下单快照，后续 update（出票/置 paid）不覆盖。
                 ON CONFLICT (id) DO UPDATE SET
@@ -971,6 +1077,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     visit_date = EXCLUDED.visit_date,
                     sales_channel = EXCLUDED.sales_channel,
                     buyer_phone = EXCLUDED.buyer_phone,
+                    buyer_phone_hash = EXCLUDED.buyer_phone_hash,
                     amount_cent = EXCLUDED.amount_cent,
                     dynamic_pricing_rule_id = EXCLUDED.dynamic_pricing_rule_id,
                     base_amount_cent = EXCLUDED.base_amount_cent,
@@ -982,7 +1089,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     updated_at = EXCLUDED.updated_at,
                     -- V231：支付确认写入的 paid_at 随 upsert 落库；出票等后续 update 携带原值不丢。
                     paid_at = EXCLUDED.paid_at
-                """, parameterSource.ticketOrderParameters(order));
+                """, parameterSource.ticketOrderParameters(order).addValue("buyer_phone_hash", blindIndex.hash(order.buyerPhone())));
         return order;
     }
 
@@ -1087,6 +1194,48 @@ class JdbcTicketingRepository implements TicketingRepository {
                         + " WHERE business_order_type = 'ticket_order' AND business_order_id = :order_id AND status = 'succeeded'"
                         + " ORDER BY created_at DESC, id LIMIT 1",
                 Map.of("order_id", orderId), rowMapper::mapTicketPaymentIntent).stream().findFirst();
+    }
+
+    @Override
+    public List<TicketPaymentIntentRecord> listTicketPaymentIntentsByOrder(String orderId) {
+        return jdbcTemplate.query(JdbcTicketingSql.ticketPaymentIntentSelect()
+                        + " WHERE business_order_type = 'ticket_order' AND business_order_id = :order_id ORDER BY updated_at, id",
+                Map.of("order_id", orderId), rowMapper::mapTicketPaymentIntent);
+    }
+
+    @Override
+    public long sumApprovedRefundAmountByOrderExcluding(String orderId, String refundId) {
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(refund_amount_cent), 0) FROM ticket_refunds
+                 WHERE target_id = :order_id AND id <> :refund_id AND status IN ('approved', 'success')
+                """, Map.of("order_id", orderId, "refund_id", refundId), Long.class);
+        return sum == null ? 0L : sum;
+    }
+
+    @Override
+    public void saveTicketOrderPriceHits(String orderId, List<Map<String, Object>> priceHits) {
+        try {
+            jdbcTemplate.update("UPDATE ticket_orders SET price_hits = CAST(:hits AS jsonb) WHERE id = :id",
+                    Map.of("id", orderId, "hits", jsonMapper.writeValueAsString(priceHits)));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("price hits not serializable", exception);
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> findTicketOrderPriceHits(String orderId) {
+        // 员工、渠道与一体机订单不存命中资格价（列为空）：ROOT-03-R29 归集到客人「我的订单」后照常列出，空即无命中。
+        List<String> rows = jdbcTemplate.query("SELECT price_hits::text FROM ticket_orders WHERE id = :id", Map.of("id", orderId),
+                (rs, n) -> rs.getString(1));
+        String raw = rows.isEmpty() ? null : rows.get(0);
+        if (raw == null) {
+            return List.of();
+        }
+        try {
+            return jsonMapper.readValue(raw, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() { });
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("price hits unreadable", exception);
+        }
     }
 
     @Override
@@ -1407,7 +1556,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
                        requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
-                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot
+                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items
                   FROM ticket_refunds
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketRefund).stream().findFirst();
@@ -1479,11 +1628,6 @@ class JdbcTicketingRepository implements TicketingRepository {
                  WHERE id = :id
                    AND used_times < total_times
                    AND status = 'active'
-                   AND NOT EXISTS (
-                       SELECT 1 FROM ticket_transfers t
-                        WHERE t.parent_ticket_id = issued_entitlements.parent_ticket_id
-                          AND t.slot_index = issued_entitlements.slot_index
-                          AND t.status = 'pending')
                    AND (parent_ticket_id IS NULL OR EXISTS (
                        SELECT 1 FROM ticket_instances p
                         WHERE p.id = issued_entitlements.parent_ticket_id
@@ -1494,6 +1638,14 @@ class JdbcTicketingRepository implements TicketingRepository {
         if (rowCount == 0) {
             return Optional.empty();
         }
+        // clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……原持有人自行核销……以先处理成功的那个动作为准，其余动作自动失效」）：
+        // 一切核销路径（核销主链、游乐闸机直连、合作券）消费成功即同事务作废该人份的在途转赠；领取方锁同一权益行，后到者读到已作废。
+        jdbcTemplate.update("""
+                UPDATE ticket_transfers t
+                   SET status = 'voided', void_reason = 'holder_redeemed', voided_at = :now, updated_at = :now
+                  FROM issued_entitlements e
+                 WHERE e.id = :id AND t.parent_ticket_id = e.parent_ticket_id AND t.slot_index = e.slot_index AND t.status = 'pending'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("now", updatedAt.atOffset(java.time.ZoneOffset.UTC)));
         return findIssuedEntitlementById(id);
     }
 
@@ -1763,6 +1915,34 @@ class JdbcTicketingRepository implements TicketingRepository {
                  WHERE parent_ticket_id = :p AND status = 'pending'
                 """, new MapSqlParameterSource().addValue("p", parentTicketId).addValue("reason", reason, java.sql.Types.VARCHAR)
                 .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int voidPendingTransfersForSlot(String parentTicketId, int slotIndex, String reason, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE ticket_transfers SET status = 'voided', void_reason = :reason, voided_at = :now, updated_at = :now
+                 WHERE parent_ticket_id = :p AND slot_index = :s AND status = 'pending'
+                """, new MapSqlParameterSource().addValue("p", parentTicketId).addValue("s", slotIndex).addValue("reason", reason)
+                .addValue("now", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public Optional<FirstSessionWindow.Session> findFirstSession(String parentTicketId) {
+        return jdbcTemplate.query("""
+                SELECT ti.first_session_key, vs.session_date,
+                       EXTRACT(EPOCH FROM h.open_time)::int AS open_s, EXTRACT(EPOCH FROM h.close_time)::int AS close_s
+                  FROM ticket_instances ti
+                  LEFT JOIN venue_sessions vs ON vs.id = ti.first_session_key
+                  LEFT JOIN venue_business_hours h ON h.venue_id = vs.venue_id AND h.is_draft = FALSE
+                        AND h.day_of_week = EXTRACT(DOW FROM vs.session_date)::int
+                 WHERE ti.id = :p AND ti.first_session_key IS NOT NULL
+                 LIMIT 1
+                """, Map.of("p", parentTicketId), (rs, n) -> {
+                    java.time.LocalDate day = rs.getObject("session_date", java.time.LocalDate.class);
+                    String key = rs.getString("first_session_key");
+                    return new FirstSessionWindow.Session(day == null ? key : day.toString(),
+                            FirstSessionWindow.endOf(key, day, (Integer) rs.getObject("open_s"), (Integer) rs.getObject("close_s")));
+                }).stream().findFirst();
     }
 
     @Override

@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -153,6 +153,8 @@ public class ParkingCustomerService {
                 audit.recordSuccess("parking.payment_created", "not_applicable", "parking_payment", id, null, key, details);
                 Map<String, Object> view = payment(id);
                 view.put("payment_url", intent.paymentUrl());
+                // ROOT-03-R18：App/小程序拉起参数（渠道按付款端签发、原样透传；渠道未配置时为空）。
+                view.put("launch", intent.launch());
                 return view;
             }, Map.class);
             return out;

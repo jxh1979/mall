@@ -1,5 +1,7 @@
 package com.complex.platform.evidence;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,6 +44,20 @@ public class EvidenceFileStorage {
             Map.entry("mov", "video/quicktime"),
             Map.entry("webm", "video/webm"));
 
+    /** ROOT-03 clients-R8（BSM 第 869 行「支持文字留言、照片、视频与语音」）：只供客人投诉入口——照片、视频之外加语音。 */
+    private static final Map<String, String> COMPLAINT_TYPES = withAudio();
+
+    /** ROOT-03-R28 学生认证证件：只收照片。 */
+    private static final Map<String, String> PHOTO_TYPES = Map.of("jpg", "image/jpeg", "jpeg", "image/jpeg",
+            "png", "image/png", "webp", "image/webp", "heic", "image/heic");
+
+    private static Map<String, String> withAudio() {
+        Map<String, String> types = new java.util.HashMap<>(ALLOWED_TYPES);
+        types.putAll(Map.of("m4a", "audio/mp4", "aac", "audio/aac", "mp3", "audio/mpeg", "amr", "audio/amr",
+                "wav", "audio/wav"));
+        return Map.copyOf(types);
+    }
+
     static final String KEY_PREFIX = "evidence-files/";
 
     private final Path baseDir;
@@ -60,6 +76,32 @@ public class EvidenceFileStorage {
     }
 
     public StoredFile store(MultipartFile file) {
+        return store(file, ALLOWED_TYPES, "只支持照片 jpg/jpeg/png/webp/heic 与视频 mp4/mov/webm", null);
+    }
+
+    /** 客人投诉附件：照片、视频、语音（类型仍由扩展名服务端判定）。 */
+    public StoredFile storeComplaintMedia(MultipartFile file) {
+        return store(file, COMPLAINT_TYPES, "只支持照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm 与语音 m4a/aac/mp3/amr/wav", null);
+    }
+
+    /** 学生认证证件照片：seal 把原字节加密后才落盘（PGM 第 876 行身份信息一律加密存放），磁盘上不留明文。 */
+    public StoredFile storePhoto(MultipartFile file, java.util.function.UnaryOperator<byte[]> seal) {
+        return store(file, PHOTO_TYPES, "只支持照片 jpg/jpeg/png/webp/heic", seal);
+    }
+
+    /** ROOT-03-R21（BSM 第 863 行「证件等个人信息一律删除」）：删除本存储签发的文件；不存在即视为已删。 */
+    public void delete(String objectKey) {
+        try {
+            Files.deleteIfExists(resolveForRead(objectKey));
+        } catch (ApiException missing) {
+            // 文件已不在：删除目的已达成。
+        } catch (IOException exception) {
+            throw ApiException.badRequest("EVIDENCE_FILE_DELETE_FAILED", "证据文件删除失败");
+        }
+    }
+
+    private StoredFile store(MultipartFile file, Map<String, String> allowedTypes, String allowedHint,
+            java.util.function.UnaryOperator<byte[]> seal) {
         if (file == null || file.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "证据文件不能为空");
         }
@@ -68,10 +110,9 @@ public class EvidenceFileStorage {
                     "证据文件超过上限 " + (maxBytes / 1024 / 1024) + "MB");
         }
         String ext = extensionOf(file.getOriginalFilename());
-        String contentType = ALLOWED_TYPES.get(ext);
+        String contentType = allowedTypes.get(ext);
         if (contentType == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED",
-                    "只支持照片 jpg/jpeg/png/webp/heic 与视频 mp4/mov/webm");
+            throw ApiException.badRequest("VALIDATION_FAILED", allowedHint);
         }
         String name = UUID.randomUUID().toString().replace("-", "") + "." + ext;
         try {
@@ -80,8 +121,12 @@ public class EvidenceFileStorage {
             if (!target.startsWith(baseDir)) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "非法文件名");
             }
-            try (InputStream in = file.getInputStream()) {
-                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+            if (seal != null) {
+                Files.write(target, seal.apply(file.getBytes()));
+            } else {
+                try (InputStream in = file.getInputStream()) {
+                    Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+                }
             }
         } catch (IOException exception) {
             throw ApiException.badRequest("EVIDENCE_FILE_STORE_FAILED", "证据文件保存失败");

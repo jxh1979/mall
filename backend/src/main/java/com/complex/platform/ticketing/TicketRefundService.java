@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -107,12 +107,57 @@ public class TicketRefundService {
     }
 
     TicketRefundRecord requestRefund(TicketRefundRequest request) {
-        TicketRefundRequest actual = requireRequest(request);
+        return openRefund(requireRequest(request), null);
+    }
+
+    /**
+     * 操作员裁决第十三批第 11 条「客人端自助申请」（「只对本人可退的未用票，提交后走与员工退款同一套审批和原路退回」）：
+     * 本人名下（该票每个人份的持有人都是本人）的整张票，理由固定为「票种规则明确允许」；可退判定、金额、申请即冻结与员工发起同一条
+     * {@link #openRefund}，之后由员工在同一审批入口批准或驳回（{@link #approveRefund} 时补填责任主体）。非本人 403 CUSTOMER_ORDER_FORBIDDEN，
+     * 票种不可退、已用、已在申请中等按员工退款既有错误码拒。退款单号随机生成（不取客人可控的幂等键）；重复提交由包装层按幂等键返回同一申请。
+     */
+    TicketRefundRecord requestCustomerRefund(String customerId,
+            com.complex.platform.customer.dto.CustomerTicketRefundRequest request) {
+        String me = requireText(customerId, "customer_id");
+        com.complex.platform.customer.dto.CustomerTicketRefundRequest actual = requireRequest(request);
+        TicketInstanceRecord ticket = repository.findTicketInstanceById(requireText(actual.ticketInstanceId(), "ticket_instance_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_INSTANCE_NOT_FOUND", "票不存在或已被删除"));
+        for (int slot = 1; slot <= Math.max(1, ticket.numPeople()); slot++) {
+            if (!me.equals(repository.findSlotHolder(ticket.id(), slot).map(TicketSlotHolderRecord::holderCustomerId).orElse(null))) {
+                throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "该票不属于当前客人");
+            }
+        }
+        return openRefund(new TicketRefundRequest(null, null, null, ticket.orderId(), null, "客人自助申请退票", "original", null,
+                List.of(ticket.id()), REASON_TICKET_TYPE_RULE, null), me);
+    }
+
+    /** 操作员裁决第十三批第 11 条：客人本人提交的退票申请及其状态（新到旧）。 */
+    List<CustomerTicketRefundResponse> listCustomerRefunds(String customerId) {
+        return repository.listTicketRefundsByRequester(requireText(customerId, "customer_id")).stream()
+                .map(this::customerView).toList();
+    }
+
+    CustomerTicketRefundResponse customerView(TicketRefundRecord refund) {
+        TicketInstanceRecord ticket = repository.listTicketRefundLines(refund.id()).stream()
+                .map(TicketRefundLineRecord::entitlementId).filter(java.util.Objects::nonNull).findFirst()
+                .flatMap(repository::findIssuedEntitlementById).map(IssuedEntitlementRecord::parentTicketId)
+                .flatMap(repository::findTicketInstanceById).orElse(null);
+        return new CustomerTicketRefundResponse(refund.id(), ticket == null ? null : ticket.id(),
+                ticket == null ? null : ticket.ticketNo(),
+                ticket == null ? null : repository.findTicketTypeById(ticket.ticketTypeId()).map(TicketTypeRecord::ticketName).orElse(null),
+                refund.refundAmountCent(), refund.status(), refund.createdAt(), refund.updatedAt());
+    }
+
+    /** customerId 非空＝客人自助申请：不过员工商户范围、不填责任主体、不享额度内自助，发起人记客人编号。 */
+    private TicketRefundRecord openRefund(TicketRefundRequest actual, String customerId) {
+        boolean byStaff = customerId == null;
         String targetId = requireText(actual.targetId(), "target_id");
         TicketOrderRecord order = repository.findTicketOrderById(targetId)
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // F-TXN-01 越权修复：发起退款前按调用者商户范围校验原单归属，防商户A退商户B的票（跨租户 IDOR）。
-        enforceMerchantScope(order.merchantId());
+        if (byStaff) {
+            enforceMerchantScope(order.merchantId());
+        }
         // 仅已支付订单可退款：堵"未支付/已取消订单凭空发起退款"（无真实收款却触发退款冻结/积分冲减链）。
         if (!"paid".equals(order.payStatus())) {
             throw ApiException.conflict("TICKET_ORDER_NOT_REFUNDABLE", "只有已支付的票务订单才能退款");
@@ -136,7 +181,8 @@ public class TicketRefundService {
                     "该票种不支持退款");
         }
         String responsibleEntityId = trimToDefault(actual.responsibleEntityId(), "");
-        if (responsibleEntityId.isEmpty() || !repository.isActiveBusinessEntity(responsibleEntityId)) {
+        // 第十三批第 11 条：客人自助申请不填责任主体，由批准的员工补填（approveRefund）。
+        if (byStaff && (responsibleEntityId.isEmpty() || !repository.isActiveBusinessEntity(responsibleEntityId))) {
             throw ApiException.badRequest("REFUND_RESPONSIBLE_ENTITY_REQUIRED",
                     "请填写退款责任主体（主体主数据中在用的法律主体）");
         }
@@ -177,15 +223,15 @@ public class TicketRefundService {
                         "票 " + ti.id() + " 当前状态不能冻结退款");
             }
         }
-        String requestedBy = currentActorId();
+        String requestedBy = byStaff ? currentActorId() : customerId;
         // Stage B 分级授权（功能标志 refund.tiered_authorization.enabled，默认关）：判定本笔退款能否当场自助完成。
         //   额度内/规则既定 → 发起人当场自助自动退；超额/无额度 → 留待二人复核。关闭/未注入 → 一律 requested 等人工审批。
         // AUD-008：分级授权按综合体隔离——projectId 取操作者授权 scope（票单不自带 project；scope 由安全 token 得出，
         //   非请求体），无 scope（平台管理员/无组织）→ null=仅命中全局配置，绝不跨综合体串额度。
-        String refundProjectId = authorizationService == null
+        String refundProjectId = !byStaff || authorizationService == null
                 ? null : authorizationService.currentProjectScopeQuietly().orElse(null);
-        // 最高权限逐笔放行：不享额度内自助，必须由最高权限审批。
-        boolean selfComplete = !REASON_MASTER_OVERRIDE.equals(reasonCode) && tieredRefundEnabled && refundAuthorizationService != null
+        // 最高权限逐笔放行：不享额度内自助，必须由最高权限审批。客人自助申请一律留待员工审批。
+        boolean selfComplete = byStaff && !REASON_MASTER_OVERRIDE.equals(reasonCode) && tieredRefundEnabled && refundAuthorizationService != null
                 && refundAuthorizationService.classify("ticket", amountCent, requestedBy, null, refundProjectId)
                         != RefundAuthorizationService.RefundTier.REVIEW_REQUIRED;
         TicketRefundRecord refund = repository.saveTicketRefund(new TicketRefundRecord(
@@ -202,7 +248,7 @@ public class TicketRefundService {
                 now,
                 order.merchantId(),   // V220：退款受理商户=原销售订单 merchant_id（平台直营单为 null）
                 reasonCode,
-                responsibleEntityId,
+                responsibleEntityId.isEmpty() ? null : responsibleEntityId,
                 ticketType != null && ticketType.refundable()
         ));
         createRefundLines(refund, order, targets, entByInstance, shareByInstance, now);
@@ -235,6 +281,16 @@ public class TicketRefundService {
             throw ApiException.forbidden("MASTER_AUTHORITY_REQUIRED",
                     "五种情形之外的退款只能由持授权 U 盘密钥的最高权限逐笔放行");
         }
+        // 操作员裁决第十三批第 11 条：客人自助申请的退票没有责任主体，由批准的员工补填（BSM「系统完整记录退款原因、责任主体」），
+        // 校验同员工发起（主体主数据中在用的法律主体）；已有责任主体的退款不改，已不在待审批的照旧报不可批准。
+        String filledEntityId = null;
+        if (current.responsibleEntityId() == null && "requested".equals(current.status())) {
+            filledEntityId = trimToDefault(actual.responsibleEntityId(), "");
+            if (filledEntityId.isEmpty() || !repository.isActiveBusinessEntity(filledEntityId)) {
+                throw ApiException.badRequest("REFUND_RESPONSIBLE_ENTITY_REQUIRED",
+                        "请填写退款责任主体（主体主数据中在用的法律主体）");
+            }
+        }
         Instant now = Instant.now();
         // F-TXN-04 并发双拨付防护：退款状态翻转改用 CAS（WHERE status='requested'），并发只一路过闸。
         int approvedRows = repository.markTicketRefundApproved(current.id(), approvedBy, now);
@@ -242,7 +298,11 @@ public class TicketRefundService {
             throw ApiException.conflict(
                     "TICKET_REFUND_NOT_APPROVABLE", "票务退款当前状态不可批准");
         }
-        TicketRefundRecord approved = current.withStatus("approved", approvedBy, now, now);
+        if (filledEntityId != null) {
+            repository.fillTicketRefundResponsibleEntity(current.id(), filledEntityId);
+        }
+        TicketRefundRecord approved = (filledEntityId == null ? current : current.withResponsibleEntityId(filledEntityId))
+                .withStatus("approved", approvedBy, now, now);
         return finalizeApprovedRefund(approved, now, false); // 审批通过=已发起兑付，停在 approved；财务打款后 confirm-payout 才 success
     }
 
@@ -359,19 +419,53 @@ public class TicketRefundService {
             // TK-20-R3（CG-06a 第 12 条「票务……消费获准退款均回原卡，固定先回原消费尚未回冲的赠送金，再回本金；不扩大原退款资格」）：
             // 储值支付的订单（支付意图 channel=stored_value、id=原消费流水）获准即回冲原卡，回冲到账即为「原路退回结果」，
             // 退款单直接 approved→success，不再等财务 confirm-payout；资格/金额沿上面既有审批算定，不改。非储值订单路径不变。
-            TicketPaymentIntentRecord storedValueIntent = storedValueService == null ? null
-                    : repository.findSucceededTicketPaymentIntentByOrder(order.id())
-                            .filter(intent -> "stored_value".equals(intent.channel())).orElse(null);
-            if (storedValueIntent != null) {
-                storedValueService.refundConsumption(storedValueIntent.id(), approved.refundAmountCent(),
-                        "票务退款 " + approved.id(), "ticketrev_" + approved.id());
+            // ROOT-03-R20（BSM 第 1749 行「混合支付的退款按收款相反顺序逐笔原路退回（后收的先退，单笔退足再退上一笔）；储值部分回冲仍按先赠送金
+            // 后本金的既有顺序」）：本单之前已批准的退款先从最后收的一笔往前扣掉，本次退款接着往前分到各笔；储值笔当场回原卡，在线笔按该笔渠道发打款待办。
+            // 只分到储值笔时回冲到账即原路退回结果，退款单直接成功；分到在线笔的停在已通过，等财务确认拨付。
+            List<TicketPaymentIntentRecord> received = new ArrayList<>(repository.listTicketPaymentIntentsByOrder(order.id()).stream()
+                    .filter(intent -> "succeeded".equals(intent.status())).toList());
+            java.util.Collections.reverse(received);
+            long alreadyRefunded = repository.sumApprovedRefundAmountByOrderExcluding(order.id(), approved.id());
+            long left = approved.refundAmountCent();
+            boolean awaitsPayout = false;
+            int storedValuePieces = 0;
+            // 分到在线笔、待财务原路打款的各笔（渠道×金额）落退款单：确认拨付页按它打款，不按整笔金额（储值部分已当场回卡）。
+            List<TicketRefundRecord.PayoutItem> payout = new ArrayList<>();
+            for (TicketPaymentIntentRecord payment : received) {
+                if (left <= 0) {
+                    break;
+                }
+                long consumed = Math.min(alreadyRefunded, payment.amountCent());
+                alreadyRefunded -= consumed;
+                long share = Math.min(payment.amountCent() - consumed, left);
+                if (share <= 0) {
+                    continue;
+                }
+                left -= share;
+                if ("stored_value".equals(payment.channel()) && storedValueService != null) {
+                    storedValueService.refundConsumption(payment.id(), share, "票务退款 " + approved.id(),
+                            "ticketrev_" + approved.id() + (storedValuePieces++ == 0 ? "" : "_" + storedValuePieces));
+                } else {
+                    awaitsPayout = true;
+                    String channel = "stored_value".equals(payment.channel()) ? approved.refundChannel() : payment.channel();
+                    payout.add(new TicketRefundRecord.PayoutItem(channel, share));
+                    // 打款拨付信号：金额已落 ticket_refunds，此事件只承载实际打款，不重复入账。
+                    eventPublisher.publishEvent(new TicketRefundApprovedEvent(order.id(), approved.id(), share, channel));
+                }
+            }
+            if (left > 0) {
+                // 没有可分的收款记录（如后台代客免确认出票的订单）：沿原退款渠道整笔发打款待办。
+                awaitsPayout = true;
+                payout.add(new TicketRefundRecord.PayoutItem(approved.refundChannel(), left));
+                eventPublisher.publishEvent(new TicketRefundApprovedEvent(order.id(), approved.id(), left, approved.refundChannel()));
+            }
+            if (!awaitsPayout) {
                 repository.markTicketRefundSucceeded(approved.id(), now);
                 eventPublisher.publishEvent(new TicketRewardFacts.Refunded(approved.id()));
                 return approved.withStatus("success", approved.approvedBy(), approved.approvedAt(), now);
             }
-            // 打款拨付信号：金额已落 ticket_refunds，此事件只承载实际打款，不重复入账。
-            eventPublisher.publishEvent(new TicketRefundApprovedEvent(
-                    order.id(), approved.id(), approved.refundAmountCent(), approved.refundChannel()));
+            repository.saveTicketRefundPayoutItems(approved.id(), payout);
+            return approved.withPayoutItems(List.copyOf(payout));
         }
         // 业务权威口径（business-enum-quick-reference-v0.1.html「退款单状态」行）：退款以“成功”为最终完成态，
         //   只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。

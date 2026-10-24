@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
@@ -169,6 +171,39 @@ public class TicketPricingService {
                 .multiply(discountRate)
                 .divide(MAX_DISCOUNT_RATE, 0, RoundingMode.HALF_UP)
                 .longValueExact();
+    }
+
+    /** ROOT-03-R27 客人价：基础价、动态公开价、命中资格价（每条一行）、最终选中规则（公开价最低时为空）与最终单价。 */
+    public record CustomerPrice(long baseUnitCent, DynamicPriceResult publicPrice, List<Map<String, Object>> hits,
+            TicketPriceRuleRecord selected, long finalUnitCent) {
+    }
+
+    /**
+     * ROOT-03-R27（BSM 第 756 行、ENUM 第 58 行「先按日期、时段、场次和容量算动态公开价，再计算会员、新人、学生、团体和渠道等全部符合条件的价格；
+     * 多种资格价不叠加，选择最终价格最低的一项」；第 782 行「会员价、渠道价、动态价都在对应基础价上……派生」）：动态公开价与各资格价都从日历基础价派生，
+     * 只算客人符合的类型（eligibleVariants，由客人域判定）且在售（未存档、未待删）的规则，取最低。
+     */
+    CustomerPrice resolveCustomerPrice(TicketTypeRecord ticketType, LocalDate visitDate, String salesChannel,
+            Set<String> eligibleVariants) {
+        long base = resolveUnitPrice(ticketType, null, visitDate);
+        DynamicPriceResult publicPrice = applyPublishedDynamicPricing(ticketType.id(), visitDate, salesChannel, base, Map.of());
+        long best = publicPrice.finalUnitPriceCent();
+        TicketPriceRuleRecord selected = null;
+        List<Map<String, Object>> hits = new java.util.ArrayList<>();
+        for (TicketPriceRuleRecord rule : repository.listPriceRules()) {
+            if (!ticketType.id().equals(rule.ticketTypeId()) || !"active".equals(rule.status()) || rule.archivedAt() != null
+                    || !"none".equals(rule.deleteStatus()) || !eligibleVariants.contains(rule.variantType())) {
+                continue;
+            }
+            long price = resolveUnitPrice(ticketType, rule, visitDate);
+            hits.add(Map.of("rule_id", rule.id(), "variant_type", rule.variantType(), "unit_price_cent", price,
+                    "rule_updated_at", String.valueOf(rule.updatedAt())));
+            if (price < best) {
+                best = price;
+                selected = rule;
+            }
+        }
+        return new CustomerPrice(base, publicPrice, hits, selected, best);
     }
 
     DynamicPriceResult applyPublishedDynamicPricing(

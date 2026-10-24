@@ -1,9 +1,8 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
-import com.complex.platform.bar.BarOrderRecord;
 import com.complex.platform.bar.BarReservationInvitationMemberRecord;
 import com.complex.platform.bar.BarReservationInvitationRecord;
 import com.complex.platform.bar.BarReservationRecord;
@@ -11,9 +10,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.CustomerBarInvitationConfirmRequest;
-import com.complex.platform.customer.dto.CustomerBarMenuItemResponse;
 import com.complex.platform.customer.dto.CustomerBarReservationRequest;
-import com.complex.platform.customer.dto.CustomerBarScanOrderRequest;
 import com.complex.platform.customer.dto.CustomerCheckInRequest;
 import com.complex.platform.customer.dto.CustomerConsentRequest;
 import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
@@ -36,12 +33,16 @@ import static com.complex.platform.common.Strings.trimToNull;
 public class CustomerController {
 
     private final CustomerService service;
+    // ROOT-03-R3 条款正文；WebMvcTest 切片无此 bean 时为 null（只影响 /terms）。
+    private final CustomerTerms terms;
     // 生产环境强制会话 cookie Secure：即便 request.isSecure() 因反代配置误判为 http，
     // prod 也钉死 secure=true（dev/local 保持依赖 isSecure，便于本地 http 调试）。
     private final boolean forceSecureCookie;
 
-    public CustomerController(CustomerService service, org.springframework.core.env.Environment environment) {
+    public CustomerController(CustomerService service, org.springframework.core.env.Environment environment,
+            org.springframework.beans.factory.ObjectProvider<CustomerTerms> terms) {
         this.service = service;
+        this.terms = terms.getIfAvailable();
         this.forceSecureCookie = environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"));
     }
 
@@ -50,13 +51,30 @@ public class CustomerController {
             @RequestBody @jakarta.validation.Valid CustomerPhoneLoginRequest request,
             jakarta.servlet.http.HttpServletRequest httpRequest,
             jakarta.servlet.http.HttpServletResponse httpResponse) {
-        CustomerLoginResponse login = service.phoneLogin(request);
+        // ROOT-03-R2：登录端取设备凭证闸派生的本请求终端（客人只认 app、miniapp，由服务层判定）。
+        CustomerLoginResponse login = service.phoneLogin(request, com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(null));
         // 3.3 免登录：token 同时种 httpOnly+SameSite=Strict cookie（web 端刷新免登录，脚本不可读防 XSS 窃取）。
         // body 仍返回 token 供头 token 调用方（小程序/App/Android）使用，两轨并行。
         long maxAge = java.time.Duration.between(java.time.Instant.now(), login.expiresAt()).getSeconds();
         httpResponse.addHeader("Set-Cookie",
                 sessionCookie(login.customerToken(), Math.max(0, maxAge), forceSecureCookie || httpRequest.isSecure()));
         return ApiResponse.ok(login);
+    }
+
+    /**
+     * ROOT-03-R3 会员注册：公开端点（尚无会话）；条件全部满足即建有效会员并返回会话凭证，任一条件不满足整笔不落库。
+     * 验证码与登录同一场景（customer.login），先用 POST /auth/sms-codes 取码。
+     */
+    @PostMapping("/auth/register")
+    public ApiResponse<CustomerLoginResponse> register(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.customer.dto.CustomerRegisterRequest request) {
+        return ApiResponse.ok(service.register(request, com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(null)));
+    }
+
+    /** ROOT-03-R3 当前会员条款与隐私条款（匿名可读）：注册前展示，注册时回传两份版本号。 */
+    @GetMapping("/terms")
+    public ApiResponse<CustomerTerms.Current> terms() {
+        return ApiResponse.ok(terms.current());
     }
 
     /** ROOT-05-R3 登录取码：公开端点，请求体只有 phone；短信服务未配置时 409，不假成功。 */
@@ -110,8 +128,9 @@ public class CustomerController {
     }
 
     /**
-     * 客人自助注销本人账号（V194）：凭本人 token；注销后动作/登录被拒、历史数据物理保留但客人不可见。
-     * TK-21-R3：请求体 {waive_balance}——true 放弃余额径行注销；false/缺省 需退本金的生成待退事项（老客户端无请求体等同 false）。
+     * 客人自助注销本人账号（V194）：凭本人 token；注销后动作/登录被拒，个人信息删除（ROOT-03-R21）。
+     * TK-21-R3：请求体 {waive_balance}——true 放弃余额径行注销；false/缺省 需退本金的生成待退事项。
+     * ROOT-03-R21：{abandon_saved_bottles}——名下有存酒须为 true（确认放弃，转为所在酒吧自有库存资产），否则 409 CUSTOMER_SAVED_BOTTLES_HELD。
      */
     @PostMapping("/deregister")
     public ApiResponse<CustomerRecord> deregister(
@@ -119,12 +138,12 @@ public class CustomerController {
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @RequestBody(required = false) com.complex.platform.customer.dto.CustomerDeregisterRequest request) {
         return ApiResponse.ok(service.deregisterAccount(requireCustomerToken(customerToken, authorization),
-                request != null && request.waive()));
+                request != null && request.waive(), request != null && request.abandonBottles()));
     }
 
-    /** TK-21-R3（BSM「账户注销」：「发起注销时系统须提醒其名下尚有……储值卡余额」）：注销预览——本人各卡本金/赠送金。 */
+    /** TK-21-R3 / ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额」）：注销预览——各卡本金/赠送金与名下存酒。 */
     @GetMapping("/deregister/preview")
-    public ApiResponse<java.util.List<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse>> deregisterPreview(
+    public ApiResponse<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse> deregisterPreview(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization) {
         return ApiResponse.ok(service.deregisterPreview(requireCustomerToken(customerToken, authorization)));
@@ -132,9 +151,12 @@ public class CustomerController {
 
     @GetMapping("/ticket-products")
     public ApiResponse<PageResponse<CustomerTicketProductResponse>> listTicketProducts(
-            @RequestParam(name = "bar_id", required = false) String barId) {
+            @RequestParam(name = "bar_id", required = false) String barId,
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization) {
         // AUD-076 专属入口：酒吧二维码/分享链接带 bar_id 锁定该酒吧单店票；不传=公共入口全量。
-        return ApiResponse.ok(service.listTicketProducts(barId));
+        // ROOT-03-R27：带客人会话时另给「我的价格」；匿名照旧。
+        return ApiResponse.ok(service.listTicketProducts(barId, resolveCustomerToken(customerToken, authorization)));
     }
 
     @PostMapping("/ticket-orders")
@@ -152,7 +174,7 @@ public class CustomerController {
     }
 
     @GetMapping("/orders")
-    public ApiResponse<PageResponse<TicketOrderRecord>> listOrders(
+    public ApiResponse<PageResponse<com.complex.platform.customer.dto.CustomerTicketOrderResponse>> listOrders(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization
     ) {
@@ -279,30 +301,6 @@ public class CustomerController {
                 key,
                 request
         ));
-    }
-
-    @GetMapping("/bar-sessions/{session_id}/menu")
-    public ApiResponse<PageResponse<CustomerBarMenuItemResponse>> listBarScanMenu(
-            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
-            @RequestHeader(name = "Authorization", required = false) String authorization,
-            @PathVariable("session_id") String sessionId
-    ) {
-        return ApiResponse.ok(service.listBarScanMenu(
-                requireCustomerToken(customerToken, authorization), sessionId));
-    }
-
-    @PostMapping("/bar-sessions/{session_id}/scan-orders")
-    public ApiResponse<BarOrderRecord> placeBarScanOrder(
-            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
-            @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @PathVariable("session_id") String sessionId,
-            @RequestBody @jakarta.validation.Valid CustomerBarScanOrderRequest request
-    ) {
-        String key = firstNonBlank(idempotencyKey, request == null ? null : request.idempotencyKey());
-        requireIdempotencyKey(key);
-        return ApiResponse.ok(service.placeBarScanOrder(
-                requireCustomerToken(customerToken, authorization), key, sessionId, request));
     }
 
     @PostMapping("/bar-invitations/confirm")
@@ -443,6 +441,30 @@ public class CustomerController {
             @RequestHeader(name = "Authorization", required = false) String authorization
     ) {
         return ApiResponse.ok(service.listOutgoingTicketTransfers(requireCustomerToken(customerToken, authorization)));
+    }
+
+    /** 操作员裁决第十三批第 11 条「客人端自助申请」：本人可退的未用票（整张）申请退票，提交后走与员工退款同一套审批和原路退回。 */
+    @PostMapping("/ticket-refunds")
+    public ApiResponse<com.complex.platform.ticketing.CustomerTicketRefundResponse> requestTicketRefund(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.customer.dto.CustomerTicketRefundRequest request
+    ) {
+        String token = requireCustomerToken(customerToken, authorization);
+        String key = firstNonBlank(idempotencyKey, request.idempotencyKey());
+        requireIdempotencyKey(key);
+        return ApiResponse.ok(service.requestTicketRefund(token,
+                new com.complex.platform.customer.dto.CustomerTicketRefundRequest(key, request.ticketInstanceId())));
+    }
+
+    /** 操作员裁决第十三批第 11 条：本人退票申请及其状态（新到旧）。 */
+    @GetMapping("/ticket-refunds")
+    public ApiResponse<PageResponse<com.complex.platform.ticketing.CustomerTicketRefundResponse>> listTicketRefunds(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        return ApiResponse.ok(service.listTicketRefunds(requireCustomerToken(customerToken, authorization)));
     }
 
     private String requireCustomerToken(String customerToken, String authorization) {

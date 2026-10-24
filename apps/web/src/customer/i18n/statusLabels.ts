@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -82,6 +82,8 @@ const STATUS_LABELS: Record<string, string> = {
   occupied: "使用中",
   open: "进行中",
   not_required: "无需定金",
+  // ENUM 第 103 行订台定金状态「已超时释放」（超时释放时未付定金直接作废）
+  timeout_released: "已超时释放",
   // 员工账号类型 / 账号状态
   staff: "普通员工",
   sales: "销售人员",
@@ -262,6 +264,8 @@ const STATUS_LABELS: Record<string, string> = {
   not_ready: "未就绪",
   // 支付渠道
   cash: "现金",
+  wechat: "微信",
+  alipay: "支付宝",
   pos: "POS刷卡",
   // 补录数量明细的补录类型（ROOT-04）
   locked_backfill: "锁账后补录",

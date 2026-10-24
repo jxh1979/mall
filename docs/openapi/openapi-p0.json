@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.27",
+    "version": "V0.28",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -2978,7 +2978,6 @@
           "VOUCHER_ALREADY_REDEEMED",
           "VOUCHER_EXPIRED",
           "VOUCHER_REVOKED",
-          "VOUCHER_TRANSFERRING",
           "MEMBER_NOT_FOUND"
         ],
         "x-permission": "finance.payment.register",
@@ -3352,6 +3351,9 @@
           "400": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -3359,7 +3361,12 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号只用于核对、不落库）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。",
+        "x-failure-codes": [
+          "BAR_TABLE_ALREADY_RESERVED",
+          "CUSTOMER_RESTRICTED"
+        ]
       },
       "get": {
         "tags": [
@@ -3484,7 +3491,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "确认并签发订卡邀请函（操作员裁决第十三批第 4 条「酒吧员工确认后签发」：客人自助订卡后由酒吧员工在后台确认订台后签发）。已签发且未吊销的幂等返回原邀请函，不重置口令。"
       },
       "get": {
         "tags": [
@@ -3615,7 +3623,13 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "description": "门口邀请函入场核验。ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：credential_payload 必须是被邀请人本人在 App/小程序取的动态入场码（未过期、本订台），客人号/手机号明文与过期码一律 409 BAR_INVITATION_ENTRY_CODE_INVALID；已入场重复核验返回原记录。",
+        "x-failure-codes": [
+          "BAR_INVITATION_ENTRY_CODE_INVALID",
+          "BAR_INVITATION_MEMBER_NOT_CONFIRMED",
+          "BAR_INVITATION_CAPACITY_EXHAUSTED"
+        ]
       }
     },
     "/api/v1/bar/tables": {
@@ -3625,6 +3639,7 @@
         ],
         "operationId": "listBarTables",
         "summary": "查询桌台或卡座",
+        "description": "台位列表随行返回 held_reservation_id：ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）」）正被有效预留占着该台位的订台号，后台显示「已预留」，员工到店开台须带上它；没有为空。",
         "x-permission": "bar.table.view",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
@@ -3688,6 +3703,7 @@
         ],
         "operationId": "openBarTable",
         "summary": "开台",
+        "description": "ROOT-03-R19（ENUM 第 100 行「已预留只能经取消订台、超时释放、到店开台三条路径退出」）：必须带本台位的订台号；该台位正被另一笔有效预留占着时 409 BAR_TABLE_ALREADY_RESERVED。开台即该订台退出占台（含定金未付、尚未占台的订台），之后不再被超时作业当成未到店。",
         "x-permission": "bar.table.open_close",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
@@ -3801,14 +3817,13 @@
         ],
         "operationId": "customerPhoneLogin",
         "summary": "客人手机号登录",
+        "description": "ROOT-03-R2/R3：只经官方 App、小程序登录（PGM「客人无网页端」），登录端取本请求可信终端并锁定到会话，此后该会话只能在同一端使用；其他终端 403 CUSTOMER_TERMINAL_NOT_ALLOWED。登录不再自动建号：手机号未注册的 409 CUSTOMER_REGISTRATION_REQUIRED、整笔不落库（验证码不被消费，可直接用于注册）。已关闭（黑名单）、已注销 403；受限照常登录（只停订台）。",
         "security": [],
         "x-permission": "public",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
-          "app",
-          "kiosk"
+          "app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.auth.login",
@@ -3821,6 +3836,18 @@
             "$ref": "#/components/responses/Success"
           },
           "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -3842,7 +3869,6 @@
         "x-permission": "public",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -3873,6 +3899,119 @@
         "x-auth-context": "public"
       }
     },
+    "/api/v1/customer/auth/register": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "registerCustomerMember",
+        "summary": "客人注册会员（短信验证＋生日＋满 18 周岁＋同意当前会员条款与隐私条款）",
+        "description": "ROOT-03-R3（BSM「创建会员身份必须完成手机号短信验证、填写生日、满足平台年龄要求，并同意当前会员条款和隐私条款。条件全部满足即自动创建有效会员，否则注册失败且不创建身份；已关闭状态的手机号拒绝再次注册」；操作员裁决「满 18 周岁」）。验证码与登录同一场景（先 POST /api/v1/customer/auth/sms-codes 取码）。成功即建有效会员、记两份条款同意（版本、时间、来源终端）并返回会话凭证（会话锁定本端）。失败码：缺生日 400；未满 18 周岁 409 CUSTOMER_UNDER_AGE；条款版本不是当前版本 409 CUSTOMER_TERMS_OUTDATED；生产环境条款正文未发布 409 CUSTOMER_TERMS_NOT_PUBLISHED；已关闭手机号 403 CUSTOMER_PHONE_CLOSED；已注册 409 CUSTOMER_ALREADY_REGISTERED；非 App/小程序 403 CUSTOMER_TERMINAL_NOT_ALLOWED。任一失败整笔不落库。",
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.registered",
+        "x-audit-event-failure": "customer.register_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
+      }
+    },
+    "/api/v1/customer/terms": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerTerms",
+        "summary": "当前会员条款与隐私条款（匿名可读）",
+        "description": "ROOT-03-R3：返回 member_terms、privacy_policy 两份正文与版本（版本＝正文 SHA-256 前 16 位，正文改动即换版本）；注册时回传两份版本号。",
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "miniapp",
+          "app"
+        ],
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
+      }
+    },
+    "/api/v1/customer/terminal-switches/effective": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerEffectiveTerminalSwitches",
+        "summary": "客人端读取本端已关闭的开关行（匿名可读）",
+        "description": "ROOT-03-R2（PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」「开关拉取失败时按兜底关闭处理」）：只认客人手机应用（app）与客人小程序（miniapp），返回本端及全端（*）全部 enabled=false 的开关行（含模块、版本、项目等维度）供客户端隐藏入口；接口侧仍由终端总开关独立拒绝。其他终端 403 CUSTOMER_TERMINAL_NOT_ALLOWED。",
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "miniapp",
+          "app"
+        ],
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
+      }
+    },
     "/api/v1/customer/auth/logout": {
       "post": {
         "tags": [
@@ -3885,7 +4024,6 @@
         "x-permission": "public",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -3915,7 +4053,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -3948,7 +4085,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "public-project-bar",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -3967,7 +4103,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": "客人订台选项（空闲中的台位）。ROOT-03-R19：reserved=true 表示该台位正被有效预留占着（ENUM 第 100 行），照常列出但不可下单。 ROOT-03 clients-R9（BSM 第 860 行「订台页面须写明该卡座适用的最低消费金额与服务费比例」）：每个台位带 min_consumption_cent、service_fee_rate_bps（卡座与包厢取所属项目当日已批准的收费规则，未配置为空；散台与吧台位为 0）、deposit_amount_cent（按本酒吧定金规则现算，0＝免定金）与 reserved。"
       }
     },
     "/api/v1/customer/bar-reservations": {
@@ -3981,7 +4118,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer-project-bar",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -4006,6 +4142,43 @@
             "$ref": "#/components/responses/Error"
           }
         },
+        "x-auth-context": "customer-token",
+        "description": "客人自助订台。latest_arrival_at 必填（缺失 400 VALIDATION_FAILED）。ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。定金付款确认成功时占台。BSM 第 1062 行「客人自助订台必须支付定金」：本酒吧未配定金规则时 409 BAR_SELF_RESERVATION_UNAVAILABLE（该酒吧暂未开放自助订台），员工代订不受影响。订台归台位所属的酒吧商户（BSM 第 1062 行「定金直接进该卡座所属的酒吧商户」），该酒吧员工在后台可见、可确认并签发邀请函（第十三批裁决第 4 条）。受限客人 403 CUSTOMER_RESTRICTED。",
+        "x-failure-codes": [
+          "BAR_TABLE_ALREADY_RESERVED",
+          "BAR_SELF_RESERVATION_UNAVAILABLE",
+          "CUSTOMER_RESTRICTED"
+        ]
+      },
+      "get": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "operationId": "listMyCustomerBarReservations",
+        "summary": "我的订台",
+        "description": "ROOT-03 clients-R6（BSM 第 870 行）：本人订台列表（酒吧、卡座、预订时间、最晚到店时间、定金状态、订台状态、邀请函状态），App/小程序「我的订台」由此进入邀请函。只返回本人订台。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.bar_reservations.viewed",
+        "x-audit-event-failure": "customer.bar_reservations.view_failed",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
         "x-auth-context": "customer-token"
       }
     },
@@ -4020,7 +4193,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer-project-bar",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -4028,19 +4200,44 @@
         "x-audit-event-success": "customer.bar_invitation.confirmed",
         "x-audit-event-failure": "customer.bar_invitation.confirm_failed",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": [
-                  "invitation_token"
+                  "idempotency_key",
+                  "invitation_token",
+                  "invitation_signature",
+                  "table_id",
+                  "capacity"
                 ],
                 "properties": {
                   "idempotency_key": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
                   },
                   "invitation_token": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "邀请函二维码里的口令。"
+                  },
+                  "invitation_signature": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "description": "邀请函二维码里的防伪标记。"
+                  },
+                  "table_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "邀请函二维码里的卡座。"
+                  },
+                  "capacity": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "邀请函二维码里的可进人数。"
                   }
                 }
               }
@@ -4064,7 +4261,13 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": "被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。",
+        "x-failure-codes": [
+          "BAR_INVITATION_SIGNATURE_INVALID",
+          "BAR_INVITATION_CAPACITY_EXHAUSTED",
+          "BAR_INVITATION_NOT_ACTIVE"
+        ]
       }
     },
     "/api/v1/customer/bar-invitations/{reservation_id}": {
@@ -4078,7 +4281,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer-project-bar",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -4112,6 +4314,230 @@
         "x-auth-context": "customer-token"
       }
     },
+    "/api/v1/customer/bar-invitations/preview": {
+      "get": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "operationId": "previewCustomerBarInvitation",
+        "summary": "扫邀请函二维码预览",
+        "description": "ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.bar_invitation.previewed",
+        "x-audit-event-failure": "customer.bar_invitation.preview_failed",
+        "parameters": [
+          {
+            "name": "invitation_token",
+            "in": "query",
+            "required": true,
+            "description": "邀请函二维码里的口令。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "invitation_signature",
+            "in": "query",
+            "required": true,
+            "description": "邀请函二维码里的防伪标记。",
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "table_id",
+            "in": "query",
+            "required": true,
+            "description": "邀请函二维码里的卡座。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "capacity",
+            "in": "query",
+            "required": true,
+            "description": "邀请函二维码里的可进人数。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/bar-invitations/{reservation_id}/members/{member_id}/remove": {
+      "post": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "operationId": "removeCustomerBarInvitationMember",
+        "summary": "开卡人移出尚未入场的被邀请人",
+        "description": "ROOT-03 clients-R6（BSM 第 870 行「作为开卡人……可把尚未入场的被邀请人移出邀请函、收回其名额；名额释放后可再邀请他人。被邀请人一旦完成核销入场，开卡人不得再将其移出……每一次邀请、接受、移出都记录操作人与时间」）：只许开卡人本人（否则 403 CUSTOMER_RESERVATION_FORBIDDEN）；已入场 409 BAR_INVITATION_MEMBER_ENTERED；成功后该成员置已取消、名额释放。重复移出返回原结果。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.bar_invitation.member_removed",
+        "x-audit-event-failure": "customer.bar_invitation.member_remove_failed",
+        "x-failure-codes": [
+          "BAR_INVITATION_MEMBER_ENTERED",
+          "BAR_INVITATION_MEMBER_NOT_FOUND"
+        ],
+        "parameters": [
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "description": "订台（邀请函所属订台）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "member_id",
+            "in": "path",
+            "required": true,
+            "description": "被邀请人成员编号（邀请函成员列表里的 id）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/bar-invitations/{reservation_id}/entry-code": {
+      "get": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "operationId": "getCustomerBarInvitationEntryCode",
+        "summary": "本人动态入场码",
+        "description": "ROOT-03 clients-R6（BSM 第 870 行「该名额自动关联到接受人本人的动态入场码，到店出示本人的动态入场码入场」；BSM 第 585 行）：已接受未入场的本人（含开卡人自己）取动态入场码，窗口＝全场统一二维码刷新间隔，返回 {reservation_id, member_id, code, expires_at, refresh_interval_seconds}，码不落库，过期即作废。未接受 409 BAR_INVITATION_MEMBER_NOT_CONFIRMED，已入场 409 BAR_INVITATION_MEMBER_ENTERED。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.bar_invitation.entry_code_issued",
+        "x-audit-event-failure": "customer.bar_invitation.entry_code_failed",
+        "parameters": [
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "description": "订台（邀请函所属订台）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
     "/api/v1/customer/consents": {
       "post": {
         "tags": [
@@ -4122,7 +4548,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -4154,10 +4579,10 @@
         ],
         "operationId": "listCustomerOrders",
         "summary": "我的订单",
+        "description": "ROOT-03-R20／R27：每单另带 paid_amount_cent（已收各笔合计）、remaining_cent（待付金额；已付或已取消为 0）、payments（已收各笔：channel、amount_cent、status、paid_at，按收款先后）与 price_hits（客人自助下单命中的全部资格价：rule_id、variant_type、unit_price_cent、rule_updated_at 规则版本快照）。",
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -4189,7 +4614,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -4223,7 +4647,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -4248,7 +4671,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。 订单保存 project_id 项目快照，含游乐权益的票必须先确定唯一项目；储值付款仅允许平台通用卡或与原订单项目一致的项目通用卡。"
+        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。 订单保存 project_id 项目快照，含游乐权益的票必须先确定唯一项目；储值付款仅允许平台通用卡或与原订单项目一致的项目通用卡。 ROOT-03-R27（BSM 第 733 行「符合后台规则时系统自动判断可用」、第 756 行「多种资格价不叠加，选择最终价格最低的一项」）：价格由系统按客人资格自动判定，请求不收 price_rule_id（带即 400 VALIDATION_FAILED）；会员价对全部会员、新人价仅本账户无已付门票订单且不是注销后一年内重新注册、学生价须学生资格、团体价与渠道价不对客人自助开放，与动态公开价一起取最低；订单 price_rule_id＝选中的资格价规则（公开价最低时为空），全部命中资格价见我的订单 price_hits。"
       }
     },
     "/api/v1/customer/ticket-products": {
@@ -4258,11 +4681,11 @@
         ],
         "operationId": "listCustomerTicketProducts",
         "summary": "客人可购票种和票价",
+        "description": "ROOT-03-R27：带有效客人会话（X-Customer-Token 或 Bearer）时每个票种另给 my_price_cent（今日按本人资格系统判定的最低价）与 my_price_basis（会员价／新人价／学生价；动态公开价最低时为空）；匿名或会话失效时两者为空。 ROOT-03 clients-R9（BSM 第 858 行「购票前须以门票守则的形式向客人告知该票的规则，包括能否退款、有效期、年龄限制与可使用范围」；第 879 行「展示……赠饮权益」）：每个票种带 refundable、validity_days、usage_scope（单店票＝所属酒吧名，通票＝综合体通票）、entitlements（所含权益名称）、age_limit_text（全场 18 岁以上方可入场）；带客人会话时另给 my_price_cent 与 my_price_basis。",
         "security": [],
         "x-permission": "public",
         "x-data-scope": "public-project",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app",
           "kiosk"
@@ -4306,7 +4729,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -12917,7 +13339,13 @@
           "400": {
             "$ref": "#/components/responses/Error"
           },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -12925,7 +13353,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。 订单保存 project_id 项目快照，按原票种商户和权益点位确定，冲突时不能用操作人项目覆盖；含游乐权益而项目不明时拒绝售票。普通订单更新不改变原项目。"
+        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。 订单保存 project_id 项目快照，按原票种商户和权益点位确定，冲突时不能用操作人项目覆盖；含游乐权益而项目不明时拒绝售票。普通订单更新不改变原项目。 ROOT-03-R29（BSM 第 986 行「客人用手机号短信验证绑定，在官方 App/小程序查看门票」）：sales_channel=kiosk 必填 buyer_phone 与 sms_code（先经 POST /api/v1/ticketing/kiosk-bind-codes 发码），缺失 400 VALIDATION_FAILED、验证码不对 401 CUSTOMER_OTP_INVALID，核验在扣库存之前；该手机号已注册会员的订单直接归本人，未注册的注册时按手机号归集。第三方渠道回流订单（sales_channel 为渠道码）的购票手机号已是会员的直接归本人。"
       }
     },
     "/api/v1/ticketing/orders/{order_id}/issue": {
@@ -13086,7 +13514,7 @@
         ],
         "operationId": "listTicketRefunds",
         "summary": "查询退款单列表",
-        "description": "后台退款台账；业务人员据此看哪几笔已“已通过”但钱还没实际打出去（待确认拨付）。商户范围只见本商户受理的退款。",
+        "description": "后台退款台账；业务人员据此看哪几笔已“已通过”但钱还没实际打出去（待确认拨付）。商户范围只见本商户受理的退款。每行带 payout_items（[{channel, amount_cent}]）：ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）批准时分到在线笔、待财务原路打款的各笔；储值部分已当场回原卡、不在其中，财务按此打款，不按整笔 refund_amount_cent。未分笔的为空。",
         "x-auth-context": "staff-token",
         "x-permission": "ticket.refund.view",
         "x-data-scope": "project-order",
@@ -13151,7 +13579,7 @@
         ],
         "operationId": "confirmTicketRefundPayout",
         "summary": "退款确认拨付",
-        "description": "财务实际打完款后确认兑付，退款单“已通过”→“成功”。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。",
+        "description": "财务实际打完款后确认兑付，退款单“已通过”→“成功”。组合支付的退款只按 payout_items 所列渠道与金额打款（储值部分批准时已回卡）。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。",
         "x-permission": "ticket.refund.approve",
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
@@ -13208,11 +13636,57 @@
           }
         ],
         "requestBody": {
-          "$ref": "#/components/requestBodies/StatusChange"
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "action",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "幂等键；同一状态变更重试必须复用。",
+                    "maxLength": 128
+                  },
+                  "action": {
+                    "type": "string",
+                    "description": "状态动作编码；必须使用后端枚举，不得提交任意文案。",
+                    "maxLength": 64
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "状态变更原因；暂停、作废、退款、驳回等动作必须填写。",
+                    "maxLength": 1000
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "description": "证据附件 ID 列表；用于关联状态变更依据。",
+                    "maxItems": 50
+                  },
+                  "responsible_entity_id": {
+                    "type": "string",
+                    "description": "退款责任主体（主体主数据中在用的法律主体）。操作员裁决第十三批第 11 条：只在退款单还没有责任主体时（客人自助申请的退票）必填，由批准的员工补填；已有责任主体的退款不改、忽略此字段。缺失或不在用 400 REFUND_RESPONSIBLE_ENTITY_REQUIRED。",
+                    "maxLength": 64
+                  }
+                }
+              }
+            }
+          }
         },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
           },
           "403": {
             "$ref": "#/components/responses/Error"
@@ -14626,6 +15100,7 @@
         ],
         "operationId": "cancelBarReservation",
         "summary": "订台取消/爽约（按时限退定金或没收）",
+        "description": "取消即退出占台。订台取消（含超时释放作业）时已签发的邀请函一并吊销（invitation_status=revoked）：未接受的不能再接受、已接受的取不到动态入场码、门口核验 409 BAR_INVITATION_NOT_ACTIVE（ENUM 第 105 行邀请函名额随卡座而在）。超时释放时未付定金记 deposit_status=timeout_released（已超时释放，ENUM 第 103 行），已付定金按爽约没收。",
         "x-permission": "bar.reservation.manage",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
@@ -16174,7 +16649,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -16212,7 +16686,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -16422,10 +16895,10 @@
         ],
         "operationId": "customerStoredValueTopup",
         "summary": "客人储值充值（绑支付意图）",
+        "description": "ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。客户端未回前台入账的，由服务端结算作业按充值绑定的卡范围查单入账。",
         "x-permission": "customer.stored_value.topup",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -16469,7 +16942,6 @@
         "x-permission": "customer.stored_value.topup",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -16478,53 +16950,6 @@
         "x-audit-event-failure": "customer.stored_value.settle_failed",
         "requestBody": {
           "$ref": "#/components/requestBodies/StoredValueSettleRequest"
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "customer-token"
-      }
-    },
-    "/api/v1/customer/stored-value/consume": {
-      "post": {
-        "tags": [
-          "customer"
-        ],
-        "operationId": "customerStoredValueConsume",
-        "summary": "客人储值消费（余额扣减）",
-        "description": "CG-06a：通用卡扣款顺序写死先扣本金、后扣赠送金；商户级卡按发卡商户自定（平台代录）的 consume_order 扣减；consume 流水记录扣减的本金与赠送金各多少（BSM「我的余额」）。",
-        "x-permission": "customer.stored_value.consume",
-        "x-data-scope": "customer",
-        "x-terminal-allowed": [
-          "web",
-          "miniapp",
-          "app"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "customer.stored_value.consume",
-        "x-audit-event-failure": "customer.stored_value.consume_failed",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/StoredValueConsumeRequest"
         },
         "responses": {
           "200": {
@@ -16563,7 +16988,6 @@
         "x-permission": "customer.stored_value.view",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -16615,7 +17039,6 @@
         "x-permission": "customer.stored_value.view",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -16646,7 +17069,6 @@
         "x-permission": "customer.voucher.view",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -16664,7 +17086,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）＋ROOT-03-R30（BSM 第 865 行「已失效详情显示原因以及是否退回积分……可用券只有在券种允许时才显示转赠入口」）：本人券包聚合，不再下发固定券码（code 恒为空，出示走 /vouchers/{voucher_instance_id}/redeem-code 动态码）；每张券带 invalid_reason（作废原因）、points_refunded（积分兑换券作废后退回的积分，非积分兑换券为空）、transferable（券种允许且仍可用）。"
       }
     },
     "/api/v1/loyalty/stored-value/{customer_id}/freeze": {
@@ -19483,6 +19906,7 @@
         ],
         "operationId": "createBarTableSession",
         "summary": "创建酒水台位会话（开台）",
+        "description": "ROOT-03-R19（ENUM 第 100 行「排他锁，不是展示标记」）：台位正被有效预留占着时，只有带上占台的那笔订台号（reservation_id）才能开台，散客开台或带别的订台号 409 BAR_TABLE_ALREADY_RESERVED；带了即到店开台，该订台退出占台（含定金未付的订台），超时作业不再按爽约处理、已付定金不被没收。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.create",
         "x-data-scope": "project-bar-table",
@@ -19965,6 +20389,7 @@
         ],
         "operationId": "transferBarTableSession",
         "summary": "转台（台位会话转移）",
+        "description": "ROOT-03-R19：转入台位正被有效预留占着时 409 BAR_TABLE_ALREADY_RESERVED（不能把别人订着的台转给在座客人）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.transfer",
         "x-data-scope": "project-bar-table",
@@ -24998,8 +25423,7 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.points.ledger_viewed",
@@ -25029,8 +25453,7 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.points.redemption_items_viewed",
@@ -25060,8 +25483,7 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.points.redemptions_viewed",
@@ -25089,8 +25511,7 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "customer.points.redeem",
@@ -25122,11 +25543,6 @@
                     "type": "integer",
                     "description": "兑换数量。",
                     "minimum": 1
-                  },
-                  "source_terminal": {
-                    "type": "string",
-                    "description": "来源终端。",
-                    "maxLength": 255
                   }
                 }
               }
@@ -26895,41 +27311,42 @@
         "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/customer/bar-sessions/{session_id}/menu": {
+    "/api/v1/customer/bar-tables/{table_id}/menu": {
       "get": {
         "tags": [
           "customer",
           "bar"
         ],
-        "operationId": "listCustomerBarScanMenu",
-        "summary": "客人扫码点单查看菜单",
-        "x-permission": "not_applicable",
-        "x-data-scope": "customer-project-bar",
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "public-project",
         "x-terminal-allowed": [
-          "web",
-          "miniapp",
-          "app"
+          "app",
+          "miniapp"
         ],
+        "operationId": "listCustomerBarScanMenu",
+        "summary": "扫码点单查看菜单",
+        "description": "ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。返回本酒吧在售商品（不含内部结算价）；沽清商品 sold_out=true 置灰不隐藏（ENUM 第 111 行）。",
         "x-idempotency-required": false,
-        "x-audit-event-success": "customer.bar_scan_menu.viewed",
-        "x-audit-event-failure": "customer.bar_scan_menu.view_failed",
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
         "parameters": [
           {
-            "name": "session_id",
+            "name": "table_id",
             "in": "path",
             "required": true,
+            "description": "散台固定桌台码里的台位编号（码固定不变，BSM 第 585 行）。",
             "schema": {
               "type": "string",
               "maxLength": 64
-            },
-            "description": "被扫的台位会话 ID。"
+            }
           }
         ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Page"
           },
-          "403": {
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -26939,40 +27356,45 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "public"
       }
     },
-    "/api/v1/customer/bar-sessions/{session_id}/scan-orders": {
+    "/api/v1/customer/bar-tables/{table_id}/scan-orders": {
       "post": {
         "tags": [
           "customer",
           "bar"
         ],
-        "operationId": "placeCustomerBarScanOrder",
-        "x-failure-codes": [
-          "CONTRACT_SCOPE_VIOLATION"
-        ],
-        "summary": "客人自助扫码点单",
-        "x-permission": "not_applicable",
-        "x-data-scope": "customer-project-bar",
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "public-project",
         "x-terminal-allowed": [
-          "web",
-          "miniapp",
-          "app"
+          "app",
+          "miniapp"
         ],
+        "operationId": "createCustomerBarScanOrder",
+        "summary": "扫码点单下单（即时付款）",
+        "description": "ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。按商品现价计价，只落待付单与在线付款单，返回 {scan_order_id, table_id, amount_cent, status=pending, payment_intent_id, channel, gateway_status, payment_url, launch}，此时不成单、不出品；付款成功确认后才成单。ROOT-03-R24（BSM 第 1069 行）：任一行带 is_gift=true 400 BAR_SCAN_ORDER_GIFT_NOT_ALLOWED。沽清 409 PRODUCT_SOLD_OUT；扫码点单开关关时 409 BAR_SCAN_ORDER_DISABLED；支付渠道未启用时 gateway_status 为 RESERVED/NOT_CONFIGURED、不带拉起参数，客户端显示「支付暂不可用」、不成单。",
         "x-idempotency-required": true,
         "x-audit-event-success": "customer.bar_scan_order.created",
         "x-audit-event-failure": "customer.bar_scan_order.create_failed",
+        "x-failure-codes": [
+          "BAR_SCAN_ORDER_GIFT_NOT_ALLOWED",
+          "BAR_SCAN_ORDER_TABLE_NOT_ALLOWED",
+          "BAR_TABLE_NOT_OPENED",
+          "PRODUCT_SOLD_OUT",
+          "BAR_SCAN_ORDER_DISABLED"
+        ],
         "parameters": [
           {
-            "name": "session_id",
+            "name": "table_id",
             "in": "path",
             "required": true,
+            "description": "散台固定桌台码里的台位编号（码固定不变，BSM 第 585 行）。",
             "schema": {
               "type": "string",
               "maxLength": 64
-            },
-            "description": "被扫的台位会话 ID。"
+            }
           }
         ],
         "requestBody": {
@@ -26985,6 +27407,12 @@
           "400": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -26992,7 +27420,143 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "public"
+      }
+    },
+    "/api/v1/customer/bar-tables/{table_id}/scan-orders/{scan_order_id}/confirm": {
+      "post": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "public-project",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "operationId": "confirmCustomerBarScanOrder",
+        "summary": "扫码点单回前台确认付款（查单）",
+        "description": "ROOT-03 clients-R7：渠道查单成功才在该桌当前开台会话上成单（计入本桌当前账单、进出品流转，并记一张已结清的账单，不挂账），返回 status=paid 与 bar_order_id；渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、未确认收款 409 PAYMENT_NOT_SUCCEEDED，不成单。付款成功时该桌已结束接待的，已收款登记原路待退（退款来源 bar_scan_order_rejection），返回 409 BAR_SCAN_ORDER_SESSION_CLOSED_REFUNDING；下单后到账前所点酒水被沽清或下架、扫码点单被关、或改了价（账单金额≠实付）而成不了单的，同样只回滚成单、已收款登记原路待退，返回 409 BAR_SCAN_ORDER_REJECTED_REFUNDING（结算作业不再反复重试）。重复确认返回现状；客户端未回前台的由服务端结算作业查单成单。",
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.bar_scan_order.paid",
+        "x-audit-event-failure": "customer.bar_scan_order.pay_failed",
+        "x-failure-codes": [
+          "PAYMENT_GATEWAY_UNAVAILABLE",
+          "PAYMENT_NOT_SUCCEEDED",
+          "BAR_SCAN_ORDER_SESSION_CLOSED_REFUNDING",
+          "BAR_SCAN_ORDER_REJECTED_REFUNDING"
+        ],
+        "parameters": [
+          {
+            "name": "table_id",
+            "in": "path",
+            "required": true,
+            "description": "散台固定桌台码里的台位编号（码固定不变，BSM 第 585 行）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "scan_order_id",
+            "in": "path",
+            "required": true,
+            "description": "扫码点单下单返回的 scan_order_id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
+      }
+    },
+    "/api/v1/customer/bar-tables/{table_id}/current-bill": {
+      "get": {
+        "tags": [
+          "customer",
+          "bar"
+        ],
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "public-project",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "operationId": "getCustomerBarTableCurrentBill",
+        "summary": "本桌当前账单",
+        "description": "ROOT-03 clients-R7（BSM 第 1025 行「付款成功后所点酒水计入该桌位当前账单，账单上逐项列出物品名称与价格，并分别标注已上菜与未上菜……此后新客人看到的是一张空账单，看不到上一位客人的消费」）：只列该散台当前开台会话已成单、未撤的酒水（product_name、unit_price_cent、quantity、amount_cent、served），不含任何客人身份；未开台为空账单。",
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "table_id",
+            "in": "path",
+            "required": true,
+            "description": "散台固定桌台码里的台位编号（码固定不变，BSM 第 585 行）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
       }
     },
     "/api/v1/amusement/inspection-tasks": {
@@ -33638,7 +34202,8 @@
           "customer"
         ],
         "operationId": "suspendCustomerAccount",
-        "summary": "封禁客人账号（临时，到期客人再登录自动恢复正常；期内购买/使用被拒）",
+        "summary": "置为受限（只停自助订台与员工代订，到期自动恢复有效）",
+        "description": "ROOT-03-R23（BSM「会员状态」条）：只对有效会员；客服主管填原因人工置入，截止＝此刻＋申请所在项目的受限时长（业务参数，按项目可配，出厂默认 90 天，值与上下限同配）。项目账号不传 project_id 即本项目，跨项目 403；非有效会员 409 CUSTOMER_NOT_ACTIVE。受限期内客人登录、购票等照常，自助订台 403 CUSTOMER_RESTRICTED。",
         "x-permission": "customer.account.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -33665,18 +34230,18 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "suspended_until"
+                  "reason"
                 ],
                 "properties": {
-                  "suspended_until": {
+                  "project_id": {
                     "type": "string",
-                    "format": "date-time",
-                    "description": "封禁到期时刻（ISO-8601）"
+                    "maxLength": 64,
+                    "description": "按哪个综合体项目的受限时长计算截止；项目账号不传即本项目，平台账号必填"
                   },
                   "reason": {
                     "type": "string",
                     "maxLength": 500,
-                    "description": "封禁原因（留审计）"
+                    "description": "置入受限原因（必填，留审计）"
                   }
                 }
               }
@@ -33696,6 +34261,9 @@
           "404": {
             "$ref": "#/components/responses/Error"
           },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
           "500": {
             "$ref": "#/components/responses/Error"
           }
@@ -33703,22 +34271,22 @@
         "x-auth-context": "staff-token"
       }
     },
-    "/api/v1/customer-accounts/{customer_id}/blacklist": {
+    "/api/v1/customer-accounts/{customer_id}/blacklist-requests": {
       "post": {
         "tags": [
           "customer"
         ],
-        "operationId": "blacklistCustomerAccount",
-        "summary": "拉黑客人账号（永久禁止使用服务，无到期）",
-        "description": "CG-06b（BSM「核销单位」「储值预付卡 / 余额」：账户关闭的，储值本金退还本人）：拉黑即关闭账户，同事务内把该客人名下综合体通用卡的未消费本金全额退还本人（退款打款登记 finance_refunds，退款执行主体＝长沙项目公司）、未使用赠送金作废（adjust 流水）、卡置 closed；商户级卡不动，由发卡商户按自设规则到店办理；重复拉黑不重复退。",
-        "x-permission": "customer.account.manage",
-        "x-data-scope": "platform",
+        "operationId": "requestCustomerBlacklistChange",
+        "summary": "申请列入或解除黑名单（保安团队提交，待夜班值班经理与娱乐平台负责人两级批准）",
+        "description": "ROOT-03-R23（ENUM「会员身份状态」条「将客人列入黑名单即为关闭其账户，黑名单全平台通用，由保安团队申请、夜班值班经理批准、娱乐平台负责人批准」；BSM「会员状态」条「解除黑名单须按列入时同级审批链……复核，填原因留痕」）。不再有直接拉黑入口。action=list 只对未关闭、未注销账号；release 只对已关闭且手机号未释放的账号，否则 409；同一客人已有待批申请 409 CUSTOMER_BLACKLIST_REQUEST_PENDING。项目＝申请所在综合体（决定第一级当班夜班值班经理），项目账号不传即本项目。",
+        "x-permission": "customer.blacklist.request",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "customer.account.blacklisted",
-        "x-audit-event-failure": "customer.account.blacklist_failed",
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.blacklist.requested",
+        "x-audit-event-failure": "customer.blacklist.request_failed",
         "parameters": [
           {
             "name": "customer_id",
@@ -33731,18 +34299,11 @@
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "reason": {
-                    "type": "string",
-                    "maxLength": 500,
-                    "description": "操作原因（留审计）"
-                  }
-                }
+                "$ref": "#/components/schemas/CustomerBlacklistRequestCommand"
               }
             }
           }
@@ -33751,10 +34312,16 @@
           "200": {
             "$ref": "#/components/responses/Success"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "403": {
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -33770,7 +34337,8 @@
           "customer"
         ],
         "operationId": "reinstateCustomerAccount",
-        "summary": "恢复客人账号为正常（解封/解黑）",
+        "summary": "提前解除受限（原因必填）",
+        "description": "ROOT-03-R23（BSM「会员状态」条「客服主管也可提前人工解除，填原因留痕」）：只对受限账号；已关闭（黑名单）只能走两级批准的解除申请，409 CUSTOMER_BLACKLIST_RELEASE_REQUIRES_APPROVAL；其他状态 409 CUSTOMER_NOT_RESTRICTED。",
         "x-permission": "customer.account.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -33791,16 +34359,19 @@
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "reason"
+                ],
                 "properties": {
                   "reason": {
                     "type": "string",
                     "maxLength": 500,
-                    "description": "操作原因（留审计）"
+                    "description": "提前解除原因（必填，留审计）"
                   }
                 }
               }
@@ -33811,10 +34382,329 @@
           "200": {
             "$ref": "#/components/responses/Success"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "403": {
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-blacklist-requests": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerBlacklistRequests",
+        "summary": "黑名单申请列表（待批准在前）",
+        "description": "ROOT-03-R23：持申请或终审权限的看本项目范围（平台看全部）；其余人只看自己此刻在班当夜班值班经理的项目的申请。status 可选 pending、approved、rejected。",
+        "x-permission": "customer.blacklist.request",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-audit-event-success": "customer.blacklist_requests_viewed",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            },
+            "description": "申请状态"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-blacklist-requests/{request_id}/approve": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "approveCustomerBlacklistRequest",
+        "summary": "批准黑名单申请的当前这一级（夜班值班经理批准 → 娱乐平台负责人终审，终审通过即执行）",
+        "description": "ROOT-03-R23：第一级须为申请所在项目此刻在班的夜班值班经理（按已发布排班与顶班关系，不放宽到“及以上”），否则 403 NIGHT_DUTY_MANAGER_REQUIRED；第二级须持 customer.blacklist.approve。申请人与两级批准人须为不同的人，否则 403 CUSTOMER_BLACKLIST_SELF_APPROVAL。列入：关闭账户（储值本金退还本人等按账户关闭规则）；解除：原账户保持已关闭，手机号释放、可重新注册且与原账户不建立关联。已处理的申请 409。",
+        "x-permission": "customer.blacklist.approve",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.blacklist.approved",
+        "x-audit-event-failure": "customer.blacklist.approve_failed",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "黑名单申请 id"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CustomerBlacklistDecisionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-blacklist-requests/{request_id}/reject": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "rejectCustomerBlacklistRequest",
+        "summary": "驳回黑名单申请（由当前这一级有权批准的人驳回，账户不变）",
+        "x-permission": "customer.blacklist.approve",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.blacklist.rejected",
+        "x-audit-event-failure": "customer.blacklist.reject_failed",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "黑名单申请 id"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CustomerBlacklistDecisionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-restriction-settings/{project_id}": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerRestrictionSetting",
+        "summary": "查本项目会员受限时长（未配置时回落出厂 90 天）",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "综合体项目 id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "configureCustomerRestrictionSetting",
+        "summary": "配置本项目会员受限时长（天数与上下限同配）",
+        "description": "ROOT-03-R23（BSM「会员状态」条「受限满后台配置时长（业务参数，按项目可配，出厂默认 90 天，须同时配置上下限）自动恢复有效」）：天数、下限、上限须同时填写且 1 ≤ 下限 ≤ 天数 ≤ 上限，否则 400；项目账号只能配本项目。变更留痕前后值。",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.restriction_setting.configured",
+        "x-audit-event-failure": "customer.restriction_setting.config_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "综合体项目 id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerRestrictionSettingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer-churn-alert-setting": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerChurnAlertSetting",
+        "summary": "查同号注销与注册频次预警上限（全平台）",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "configureCustomerChurnAlertSetting",
+        "summary": "配置同号一年内注销与注册合计次数上限（全平台，值与上下限同配）",
+        "description": "ROOT-03-R22（ENUM「会员身份状态」条「同一手机号在一年内注销与注册合计超过后台配置的次数上限的，触发异常预警交风控查看处置（业务参数，全平台统一可配，出厂默认一年内合计 3 次，须同时配置上下限）；预警只作提示，不自动阻断注册」）：次数上限、下限、上限须同时填写且 1 ≤ 下限 ≤ 次数上限 ≤ 上限，否则 400；商户账号 403。注册成功与注销完成时同事务计数，超过即进统一风控预警队列（来源 platform、类型 customer.churn，只写次数不写手机号）。变更留痕前后值。",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.churn_alert_setting.configured",
+        "x-audit-event-failure": "customer.churn_alert_setting.config_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerChurnAlertSettingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -33830,12 +34720,11 @@
           "customer"
         ],
         "operationId": "deregisterCustomerAccount",
-        "summary": "客人自助注销本人账号（注销后登录/动作被拒，历史数据物理保留但客人不可见）",
+        "summary": "客人自助注销本人账号（个人信息删除、积分券清零、名下存酒须确认放弃）",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.account.deregistered",
@@ -33847,17 +34736,24 @@
           "200": {
             "$ref": "#/components/responses/Success"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "401": {
             "$ref": "#/components/responses/Error"
           },
           "403": {
             "$ref": "#/components/responses/Error"
           },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
           "500": {
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": "TK-21-R3 / ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额，客人可以选择不取存酒、放弃余额，径行注销；放弃的存酒按存酒到期规则转为所在酒吧的自有库存资产……注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除……积分、券一律清零，未核销的票按本文件「退款」条的退票规则处理」；ENUM 第 68 行「已注销会员的手机号可以重新注册，新账户与原账户之间不建立任何关联」）：名下有在保管存酒而 abandon_saved_bottles 不为 true 时 409 CUSTOMER_SAVED_BOTTLES_HELD、不改任何数据；放弃的存酒置到期（转酒吧自有）；储值按 waive_balance 处理；可用与冻结积分清零、未核销券作废、在途转赠作废；票种不允许退款的未用票作废（主动放弃不构成退款理由）；已部分核销或只持有部分人份的，作废本人持有的未用权益（操作员裁决第十三批第 12 条）；名下有每个人份都归本人、票种允许退款且整张未用的票时 409 CUSTOMER_REFUNDABLE_TICKETS_HELD、不改任何数据（操作员裁决第十三批第 8 条「先退票才能注销」：提醒先申请退票，退完才能注销）；最后删除手机号、盲索引、掩码与生日（同号可重新注册、与原账户无关联），会话全部撤销，订单购票手机号清空，学生认证证件照片与学信网验证码删除；本人投诉附件按操作员裁决第十三批第 10 条「作为工单材料保留」不删，附件行与工单只留随机客人编号（不可反查，与钱账留存同一做法），有工单查看权限的员工照常查看；只留注销时点与手机号盲索引的一年期标记。同一事务。"
       }
     },
     "/api/v1/customer/deregister/preview": {
@@ -33866,13 +34762,12 @@
           "customer"
         ],
         "operationId": "previewCustomerDeregistration",
-        "summary": "客人注销预览（提醒名下各储值卡本金/赠送金；供选择放弃余额或生成待退事项）",
-        "description": "TK-21-R3（BSM「账户注销」）：返回本人每张未销户储值卡的 account_id、card_scope、merchant_id、principal_cent、bonus_cent。",
+        "summary": "客人注销预览（提醒名下各储值卡本金/赠送金、名下存酒与可退款的未用票）",
+        "description": "TK-21-R3 / ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额」）：返回 {stored_value_cards:[account_id、card_scope、merchant_id、principal_cent、bonus_cent], saved_bottles:[与「我的存酒」同一投影：id、bar_project_id、bottle_name、remaining_quantity、unit、expire_at……], refundable_tickets:[与「我的票」同一投影：id、ticket_name、status、parent_ticket_id、ticket_no……，每个人份都归本人、票种允许退款且整张未用的票（操作员裁决第十三批第 8 条「先退票才能注销」）]}。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.account.deregister_previewed",
@@ -33905,8 +34800,7 @@
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.order_tickets_viewed",
@@ -39421,7 +40315,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39449,11 +40342,10 @@
         ],
         "operationId": "listMyCustomerSavedBottles",
         "summary": "我的存酒（本人名下全部存酒与到期日，跨店汇总，每条标明所属酒吧）",
-        "description": "BSM L867「我的存酒：查看本人名下全部存酒、到期日与动态取酒码……跨店汇总展示，每条记录标明所属酒吧」：每条只下发客人可见字段 id、bar_project_id（所属酒吧）、bottle_name、remaining_quantity、unit、expire_at、status、bottle_label_value、pickup_location、handed_over_to_platform（CustomerSavedBottleResponse）；不含员工备注、高价值标记与阈值、登记照片、保管主体与交接单等员工内部字段。",
+        "description": "BSM L867「我的存酒：查看本人名下全部存酒、到期日与动态取酒码……跨店汇总展示，每条记录标明所属酒吧」：每条只下发客人可见字段 id、bar_project_id（所属酒吧）、bottle_name、remaining_quantity、unit、expire_at、status、bottle_label_value、pickup_location、handed_over_to_platform（CustomerSavedBottleResponse）；不含员工备注、高价值标记与阈值、登记照片、保管主体与交接单等员工内部字段。 ROOT-03-R30（BSM 第 867 行「客人端「我的存酒」为跨店汇总展示，每条记录标明所属酒吧」）：本人名下全部在存存酒，每条带 bar_project_id 与 bar_name（所属酒吧名称）。",
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39484,7 +40376,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39533,7 +40424,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39582,7 +40472,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39660,7 +40549,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39722,7 +40610,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：在途不冻结——原持有人仍可核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；场次已结束不阻止发起。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。"
       }
     },
     "/api/v1/customer/ticket-transfers/{transfer_id}/claim": {
@@ -39735,7 +40624,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39791,7 +40679,13 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：与核销、改转争同一人份行锁，先成功者为准；原持有人已核销或已改转时 409 TICKET_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）；该人份权益所在场次已结束 409 TICKET_TRANSFER_SESSION_ENDED（不发生领取）。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。",
+        "x-failure-codes": [
+          "TICKET_TRANSFER_VOIDED",
+          "TICKET_TRANSFER_SESSION_ENDED",
+          "TICKET_TRANSFER_SLOT_USED"
+        ]
       }
     },
     "/api/v1/customer/ticket-transfers/{transfer_id}/revoke": {
@@ -39804,7 +40698,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39851,7 +40744,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39885,7 +40777,8 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "customer-token"
+        "x-auth-context": "customer-token",
+        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：领取预览不算领取。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。session_ended=true 时客户端提示「该权益所在场次已结束、权益已终结」并禁用确认领取。"
       }
     },
     "/api/v1/customer/ticket-transfers/incoming": {
@@ -39898,7 +40791,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -39929,7 +40821,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -47233,7 +48124,9 @@
           "VOUCHER_REVOKED",
           "VOUCHER_EXPIRED",
           "VOUCHER_STOCK_INSUFFICIENT",
-          "CROSS_MERCHANT_FORBIDDEN"
+          "CROSS_MERCHANT_FORBIDDEN",
+          "VOUCHER_DYNAMIC_CODE_REQUIRED",
+          "VOUCHER_REDEEM_CODE_EXPIRED"
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/VoucherRedeemRequest"
@@ -47257,7 +48150,8 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "description": " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人；过期、已换新码或转赠后 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码一律 409 VOUCHER_DYNAMIC_CODE_REQUIRED；按 voucher_instance_id 定位的员工台账路径不变。核销成功同事务把该动态码置已用。有在途转赠照常核销，核销成功即作废在途转赠（void_reason=holder_redeemed；操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。"
       }
     },
     "/api/v1/vouchers/overview": {
@@ -47334,10 +48228,10 @@
         ],
         "operationId": "initiateCustomerVoucherTransfer",
         "summary": "发起券转赠(手机号/微信链接/二维码)",
+        "description": "操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」：在途不冻结——原持有人仍可出示动态码核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；与领取争同一券行锁，券已被对方领走时 403 VOUCHER_TRANSFER_NOT_HOLDER。",
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -47405,10 +48299,13 @@
         ],
         "operationId": "claimCustomerVoucherTransfer",
         "summary": "确认领取转赠(手机号只指定人可领;链接/二维码先确认者得)",
+        "description": "操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」：与原持有人核销、改转争同一券行锁，先成功者为准；原持有人已核销或已改转时 409 VOUCHER_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）。",
+        "x-failure-codes": [
+          "VOUCHER_TRANSFER_VOIDED"
+        ],
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -47477,7 +48374,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -47524,7 +48420,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -47571,7 +48466,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -47602,7 +48496,6 @@
         "x-permission": "not_applicable",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -55664,7 +56557,6 @@
         "x-data-scope": "customer",
         "x-auth-context": "public",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -55780,7 +56672,6 @@
         "x-data-scope": "customer",
         "x-auth-context": "customer-token",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -55875,7 +56766,6 @@
         "x-data-scope": "customer",
         "x-auth-context": "customer-token",
         "x-terminal-allowed": [
-          "web",
           "miniapp",
           "app"
         ],
@@ -67148,8 +68038,7 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -67216,13 +68105,12 @@
         ],
         "operationId": "createCustomerParkingPayment",
         "summary": "客人停车缴费下单",
-        "description": "BSM「停车场」L1435「出口扫码支付，或在官方 App/小程序提前缴费后在离场宽限时限内离场……不做车牌绑定无感支付」、L1445「停车费收入归城市项目公司」：按应缴拉起支付意向（business_order_type=parking_fee），收款主体为本项目唯一有效的城市项目公司（否则 409 CITY_PROJECT_COMPANY_MISSING）；离场宽限内已缴 409 PARKING_ALREADY_PAID；无需缴费 409 PARKING_NO_FEE_DUE；已出场 409 PARKING_SESSION_EXITED。不保存车牌与账户的代扣绑定。HP-P01 消费抵免：带实际抵掉计费小时的抵免下单即预占（同一次抵免只一笔能用；本客人另一辆在场车已占用时本笔按无抵免计），须城市项目公司有且仅有一条已生效的停车抵免每小时内部结算价（内部结算价目录品类 parking_credit，否则 409 PARKING_CREDIT_PRICE_MISSING，不按 0 计）并随缴费固化；抵免把应缴抵到 0 元时直接记 0 元已缴（无支付意向）并置抵免已使用、按组成比例分担成本，停车系统按缴费记录放行。已用在本次停车上的抵免续缴时随缴费带上，缴费成功按整次停车累计重算实际抵掉小时与成本（可升可降）；累计一分没少收的（如带抵免缴费后停到每日封顶），抵免退回可用、不计成本、未并入月度内部结算的分担删除（第十二批操作员裁决补充第 11 条「一分没少收＝没用掉抵免、不计成本」）。",
+        "description": "BSM「停车场」L1435「出口扫码支付，或在官方 App/小程序提前缴费后在离场宽限时限内离场……不做车牌绑定无感支付」、L1445「停车费收入归城市项目公司」：按应缴拉起支付意向（business_order_type=parking_fee），收款主体为本项目唯一有效的城市项目公司（否则 409 CITY_PROJECT_COMPANY_MISSING）；离场宽限内已缴 409 PARKING_ALREADY_PAID；无需缴费 409 PARKING_NO_FEE_DUE；已出场 409 PARKING_SESSION_EXITED。不保存车牌与账户的代扣绑定。HP-P01 消费抵免：带实际抵掉计费小时的抵免下单即预占（同一次抵免只一笔能用；本客人另一辆在场车已占用时本笔按无抵免计），须城市项目公司有且仅有一条已生效的停车抵免每小时内部结算价（内部结算价目录品类 parking_credit，否则 409 PARKING_CREDIT_PRICE_MISSING，不按 0 计）并随缴费固化；抵免把应缴抵到 0 元时直接记 0 元已缴（无支付意向）并置抵免已使用、按组成比例分担成本，停车系统按缴费记录放行。已用在本次停车上的抵免续缴时随缴费带上，缴费成功按整次停车累计重算实际抵掉小时与成本（可升可降）；累计一分没少收的（如带抵免缴费后停到每日封顶），抵免退回可用、不计成本、未并入月度内部结算的分担删除（第十二批操作员裁决补充第 11 条「一分没少收＝没用掉抵免、不计成本」）。 ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "parking.payment_created",
@@ -67289,8 +68177,7 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "parking.payment_paid",
@@ -67360,8 +68247,7 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "app",
-          "miniapp",
-          "web"
+          "miniapp"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "parking.credit.granted",
@@ -67386,6 +68272,470 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/orders/{order_id}/stored-value/pay": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "payCustomerTicketOrderWithStoredValue",
+        "summary": "客人本人订单储值付款（可只付一部分）",
+        "description": "储值付款须本人卡、本人手机号＋短信验证码（场景 customer.stored_value.consume）；项目卡只用于原订单项目、商户卡只用于该商户单店票。ROOT-03-R20（操作员原话「一个订单可分多个渠道支付，但最终必须完成一次支付才算完成」）：amount_cent 可选，只付一部分（不超过待付金额，否则 400 VALIDATION_FAILED），其余在线补足；不填＝付清待付金额；合计足额才置已付。ROOT-03-R17（BSM 第 859 行「客人付款成功后必须出票」）：付足即同一事务自动出票（审计 ticket_order.auto_issued），出票失败整笔回滚——余额不扣、订单仍待付，返回出票失败的原错误码（审计 ticket_order.auto_issue_failed）。同一请求编号重复提交不重复扣款。响应为订单视图（订单字段＋paid_amount_cent、remaining_cent、payments、price_hits）。",
+        "x-permission": "customer.stored_value.consume",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "stored_value.consume",
+        "x-audit-event-failure": "customer.stored_value.pay_failed",
+        "x-failure-codes": [
+          "STORED_VALUE_INSUFFICIENT",
+          "STORED_VALUE_SCOPE_MISMATCH",
+          "ORDER_CANCELLED",
+          "ORDER_NOT_PAYABLE"
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "description": "本人票务订单（非本人订单或非本人卡 403 STORED_VALUE_CUSTOMER_MISMATCH）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "account_id",
+                  "phone",
+                  "sms_code"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "account_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "本人储值卡。"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "description": "本人手机号。"
+                  },
+                  "sms_code": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "短信验证码。"
+                  },
+                  "amount_cent": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "本次储值付款金额（分）；不填＝付清待付金额。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/orders/{order_id}/payments": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "startCustomerTicketPayment",
+        "summary": "客人本人订单发起在线付款",
+        "description": "ROOT-03 clients-R4（BSM 第 859 行「通过官方 App/小程序购票、预定、确认订单、查看支付结果」）：只许本人待付订单；金额由服务端定＝此刻待付金额（ROOT-03-R20：订单金额减已成功各笔，储值可先付一部分），不收客户端金额；同一订单尚未付款的旧在线付款单作废前先向渠道查单（ROOT-03-R18）：渠道已收款的按同一确认内核到账出票、不再拉起新的一笔，直接返回那笔已成功的付款（gateway_status=SUCCEEDED，无 launch），客户端按已付处理；渠道确认未付或渠道未启用的才作废（status=voided），只留本次一笔；已取消 409 ORDER_CANCELLED、已付 409 ORDER_NOT_PAYABLE。响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.payment_created",
+        "x-audit-event-failure": "customer.payment_create_failed",
+        "x-failure-codes": [
+          "ORDER_CANCELLED",
+          "ORDER_NOT_PAYABLE"
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "description": "本人票务订单（非本人订单 403 CUSTOMER_ORDER_FORBIDDEN）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "wechat",
+                      "alipay"
+                    ],
+                    "description": "付款渠道（仅作路由提示）：App 可选微信或支付宝，小程序只能微信；不填＝wechat。金额由服务端定，请求里的金额一律不认。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/orders/{order_id}/payments/{payment_intent_id}/confirm": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "confirmCustomerTicketPayment",
+        "summary": "客人回前台确认在线付款（查单）",
+        "description": "只认支付渠道查单成功：渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、渠道未确认收款 409 PAYMENT_NOT_SUCCEEDED，订单一律不变（不入账、不出票）。成功即记已付并同一事务自动出票（ROOT-03-R17，审计 ticket_order.auto_issued）；出票失败时收款不回滚，已收各笔原路待退（储值笔回原卡、在线笔登记原路待退 source_type=ticket_payment_rejection）、订单取消，返回 409 TICKET_ISSUE_FAILED_REFUNDING。订单已超时取消后才到账的，本笔原路待退、返回已取消的订单；与待付金额不符的到账本笔原路待退、订单不动。重复确认返回订单现状、不重复出票。客户端未回前台的由服务端结算作业（customer.payment.settle.scheduled.enabled）用同一内核查单入账出票。响应为订单视图。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.payment_confirmed",
+        "x-audit-event-failure": "customer.payment_confirm_failed",
+        "x-failure-codes": [
+          "PAYMENT_GATEWAY_UNAVAILABLE",
+          "PAYMENT_NOT_SUCCEEDED",
+          "TICKET_ISSUE_FAILED_REFUNDING"
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "description": "本人票务订单（非本人订单 403 CUSTOMER_ORDER_FORBIDDEN）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "payment_intent_id",
+            "in": "path",
+            "required": true,
+            "description": "本次在线付款单（发起付款返回的 payment_intent_id）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "startCustomerDepositPayment",
+        "summary": "客人本人订台发起定金在线付款",
+        "description": "ROOT-03 clients-R4（BSM 第 860 行「官方 App 和小程序都可以订台，订台需要支付定金」）：只许本人订台、定金待支付；金额＝该订台定金（服务端定）；收款主体＝订台所属的酒吧商户（商户直收，BSM 第 1062 行「定金直接进该卡座所属的酒吧商户」）。同一订台尚未付款的旧定金付款单作废前先向渠道查单（ROOT-03-R18）：渠道已收款的按到账处理（置已支付并占台）、不再拉起，直接返回那笔已成功的付款（gateway_status=SUCCEEDED，无 launch）；渠道确认未付的才作废。台位已被别人的有效预留占着或已开台 409 BAR_TABLE_ALREADY_RESERVED，不拉起付款（ENUM 第 100 行「冲突时先支付定金者得」，免得付了钱才被原路退回）；已取消或定金非待支付 409 BAR_DEPOSIT_NOT_PAYABLE。响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.payment_created",
+        "x-audit-event-failure": "customer.payment_create_failed",
+        "x-failure-codes": [
+          "BAR_DEPOSIT_NOT_PAYABLE",
+          "BAR_TABLE_ALREADY_RESERVED"
+        ],
+        "parameters": [
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "description": "本人订台（非本人订台 403 CUSTOMER_RESERVATION_FORBIDDEN）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "wechat",
+                      "alipay"
+                    ],
+                    "description": "付款渠道（仅作路由提示）：App 可选微信或支付宝，小程序只能微信；不填＝wechat。金额由服务端定，请求里的金额一律不认。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/bar-reservations/{reservation_id}/deposit-payments/{payment_intent_id}/confirm": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "confirmCustomerDepositPayment",
+        "summary": "客人回前台确认定金在线付款（查单）",
+        "description": "只认本订台当前定金付款单，渠道查单成功才按员工登记定金同口径置已支付并落付款渠道（第十批 TK-24：达标退回按此原路；审计 bar.reservation_deposit_paid）；渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、未确认收款 409 PAYMENT_NOT_SUCCEEDED，订台不变。重复确认返回原结果。客户端未回前台的由服务端结算作业查单入账。ROOT-03-R19（ENUM 第 100 行「客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得」）：到账即占台；台位已被先付者或员工代订占着、或已开台不可用时，本订台取消、已收定金按原付款渠道登记原路待退（退款来源 bar_deposit_rejection），返回 409 BAR_TABLE_ALREADY_RESERVED。订台已取消（员工取消或超时释放）后才到账的定金，同样登记原路待退（bar_deposit_rejection）、付款单正常入账，返回 409 BAR_DEPOSIT_NOT_PAYABLE（结算作业不再反复重试）。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.payment_confirmed",
+        "x-audit-event-failure": "customer.payment_confirm_failed",
+        "x-failure-codes": [
+          "PAYMENT_GATEWAY_UNAVAILABLE",
+          "PAYMENT_NOT_SUCCEEDED",
+          "BAR_DEPOSIT_NOT_PAYABLE",
+          "BAR_TABLE_ALREADY_RESERVED"
+        ],
+        "parameters": [
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "description": "本人订台（非本人订台 403 CUSTOMER_RESERVATION_FORBIDDEN）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "payment_intent_id",
+            "in": "path",
+            "required": true,
+            "description": "本次在线付款单（发起付款返回的 payment_intent_id）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -67487,6 +68837,1798 @@
         "x-invocation-channel": [
           "server-to-server"
         ]
+      }
+    },
+    "/api/v1/customer/complaints": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listMyCustomerComplaints",
+        "summary": "我的投诉",
+        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：只返回本人提交的投诉——编号、标题、状态与中文名（status_label）、提交时间（submitted_at）、处理结论（resolution）、满意度（satisfaction）与附件数（media_count）。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.complaints_viewed",
+        "x-audit-event-failure": "customer.complaints_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      },
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "submitCustomerComplaint",
+        "summary": "客人提交投诉（文字＋照片、视频、语音）",
+        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：multipart 提交，建「投诉」工单（来源 customer、提单方＝客人本人、时限按「投诉×普通」策略），附件 0～9 个，类型由服务端按扩展名判定（照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm、语音 m4a/aac/mp3/amr/wav，其他 400 VALIDATION_FAILED，不建工单）。project_id 须为存在的综合体，title 必填。幂等键必填。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.complaint_submitted",
+        "x-audit-event-failure": "customer.complaint_submit_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "project_id",
+                  "title"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "投诉所在综合体。"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "投诉标题。"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "文字留言。"
+                  },
+                  "files": {
+                    "type": "array",
+                    "maxItems": 9,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "照片、视频、语音附件，合计不超过 9 个。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/complaints/{work_order_id}/satisfaction": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "rateCustomerComplaint",
+        "summary": "客人对本人投诉评满意度",
+        "description": "ROOT-03-R26（BSM 第 1385 行「满意度在回访/验收时由提单方评分……客人投诉由客人自行在客人端提交，客人即为提单方」）：只许本人投诉；已写处理结论（待回访、待验收、已验收、已关闭）后才可评，否则 409 COMPLAINT_NOT_RESOLVED；score 1～5；同单只评一次（409 FACILITY_SATISFACTION_ALREADY_RATED）；他人投诉 403 CUSTOMER_COMPLAINT_FORBIDDEN。评分不作为关闭条件，员工关闭不改写客人评分。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.complaint_rated",
+        "x-audit-event-failure": "customer.complaint_rate_failed",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "本人投诉的工单编号（提交返回的 work_order_id）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "score"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "score": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "description": "满意度 1～5。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/student-certifications": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "applyCustomerStudentCertification",
+        "summary": "客人申请学生认证",
+        "description": "ROOT-03-R28（BSM 第 903 行「学生认证必须在本人注册会员后单独申请，认证通过只增加学生资格，不自动创建会员身份」；第 777 行「学生票要票务运营岗人工审核证件 + 学信网核验通过才可用」；第 890 行「采集证件……前先单独取得同意，并留同意版本、时间和范围」；第十三批裁决第 1 条「有效到客人提供的学信网《学籍在线验证报告》上的预计毕业日期，审核人通过时按报告填写」）：先经 POST /api/v1/customer/consents 单独同意证件采集（consent_type=student_certificate、accepted=true），申请带该同意编号；同意不属本人、未同意或类型不符 409 CUSTOMER_CONSENT_REQUIRED。上传学生证件照片 1～9 张（jpg/jpeg/png/webp/heic）并填《学籍在线验证报告》在线验证码；同一客人已有待审申请 409 STUDENT_CERT_PENDING。幂等键必填。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.student_cert.applied",
+        "x-audit-event-failure": "customer.student_cert.apply_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "consent_id",
+                  "chsi_verification_code",
+                  "files"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "consent_id": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "证件采集单独同意的同意编号。"
+                  },
+                  "chsi_verification_code": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "学信网《学籍在线验证报告》在线验证码，供审核人在学信网网页核验。"
+                  },
+                  "files": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 9,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "学生证件照片。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/student-certifications/current": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getMyStudentCertification",
+        "summary": "我的学生认证",
+        "description": "ROOT-03-R28（BSM 第 903 行「学生认证必须在本人注册会员后单独申请，认证通过只增加学生资格，不自动创建会员身份」；第 777 行「学生票要票务运营岗人工审核证件 + 学信网核验通过才可用」；第 890 行「采集证件……前先单独取得同意，并留同意版本、时间和范围」；第十三批裁决第 1 条「有效到客人提供的学信网《学籍在线验证报告》上的预计毕业日期，审核人通过时按报告填写」）：本人最近一次申请——状态与中文名、资格有效期至（valid_until）、驳回原因；没有申请时 data 为空。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/tickets/{ticket_id}/usages": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerTicketUsages",
+        "summary": "我的票使用记录",
+        "description": "ROOT-03-R29（BSM 第 862 行「查看我的订单、我的票、我的权益和使用记录」；第 880 行「核销后客人能看到使用记录」）：只许本人当前持有的票（人员权益组持有人；无持有人的按订单归属，与取码同口径），他人 403 CUSTOMER_ORDER_FORBIDDEN。每条：结果（success/reversed 与中文 成功/已冲正）、时间、核销商户；不含员工、设备与凭证。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.ticket_usages_viewed",
+        "x-audit-event-failure": "customer.ticket_usages_view_failed",
+        "parameters": [
+          {
+            "name": "ticket_id",
+            "in": "path",
+            "required": true,
+            "description": "我的票（权益）编号。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/ticket-channels": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerTicketChannels",
+        "summary": "第三方渠道接入状态（匿名可读，供客户端置灰）",
+        "description": "ROOT-03-R29（BSM 第 892 行「第三方团购（美团/大众点评/抖音）购买的票按渠道来源在“我的订单/我的票”统一展示，渠道未接入前相关入口置灰、不展示伪造数据」）：返回美团、大众点评、抖音三行 {channel, name, enabled}，enabled 一律读唯一的渠道售票开关（integration.ticket_channel.sync，出厂关闭）；不返回任何订单样例。渠道订单与一体机辅助购票按已验证手机号归到会员本人后，在「我的订单」按 sales_channel 区分来源。",
+        "security": [],
+        "x-permission": "public",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
+      }
+    },
+    "/api/v1/student-certifications": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listStudentCertifications",
+        "summary": "学生认证审核列表（票务运营岗）",
+        "description": "ROOT-03-R28（BSM 第 903 行「学生认证必须在本人注册会员后单独申请，认证通过只增加学生资格，不自动创建会员身份」；第 777 行「学生票要票务运营岗人工审核证件 + 学信网核验通过才可用」；第 890 行「采集证件……前先单独取得同意，并留同意版本、时间和范围」；第十三批裁决第 1 条「有效到客人提供的学信网《学籍在线验证报告》上的预计毕业日期，审核人通过时按报告填写」）：权限 ticket.student_cert.review、平台范围；status 可选 pending/approved/rejected。每条含学信网验证码与证件照片张数（照片经 /files/{index} 受控回读），供审核人在学信网网页人工核验。",
+        "x-permission": "ticket.student_cert.review",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.student_certs_viewed",
+        "x-audit-event-failure": "customer.student_certs_view_failed",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "按状态筛选。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/student-certifications/{certification_id}/approve": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "approveStudentCertification",
+        "summary": "学生认证审核通过",
+        "description": "ROOT-03-R28（BSM 第 903 行「学生认证必须在本人注册会员后单独申请，认证通过只增加学生资格，不自动创建会员身份」；第 777 行「学生票要票务运营岗人工审核证件 + 学信网核验通过才可用」；第 890 行「采集证件……前先单独取得同意，并留同意版本、时间和范围」；第十三批裁决第 1 条「有效到客人提供的学信网《学籍在线验证报告》上的预计毕业日期，审核人通过时按报告填写」）：只限待审申请（否则 409 STUDENT_CERT_NOT_PENDING）；valid_until 必填＝审核人按客人《学籍在线验证报告》填写的预计毕业日期，不得早于今天（400 VALIDATION_FAILED）；通过只增加学生资格（valid_until 当日及以前客人自助购票按学生价参与取最低），不改会员身份与等级；系统只记审核人与时间，不写「学信网自动核验通过」。",
+        "x-permission": "ticket.student_cert.review",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.student_cert.approved",
+        "x-audit-event-failure": "customer.student_cert.approve_failed",
+        "parameters": [
+          {
+            "name": "certification_id",
+            "in": "path",
+            "required": true,
+            "description": "学生认证申请编号。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "valid_until"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "valid_until": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "资格有效期至（预计毕业日期，YYYY-MM-DD）。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/student-certifications/{certification_id}/reject": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "rejectStudentCertification",
+        "summary": "学生认证审核驳回",
+        "description": "ROOT-03-R28（BSM 第 903 行「学生认证必须在本人注册会员后单独申请，认证通过只增加学生资格，不自动创建会员身份」；第 777 行「学生票要票务运营岗人工审核证件 + 学信网核验通过才可用」；第 890 行「采集证件……前先单独取得同意，并留同意版本、时间和范围」；第十三批裁决第 1 条「有效到客人提供的学信网《学籍在线验证报告》上的预计毕业日期，审核人通过时按报告填写」）：只限待审申请（否则 409 STUDENT_CERT_NOT_PENDING）；reason 必填。",
+        "x-permission": "ticket.student_cert.review",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.student_cert.rejected",
+        "x-audit-event-failure": "customer.student_cert.reject_failed",
+        "parameters": [
+          {
+            "name": "certification_id",
+            "in": "path",
+            "required": true,
+            "description": "学生认证申请编号。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "驳回原因。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/student-certifications/{certification_id}/files/{index}": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "readStudentCertificationFile",
+        "summary": "回读学生证件照片",
+        "description": "ROOT-03-R28（BSM 第 903 行「学生认证必须在本人注册会员后单独申请，认证通过只增加学生资格，不自动创建会员身份」；第 777 行「学生票要票务运营岗人工审核证件 + 学信网核验通过才可用」；第 890 行「采集证件……前先单独取得同意，并留同意版本、时间和范围」；第十三批裁决第 1 条「有效到客人提供的学信网《学籍在线验证报告》上的预计毕业日期，审核人通过时按报告填写」）：审核人受控查看第 index 张证件照片（从 1 起）；注销后照片已删除返回 404 STUDENT_CERT_FILE_NOT_FOUND。",
+        "x-permission": "ticket.student_cert.review",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "certification_id",
+            "in": "path",
+            "required": true,
+            "description": "学生认证申请编号。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "description": "照片序号（从 1 起）。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/kiosk-bind-codes": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "requestKioskBindCode",
+        "summary": "一体机辅助购票给客人手机号发绑定验证码",
+        "description": "ROOT-03-R29（BSM 第 986 行「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单（门票为动态二维码，不提供取票功能；客人用手机号短信验证绑定，在官方 App/小程序查看门票）」）：授权服务人员（ticket.order.create）给客人手机号发 customer.kiosk_bind 场景验证码，客人报码后随下单（sales_channel=kiosk 的 sms_code）核验。短信供应商未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE（不假成功），下发失败 409 CUSTOMER_OTP_SEND_FAILED，按手机号限速超限 429。成功返回 phone_masked、requested_at。",
+        "x-permission": "ticket.order.create",
+        "x-data-scope": "project-channel",
+        "x-terminal-allowed": [
+          "web",
+          "kiosk"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.otp_requested",
+        "x-audit-event-failure": "customer.otp_request_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "pattern": "^\\+?[0-9]{6,20}$",
+                    "description": "客人手机号。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/customer-media": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "listFacilityWorkOrderCustomerMedia",
+        "summary": "客人投诉附件清单",
+        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：按工单查看权限（facility.work_order.manage、平台范围）列出客人投诉附件（编号、类型、大小、上传时间），文件经 /customer-media/{media_id}/file 受控回读。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "readFacilityWorkOrderCustomerMedia",
+        "summary": "回读客人投诉附件",
+        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：附件须属该工单（否则 404 COMPLAINT_MEDIA_NOT_FOUND），按服务端判定的类型流式返回照片、视频或语音。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "media_id",
+            "in": "path",
+            "required": true,
+            "description": "附件编号。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer/vouchers/{voucher_instance_id}/redeem-code": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerVoucherRedeemCode",
+        "summary": "我的券动态核销码（按全场统一刷新间隔过期）",
+        "description": "ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：只许本人持有、当前可核销的统一台账券（他人 403 VOUCHER_NOT_HOLDER；已核销/已过期/已作废 409）；有在途转赠照常取码（操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。每次取码先撤旧码，返回 {voucher_instance_id, code, expires_at, refresh_interval_seconds}，有效期＝全场统一动态码刷新间隔；明文只在本响应出现。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "voucher.redeem_code_issued",
+        "x-audit-event-failure": "voucher.redeem_code_issue_failed",
+        "parameters": [
+          {
+            "name": "voucher_instance_id",
+            "in": "path",
+            "required": true,
+            "description": "本人券包里统一台账券的实例编号。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/stored-value/topup-rules": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerStoredValueTopupRules",
+        "summary": "充值前规则告知（扣款顺序、赠送金性质、退卡口径）",
+        "description": "ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，bonus_bps＝项目赠送比例，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体项目（通用卡）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "description": "发卡商户（商户级卡）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/stored-value/accounts/{account_id}/transactions": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerStoredValueTransactions",
+        "summary": "我的余额逐笔记录",
+        "description": "ROOT-03-R30（BSM 第 868 行「每笔充值（时间、金额、本金与赠送金拆分、支付通路）、每笔扣款（商户、扣减的本金与赠送金各多少）、每笔退款与回冲（含回冲顺序结果）」）：只许本人卡（否则 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；每笔带 principal_cent/bonus_cent、充值行 payment_channel、扣款行 merchant_id/merchant_name（通票为空＝综合体）、回冲行 original_txn_id。page 从 1 起，size 1～100。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "description": "本人储值卡编号。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "页码，从 1 起。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "每页条数 1～100。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/stored-value/sms": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "requestCustomerStoredValueSmsCode",
+        "summary": "储值付款短信验证码",
+        "description": "储值余额付款前给本人登记手机号发验证码（手机号须为本人；限频）；短信服务未配置时 409，不假成功。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.otp_requested",
+        "x-audit-event-failure": "customer.otp_request_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "description": "本人登记手机号。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/merchant-card-exit-notices": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerMerchantCardExitNotices",
+        "summary": "商户储值卡退出公告（客人端）",
+        "description": "ROOT-03-R31（ENUM 第 86 行「发卡商户退租、合同终止或被清退前，必须提前公告告知持卡消费者……（可用到哪天、能否退、退多少比例、怎么退、找谁退），公告须在客人手机应用、小程序和该商户的商场店面三处同时公示，公示期不少于后台配置的天数（业务参数，全平台统一可配，须同时配置上下限）」；第十三批裁决第 2 条「商户在商户门户自行发公告，平台只校验公示天数，不影响退租流程」）：公示中的全部公告（公示截止日不早于今天），本人持该商户未销户商户卡的排前（holds_card=true）；每条含商户名称、可用至（use_until）、能否退（refundable）、退款比例（refund_ratio_bps，基点）、怎么退（refund_method）、找谁退（refund_contact）、公示起止。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/ticket-expiry-reminders": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerTicketExpiryReminders",
+        "summary": "未核销票到期提醒（App/小程序启动与回前台拉取）",
+        "description": "ROOT-03 clients-R10（BSM 第 1596 行「未核销的票在到期前通过官方 App 或小程序弹出的到期提醒（业务参数，按项目可配，出厂默认到期前二十四小时，须同时配置上下限）」）：本人持有、未核销、到期时刻落在 [现在, 现在＋该票所属项目的提前小时数] 内的票（ticket_id、ticket_name、order_id、valid_to）；客户端弹出提醒、不提供关闭此类提醒的设置。应用关闭时的系统推送需推送凭证，未接入。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "self",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/projects": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerProjects",
+        "summary": "综合体介绍、营业时间与活动公告（客人端首页）",
+        "description": "ROOT-03 clients-R9（BSM 第 857 行「查看综合体介绍、营业时间、活动公告、票务入口」）：匿名可读。启用中的综合体（project_id、project_name、address）、各场地营业时间（business_hours：venue_id、venue_name、day_of_week 0=周日、open_time、close_time，停用的星期不列）；intro／announcement＝经审批发布的综合体介绍与活动公告（第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」），未发布为空。",
+        "x-permission": "public",
+        "x-data-scope": "public-project",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "security": [],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
+      }
+    },
+    "/api/v1/customer/amusement/projects": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerAmusementProjects",
+        "summary": "可预定游乐项目与场次（客人端只读）",
+        "description": "ROOT-03 clients-R9（BSM 第 878 行「连接游乐系统，展示可预定项目和场次」）：匿名可读。该综合体开放中的游乐项目（amusement_project_id、project_name、open_status）及尚未结束、待开或开放中的场次（sessions：session_id、start_time、end_time、capacity、used_capacity、status）。",
+        "x-permission": "public",
+        "x-data-scope": "public-project",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "security": [],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "description": "综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "public"
+      }
+    },
+    "/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getMerchantCardExitNoticePolicy",
+        "summary": "查商户卡退出公示天数（全平台）",
+        "description": "ROOT-03-R31（ENUM 第 86 行「发卡商户退租、合同终止或被清退前，必须提前公告告知持卡消费者……（可用到哪天、能否退、退多少比例、怎么退、找谁退），公告须在客人手机应用、小程序和该商户的商场店面三处同时公示，公示期不少于后台配置的天数（业务参数，全平台统一可配，须同时配置上下限）」；第十三批裁决第 2 条「商户在商户门户自行发公告，平台只校验公示天数，不影响退租流程」）：平台范围、权限 customer.stored_value.refund；未配置时 data 为空（此时商户不能发公告）。",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "saveMerchantCardExitNoticePolicy",
+        "summary": "配置商户卡退出公示天数及上下限（全平台）",
+        "description": "ROOT-03-R31（ENUM 第 86 行「发卡商户退租、合同终止或被清退前，必须提前公告告知持卡消费者……（可用到哪天、能否退、退多少比例、怎么退、找谁退），公告须在客人手机应用、小程序和该商户的商场店面三处同时公示，公示期不少于后台配置的天数（业务参数，全平台统一可配，须同时配置上下限）」；第十三批裁决第 2 条「商户在商户门户自行发公告，平台只校验公示天数，不影响退租流程」）：参数值与上下限须同时填写，1 ≤ 下限 ≤ 参数值 ≤ 上限，否则 400 VALIDATION_FAILED；平台范围、权限 customer.stored_value.refund。",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "stored_value.exit_notice_policy_configured",
+        "x-audit-event-failure": "stored_value.exit_notice_policy_config_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "publish_days",
+                  "min_days",
+                  "max_days"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "publish_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "公示期最少天数。"
+                  },
+                  "min_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "下限（不小于 1，不大于参数值）。"
+                  },
+                  "max_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "上限（不小于参数值）。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "调整说明。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/merchant-portal/card-exit-notices": {
+      "get": {
+        "tags": [
+          "merchant-portal"
+        ],
+        "operationId": "listMyMerchantCardExitNotices",
+        "summary": "商户专区·本商户储值卡退出公告",
+        "description": "ROOT-03-R31（ENUM 第 86 行「发卡商户退租、合同终止或被清退前，必须提前公告告知持卡消费者……（可用到哪天、能否退、退多少比例、怎么退、找谁退），公告须在客人手机应用、小程序和该商户的商场店面三处同时公示，公示期不少于后台配置的天数（业务参数，全平台统一可配，须同时配置上下限）」；第十三批裁决第 2 条「商户在商户门户自行发公告，平台只校验公示天数，不影响退租流程」）：商户范围（无商户归属 403 MERCHANT_SCOPE_REQUIRED），权限 merchant.portal.card_exit_notice.publish。",
+        "x-permission": "merchant.portal.card_exit_notice.publish",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "post": {
+        "tags": [
+          "merchant-portal"
+        ],
+        "operationId": "publishMerchantCardExitNotice",
+        "summary": "商户专区·发布本商户储值卡退出公告",
+        "description": "ROOT-03-R31（ENUM 第 86 行「发卡商户退租、合同终止或被清退前，必须提前公告告知持卡消费者……（可用到哪天、能否退、退多少比例、怎么退、找谁退），公告须在客人手机应用、小程序和该商户的商场店面三处同时公示，公示期不少于后台配置的天数（业务参数，全平台统一可配，须同时配置上下限）」；第十三批裁决第 2 条「商户在商户门户自行发公告，平台只校验公示天数，不影响退租流程」）：五项条件与公示截止日必填（缺项 400 VALIDATION_FAILED）；平台未配置公示天数 409 EXIT_NOTICE_POLICY_NOT_CONFIGURED；公示截止日距今天少于配置天数 400 EXIT_NOTICE_PERIOD_TOO_SHORT；发布即对客人端可见，不与退租、合同终止流程联动。",
+        "x-permission": "merchant.portal.card_exit_notice.publish",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "stored_value.exit_notice_published",
+        "x-audit-event-failure": "stored_value.exit_notice_publish_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "use_until",
+                  "refundable",
+                  "refund_ratio_bps",
+                  "refund_method",
+                  "refund_contact",
+                  "publish_until"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "use_until": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "该卡在剩余期间可用到哪天。"
+                  },
+                  "refundable": {
+                    "type": "boolean",
+                    "description": "能否退。"
+                  },
+                  "refund_ratio_bps": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "退多少比例（基点）。"
+                  },
+                  "refund_method": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "怎么退。"
+                  },
+                  "refund_contact": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "找谁退。"
+                  },
+                  "publish_until": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "公示截止日（自今天起不少于平台配置的公示天数）。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/expiry-reminder-policies/{project_id}": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "getTicketExpiryReminderPolicy",
+        "summary": "查未核销票到期提醒提前小时数（按项目）",
+        "description": "ROOT-03 clients-R10（BSM 第 1596 行「未核销的票在到期前通过官方 App 或小程序弹出的到期提醒（业务参数，按项目可配，出厂默认到期前二十四小时，须同时配置上下限）」）：项目无自有配置时返回出厂行（project_id=__global__、24 小时、min_hours/max_hours 为空）。",
+        "x-permission": "ticket.product.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "saveTicketExpiryReminderPolicy",
+        "summary": "配置未核销票到期提醒提前小时数及上下限（按项目）",
+        "description": "ROOT-03 clients-R10（BSM 第 1596 行「未核销的票在到期前通过官方 App 或小程序弹出的到期提醒（业务参数，按项目可配，出厂默认到期前二十四小时，须同时配置上下限）」）：参数值与上下限须同时填写，1 ≤ 下限 ≤ 参数值 ≤ 上限，否则 400 VALIDATION_FAILED；留痕含前后值。",
+        "x-permission": "ticket.product.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket.expiry_reminder_policy_updated",
+        "x-audit-event-failure": "ticket.expiry_reminder_policy_update_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "remind_hours",
+                  "min_hours",
+                  "max_hours"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "remind_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "到期前多少小时提醒（出厂 24）。"
+                  },
+                  "min_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "下限。"
+                  },
+                  "max_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "上限。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "调整说明。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/home-contents/{project_id}": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerHomeContent",
+        "summary": "查客人端首页已发布与待审批的综合体介绍与活动公告",
+        "description": "ROOT-03 clients-R9（BSM 第 857 行）＋第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」：发布走现有准入审批（主管复核，一级上级）——首次提交建复核单并 409 ADMISSION_BLOCKED（提示复核单号），批准后原样再提交才写入，客人端 /api/v1/customer/projects 随即可见。返回已发布的 intro、announcement、published_by、published_at 与已提交待审批的原文 draft_intro、draft_announcement、draft_submitted_by、draft_submitted_at（审批人审批前据此核对，不盲批）；编辑人（customer.home_content.manage）与审批人（governance.supervisor_review.approve）可读，均限本项目（403 CROSS_PROJECT_FORBIDDEN）。都没有时 data 为空。",
+        "x-permission": "customer.home_content.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/home-contents/{project_id}/publish": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "publishCustomerHomeContent",
+        "summary": "提交发布客人端首页综合体介绍与活动公告（审批后生效）",
+        "description": "ROOT-03 clients-R9（BSM 第 857 行）＋第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」：发布走现有准入审批（主管复核，一级上级）——首次提交建复核单并 409 ADMISSION_BLOCKED（提示复核单号），批准后原样再提交才写入，客人端 /api/v1/customer/projects 随即可见。每次提交先把本次原文存为待审原文（被拦下送审时照样留下，审批人在主管复核页可读），发布写入后删除待审原文；内容改了再提交仍被拦下送审。intro 必填，announcement 可空。项目范围账号只能是本项目（403 CROSS_PROJECT_FORBIDDEN）。",
+        "x-permission": "customer.home_content.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.home_content_published",
+        "x-audit-event-failure": "customer.home_content_publish_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "intro"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "intro": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "综合体介绍。"
+                  },
+                  "announcement": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "description": "活动公告（可空）。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/customer/ticket-refunds": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "requestCustomerTicketRefund",
+        "summary": "客人自助申请退票（只对本人名下、票种允许退款、整张未使用的票）",
+        "description": "操作员裁决第十三批第 11 条「客人端自助申请」（「在客人 App／小程序加「申请退票」：只对本人可退的未用票，提交后走与员工退款同一套审批和原路退回」）：按整张票申请（ticket_instance_id＝「我的票」里的 parent_ticket_id，该票每个人份的持有人都须是本人），理由固定为 ticket_type_rule（票种规则明确允许），金额由服务端按该票出票时定格的实付分摊额算定；客人不填退款责任主体等员工字段，由批准的员工在 /api/v1/ticketing/refunds/{refund_id}/approve 补填。提交即冻结该票（退款中），进入后台退款审批（与员工发起的退款同一入口），批准后同样按收款相反顺序原路退回（储值部分当场回原卡）。同一幂等键重复提交返回同一申请。拒绝：该票不归本人 403 CUSTOMER_ORDER_FORBIDDEN；票不存在 404 TICKET_INSTANCE_NOT_FOUND；票种不允许退款 409 TICKET_TYPE_NOT_REFUNDABLE；已开始核销 409 TICKET_INSTANCE_VERIFIED_NO_REFUND；已在退款申请中 409 TICKET_INSTANCE_REFUND_IN_PROGRESS；有在途转赠 409 TICKET_TRANSFER_PENDING_NO_REFUND；订单未支付 409 TICKET_ORDER_NOT_REFUNDABLE。响应只含客人可见字段（id、ticket_instance_id、ticket_no、ticket_name、refund_amount_cent、status、created_at、updated_at）。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.ticket_refund.requested",
+        "x-audit-event-failure": "customer.ticket_refund.request_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ticket_instance_id"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一申请。也可放在 Idempotency-Key 请求头。",
+                    "maxLength": 128
+                  },
+                  "ticket_instance_id": {
+                    "type": "string",
+                    "description": "要退的票（父票实例 id，即「我的票」的 parent_ticket_id）；必须是本人名下的整张票。",
+                    "maxLength": 64
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      },
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerTicketRefunds",
+        "summary": "我的退票申请及其状态",
+        "description": "操作员裁决第十三批第 11 条：本人提交的退票申请（新到旧），每条带对应的票（ticket_instance_id、ticket_no、ticket_name）、退款金额（分）与状态（requested 已申请、approved 已通过待原路打款、rejected 已驳回、success 成功）；不含审批人、发起人、商户与责任主体等内部字段。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "customer",
+        "x-terminal-allowed": [
+          "miniapp",
+          "app"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.ticket_refunds_viewed",
+        "x-audit-event-failure": "customer.ticket_refunds_view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
       }
     }
   },
@@ -68129,6 +71271,27 @@
           }
         }
       },
+      "CustomerBlacklistDecisionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "idempotency_key"
+              ],
+              "properties": {
+                "idempotency_key": {
+                  "type": "string",
+                  "description": "操作幂等键；重复提交返回同一处理结果。",
+                  "maxLength": 128
+                }
+              }
+            }
+          }
+        }
+      },
       "CustomerConsentRequest": {
         "required": true,
         "content": {
@@ -68158,7 +71321,6 @@
             },
             "example": {
               "ticket_type_id": "ticket_weekend_adult",
-              "price_rule_id": "price_weekend_202606",
               "quantity": 2,
               "visit_date": "2026-06-20",
               "contact_phone": "13800138000",
@@ -68197,7 +71359,8 @@
               "table_type": "vip_sofa",
               "reservation_time": "2026-06-20T21:00:00+08:00",
               "guest_count": 6,
-              "contact_phone": "13800138000"
+              "contact_phone": "13800138000",
+              "latest_arrival_at": "2026-06-20T23:00:00+08:00"
             }
           }
         }
@@ -73069,6 +76232,11 @@
             "type": "object",
             "description": "Optional matching context for published dynamic pricing rules. Missing context only matches rules without conditions.",
             "additionalProperties": true
+          },
+          "sms_code": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "一体机辅助购票时客人收到的绑定验证码（sales_channel=kiosk 必填，其他渠道不用）。"
           }
         }
       },
@@ -73232,17 +76400,147 @@
             "type": "string",
             "description": "CustomerPhoneLoginRequest.sms_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
             "maxLength": 128
-          },
-          "scene": {
+          }
+        }
+      },
+      "CustomerRegisterRequest": {
+        "type": "object",
+        "description": "请求载荷 `CustomerRegisterRequest`；ROOT-03-R3 会员注册：两份条款版本须等于 GET /api/v1/customer/terms 返回的当前版本。",
+        "additionalProperties": false,
+        "required": [
+          "phone",
+          "sms_code",
+          "birth_date",
+          "member_terms_version",
+          "privacy_terms_version"
+        ],
+        "properties": {
+          "phone": {
             "type": "string",
-            "description": "CustomerPhoneLoginRequest.scene 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
+            "description": "手机号字段；用于客人身份匹配，保存和展示必须遵守脱敏规则。",
+            "maxLength": 20,
+            "pattern": "^\\+?[0-9]{6,20}$"
+          },
+          "sms_code": {
+            "type": "string",
+            "description": "短信验证码（与登录同一场景 customer.login）。",
+            "maxLength": 128
+          },
+          "birth_date": {
+            "type": "string",
+            "format": "date",
+            "description": "生日（必填，不晚于今天）；按北京时间算满 18 周岁才可注册。"
+          },
+          "member_terms_version": {
+            "type": "string",
+            "description": "客人同意的会员条款版本（须为当前版本）。",
+            "maxLength": 64
+          },
+          "privacy_terms_version": {
+            "type": "string",
+            "description": "客人同意的隐私条款版本（须为当前版本）。",
+            "maxLength": 64
+          }
+        }
+      },
+      "CustomerBlacklistRequestCommand": {
+        "type": "object",
+        "description": "请求载荷 `CustomerBlacklistRequestCommand`；ROOT-03-R23 申请列入或解除黑名单。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "action",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交返回同一处理结果。",
+            "maxLength": 128
+          },
+          "action": {
+            "type": "string",
+            "description": "申请类型：list 列入黑名单（关闭账户）；release 解除黑名单（原账户保持已关闭、手机号可重新注册）。",
             "enum": [
-              "miniapp",
-              "app",
-              "web",
-              "kiosk"
-            ],
-            "maxLength": 255
+              "list",
+              "release"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "原因（必填，留痕）。",
+            "maxLength": 500
+          },
+          "project_id": {
+            "type": "string",
+            "description": "申请所在综合体项目（决定第一级当班夜班值班经理）；项目账号不传即本项目，平台账号必填。",
+            "maxLength": 64
+          }
+        }
+      },
+      "CustomerRestrictionSettingRequest": {
+        "type": "object",
+        "description": "请求载荷 `CustomerRestrictionSettingRequest`；ROOT-03-R23 按项目会员受限时长，值与上下限同配。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "duration_days",
+          "min_days",
+          "max_days"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交返回同一处理结果。",
+            "maxLength": 128
+          },
+          "duration_days": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "受限时长（天）。"
+          },
+          "min_days": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "受限时长下限（天）。"
+          },
+          "max_days": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "受限时长上限（天）。"
+          }
+        }
+      },
+      "CustomerChurnAlertSettingRequest": {
+        "type": "object",
+        "description": "请求载荷 `CustomerChurnAlertSettingRequest`；ROOT-03-R22 同号一年内注销与注册合计次数上限（全平台），值与上下限同配。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "threshold",
+          "min_threshold",
+          "max_threshold"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交返回同一处理结果。",
+            "maxLength": 128
+          },
+          "threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "次数上限（一年内注销与注册合计超过即预警）。"
+          },
+          "min_threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "次数上限的下限。"
+          },
+          "max_threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "次数上限的上限。"
           }
         }
       },
@@ -73284,22 +76582,21 @@
             "type": "string",
             "description": "CustomerConsentRequest.version 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
             "maxLength": 255
-          },
-          "source_terminal": {
-            "type": "string",
-            "description": "分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。",
-            "maxLength": 64
           }
         }
       },
       "CustomerDeregisterRequest": {
         "type": "object",
-        "description": "请求载荷 `CustomerDeregisterRequest`；TK-21-R3 自助注销是否放弃余额。",
+        "description": "请求载荷 `CustomerDeregisterRequest`；TK-21-R3 是否放弃余额、ROOT-03-R21 是否放弃名下存酒。",
         "additionalProperties": false,
         "properties": {
           "waive_balance": {
             "type": "boolean",
             "description": "true=客人明确确认放弃全部储值余额（归发卡主体）径行注销；false/缺省=需退本金的按「储值」条生成待退事项并通知发卡主体。"
+          },
+          "abandon_saved_bottles": {
+            "type": "boolean",
+            "description": "true=客人明确确认放弃名下全部存酒（按存酒到期规则转为所在酒吧的自有库存资产）；名下有存酒而未传 true 的 409 CUSTOMER_SAVED_BOTTLES_HELD。"
           }
         }
       },
@@ -73316,11 +76613,6 @@
           "ticket_type_id": {
             "type": "string",
             "description": "票务唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
-            "maxLength": 64
-          },
-          "price_rule_id": {
-            "type": "string",
-            "description": "业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
             "maxLength": 64
           },
           "quantity": {
@@ -73407,7 +76699,8 @@
         "required": [
           "bar_id",
           "table_type",
-          "reservation_time"
+          "reservation_time",
+          "latest_arrival_at"
         ],
         "properties": {
           "idempotency_key": {
@@ -73446,6 +76739,11 @@
             "description": "手机号字段；用于客人或员工身份匹配，保存和展示必须遵守脱敏规则。",
             "maxLength": 20,
             "pattern": "^\\+?[0-9]{6,20}$"
+          },
+          "latest_arrival_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最晚到店时间（BSM 第 1062 行「无论是否支付定金，每一笔订台都必须填写最晚到店时间」）；超过仍未到店由系统自动释放台位，已付定金按爽约规则没收、未付定金直接作废。缺失 400 VALIDATION_FAILED。"
           }
         }
       },
@@ -73530,7 +76828,9 @@
           "bar_id",
           "table_id",
           "reservation_time",
-          "guest_count"
+          "guest_count",
+          "latest_arrival_at",
+          "customer_phone"
         ],
         "properties": {
           "idempotency_key": {
@@ -73584,6 +76884,17 @@
             "minimum": 0,
             "maximum": 100,
             "multipleOf": 0.01
+          },
+          "latest_arrival_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最晚到店时间（BSM 第 1062 行「无论是否支付定金，每一笔订台都必须填写最晚到店时间」）；超过仍未到店由系统自动释放台位，已付定金按爽约规则没收、未付定金直接作废。缺失 400 VALIDATION_FAILED。"
+          },
+          "customer_phone": {
+            "type": "string",
+            "maxLength": 20,
+            "pattern": "^\\+?[0-9]{6,20}$",
+            "description": "客人手机号（操作员裁决第十三批第 7 条，必填）：查到会员且受限就拒绝（403 CUSTOMER_RESTRICTED），查不到会员的照常代订；只用于核对，不落库。"
           }
         }
       },
@@ -78686,18 +81997,13 @@
       },
       "CustomerCheckInRequest": {
         "type": "object",
-        "description": "请求载荷 `CustomerCheckInRequest`；客人每日签到（连续签到阶梯），字段用于生成 DTO、校验和契约测试。",
+        "description": "请求载荷 `CustomerCheckInRequest`；客人每日签到（连续签到阶梯），字段用于生成 DTO、校验和契约测试。来源终端由服务端取本会话锁定的登录端（ROOT-03-R2），不收请求体。",
         "additionalProperties": false,
         "properties": {
           "idempotency_key": {
             "type": "string",
             "description": "幂等键；同键重复提交返回首次结果。",
             "maxLength": 128
-          },
-          "source_terminal": {
-            "type": "string",
-            "description": "分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。",
-            "maxLength": 32
           }
         }
       },
@@ -80186,7 +83492,7 @@
       },
       "CustomerBarScanOrderRequest": {
         "type": "object",
-        "description": "请求载荷 CustomerBarScanOrderRequest；客人自助扫码点单——bar/桌台/预订/商户由后端取自会话，客人只传所点 items。",
+        "description": "请求载荷 CustomerBarScanOrderRequest（ROOT-03-R7）：台位走路径参（扫散台固定桌台码得 table_id），当前开台会话、酒吧、商户由后端定位；客人只传所点 items 与可选付款渠道。",
         "additionalProperties": false,
         "required": [
           "items"
@@ -80199,11 +83505,35 @@
           },
           "items": {
             "type": "array",
-            "description": "BarOrderRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。",
+            "maxItems": 200,
+            "description": "所点商品 [{product_id, quantity}]；客人不得带 is_gift（ROOT-03-R24，带了 400 BAR_SCAN_ORDER_GIFT_NOT_ALLOWED），计价一律按商品现价。",
             "items": {
-              "type": "object"
-            },
-            "maxItems": 200
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "product_id",
+                "quantity"
+              ],
+              "properties": {
+                "product_id": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 999
+                }
+              }
+            }
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "wechat",
+              "alipay"
+            ],
+            "description": "付款渠道：App 可选微信或支付宝，小程序只能微信；不填＝wechat。"
           }
         }
       },
@@ -81408,7 +84738,7 @@
       },
       "FacilityWorkOrderActionRequest": {
         "type": "object",
-        "description": "工单开始/完成/验收/回访/挂起/恢复/退回返工动作请求。完成动作必须填写 resolution；验收/回访 satisfaction 为 1-5；退回返工 note 必填（不通过原因）。",
+        "description": "工单开始/完成/验收/回访/挂起/恢复/退回返工动作请求。完成动作必须填写 resolution；验收/回访 satisfaction 为 1-5；退回返工 note 必填（不通过原因）。 客人投诉（来源 customer）转为关闭时 customer_feedback 必填（否则 409 COMPLAINT_CUSTOMER_FEEDBACK_REQUIRED），满意度由客人本人评，员工关闭不改写。",
         "additionalProperties": false,
         "required": [
           "idempotency_key"
@@ -81434,6 +84764,11 @@
             "type": "string",
             "description": "动作备注。",
             "maxLength": 1000
+          },
+          "customer_feedback": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "关闭客人投诉时记录的客人反馈（BSM 第 1379 行「客户关怀部记录问题解决方案及客人反馈后可以关闭」）。"
           }
         }
       },

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -79,22 +79,11 @@ class JdbcBarRepository implements BarRepository {
         return table;
     }
 
-    /** BYOD 一期:活跃预订(未取消,reserved_at 自 since 起)占用的桌位 id 集,空位视图标记用。 */
+    /** BYOD 一期空位视图：ROOT-03-R19 起按排他预留口径——正被有效预留占着的台位（ENUM 第 100 行「排他锁，不是展示标记」）。 */
     @Override
-    public java.util.Set<String> listActiveReservedTableIds(java.time.Instant since) {
-        java.util.Set<String> ids = new java.util.LinkedHashSet<>();
-        jdbcTemplate.query("""
-                SELECT DISTINCT table_id
-                  FROM bar_reservations
-                 WHERE delete_status <> 'approved'
-                   AND status NOT IN ('cancelled', 'expired', 'completed')
-                   AND reserved_at >= :since
-                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("since", java.sql.Timestamp.from(since)),
-                resultSet -> {
-            ids.add(resultSet.getString("table_id"));
-        });
-        return ids;
+    public java.util.Set<String> listActiveReservedTableIds() {
+        return new java.util.LinkedHashSet<>(jdbcTemplate.queryForList(
+                "SELECT table_id FROM bar_reservations WHERE hold_status = 'held'", Map.of(), String.class));
     }
 
     // 第十批 TK-27-R2（BSM L1058 待清台超时提醒）：列表面带出待清台起始时刻与是否超过酒吧（merchant_type=bar 的商户）
@@ -106,7 +95,8 @@ class JdbcBarRepository implements BarRepository {
                    CASE WHEN t.status = 'pending_clear' THEN t.pending_clear_since END AS pending_clear_since,
                    (t.status = 'pending_clear'
                         AND t.pending_clear_since < now() - make_interval(mins => COALESCE(m.pending_clear_alert_minutes, 15)))
-                       AS pending_clear_overdue
+                       AS pending_clear_overdue,
+                   (SELECT r.id FROM bar_reservations r WHERE r.table_id = t.id AND r.hold_status = 'held') AS held_reservation_id
               FROM bar_tables t
               LEFT JOIN merchants m ON m.id = t.bar_id
             """;
@@ -202,7 +192,7 @@ class JdbcBarRepository implements BarRepository {
                     invitation_token, invitation_signature, invitation_capacity,
                     invitation_status, invitation_issued_at,
                     archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                    deposit_channel, deposit_settled_at
+                    deposit_channel, deposit_settled_at, latest_arrival_at
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :customer_id, :reserved_at, :guest_count,
@@ -213,7 +203,7 @@ class JdbcBarRepository implements BarRepository {
                     :invitation_token, :invitation_signature, :invitation_capacity,
                     :invitation_status, :invitation_issued_at,
                     :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
-                    :deposit_channel, :deposit_settled_at
+                    :deposit_channel, :deposit_settled_at, :latest_arrival_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -248,9 +238,63 @@ class JdbcBarRepository implements BarRepository {
                     delete_requested_at = EXCLUDED.delete_requested_at,
                     delete_reason = EXCLUDED.delete_reason,
                     deposit_channel = EXCLUDED.deposit_channel,
-                    deposit_settled_at = EXCLUDED.deposit_settled_at
+                    deposit_settled_at = EXCLUDED.deposit_settled_at,
+                    latest_arrival_at = EXCLUDED.latest_arrival_at
                 """, parameterSource.reservationParameters(reservation));
         return reservation;
+    }
+
+    // ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）；台位未被占用——既无有效预留也未开台——
+    // 时即可再次接受预订」）：hold_status 只由下面三条语句写，saveReservation 不碰它（避免拿旧记录回写把占台状态改掉）。
+    @Override
+    public boolean holdTable(String reservationId, String tableId) {
+        // 台位行锁序列化同一台位的并发占台：后到者在锁上等，拿到锁后再读已是先到者提交后的结果（先付者得、先提交者得）。
+        String tableStatus = jdbcTemplate.query("SELECT status FROM bar_tables WHERE id = :table_id FOR UPDATE",
+                Map.of("table_id", tableId), (rs, n) -> rs.getString("status")).stream().findFirst().orElse(null);
+        if (!"active".equals(tableStatus) || heldByOther(tableId, reservationId)) {
+            return false;
+        }
+        jdbcTemplate.update("UPDATE bar_reservations SET hold_status = 'held', updated_at = now() WHERE id = :id",
+                Map.of("id", reservationId));
+        return true;
+    }
+
+    @Override
+    public boolean isTableReservable(String tableId) {
+        String tableStatus = jdbcTemplate.query("SELECT status FROM bar_tables WHERE id = :table_id",
+                Map.of("table_id", tableId), (rs, n) -> rs.getString("status")).stream().findFirst().orElse(null);
+        return "active".equals(tableStatus) && !heldByOther(tableId, "");
+    }
+
+    private boolean heldByOther(String tableId, String reservationId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM bar_reservations
+                                WHERE table_id = :table_id AND hold_status = 'held' AND id <> :id)
+                """, Map.of("table_id", tableId, "id", reservationId), Boolean.class));
+    }
+
+    @Override
+    public void releaseHold(String reservationId) {
+        // 尚未占台（定金未付，NULL）的到店开台同样记 released：超时作业只扫 NULL/held，开台后不会再被当成未到店爽约。
+        jdbcTemplate.update("UPDATE bar_reservations SET hold_status = 'released', updated_at = now()"
+                + " WHERE id = :id AND (hold_status IS NULL OR hold_status = 'held')", Map.of("id", reservationId));
+    }
+
+    @Override
+    public Optional<String> findHeldReservationId(String tableId) {
+        return jdbcTemplate.queryForList("SELECT id FROM bar_reservations WHERE table_id = :table_id AND hold_status = 'held'",
+                Map.of("table_id", tableId), String.class).stream().findFirst();
+    }
+
+    /** BSM 第 1062 行：超过最晚到店时间仍未到店（未占台的待付订台，或仍占着台位）的有效订台。到店开台已释放的不在内。 */
+    @Override
+    public List<String> listOverdueReservationIds(java.time.Instant now) {
+        return jdbcTemplate.queryForList("""
+                SELECT id FROM bar_reservations
+                 WHERE status = 'reserved' AND delete_status <> 'approved'
+                   AND latest_arrival_at < :now AND (hold_status IS NULL OR hold_status = 'held')
+                 ORDER BY latest_arrival_at, id
+                """, Map.of("now", java.sql.Timestamp.from(now)), String.class);
     }
 
     @Override

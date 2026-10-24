@@ -1,11 +1,11 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 // 客人端业务服务层：封装 P0 客旅用到的真实端点（全部 /api/v1/customer/* 与 finance/ticketing）
 // 所有接口均在 docs/openapi/openapi-p0.json 契约内；P1 能力（积分明细/礼物兑换）不在此暴露。
 
 import { CustomerApi } from "./customerClient";
 import type {
   CustomerTicket,
-  DeregisterPreviewCard,
+  DeregisterPreview,
   CustomerVoucher,
   TicketTransfer,
   TicketTransferPreview,
@@ -108,6 +108,8 @@ export class CustomerService {
     reservationTime: string;
     guestCount: number;
     contactPhone?: string;
+    // ROOT-03-R19（BSM 第 1062 行）：每笔订台必填最晚到店时间。
+    latestArrivalAt: string;
   }): Promise<BarReservation> {
     return this.api.post<BarReservation>("/api/v1/customer/bar-reservations", payload);
   }
@@ -117,9 +119,14 @@ export class CustomerService {
     return this.api.get<BarInvitation>(`/api/v1/customer/bar-invitations/${encodeURIComponent(reservationId)}`);
   }
 
-  // ③a 订卡邀请函：朋友确认接受（两步之第一步，占一个名额）
-  confirmBarInvitation(invitationToken: string): Promise<BarInvitationMember> {
-    return this.api.post<BarInvitationMember>("/api/v1/customer/bar-invitations/confirm", { invitationToken });
+  // ③a 订卡邀请函：朋友确认接受（两步之第一步，占一个名额）。ROOT-03-R25：二维码载荷的防伪标记、卡座、可进人数一并回传核验。
+  confirmBarInvitation(payload: {
+    invitationToken: string;
+    invitationSignature: string;
+    tableId: string;
+    capacity: number;
+  }): Promise<BarInvitationMember> {
+    return this.api.post<BarInvitationMember>("/api/v1/customer/bar-invitations/confirm", payload);
   }
 
   // ④ 我的订单 / 我的票 / 我的权益
@@ -132,9 +139,9 @@ export class CustomerService {
     return this.api.get<PointsSummary>("/api/v1/customer/points");
   }
 
-  // 连续签到（V089）
-  checkIn(sourceTerminal = "customer-web"): Promise<CheckInRecord> {
-    return this.api.post<CheckInRecord>("/api/v1/customer/check-ins", { sourceTerminal });
+  // 连续签到（V089）；来源终端由服务端取本会话锁定的登录端（ROOT-03-R2），不再上送。
+  checkIn(): Promise<CheckInRecord> {
+    return this.api.post<CheckInRecord>("/api/v1/customer/check-ins", {});
   }
 
   listCheckIns(): Promise<CheckInRecord[]> {
@@ -178,9 +185,9 @@ export class CustomerService {
     return this.api.post<StoredValueTransaction>("/api/v1/customer/stored-value/settle", payload);
   }
 
-  // TK-21-R3 自助注销：先预览各卡本金/赠送金，再带「是否放弃余额」注销（waiveBalance 自动转蛇形 waive_balance）。
-  getDeregisterPreview(): Promise<DeregisterPreviewCard[]> {
-    return this.api.get<DeregisterPreviewCard[]>("/api/v1/customer/deregister/preview");
+  // TK-21-R3 自助注销：先预览各卡本金/赠送金（ROOT-03-R21 另带名下存酒），再带「是否放弃余额」注销（waiveBalance 自动转蛇形 waive_balance）。
+  getDeregisterPreview(): Promise<DeregisterPreview> {
+    return this.api.get<DeregisterPreview>("/api/v1/customer/deregister/preview");
   }
 
   deregister(waiveBalance: boolean): Promise<{ status: string }> {
@@ -192,19 +199,19 @@ export class CustomerService {
       `/api/v1/customer/stored-value/accounts/${encodeURIComponent(accountId)}/transactions?page=${page}&size=20`);
   }
 
-  // ⑧ 扫码点单（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId -> 看菜单 / 自助下单（不重复核龄）
-  listBarScanMenu(sessionId: string): Promise<BarScanMenuItem[]> {
+  // ⑧ 扫码点单（ROOT-03-R7）：扫散台固定桌台码得 tableId -> 看菜单 / 下单即付款（付款成功才成单，不重复核龄）
+  listBarScanMenu(tableId: string): Promise<BarScanMenuItem[]> {
     return this.api.get<BarScanMenuItem[]>(
-      `/api/v1/customer/bar-sessions/${encodeURIComponent(sessionId)}/menu`,
+      `/api/v1/customer/bar-tables/${encodeURIComponent(tableId)}/menu`,
     );
   }
 
   placeBarScanOrder(
-    sessionId: string,
+    tableId: string,
     items: Array<{ productId: string; quantity: number }>,
   ): Promise<BarScanOrder> {
     return this.api.post<BarScanOrder>(
-      `/api/v1/customer/bar-sessions/${encodeURIComponent(sessionId)}/scan-orders`,
+      `/api/v1/customer/bar-tables/${encodeURIComponent(tableId)}/scan-orders`,
       { items },
     );
   }
@@ -218,7 +225,6 @@ export class CustomerService {
     return this.api.post<PointsRedemption>("/api/v1/customer/points/redemptions", {
       catalogItemId,
       quantity,
-      sourceTerminal: "customer-web",
     });
   }
 

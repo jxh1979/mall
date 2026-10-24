@@ -1,6 +1,6 @@
-# 客人购票 App/小程序开发设计 V0.1
+# 客人购票 App/小程序开发设计 V0.11
 
-> 版本：V0.1 ｜ 最后更新：2026-06-20 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 版本：V0.11 ｜ 最后更新：2026-10-21 ｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -115,20 +115,26 @@ flowchart TB
 
 | 页面 | API | 用途 | 优先级 |
 |---|---|---|---|
-| 登录 | `POST /api/v1/customer/auth/phone-login` | 手机号 + 验证码登录，返回客人会话；新人资格按手机号在服务端同步判定 | P0 |
+| 登录 | `POST /api/v1/customer/auth/phone-login` | 手机号 + 验证码登录，返回客人会话；新人资格按手机号在服务端同步判定。第十三批 ROOT-03：只认官方 App、小程序（请求头 `X-Terminal-Type` 为 app 或 miniapp），会话锁定登录端，此后该凭证只能在同一端使用；手机号未注册返回 409 `CUSTOMER_REGISTRATION_REQUIRED`，转注册页 | P0 |
+| 注册 | `POST /api/v1/customer/auth/register` | 第十三批 ROOT-03：手机号 + 验证码（与登录同一取码接口）+ 生日 + 两份条款版本；满 18 周岁、同意当前会员条款与隐私条款才建有效会员并返回会话；失败不落库 | P0 |
+| 条款 | `GET /api/v1/customer/terms` | 当前会员条款与隐私条款正文及版本（匿名可读），注册页展示并回传版本 | P0 |
+| 开关 | `GET /api/v1/customer/terminal-switches/effective` | 本端（app 或 miniapp）已关闭的开关行（匿名可读），按模块等维度隐藏入口；拉取失败按兜底关闭只显示「本端暂停服务」 | P0 |
 | 同意采集 | `POST /api/v1/customer/consents` | 记录隐私政策同意版本/时间/范围/是否敏感（compliance §3） | P0 |
 | 会员摘要 | `GET /api/v1/customer/points` | 当前游客/会员、等级、积分余额摘要；积分明细后续按查询参数或 P1 明细接口扩展 | P0 |
-| 学生资格 | `POST /api/v1/customer/ticket-orders` 字段/后台审核流程 | 学生票资格作为下单字段和后台人工审核状态处理，P0 不另设独立资格接口 | P0 |
+| 学生认证 | `POST /api/v1/customer/consents`（`consent_type=student_certificate`）→ `POST /api/v1/customer/student-certifications`（multipart）、`GET /api/v1/customer/student-certifications/current` | 第十三批 ROOT-03-R28：先单独同意证件采集，再上传学生证件照片与学信网验证码申请；票务运营岗后台人工审核，通过后学生资格有效到预计毕业日期，下单时系统自动判定 | P0 |
+| 投诉 | `POST /api/v1/customer/complaints`（multipart）、`GET /api/v1/customer/complaints`、`POST /api/v1/customer/complaints/{work_order_id}/satisfaction` | 第十三批 ROOT-03 clients-R8/R26：文字＋照片、视频、语音（录音可用 MediaRecorder）提交；本人投诉列表含处理结论与满意度；处理结论写出后评满意度 1～5、只评一次 | P0 |
+| 注销 | `GET /api/v1/customer/deregister/preview`、`POST /api/v1/customer/deregister` | 第十三批 ROOT-03-R21：预览为 `{stored_value_cards, saved_bottles, refundable_tickets}`，逐条提醒存酒、储值余额与可退款的未用票；请求体 `{waive_balance, abandon_saved_bottles}`，名下有存酒须确认放弃，否则 409 `CUSTOMER_SAVED_BOTTLES_HELD`；名下有票种允许退款且整张未用的票 409 `CUSTOMER_REFUNDABLE_TICKETS_HELD`（操作员裁决第十三批第 8 条「先退票才能注销」） | P0 |
 
 ### 4.2 购票与预定
 
 | 页面 | API | 用途 | 优先级 |
 |---|---|---|---|
-| 票务列表 | `GET /api/v1/customer/ticket-products` | 查询可售票种/通票、平日/周末/节假日基础价及派生票价 | P0 |
+| 票务列表 | `GET /api/v1/customer/ticket-products` | 查询可售票种/通票、平日/周末/节假日基础价及派生票价。第十三批 ROOT-03-R27：带客人会话时另返回 `my_price_cent`（今日按本人资格系统判定的最低价）与 `my_price_basis`（会员价／新人价／学生价；公开价最低时为空） | P0 |
 | 票务详情 | `GET /api/v1/customer/ticket-products` | 通过列表结果或查询参数返回票种详情、权益组成、使用限制 | P0 |
-| 下单确认 | `POST /api/v1/customer/ticket-orders` | 创建订单（含游客信息、新人/学生/多人资格校验，D9） | P0 |
-| 支付 | `POST /api/v1/finance/payment-intents` | 发起聚合支付；客人端只展示支付结果，不直接处理通道细节 | P0 |
-| 支付结果/我的订单 | `GET /api/v1/customer/orders` | 查询本人订单、出票、退款、第三方回流来源标识 | P0 |
+| 下单确认 | `POST /api/v1/customer/ticket-orders` | 创建订单（含游客信息、新人/学生/多人资格校验，D9）。第十三批 ROOT-03-R27：不收 `price_rule_id`（带即 400），价格由服务端按本人资格自动取最低（会员价对全部会员、新人价仅首单且非注销后一年内重新注册、学生价须学生资格、团体与渠道价不对客人开放），订单另存全部命中资格价 | P0 |
+| 支付 | `POST /api/v1/customer/orders/{order_id}/payments`、`POST /api/v1/customer/orders/{order_id}/payments/{payment_intent_id}/confirm` | 第十三批 ROOT-03 clients-R4／R18：客人本人订单发起在线付款（金额＝服务端算的待付金额；小程序只能 wechat，App 可选 wechat、alipay），响应带渠道按付款端签发的 `launch` 拉起参数（`h5_url`／`app_wechat`／`app_alipay`／`miniapp_wechat`，参数原样交给 SDK）；回前台调确认接口，服务端向渠道查单成功才记已付并自动出票（R17）；渠道未启用 409 `PAYMENT_GATEWAY_UNAVAILABLE`、出票失败 409 `TICKET_ISSUE_FAILED_REFUNDING`（款项原路退回）。不回前台也由服务端结算作业查单入账出票 | P0 |
+| 储值付款 | `POST /api/v1/customer/orders/{order_id}/stored-value/pay` | 本人卡＋手机号短信验证码付款；第十三批 ROOT-03-R20：可带 `amount_cent` 只付一部分、其余在线补足，合计足额才完成并出票；付足同事务出票，出票失败整笔回滚不扣款 | P0 |
+| 支付结果/我的订单 | `GET /api/v1/customer/orders` | 查询本人订单、出票、退款、第三方回流来源标识。第十三批：每单另带 `paid_amount_cent`、`remaining_cent`、`payments`（已收各笔）与 `price_hits`（命中资格价） | P0 |
 | 改期 | OpenAPI 后续扩展字段/流程 | 申请改期，P1 不进入 MVP 接口开发 | P1 |
 
 > 说明：第三方团购（美团/大众点评/抖音）票通过开放平台回流后，在"我的订单/我的票"以来源标识统一展示与查询，不在客人端提供第三方下单页（产品口径）。
@@ -138,9 +144,12 @@ flowchart TB
 | 页面 | API | 用途 | 优先级 |
 |---|---|---|---|
 | 可订台资源 | `GET /api/v1/customer/bar-reservation-options` | 读取可订酒吧、卡座/桌台/吧台位、可选时段、人数额度和定金规则 | P0 |
-| 酒吧订台 | `POST /api/v1/customer/bar-reservations` | 创建订台并写入来源、酒吧、卡座、人数、定金规则和幂等键 | P0 |
-| 订台定金支付 | `POST /api/v1/finance/payment-intents` | 为订台定金发起聚合支付，支付对象关联订台单 | P0 |
+| 酒吧订台 | `POST /api/v1/customer/bar-reservations` | 创建订台并写入来源、酒吧、卡座、人数、定金规则和幂等键；第十三批 ROOT-03-R19：最晚到店时间 `latest_arrival_at` 必填，台位已被有效预留或正在使用 409 `BAR_TABLE_ALREADY_RESERVED`；本酒吧未配定金规则时 409 `BAR_SELF_RESERVATION_UNAVAILABLE`（BSM「客人自助订台必须支付定金」，员工代订不受影响） | P0 |
+| 订台定金支付 | `POST /api/v1/customer/bar-reservations/{reservation_id}/deposit-payments`、`…/deposit-payments/{payment_intent_id}/confirm` | 第十三批 ROOT-03 clients-R4：本人订台定金在线付款（金额＝该订台定金，响应带 `launch`），回前台查单确认成功才置定金已支付并记付款渠道；不回前台由服务端结算作业查单入账 | P0 |
 | 订台跟踪 | `GET /api/v1/customer/orders` | 本人订台、定金、取消、退款状态统一从客人订单视图展示 | P0 |
+| 我的订台 | `GET /api/v1/customer/bar-reservations` | 第十三批 ROOT-03 clients-R6：本人订台列表（酒吧、卡座、预订时间、最晚到店时间、定金与订台状态、邀请函状态），由此进入邀请函 | P0 |
+| 订卡邀请函 | `GET /api/v1/customer/bar-invitations/preview`、`POST /api/v1/customer/bar-invitations/confirm`、`POST …/{reservation_id}/members/{member_id}/remove`、`GET …/{reservation_id}/entry-code` | 扫码预览（不占名额）；接受时回传二维码里的口令、防伪标记、卡座、可进人数（backend-R25 核验）；开卡人移出未入场者；本人动态入场码（窗口＝全场统一刷新间隔，过期即废）。邀请函二维码载荷＝口令＋防伪标记＋卡座＋可进人数 | P0 |
+| 扫码点单 | `GET /api/v1/customer/bar-tables/{table_id}/menu`、`POST …/scan-orders`、`POST …/scan-orders/{scan_order_id}/confirm`、`GET …/current-bill` | 第十三批 ROOT-03 clients-R7：散台固定桌台码定位当前开台会话，匿名可用；下单即在线付款（响应带 `launch`），查单成功才成单；本桌当前账单逐项标已上菜／未上菜 | P0 |
 
 > 字段口径：`reserved_at`、`deposit_amount`(分)、`deposit_rule`、`deposit_status`(unpaid/paid/deducted/refunded/forfeited)、`order_source`、`status` 与 `bar-operations-development-design §6.3` 一致；到店开台后定金转账单抵扣项（`deducted`）由酒吧端处理，客人端只展示状态。
 >
@@ -151,6 +160,8 @@ flowchart TB
 | 页面 | API | 用途 | 优先级 |
 |---|---|---|---|
 | 我的票/权益 | `GET /api/v1/customer/orders` | 本人订单、票、权益、使用记录和退款状态汇总 | P0 |
+| 使用记录 | `GET /api/v1/customer/tickets/{ticket_id}/usages` | 第十三批 ROOT-03-R29：本人持有的票的核销记录（成功/已冲正、时间、核销商户） | P0 |
+| 第三方渠道 | `GET /api/v1/customer/ticket-channels` | 第十三批 ROOT-03-R29：美团、大众点评、抖音接入状态（匿名可读），`enabled=false` 即入口置灰，不展示样例；渠道票按已验证手机号归到本人后在「我的订单」按 `sales_channel` 展示来源 | P0 |
 | 验票二维码 | `GET /api/v1/customer/tickets/{ticket_id}/qr` | 拉取当前可展示的动态二维码（签名、票种有效期、随机串、哈希、刷新窗口） | P0 |
 | 验票二维码刷新 | `GET /api/v1/customer/tickets/{ticket_id}/qr` | 客人端按 10/15/30/60 秒窗口重新拉取（默认 15 秒）；P0 不另设 `/refresh` 路径 | P0 |
 | 退款 | `POST /api/v1/ticketing/refunds` | 按订单或票发起退款（D9 客人侧口径），审批和资金流按票务/财务域处理 | P0 |
@@ -212,7 +223,7 @@ flowchart TB
 
 - 购票、会员注册、订台、支付等收集个人信息前必须展示隐私政策并取得同意（compliance §3）；敏感个人信息（证件、人脸、支付账号、精确位置）单独同意。
 - 每次同意记录版本/时间/范围（`POST /api/v1/customer/consents`，数据库表为 `consent_records`），可事后举证。
-- 新人优惠以手机号为准并短信验证；学生票资格并入下单字段和后台人工审核状态，不另设 P0 独立接口，并保留人工审核 + 学信网核验留痕（D9）。
+- 新人优惠以手机号为准并短信验证；学生资格由本人单独申请的学生认证承接（先单独同意证件采集，票务运营岗后台人工审核＋学信网网页核验，留审核人与时间；第十三批 ROOT-03-R28），下单时系统自动判定（D9）。
 - 客人端仅展示，不持久化原始敏感标识；二维码原始值不落客户端，只在线核验。
 
 ---
@@ -329,3 +340,8 @@ flowchart TB
 | 2026-06-12 默认方案收口 | 改 | §4/§8 | 删除当前开发口径中的 `/api/public/*`、`/api/customer/*`、`/api/bar/reservations*`、`/api/consent-records` 等旧路径，统一改为 `docs/openapi/openapi-p0.yaml` 已定义的 `/api/v1/customer/*`、`/api/v1/finance/payment-intents`、`/api/v1/ticketing/refunds`；未进 OpenAPI 的细分能力降为字段、页面状态或后续版本扩展；验收标准同步收窄为积分摘要 P0、积分明细和兑换独立接口后续扩展 | 执行“OpenAPI 为接口唯一事实源”的默认收口方案，避免前后端按旧路径开发 |
 | 2026-06-12 默认方案执行 | 改 | §1/§3/§4/§5/§6/§7/§8/§9 | 按总控确认执行：D1 客人端积分兑换独立接口和页面降 P1；D2 新增 `GET /api/v1/customer/bar-reservation-options`；D3 学生资格并入下单字段和后台审核流程；D5 旧路径只作为历史废弃口径保留 | 修复审计报告 P0-01/P0-02/P0-03/P1-01，保证客人端文档与 OpenAPI、任务清单一致 |
 | 2026-06-19 R6 全闭环 | 增 | §9A | 新增"两端一致性/订台定金异常/第三方渠道查询/公开信息(补齐)"章节：①App 与小程序一致性 E2E（订单/票/二维码/定金/积分摘要两端一致用例）；②订台定金异常 AC（支付失败/重复支付/超时未支付/取消退定金 AC-CUST-DEP-01~04）；③第三方渠道 C6（美团/点评/抖音回流票/权益/核销状态展示+来源标识，依赖 F12 渠道语义、未接入前置灰 AC-CUST-3RD-01~03）；④公开信息接口（营业时间/活动公告 P0 静态配置、P1 补 /public/info API，AC-CUST-INFO-01~02） | R6 审计：两端一致性无 E2E、订台定金异常 AC 缺、第三方 C6 查询悬空、公开信息接口降 P1 落点不明 |
+| 2026-10-21 第十三批 B 段 | 增/改 | 版本、§4.1 | V0.11：ROOT-03-R2/R3 服务端实现——登录不再自动建号、注册接口与条款接口、客人会话锁定登录端（只认 App/小程序）、客人端读本端已关闭开关；签到、兑换、同意不再上送来源终端（服务端取会话登录端） | BSM「登录可支持手机号短信验证码和微信」；ENUM「会员注册」；PGM「受控的十类终端」；PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」 |
+| 2026-10-21 第十三批 B 段支付组 | 改 | §4.2、§4.3 | 客人端支付改走客人本人接口：在线付款发起与查单确认（订单、定金）、拉起参数 `launch`、服务端自动结算；储值可只付一部分、在线补足；付款即出票、出票失败原路退回；下单不收价格规则、资格价系统自动取最低；我的订单带已付、待付、已收各笔与命中资格价；票种列表登录后带「我的价格」 | BSM「客人付款成功后必须出票」；BSM「混合支付的退款按收款相反顺序逐笔原路退回」；BSM「多种资格价不叠加，选择最终价格最低的一项」；操作员原话「一个订单可分多个渠道支付，但最终必须完成一次支付才算完成」 |
+| 2026-10-22 | 增 | §4.3 酒吧订台 + 定金 | 第十三批 ROOT-03 B 段 B-bar：订台最晚到店时间与台位排他预留、我的订台、订卡邀请函预览/接受核防伪标记/移出/本人动态入场码、扫码点单四个接口 | BSM「订台定金与到店时限」条；ENUM「桌台/卡座/吧台位状态」条；操作员裁决第十三批第 4、7 条 |
+| 2026-10-22 | 增/改 | §4.1、§4.4、§6 | 第十三批 ROOT-03 B 段 B-account：学生认证申请与查询、投诉提交与列表与满意度、注销预览与请求体新形状、我的票使用记录、第三方渠道接入状态；学生资格口径由「下单字段」改为独立认证 | ENUM「资格判定」；BSM「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；BSM「客人可以选择不取存酒、放弃余额，径行注销」；BSM「核销后客人能看到使用记录」；BSM「渠道未接入前相关入口置灰、不展示伪造数据」 |
+| 2026-10-24 | 改 | §4.1 注销、§4.3 酒吧订台 | 第十三批 ROOT-03 B 段复核后裁决与直接修（V0.11 同版续记）：注销预览加 `refundable_tickets`、名下有可退款的未用票 409 `CUSTOMER_REFUNDABLE_TICKETS_HELD`；未配定金规则的酒吧客人自助订台 409 `BAR_SELF_RESERVATION_UNAVAILABLE` | 操作员裁决第十三批第 8 条「先退票才能注销」；BSM「客人自助订台必须支付定金」 |

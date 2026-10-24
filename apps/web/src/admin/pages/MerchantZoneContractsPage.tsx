@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -7,6 +7,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps, MerchantZoneContractRow } from "../types";
+import { MerchantCardExitNoticeSection } from "./CustomerFacingSettingsSections";
 
 const TEXT = {
   title: "我的合同",
@@ -57,7 +58,7 @@ function readKpiFocusFromUrl(): KpiFocus | null {
   return { subset: params.get("subset") === "effective" ? "effective" : "all" };
 }
 
-export function MerchantZoneContractsPage({ api, setGlobalError }: AdminPageProps) {
+export function MerchantZoneContractsPage({ api, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneContractRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该合同完整字段（日期中文·金额元·状态中文）。
@@ -169,6 +170,7 @@ export function MerchantZoneContractsPage({ api, setGlobalError }: AdminPageProp
           </>
         )}
       </AdminDataState>
+      <MerchantCardExitNoticeSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { Alert, Button, Card, Divider, Form, Input, List, Result, Space, Tag, Typography } from "antd";
 import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
@@ -38,7 +39,14 @@ export function BarInvitationPage({ service }: { service: CustomerService }): Re
     setConfirmError(null);
     setConfirmed(null);
     try {
-      const member = await service.confirmBarInvitation(values.invitationToken.trim());
+      // ROOT-03-R25：邀请函码载荷＝口令、防伪标记、卡座、可进人数，一并回传核验。
+      const payload = new URLSearchParams(values.invitationToken.trim().replace(/^[^?]*\?/, ""));
+      const member = await service.confirmBarInvitation({
+        invitationToken: payload.get("token") ?? "",
+        invitationSignature: payload.get("sig") ?? "",
+        tableId: payload.get("table_id") ?? "",
+        capacity: Number(payload.get("capacity") ?? 0),
+      });
       setConfirmed(member);
     } catch (err) {
       setConfirmError(err instanceof Error ? err.message : "确认失败");
@@ -48,6 +56,12 @@ export function BarInvitationPage({ service }: { service: CustomerService }): Re
   };
 
   const issued = invitation && invitation.status === "active" && invitation.invitationToken;
+  const invitationCode = invitation ? `invitation?${new URLSearchParams({
+    token: invitation.invitationToken ?? "",
+    sig: invitation.invitationSignature ?? "",
+    table_id: invitation.tableId ?? "",
+    capacity: String(invitation.capacity ?? 0),
+  }).toString()}` : "";
 
   return (
     <div data-testid="bar-invitation-page">
@@ -71,10 +85,10 @@ export function BarInvitationPage({ service }: { service: CustomerService }): Re
                   data-testid="invitation-qr"
                   style={{ background: "#fff", padding: 16, borderRadius: 8, width: "fit-content" }}
                 >
-                  <QRCodeSVG value={invitation.invitationToken ?? ""} size={180} level="M" />
+                  <QRCodeSVG value={invitationCode} size={180} level="M" />
                 </div>
-                <Paragraph copyable={{ text: invitation.invitationToken ?? "" }} data-testid="invitation-token">
-                  口令（可复制转发）：<Text code>{invitation.invitationToken}</Text>
+                <Paragraph copyable={{ text: invitationCode }} data-testid="invitation-token">
+                  邀请函码（可复制转发）：<Text code>{invitationCode}</Text>
                 </Paragraph>
                 <Divider style={{ margin: "8px 0" }}>已确认成员</Divider>
                 <List
@@ -110,8 +124,8 @@ export function BarInvitationPage({ service }: { service: CustomerService }): Re
         <Paragraph type="secondary">朋友转发给你邀请函口令后，在此确认接受——确认即占一个名额，到店扫码入场。</Paragraph>
         {confirmError ? <Alert type="error" message="确认失败" description={confirmError} style={{ marginBottom: 12 }} /> : null}
         <Form form={confirmForm} layout="vertical" onFinish={onConfirm}>
-          <Form.Item name="invitationToken" label="邀请函口令" rules={[{ required: true, message: "请输入邀请函口令" }]}>
-            <Input placeholder="inv_..." data-testid="invitation-confirm-token" />
+          <Form.Item name="invitationToken" label="邀请函码" rules={[{ required: true, message: "请粘贴邀请函码" }]}>
+            <Input placeholder="invitation?token=..." data-testid="invitation-confirm-token" />
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={confirming} block data-testid="invitation-confirm-submit">
             确认接受邀请

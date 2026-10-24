@@ -1,5 +1,7 @@
 package com.complex.platform.terminal;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -110,21 +112,24 @@ class MdmJdbcIntegrationTests {
     }
 
     @Test
-    void v097SeedsCameraScanAndNativeClientSwitchesDefaultOff() {
-        // V097：摄像头扫码（#2）+ 微信小程序/原生 App 客户端（#3）能力开关，显式 seed enabled=false（默认关）。
+    void v097SeedsCameraScanSwitchDefaultOff() {
+        // V097：摄像头扫码（#2）能力开关，显式 seed enabled=false（默认关）。
         Boolean cameraScan = jdbcTemplate.queryForObject("""
                 SELECT enabled FROM terminal_capability_switches
                  WHERE capability_code = 'terminal.camera_scan.enabled'
                    AND terminal_type = '*' AND scope_type = 'global' AND scope_id = 'global'
                 """, Boolean.class);
         assertThat(cameraScan).isFalse();
+    }
 
-        Boolean nativeClient = jdbcTemplate.queryForObject("""
-                SELECT enabled FROM terminal_capability_switches
-                 WHERE capability_code = 'customer.native_client.enabled'
-                   AND terminal_type = '*' AND scope_type = 'global' AND scope_id = 'global'
-                """, Boolean.class);
-        assertThat(nativeClient).isFalse();
+    @Test
+    void nativeClientSwitchRowRetired() {
+        // ROOT-03-R33（PGM 第 737 行「关闭后菜单不可见或不可点，接口也要拒绝业务动作」、第 745 行「客人无网页端」）：
+        // V097 的 customer.native_client.enabled 行无代码读取、关着不拒任何请求，V537 前向删除；客人两端只认 V197 terminal.enabled。
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM terminal_capability_switches WHERE capability_code = 'customer.native_client.enabled'",
+                Integer.class);
+        assertThat(rows).isZero();
     }
 
     @Test

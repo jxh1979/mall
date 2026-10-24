@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -205,7 +205,7 @@ class StoredValueTopupReplayCompletedJdbcIntegrationTests {
 
     private ResultActions customerWrite(String path, String idempotencyKey, String body) throws Exception {
         return mockMvc.perform(post(path)
-                .header("X-Terminal-Type", "web")
+                .header("X-Terminal-Type", "miniapp")
                 .header("X-Customer-Token", token)
                 .header("Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)

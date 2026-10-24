@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 
 /**
@@ -17,12 +19,17 @@ public record TicketTransferResponse(
         String ticketName,
         String voidReason,
         Instant createdAt,
-        Instant claimedAt
+        Instant claimedAt,
+        // clients-R40（BSM 第 809 行「转出时，系统须同时向转出人与受赠人明示这一场次限制」）：多人票同票已有人入场＝本人份只能在该场次内入场。
+        boolean sessionRestricted,
+        String sessionLabel,
+        boolean sessionEnded
 ) {
-    static TicketTransferResponse of(TicketTransferRecord r, String ticketName, boolean includeClaimCode) {
+    static TicketTransferResponse of(TicketTransferRecord r, String ticketName, boolean includeClaimCode, FirstSessionWindow.Limit limit) {
         return new TicketTransferResponse(
                 r.id(), r.parentTicketId(), r.slotIndex(), r.channel(), r.status(),
                 includeClaimCode ? r.claimCode() : null,
-                r.receiverPhoneMasked(), ticketName, r.voidReason(), r.createdAt(), r.claimedAt());
+                r.receiverPhoneMasked(), ticketName, r.voidReason(), r.createdAt(), r.claimedAt(),
+                limit.restricted(), limit.label(), limit.ended());
     }
 }

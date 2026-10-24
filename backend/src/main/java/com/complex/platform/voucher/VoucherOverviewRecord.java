@@ -1,5 +1,7 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 
 /**
@@ -20,8 +22,18 @@ public record VoucherOverviewRecord(
         // 内部结算价（成本）刻意不入此聚合视图——客人/店员天然不可见。
         Long faceValueCent,
         String redeemMethod,
-        // V312/#29：核销码（统一台账券实例的 code，供客人端「使用」时出示给店员/核销点扫码；
-        // 通票第三方券为 null，其核销走合作方系统）。非成本字段，客人可见其本人券码。
-        String code
+        // V312/#29：统一台账券实例的固定券码（员工端台账查券用；通票第三方券为 null）。ROOT-03-R32（BSM 第 585 行）起客人端不再下发，
+        // 客人出示的是 GET /customer/vouchers/{id}/redeem-code 的动态码，见 {@link #withoutCode()}。
+        String code,
+        // ROOT-03-R30（BSM 第 865 行「已失效详情显示原因以及是否退回积分……可用券只有在券种允许时才显示转赠入口」）：
+        // 失效原因＝作废原因；退回积分＝积分兑换券作废后实际退回的积分（无退回流水为 0，非积分兑换券为 null）；可转赠＝券种允许且券仍可用。
+        String invalidReason,
+        Long pointsRefunded,
+        boolean transferable
 ) {
+    /** 客人端投影：去掉固定券码。 */
+    public VoucherOverviewRecord withoutCode() {
+        return new VoucherOverviewRecord(id, source, name, voucherKind, customerId, status, remainingTimes, expiresAt, faceValueCent,
+                redeemMethod, null, invalidReason, pointsRefunded, transferable);
+    }
 }

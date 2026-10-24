@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -29,6 +29,8 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-TKT-002", label: "动态定价", module: "票务", group: "ticketing", route: "/admin/ticketing/dynamic-pricing", requiredPermissions: ["ticket.dynamic_pricing.view"] },
   { pageId: "ADM-TKT-003", label: "出票与核销追踪", module: "票务", group: "ticketing", route: "/admin/ticketing/orders", requiredPermissions: ["ticket.order.read", "ticket.entitlement.view", "ticket.verify.view"] },
   { pageId: "ADM-TKT-004", label: "门票积分配置", module: "票务", group: "ticketing", route: "/admin/ticketing/reward-configs", requiredPermissions: ["ticket.reward.config.view"] },
+  // ROOT-03-R28（BSM 第 777 行「学生票要票务运营岗人工审核证件 + 学信网核验通过才可用」）。
+  { pageId: "ADM-TKT-005", label: "学生认证审核", module: "票务", group: "ticketing", route: "/admin/ticketing/student-certifications", requiredPermissions: ["ticket.student_cert.review"] },
   { pageId: "ADM-BAR-002", label: "订单/出品/账单", module: "酒吧", group: "bar", route: "/admin/bar/orders", requiredPermissions: ["bar.order.view"] },
   { pageId: "ADM-BAR-003", label: "存酒", module: "酒吧", group: "bar", route: "/admin/bar/stored-wine", requiredPermissions: ["bar.saved_bottle.manage"] },
   { pageId: "ADM-BAR-004", label: "销售提成", module: "酒吧", group: "bar", route: "/admin/bar/commissions", requiredPermissions: ["bar.table_commission.calculate"] },

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -486,8 +486,7 @@ public class BarService {
         return operations.readPage(
                 BarReadOperation.LIST_TABLE_AVAILABILITY,
                 () -> {
-                    java.util.Set<String> reserved = repository.listActiveReservedTableIds(
-                            java.time.Instant.now().minus(4, java.time.temporal.ChronoUnit.HOURS));
+                    java.util.Set<String> reserved = repository.listActiveReservedTableIds();
                     return repository.listTables(authorizationService.currentMerchantScope()).stream()
                             .map(table -> new BarTableAvailabilityRecord(table.id(), table.barId(), table.tableCode(),
                                     table.tableName(), table.tableType(), table.capacity(), table.minConsumptionCent(),

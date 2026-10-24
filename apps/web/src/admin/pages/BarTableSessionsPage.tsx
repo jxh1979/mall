@@ -1,5 +1,6 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -45,6 +46,23 @@ function nextRenewedUntil(minutes: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
+/** 本地日期时间（datetime-local）→ UTC 时刻串；同一输入总得同一串，重复提交时请求内容逐字不变。 */
+function localDateTimeToUtc(value: string) {
+  const at = new Date(value);
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${at.getUTCFullYear()}-${two(at.getUTCMonth() + 1)}-${two(at.getUTCDate())}T${two(at.getUTCHours())}:${two(at.getUTCMinutes())}:00Z`;
+}
+
+/** 裁决第十三批第 7 条员工代订核对受限：员工录入的客人手机号去掉空格与横线（与后端同口径）。 */
+function normalizedPhone(value: string) {
+  return value.replace(/[\s-]/g, "");
+}
+
+/** ROOT-03-R7：散台固定桌台码（扫了打开点单页，BSM 第 585 行「保持固定即可」），客人端按 t 定位桌台。 */
+function looseTableQrValue(tableId: string) {
+  return `table?t=${encodeURIComponent(tableId)}`;
+}
+
 export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [tables, setTables] = React.useState<BarTableRow[]>([]);
   const [reservations, setReservations] = React.useState<BarReservationRow[]>([]);
@@ -71,8 +89,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [tableCreateError, setTableCreateError] = React.useState("");
   // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
   const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", tableType: "card_seat", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
-  const [newReservation, setNewReservation] = React.useState({ barId: "", tableId: "", guestCount: "2", salespersonUserId: "" });
-  const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", businessDate: todayBusinessDate(), guestCount: "2", salesStaffId: "", serviceStaffId: "" });
+  const [newReservation, setNewReservation] = React.useState({ barId: "", tableId: "", guestCount: "2", salespersonUserId: "", customerPhone: "", latestArrivalAt: "" });
+  const [qrTableId, setQrTableId] = React.useState("");
+  const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", reservationId: "", businessDate: todayBusinessDate(), guestCount: "2", salesStaffId: "", serviceStaffId: "" });
   // 行明细抽屉：三张业务表整行可点 → 完整字段（状态中文·开台/关台/预定时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -301,12 +320,17 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
-  // 新建订台（代客）：order_source 由后端自动置为 staff（代客下单），前端只填卡座与人数。
+  // 新建订台（代客）：order_source 由后端自动置为 staff（代客下单）。最晚到店时间必填（BSM 第 1062 行）；
+  // 客人手机号必填（操作员裁决第十三批第 7 条：员工代订必须录入客人手机号，查到会员且受限就拒绝，查不到会员的照常代订）。
   function validateNewReservation() {
     if (!newReservation.barId.trim()) return fail("新建订台请填写所属酒吧。");
     if (!newReservation.tableId.trim()) return fail("新建订台请填写卡座 ID。");
     const count = Number(newReservation.guestCount);
     if (!Number.isFinite(count) || count <= 0) return fail("订台人数必须大于 0。");
+    if (!newReservation.customerPhone.trim()) return fail("代客订台请填写客人手机号。");
+    // 与后端同口径：去掉空格、横线后须为 11 位手机号，否则查不到会员而误放行受限客人。
+    if (!/^1\d{10}$/.test(normalizedPhone(newReservation.customerPhone))) return fail("客人手机号须为 11 位手机号（可带空格或横线）。");
+    if (!newReservation.latestArrivalAt) return fail("每笔订台都须填写最晚到店时间。");
     setBarError("");
     return true;
   }
@@ -321,6 +345,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         tableId: newReservation.tableId.trim(),
         guestCount: Number(newReservation.guestCount),
         salespersonUserId: newReservation.salespersonUserId.trim() || undefined,
+        customerPhone: normalizedPhone(newReservation.customerPhone),
+        latestArrivalAt: localDateTimeToUtc(newReservation.latestArrivalAt),
       };
       // M725-F02：订台时间在这次订台第一次提交时取一次，订成功之前同样的内容都沿用（切页回来、中间订过别的卡座也一样）——
       // 没拿到结果再点时请求内容逐字不变，客户端才认得出是同一次操作、沿用首发的提交编号，不会再订一笔。
@@ -360,6 +386,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       const result = await api.post("/api/v1/bar/table-sessions", {
         barId: newSession.barId.trim(),
         tableId: newSession.tableId.trim(),
+        // ROOT-03-R19（ENUM 第 100 行「已预留只能经取消订台、超时释放、到店开台三条路径退出」）：客人到店开台带上该台位的订台号，占台随即退出。
+        reservationId: newSession.reservationId.trim() || undefined,
         businessDate: newSession.businessDate,
         guestCount: Number(newSession.guestCount),
         salesStaffId: newSession.salesStaffId.trim() || undefined,
@@ -394,7 +422,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       return;
     }
     if (kind === "entry" && !invitationMemberId.trim()) {
-      setBarError("入场核验请先输入成员标识（朋友的客人 ID 或持函人标识）。");
+      setBarError("入场核验请扫描或粘贴客人出示的本人动态入场码。");
       return;
     }
     setSubmitting(true);
@@ -469,6 +497,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                     <option value="card_seat">卡座（出品走接单→制作→备好→送达流转）</option>
                     <option value="vip">VIP 包坐（同卡座流转）</option>
                     <option value="bar_counter">吧台位（直点即点即取，不走出品流转）</option>
+                    <option value="loose_table">散台（客人扫码点单、下单即付款，不收服务费）</option>
                   </select>
                 </label>
               </>
@@ -490,7 +519,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         summary={[
           { label: "所属酒吧", value: newTable.barId.trim() || "未填写" },
           { label: "卡座名称", value: newTable.tableName.trim() || "未填写" },
-          { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "VIP 包坐" : "卡座" },
+          { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "VIP 包坐" : newTable.tableType === "loose_table" ? "散台（扫码点单）" : "卡座" },
           { label: "可进人数", value: newTable.capacity.trim() || "未填写" },
           { label: "免通票入场人数", value: newTable.allowedFreeEntryCount.trim() || "0" },
           { label: "低消（元）", value: newTable.minimumSpendYuan.trim() || "0" },
@@ -501,11 +530,14 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <label>卡座 ID<input data-testid="bar-new-reservation-table" value={newReservation.tableId} onChange={(event) => setNewReservation((p) => ({ ...p, tableId: event.target.value }))} placeholder="要订的卡座 ID" /></label>
         <label>人数<input data-testid="bar-new-reservation-guests" type="number" min={1} value={newReservation.guestCount} onChange={(event) => setNewReservation((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
         <label>销售员（选填）<input data-testid="bar-new-reservation-sales" value={newReservation.salespersonUserId} onChange={(event) => setNewReservation((p) => ({ ...p, salespersonUserId: event.target.value }))} placeholder="销售员 ID" /></label>
+        <label>客人手机号<input data-testid="bar-new-reservation-phone" type="tel" value={newReservation.customerPhone} onChange={(event) => setNewReservation((p) => ({ ...p, customerPhone: event.target.value }))} placeholder="必填，用于核对会员是否受限" /></label>
+        <label>最晚到店时间<input data-testid="bar-new-reservation-latest" type="datetime-local" value={newReservation.latestArrivalAt} onChange={(event) => setNewReservation((p) => ({ ...p, latestArrivalAt: event.target.value }))} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createReservation()} data-testid="bar-new-reservation-submit">新建订台（代客）</PermissionButton>
       </div>
       <div className="admin-form-row" data-testid="bar-create-session-form">
         <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-session-bar" value={newSession.barId} onChange={(v) => setNewSession((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
         <label>卡座 ID<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座 ID" /></label>
+        <label>订台号（有预订必填）<input data-testid="bar-new-session-reservation" value={newSession.reservationId} onChange={(event) => setNewSession((p) => ({ ...p, reservationId: event.target.value }))} placeholder="客人到店开台填该台位的订台号" /></label>
         <label>营业日<input data-testid="bar-new-session-date" type="date" value={newSession.businessDate} onChange={(event) => setNewSession((p) => ({ ...p, businessDate: event.target.value }))} /></label>
         <label>人数<input data-testid="bar-new-session-guests" type="number" min={1} value={newSession.guestCount} onChange={(event) => setNewSession((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
         <label>销售（选填）<input data-testid="bar-new-session-sales" value={newSession.salesStaffId} onChange={(event) => setNewSession((p) => ({ ...p, salesStaffId: event.target.value }))} placeholder="销售 ID" /></label>
@@ -554,11 +586,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         {barError ? <div data-testid="bar-checkin-error" className="admin-inline-error">{barError}</div> : null}
 
         <h3>订卡邀请函</h3>
-        <p className="admin-muted-action">对选中订台签发邀请函（持函人转发给朋友，朋友客人端确认占名额）；门口扫码核验成员入场，总人数受卡座可进人数约束。</p>
+        <p className="admin-muted-action">客人自助订卡后，由酒吧员工在此确认订台并签发邀请函（开卡人在 App/小程序转发给朋友，朋友确认接受后占名额）；门口核验被邀请人出示的本人动态入场码，总人数受卡座可进人数约束。</p>
         <div className="admin-form-row">
-          <HighRiskConfirm label="签发邀请函" impact="将对选中订台签发订卡邀请函，持函人可转发给朋友占用入场名额。" disabled={submitting} precheck={() => requireSelectedReservation()} onConfirm={() => void runInvitationAction("issue")} permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} irreversible={false} data-testid="bar-invitation-issue" />
+          <HighRiskConfirm label="确认并签发" impact="确认选中订台有效并签发订卡邀请函，开卡人可在 App/小程序查看并转发给朋友占用入场名额。" disabled={submitting} precheck={() => requireSelectedReservation()} onConfirm={() => void runInvitationAction("issue")} permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} irreversible={false} data-testid="bar-invitation-issue" />
           <HighRiskConfirm label="吊销邀请函" impact="将吊销选中订台的邀请函，已转发链接立即失效、未入场的朋友名额被收回。" disabled={submitting} precheck={() => requireSelectedReservation()} onConfirm={() => void runInvitationAction("revoke")} permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} data-testid="bar-invitation-revoke" />
-          <input data-testid="bar-invitation-member" value={invitationMemberId} onChange={(event) => setInvitationMemberId(event.target.value)} placeholder="入场成员标识（朋友客人ID/持函人标识）" />
+          <input data-testid="bar-invitation-member" aria-label="本人动态入场码" value={invitationMemberId} onChange={(event) => setInvitationMemberId(event.target.value)} placeholder="请出示本人动态入场码（扫码或粘贴）" />
           <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_CHECKIN_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("entry")} data-testid="bar-invitation-entry">门口入场核验</PermissionButton>
         </div>
 
@@ -614,14 +646,22 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-tables-table">
             <thead><tr><th>卡座</th><th>容量</th><th>状态</th><th>待清台</th><th>详情</th></tr></thead>
-            <tbody>{tables.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-table-row-${row.id}`} onClick={() => openTableDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTableDetail(row); } }}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}</td>
+            <tbody>{tables.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-table-row-${row.id}`} onClick={() => openTableDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTableDetail(row); } }}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}{row.heldReservationId ? <span data-testid={`bar-table-held-${row.id}`}>（已预留 · 订台号 {row.heldReservationId}）</span> : null}</td>
               <td onClick={(event) => event.stopPropagation()}>{row.status === "pending_clear" ? <>
                 <span className={row.pendingClearOverdue ? "admin-inline-error" : undefined}>{row.pendingClearOverdue ? "已超时，请提醒当班主管" : "清理中"}{row.pendingClearSince ? ` · ${cnDate(row.pendingClearSince)} 起` : ""}</span>
                 <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_OPEN_CLOSE_PERMISSION]} disabled={submitting} onClick={() => void clearTable(row)} data-testid={`bar-table-clear-${row.id}`}>登记恢复空闲</PermissionButton>
               </> : "—"}</td>
-              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看卡座详情" onClick={(event) => { event.stopPropagation(); openTableDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+              <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看卡座详情" onClick={(event) => { event.stopPropagation(); openTableDetail(row); }}>查看详情</button>
+                {row.tableType === "loose_table" ? <button type="button" className="admin-row-detail-btn" data-testid={`bar-table-qr-${row.id}`} onClick={(event) => { event.stopPropagation(); setQrTableId(qrTableId === row.id ? "" : row.id); }}>桌台二维码</button> : null}</td></tr>)}</tbody>
           </table>
         </div>
+        {qrTableId ? (
+          <div className="admin-state" data-testid="bar-table-qr-panel">
+            <p>散台固定桌台码（打印贴在桌上，码不变；客人扫码进入本桌点单页，须服务员先开台）</p>
+            <QRCodeSVG value={looseTableQrValue(qrTableId)} size={180} level="M" />
+            <p data-testid="bar-table-qr-value">{looseTableQrValue(qrTableId)}</p>
+          </div>
+        ) : null}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>

@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -44,27 +46,27 @@ class TicketVerificationTransferGuardTests {
     }
 
     @Test
-    void verificationRolledBackWhenTransferTurnsPendingAfterConsume() {
+    void pendingTransferNoLongerConsultedByVerification() {
+        // clients-R40（BSM 第 809 行「发起转赠后不冻结该权益」）：核销主链不再查在途转赠，转赠由消费成功同事务作废（atomicUseEntitlement）。
         TicketingRepository repository = mock(TicketingRepository.class);
         when(repository.terminalDeviceExists(any())).thenReturn(true);
         IssuedEntitlementRecord entitlement = slotEntitlement();
         when(repository.findIssuedEntitlementByCode(ENTITLEMENT_CODE)).thenReturn(Optional.of(entitlement));
         when(repository.findTicketInstanceById(PARENT_ID)).thenReturn(Optional.of(activeParent()));
-        // 消费前复检=false 放行,消费后复检=true(模拟发起转赠与本次核销竞争,pending 在消费后可见)。
-        when(repository.existsPendingTransferForSlot(PARENT_ID, 1)).thenReturn(false, true);
+        when(repository.existsPendingTransferForSlot(PARENT_ID, 1)).thenReturn(true);
         when(repository.atomicUseEntitlement(eq("issued_1"), any()))
                 .thenReturn(Optional.of(entitlement.useOnce(Instant.now())));
 
         TicketVerificationService service = new TicketVerificationService(
                 repository, mock(ApplicationEventPublisher.class), null, null, null, null);
 
-        assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
-                "guard-race-1", "qr", ENTITLEMENT_CODE, "dev_1", "gate_1", Map.of())))
-                .isInstanceOf(ApiException.class)
-                .extracting(e -> ((ApiException) e).code())
-                .isEqualTo("TICKET_TRANSFER_PENDING");
-        // 复检命中即中止:不落任何核销记录(事务内扣减随异常回滚)。
-        verify(repository, never()).saveVerification(any());
+        Throwable outcome = org.assertj.core.api.Assertions.catchThrowable(() -> service.createVerification(new VerificationRequest(
+                "guard-race-1", "qr", ENTITLEMENT_CODE, "dev_1", "gate_1", Map.of())));
+        if (outcome instanceof ApiException api) {
+            org.assertj.core.api.Assertions.assertThat(api.code()).isNotEqualTo("TICKET_TRANSFER_PENDING");
+        }
+        verify(repository).atomicUseEntitlement(eq("issued_1"), any());
+        verify(repository, never()).existsPendingTransferForSlot(any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test

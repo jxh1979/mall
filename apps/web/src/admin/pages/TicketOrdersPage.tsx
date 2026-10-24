@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -124,6 +124,18 @@ function kpiFocusTitle(target: KpiTarget): string {
 
 function formatAmount(amountCent: number | undefined) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(Number(amountCent ?? 0) / 100);
+}
+
+/**
+ * ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）：财务确认拨付按待打款明细打款——只打分到在线笔的金额（渠道×金额），
+ * 储值部分批准时已当场回原卡，注明「已回卡」，不能按整笔金额再打一次。
+ */
+function payoutText(refund: TicketRefundRow) {
+  const items = refund.payoutItems ?? [];
+  const online = items.reduce((sum, item) => sum + Number(item.amountCent ?? 0), 0);
+  const storedValue = Number(refund.refundAmountCent ?? 0) - online;
+  const parts = items.map((item) => `${formatBusinessStatus(item.channel)} ${formatAmount(item.amountCent)}`).join("、");
+  return `待打款：${parts}${storedValue > 0 ? `；储值 ${formatAmount(storedValue)} 已回卡` : ""}`;
 }
 
 function selectedLabel(order: TicketOrderRow | undefined) {
@@ -553,7 +565,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                           <td>{refund.id}</td>
                           <td>{refund.targetId ?? "-"}</td>
                           <td>{formatAmount(refund.refundAmountCent)}</td>
-                          <td>{formatBusinessStatus(refund.refundChannel)}</td>
+                          <td>{refund.payoutItems?.length ? <span data-testid={`ticket-refund-payout-${refund.id}`}>{payoutText(refund)}</span>
+                            : formatBusinessStatus(refund.refundChannel)}</td>
                           <td>{formatBusinessStatus(refund.status)}</td>
                           <td>{refund.requestedBy ?? "-"}</td>
                           <td>{refund.approvedBy ?? "-"}</td>

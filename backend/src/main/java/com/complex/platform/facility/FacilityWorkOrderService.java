@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -37,7 +37,10 @@ public class FacilityWorkOrderService {
 
     static final Set<String> TYPES = Set.of("repair", "cleaning", "complaint", "rectification", "inspection", "other");
     static final Set<String> PRIORITIES = Set.of("urgent", "high", "normal");
-    static final Set<String> SOURCES = Set.of("merchant_self", "platform", "equipment_alarm", "inspection");
+    /** ROOT-03 clients-R8（BSM 第 1379 行）：customer＝消费客人通过客人端投诉，客人即提单方（只经 {@link #createCustomerComplaint} 建单）。 */
+    static final Set<String> SOURCES = Set.of("merchant_self", "platform", "equipment_alarm", "inspection", "customer");
+    /** 已写处理结论的状态（V166 chk_fwo_status 闭集里完工之后的各态）：客人可对本人投诉评满意度（ROOT-03-R26）。 */
+    private static final Set<String> RESOLVED_STATUSES = Set.of("pending_review", "pending_acceptance", "accepted", "closed");
     /**
      * 验收方式（后台按类型×优先级配置）。HP-F02 主管／物业验收＋提单方确认双闸不是可配的验收方式：第十二批操作员裁决第 12 条
      * 「关联设备的报修才两道」——关联了设备的报修单（含设备告警自动生成的）一律两道，没关联设备的普通报修按这里配置的方式（见 {@link #dual}）。
@@ -133,6 +136,9 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord create(FacilityWorkOrderRequest request) {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderRequest r = require(request);
+        if ("customer".equals(trimToNull(r.source()))) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "客人投诉只能由客人在官方 App、小程序提交");
+        }
         // 第十二批操作员裁决第 15 条「提单员工就是承接人」：员工建单的提单员工＝在后台点「新建工单」的当前登录员工，不取客户端传的 reporter_id。
         if ("staff".equals(trimToNull(r.reporterType()))) {
             r = new FacilityWorkOrderRequest(r.workOrderType(), r.priority(), r.title(), r.description(), r.source(), r.spaceId(),
@@ -257,6 +263,7 @@ public class FacilityWorkOrderService {
                 fresh ? null : cur.verifierId(), fresh ? null : cur.satisfaction(), cur.overtime(),
                 requireText(r.resolution(), "resolution"), cur.projectId(), cur.merchantId(), cur.createdAt(), now,
                 cur.confirmerId(), fresh ? null : cur.reporterConfirmedAt(), fresh ? null : cur.reporterConfirmedBy());
+        recordCustomerFeedbackOnClose(cur, completed, r);
         repository.updateWorkOrder(completed);
         resetEquipmentIfClosed(cur, completed);
         audit("facility.work_order_completed", completed.id(), r.idempotencyKey(), metadata(completed, r.note()));
@@ -276,6 +283,7 @@ public class FacilityWorkOrderService {
                 ? withConfirmations(cur, cur.reporterConfirmedAt() != null ? "closed" : "accepted", cur.completedAt(),
                         now, actorId(), cur.satisfaction(), cur.reporterConfirmedAt(), cur.reporterConfirmedBy(), now)
                 : verifyClosed(cur, r);
+        recordCustomerFeedbackOnClose(cur, closed, r);
         repository.updateWorkOrder(closed);
         resetEquipmentIfClosed(cur, closed);
         audit("facility.work_order_accepted", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
@@ -311,6 +319,7 @@ public class FacilityWorkOrderService {
                 requireStatus(cur, "pending_review", "只有待审核的工单才能审核");
                 closed = verifyClosed(cur, r);
             }
+            recordCustomerFeedbackOnClose(cur, closed, r);
             repository.updateWorkOrder(closed);
             resetEquipmentIfClosed(cur, closed);
             audit("facility.work_order_reviewed", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
@@ -519,6 +528,61 @@ public class FacilityWorkOrderService {
         }
     }
 
+    /**
+     * ROOT-03 clients-R8（BSM 第 869 行「客人可在官方 App、小程序提交投诉」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方……）」）：
+     * 客人本人投诉建单——类型投诉、来源 customer、提单方＝客人本人，时限按「投诉×普通」策略。客人会话由调用方校验，不走员工范围闸。
+     */
+    public FacilityWorkOrderRecord createCustomerComplaint(String customerId, String projectId, String title, String description,
+            String idempotencyKey) {
+        return createInternal(new FacilityWorkOrderRequest("complaint", "normal", title, description, "customer", null, null,
+                customerId, "customer", projectId, null, idempotencyKey), idempotencyKey, null);
+    }
+
+    /** clients-R8 本人投诉列表：只返回提单方为本人的客人投诉。 */
+    public List<FacilityWorkOrderRecord> listCustomerComplaints(String customerId) {
+        return repository.listCustomerComplaints(customerId);
+    }
+
+    /**
+     * ROOT-03-R26（BSM 第 1385 行「满意度在回访/验收时由提单方评分……客人投诉由客人自行在客人端提交，客人即为提单方」）：客人对本人投诉评
+     * 1～5 分；已写处理结论后才可评，同单只评一次；不作为关闭条件（关闭仍由客户关怀部记录方案与客人反馈）。
+     */
+    public FacilityWorkOrderRecord rateByCustomer(String customerId, String workOrderId, Integer score) {
+        FacilityWorkOrderRecord cur = loadForUpdate(workOrderId);
+        if (!"customer".equals(cur.source()) || !Objects.equals(customerId, cur.reporterId())) {
+            throw ApiException.forbidden("CUSTOMER_COMPLAINT_FORBIDDEN", "该投诉不属于当前客人");
+        }
+        if (score == null || score < 1 || score > 5) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "满意度评分必须在 1 到 5 之间");
+        }
+        if (!RESOLVED_STATUSES.contains(cur.status())) {
+            throw ApiException.conflict("COMPLAINT_NOT_RESOLVED", "投诉尚未给出处理结论，暂不能评价");
+        }
+        if (cur.satisfaction() != null) {
+            throw ApiException.conflict("FACILITY_SATISFACTION_ALREADY_RATED", "该投诉已评价");
+        }
+        FacilityWorkOrderRecord rated = withConfirmations(cur, cur.status(), cur.completedAt(), cur.verifiedAt(),
+                cur.verifierId(), score, cur.reporterConfirmedAt(), cur.reporterConfirmedBy(), Instant.now());
+        repository.updateWorkOrder(rated);
+        return rated;
+    }
+
+    /**
+     * clients-R8（BSM 第 1379 行、ENUM 第 262 行「消费客人的投诉，由客户关怀部记录问题解决方案及客人反馈后，可以关闭」）：客人投诉转为关闭时
+     * 请求须带客人反馈并落库；不要求客人在端上确认。
+     */
+    private void recordCustomerFeedbackOnClose(FacilityWorkOrderRecord before, FacilityWorkOrderRecord after,
+            FacilityWorkOrderActionRequest request) {
+        if (!"customer".equals(before.source()) || !"closed".equals(after.status())) {
+            return;
+        }
+        String feedback = trimToNull(request.customerFeedback());
+        if (feedback == null) {
+            throw ApiException.conflict("COMPLAINT_CUSTOMER_FEEDBACK_REQUIRED", "关闭客人投诉须记录客人反馈");
+        }
+        repository.saveCustomerFeedback(after.id(), feedback);
+    }
+
     private FacilityWorkOrderRecord createInternal(FacilityWorkOrderRequest request, String idempotencyKey,
             String confirmerId) {
         String type = normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
@@ -560,7 +624,9 @@ public class FacilityWorkOrderService {
         return new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(), cur.priority(), "closed",
                 cur.title(), cur.description(), cur.source(), cur.spaceId(), cur.equipmentId(), cur.reporterId(),
                 cur.reporterType(), cur.assigneeId(), cur.responseDueAt(), cur.handleDueAt(), cur.assignedAt(),
-                cur.respondedAt(), cur.completedAt(), now, actorId(), r.satisfaction(), cur.overtime(),
+                cur.respondedAt(), cur.completedAt(), now, actorId(),
+                // ROOT-03-R26（BSM 第 1385 行「满意度在回访/验收时由提单方评分」）：客人投诉的满意度只由客人本人评，员工关闭不改写。
+                "customer".equals(cur.source()) ? cur.satisfaction() : r.satisfaction(), cur.overtime(),
                 cur.resolution(), cur.projectId(), cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
                 cur.reporterConfirmedBy());
     }

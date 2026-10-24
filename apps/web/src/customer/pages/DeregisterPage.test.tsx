@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,10 +9,13 @@ import type { CustomerService } from "../client/customerService";
 describe("DeregisterPage", () => {
   it("shows balances and sends waive flag", async () => {
     const service = {
-      getDeregisterPreview: vi.fn().mockResolvedValue([
-        { accountId: "svacc_prj", cardScope: "project", merchantId: null, principalCent: 3000, bonusCent: 500 },
-        { accountId: "svacc_m1", cardScope: "merchant", merchantId: "m1", principalCent: 2000, bonusCent: 0 },
-      ]),
+      getDeregisterPreview: vi.fn().mockResolvedValue({
+        storedValueCards: [
+          { accountId: "svacc_prj", cardScope: "project", merchantId: null, principalCent: 3000, bonusCent: 500 },
+          { accountId: "svacc_m1", cardScope: "merchant", merchantId: "m1", principalCent: 2000, bonusCent: 0 },
+        ],
+        savedBottles: [],
+      }),
       deregister: vi.fn().mockResolvedValue({ status: "deregistered" }),
     } as unknown as CustomerService;
     const onDeregistered = vi.fn();
@@ -34,9 +37,10 @@ describe("DeregisterPage", () => {
 
   it("sends waive=false by default so refundable principal becomes pending refund", async () => {
     const service = {
-      getDeregisterPreview: vi.fn().mockResolvedValue([
-        { accountId: "svacc_prj", cardScope: "project", merchantId: null, principalCent: 3000, bonusCent: 0 },
-      ]),
+      getDeregisterPreview: vi.fn().mockResolvedValue({
+        storedValueCards: [{ accountId: "svacc_prj", cardScope: "project", merchantId: null, principalCent: 3000, bonusCent: 0 }],
+        savedBottles: [],
+      }),
       deregister: vi.fn().mockResolvedValue({ status: "deregistered" }),
     } as unknown as CustomerService;
 

@@ -1,5 +1,6 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
+import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -27,6 +28,9 @@ type FacilityWorkOrderRow = {
   source?: string | null; reporterType?: string | null; confirmerId?: string | null; verifierId?: string | null; verifiedAt?: string | null;
   reporterConfirmedAt?: string | null; reporterConfirmedBy?: string | null;
 };
+// ROOT-03 clients-R8 客人投诉附件（后端 CustomerComplaintService.MediaView）。
+type CustomerMediaRow = { id: string; contentType: string; fileSize: number; createdAt: string };
+const MEDIA_LABELS: Record<string, string> = { image: "照片", video: "视频", audio: "语音" };
 type FacilityWorkOrderPolicyRow = {
   id: string; workOrderType: string; priority: string; responseMinutes: number; handleMinutes: number;
   requiresAcceptance: boolean; acceptanceBy: string; active: boolean;
@@ -174,7 +178,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [scrapDisposal, setScrapDisposal] = React.useState<{ scrapId: string; note: string; proofs: { id: string; name: string }[] }>({ scrapId: "", note: "", proofs: [] });
   const [scrapFinance, setScrapFinance] = React.useState({ scrapId: "", residual: "", counterparty: "", loss: "" });
   const [workOrderForm, setWorkOrderForm] = React.useState({ workOrderType: "repair", priority: "normal", title: "", equipmentId: "", spaceId: "", reporterId: "", reporterType: "staff", source: "platform" });
-  const [workOrderAction, setWorkOrderAction] = React.useState({ assigneeId: "", resolution: "现场处理完成", satisfaction: "5", note: "", confirmerId: "", reassignReason: "" });
+  const [workOrderAction, setWorkOrderAction] = React.useState({ assigneeId: "", resolution: "现场处理完成", satisfaction: "5", note: "", confirmerId: "", reassignReason: "", customerFeedback: "" });
   const [policyForm, setPolicyForm] = React.useState({ workOrderType: "repair", priority: "normal", responseMinutes: "60", handleMinutes: "720", requiresAcceptance: true, acceptanceBy: "supervisor", active: true });
   const [templateForm, setTemplateForm] = React.useState({ name: "", inspectionType: "security", cycleDays: "7", abnormalMode: "light", checklist: "现场照片,关键设备状态", scopeNote: "" });
   const [taskForm, setTaskForm] = React.useState({ templateId: "", inspectionType: "security", title: "", scheduleMode: "manual", assigneeId: "", scheduledDate: "", dueDate: "", spaceId: "" });
@@ -487,16 +491,24 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
     await reload();
   }
 
-  async function workOrderActionPost(id: string, action: "start" | "complete" | "accept" | "review" | "suspend" | "resume" | "rework") {
+  async function workOrderActionPost(id: string, action: "start" | "complete" | "accept" | "review" | "suspend" | "resume" | "rework", source?: string | null) {
     // 第十二批操作员裁决第 2 条：验收或提单确认不通过，须填不通过原因后退回原维修人返工。
     if (action === "rework" && !workOrderAction.note.trim()) {
       setGlobalError("退回返工须在备注里填写不通过原因");
       return;
     }
+    // ROOT-03 clients-R8（BSM 第 1379 行「客户关怀部记录问题解决方案及客人反馈后可以关闭」）：关闭客人投诉须填客人反馈；满意度由客人本人评（R26）。
+    const customerComplaint = source === "customer";
+    const customerFeedback = workOrderAction.customerFeedback.trim();
+    if (customerComplaint && (action === "accept" || action === "review") && !customerFeedback) {
+      setGlobalError("关闭客人投诉须填写客人反馈");
+      return;
+    }
     await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/${action}`, {
       resolution: action === "complete" ? workOrderAction.resolution.trim() || "已处理" : undefined,
-      satisfaction: action === "accept" || action === "review" ? positiveInt(workOrderAction.satisfaction) : undefined,
+      satisfaction: !customerComplaint && (action === "accept" || action === "review") ? positiveInt(workOrderAction.satisfaction) : undefined,
       note: workOrderAction.note.trim() || undefined,
+      customerFeedback: customerComplaint && customerFeedback ? customerFeedback : undefined,
     });
     setActionResult({ action: `facility_work_order_${action}`, workOrderId: id });
     await reload();
@@ -665,6 +677,19 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         { label: "满意度", value: row.satisfaction != null ? `${row.satisfaction} 分` : "-" },
       ],
     });
+    // ROOT-03 clients-R8：客人投诉附件（照片、视频、语音）按工单查看权限受控查看。
+    if (row.source === "customer") {
+      void api.get<CustomerMediaRow[]>(`/api/v1/facility/work-orders/${encodeURIComponent(row.id)}/customer-media`).then((media) => {
+        const links = (media ?? []).map((m, index) => (
+          <a key={m.id} href={withBase(`/api/v1/facility/work-orders/${encodeURIComponent(row.id)}/customer-media/${encodeURIComponent(m.id)}/file`)} target="_blank" rel="noreferrer">
+            {MEDIA_LABELS[m.contentType.split("/")[0] ?? ""] ?? "附件"} {index + 1}{" "}
+          </a>
+        ));
+        setDetail((current) => current && current.title.endsWith(row.code ?? row.id)
+          ? { ...current, fields: [...current.fields, { label: "客人附件", value: links.length > 0 ? <span data-testid="facility-work-order-customer-media">{links}</span> : "无" }] }
+          : current);
+      }).catch(() => undefined);
+    }
   }
 
   function openOverdueWorkOrderDetail(row: FacilityWorkOrderRow) {
@@ -863,6 +888,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <input data-testid="facility-work-order-resolution" aria-label="处理结果" placeholder="处理结果" value={workOrderAction.resolution} onChange={(event) => setWorkOrderAction({ ...workOrderAction, resolution: event.target.value })} />
           <input data-testid="facility-work-order-satisfaction" aria-label="满意度" type="number" min="1" max="5" value={workOrderAction.satisfaction} onChange={(event) => setWorkOrderAction({ ...workOrderAction, satisfaction: event.target.value })} />
           <input data-testid="facility-work-order-note" aria-label="操作备注" placeholder="备注（退回返工填不通过原因）" value={workOrderAction.note} onChange={(event) => setWorkOrderAction({ ...workOrderAction, note: event.target.value })} />
+          <input data-testid="facility-work-order-customer-feedback" aria-label="客人反馈" placeholder="客人反馈（关闭客人投诉必填）" value={workOrderAction.customerFeedback} onChange={(event) => setWorkOrderAction({ ...workOrderAction, customerFeedback: event.target.value })} />
           <input data-testid="facility-work-order-confirmer" aria-label="提单确认人" placeholder="指定提单确认人 id" value={workOrderAction.confirmerId} onChange={(event) => setWorkOrderAction({ ...workOrderAction, confirmerId: event.target.value })} />
           <input data-testid="facility-work-order-reassign-reason" aria-label="转派原因" placeholder="转派原因（转派必填，新处理人填在处理人 id）" value={workOrderAction.reassignReason} onChange={(event) => setWorkOrderAction({ ...workOrderAction, reassignReason: event.target.value })} />
         </div>
@@ -879,10 +905,10 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
                     const wo: RowAction[] = [];
                     if (row.status === "pending_assign") wo.push({ key: "assign", label: "派单", permissions: WORK_ORDER, onClick: () => void assignWorkOrder(row.id), testId: `facility-work-order-assign-${row.id}` });
                     if (row.status === "assigned") wo.push({ key: "start", label: "开始", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "start"), testId: `facility-work-order-start-${row.id}` });
-                    if (row.status === "processing") wo.push({ key: "complete", label: "完成", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "complete"), testId: `facility-work-order-complete-${row.id}` });
+                    if (row.status === "processing") wo.push({ key: "complete", label: "完成", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "complete", row.source), testId: `facility-work-order-complete-${row.id}` });
                     if (row.status === "assigned" || row.status === "processing") wo.push({ key: "reassign", label: "转派", permissions: WORK_ORDER, onClick: () => void reassignWorkOrder(row.id), testId: `facility-work-order-reassign-${row.id}` });
-                    if (row.status === "pending_acceptance") wo.push({ key: "accept", label: "验收", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "accept"), testId: `facility-work-order-accept-${row.id}` });
-                    if (row.status === "pending_review") wo.push({ key: "review", label: "回访", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "review"), testId: `facility-work-order-review-${row.id}` });
+                    if (row.status === "pending_acceptance") wo.push({ key: "accept", label: "验收", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "accept", row.source), testId: `facility-work-order-accept-${row.id}` });
+                    if (row.status === "pending_review") wo.push({ key: "review", label: "回访", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "review", row.source), testId: `facility-work-order-review-${row.id}` });
                     // HP-F02 双闸（裁决第 12 条：关联设备的报修才两道）：已验收或待验收且提单方未确认 → 提单确认；任一方不通过 → 退回返工。
                     const dualPending = row.workOrderType === "repair" && !!row.equipmentId && (row.status === "pending_acceptance" || row.status === "accepted");
                     // 告警单与裁决第 15 条员工手工建的关联设备报修单（提单员工就是承接人）：只给承接人本人且不是本次维修人时显示「提单确认」，

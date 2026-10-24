@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -56,7 +56,6 @@ class CustomerServiceTests {
     private TicketingService ticketingService;
     private InventoryService inventoryService;
     private com.complex.platform.bar.BarRepository barRepository;
-    private com.complex.platform.bar.BarOrderService barOrderService;
     private RecordingVoucherIssuePort voucherIssuePort;
     private CustomerService service;
 
@@ -85,6 +84,9 @@ class CustomerServiceTests {
         customerRepository = new InMemoryCustomerRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
         ticketingService = Mockito.mock(TicketingService.class);
+        // ROOT-03-R21：注销处置名下未核销票（替身：无票）。
+        when(ticketingService.disposeHeldTicketsOnDeregistration(any(), any()))
+                .thenReturn(new TicketingService.DeregistrationTickets(0, 0));
         inventoryService = Mockito.mock(InventoryService.class);
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         AuditedOperationExecutor operations = new AuditedOperationExecutor(
@@ -93,7 +95,9 @@ class CustomerServiceTests {
         );
         LoyaltyService loyaltyService = new LoyaltyService(customerRepository, auditEventService);
         barRepository = Mockito.mock(com.complex.platform.bar.BarRepository.class);
-        barOrderService = Mockito.mock(com.complex.platform.bar.BarOrderService.class);
+        // ROOT-03-R19：台位排他预留由真库用例覆盖（BarReservationHoldJdbcIntegrationTests），这里台位一律可订、可占。
+        Mockito.when(barRepository.isTableReservable(Mockito.any())).thenReturn(true);
+        Mockito.when(barRepository.holdTable(Mockito.any(), Mockito.any())).thenReturn(true);
         voucherIssuePort = new RecordingVoucherIssuePort();
         service = new CustomerService(
                 customerRepository,
@@ -104,7 +108,6 @@ class CustomerServiceTests {
                 inventoryService,
                 loyaltyService,
                 barRepository,
-                barOrderService,
                 voucherIssuePort,
                 java.time.Clock.fixed(java.time.Instant.parse("2026-06-14T00:00:00Z"), java.time.ZoneOffset.UTC),
                 new com.complex.platform.common.ratelimit.RateLimiter(),
@@ -112,53 +115,7 @@ class CustomerServiceTests {
         );
     }
 
-    @Test
-    void barScanMenuReturnsSafeProjectionWithoutInternalPrice() {
-        // 客人扫码看菜单：安全投影只给对客售卖信息；DTO 类型本身不含 internal_settlement_price（编译期即隐去敏感成本）。
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
-        java.time.Instant now = java.time.Instant.now();
-        Mockito.when(barRepository.findTableSessionById("session_s1")).thenReturn(Optional.of(
-                new com.complex.platform.bar.BarTableSessionRecord("session_s1", "bar_1", "merchant_1",
-                        java.time.LocalDate.parse("2026-06-24"), "table_1", null, null, 2, 0L, 0, null, null,
-                        "open", now, null, null, 1L, now, now)));
-        Mockito.when(barRepository.listProducts(Optional.of("merchant_1"))).thenReturn(List.of(
-                new com.complex.platform.bar.BarProductRecord("product_1", "bar_1", "merchant_1", "精酿", "beer",
-                        3800L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, 1500L)));
-
-        PageResponse<com.complex.platform.customer.dto.CustomerBarMenuItemResponse> menu =
-                service.listBarScanMenu(login.customerToken(), "session_s1");
-
-        assertThat(menu.items()).hasSize(1);
-        com.complex.platform.customer.dto.CustomerBarMenuItemResponse item = menu.items().get(0);
-        assertThat(item.productId()).isEqualTo("product_1");
-        assertThat(item.priceCent()).isEqualTo(3800L);
-        assertThat(item.productType()).isEqualTo("beer");
-    }
-
-    @Test
-    void customerScanOrderDelegatesToBarOrderServiceWithCustomerId() {
-        // 客人自助扫码下单：委托 BarOrderService.placeCustomerScanOrder，传本人 customerId + 会话 id。
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
-        String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
-        java.time.Instant now = java.time.Instant.now();
-        com.complex.platform.bar.BarOrderRecord created = new com.complex.platform.bar.BarOrderRecord(
-                "order_1", "bar_1", "merchant_1", "table_1", null, customerId, "app", "created",
-                7600L, "CNY", "miniapp", null, null, now, now);
-        Mockito.when(barOrderService.placeCustomerScanOrder(Mockito.eq("session_s1"), Mockito.any(), Mockito.eq(customerId)))
-                .thenReturn(created);
-
-        com.complex.platform.bar.BarOrderRecord order = service.placeBarScanOrder(
-                login.customerToken(), "scan-key-1", "session_s1",
-                new com.complex.platform.customer.dto.CustomerBarScanOrderRequest(
-                        "scan-key-1", List.of(Map.of("product_id", "product_1", "quantity", 2))));
-
-        assertThat(order.orderSource()).isEqualTo("app");
-        assertThat(order.customerId()).isEqualTo(customerId);
-        Mockito.verify(barOrderService)
-                .placeCustomerScanOrder(Mockito.eq("session_s1"), Mockito.any(), Mockito.eq(customerId));
-    }
-
-    /** ROOT-05-R3：登录核验场景固定 customer.login（与登录取码同一场景），请求里的 scene 只作会话渠道。 */
+    /** ROOT-05-R3：登录核验场景固定 customer.login（与登录取码同一场景）；ROOT-03-R2：会话锁定本请求的可信登录端。 */
     @Test
     void phoneLoginVerifiesWithLoginSceneRegardlessOfClientScene() {
         List<String> calls = new ArrayList<>();
@@ -174,7 +131,7 @@ class CustomerServiceTests {
             }
         });
 
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
 
         assertThat(calls).containsExactly("verify:customer.login");
         assertThat(customerRepository.findSessionByToken(login.customerToken()))
@@ -204,11 +161,7 @@ class CustomerServiceTests {
 
     @Test
     void phoneLoginReturnsCustomerTokenAndMasksPhone() {
-        CustomerLoginResponse response = service.phoneLogin(new CustomerPhoneLoginRequest(
-                "13800138000",
-                "000000",
-                "miniapp"
-        ));
+        CustomerLoginResponse response = login("13800138000");
 
         assertThat(response.customerToken()).startsWith("cust_");
         assertThat(response.maskedPhone()).isEqualTo("138****8000");
@@ -220,8 +173,13 @@ class CustomerServiceTests {
 
     @Test
     void phoneLoginCustomerIdDoesNotLeakPhone() {
+        // ROOT-03-R3：会员身份只在注册时创建；注册建号的主键同样不得由手机号派生。
         String phone = "13800138000";
-        CustomerLoginResponse response = service.phoneLogin(new CustomerPhoneLoginRequest(phone, "000000", "miniapp"));
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "terms", new CustomerTerms(false));
+        CustomerTerms.Current terms = new CustomerTerms(false).current();
+        CustomerLoginResponse response = service.register(new com.complex.platform.customer.dto.CustomerRegisterRequest(
+                phone, "000000", LocalDate.parse("1990-05-01"), terms.memberTerms().version(), terms.privacyPolicy().version()),
+                "miniapp");
 
         // 主键内嵌明文手机号会架空 phone 列的 AES-GCM 加密; id 必须与手机号无关且不可反推.
         assertThat(response.customerId()).startsWith("customer_");
@@ -231,38 +189,66 @@ class CustomerServiceTests {
 
     @Test
     void accountLifecycleSuspendBlacklistDeregisterEnforcedAtLoginAndActions() {
-        // V194：四态账号生命周期闸——封禁/黑名单/注销拦截登录与动作；数据保留。
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp"));
+        // V194 四态；ROOT-03-R23（BSM 第 819 行）：受限只停订台、其余照常；已关闭拦截登录与动作；已注销拦截动作；数据保留。
+        CustomerLoginResponse login = login("13900001234");
         String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
 
-        // 封禁(未到期，fixed clock 2026-06-14 → until 2026-06-20) → 动作被拒、登录被拒。
+        // 受限(未到期，fixed clock 2026-06-14 → until 2026-06-20) → 查订单、登录照常，订台被拒。
         service.suspendCustomer(customerId, java.time.Instant.parse("2026-06-20T00:00:00Z"), "risk");
-        assertThatThrownBy(() -> service.listOrders(login.customerToken()))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_SUSPENDED"));
-        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp")))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_SUSPENDED"));
+        service.listOrders(login.customerToken());
+        assertThat(login("13900001234").customerToken()).isNotBlank();
+        assertThat(customerRepository.findCustomerById(customerId).orElseThrow().status()).isEqualTo("suspended");
+        assertThatThrownBy(() -> service.createBarReservation(login.customerToken(), "resv-restricted",
+                new CustomerBarReservationRequest("resv-restricted", "bar_1", "table_1", "booth", null, 2, null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_RESTRICTED"));
 
-        // 恢复 → 可用。
+        // 提前解除受限 → 有效。
         service.reinstateCustomer(customerId, "appeal ok");
-        assertThat(service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp")).customerToken()).isNotBlank();
-
-        // 拉黑(永久) → 登录被拒。
-        service.blacklistCustomer(customerId, "fraud");
-        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp")))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_BLACKLISTED"));
-        service.reinstateCustomer(customerId, "unblock");
+        assertThat(customerRepository.findCustomerById(customerId).orElseThrow().status()).isEqualTo("active");
 
         // 客人自助注销 → 后续动作被拒；客人行仍在库(数据物理保留)。
-        CustomerLoginResponse s2 = service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp"));
+        CustomerLoginResponse s2 = login("13900001234");
         service.deregisterAccount(s2.customerToken());
         assertThatThrownBy(() -> service.listOrders(s2.customerToken()))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_DEREGISTERED"));
         assertThat(customerRepository.findCustomerById(customerId)).isPresent();
+
+        // 拉黑(关闭账户，永久) → 登录被拒；不能直接改回有效（须两级批准的解除申请）。
+        CustomerLoginResponse other = login("13900004321");
+        String otherId = other.customerId();
+        service.blacklistCustomer(otherId, "fraud");
+        assertThatThrownBy(() -> login("13900004321"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_BLACKLISTED"));
+        assertThatThrownBy(() -> service.reinstateCustomer(otherId, "unblock"))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("CUSTOMER_BLACKLIST_RELEASE_REQUIRES_APPROVAL"));
+    }
+
+    /** ROOT-03-R3：手机号未注册的登录不建号（整笔不落库），提示注册。 */
+    @Test
+    void unknownPhoneLoginRequiresRegistration() {
+        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest("13700000001", "000000"), "miniapp"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_REGISTRATION_REQUIRED"));
+        assertThat(customerRepository.findCustomerByPhone("13700000001")).isEmpty();
+        assertThat(customerRepository.sessions).isEmpty();
+    }
+
+    /** ROOT-03-R2：客人只经官方 App、小程序登录（客人无网页端）。 */
+    @Test
+    void phoneLoginOnlyFromAppOrMiniapp() {
+        login("13700000002");
+        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest("13700000002", "000000"), "web"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_TERMINAL_NOT_ALLOWED"));
+        assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest("13700000002", "000000"), null))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_TERMINAL_NOT_ALLOWED"));
+        assertThat(customerRepository.findSessionByToken(
+                service.phoneLogin(new CustomerPhoneLoginRequest("13700000002", "000000"), "app").customerToken()))
+                .get().extracting(CustomerSessionRecord::scene).isEqualTo("app");
     }
 
     @Test
     void logoutRevokesServerSideSessionAndIsIdempotent() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900001234", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13900001234");
         assertThat(customerRepository.findSessionByToken(login.customerToken())).isPresent();
 
         service.logout(login.customerToken());
@@ -278,17 +264,17 @@ class CustomerServiceTests {
     @Test
     void suspensionAutoRestoresWhenExpiredOnNextLogin() {
         // V194：封禁到期(until 早于 fixed clock 2026-06-14) → 下次登录 lazy 自动恢复 active。
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900005678", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13900005678");
         String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
         service.suspendCustomer(customerId, java.time.Instant.parse("2026-06-10T00:00:00Z"), "temp");
-        assertThat(service.phoneLogin(new CustomerPhoneLoginRequest("13900005678", "000000", "miniapp")).customerToken()).isNotBlank();
+        assertThat(login("13900005678").customerToken()).isNotBlank();
         assertThat(customerRepository.findCustomerById(customerId).orElseThrow().status()).isEqualTo("active");
     }
 
     @Test
     void listOrderTicketsDelegatesAndEnforcesAccountGate() {
         // 1.8：我的票走 requireCustomer 状态闸；正常账号取到票实例投影，封禁账号被拒。
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13900007777", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13900007777");
         String customerId = customerRepository.findSessionByToken(login.customerToken()).orElseThrow().customerId();
         com.complex.platform.ticketing.CustomerTicketResponse ticket =
                 new com.complex.platform.ticketing.CustomerTicketResponse(
@@ -300,18 +286,17 @@ class CustomerServiceTests {
                 service.listOrderTickets(login.customerToken(), "order_1");
         assertThat(page.items()).singleElement().extracting(t -> t.id()).isEqualTo("ent_1");
 
-        service.suspendCustomer(customerId, java.time.Instant.parse("2026-06-20T00:00:00Z"), "risk");
+        service.blacklistCustomer(customerId, "risk");
         assertThatThrownBy(() -> service.listOrderTickets(login.customerToken(), "order_1"))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_SUSPENDED"));
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CUSTOMER_BLACKLISTED"));
     }
 
     @Test
     void phoneLoginRejectsInvalidSmsCodeWithoutCreatingSession() {
         assertThatThrownBy(() -> service.phoneLogin(new CustomerPhoneLoginRequest(
                 "13800138000",
-                "111111",
-                "miniapp"
-        ))).isInstanceOfSatisfying(ApiException.class, exception ->
+                "111111"
+        ), "miniapp")).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("CUSTOMER_OTP_INVALID"));
 
         assertThat(customerRepository.sessions).isEmpty();
@@ -371,8 +356,8 @@ class CustomerServiceTests {
 
     @Test
     void customerTicketOrderUsesCustomerIdentityAndIdempotency() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
-        when(ticketingService.createTicketOrder(any(TicketOrderRequest.class))).thenReturn(new TicketOrderRecord(
+        CustomerLoginResponse login = login("13800138000");
+        when(ticketingService.createCustomerTicketOrder(any(TicketOrderRequest.class), org.mockito.ArgumentMatchers.anySet())).thenReturn(new TicketOrderRecord(
                 "ticket_order_customer",
                 "TO20260614000001",
                 login.customerId(),
@@ -406,7 +391,7 @@ class CustomerServiceTests {
         );
 
         ArgumentCaptor<TicketOrderRequest> requestCaptor = ArgumentCaptor.forClass(TicketOrderRequest.class);
-        verify(ticketingService).createTicketOrder(requestCaptor.capture());
+        verify(ticketingService).createCustomerTicketOrder(requestCaptor.capture(), org.mockito.ArgumentMatchers.anySet());
         assertThat(requestCaptor.getValue().customerId()).isEqualTo(login.customerId());
         assertThat(requestCaptor.getValue().salesChannel()).isEqualTo("miniapp");
         assertThat(response.customerId()).isEqualTo(login.customerId());
@@ -417,7 +402,7 @@ class CustomerServiceTests {
 
     @Test
     void customerOrdersAndQrAreScopedToCustomerToken() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         when(ticketingService.listTicketOrdersByCustomerId(login.customerId())).thenReturn(List.of(new TicketOrderRecord(
                 "ticket_order_customer",
                 "TO20260614000001",
@@ -447,10 +432,10 @@ class CustomerServiceTests {
                 1
         ));
 
-        PageResponse<TicketOrderRecord> orders = service.listOrders(login.customerToken());
+        PageResponse<com.complex.platform.customer.dto.CustomerTicketOrderResponse> orders = service.listOrders(login.customerToken());
         TicketCredentialResponse qr = service.getTicketQr(login.customerToken(), "ent_customer");
 
-        assertThat(orders.items()).extracting(TicketOrderRecord::customerId).containsExactly(login.customerId());
+        assertThat(orders.items()).extracting(view -> view.order().customerId()).containsExactly(login.customerId());
         assertThat(qr.credentialToken()).isEqualTo("cred_customer");
         verify(ticketingService).listTicketOrdersByCustomerId(login.customerId());
         verify(ticketingService).getCustomerTicketCredential("ent_customer", login.customerId());
@@ -458,14 +443,13 @@ class CustomerServiceTests {
 
     @Test
     void consentAndPointsUseCustomerTokenBoundary() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
 
         CustomerConsentRecord consent = service.recordConsent(login.customerToken(), "consent-once", new CustomerConsentRequest(
                 "consent-once",
                 "privacy",
                 true,
-                "v1",
-                "miniapp"
+                "v1"
         ));
         CustomerPointsResponse points = service.getPoints(login.customerToken());
 
@@ -480,16 +464,16 @@ class CustomerServiceTests {
 
     @Test
     void consentIdsDoNotCollideForLongKeysDifferingPastTruncationCutoff() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         // Two distinct idempotency keys that are identical for the first 45 chars and differ only afterwards.
         String prefix = "a".repeat(45);
         String key1 = prefix + "-tail-one";
         String key2 = prefix + "-tail-two";
 
         CustomerConsentRecord consent1 = service.recordConsent(login.customerToken(), key1,
-                new CustomerConsentRequest(key1, "privacy", true, "v1", "miniapp"));
+                new CustomerConsentRequest(key1, "privacy", true, "v1"));
         CustomerConsentRecord consent2 = service.recordConsent(login.customerToken(), key2,
-                new CustomerConsentRequest(key2, "marketing", true, "v1", "miniapp"));
+                new CustomerConsentRequest(key2, "marketing", true, "v1"));
 
         // Before the fix both slugged to the same 40-char id and the second overwrote the first.
         assertThat(consent2.id()).isNotEqualTo(consent1.id());
@@ -499,7 +483,7 @@ class CustomerServiceTests {
 
     @Test
     void barReservationOptionsAndCreateUseCustomerTokenWithoutStaffPermission() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         customerRepository.saveBarTable(new BarTableRecord(
                 "table_customer",
                 "bar_1",
@@ -515,6 +499,10 @@ class CustomerServiceTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
+        // BSM 第 1062 行「客人自助订台必须支付定金」：本酒吧已配定金规则。
+        customerRepository.depositRules.put("rule_bar_1", new com.complex.platform.bar.BarDepositRuleRecord(
+                "rule_bar_1", "bar_1", null, "bar", "bar_1", "fixed",
+                20000L, null, 60, true, Instant.now(), Instant.now()));
 
         PageResponse<CustomerBarReservationOptionResponse> options = service.listBarReservationOptions(login.customerToken());
         BarReservationRecord reservation = service.createBarReservation(
@@ -527,7 +515,8 @@ class CustomerServiceTests {
                         "card_seat",
                         Instant.parse("2026-06-20T21:00:00Z"),
                         2,
-                        "13800138000"
+                        "13800138000",
+                        Instant.parse("2026-06-20T23:00:00Z")
                 )
         );
 
@@ -542,16 +531,33 @@ class CustomerServiceTests {
                         BarReservationRecord::orderSource,
                         BarReservationRecord::status
                 )
-                .containsExactly(login.customerId(), 2, 0L, "miniapp", "reserved");
+                .containsExactly(login.customerId(), 2, 20000L, "miniapp", "reserved");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("customer.bar_reservation_options_viewed", "customer.bar_reservation.created");
     }
 
+    // BSM 第 1062 行「客人自助订台必须支付定金」：酒吧未配定金规则时客人自助订台不可用（不再「未配置即下单占台」）。
+    @Test
+    void barSelfReservationUnavailableWithoutDepositRule() {
+        CustomerLoginResponse login = login("13800138000");
+        customerRepository.saveBarTable(new BarTableRecord(
+                "table_no_rule", "bar_no_rule", null, "T-NR", "VIP", "card_seat",
+                6, 2, 50000L, "CNY", "active",
+                Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
+
+        assertThatThrownBy(() -> service.createBarReservation(login.customerToken(), "no-rule",
+                new CustomerBarReservationRequest(null, "bar_no_rule", "table_no_rule", "card_seat",
+                        Instant.parse("2026-06-20T21:00:00Z"), 2, "13800138000", Instant.parse("2026-06-20T23:00:00Z"))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SELF_RESERVATION_UNAVAILABLE"));
+        assertThat(customerRepository.barReservations).isEmpty();
+        Mockito.verify(barRepository, Mockito.never()).holdTable(Mockito.any(), Mockito.any());
+    }
+
     // P0#3: 订台定金按 bar_deposit_rules 计算（固定额规则 → deposit pending + 金额按规则）。
     @Test
     void barReservationComputesDepositFromFixedRule() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         customerRepository.saveBarTable(new BarTableRecord(
                 "table_deposit", "bar_dep", null, "T-DEP", "VIP", "card_seat",
                 6, 2, 50000L, "CNY", "active",
@@ -562,7 +568,7 @@ class CustomerServiceTests {
 
         BarReservationRecord reservation = service.createBarReservation(login.customerToken(), "dep-fixed",
                 new CustomerBarReservationRequest(null, "bar_dep", "table_deposit", "card_seat",
-                        Instant.parse("2026-06-20T21:00:00Z"), 2, "13800138000"));
+                        Instant.parse("2026-06-20T21:00:00Z"), 2, "13800138000", Instant.parse("2026-06-20T23:00:00Z")));
 
         assertThat(reservation.depositAmountCent()).isEqualTo(20000L);
         assertThat(reservation.depositStatus()).isEqualTo("pending");
@@ -571,7 +577,7 @@ class CustomerServiceTests {
     // P0#3: 比例规则（min_consumption_ratio）→ 低消 × ratioBps/10000。
     @Test
     void barReservationComputesDepositFromRatioRule() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         customerRepository.saveBarTable(new BarTableRecord(
                 "table_ratio", "bar_ratio", null, "T-R", "VIP", "card_seat",
                 6, 2, 100000L, "CNY", "active",
@@ -582,7 +588,7 @@ class CustomerServiceTests {
 
         BarReservationRecord reservation = service.createBarReservation(login.customerToken(), "dep-ratio",
                 new CustomerBarReservationRequest(null, "bar_ratio", "table_ratio", "card_seat",
-                        Instant.parse("2026-06-20T21:00:00Z"), 2, "13800138000"));
+                        Instant.parse("2026-06-20T21:00:00Z"), 2, "13800138000", Instant.parse("2026-06-20T23:00:00Z")));
 
         assertThat(reservation.depositAmountCent()).isEqualTo(30000L); // 100000 * 3000 / 10000
         assertThat(reservation.depositStatus()).isEqualTo("pending");
@@ -590,7 +596,7 @@ class CustomerServiceTests {
 
     @Test
     void pointsLedgerAndRedemptionItemsAreCustomerScoped() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         customerRepository.savePoints(new CustomerPointsAccountRecord(
                 "points_" + login.customerId(),
                 login.customerId(),
@@ -674,7 +680,7 @@ class CustomerServiceTests {
 
     @Test
     void redeemPointsDeductsBalanceIssuesUnifiedVoucherWithoutInventoryCall() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         customerRepository.savePoints(new CustomerPointsAccountRecord(
                 "points_" + login.customerId(),
                 login.customerId(),
@@ -709,7 +715,7 @@ class CustomerServiceTests {
         CustomerPointsRedemptionRecord redemption = service.redeemPoints(
                 login.customerToken(),
                 "redeem-once",
-                new CustomerPointsRedemptionRequest(null, "gift_active", 1, "miniapp")
+                new CustomerPointsRedemptionRequest(null, "gift_active", 1)
         );
 
         assertThat(redemption)
@@ -736,7 +742,7 @@ class CustomerServiceTests {
 
     @Test
     void redeemPointsRejectsInsufficientPointsWithoutInventoryCall() {
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         customerRepository.savePoints(new CustomerPointsAccountRecord(
                 "points_" + login.customerId(),
                 login.customerId(),
@@ -771,7 +777,7 @@ class CustomerServiceTests {
         assertThatThrownBy(() -> service.redeemPoints(
                 login.customerToken(),
                 "redeem-insufficient",
-                new CustomerPointsRedemptionRequest(null, "gift_active", 1, "miniapp")
+                new CustomerPointsRedemptionRequest(null, "gift_active", 1)
         ))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("积分余额不足");
@@ -786,7 +792,7 @@ class CustomerServiceTests {
     void redeemPointsRejectsFrozenAccountWithoutTouchingInventoryOrPoints() {
         // R3 P0-7 顺序修回归：冻结账户校验必须在扣库存之前——余额足够但账户冻结时，绝不能先扣库存。
         // 此前冻结校验误排在 createTypedStockMovement 之后，仅靠同事务回滚兜底；本用例以 never() 锁死顺序。
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138000", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138000");
         customerRepository.savePoints(new CustomerPointsAccountRecord(
                 "points_" + login.customerId(),
                 login.customerId(),
@@ -821,7 +827,7 @@ class CustomerServiceTests {
         assertThatThrownBy(() -> service.redeemPoints(
                 login.customerToken(),
                 "redeem-frozen",
-                new CustomerPointsRedemptionRequest(null, "gift_active", 1, "miniapp")
+                new CustomerPointsRedemptionRequest(null, "gift_active", 1)
         ))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("积分账户已被冻结");
@@ -844,7 +850,7 @@ class CustomerServiceTests {
         // balance reads as 120, passes check, returns success — test expects exception → FAIL.
         // GREEN: after fix, service uses findPointsByCustomerIdForUpdate, hook fires first,
         // sets balance to 0, service reads 0 < 120 and throws POINTS_INSUFFICIENT → PASS.
-        CustomerLoginResponse login = service.phoneLogin(new CustomerPhoneLoginRequest("13800138099", "000000", "miniapp"));
+        CustomerLoginResponse login = login("13800138099");
         customerRepository.savePoints(new CustomerPointsAccountRecord(
                 "points_" + login.customerId(),
                 login.customerId(),
@@ -890,12 +896,22 @@ class CustomerServiceTests {
         assertThatThrownBy(() -> service.redeemPoints(
                 login.customerToken(),
                 "redeem-race-concurrent",
-                new CustomerPointsRedemptionRequest(null, "gift_race_item", 1, "miniapp")
+                new CustomerPointsRedemptionRequest(null, "gift_race_item", 1)
         ))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("积分余额不足");
 
         assertThat(customerRepository.findPointsByCustomerId(login.customerId()).orElseThrow().balance()).isEqualTo(0L);
+    }
+
+    /** ROOT-03-R3：登录不再建号——测试客人先按已注册的有效会员落库，再经小程序登录取会话。 */
+    private CustomerLoginResponse login(String phone) {
+        if (customerRepository.findCustomerByPhone(phone).isEmpty()) {
+            Instant now = Instant.parse("2026-06-01T00:00:00Z");
+            customerRepository.saveCustomer(new CustomerRecord("customer_" + java.util.UUID.randomUUID().toString().replace("-", ""),
+                    phone, phone.substring(0, 3) + "****" + phone.substring(7), "active", LocalDate.parse("1990-05-01"), null, now, now));
+        }
+        return service.phoneLogin(new CustomerPhoneLoginRequest(phone, "000000"), "miniapp");
     }
 
     private static class InMemoryCustomerRepository implements CustomerRepository {

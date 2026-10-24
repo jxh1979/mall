@@ -1,21 +1,14 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.bar.BarDepositRuleRecord;
-import com.complex.platform.bar.BarOrderRecord;
-import com.complex.platform.bar.BarOrderRequest;
-import com.complex.platform.bar.BarOrderService;
-import com.complex.platform.bar.BarProductRecord;
 import com.complex.platform.bar.BarRepository;
 import com.complex.platform.bar.BarReservationInvitationMemberRecord;
 import com.complex.platform.bar.BarReservationInvitationRecord;
 import com.complex.platform.bar.BarReservationRecord;
 import com.complex.platform.bar.BarTableRecord;
-import com.complex.platform.bar.BarTableSessionRecord;
 import com.complex.platform.customer.dto.CustomerBarInvitationConfirmRequest;
-import com.complex.platform.customer.dto.CustomerBarMenuItemResponse;
-import com.complex.platform.customer.dto.CustomerBarScanOrderRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.money.MoneyRounding;
@@ -26,6 +19,7 @@ import com.complex.platform.customer.dto.CustomerCheckInRequest;
 import com.complex.platform.customer.dto.CustomerConsentRequest;
 import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
 import com.complex.platform.customer.dto.CustomerPointsRedemptionRequest;
+import com.complex.platform.customer.dto.CustomerRegisterRequest;
 import com.complex.platform.customer.dto.CustomerTicketOrderRequest;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.inventory.InventoryService;
@@ -38,6 +32,7 @@ import com.complex.platform.ticketing.dto.TicketOrderRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -51,13 +46,23 @@ import static com.complex.platform.common.Strings.trimToNull;
 import static com.complex.platform.common.Strings.requireText;
 
 @Service
-public class CustomerService {
+public class CustomerService implements com.complex.platform.ticketing.KioskBuyerVerifier {
 
     @org.springframework.beans.factory.annotation.Autowired
     private PointsRecoveryService pointsRecoveries;
 
     /** ROOT-05-R3：登录短信验证码场景（取码与核验同一场景）。 */
     static final String LOGIN_OTP_SCENE = "customer.login";
+    /** ROOT-03-R29：一体机辅助购票的客人手机号绑定验证码场景（员工端发码与下单核验同一场景）。 */
+    static final String KIOSK_BIND_OTP_SCENE = "customer.kiosk_bind";
+
+    // ROOT-03-R28 学生资格判定与注销清证件；ROOT-03-R21 注销清券。字段注入 + @Lazy 断环；无容器的单测为 null 则不处理。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private StudentCertificationService studentCertifications;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private com.complex.platform.voucher.VoucherService voucherService;
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
@@ -70,8 +75,6 @@ public class CustomerService {
     private final InventoryService inventoryService;
     private final LoyaltyService loyaltyService;
     private final BarRepository barRepository;
-    // 扫码点单跨域调入：客人自助下单复用 bar 下单逻辑（merchant/customer 取自会话），见 placeBarScanOrder。
-    private final BarOrderService barOrderService;
     // 统一台账发券端口（V301 方案A）：积分兑换只发券不动库存，实物出库/结算移到统一核销阶段。
     private final com.complex.platform.voucher.VoucherIssuePort voucherIssuePort;
 
@@ -87,6 +90,19 @@ public class CustomerService {
     @org.springframework.context.annotation.Lazy
     private StoredValueService storedValueService;
 
+    // ROOT-03-R3 当前会员条款与隐私条款；ROOT-03-R22 注册/注销计数预警。字段注入：无容器的单测为 null。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CustomerTerms terms;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CustomerChurnAlertService churnAlerts;
+    // ROOT-03 clients-R6/backend-R25 订卡邀请函客人侧（防伪核验、我的订台、移出、动态入场码）。字段注入：无容器的单测不涉及邀请函。
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private com.complex.platform.bar.BarCustomerInvitationService barInvitations;
+
+    /** ROOT-03-R3 操作员裁决（第十三批第 3 条）「满 18 周岁（推荐）：与入场年龄一致，生日算下来不满 18 周岁不能注册」。 */
+    static final int MIN_MEMBER_AGE = 18;
+
     @org.springframework.beans.factory.annotation.Autowired
     public CustomerService(
             CustomerRepository repository,
@@ -97,13 +113,12 @@ public class CustomerService {
             InventoryService inventoryService,
             LoyaltyService loyaltyService,
             BarRepository barRepository,
-            BarOrderService barOrderService,
             @org.springframework.context.annotation.Lazy com.complex.platform.voucher.VoucherIssuePort voucherIssuePort,
             com.complex.platform.common.ratelimit.RateLimiter rateLimiter,
             com.complex.platform.common.ratelimit.RateLimitProperties rateLimitProperties
     ) {
         this(repository, otpVerifier, ticketingService, operations, auditEventService,
-                inventoryService, loyaltyService, barRepository, barOrderService, voucherIssuePort,
+                inventoryService, loyaltyService, barRepository, voucherIssuePort,
                 java.time.Clock.systemUTC(), rateLimiter, rateLimitProperties);
     }
 
@@ -117,7 +132,6 @@ public class CustomerService {
             InventoryService inventoryService,
             LoyaltyService loyaltyService,
             BarRepository barRepository,
-            BarOrderService barOrderService,
             com.complex.platform.voucher.VoucherIssuePort voucherIssuePort,
             java.time.Clock clock,
             com.complex.platform.common.ratelimit.RateLimiter rateLimiter,
@@ -134,7 +148,6 @@ public class CustomerService {
         this.inventoryService = inventoryService;
         this.loyaltyService = loyaltyService;
         this.barRepository = barRepository;
-        this.barOrderService = barOrderService;
         this.voucherIssuePort = voucherIssuePort;
     }
 
@@ -171,6 +184,36 @@ public class CustomerService {
         otpVerifier.requestCode(number, "customer.stored_value.consume");
     }
 
+    /**
+     * ROOT-03-R29（BSM 第 986 行「启用售票能力的一体机可由授权服务人员登录后辅助客人购票……客人用手机号短信验证绑定」）：员工端给客人手机号
+     * 发绑定验证码（权限在控制器逐个校验）；短信服务未配置时如实 409，不假成功。
+     */
+    public Map<String, Object> requestKioskBindCode(String phone) {
+        String number;
+        try {
+            number = requireText(phone, "phone");
+            enforceOtpRateLimit(number);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("customer.otp_request_failed", "ticket.order.create", "customer_otp", null, null, null,
+                    codeOf(exception));
+            throw exception;
+        }
+        // 下发成功 customer.otp_requested、下发失败 customer.otp_request_failed 由验证码服务记录。
+        otpVerifier.requestCode(number, KIOSK_BIND_OTP_SCENE);
+        return Map.of("phone_masked", maskPhone(number), "requested_at", clock.instant());
+    }
+
+    /** ROOT-03-R29 一体机下单时核验客人验证码（一次性，随下单事务消费）；返回该号已注册的会员编号，未注册返回 null。 */
+    @Override
+    public String verify(String phone, String smsCode) {
+        String number = requireText(phone, "buyer_phone");
+        enforceOtpRateLimit(number);
+        otpVerifier.verify(number, requireText(smsCode, "sms_code"), KIOSK_BIND_OTP_SCENE);
+        return repository.findCustomerByPhone(number)
+                .filter(customer -> "active".equals(customer.status()) || "suspended".equals(customer.status()))
+                .map(CustomerRecord::id).orElse(null);
+    }
+
     private CustomerRecord requireStoredValueCustomer(String expectedCustomerId, String number) {
         CustomerRecord customer = repository.findCustomerByPhone(number)
                 .orElseThrow(() -> ApiException.unauthorized("CUSTOMER_OTP_INVALID", "手机号或短信验证码不正确"));
@@ -200,61 +243,30 @@ public class CustomerService {
         return Map.of("phone_masked", maskPhone(number), "requested_at", clock.instant());
     }
 
+    /**
+     * 手机号短信验证码登录。ROOT-03-R3（BSM 第 886 行「创建会员身份必须完成手机号短信验证、填写生日、满足平台年龄要求，并同意当前会员条款和
+     * 隐私条款」）：登录不再自动建号，手机号未注册的整笔回滚（验证码随事务不被消费），客人改走 {@link #register}。
+     * ROOT-03-R2：terminalType＝本请求可信终端（只认 app、miniapp），会话锁定该登录端。
+     */
     @Transactional
-    public CustomerLoginResponse phoneLogin(CustomerPhoneLoginRequest request) {
+    public CustomerLoginResponse phoneLogin(CustomerPhoneLoginRequest request, String terminalType) {
         try {
+            String terminal = requireCustomerTerminal(terminalType);
             CustomerPhoneLoginRequest actual = requireRequest(request);
             String phone = requireText(actual.phone(), "phone");
             String smsCode = requireText(actual.smsCode(), "sms_code");
             enforceOtpRateLimit(phone);
-            // 核验场景固定 customer.login（与登录取码一致）；请求里的 scene 只作会话渠道。
+            // 核验场景固定 customer.login（与登录取码一致）。
             otpVerifier.verify(phone, smsCode, LOGIN_OTP_SCENE);
             Instant now = Instant.now();
-            CustomerRecord customer = repository.findCustomerByPhone(phone)
-                    .map(existing -> {
-                        // V194 需求：登录须先过账号状态闸——黑名单/注销/未到期封禁拒登录；封禁到期则自动恢复。
-                        CustomerRecord usable = enforceUsableAccount(existing, clock.instant());
-                        return repository.saveCustomer(new CustomerRecord(
-                                usable.id(),
-                                usable.phone(),
-                                usable.maskedPhone(),
-                                "active",
-                                usable.birthDate(),
-                                now,
-                                usable.createdAt(),
-                                now
-                        ));
-                    })
-                    .orElseGet(() -> repository.saveCustomer(new CustomerRecord(
-                            // PII: 主键不得由手机号派生, 否则从 id 即可反推手机号, 架空 phone 列的 AES-GCM 加密. 用随机不可反推 id.
-                            "customer_" + UUID.randomUUID().toString().replace("-", ""),
-                            phone,
-                            maskPhone(phone),
-                            "active",
-                            null,
-                            now,
-                            now,
-                            now
-                    )));
-            CustomerSessionRecord session = repository.saveSession(new CustomerSessionRecord(
-                    "session_" + UUID.randomUUID().toString().replace("-", ""),
-                    customer.id(),
-                    "cust_" + UUID.randomUUID().toString().replace("-", ""),
-                    trimToDefault(actual.scene(), "miniapp"),
-                    now,
-                    now.plusSeconds(86_400),
-                    "active"
-            ));
-            auditEventService.recordSuccess(
-                    "customer.auth.login",
-                    "public",
-                    "customer",
-                    customer.id(),
-                    null,
-                    null,
-                    Map.of("scene", session.scene())
-            );
-            return new CustomerLoginResponse(customer.id(), customer.maskedPhone(), session.customerToken(), session.expiresAt());
+            CustomerRecord existing = repository.findCustomerByPhone(phone)
+                    .orElseThrow(() -> ApiException.conflict("CUSTOMER_REGISTRATION_REQUIRED", "该手机号尚未注册，请完成注册"));
+            // V194 需求：登录须先过账号状态闸——已关闭/已注销拒登录；受限照常登录（R23，只停订台）。
+            CustomerRecord usable = enforceUsableAccount(existing, clock.instant());
+            CustomerRecord customer = repository.saveCustomer(new CustomerRecord(usable.id(), usable.phone(),
+                    usable.maskedPhone(), usable.status(), usable.birthDate(), now, usable.createdAt(), now,
+                    usable.suspendedUntil()));
+            return openSession(customer, terminal, now, "customer.auth.login");
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     "customer.auth.login_failed",
@@ -269,9 +281,124 @@ public class CustomerService {
         }
     }
 
+    /**
+     * ROOT-03-R3 会员注册（BSM 第 886 行；ENUM 第 66 行「任一条件不满足时注册失败且不创建会员身份，不产生“注册中”或“未通过”状态」；
+     * BSM 第 902 行「会员只能由本人完成手机号验证、阅读并同意会员条款及隐私条款后注册」）。条件全部满足才在同一事务里建有效会员、
+     * 记两份条款同意与会话；任一步失败整笔回滚。已关闭（黑名单）手机号拒绝再次注册（BSM 第 886 行）。
+     */
+    @Transactional
+    public CustomerLoginResponse register(CustomerRegisterRequest request, String terminalType) {
+        try {
+            String terminal = requireCustomerTerminal(terminalType);
+            CustomerRegisterRequest actual = requireRequest(request);
+            String phone = requireText(actual.phone(), "phone");
+            String smsCode = requireText(actual.smsCode(), "sms_code");
+            LocalDate birthDate = actual.birthDate();
+            if (birthDate == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "birth_date is required");
+            }
+            LocalDate today = LocalDate.now(clock.withZone(com.complex.platform.common.LocalZone.ID));
+            if (birthDate.isAfter(today)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "birth_date is invalid");
+            }
+            if (birthDate.plusYears(MIN_MEMBER_AGE).isAfter(today)) {
+                throw ApiException.conflict("CUSTOMER_UNDER_AGE", "未满 18 周岁不能注册会员");
+            }
+            CustomerTerms.Current current = terms.requirePublished();
+            if (!current.memberTerms().version().equals(requireText(actual.memberTermsVersion(), "member_terms_version"))
+                    || !current.privacyPolicy().version().equals(requireText(actual.privacyTermsVersion(), "privacy_terms_version"))) {
+                throw ApiException.conflict("CUSTOMER_TERMS_OUTDATED", "会员条款或隐私条款已更新，请重新阅读并同意后注册");
+            }
+            enforceOtpRateLimit(phone);
+            otpVerifier.verify(phone, smsCode, LOGIN_OTP_SCENE);
+            repository.findCustomerByPhone(phone).ifPresent(existing -> {
+                throw "blacklisted".equals(existing.status())
+                        ? ApiException.forbidden("CUSTOMER_PHONE_CLOSED", "该手机号已关闭，不能再次注册")
+                        : ApiException.conflict("CUSTOMER_ALREADY_REGISTERED", "该手机号已注册，请直接登录");
+            });
+            Instant now = Instant.now();
+            CustomerRecord customer = repository.saveCustomer(new CustomerRecord(
+                    // PII: 主键不得由手机号派生, 否则从 id 即可反推手机号, 架空 phone 列的 AES-GCM 加密. 用随机不可反推 id.
+                    "customer_" + UUID.randomUUID().toString().replace("-", ""),
+                    phone, maskPhone(phone), "active", birthDate, now, now, now));
+            saveRegistrationConsent(customer.id(), "member_terms", current.memberTerms().version(), terminal, now);
+            saveRegistrationConsent(customer.id(), "privacy_policy", current.privacyPolicy().version(), terminal, now);
+            if (churnAlerts != null) {
+                churnAlerts.afterRegistration(phone, customer.id());
+            }
+            // ROOT-03-R29（BSM 第 892、986 行）：此前按本手机号买的第三方渠道票、一体机票（尚未归属会员）归到本人。
+            ticketingService.linkUnclaimedOrdersToMember(phone, customer.id());
+            return openSession(customer, terminal, now, "customer.registered");
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("customer.register_failed", "public", "customer", null, null, null,
+                    codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private void saveRegistrationConsent(String customerId, String type, String version, String terminal, Instant now) {
+        repository.saveConsent(new CustomerConsentRecord("consent_" + UUID.randomUUID().toString().replace("-", ""),
+                customerId, type, true, version, terminal, now, null, now, now));
+    }
+
+    /** 签发会话（锁定登录端）并留痕；审计不记手机号。 */
+    private CustomerLoginResponse openSession(CustomerRecord customer, String terminal, Instant now, String event) {
+        CustomerSessionRecord session = repository.saveSession(new CustomerSessionRecord(
+                "session_" + UUID.randomUUID().toString().replace("-", ""),
+                customer.id(),
+                "cust_" + UUID.randomUUID().toString().replace("-", ""),
+                terminal,
+                now,
+                now.plusSeconds(86_400),
+                "active"
+        ));
+        auditEventService.recordSuccess(event, "public", "customer", customer.id(), null, null,
+                Map.of("scene", session.scene()));
+        return new CustomerLoginResponse(customer.id(), customer.maskedPhone(), session.customerToken(), session.expiresAt());
+    }
+
+    /** ROOT-03-R2（PGM 第 745 行「客人手机应用、客人小程序、Web 前端（业务人员，客人无网页端）」）：客人只经官方 App 或小程序登录、注册。 */
+    static String requireCustomerTerminal(String terminalType) {
+        if (!"app".equals(terminalType) && !"miniapp".equals(terminalType)) {
+            throw ApiException.forbidden("CUSTOMER_TERMINAL_NOT_ALLOWED", "客人请使用官方 App 或小程序登录");
+        }
+        return terminalType;
+    }
+
+    /**
+     * ROOT-03-R2（BSM 第 1611 行「订单从哪里来，是官方 App/小程序……」）：订单、订台、签到、兑换、同意的来源取本会话锁定的登录端
+     * （请求时已由设备凭证闸核对自报类型与之一致），不取请求体，取不到不默认。
+     */
+    String sessionTerminal(String customerToken) {
+        String scene = repository.findSessionByToken(trimToNull(customerToken)).map(CustomerSessionRecord::scene).orElse(null);
+        if (!"app".equals(scene) && !"miniapp".equals(scene)) {
+            throw ApiException.conflict("CUSTOMER_TERMINAL_UNKNOWN", "无法确认下单终端，请在官方 App 或小程序重新登录");
+        }
+        return scene;
+    }
+
     public PageResponse<CustomerTicketProductResponse> listTicketProducts(String barId) {
+        return listTicketProducts(barId, null);
+    }
+
+    /**
+     * ROOT-03-R27：带有效客人会话时，每个票种另给「我的价格」（今日按本人资格系统自动判定的最低价）与命中的资格名称；匿名只给基础价。
+     */
+    public PageResponse<CustomerTicketProductResponse> listTicketProducts(String barId, String customerToken) {
         // AUD-076 专属入口锁定：带 bar_id 只返回该酒吧单店票；不传=公共入口全量（通票 + 各家单店票）。
         String barFilter = barId == null || barId.isBlank() ? null : barId.trim();
+        CustomerRecord viewer = null;
+        if (trimToNull(customerToken) != null) {
+            try {
+                viewer = requireCustomer(customerToken);
+            } catch (ApiException anonymous) {
+                viewer = null; // 公开票价接口：会话失效按匿名展示基础价。
+            }
+        }
+        java.util.Set<String> eligible = viewer == null ? null : ticketPriceEligibility(viewer);
+        String terminal = viewer == null ? null : repository.findSessionByToken(trimToNull(customerToken))
+                .map(CustomerSessionRecord::scene).orElse(null);
+        LocalDate today = LocalDate.now(clock.withZone(com.complex.platform.common.LocalZone.ID));
         return readPage(
                 "customer.ticket_products_viewed",
                 "customer.ticket_products_view_failed",
@@ -281,7 +408,8 @@ public class CustomerService {
                         // AUD-015：公开列表只认已发布（过了权益绑定发布闸）的票种；历史 active 行由 V293 一次性归位。
                         .filter(ticketType -> "published".equals(ticketType.status()))
                         .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
-                        .map(this::toTicketProduct)
+                        .map(ticketType -> toTicketProduct(ticketType, eligible == null ? null
+                                : ticketingService.quoteCustomerPrice(ticketType.id(), today, terminal, eligible)))
                         .toList()
         );
     }
@@ -293,8 +421,13 @@ public class CustomerService {
             CustomerTicketOrderRequest request
     ) {
         CustomerRecord customer = requireCustomer(customerToken);
+        String terminal = sessionTerminal(customerToken);
         CustomerTicketOrderRequest actual = requireRequest(request);
         String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
+        // ROOT-03-R27（BSM 第 733 行「符合后台规则时系统自动判断可用，不符合规则时不能使用」）：客人不得自选价格规则。
+        if (trimToNull(actual.priceRuleId()) != null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "价格由系统按客人资格自动计算，不能自选价格规则");
+        }
         return executeWrite(
                 "createCustomerTicketOrder:" + customer.id(),
                 key,
@@ -305,34 +438,65 @@ public class CustomerService {
                 "not_applicable",
                 "ticket_order",
                 () -> {
-                    return ticketingService.createTicketOrder(new TicketOrderRequest(
+                    return ticketingService.createCustomerTicketOrder(new TicketOrderRequest(
                             key,
                             actual.buyerNote(),
                             List.of(),
                             actual.ticketTypeId(),
-                            actual.priceRuleId(),
+                            null,
                             actual.quantity(),
                             actual.visitDate(),
-                            "miniapp",
+                            terminal,
                             actual.contactPhone(),
                             customer.id(),
                             java.util.Map.of(),
                             // AUD-076：把客人选中的酒吧透传给服务端校验+快照（单店票必填、通票必空）。
                             actual.barId()
-                    ));
+                    ), ticketPriceEligibility(customer));
                 }
         );
     }
 
-    public PageResponse<TicketOrderRecord> listOrders(String customerToken) {
+    /**
+     * ROOT-03-R27 客人购票资格（系统自动判定，BSM 第 733、756 行）：member——全部会员等级均有「票务会员价购买资格」（BSM 第 821 行），
+     * 持本人有效会话的客人即会员；new_customer——同一手机号没买过（本账户无已付门票订单，BSM 第 781 行「同一手机号没买过才算新人」），
+     * 注销后重新注册与注销间隔不足一年的不算（ENUM 第 39 行）；student——须票务运营岗人工审核证件＋学信网核验通过（BSM 第 777 行），
+     * 即本人有已通过、资格有效期至（预计毕业日期，第十三批裁决第 1 条）不早于今天的学生认证（ROOT-03-R28）；
+     * 团体（需主管审批，BSM 第 1301 行）与渠道价不对客人自助开放。
+     */
+    java.util.Set<String> ticketPriceEligibility(CustomerRecord customer) {
+        java.util.Set<String> eligible = new java.util.HashSet<>(java.util.Set.of("member"));
+        // 「买过」含已按新人价下单、尚未取消的待付单：同时挂几笔待付单不能都按新人价成交（BSM 第 781 行「同一手机号没买过才算新人」）。
+        boolean bought = ticketingService.listTicketOrdersByCustomerId(customer.id()).stream()
+                .anyMatch(order -> "paid".equals(order.payStatus()) || (!"cancelled".equals(order.status())
+                        && order.priceRuleId() != null && ticketingService.listOrderPriceHits(order.id()).stream()
+                                .anyMatch(hit -> order.priceRuleId().equals(hit.get("rule_id"))
+                                        && "new_customer".equals(hit.get("variant_type")))));
+        if (!bought && !repository.reRegisteredWithinOneYear(customer.id())) {
+            eligible.add("new_customer");
+        }
+        if (studentCertifications != null && studentCertifications.qualifies(customer.id(),
+                LocalDate.now(clock.withZone(com.complex.platform.common.LocalZone.ID)))) {
+            eligible.add("student");
+        }
+        return eligible;
+    }
+
+    public PageResponse<com.complex.platform.customer.dto.CustomerTicketOrderResponse> listOrders(String customerToken) {
         CustomerRecord customer = requireCustomer(customerToken);
         return readPage(
                 "customer.orders_viewed",
                 "customer.orders_view_failed",
                 "not_applicable",
                 "ticket_order",
-                () -> ticketingService.listTicketOrdersByCustomerId(customer.id())
+                () -> ticketingService.listTicketOrdersByCustomerId(customer.id()).stream().map(this::orderView).toList()
         );
+    }
+
+    /** ROOT-03-R20/R27 客人订单视图：已付、待付、已收各笔与全部命中资格价。 */
+    public com.complex.platform.customer.dto.CustomerTicketOrderResponse orderView(TicketOrderRecord order) {
+        return com.complex.platform.customer.dto.CustomerTicketOrderResponse.of(order,
+                ticketingService.listOrderPayments(order.id()), ticketingService.listOrderPriceHits(order.id()));
     }
 
     /** 1.8 我的票：订单内票实例列表（先过账号状态闸与订单归属校验，无需手输票 id）。 */
@@ -355,6 +519,7 @@ public class CustomerService {
     @Transactional
     public CustomerConsentRecord recordConsent(String customerToken, String idempotencyKey, CustomerConsentRequest request) {
         CustomerRecord customer = requireCustomer(customerToken);
+        String terminal = sessionTerminal(customerToken);
         CustomerConsentRequest actual = requireRequest(request);
         String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
         return executeWrite(
@@ -378,7 +543,7 @@ public class CustomerService {
                             requireText(actual.consentType(), "consent_type"),
                             accepted,
                             trimToNull(actual.version()),
-                            trimToNull(actual.sourceTerminal()),
+                            terminal,
                             accepted ? now : null,
                             accepted ? null : now,
                             now,
@@ -436,9 +601,9 @@ public class CustomerService {
     @Transactional
     public CustomerCheckInRecord checkIn(String customerToken, CustomerCheckInRequest request) {
         CustomerRecord customer = requireCustomer(customerToken);
-        String terminal = request == null ? null : trimToNull(request.sourceTerminal());
+        String terminal = sessionTerminal(customerToken);
         try {
-            CustomerCheckInRecord checkIn = loyaltyService.checkIn(customer.id(), trimToDefault(terminal, "miniapp"));
+            CustomerCheckInRecord checkIn = loyaltyService.checkIn(customer.id(), terminal);
             auditEventService.recordSuccess(
                     "customer.checked_in",
                     "not_applicable",
@@ -503,6 +668,7 @@ public class CustomerService {
             CustomerPointsRedemptionRequest request
     ) {
         CustomerRecord customer = requireCustomer(customerToken);
+        String terminal = sessionTerminal(customerToken);
         CustomerPointsRedemptionRequest actual = requireRequest(request);
         String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
         return executeWrite(
@@ -589,7 +755,7 @@ public class CustomerService {
                             item.inventoryItemId(),
                             item.stockLocationId(),
                             item.stockQuantity() * quantity,
-                            trimToDefault(actual.sourceTerminal(), "miniapp"),
+                            terminal,
                             "voucher_issued",
                             now,
                             now
@@ -733,7 +899,13 @@ public class CustomerService {
                 "customer.bar_reservation_options_view_failed",
                 "not_applicable",
                 "bar_reservation_option",
-                repository::listBarReservationOptions
+                // ROOT-03 clients-R9：订卡规则带应付定金（与下单同一口径现算）。
+                () -> repository.listBarReservationOptions().stream()
+                        .map(option -> {
+                            BarDepositRuleRecord rule = resolveDepositRule(option.barId(), option.tableType());
+                            return option.withDepositAmountCent(rule == null ? 0L : computeDepositAmount(rule, option.minConsumptionCent()));
+                        })
+                        .toList()
         );
     }
 
@@ -744,6 +916,8 @@ public class CustomerService {
             CustomerBarReservationRequest request
     ) {
         CustomerRecord customer = requireCustomer(customerToken);
+        requireNotRestricted(customer);
+        String terminal = sessionTerminal(customerToken);
         CustomerBarReservationRequest actual = requireRequest(request);
         String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
         return executeWrite(
@@ -759,8 +933,16 @@ public class CustomerService {
                     String barId = requireText(actual.barId(), "bar_id");
                     String tableId = requireText(actual.tableId(), "table_id");
                     String tableType = requireText(actual.tableType(), "table_type");
+                    // ROOT-03-R19（BSM 第 1062 行「无论是否支付定金，每一笔订台都必须填写最晚到店时间」）。
+                    if (actual.latestArrivalAt() == null) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "latest_arrival_at is required");
+                    }
                     BarTableRecord table = repository.findActiveBarTableForReservation(barId, tableId, tableType)
                             .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "订台选项不存在或已被删除"));
+                    // ROOT-03-R19 下单前预检：台位已被有效预留占着或正在使用的直接拒绝，不让客人付了定金才被退。
+                    if (!barRepository.isTableReservable(table.id())) {
+                        throw com.complex.platform.bar.BarEntryService.tableAlreadyReserved();
+                    }
                     int guestCount = actual.guestCount() == null ? 0 : actual.guestCount();
                     if (guestCount < 0) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "客人数不能为负数");
@@ -770,38 +952,37 @@ public class CustomerService {
                     }
                     Instant now = Instant.now();
                     // P0#3 订台定金（V073 bar_deposit_rules，对齐 BarEntryService）：按 bar 读启用规则，
-                    // table_type 优先于 bar。无匹配规则或计算额 ≤0 → 0/not_required（向后兼容）；
-                    // 否则 pending（待支付）。比例模式按卡座低消 minConsumptionCent × ratioBps/10000。
-                    BarDepositRuleRecord rule = resolveDepositRule(barId, table);
-                    long depositAmountCent = rule == null ? 0L : computeDepositAmount(rule, table);
-                    String depositStatus;
-                    if (rule == null || depositAmountCent <= 0L) {
-                        depositAmountCent = 0L;
-                        depositStatus = "not_required";
-                    } else {
-                        depositStatus = "pending";
+                    // table_type 优先于 bar；比例模式按卡座低消 minConsumptionCent × ratioBps/10000，定金待支付（pending）。
+                    // BSM 第 1062 行「客人自助订台必须支付定金」：本酒吧未配定金规则（或算出无定金可付）时客人自助订台不可用，员工代订不受影响。
+                    BarDepositRuleRecord rule = resolveDepositRule(barId, table.tableType());
+                    long depositAmountCent = rule == null ? 0L : computeDepositAmount(rule, table.minConsumptionCent());
+                    if (depositAmountCent <= 0L) {
+                        throw ApiException.conflict("BAR_SELF_RESERVATION_UNAVAILABLE", "该酒吧暂未开放自助订台");
                     }
-                    return repository.saveCustomerBarReservation(new BarReservationRecord(
+                    // BSM 第 1062 行「定金直接进该卡座所属的酒吧商户」：订台归台位所属商户（该酒吧员工才看得到、确认得了、签发得了邀请函）。
+                    BarReservationRecord saved = repository.saveCustomerBarReservation(new BarReservationRecord(
                             "reservation_" + slug(key),
                             barId,
-                            null,
+                            table.merchantId(),
                             table.id(),
                             customer.id(),
                             actual.reservationTime() == null ? now : actual.reservationTime(),
                             guestCount,
                             table.allowedPassFreeGuestCount(),
                             depositAmountCent,
-                            depositStatus,
-                            "miniapp",
+                            "pending",
+                            terminal,
                             null,
                             "reserved",
-                            "miniapp",
+                            terminal,
                             null,
                             List.of(),
                             now,
                             now,
                             null
-                    ));
+                    ).withLatestArrivalAt(actual.latestArrivalAt()));
+                    // ENUM 第 100 行「客人自助订台支付定金成功……该台位即进入已预留」：在付款确认时占台（CustomerPaymentService）。
+                    return barRepository.findReservationById(saved.id()).orElse(saved);
                 }
         );
     }
@@ -840,12 +1021,14 @@ public class CustomerService {
                     if (!"active".equals(reservation.invitationStatus())) {
                         throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "卡座邀请已失效");
                     }
+                    // ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：核防伪标记与卡座、可进人数。
+                    barInvitations.requireGenuine(reservation, actual.invitationSignature(), actual.tableId(), actual.capacity());
                     String memberIdentifier = customer.id();
                     List<BarReservationInvitationMemberRecord> members = barRepository.listInvitationMembers(reservation.id());
                     BarReservationInvitationMemberRecord existing = members.stream()
                             .filter(member -> memberIdentifier.equals(member.memberIdentifier()))
                             .findFirst().orElse(null);
-                    if (existing != null) {
+                    if (existing != null && !"revoked".equals(existing.status())) {
                         return existing; // 幂等：同一朋友重复确认返回原记录，不重复占名额
                     }
                     int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
@@ -854,10 +1037,15 @@ public class CustomerService {
                         throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "卡座名额已满");
                     }
                     Instant now = Instant.now();
-                    return barRepository.saveInvitationMember(new BarReservationInvitationMemberRecord(
-                            "invm_" + slug(reservation.id() + ":" + memberIdentifier),
-                            reservation.id(), reservation.barId(), memberIdentifier, customer.id(),
-                            false, "confirmed", now, null, null, now, now));
+                    // BSM 第 870 行「名额释放后可再邀请他人」：被移出的人再次接受＝沿用同一行重新占名额（不把移出记录当成功返回）。
+                    return barRepository.saveInvitationMember(existing != null
+                            ? new BarReservationInvitationMemberRecord(existing.id(), existing.reservationId(), existing.barId(),
+                                    existing.memberIdentifier(), existing.memberCustomerId(), existing.isHolder(), "confirmed",
+                                    existing.confirmedAt(), null, existing.deviceId(), existing.createdAt(), now)
+                            : new BarReservationInvitationMemberRecord(
+                                    "invm_" + slug(reservation.id() + ":" + memberIdentifier),
+                                    reservation.id(), reservation.barId(), memberIdentifier, customer.id(),
+                                    false, "confirmed", now, null, null, now, now));
                 }
         );
     }
@@ -885,13 +1073,81 @@ public class CustomerService {
                 confirmed, entered, Math.max(capacity - confirmed, 0), members);
     }
 
+    /** ROOT-03 clients-R6（BSM 第 870 行）：我的订台——本人订台列表，App/小程序「我的订台」由此进入邀请函。 */
+    public PageResponse<com.complex.platform.bar.BarCustomerInvitationService.ReservationView> listMyBarReservations(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        // 成功/失败审计按 OpenAPI 声明（customer.bar_reservations.viewed / view_failed）。
+        return readPage("customer.bar_reservations.viewed", "customer.bar_reservations.view_failed", "not_applicable",
+                "bar_reservation", () -> barInvitations.listMine(customer.id()));
+    }
+
+    /** ROOT-03 clients-R6：被邀请人扫邀请函二维码后的预览（验防伪标记，不占名额）。审计按 OpenAPI 声明（previewed / preview_failed）。 */
+    public com.complex.platform.bar.BarCustomerInvitationService.InvitationPreview previewBarInvitation(
+            String customerToken, String invitationToken, String signature, String tableId, Integer capacity) {
+        requireCustomer(customerToken);
+        return operations.readSingle(AuditedOperation.of("customer.bar_invitation.previewed", "customer.bar_invitation.preview_failed",
+                        "not_applicable", "bar_reservation"),
+                () -> barInvitations.preview(invitationToken, signature, tableId, capacity),
+                value -> ((com.complex.platform.bar.BarCustomerInvitationService.InvitationPreview) value).reservationId());
+    }
+
+    /**
+     * ROOT-03 clients-R6（BSM 第 870 行「作为开卡人……可把尚未入场的被邀请人移出邀请函、收回其名额……每一次邀请、接受、移出都记录操作人与时间」）：
+     * 只许开卡人本人；成功与失败均留痕（customer.bar_invitation.member_removed / member_remove_failed）。
+     */
+    @Transactional
+    public BarReservationInvitationMemberRecord removeBarInvitationMember(
+            String customerToken, String idempotencyKey, String reservationId, String memberId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        String id = requireText(reservationId, "reservation_id");
+        String member = requireText(memberId, "member_id");
+        return executeWrite(
+                "removeCustomerBarInvitationMember:" + customer.id() + ":" + id + ":" + member,
+                idempotencyKey,
+                Map.of("reservation_id", id, "member_id", member),
+                BarReservationInvitationMemberRecord.class,
+                "customer.bar_invitation.member_removed",
+                "customer.bar_invitation.member_remove_failed",
+                "not_applicable",
+                "bar_reservation",
+                () -> barInvitations.removeMember(customer.id(), id, member));
+    }
+
+    /** ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」）：本人动态入场码。取入场凭证留痕（entry_code_issued / entry_code_failed）。 */
+    public com.complex.platform.bar.BarCustomerInvitationService.EntryCode getBarInvitationEntryCode(
+            String customerToken, String reservationId) {
+        String customerId = requireCustomer(customerToken).id();
+        return operations.readSingle(AuditedOperation.of("customer.bar_invitation.entry_code_issued",
+                        "customer.bar_invitation.entry_code_failed", "not_applicable", "bar_reservation"),
+                () -> barInvitations.entryCode(customerId, requireText(reservationId, "reservation_id")),
+                value -> ((com.complex.platform.bar.BarCustomerInvitationService.EntryCode) value).reservationId());
+    }
+
+    /**
+     * 操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」（BSM 第 819 行「受限：暂停该客人的
+     * 自助订台资格与员工为其代订的资格」）。受限期已过的按 {@link #enforceUsableAccount} 同口径视为有效。
+     */
+    public void requireStaffBookable(String phone) {
+        // 员工录入常带空格或横线（如 138 0013-8000）：去掉后须为 11 位手机号再按盲索引查会员，否则查不到而误放行。
+        String normalized = requireText(phone, "customer_phone").replaceAll("[\\s-]", "");
+        if (!normalized.matches("1\\d{10}")) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "客人手机号须为 11 位手机号");
+        }
+        repository.findCustomerByPhone(normalized).ifPresent(customer -> {
+            Instant until = customer.suspendedUntil();
+            if ("suspended".equals(customer.status()) && (until == null || clock.instant().isBefore(until))) {
+                throw ApiException.forbidden("CUSTOMER_RESTRICTED", "该客人受限期间不能为其代订");
+            }
+        });
+    }
+
     /** P0#3：scope 优先级 table_type > bar；listDepositRules 已按 scope_type DESC 返回（对齐 BarEntryService）。 */
-    private BarDepositRuleRecord resolveDepositRule(String barId, BarTableRecord table) {
+    private BarDepositRuleRecord resolveDepositRule(String barId, String tableType) {
         List<BarDepositRuleRecord> rules = repository.listDepositRules(barId);
         BarDepositRuleRecord barScoped = null;
         for (BarDepositRuleRecord rule : rules) {
             if ("table_type".equals(rule.scopeType()) && rule.scopeId() != null
-                    && rule.scopeId().equals(table.tableType())) {
+                    && rule.scopeId().equals(tableType)) {
                 return rule;
             }
             if ("bar".equals(rule.scopeType()) && barScoped == null) {
@@ -902,14 +1158,14 @@ public class CustomerService {
     }
 
     /** P0#3：fixed=固定额；min_consumption_ratio=卡座低消 × ratioBps/10000（对齐 BarEntryService）。 */
-    private long computeDepositAmount(BarDepositRuleRecord rule, BarTableRecord table) {
+    private long computeDepositAmount(BarDepositRuleRecord rule, long minConsumptionCent) {
         if ("fixed".equals(rule.mode())) {
             return rule.fixedAmountCent() == null ? 0L : Math.max(0L, rule.fixedAmountCent());
         }
         if ("min_consumption_ratio".equals(rule.mode())) {
             int ratioBps = rule.ratioBps() == null ? 0 : rule.ratioBps();
             // R-7:定金按低消比例取额四舍五入到分(旧整除截断,定金恒少收)。
-            return Math.max(0L, MoneyRounding.bpsOf(table.minConsumptionCent(), ratioBps));
+            return Math.max(0L, MoneyRounding.bpsOf(minConsumptionCent, ratioBps));
         }
         return 0L;
     }
@@ -929,53 +1185,6 @@ public class CustomerService {
         } catch (RuntimeException exception) {
             return java.util.Optional.empty();
         }
-    }
-
-    /**
-     * 客人扫码点单——查菜单（安全投影，刻意隐去内部结算价）：扫桌台二维码得 session_id → 列该开台会话所在 bar 的在售商品。
-     */
-    public PageResponse<CustomerBarMenuItemResponse> listBarScanMenu(String customerToken, String sessionId) {
-        requireCustomer(customerToken);
-        String id = requireText(sessionId, "session_id");
-        BarTableSessionRecord session = barRepository.findTableSessionById(id)
-                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "台位就餐会话不存在或已结束"));
-        if (!"open".equals(session.status())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_NOT_OPEN", "扫码点单须在开台状态下进行");
-        }
-        List<CustomerBarMenuItemResponse> items = barRepository.listProducts(Optional.ofNullable(session.merchantId())).stream()
-                // V262：已存档/待删除商品不上扫码点单菜单（下单 API 另有 BAR_PRODUCT_NOT_SELLABLE 兜底）。
-                .filter(p -> session.barId().equals(p.barId()) && "active".equals(p.status()) && p.archivedAt() == null)
-                .map(p -> new CustomerBarMenuItemResponse(
-                        p.id(), p.productName(), p.productType(), p.priceCent(), p.currency(), p.soldOut()))
-                .toList();
-        return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
-    }
-
-    /**
-     * 客人自助扫码下单：在开台会话上下单（bar/桌台/预订/商户取自会话，customerId=本人，来源 app/miniapp），
-     * 继承入场闸不重复核龄；幂等经 executeWrite。复用 BarOrderService.placeCustomerScanOrder
-     *（功能标志 bar.scan_order.enabled 默认关→关时拒）。
-     */
-    @Transactional
-    public BarOrderRecord placeBarScanOrder(
-            String customerToken, String idempotencyKey, String sessionId, CustomerBarScanOrderRequest request) {
-        CustomerRecord customer = requireCustomer(customerToken);
-        CustomerBarScanOrderRequest actual = requireRequest(request);
-        String id = requireText(sessionId, "session_id");
-        String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
-        return executeWrite(
-                "customerBarScanOrder:" + customer.id(),
-                key,
-                actual,
-                BarOrderRecord.class,
-                "customer.bar_scan_order.created",
-                "customer.bar_scan_order.create_failed",
-                "not_applicable",
-                "bar_order",
-                () -> barOrderService.placeCustomerScanOrder(
-                        id,
-                        new BarOrderRequest(key, null, List.of(), null, null, null, actual.items(), null, List.of(), null),
-                        customer.id()));
     }
 
     /** 3.3 免登录：会话恢复——凭有效 token（cookie 桥接或显式头）返回客人身份与到期时间，不回凭证。 */
@@ -1011,12 +1220,25 @@ public class CustomerService {
                 "issued_entitlement", () -> ticketingService.listCustomerHeldTickets(customer.id()));
     }
 
+    /** ROOT-03-R29 我的票使用记录（BSM 第 862、880 行）：只许本人持有的票。 */
+    public PageResponse<com.complex.platform.ticketing.CustomerTicketUsageResponse> listTicketUsages(String customerToken, String ticketId) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.ticket_usages_viewed", "customer.ticket_usages_view_failed", "not_applicable",
+                "issued_entitlement", () -> ticketingService.listCustomerTicketUsages(ticketId, customer.id()));
+    }
+
+    /** ROOT-03-R29 第三方渠道接入状态（匿名可读，供客户端置灰）。 */
+    public List<com.complex.platform.ticketing.TicketingService.TicketChannelStatus> listTicketChannels() {
+        return ticketingService.listTicketChannels();
+    }
+
     /** FS-016（BSM L867「我的存酒：查看本人名下全部存酒、到期日与动态取酒码……跨店汇总展示」）：只下发客人可见字段（安全投影）。 */
     public PageResponse<com.complex.platform.customer.dto.CustomerSavedBottleResponse> listMySavedBottles(String customerToken) {
         CustomerRecord customer = requireCustomer(customerToken);
         return readPage("customer.my_saved_bottles_viewed", "customer.my_saved_bottles_view_failed", "not_applicable",
                 "saved_bottle", () -> inventoryService.listSavedBottlesForCustomer(customer.id(), customer.phone()).stream()
-                        .map(com.complex.platform.customer.dto.CustomerSavedBottleResponse::from).toList());
+                        .map(bottle -> com.complex.platform.customer.dto.CustomerSavedBottleResponse.from(bottle,
+                                ticketingService.resolveBarName(bottle.barProjectId()))).toList());
     }
 
     /** FS-016：官方动态取酒码——按当前持有人授权签发，窗口为全场统一刷新间隔（BSM L585/L1073）。 */
@@ -1057,6 +1279,20 @@ public class CustomerService {
     public com.complex.platform.ticketing.TicketTransferResponse revokeTicketTransfer(String customerToken, String transferId) {
         CustomerRecord customer = requireCustomer(customerToken);
         return ticketingService.revokeTicketTransfer(customer.id(), transferId);
+    }
+
+    /** 操作员裁决第十三批第 11 条「客人端自助申请」：本人可退的未用票申请退票，走与员工退款同一套审批和原路退回。 */
+    public com.complex.platform.ticketing.CustomerTicketRefundResponse requestTicketRefund(
+            String customerToken, com.complex.platform.customer.dto.CustomerTicketRefundRequest request) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return ticketingService.requestCustomerTicketRefund(customer.id(), request);
+    }
+
+    /** 操作员裁决第十三批第 11 条：本人退票申请及其状态。 */
+    public PageResponse<com.complex.platform.ticketing.CustomerTicketRefundResponse> listTicketRefunds(String customerToken) {
+        CustomerRecord customer = requireCustomer(customerToken);
+        return readPage("customer.ticket_refunds_viewed", "customer.ticket_refunds_view_failed", "not_applicable",
+                "ticket_refund", () -> ticketingService.listCustomerTicketRefunds(customer.id()));
     }
 
     public com.complex.platform.ticketing.TicketTransferPreviewResponse previewTicketTransfer(
@@ -1102,8 +1338,9 @@ public class CustomerService {
     }
 
     /**
-     * V194 需求 · 客人账号状态闸：
-     * blacklisted 永久拒、deregistered 已注销拒、suspended 未到期拒；suspended 已过 suspended_until → lazy 恢复 active 并落库。
+     * V194 需求 · 客人账号状态闸：blacklisted（已关闭）拒、deregistered 已注销拒。
+     * ROOT-03-R23（BSM 第 819 行「受限：暂停该客人的自助订台资格与员工为其代订的资格，其余功能不受影响……受限满后台配置时长……自动恢复有效」）：
+     * suspended（受限）不再拒绝客人动作，只由 {@link #requireNotRestricted} 停订台；已过 suspended_until → lazy 恢复 active 并落库。
      */
     private CustomerRecord enforceUsableAccount(CustomerRecord customer, Instant now) {
         String status = customer.status();
@@ -1120,13 +1357,18 @@ public class CustomerService {
                         customer.id(), customer.phone(), customer.maskedPhone(), "active",
                         customer.birthDate(), customer.lastLoginAt(), customer.createdAt(), now, null));
             }
-            throw ApiException.forbidden("CUSTOMER_SUSPENDED",
-                    until == null ? "该账号已被暂停使用" : "该账号被暂停使用至 " + until);
         }
         return customer;
     }
 
-    /** 平台封禁客人账号（临时，suspendedUntil 到期自动恢复）。需 customer.account.manage。 */
+    /** ROOT-03-R23：受限期内停自助订台（已过闸的客人；到期已在 {@link #enforceUsableAccount} 恢复）。 */
+    private void requireNotRestricted(CustomerRecord customer) {
+        if ("suspended".equals(customer.status())) {
+            throw ApiException.forbidden("CUSTOMER_RESTRICTED", "该账号受限期间不能订台");
+        }
+    }
+
+    /** ROOT-03-R23 置入受限（受限截止由 {@link CustomerAccountStatusService} 按项目参数算出）。需 customer.account.manage。 */
     @Transactional
     public CustomerRecord suspendCustomer(String customerId, Instant suspendedUntil, String reason) {
         return changeAccountStatus(customerId, "suspended", suspendedUntil, reason, "customer.account.suspended", "customer.account.suspend_failed");
@@ -1141,35 +1383,124 @@ public class CustomerService {
     public CustomerRecord blacklistCustomer(String customerId, String reason) {
         CustomerRecord closed = changeAccountStatus(customerId, "blacklisted", null, reason,
                 "customer.account.blacklisted", "customer.account.blacklist_failed");
+        // docs/decisions/2026-10-18-cg-pending-decisions.md 第 15 行「拉黑/账户关闭立即撤权；本金退还本人，其他权益按账户注销专条处置」。
+        disposeHoldingsOnAccountClosure(closed.id(), clock.instant());
         if (storedValueService != null) {
             storedValueService.closeCardsOnAccountClosure(closed.id(), reason);
         }
         return closed;
     }
 
-    /** 平台恢复客人账号为正常（解封/解黑/复活）。需 customer.account.manage。 */
+    /**
+     * ROOT-03-R23 解除黑名单（两级批准后由 {@link CustomerAccountStatusService} 调用）：BSM 第 819 行「解除后原账户保持已关闭，该手机号自解除时起
+     * 允许重新注册」——账户状态不变，手机号三列置空释放唯一名额，新注册与原账户不建立关联。
+     */
     @Transactional
-    public CustomerRecord reinstateCustomer(String customerId, String reason) {
-        return changeAccountStatus(customerId, "active", null, reason, "customer.account.reinstated", "customer.account.reinstate_failed");
-    }
-
-    /** 客人自助注销本人账号（凭本人 token，无需管理权限）。注销后动作/登录被拒、数据物理保留。不放弃余额（需退本金的登记待退）。 */
-    @Transactional
-    public CustomerRecord deregisterAccount(String customerToken) {
-        return deregisterAccount(customerToken, false);
+    public CustomerRecord releaseBlacklistedPhone(String customerId, String reason) {
+        try {
+            CustomerRecord existing = repository.findCustomerById(requireText(customerId, "customer_id"))
+                    .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "客人不存在或已被删除"));
+            if (!"blacklisted".equals(existing.status())) {
+                throw ApiException.conflict("CUSTOMER_NOT_BLACKLISTED", "该账号不在黑名单中");
+            }
+            CustomerRecord saved = repository.saveCustomer(new CustomerRecord(existing.id(), null, null, existing.status(),
+                    existing.birthDate(), existing.lastLoginAt(), existing.createdAt(), clock.instant(), null));
+            auditEventService.recordSuccess("customer.account.blacklist_released", "customer.blacklist.approve", "customer",
+                    customerId, null, null, Map.of("reason", reason == null ? "" : reason));
+            return saved;
+        } catch (ApiException e) {
+            auditEventService.recordFailure("customer.account.blacklist_release_failed", "customer.blacklist.approve",
+                    "customer", customerId, null, null, e.code());
+            throw e;
+        }
     }
 
     /**
-     * TK-21-R3（BSM「账户注销」：「发起注销时系统须提醒其名下尚有……储值卡余额，客人可以选择……放弃余额，径行注销；放弃的储值卡余额归发卡主体
-     * ……需要退还本金的注销事项按本文件「储值」条自动生成待退事项、通知发卡主体执行，并跟踪至实际退款成功；已明确确认放弃余额的仍按上述例外办理」）：
-     * waiveBalance=true 各卡本金与赠送金作废、卡 closed、不生成事项；false 按「储值」条关闭各卡（通用卡登记待退、商户卡按规则登记待退并通知）。
-     * 卡处理在先，状态改 deregistered 在后，同一事务。
+     * ROOT-03-R23 客服主管提前解除受限（BSM 第 819 行「客服主管也可提前人工解除，填原因留痕」）。需 customer.account.manage。
+     * 已关闭（黑名单）只能走两级批准的解除申请，不能在这里改回有效。
      */
     @Transactional
-    public CustomerRecord deregisterAccount(String customerToken, boolean waiveBalance) {
+    public CustomerRecord reinstateCustomer(String customerId, String reason) {
+        try {
+            CustomerRecord existing = repository.findCustomerById(requireText(customerId, "customer_id"))
+                    .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "客人不存在或已被删除"));
+            requireText(reason, "reason");
+            if ("blacklisted".equals(existing.status())) {
+                throw ApiException.conflict("CUSTOMER_BLACKLIST_RELEASE_REQUIRES_APPROVAL",
+                        "已关闭的账号须经夜班值班经理与娱乐平台负责人批准后解除");
+            }
+            if (!"suspended".equals(existing.status())) {
+                throw ApiException.conflict("CUSTOMER_NOT_RESTRICTED", "该账号不在受限状态");
+            }
+        } catch (ApiException e) {
+            auditEventService.recordFailure("customer.account.reinstate_failed", "customer.account.manage", "customer",
+                    customerId, null, null, e.code());
+            throw e;
+        }
+        return changeAccountStatus(customerId, "active", null, reason, "customer.account.reinstated", "customer.account.reinstate_failed");
+    }
+
+    /** 账户关闭时名下权益处置的计数（注销审计用）。 */
+    private record ClosureDisposal(long pointsCleared, int vouchersRevoked,
+            com.complex.platform.ticketing.TicketingService.DeregistrationTickets tickets) {
+    }
+
+    /**
+     * 账户关闭（拉黑）与注销共用的名下权益处置（BSM 第 863 行「积分、券一律清零，未核销的票按本文件「退款」条的退票规则处理」；
+     * docs/decisions/2026-10-18-cg-pending-decisions.md #15 拉黑「其他权益按账户注销专条处置」）：取消积分追偿、积分清零、券作废（含在途券转赠）、
+     * 未核销票按退票规则处置（含在途票转赠作废）。储值卡两边规则不同、个人信息只在注销时删除，由调用方各自处理。
+     */
+    private ClosureDisposal disposeHoldingsOnAccountClosure(String customerId, Instant now) {
+        repository.findPointsByCustomerIdForUpdate(customerId);
+        if (pointsRecoveries != null) pointsRecoveries.cancelForDeregistration(customerId, now);
+        long pointsCleared = loyaltyService.clearOnDeregistration(customerId, now);
+        int vouchersRevoked = voucherService == null ? 0 : voucherService.revokeAllOnDeregistration(customerId, now);
+        return new ClosureDisposal(pointsCleared, vouchersRevoked, ticketingService.disposeHeldTicketsOnDeregistration(customerId, now));
+    }
+
+    /** 客人自助注销本人账号（凭本人 token，无需管理权限）。不放弃余额（需退本金的登记待退）、不放弃存酒（名下有存酒即拒）。 */
+    @Transactional
+    public CustomerRecord deregisterAccount(String customerToken) {
+        return deregisterAccount(customerToken, false, false);
+    }
+
+    /**
+     * TK-21-R3 / ROOT-03-R21 账户注销闭环（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额，客人可以选择不取存酒、放弃余额，径行注销；
+     * 放弃的存酒按存酒到期规则转为所在酒吧的自有库存资产，放弃的储值卡余额归发卡主体……注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除；
+     * 仅有一项例外：注销时点与该手机号的对应事件记录……留存至该一年统计窗口届满即删除……积分、券一律清零，未核销的票按本文件「退款」条的退票规则处理；
+     * 消费记录、支付流水、退款记录等钱账留存，但脱去个人标识、改以不可反查的编号记录」；ENUM 第 68 行「已注销会员的手机号可以重新注册，
+     * 新账户与原账户之间不建立任何关联」）。
+     * <ol>
+     *   <li>名下有在保管存酒而未确认放弃 → 409 CUSTOMER_SAVED_BOTTLES_HELD，不改任何数据；</li>
+     *   <li>操作员裁决第十三批第 8 条「先退票才能注销」：名下有每个人份都归本人、票种允许退款且整张未用的票 → 409 CUSTOMER_REFUNDABLE_TICKETS_HELD，不改任何数据，
+     *       退完（权益已退）才能注销；</li>
+     *   <li>储值卡：waiveBalance=true 本金与赠送金作废、卡 closed；false 按「储值」条关闭各卡登记待退（TK-21-R3）；</li>
+     *   <li>放弃的存酒按到期规则置 expired（与到期作业同一写法）；积分清零、本人未核销券作废、在途转赠作废；</li>
+     *   <li>未核销票按退票规则：票种不可退的未用权益作废；已部分核销或只持有部分人份的，作废本人持有的未用权益（操作员裁决第十三批第 12 条）；</li>
+     *   <li>状态改已注销并写注销标记（只留手机号盲索引与时点，供一年计数与新人判定）；</li>
+     *   <li>最后删除个人信息：手机号、盲索引、掩码、生日置空（同号可重新注册且与本账户无关联），会话全部撤销，订单购票手机号清空，
+     *       学生认证证件照片与学信网验证码删除；钱账只留随机不可反推的客人编号。本人投诉附件按操作员裁决第十三批第 10 条「作为工单材料保留」
+     *       不删，附件行与工单同样只留该随机编号（不再关联任何个人信息），有工单查看权限的员工照常查看。</li>
+     * </ol>
+     * 以上同一事务；处理计数单记一条审计（不记个人信息）。
+     */
+    @Transactional
+    public CustomerRecord deregisterAccount(String customerToken, boolean waiveBalance, boolean abandonSavedBottles) {
         CustomerRecord customer = requireCustomer(customerToken);
-        repository.findPointsByCustomerIdForUpdate(customer.id());
-        if (pointsRecoveries != null) pointsRecoveries.cancelForDeregistration(customer.id(), Instant.now());
+        Instant now = clock.instant();
+        List<com.complex.platform.inventory.SavedBottleRecord> bottles =
+                inventoryService.listSavedBottlesForCustomer(customer.id(), customer.phone());
+        if (!bottles.isEmpty() && !abandonSavedBottles) {
+            auditEventService.recordFailure("customer.account.deregister_failed", "customer.account.manage", "customer",
+                    customer.id(), null, null, "CUSTOMER_SAVED_BOTTLES_HELD");
+            throw ApiException.conflict("CUSTOMER_SAVED_BOTTLES_HELD", "名下尚有 " + bottles.size() + " 份存酒，请确认放弃存酒后再注销");
+        }
+        if (!ticketingService.listRefundableUnusedHeldTickets(customer.id()).isEmpty()) {
+            auditEventService.recordFailure("customer.account.deregister_failed", "customer.account.manage", "customer",
+                    customer.id(), null, null, "CUSTOMER_REFUNDABLE_TICKETS_HELD");
+            throw ApiException.conflict("CUSTOMER_REFUNDABLE_TICKETS_HELD", "名下尚有可退款的未使用门票，请先申请退票，退完后再注销");
+        }
+        ClosureDisposal disposed = disposeHoldingsOnAccountClosure(customer.id(), now);
         if (storedValueService != null) {
             if (waiveBalance) {
                 storedValueService.waiveBalancesOnDeregistration(customer.id());
@@ -1177,24 +1508,52 @@ public class CustomerService {
                 storedValueService.closeCardsOnAccountClosure(customer.id(), "账户注销");
             }
         }
-        return changeAccountStatus(customer.id(), "deregistered", null, "self-service deregistration",
+        int bottlesAbandoned = inventoryService.abandonSavedBottlesOnDeregistration(customer.id(), customer.phone(), now);
+        long pointsCleared = disposed.pointsCleared();
+        int vouchersRevoked = disposed.vouchersRevoked();
+        com.complex.platform.ticketing.TicketingService.DeregistrationTickets tickets = disposed.tickets();
+        CustomerRecord deregistered = changeAccountStatus(customer.id(), "deregistered", null, "self-service deregistration",
                 "customer.account.deregistered", "customer.account.deregister_failed");
+        // 注销标记取注销前的手机号盲索引，须在删除个人信息之前。
+        if (churnAlerts != null) {
+            churnAlerts.afterDeregistration(customer.id());
+        }
+        int certificatePhotos = studentCertifications == null ? 0 : studentCertifications.purgeOnDeregistration(customer.id());
+        ticketingService.clearBuyerPhonesOnDeregistration(customer.id());
+        repository.revokeSessionsOfCustomer(customer.id());
+        CustomerRecord cleared = repository.saveCustomer(new CustomerRecord(deregistered.id(), null, null, deregistered.status(),
+                null, deregistered.lastLoginAt(), deregistered.createdAt(), now, null));
+        auditEventService.recordSuccess("customer.account.deregistration_disposed", "not_applicable", "customer", customer.id(),
+                null, null, Map.of("saved_bottles_abandoned", bottlesAbandoned, "points_cleared", pointsCleared,
+                        "vouchers_revoked", vouchersRevoked, "tickets_forfeited", tickets.forfeited(),
+                        "refundable_tickets_kept", tickets.refundableKept(), "certificate_photos_deleted", certificatePhotos));
+        return cleared;
     }
 
-    /** TK-21-R3 注销预览：本人各未销户储值卡的本金/赠送金（供注销前提醒与「放弃余额」选择）。 */
-    public List<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse> deregisterPreview(String customerToken) {
+    /**
+     * TK-21-R3 / ROOT-03-R21 注销预览：本人各未销户储值卡的本金/赠送金与名下在保管存酒（供注销前提醒与「放弃余额」「放弃存酒」选择）；
+     * 操作员裁决第十三批第 8 条「先退票才能注销」：另列每个人份都归本人、票种允许退款且整张未用的票，供注销页提醒客人先申请退票。
+     */
+    public com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse deregisterPreview(String customerToken) {
         // 复核 authz M1：按 OpenAPI 声明记 customer.account.deregister_previewed / customer.account.deregister_preview_failed。
         try {
             CustomerRecord customer = requireCustomer(customerToken);
-            List<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse> cards =
+            List<com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse.StoredValueCard> cards =
                     repository.listStoredValueAccountsByCustomer(customer.id()).stream()
                             .filter(card -> !"closed".equals(card.status()))
-                            .map(card -> new com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse(
+                            .map(card -> new com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse.StoredValueCard(
                                     card.id(), card.cardScope(), card.merchantId(), card.principalCent(), card.bonusCent()))
                             .toList();
+            List<com.complex.platform.customer.dto.CustomerSavedBottleResponse> bottles =
+                    inventoryService.listSavedBottlesForCustomer(customer.id(), customer.phone()).stream()
+                            .map(bottle -> com.complex.platform.customer.dto.CustomerSavedBottleResponse.from(bottle,
+                                    ticketingService.resolveBarName(bottle.barProjectId()))).toList();
+            List<com.complex.platform.ticketing.CustomerTicketResponse> refundableTickets =
+                    ticketingService.listRefundableUnusedHeldTickets(customer.id());
             auditEventService.recordSuccess("customer.account.deregister_previewed", "not_applicable", "customer",
-                    customer.id(), null, null, Map.of("open_cards", cards.size()));
-            return cards;
+                    customer.id(), null, null, Map.of("open_cards", cards.size(), "saved_bottles", bottles.size(),
+                            "refundable_tickets", refundableTickets.size()));
+            return new com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse(cards, bottles, refundableTickets);
         } catch (ApiException e) {
             auditEventService.recordFailure("customer.account.deregister_preview_failed", "not_applicable", "customer",
                     "unknown", null, null, e.code());
@@ -1235,7 +1594,8 @@ public class CustomerService {
         }
     }
 
-    private CustomerTicketProductResponse toTicketProduct(TicketTypeRecord ticketType) {
+    private CustomerTicketProductResponse toTicketProduct(TicketTypeRecord ticketType,
+            com.complex.platform.ticketing.TicketPricingService.CustomerPrice myPrice) {
         return new CustomerTicketProductResponse(
                 ticketType.id(),
                 ticketType.ticketName(),
@@ -1246,9 +1606,22 @@ public class CustomerService {
                 ticketType.status(),
                 // AUD-076 单店票挂酒吧：结构化 bar_id + 实时解析酒吧名（null=综合体通票）。
                 ticketType.barId(),
-                ticketingService.resolveBarName(ticketType.barId())
+                ticketingService.resolveBarName(ticketType.barId()),
+                myPrice == null ? null : myPrice.finalUnitCent(),
+                myPrice == null || myPrice.selected() == null ? null : PRICE_BASIS.get(myPrice.selected().variantType()),
+                ticketType.refundable(),
+                ticketType.validityDays(),
+                ticketType.barId() == null ? "综合体通票" : ticketingService.resolveBarName(ticketType.barId()),
+                ticketingService.ticketTypeEntitlementNames(ticketType.id()),
+                AGE_LIMIT_TEXT
         );
     }
+
+    /** ENUM 第 33 行「全场 18 岁以上方可入场」：门票守则的年龄限制（clients-R9）。 */
+    private static final String AGE_LIMIT_TEXT = "全场 18 岁以上方可入场";
+
+    /** ROOT-03-R27「我的价格」命中的资格名称（客人自助只判这三类）。 */
+    private static final Map<String, String> PRICE_BASIS = Map.of("member", "会员价", "new_customer", "新人价", "student", "学生价");
 
     private <T> PageResponse<T> readPage(
             String successEvent,
@@ -1348,6 +1721,10 @@ public class CustomerService {
         }
         if (value instanceof BarReservationRecord record) {
             return record.id();
+        }
+        // 邀请函接受、移出按订台留痕（BSM 第 870 行「每一次邀请、接受、移出都记录操作人与时间」）。
+        if (value instanceof BarReservationInvitationMemberRecord record) {
+            return record.reservationId();
         }
         if (value instanceof CustomerPointsRedemptionRecord record) {
             return record.id();

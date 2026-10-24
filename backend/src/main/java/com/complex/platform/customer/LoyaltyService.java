@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -517,6 +517,34 @@ public class LoyaltyService {
             repository.savePoints(withBalance(account, balance, account.keepThresholdProgress(), now));
         }
         return expiredTotal;
+    }
+
+    /**
+     * ROOT-03-R21（BSM 第 863 行「注销后……积分、券一律清零」）：注销时可用积分与冻结积分清零，追加一条 adjust 明细（账本只增不改），
+     * 各有效期批次剩余量置零（之后的到期作业不再扣）。不退任何东西。返回清掉的可用积分。
+     */
+    @Transactional
+    public long clearOnDeregistration(String customerId, Instant now) {
+        CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId).orElse(null);
+        if (account == null) {
+            return 0;
+        }
+        long cleared = account.balance();
+        for (CustomerPointsLedgerRecord batch : repository.listOpenBatches(customerId)) {
+            repository.markBatchExpired(batch.id());
+        }
+        if (cleared > 0) {
+            repository.savePointsLedger(new CustomerPointsLedgerRecord(
+                    "ledger_dereg_" + UUID.randomUUID().toString().replace("-", ""),
+                    customerId, -cleared, 0, "adjust", null, "账户注销清零", null, null, false, now));
+        }
+        if (cleared > 0 || account.frozenPoints() > 0) {
+            repository.savePoints(new CustomerPointsAccountRecord(account.id(), account.customerId(), 0, account.level(),
+                    account.recentSummary(), 0, account.accountStatus(), account.levelPeriodStart(),
+                    account.keepThresholdProgress(), account.graceUntil(), account.lastCheckInDate(), account.checkInStreak(),
+                    account.createdAt(), now));
+        }
+        return cleared;
     }
 
     // ============================================================

@@ -1,11 +1,13 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.StoredValueSettleRequest;
 import com.complex.platform.customer.dto.StoredValueTopupRequest;
+import com.complex.platform.evidence.AuditedOperation;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.voucher.VoucherOverviewRecord;
 import com.complex.platform.voucher.VoucherService;
@@ -32,37 +34,46 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/customer")
 public class MemberWalletController {
 
+    private static final AuditedOperation INITIATE_VOUCHER_TRANSFER = AuditedOperation.of(
+            "voucher_transfer.created", "voucher_transfer.create_failed", "not_applicable", "voucher_transfer");
+    private static final AuditedOperation CLAIM_VOUCHER_TRANSFER = AuditedOperation.of(
+            "voucher_transfer.claimed", "voucher_transfer.claim_failed", "not_applicable", "voucher_transfer");
+
     private final CustomerService customerService;
     private final StoredValueService storedValueService;
     private final LoyaltyService loyaltyService;
     private final CustomerRepository repository;
     private final VoucherService voucherService;
     private final VoucherTransferService voucherTransferService;
+    private final AuditedOperationExecutor operations;
 
     public MemberWalletController(CustomerService customerService, StoredValueService storedValueService,
                                   LoyaltyService loyaltyService,
                                   CustomerRepository repository,
                                   VoucherService voucherService,
-                                  VoucherTransferService voucherTransferService) {
+                                  VoucherTransferService voucherTransferService,
+                                  AuditedOperationExecutor operations) {
         this.customerService = customerService;
         this.storedValueService = storedValueService;
         this.loyaltyService = loyaltyService;
         this.repository = repository;
         this.voucherService = voucherService;
         this.voucherTransferService = voucherTransferService;
+        this.operations = operations;
     }
 
     // ---- 储值 ----
 
+    /** ROOT-03-R17/R20：可只付一部分（amount_cent），付足即同事务出票；响应为订单视图（已付、待付、已收各笔）。 */
     @PostMapping("/orders/{order_id}/stored-value/pay")
-    public ApiResponse<com.complex.platform.ticketing.TicketOrderRecord> payTicketOrder(
+    public ApiResponse<com.complex.platform.customer.dto.CustomerTicketOrderResponse> payTicketOrder(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @PathVariable("order_id") String orderId,
             @Valid @RequestBody com.complex.platform.customer.dto.StoredValueConsumeRequest request) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        return ApiResponse.ok(storedValueService.payTicketOrder(
-                customerId, orderId, request.accountId(), request.phone(), request.smsCode()));
+        return ApiResponse.ok(customerService.orderView(storedValueService.payTicketOrder(customerId, orderId,
+                request.accountId(), request.phone(), request.smsCode(), request.amountCent(), request.idempotencyKey())));
     }
 
     @PostMapping("/stored-value/sms")
@@ -109,7 +120,7 @@ public class MemberWalletController {
     }
 
     @GetMapping("/stored-value/accounts/{account_id}/transactions")
-    public ApiResponse<List<CustomerStoredValueTransactionRecord>> transactions(
+    public ApiResponse<List<CustomerStoredValueTransactionView>> transactions(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @PathVariable("account_id") String accountId,
@@ -124,7 +135,18 @@ public class MemberWalletController {
             throw com.complex.platform.common.api.ApiException.notFound(
                     "STORED_VALUE_ACCOUNT_NOT_FOUND", "储值卡不存在");
         }
-        return ApiResponse.ok(repository.listStoredValueTransactions(customerId, accountId, page, size));
+        return ApiResponse.ok(repository.listStoredValueTransactionViews(customerId, accountId, page, size));
+    }
+
+    /** ROOT-03-R30（ENUM 第 86 行）：充值前告知扣款顺序、赠送金性质与退卡口径；merchant_id 为空＝综合体通用卡。 */
+    @GetMapping("/stored-value/topup-rules")
+    public ApiResponse<CustomerStoredValueTopupRulesResponse> topupRules(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestParam(name = "project_id", required = false) String projectId,
+            @RequestParam(name = "merchant_id", required = false) String merchantId) {
+        customerService.resolveCustomerId(token(customerToken, authorization));
+        return ApiResponse.ok(storedValueService.topupRules(projectId, merchantId));
     }
 
     @GetMapping("/stored-value/accounts")
@@ -155,11 +177,20 @@ public class MemberWalletController {
     //   （统一台账，积分已消耗）的会员间转赠，2026-07-19 用户拍板新增，范式对齐门票转赠/存酒转让（出让人发起冻结
     //   → 接收方绑定 → 领取 CAS 改归属 / 撤回，双花窗口）。🔴 对客上线前须经用户确认并同步业务 HTML 增补。
 
-    // 券「使用」：客人端出示的核销码即 /vouchers 聚合里的 code 字段（本人可用券），由店员/核销点扫码走既有
-    //   staff 核销（POST /api/v1/vouchers/redeems，需 customer.voucher.redeem 权限）；客人端不独立发起核销，
-    //   故「使用」无独立后端端点，仅前端出示 code。
+    // 券「使用」：ROOT-03-R32（BSM 第 585 行）客人出示按全场统一间隔刷新的动态券码（下方 redeem-code），店员/核销点扫码走既有
+    //   staff 核销（POST /api/v1/vouchers/redemptions，需 customer.voucher.redeem 权限）；固定券码不再下发、也不再能核销。
+    @GetMapping("/vouchers/{voucher_instance_id}/redeem-code")
+    public ApiResponse<com.complex.platform.voucher.VoucherRedeemCodeResponse> getVoucherRedeemCode(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @PathVariable("voucher_instance_id") String voucherInstanceId) {
+        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        return ApiResponse.ok(voucherService.issueCustomerRedeemCode(voucherInstanceId, customerId));
+    }
 
     // 发起券转赠（channel=phone 需 receiverPhone；channel=link 服务端生成一次性领取码）。
+    // 幂等照门票转赠（TicketingService#initiateTicketTransfer）：必填键＋请求指纹＋响应精确重放，operationId 绑定客人——网络中断后沿用原键重提
+    // 只回放第一次的结果，不会按裁决第十三批第 9 条「再次转赠作废前一笔」把第一笔作废；成功/失败按 OpenAPI 记 voucher_transfer.created / create_failed。
     @PostMapping("/voucher-transfers")
     public ApiResponse<VoucherTransferResponse> initiateVoucherTransfer(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
@@ -167,7 +198,10 @@ public class MemberWalletController {
             @Valid @RequestBody CustomerVoucherTransferRequest request
     ) {
         CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
-        return ApiResponse.ok(voucherTransferService.initiate(customer.id(), customer.phone(), request));
+        return ApiResponse.ok(operations.executeWrite("initiateVoucherTransfer:" + customer.id(), request.idempotencyKey(), request,
+                VoucherTransferResponse.class, INITIATE_VOUCHER_TRANSFER,
+                () -> voucherTransferService.initiate(customer.id(), customer.phone(), request),
+                MemberWalletController::transferBusinessId, java.util.Map.of()));
     }
 
     // 确认领取（link 渠道带 claimCode；phone 渠道校验登录手机号=受赠手机号）。
@@ -180,7 +214,15 @@ public class MemberWalletController {
     ) {
         CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
         String claimCode = request == null ? null : request.claimCode();
-        return ApiResponse.ok(voucherTransferService.claim(customer.id(), customer.phone(), transferId, claimCode));
+        // 幂等照门票转赠领取（operationId 绑定客人＋转赠单）；成功/失败记 voucher_transfer.claimed / claim_failed。
+        return ApiResponse.ok(operations.executeWrite("claimVoucherTransfer:" + customer.id() + ":" + transferId,
+                request == null ? null : request.idempotencyKey(), request, VoucherTransferResponse.class, CLAIM_VOUCHER_TRANSFER,
+                () -> voucherTransferService.claim(customer.id(), customer.phone(), transferId, claimCode),
+                MemberWalletController::transferBusinessId, java.util.Map.of()));
+    }
+
+    private static String transferBusinessId(Object saved) {
+        return ((VoucherTransferResponse) saved).id();
     }
 
     // 出让人撤回。

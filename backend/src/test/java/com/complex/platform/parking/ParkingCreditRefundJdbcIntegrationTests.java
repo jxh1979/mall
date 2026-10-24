@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -67,7 +67,7 @@ class ParkingCreditRefundJdbcIntegrationTests {
         bill = f.barBill(a[0], customer, null, 25_000, entered.plus(Duration.ofMinutes(1)));
         session = f.session("F1", "粤F10001", entered.toString());
         mockMvc.perform(get("/api/v1/customer/parking/sessions").param("project_id", f.project).param("plate_no", "粤F10001")
-                .header("X-Terminal-Type", "web").header("X-Customer-Token", token))
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.credit_status").value("available"));
     }
 
@@ -94,7 +94,7 @@ class ParkingCreditRefundJdbcIntegrationTests {
     @Test
     void usedCreditUnchangedAndRefundAmountNotReducedByParking() throws Exception {
         f.hourPrice(company, 1_000);
-        mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "web").header("X-Customer-Token", token)
+        mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"parking_session_id\":\"" + session + "\",\"idempotency_key\":\"rf3_" + f.suffix + "\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("paid"));

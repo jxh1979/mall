@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1200,6 +1200,15 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     // ===== FS-016 存酒持有人核验 =====
+
+    @Override
+    public int clearSavedBottleCustomerIdentity(String customerId, String phoneHash) {
+        return jdbcTemplate.update("""
+                UPDATE saved_bottles SET customer_name_or_nickname = NULL, customer_phone = NULL, customer_phone_hash = NULL
+                 WHERE customer_id = :customer_id
+                    OR (CAST(:phone_hash AS VARCHAR) IS NOT NULL AND customer_phone_hash = :phone_hash)
+                """, new MapSqlParameterSource().addValue("customer_id", customerId).addValue("phone_hash", phoneHash));
+    }
 
     @Override
     public List<SavedBottleRecord> listStoredSavedBottlesByHolder(String customerId, String phoneHash) {

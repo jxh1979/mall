@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -322,7 +324,7 @@ class BarGiftConsumerTests {
     private static final class CapturingBarRepository implements BarRepository {
         @Override public void setReservationArchiveReason(String id, String reason) { }
         @Override
-        public java.util.Set<String> listActiveReservedTableIds(java.time.Instant since) {
+        public java.util.Set<String> listActiveReservedTableIds() {
             return java.util.Set.of();
         }
 

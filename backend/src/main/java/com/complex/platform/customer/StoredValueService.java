@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -203,6 +203,21 @@ public class StoredValueService {
     }
 
     /**
+     * ROOT-03-R18 服务端结算作业：客人在渠道付完充值款却未回前台入账时，按充值时绑定的卡范围向渠道核验成功后入账（同 {@link #settleTopup} 内核，
+     * 不过客人充值权限闸——作业无登录上下文；已入账的不重复入账）。
+     */
+    @Transactional
+    public CustomerStoredValueTransactionRecord settleTopupFromGateway(String paymentIntentId) {
+        StoredValueTopupIntentScope bound = repository.findStoredValueTopupIntent(paymentIntentId)
+                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "该支付意向不属于储值充值"));
+        CustomerStoredValueAccountRecord card = repository.findStoredValueAccount(bound.customerId(), bound.projectId(), bound.merchantId())
+                .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值卡不存在"));
+        financeService.confirmOnlinePaymentIntent(paymentIntentId, bound.merchantId(),
+                bound.merchantId() == null ? null : effectiveFundOwnership(card));
+        return settleTopupInternal(bound.customerId(), bound.projectId(), bound.merchantId(), paymentIntentId, false);
+    }
+
+    /**
      * AUD-014 柜台确认收款即入账：财务柜台确认线下收款（同事务内 CAS 支付意图 created→succeeded）
      * 后立即结转本笔充值入账，同成同败——柜台确认成功=余额到账，不再停留 created/409。
      * 权限走 finance 确认闸（finance.payment.register），入账复用绑定卡范围，不重复过客户充值闸。
@@ -317,6 +332,30 @@ public class StoredValueService {
     @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
     public com.complex.platform.ticketing.TicketOrderRecord payTicketOrder(
             String customerId, String orderId, String accountId, String phone, String smsCode) {
+        return payTicketOrder(customerId, orderId, accountId, phone, smsCode, null, null);
+    }
+
+    /**
+     * 客人本人订单储值付款。ROOT-03-R20（操作员原话「一个订单可分多个渠道支付，但最终必须完成一次支付才算完成」）：amountCent 为空＝付清待付金额，
+     * 可只付一部分、其余在线补足，不得超过待付金额；合计足额才置已付。ROOT-03-R17（BSM 第 859 行「客人付款成功后必须出票」）：付足即同一事务自动出票，
+     * 出票失败整笔回滚（余额不扣、订单仍待付）。idempotencyKey＝客人请求编号：同一请求重复提交不重复扣款。
+     */
+    @Transactional
+    @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
+    public com.complex.platform.ticketing.TicketOrderRecord payTicketOrder(String customerId, String orderId, String accountId,
+            String phone, String smsCode, Long amountCent, String idempotencyKey) {
+        try {
+            return payOwnTicketOrder(customerId, orderId, accountId, phone, smsCode, amountCent, idempotencyKey);
+        } catch (RuntimeException failure) {
+            // 失败留痕走独立事务（AuditEventService.recordFailure），随本事务回滚不丢。
+            auditEventService.recordFailure("customer.stored_value.pay_failed", "customer.stored_value.consume", "ticket_order",
+                    orderId, null, idempotencyKey, failure instanceof ApiException api ? api.code() : failure.getClass().getSimpleName());
+            throw failure;
+        }
+    }
+
+    private com.complex.platform.ticketing.TicketOrderRecord payOwnTicketOrder(String customerId, String orderId, String accountId,
+            String phone, String smsCode, Long amountCent, String idempotencyKey) {
         if (authorizationService == null || customerService == null || ticketingRepository == null) {
             throw ApiException.forbidden("STORED_VALUE_UNAVAILABLE", "储值订单支付当前不可用");
         }
@@ -352,19 +391,38 @@ public class StoredValueService {
         if (!"CNY".equals(order.currency())) {
             throw ApiException.conflict("PAYMENT_CURRENCY_MISMATCH", "订单币种与储值余额不一致");
         }
+        String consumeKey = idempotencyKey == null ? "ticketsv_" + order.id()
+                : "ticketsv_" + sha256Hex(order.id() + "|" + idempotencyKey).substring(0, 40);
+        if (repository.findStoredValueTransactionByIdempotencyKey(consumeKey).isPresent()) {
+            return order; // 同一请求重复提交：已扣过，返回订单现状。
+        }
+        long paidBefore = ticketingRepository.listTicketPaymentIntentsByOrder(order.id()).stream()
+                .filter(intent -> "succeeded".equals(intent.status()))
+                .mapToLong(com.complex.platform.ticketing.TicketPaymentIntentRecord::amountCent).sum();
+        long remaining = order.amountCent() - paidBefore;
+        long amount = amountCent == null ? remaining : amountCent;
+        if (amount <= 0 || amount > remaining) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "amount_cent 须大于 0 且不超过待付金额 " + remaining + " 分");
+        }
         customerService.verifyStoredValueCustomer(customerId, phone, smsCode);
-        CustomerStoredValueTransactionRecord debit = consumeBalance(customerId, card.projectId(), card.merchantId(), order.amountCent(),
-                "票务订单储值支付 " + order.id(), "ticketsv_" + order.id(), true);
+        CustomerStoredValueTransactionRecord debit = consumeBalance(customerId, card.projectId(), card.merchantId(), amount,
+                "票务订单储值支付 " + order.id(), consumeKey, true);
         Instant paidAt = now();
         ticketingRepository.saveTicketPaymentIntent(new com.complex.platform.ticketing.TicketPaymentIntentRecord(
-                debit.id(), "ticket_order", order.id(), order.amountCent(), order.currency(),
+                debit.id(), "ticket_order", order.id(), amount, order.currency(),
                 "stored_value", "succeeded", paidAt, paidAt));
-        return ticketingRepository.updateTicketOrder(new com.complex.platform.ticketing.TicketOrderRecord(
+        if (paidBefore + amount < order.amountCent()) {
+            return order; // R20：未足额，订单保持待付，等其余渠道补足。
+        }
+        com.complex.platform.ticketing.TicketOrderRecord paid = ticketingRepository.updateTicketOrder(
+                new com.complex.platform.ticketing.TicketOrderRecord(
                 order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
                 order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
                 order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
                 "paid", order.issueStatus(), order.status(), order.createdAt(), paidAt, order.merchantId(),
                 paidAt, order.barId(), order.projectId()));
+        ticketOrderService.issuePaidOrderAutomatically(order.id());
+        return ticketingRepository.findTicketOrderById(order.id()).orElse(paid);
     }
 
     /**
@@ -1146,6 +1204,32 @@ public class StoredValueService {
             throw e;
         }
     }
+
+    /**
+     * ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：客人充值前读的规则。
+     * merchantId 为空＝综合体通用卡：赠送比例按项目、扣款顺序写死先本金后赠送金（同句「不可配置」）；非空＝该商户的商户级卡：扣款顺序与退款
+     * 比例按平台代录的商户卡规则（无配置按缺省），商户卡充值现行不赠送（赠送比例 0）。客人会话由控制器校验。
+     */
+    public CustomerStoredValueTopupRulesResponse topupRules(String projectId, String merchantId) {
+        String merchant = trimToNull(merchantId);
+        if (merchant == null) {
+            int bonusBps = repository.findStoredValueBonusPolicy(StoredValueBonusPolicyRecord.scopeOf(projectId))
+                    .map(StoredValueBonusPolicyRecord::bonusBps).orElse(0);
+            return new CustomerStoredValueTopupRulesResponse("general", trimToNull(projectId), null, bonusBps,
+                    StoredValueMerchantRefundRuleRecord.CONSUME_PRINCIPAL_FIRST, "先扣本金、后扣赠送金", TOPUP_BONUS_TEXT,
+                    TOPUP_REFUND_TEXT, true, null);
+        }
+        StoredValueMerchantRefundRuleRecord rule = repository.findStoredValueMerchantRefundRule(merchant)
+                .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchant));
+        boolean bonusFirst = StoredValueMerchantRefundRuleRecord.CONSUME_BONUS_FIRST.equals(rule.consumeOrder());
+        return new CustomerStoredValueTopupRulesResponse("merchant", null, merchant, 0, rule.consumeOrder(),
+                bonusFirst ? "先扣赠送金、后扣本金" : "先扣本金、后扣赠送金", TOPUP_BONUS_TEXT, TOPUP_REFUND_TEXT,
+                rule.refundAllowed(), rule.refundRatioBps());
+    }
+
+    // ENUM 第 86 行原句：「每笔充值拆为本金与赠送金两段分别记账」「退卡只退未消费的本金，赠送金不退现、未使用部分按活动规则作废或收回」。
+    private static final String TOPUP_BONUS_TEXT = "每笔充值拆为本金与赠送金两段分别记账。";
+    private static final String TOPUP_REFUND_TEXT = "退卡只退未消费的本金，赠送金不退现、未使用部分按活动规则作废或收回。";
 
     public StoredValueBonusPolicyRecord getBonusPolicy(String projectId) {
         if (authorizationService != null) {

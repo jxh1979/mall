@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -418,7 +418,7 @@ class ParkingCreditJdbcIntegrationTests {
                 new com.complex.platform.finance.gateway.PaymentGatewayRequest("parking_fee", paymentId,
                         ((Number) intent.get("amount_cent")).longValue(), "CNY", "wechat", ref, null, null)));
         return mockMvc.perform(post("/api/v1/customer/parking/payments/" + paymentId + "/confirm")
-                .header("X-Terminal-Type", "web").header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content("{}"));
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content("{}"));
     }
 
     private static String body(ResultActions result) throws Exception {
@@ -441,16 +441,16 @@ class ParkingCreditJdbcIntegrationTests {
 
     private ResultActions credits() throws Exception {
         return mockMvc.perform(get("/api/v1/customer/parking/credits").param("project_id", f.project)
-                .header("X-Terminal-Type", "web").header("X-Customer-Token", token));
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token));
     }
 
     private ResultActions lookup(String plate) throws Exception {
         return mockMvc.perform(get("/api/v1/customer/parking/sessions").param("project_id", f.project).param("plate_no", plate)
-                .header("X-Terminal-Type", "web").header("X-Customer-Token", token));
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token));
     }
 
     private ResultActions pay(String session, String key) throws Exception {
-        return mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "web").header("X-Customer-Token", token)
+        return mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"parking_session_id\":\"" + session + "\",\"idempotency_key\":\"" + key + "\"}"));
     }
