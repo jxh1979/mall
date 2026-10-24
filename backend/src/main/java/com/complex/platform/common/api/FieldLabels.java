@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -658,6 +658,24 @@ public final class FieldLabels {
         p("legal_distributable_cent", "依法可分配金额");
         p("tax_accounting_ref", "财税核算依据");
         p("resolution_ref", "分配决议");
+        // ── 第十三批 B 段 ROOT-03-R3：会员注册 ───────────────
+        p("birth_date", "生日");
+        p("member_terms_version", "会员条款版本");
+        p("privacy_terms_version", "隐私条款版本");
+        // 第十三批 B 段 ROOT-03 订台与扫码点单（R19、R6、R7）。
+        p("latest_arrival_at", "最晚到店时间");
+        p("member_id", "被邀请人");
+        p("scan_order_id", "扫码点单");
+        // 第十三批 B 段 ROOT-03 账户注销、学生认证、投诉与票（R21、R28、clients-R8、R26、R29）。
+        p("abandon_saved_bottles", "放弃存酒");
+        p("saved_bottles", "名下存酒");
+        p("chsi_verification_code", "学信网验证码");
+        p("consent_id", "证件采集同意");
+        p("certification_id", "学生认证申请");
+        p("work_order_id", "投诉单");
+        p("score", "满意度");
+        p("customer_feedback", "客人反馈");
+        p("buyer_phone", "客人手机号");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

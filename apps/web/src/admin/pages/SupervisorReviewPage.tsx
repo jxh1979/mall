@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -354,6 +354,27 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     await runAction("supervisor_review_rejected", request, () => api.post(`/api/v1/platform/supervisor-review/${latestReviewId}/approve`, request));
   }
 
+  // 第十三批裁决第 5 条「上级审批后发布：运营编辑后走审批，批准才对客人展示」：审批客人端首页内容前先读这次要发布的原文（不盲批）。
+  async function openHomeContentDraft(projectId: string) {
+    try {
+      const content = await api.get<{ intro?: string | null; announcement?: string | null; draftIntro?: string | null;
+        draftAnnouncement?: string | null; draftSubmittedBy?: string | null; draftSubmittedAt?: string | null }>(
+        `/api/v1/home-contents/${encodeURIComponent(projectId)}`);
+      setDetail({
+        title: `待发布的客人端首页内容 · ${projectId}`,
+        fields: [
+          { label: "综合体介绍（待发布）", value: content?.draftIntro || "（无）" },
+          { label: "活动公告（待发布）", value: content?.draftAnnouncement || "（无）" },
+          { label: "提交人", value: content?.draftSubmittedBy ?? "-" },
+          { label: "提交时间", value: content?.draftSubmittedAt ? cnDate(content.draftSubmittedAt) : "-" },
+          { label: "当前已发布的介绍", value: content?.intro || "（尚未发布）" },
+        ],
+      });
+    } catch (error) {
+      setGlobalError(error instanceof Error ? error.message : "读取待发布内容失败");
+    }
+  }
+
   function openPolicyDetail(row: SupervisorReviewPolicyRow) {
     setDetail({
       title: `${TEXT.policy}明细 · ${row.policyCode ?? row.id}`,
@@ -426,7 +447,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
                       <td>{formatReviewValue(row.decision.approvalLevel ?? "")}（主管级 {displayValue(row.decision.requiredLevel)}）</td>
                       <td>{row.schedule?.dueAt ? cnDate(row.schedule.dueAt) : "-"}</td>
                       <td>{(row.schedule?.escalationCount ?? 0) > 0 ? `已升级 ${row.schedule?.escalationCount} 次` : "待审"}{row.schedule?.forwardedTo ? `，已转交给 ${row.schedule.forwardedTo}` : ""}</td>
-                      <td><a data-testid={`supervisor-review-chain-link-${row.decision.reviewId}`} href={withBase(`/admin/governance/approval-chain?review_id=${encodeURIComponent(row.decision.reviewId)}`)}>审批链</a> <button type="button" data-testid={`supervisor-review-pending-select-${row.decision.reviewId}`} onClick={() => { setForwardReviewId(row.decision.reviewId); setLatestReviewId(row.decision.reviewId); }}>{TEXT.selectForForward}</button></td>
+                      <td>{row.decision.objectType === "customer_home_content" && row.decision.objectId ? <button type="button" data-testid={`supervisor-review-home-content-${row.decision.reviewId}`} onClick={() => void openHomeContentDraft(row.decision.objectId as string)}>查看待发布内容</button> : null} <a data-testid={`supervisor-review-chain-link-${row.decision.reviewId}`} href={withBase(`/admin/governance/approval-chain?review_id=${encodeURIComponent(row.decision.reviewId)}`)}>审批链</a> <button type="button" data-testid={`supervisor-review-pending-select-${row.decision.reviewId}`} onClick={() => { setForwardReviewId(row.decision.reviewId); setLatestReviewId(row.decision.reviewId); }}>{TEXT.selectForForward}</button></td>
                     </tr>
                   ))}</tbody>
                 </table>

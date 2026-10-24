@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,6 +14,8 @@ import com.complex.platform.access.staff.StaffDeviceCredentialRecord;
 import com.complex.platform.access.staff.StaffProfileRecord;
 import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.customer.CustomerRepository;
+import com.complex.platform.customer.CustomerSessionRecord;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.DeviceSigningKeyStore;
 import com.complex.platform.terminal.TerminalDeviceRecord;
@@ -43,6 +45,7 @@ class DeviceCredentialVerifierTests {
     private AuthorizationService authz;
     private AuditEventService audit;
     private DeviceSigningKeyStore signingKeyStore;
+    private CustomerRepository customerRepo;
     private KeyPair keyPair;
     private String pubB64;
 
@@ -53,6 +56,7 @@ class DeviceCredentialVerifierTests {
         authz = mock(AuthorizationService.class);
         audit = mock(AuditEventService.class);
         signingKeyStore = mock(DeviceSigningKeyStore.class);
+        customerRepo = mock(CustomerRepository.class);
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
         kpg.initialize(256);
         keyPair = kpg.generateKeyPair();
@@ -65,9 +69,9 @@ class DeviceCredentialVerifierTests {
     }
 
     private DeviceCredentialVerifier verifier(String defaultMode) {
-        return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit,
+        return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit, customerRepo,
                 Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC),
-                defaultMode, "", "", "", "", "", 300);
+                defaultMode, "", "", "", "", "", "", 300);
     }
 
     private MockHttpServletRequest signedRequest(String method, long ts, String nonce, String sigB64) {
@@ -234,9 +238,114 @@ class DeviceCredentialVerifierTests {
     }
 
     private DeviceCredentialVerifier verifierWith(String defaultMode, String webMode, String appMode) {
-        return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit,
+        return verifierWith(defaultMode, webMode, appMode, "");
+    }
+
+    private DeviceCredentialVerifier verifierWith(String defaultMode, String webMode, String appMode, String miniappMode) {
+        return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit, customerRepo,
                 Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC),
-                defaultMode, "", "", "", webMode, appMode, 300);
+                defaultMode, "", "", "", webMode, appMode, miniappMode, 300);
+    }
+
+    // ---------- ROOT-03-R2 客人两端：证明＝已验证客人会话，会话锁定登录端 ----------
+
+    private MockHttpServletRequest customerRequest(String method, String uri, String terminal, String token) {
+        MockHttpServletRequest r = new MockHttpServletRequest(method, uri);
+        r.setRequestURI(uri);
+        if (terminal != null) {
+            r.addHeader("X-Terminal-Type", terminal);
+        }
+        if (token != null) {
+            r.addHeader("X-Customer-Token", token);
+        }
+        return r;
+    }
+
+    private void session(String token, String scene) {
+        when(customerRepo.findSessionByToken(token)).thenReturn(Optional.of(new CustomerSessionRecord(
+                "s_" + token, "customer_1", token, scene, Instant.ofEpochMilli(NOW).minusSeconds(60),
+                Instant.ofEpochMilli(NOW).plusSeconds(3600), "active")));
+    }
+
+    @Test
+    void appWriteWithMatchingCustomerSessionIsVerified() {
+        session("tok_app", "app");
+        TerminalIdentityHolder.VerifiedTerminal vt = verifierWith("grace", "", "enforce", "enforce")
+                .verify(customerRequest("POST", "/api/v1/customer/ticket-orders", "app", "tok_app"));
+        assertThat(vt.terminalType()).isEqualTo("app");
+        assertThat(vt.verified()).isTrue();
+        assertThat(vt.deviceId()).isNull();
+    }
+
+    @Test
+    void miniappSessionTokenUsedAsAppRejectedSessionMismatch() {
+        session("tok_mini", "miniapp");
+        // 任何模式都拒（含 off/grace）：会话锁定登录端；改报 web 或不报类型同样拒。
+        for (String claimed : new String[] {"app", "web", "tablet", null}) {
+            assertThatThrownBy(() -> verifierWith("off", "", "", "")
+                    .verify(customerRequest("GET", "/api/v1/customer/orders", claimed, "tok_mini")))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+        }
+    }
+
+    @Test
+    void appWriteWithoutSessionRejectedInEnforce() {
+        assertThatThrownBy(() -> verifierWith("grace", "", "enforce", "")
+                .verify(customerRequest("POST", "/api/v1/customer/ticket-orders", "app", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+        // 带了客人令牌但会话已过期或已失效：仍拒绝，但报 401 客人登录已过期（客户端约定 401 才回登录页），不报设备凭据错误。
+        when(customerRepo.findSessionByToken("tok_old")).thenReturn(Optional.of(new CustomerSessionRecord(
+                "s_old", "customer_1", "tok_old", "app", Instant.ofEpochMilli(NOW).minusSeconds(7200),
+                Instant.ofEpochMilli(NOW).minusSeconds(60), "active")));
+        assertThatThrownBy(() -> verifierWith("grace", "", "enforce", "")
+                .verify(customerRequest("POST", "/api/v1/customer/ticket-orders", "app", "tok_old")))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("CUSTOMER_UNAUTHENTICATED");
+                    assertThat(e.status().value()).isEqualTo(401);
+                });
+        // grace 下留痕放行（自报类型，未验证）。
+        TerminalIdentityHolder.VerifiedTerminal vt = verifierWith("grace", "", "grace", "")
+                .verify(customerRequest("POST", "/api/v1/customer/ticket-orders", "app", null));
+        assertThat(vt.verified()).isFalse();
+    }
+
+    @Test
+    void customerLoginPathAllowedWithoutSessionInEnforce() {
+        for (String uri : new String[] {"/api/v1/customer/auth/phone-login", "/api/v1/customer/auth/sms-codes",
+                "/api/v1/customer/auth/register", "/api/v1/customer/auth/logout"}) {
+            TerminalIdentityHolder.VerifiedTerminal vt = verifierWith("grace", "", "enforce", "enforce")
+                    .verify(customerRequest("POST", uri, "miniapp", null));
+            assertThat(vt.terminalType()).isEqualTo("miniapp");
+            assertThat(vt.verified()).isFalse();
+        }
+    }
+
+    /** ROOT-03-R7（ENUM 第 129 行「扫码点单身份：非会员可以浏览、点单和付款」）：enforce 下无会话只放行扫码点单下单与付款确认两个写口。 */
+    @Test
+    void anonymousScanOrderWritesAllowedWithoutSessionInEnforce() {
+        for (String uri : new String[] {"/api/v1/customer/bar-tables/t1/scan-orders",
+                "/api/v1/customer/bar-tables/t1/scan-orders/bso_1/confirm"}) {
+            org.assertj.core.api.Assertions.assertThatCode(() -> verifierWith("grace", "", "enforce", "enforce")
+                    .verify(customerRequest("POST", uri, "miniapp", null))).as(uri).doesNotThrowAnyException();
+            TerminalIdentityHolder.VerifiedTerminal vt = verifierWith("grace", "", "enforce", "enforce")
+                    .verify(customerRequest("POST", uri, "miniapp", null));
+            assertThat(vt.terminalType()).isEqualTo("miniapp");
+            assertThat(vt.verified()).isFalse();
+        }
+        assertThatThrownBy(() -> verifierWith("grace", "", "enforce", "enforce")
+                .verify(customerRequest("POST", "/api/v1/customer/bar-tables/t1/scan-orders/bso_1/refund", "miniapp", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+    }
+
+    @Test
+    void miniappEnforcementModeConfigurable() {
+        // miniapp 只在配置 enforce 时拒无会话写；未配置沿用 default（grace）留痕放行。
+        assertThatThrownBy(() -> verifierWith("grace", "", "", "enforce")
+                .verify(customerRequest("POST", "/api/v1/customer/consents", "miniapp", null)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+        assertThat(verifierWith("grace", "", "", "")
+                .verify(customerRequest("POST", "/api/v1/customer/consents", "miniapp", null)).terminalType())
+                .isEqualTo("miniapp");
     }
 
     @Test

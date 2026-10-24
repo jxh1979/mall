@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -87,15 +87,17 @@ class CustomerDeregisterStoredValueJdbcIntegrationTests {
     @Test
     void previewListsPrincipalAndBonusPerCard() throws Exception {
         mockMvc.perform(get("/api/v1/customer/deregister/preview")
-                        .header("X-Terminal-Type", "web")
+                        .header("X-Terminal-Type", "miniapp")
                         .header("X-Customer-Token", token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(2))
-                .andExpect(jsonPath("$.data[?(@.account_id == '" + generalCardId + "')].principal_cent", Matchers.contains(3000)))
-                .andExpect(jsonPath("$.data[?(@.account_id == '" + generalCardId + "')].bonus_cent", Matchers.contains(500)))
-                .andExpect(jsonPath("$.data[?(@.account_id == '" + generalCardId + "')].card_scope", Matchers.contains("project")))
-                .andExpect(jsonPath("$.data[?(@.account_id == '" + merchantCardId + "')].principal_cent", Matchers.contains(2000)))
-                .andExpect(jsonPath("$.data[?(@.account_id == '" + merchantCardId + "')].merchant_id", Matchers.contains(merchantId)));
+                // ROOT-03-R21：预览为 {stored_value_cards, saved_bottles}。
+                .andExpect(jsonPath("$.data.stored_value_cards.length()").value(2))
+                .andExpect(jsonPath("$.data.stored_value_cards[?(@.account_id == '" + generalCardId + "')].principal_cent", Matchers.contains(3000)))
+                .andExpect(jsonPath("$.data.stored_value_cards[?(@.account_id == '" + generalCardId + "')].bonus_cent", Matchers.contains(500)))
+                .andExpect(jsonPath("$.data.stored_value_cards[?(@.account_id == '" + generalCardId + "')].card_scope", Matchers.contains("project")))
+                .andExpect(jsonPath("$.data.stored_value_cards[?(@.account_id == '" + merchantCardId + "')].principal_cent", Matchers.contains(2000)))
+                .andExpect(jsonPath("$.data.stored_value_cards[?(@.account_id == '" + merchantCardId + "')].merchant_id", Matchers.contains(merchantId)))
+                .andExpect(jsonPath("$.data.saved_bottles.length()").value(0));
     }
 
     /** 不放弃余额：通用卡本金登记待退、商户卡按规则登记待退（卡冻结），赠送金作废，账号置已注销。 */
@@ -151,7 +153,7 @@ class CustomerDeregisterStoredValueJdbcIntegrationTests {
         jdbcTemplate.update("UPDATE customer_stored_value_accounts SET principal_cent = 0, bonus_cent = 0, balance_cent = 0 WHERE customer_id = ?", customerId);
 
         mockMvc.perform(post("/api/v1/customer/deregister")
-                        .header("X-Terminal-Type", "web")
+                        .header("X-Terminal-Type", "miniapp")
                         .header("X-Customer-Token", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("deregistered"));
@@ -168,7 +170,7 @@ class CustomerDeregisterStoredValueJdbcIntegrationTests {
 
     private ResultActions deregister(String body) throws Exception {
         return mockMvc.perform(post("/api/v1/customer/deregister")
-                .header("X-Terminal-Type", "web")
+                .header("X-Terminal-Type", "miniapp")
                 .header("X-Customer-Token", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));

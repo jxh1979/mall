@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,6 +10,7 @@ import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.voucher.VoucherDefinitionRecord;
 import com.complex.platform.voucher.VoucherInstanceRecord;
 import com.complex.platform.voucher.VoucherRepository;
+import com.complex.platform.voucher.VoucherService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,7 @@ class BarBillVoucherJdbcIntegrationTests {
     @Autowired private BarBillingService billingService;
     @Autowired private JdbcBarRepository barRepository;
     @Autowired private VoucherRepository voucherRepository;
+    @Autowired private VoucherService voucherService;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private PlatformTransactionManager txManager;
 
@@ -47,6 +49,11 @@ class BarBillVoucherJdbcIntegrationTests {
     void setUp() {
         TestSecurityActors.asPlatformAdmin();
         tx = new TransactionTemplate(txManager);
+    }
+
+    /** ROOT-03-R32（BSM 第 585 行）：结账扫的是客人出示的动态券码，固定券码不再能核销。 */
+    private String dynamicCode(VoucherInstanceRecord voucher) {
+        return voucherService.issueCustomerRedeemCode(voucher.id(), voucher.customerId()).code();
     }
 
     @AfterEach
@@ -64,7 +71,7 @@ class BarBillVoucherJdbcIntegrationTests {
 
         BarBillRecord settled = tx.execute(st -> billingService.settleBill(billId, new BarBillSettleRequest(
                 "vch-settle-" + s, null, List.of(), "pay_vch_" + s, 25000L, "aggregate_pay",
-                null, null, null, null, voucher.code(), null)));
+                null, null, null, null, dynamicCode(voucher), null)));
 
         assertThat(settled.discountAmountCent()).isEqualTo(5000L);
         assertThat(settled.payableAmountCent()).isEqualTo(25000L);
@@ -87,7 +94,7 @@ class BarBillVoucherJdbcIntegrationTests {
 
         assertThatThrownBy(() -> tx.execute(st -> billingService.settleBill(billId, new BarBillSettleRequest(
                 "vch-other-" + s, null, List.of(), "pay_vch_" + s, 25000L, "aggregate_pay",
-                null, null, null, null, other.code(), null))))
+                null, null, null, null, dynamicCode(other), null))))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VOUCHER_MERCHANT_MISMATCH"));
 
@@ -108,7 +115,7 @@ class BarBillVoucherJdbcIntegrationTests {
         // 扣券后剩余 25000，本次却要收 30000 → 结账失败；券核销须随整笔结账一起回滚（PGM L303）。
         assertThatThrownBy(() -> tx.execute(st -> billingService.settleBill(billId, new BarBillSettleRequest(
                 "vch-fail-" + s, null, List.of(), "pay_vch_" + s, 30000L, "aggregate_pay",
-                null, null, null, null, voucher.code(), null))))
+                null, null, null, null, dynamicCode(voucher), null))))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("剩余未付");
 

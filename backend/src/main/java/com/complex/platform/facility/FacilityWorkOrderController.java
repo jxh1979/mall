@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -58,6 +58,27 @@ public class FacilityWorkOrderController {
     public ApiResponse<FacilityWorkOrderRecord> get(@PathVariable("work_order_id") String workOrderId) {
         requirePermission("facility.work_order.view_assigned");
         return ApiResponse.ok(service.findById(workOrderId));
+    }
+
+    // ROOT-03 clients-R8：客人投诉附件（照片、视频、语音）按工单查看权限受控查看。字段注入，不改既有两参构造（单测直接 new）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CustomerComplaintService complaints;
+
+    @GetMapping("/{work_order_id}/customer-media")
+    public ApiResponse<java.util.List<CustomerComplaintService.MediaView>> listCustomerMedia(
+            @PathVariable("work_order_id") String workOrderId) {
+        authorizationService.requirePermission(PERM);
+        return ApiResponse.ok(complaints.listMedia(workOrderId));
+    }
+
+    @GetMapping("/{work_order_id}/customer-media/{media_id}/file")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> readCustomerMedia(
+            @PathVariable("work_order_id") String workOrderId, @PathVariable("media_id") String mediaId) {
+        authorizationService.requirePermission(PERM);
+        java.util.Map.Entry<java.nio.file.Path, String> file = complaints.readMedia(workOrderId, mediaId);
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(file.getValue()))
+                .body(new org.springframework.core.io.FileSystemResource(file.getKey()));
     }
 
     @PostMapping

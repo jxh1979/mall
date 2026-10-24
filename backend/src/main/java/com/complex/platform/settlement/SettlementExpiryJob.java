@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import org.springframework.beans.factory.annotation.Value;
 
@@ -221,26 +221,10 @@ public class SettlementExpiryJob {
         return row.validTo().isBefore(now) ? row.validTo() : null;
     }
 
-    /**
-     * 首场次结束时刻。场次键是 venue_sessions.id 时取该场营业日按营业时间表的实际闭店时刻(跨夜闭店落次日,
-     * 票务 PRD「跨夜场次以该场次的实际闭店时间为准，不按自然日切分」);无场次配置时场次键是自然日,结束于次日零点。
-     * 时区与场次键生成处一致(系统默认时区)。定不出时返回 null,交票面到期处理。
-     */
+    /** 首场次结束时刻（算法见 {@link com.complex.platform.ticketing.FirstSessionWindow#endOf}，门票转赠场次限制共用）。 */
     private static Instant sessionEnd(JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row) {
-        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
-        if (row.sessionDate() != null) {
-            if (row.sessionOpenSecond() == null || row.sessionCloseSecond() == null) {
-                return null;
-            }
-            java.time.LocalDate day = row.sessionCloseSecond() < row.sessionOpenSecond()
-                    ? row.sessionDate().plusDays(1) : row.sessionDate();
-            return day.atTime(java.time.LocalTime.ofSecondOfDay(row.sessionCloseSecond())).atZone(zone).toInstant();
-        }
-        try {
-            return java.time.LocalDate.parse(row.firstSessionKey()).plusDays(1).atStartOfDay(zone).toInstant();
-        } catch (java.time.format.DateTimeParseException notADate) {
-            return null;
-        }
+        return com.complex.platform.ticketing.FirstSessionWindow.endOf(row.firstSessionKey(), row.sessionDate(),
+                row.sessionOpenSecond(), row.sessionCloseSecond());
     }
 
     /**

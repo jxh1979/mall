@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -334,10 +335,10 @@ describe("客人端同一次操作的请求编号", () => {
     vi.stubGlobal("fetch", fetchMock);
     const service = new CustomerService("");
 
-    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456" });
     await expect(service.redeemPoints("ri-9", 1)).rejects.toThrow("Failed to fetch");
     await customerLogout();
-    await customerPhoneLogin({ phone: "13800000002", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000002", smsCode: "123456" });
     await expect(service.redeemPoints("ri-9", 1)).rejects.toThrow("Failed to fetch");
     await expect(service.redeemPoints("ri-9", 1)).resolves.toMatchObject({ id: "redemption_b" });
     expect(sent(fetchMock, 4).header).not.toBe(sent(fetchMock, 1).header);
@@ -356,11 +357,11 @@ describe("客人端同一次操作的请求编号", () => {
     vi.stubGlobal("fetch", fetchMock);
     const service = new CustomerService("");
 
-    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456" });
     const redeemA = service.redeemPoints("ri-10", 1);
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     await customerLogout();
-    await customerPhoneLogin({ phone: "13800000002", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000002", smsCode: "123456" });
     dropA(new TypeError("Failed to fetch"));
     await expect(redeemA).rejects.toThrow("Failed to fetch");
     await expect(service.redeemPoints("ri-10", 1)).resolves.toMatchObject({ id: "redemption_b" });
@@ -386,10 +387,10 @@ describe("客人端同一次操作的请求编号", () => {
     const service = new CustomerService("");
     const logoutAndLoginAgain = async () => {
       await customerLogout();
-      await customerPhoneLogin({ phone: "13800000001", smsCode: "123456", scene: "login" });
+      await customerPhoneLogin({ phone: "13800000001", smsCode: "123456" });
     };
 
-    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456" });
     await expect(service.redeemPoints("ri-11", 1)).rejects.toThrow("Failed to fetch");
     await logoutAndLoginAgain();
     await expect(service.redeemPoints("ri-11", 1)).resolves.toMatchObject({ id: "redemption_a1" });
@@ -416,11 +417,11 @@ describe("客人端同一次操作的请求编号", () => {
     vi.stubGlobal("fetch", fetchMock);
     const service = new CustomerService("");
 
-    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456" });
     const redeemA = service.redeemPoints("ri-12", 1);
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     await customerLogout();
-    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000001", smsCode: "123456" });
     dropA(new TypeError("Failed to fetch"));
     await expect(redeemA).rejects.toThrow("Failed to fetch");
     await expect(service.redeemPoints("ri-12", 1)).resolves.toMatchObject({ id: "redemption_a3" });
@@ -437,10 +438,10 @@ describe("客人端同一次操作的请求编号", () => {
     vi.stubGlobal("fetch", fetchMock);
     const service = new CustomerService("");
 
-    await customerPhoneLogin({ phone: "13800000009", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13800000009", smsCode: "123456" });
     await expect(customerRestoreSession()).resolves.toMatchObject({ customerId: "c-q" });
     await expect(service.redeemPoints("ri-13", 1)).rejects.toThrow("Failed to fetch");
-    await customerPhoneLogin({ phone: "13900000000", smsCode: "123456", scene: "login" });
+    await customerPhoneLogin({ phone: "13900000000", smsCode: "123456" });
     await expect(service.redeemPoints("ri-13", 1)).resolves.toMatchObject({ id: "redemption_q" });
     expect(sent(fetchMock, 4)).toEqual(sent(fetchMock, 2));
   });

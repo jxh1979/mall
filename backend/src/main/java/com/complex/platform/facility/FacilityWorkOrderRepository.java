@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.util.List;
@@ -54,4 +54,15 @@ public interface FacilityWorkOrderRepository {
     }
 
     List<FacilityWorkOrderRecord> listOverdue(Instant now);
+
+    /** ROOT-03 clients-R8：本人客人投诉（来源 customer、提单方＝本人），新到旧。默认按内存全量过滤（供 InMemory 测试双子），Jdbc 覆盖。 */
+    default List<FacilityWorkOrderRecord> listCustomerComplaints(String customerId) {
+        return list().stream()
+                .filter(record -> "customer".equals(record.source()) && Objects.equals(customerId, record.reporterId()))
+                .toList();
+    }
+
+    /** ROOT-03 clients-R8：关闭客人投诉时记录的客人反馈（V540 customer_feedback）。内存双子不落库。 */
+    default void saveCustomerFeedback(String workOrderId, String customerFeedback) {
+    }
 }

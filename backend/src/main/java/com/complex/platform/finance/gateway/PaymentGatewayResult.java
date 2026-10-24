@@ -1,6 +1,6 @@
 package com.complex.platform.finance.gateway;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 /**
  * 支付渠道结果（端口出参，厂商无关）。永不抛出受检异常以阻塞业务——
@@ -10,6 +10,7 @@ package com.complex.platform.finance.gateway;
  * @param gatewayProvider 渠道厂商标识（占位实现为 null 或 "reserved"）
  * @param gatewayRef    渠道侧引用号（占位实现为 null）
  * @param message       说明（留痕用）
+ * @param clientLaunch  ROOT-03-R18 App/小程序拉起参数（占位实现为 null）
  */
 public record PaymentGatewayResult(
         Status status,
@@ -17,11 +18,18 @@ public record PaymentGatewayResult(
         String gatewayRef,
         String message,
         String paymentUrl,
-        PaymentGatewayRequest confirmedPayment
+        PaymentGatewayRequest confirmedPayment,
+        PaymentClientLaunch clientLaunch
 ) {
 
     public PaymentGatewayResult(Status status, String gatewayProvider, String gatewayRef, String message) {
-        this(status, gatewayProvider, gatewayRef, message, null, null);
+        this(status, gatewayProvider, gatewayRef, message, null, null, null);
+    }
+
+    /** 兼容构造（无拉起参数）：查询/退款结果与既有替身沿用。 */
+    public PaymentGatewayResult(Status status, String gatewayProvider, String gatewayRef, String message,
+                                String paymentUrl, PaymentGatewayRequest confirmedPayment) {
+        this(status, gatewayProvider, gatewayRef, message, paymentUrl, confirmedPayment, null);
     }
 
     public enum Status {

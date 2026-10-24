@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 export type AdminUser = {
   id: string;
   username: string;
@@ -197,6 +197,8 @@ export type TicketRefundRow = {
   // TK-05（BSM:804/806）：退款理由类别（五种情形 / 最高权限逐笔放行 / 通票安全例外）与责任主体。
   reasonCode?: string;
   responsibleEntityId?: string;
+  // ROOT-03-R20（BSM 第 1749 行）：批准时分到在线笔、待财务原路打款的各笔；储值部分已当场回卡，不在其中。未分笔为空。
+  payoutItems?: { channel: string; amountCent: number }[] | null;
 };
 
 // TK-05 通票安全事件（BSM:804 通票安全例外）：outcome=refund 退该人份票款，restore 恢复本次 1 次完整补偿使用机会。
@@ -277,10 +279,14 @@ export type BarTableRow = {
   capacity?: number;
   guestLimit?: number;
   barId?: string;
+  // ROOT-03-R7：card_seat / vip / bar_counter / loose_table（散台，扫码点单）。
+  tableType?: string;
   status?: string;
   // 第十批 TK-27-R2（BSM L1058 待清台超时提醒）：待清台起始时刻与是否已超过酒吧配置的提醒时限。
   pendingClearSince?: string | null;
   pendingClearOverdue?: boolean;
+  // ROOT-03-R19（ENUM 第 100 行排他预留）：正占着该台位的订台号（已预留）；没有为空。
+  heldReservationId?: string | null;
 };
 
 export type BarReservationRow = {

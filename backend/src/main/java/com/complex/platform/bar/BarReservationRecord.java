@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.util.List;
@@ -43,8 +43,68 @@ public record BarReservationRecord(
         String deleteReason,
         // V519 TK-24：定金付款渠道（payDeposit 写入，达标退回按此「原路」）+ 定金处置时点（退回/退还/没收）。
         String depositChannel,
-        Instant depositSettledAt
+        Instant depositSettledAt,
+        // V539 ROOT-03-R19：最晚到店时间（BSM 第 1062 行每笔必填）+ 台位排他预留状态（held/released，ENUM 第 100 行；只由占台/释放语句写）。
+        Instant latestArrivalAt,
+        String holdStatus
 ) {
+    /** 向后兼容构造器（V539 前签名）：既有调用方零改动，最晚到店时间与预留状态默认空。 */
+    public BarReservationRecord(
+            String id,
+            String barId,
+            String merchantId,
+            String tableId,
+            String customerId,
+            Instant reservedAt,
+            int guestCount,
+            int allowedPassFreeGuestCount,
+            long depositAmountCent,
+            String depositStatus,
+            String orderSource,
+            String salesStaffId,
+            String status,
+            String createdTerminal,
+            String deviceId,
+            List<String> evidenceAttachmentIds,
+            Instant createdAt,
+            Instant updatedAt,
+            String depositRule,
+            String depositIntentId,
+            Instant depositPaidAt,
+            String depositSettlement,
+            String invitationToken,
+            String invitationSignature,
+            Integer invitationCapacity,
+            String invitationStatus,
+            Instant invitationIssuedAt,
+            Instant archivedAt,
+            String archivedBy,
+            String deleteStatus,
+            String deleteRequestedBy,
+            Instant deleteRequestedAt,
+            String deleteReason,
+            String depositChannel,
+            Instant depositSettledAt
+    ) {
+        this(id, barId, merchantId, tableId, customerId, reservedAt, guestCount, allowedPassFreeGuestCount,
+                depositAmountCent, depositStatus, orderSource, salesStaffId, status, createdTerminal, deviceId,
+                evidenceAttachmentIds, createdAt, updatedAt, depositRule, depositIntentId, depositPaidAt, depositSettlement,
+                invitationToken, invitationSignature, invitationCapacity, invitationStatus, invitationIssuedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                depositChannel, depositSettledAt, null, null);
+    }
+
+    /** V539 ROOT-03-R19：落最晚到店时间（新建订台时）。 */
+    public BarReservationRecord withLatestArrivalAt(Instant latestArrivalAt) {
+        return new BarReservationRecord(id, barId, merchantId, tableId, customerId, reservedAt, guestCount,
+                allowedPassFreeGuestCount, depositAmountCent, depositStatus, orderSource, salesStaffId, status,
+                createdTerminal, deviceId, evidenceAttachmentIds, createdAt, updatedAt, depositRule, depositIntentId,
+                depositPaidAt, depositSettlement, invitationToken, invitationSignature, invitationCapacity,
+                invitationStatus, invitationIssuedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                depositChannel, depositSettledAt, latestArrivalAt, holdStatus);
+    }
+
     /** 向后兼容构造器（V519 定金渠道/处置时点前签名）：既有调用方零改动，渠道与处置时点默认空。 */
     public BarReservationRecord(
             String id,
@@ -98,7 +158,30 @@ public record BarReservationRecord(
                 depositPaidAt, depositSettlement, invitationToken, invitationSignature, invitationCapacity,
                 invitationStatus, invitationIssuedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                depositChannel, depositSettledAt);
+                depositChannel, depositSettledAt, latestArrivalAt, holdStatus);
+    }
+
+    /** ROOT-03-R4：客人在线付定金发起的当前付款意向（换渠道重新发起时替换，旧的作废）。 */
+    public BarReservationRecord withDepositIntent(String intentId, Instant updatedAt) {
+        return new BarReservationRecord(id, barId, merchantId, tableId, customerId, reservedAt, guestCount,
+                allowedPassFreeGuestCount, depositAmountCent, depositStatus, orderSource, salesStaffId, status,
+                createdTerminal, deviceId, evidenceAttachmentIds, createdAt, updatedAt, depositRule, intentId,
+                depositPaidAt, depositSettlement, invitationToken, invitationSignature, invitationCapacity,
+                invitationStatus, invitationIssuedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                depositChannel, depositSettledAt, latestArrivalAt, holdStatus);
+    }
+
+    /** V155 邀请函签发/吊销：只改邀请函字段，其余（存档、定金渠道、最晚到店时间等）原样携带。 */
+    public BarReservationRecord withInvitation(String invitationToken, String invitationSignature, Integer invitationCapacity,
+            String invitationStatus, Instant invitationIssuedAt, Instant updatedAt) {
+        return new BarReservationRecord(id, barId, merchantId, tableId, customerId, reservedAt, guestCount,
+                allowedPassFreeGuestCount, depositAmountCent, depositStatus, orderSource, salesStaffId, status,
+                createdTerminal, deviceId, evidenceAttachmentIds, createdAt, updatedAt, depositRule, depositIntentId,
+                depositPaidAt, depositSettlement, invitationToken, invitationSignature, invitationCapacity,
+                invitationStatus, invitationIssuedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                depositChannel, depositSettledAt, latestArrivalAt, holdStatus);
     }
 
     /** V519 TK-24：只改订台状态，其余原样携带（取消时保留定金渠道等资金留痕）。 */
@@ -109,7 +192,7 @@ public record BarReservationRecord(
                 depositPaidAt, depositSettlement, invitationToken, invitationSignature, invitationCapacity,
                 invitationStatus, invitationIssuedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                depositChannel, depositSettledAt);
+                depositChannel, depositSettledAt, latestArrivalAt, holdStatus);
     }
 
     /** 向后兼容构造器（V264 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none。 */
@@ -215,7 +298,7 @@ public record BarReservationRecord(
                 depositPaidAt, depositSettlement, invitationToken, invitationSignature, invitationCapacity,
                 invitationStatus, invitationIssuedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                depositChannel, depositSettledAt);
+                depositChannel, depositSettledAt, latestArrivalAt, holdStatus);
     }
 
     public BarReservationRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -226,6 +309,6 @@ public record BarReservationRecord(
                 depositPaidAt, depositSettlement, invitationToken, invitationSignature, invitationCapacity,
                 invitationStatus, invitationIssuedAt,
                 archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
-                depositChannel, depositSettledAt);
+                depositChannel, depositSettledAt, latestArrivalAt, holdStatus);
     }
 }

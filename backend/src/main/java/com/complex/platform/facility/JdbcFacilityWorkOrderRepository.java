@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -163,6 +163,21 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
                    AND status IN ('pending_assign','assigned','processing','pending_review','pending_acceptance','accepted')
                  ORDER BY handle_due_at ASC, id
                 """, new MapSqlParameterSource("now", timestampWithTimeZone(now)), this::mapWorkOrder);
+    }
+
+    @Override
+    public List<FacilityWorkOrderRecord> listCustomerComplaints(String customerId) {
+        return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + """
+                 FROM facility_work_orders
+                 WHERE source = 'customer' AND reporter_id = :customer_id
+                 ORDER BY created_at DESC, id
+                """, new MapSqlParameterSource("customer_id", customerId), this::mapWorkOrder);
+    }
+
+    @Override
+    public void saveCustomerFeedback(String workOrderId, String customerFeedback) {
+        jdbcTemplate.update("UPDATE facility_work_orders SET customer_feedback = :feedback WHERE id = :id",
+                new MapSqlParameterSource("feedback", customerFeedback).addValue("id", workOrderId));
     }
 
     private MapSqlParameterSource workOrderParams(FacilityWorkOrderRecord r) {

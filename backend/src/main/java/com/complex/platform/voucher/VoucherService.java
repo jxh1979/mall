@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -15,8 +15,13 @@ import com.complex.platform.voucher.dto.VoucherDefinitionRequest;
 import com.complex.platform.voucher.dto.VoucherIssueRequest;
 import com.complex.platform.voucher.dto.VoucherRedeemRequest;
 import com.complex.platform.voucher.dto.VoucherRevokeRequest;
+import com.complex.platform.ticketing.TicketingRepository;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +62,9 @@ public class VoucherService implements VoucherIssuePort {
             Set.of(VoucherStateMachine.ISSUED, VoucherStateMachine.REDEEMED,
                     VoucherStateMachine.EXPIRED, VoucherStateMachine.REVOKED);
     private static final int MAX_ISSUE_QUANTITY = 100;
+    /** ROOT-03-R32 客人动态核销码前缀（固定券码以 VC 开头，二者不重叠）。 */
+    static final String REDEEM_CODE_PREFIX = "vrc_";
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final VoucherRepository repository;
     private final AuthorizationService authorizationService;
@@ -64,8 +72,15 @@ public class VoucherService implements VoucherIssuePort {
     private final InventoryService inventoryService;
     // finance 结算端口（PartnerVoucherService 同款：@Lazy 防环；null＝兼容单测不结算）。
     private final FinanceService settlementPort;
-    // V313 转赠冻结：核销/作废时判该券是否有在途转赠（防"转赠中又核销"），并在作废时作废在途转赠。
+    // V313 券转赠：作废/过期时作废在途转赠；操作员裁决第十三批第 9 条「和门票一致不冻结」：核销不再被在途转赠挡住，核销成功即作废在途转赠。
     private final JdbcVoucherTransferRepository transferRepository;
+    // ROOT-03-R32：动态码窗口＝全场统一刷新间隔（BSM 第 585 行「这个刷新间隔全场用同一套统一设置」）；未注入（单测）时不签发。
+    private TicketingRepository ticketingRepository;
+
+    @Autowired(required = false)
+    void setTicketingRepository(TicketingRepository ticketingRepository) {
+        this.ticketingRepository = ticketingRepository;
+    }
 
     @Autowired
     public VoucherService(
@@ -134,7 +149,7 @@ public class VoucherService implements VoucherIssuePort {
      * 客人端「我的券包」自助只读：控制器按客人 token 解析并强制 customer_id（不可查他人），
      * 不校 staff 权限（客人无 VIEW_PERM），merchantScope=null（客人不受商户 scope 限制，看本人全部券）。
      * 内部结算价客人天然不可见——VoucherOverviewRecord 不含 internal_price/settlement 字段。
-     * 只读展示，不做客人端发起核销（核销在 POS/工作手机侧）。
+     * 只读展示，不做客人端发起核销（核销在 POS/工作手机侧）。ROOT-03-R32：不下发固定券码，客人出示动态码（{@link #issueCustomerRedeemCode}）。
      */
     public PageResponse<VoucherOverviewRecord> customerOverview(String customerId, int page, int pageSize) {
         String scoped = blankToNull(customerId);
@@ -143,7 +158,46 @@ public class VoucherService implements VoucherIssuePort {
         }
         return operations.readPageResult(
                 AuditedOperation.of("voucher.customer_wallet_viewed", "voucher.customer_wallet_view_failed", VIEW_PERM, BUSINESS_TYPE),
-                () -> repository.overview(null, scoped, safePage(page), safeSize(pageSize)));
+                () -> {
+                    PageResponse<VoucherOverviewRecord> rows = repository.overview(null, scoped, safePage(page), safeSize(pageSize));
+                    return new PageResponse<>(rows.items().stream().map(VoucherOverviewRecord::withoutCode).toList(),
+                            rows.page(), rows.pageSize(), rows.total());
+                });
+    }
+
+    /**
+     * ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的……权益核销码……是每隔一段时间自动更新的动态码，有效期（刷新间隔）由后台统一设置……
+     * 截图、转发出去的旧码过了有效期就作废」）：本人持有、当前可核销的统一台账券签发动态核销码；同一张券同时只一枚有效码（签发前撤旧码），
+     * 明文只回给客人、库里只存 SHA-256。客人会话已由控制器校验。
+     */
+    @Transactional
+    public VoucherRedeemCodeResponse issueCustomerRedeemCode(String instanceId, String customerId) {
+        return operations.readSingle(
+                AuditedOperation.of("voucher.redeem_code_issued", "voucher.redeem_code_issue_failed", "not_applicable", BUSINESS_TYPE),
+                () -> {
+                    VoucherInstanceRecord instance = repository.findInstanceById(requireText(instanceId, "voucher_instance_id"))
+                            .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
+                    if (!requireText(customerId, "customer_id").equals(instance.customerId())) {
+                        throw ApiException.forbidden("VOUCHER_NOT_HOLDER", "该券不属于本人");
+                    }
+                    Instant now = Instant.now();
+                    String block = VoucherStateMachine.redeemBlockReason(instance.status(), instance.expiresAt(), now);
+                    if (block != null) {
+                        throw ApiException.conflict(block, "该券当前不可使用：" + block);
+                    }
+                    if (ticketingRepository == null) {
+                        throw ApiException.conflict("VOUCHER_REDEEM_CODE_UNAVAILABLE", "动态券码刷新间隔未配置");
+                    }
+                    int window = ticketingRepository.findQrRefreshIntervalSeconds();
+                    repository.revokeActiveRedeemCodes(instance.id());
+                    byte[] random = new byte[16];
+                    RANDOM.nextBytes(random);
+                    String code = REDEEM_CODE_PREFIX + HexFormat.of().formatHex(random);
+                    repository.insertRedeemCode("vrcid_" + UUID.randomUUID().toString().replace("-", ""), instance.id(), customerId,
+                            sha256Hex(code), now, now.plusSeconds(window), window);
+                    return new VoucherRedeemCodeResponse(instance.id(), code, now.plusSeconds(window), window);
+                },
+                issued -> ((VoucherRedeemCodeResponse) issued).voucherInstanceId());
     }
 
     // ── 券定义 ─────────────────────────────────────────────────────────────
@@ -413,6 +467,30 @@ public class VoucherService implements VoucherIssuePort {
         return repository.findInstanceById(instanceId).orElseThrow();
     }
 
+    /**
+     * ROOT-03-R21（BSM 第 863 行「注销后……积分、券一律清零」）：本人全部未核销券作废（原因 account_deregistered），与单张作废同一写法——
+     * 释放实物券预占、作废在途转赠；客人自身原因作废，不退积分。客人会话已由调用方校验。返回作废张数。
+     */
+    @Transactional
+    public int revokeAllOnDeregistration(String customerId, Instant now) {
+        int revoked = 0;
+        // ponytail: 一页 1000 张即一个客人的全部未核销券；真有超过的再分页。
+        for (VoucherInstanceRecord instance : repository.listInstances(null, customerId, null, VoucherStateMachine.ISSUED, null,
+                1, 1000).items()) {
+            if (repository.updateInstanceStatus(instance.id(), VoucherStateMachine.ISSUED, VoucherStateMachine.REVOKED, now,
+                    "account_deregistered") == 0) {
+                continue;
+            }
+            repository.findDefinitionById(instance.definitionId())
+                    .filter(definition -> instance.stockReserved() && "in_store_goods".equals(definition.voucherKind()))
+                    .ifPresent(definition -> inventoryService.releaseStockReservation(
+                            definition.inventoryItemId(), definition.stockLocationId(), goodsQuantity(definition)));
+            transferRepository.voidPendingForInstance(instance.id(), "voucher_revoked", now);
+            revoked++;
+        }
+        return revoked;
+    }
+
     // ── V312 过期预占释放（定时作业）───────────────────────────────────────
 
     /**
@@ -464,7 +542,7 @@ public class VoucherService implements VoucherIssuePort {
 
     /**
      * 第十批 TK-28-R1（ENUM L81「商户折扣券——到对应商户抵扣」；ENUM L83「券抵扣部分不折现」；PGM L303）：
-     * 结账路径核销一张商户折扣券。复用 {@link #redeemInternal} 全部闸（状态/过期/转赠冻结/CAS/实例级唯一索引），
+     * 结账路径核销一张商户折扣券。复用 {@link #redeemInternal} 全部闸（状态/过期/CAS/实例级唯一索引），
      * 额外要求券种为 merchant_discount 且券绑定商户＝账单商户（否则 VOUCHER_MERCHANT_MISMATCH，券不消耗）；
      * 抵扣额＝min(面值, 可抵扣应付)，面值多出部分不找零不退。不走后台 REDEEM_PERM 与独立幂等——由结账权限与结账事务承接，
      * 结账任一步失败整体回滚、券回到 issued。
@@ -475,8 +553,10 @@ public class VoucherService implements VoucherIssuePort {
                 new BillDeduction(requireText(billMerchantId, "merchant_id"), billType, requireText(billId, "bill_id"), deductibleCent));
     }
 
-    private VoucherRedemptionEntryRecord redeemInternal(String code, String instanceId, String note, BillDeduction bill) {
+    private VoucherRedemptionEntryRecord redeemInternal(String rawCode, String rawInstanceId, String note, BillDeduction bill) {
         Instant now = Instant.now();
+        String code = blankToNull(rawCode);
+        String instanceId = blankToNull(rawInstanceId);
         VoucherInstanceRecord instance = resolveInstance(code, instanceId);
         VoucherDefinitionRecord definition = repository.findDefinitionById(instance.definitionId())
                 .orElseThrow(() -> ApiException.notFound("VOUCHER_DEFINITION_NOT_FOUND", "券定义不存在或已被删除"));
@@ -512,11 +592,6 @@ public class VoucherService implements VoucherIssuePort {
             }
             throw ApiException.conflict(block, "该券当前不可核销：" + block);
         }
-        // V313 转赠冻结：券有在途转赠（pending）时不能核销，须持券人先撤回（与领取端 CAS 构成双花双闸）。
-        if (transferRepository.existsPendingForInstance(instance.id())) {
-            throw ApiException.conflict("VOUCHER_TRANSFERRING",
-                    "该券正在转赠中，不能核销（请让持券人先撤回转赠）");
-        }
         // 店内实物券：先做库存前置校验（R3 P0-7 同款顺序纪律——所有前置校验完成前不动任何状态），
         // 缺货直接拒绝，券保持 issued 可换点再核；真实出库在 CAS 占位之后、同事务内执行。
         int goodsQuantity = 0;
@@ -537,6 +612,9 @@ public class VoucherService implements VoucherIssuePort {
                 VoucherStateMachine.REDEEMED, now, null) == 0) {
             throw ApiException.conflict("VOUCHER_ALREADY_REDEEMED", "该券已被并发核销，请勿重复操作");
         }
+        // 操作员裁决第十三批第 9 条「发起转赠后原持有人仍可自用……先成功的动作为准，其余自动作废」：核销成功即作废在途转赠
+        // （领取方锁同一券行，后到者读到已作废；VoucherTransferService）。
+        transferRepository.voidPendingForInstance(instance.id(), VoucherTransferService.VOID_HOLDER_REDEEMED, now);
         String redemptionId = "vrr_" + instance.id();
         String stockMovementRef = null;
         if ("in_store_goods".equals(definition.voucherKind())) {
@@ -585,18 +663,50 @@ public class VoucherService implements VoucherIssuePort {
         if (!repository.insertRedemption(entry)) {
             throw ApiException.conflict("VOUCHER_ALREADY_REDEEMED", "该券已有核销记录，请勿重复核销");
         }
+        if (instanceId == null && code != null) {
+            repository.consumeRedeemCode(sha256Hex(code.trim()), redemptionId);
+        }
         return entry;
     }
 
+    /**
+     * 按券编号（员工台账查券）或客人出示的码定位券。ROOT-03-R32（BSM 第 585 行）：客人出示的只认未过期的动态码（vrc_ 前缀，且码签发对象仍是
+     * 当前持有人——转赠完成即失效）；统一台账券都有持有客人，凭固定券码一律不再核销。
+     */
     private VoucherInstanceRecord resolveInstance(String rawCode, String rawInstanceId) {
         String code = blankToNull(rawCode);
         String instanceId = blankToNull(rawInstanceId);
         if (code == null && instanceId == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "券码或券编号必须至少填写一项");
         }
-        Optional<VoucherInstanceRecord> found =
-                instanceId != null ? repository.findInstanceById(instanceId) : repository.findInstanceByCode(code);
-        return found.orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
+        if (instanceId != null) {
+            repository.lockInstance(instanceId);
+            return repository.findInstanceById(instanceId)
+                    .orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
+        }
+        if (!code.startsWith(REDEEM_CODE_PREFIX)) {
+            repository.findInstanceByCode(code).orElseThrow(() -> ApiException.notFound("VOUCHER_NOT_FOUND", "券不存在或已被删除"));
+            throw ApiException.conflict("VOUCHER_DYNAMIC_CODE_REQUIRED", "请客人出示券包里的动态券码");
+        }
+        VoucherRepository.ActiveRedeemCode active = repository.findActiveRedeemCode(sha256Hex(code), Instant.now())
+                .orElseThrow(VoucherService::redeemCodeExpired);
+        // 操作员裁决第十三批第 9 条「先成功的动作为准」：锁券行后再读持有人——与领取并发时等领取提交，券已归对方即码失效。
+        repository.lockInstance(active.voucherInstanceId());
+        return repository.findInstanceById(active.voucherInstanceId())
+                .filter(instance -> active.customerId().equals(instance.customerId()))
+                .orElseThrow(VoucherService::redeemCodeExpired);
+    }
+
+    private static ApiException redeemCodeExpired() {
+        return ApiException.conflict("VOUCHER_REDEEM_CODE_EXPIRED", "券码已过期或已失效，请客人刷新后重新出示");
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     // ── 工具 ───────────────────────────────────────────────────────────────

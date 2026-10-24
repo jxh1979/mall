@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 package com.complex.platform.customer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -67,7 +67,7 @@ class CustomerControllerTests {
 
     @Test
     void phoneLoginIsPublicAndReturnsCustomerToken() throws Exception {
-        when(service.phoneLogin(any(CustomerPhoneLoginRequest.class))).thenReturn(new CustomerLoginResponse(
+        when(service.phoneLogin(any(CustomerPhoneLoginRequest.class), any())).thenReturn(new CustomerLoginResponse(
                 "customer_1",
                 "138****8000",
                 "cust_token_1",
@@ -92,7 +92,7 @@ class CustomerControllerTests {
 
     @Test
     void ticketProductsArePublicAndDoNotRequireStaffPermission() throws Exception {
-        when(service.listTicketProducts(any())).thenReturn(new PageResponse<>(List.of(new CustomerTicketProductResponse(
+        when(service.listTicketProducts(any(), any())).thenReturn(new PageResponse<>(List.of(new CustomerTicketProductResponse(
                 "ticket_type_1",
                 "P0 Pass",
                 9900L,
@@ -129,7 +129,7 @@ class CustomerControllerTests {
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
         , null, null, null));
-        when(service.listOrders("cust_token_1")).thenReturn(new PageResponse<>(List.of(new TicketOrderRecord(
+        when(service.listOrders("cust_token_1")).thenReturn(new PageResponse<>(List.of(com.complex.platform.customer.dto.CustomerTicketOrderResponse.of(new TicketOrderRecord(
                 "ticket_order_1",
                 "TO20260614000001",
                 "customer_1",
@@ -146,7 +146,7 @@ class CustomerControllerTests {
                 "created",
                 Instant.parse("2026-06-14T00:00:00Z"),
                 Instant.parse("2026-06-14T00:00:00Z")
-        , null, null, null)), 1, 50, 1));
+        , null, null, null), List.of(), List.of())), 1, 50, 1));
         when(service.getTicketQr("cust_token_1", "ent_1")).thenReturn(new TicketCredentialResponse(
                 "credential_1",
                 "ent_1",
@@ -479,10 +479,10 @@ class CustomerControllerTests {
                 .andExpect(jsonPath("$.message").value("请勿重复提交，请刷新后再试"));
     }
 
-    /** TK-21-R3：自助注销请求体按前端真实形状（蛇形键 waive_balance）进入服务层。 */
+    /** TK-21-R3 / ROOT-03-R21：自助注销请求体按前端真实形状（蛇形键 waive_balance、abandon_saved_bottles）进入服务层。 */
     @Test
     void deregisterAcceptsSnakeCaseWaiveBalanceBody() throws Exception {
-        when(service.deregisterAccount("cust_token_1", true)).thenReturn(new CustomerRecord(
+        when(service.deregisterAccount("cust_token_1", true, true)).thenReturn(new CustomerRecord(
                 "customer_1", "13800008000", "138****8000", "deregistered", null, null,
                 Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")));
 
@@ -490,12 +490,12 @@ class CustomerControllerTests {
                         .header("X-Customer-Token", "cust_token_1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"waive_balance": true}
+                                {"waive_balance": true, "abandon_saved_bottles": true}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("deregistered"));
 
-        verify(service).deregisterAccount("cust_token_1", true);
+        verify(service).deregisterAccount("cust_token_1", true, true);
     }
 
     /** ROOT-05-R3：登录取码公开端点，请求体按前端真实形状（蛇形键，只有 phone）委派服务层。 */

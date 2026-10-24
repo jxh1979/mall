@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 // 客人端 API client：复用 admin 的请求封装口径
 // - Bearer 客人 Token（同时写 X-Customer-Token，对齐后端双读口径）
 // - 请求体 camelCase -> snake_case；响应 snake_case -> camelCase
@@ -154,7 +155,6 @@ export class CustomerApi {
 export async function customerPhoneLogin(payload: {
   phone: string;
   smsCode: string;
-  scene?: string;
 }): Promise<CustomerLoginResponse> {
   const api = new CustomerApi("");
   const result = await api.post<CustomerLoginResponse>("/api/v1/customer/auth/phone-login", payload);

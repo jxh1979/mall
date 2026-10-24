@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -803,6 +803,22 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     /** FS-016 客人端「我的存酒」：本人名下全部 stored 存酒，跨店汇总（每行自带 barProjectId=所属酒吧）。 */
     public List<SavedBottleRecord> listSavedBottlesForCustomer(String customerId, String customerPhone) {
         return repository.listStoredSavedBottlesByHolder(requireText(customerId, "customer_id"), phoneHash(customerPhone));
+    }
+
+    /**
+     * ROOT-03-R21（BSM 第 863 行「客人可以选择不取存酒……放弃的存酒按存酒到期规则转为所在酒吧的自有库存资产」）：注销时客人已确认放弃的
+     * 名下在保管存酒，按到期作业同一写法置 expired（不发到期短信，现行到期回库流水另项补齐后同路生效），逐瓶留痕；随后清空本人各存酒上的
+     * 客人姓名/昵称与手机号（同条「注销后……个人信息一律删除」）。返回放弃的瓶数。
+     */
+    public int abandonSavedBottlesOnDeregistration(String customerId, String customerPhone, Instant now) {
+        List<SavedBottleRecord> bottles = listSavedBottlesForCustomer(customerId, customerPhone);
+        for (SavedBottleRecord bottle : bottles) {
+            repository.saveSavedBottle(savedBottleWith(bottle, "expired", bottle.remainingQuantity(), now));
+            auditEventService.recordSuccess("bar.saved_bottle.abandoned_on_deregistration", "not_applicable", "saved_bottle",
+                    bottle.id(), null, null, Map.of("remaining_quantity", bottle.remainingQuantity()));
+        }
+        repository.clearSavedBottleCustomerIdentity(customerId, phoneHash(customerPhone));
+        return bottles.size();
     }
 
     // ===== FS-025 存酒转存（延期）：ENUM L120 / BSM L1072 =====

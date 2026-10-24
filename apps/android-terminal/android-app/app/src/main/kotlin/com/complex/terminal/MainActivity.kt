@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import android.app.Activity
 import android.content.Intent
@@ -953,6 +953,8 @@ class MainActivity : Activity() {
     val barId = editText("酒吧(点上方桌位自动回填)")
     val tableId = editText("桌位(点上方空位自动回填)")
     val time = editText("到店时间(如 2026-07-02T20:00:00Z)")
+    val latest = editText("最晚到店时间(如 2026-07-02T22:00:00Z)")
+    val phone = editText("客人手机号(必填,核对会员是否受限)").apply { inputType = InputType.TYPE_CLASS_PHONE }
     val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
     runBackground(
       action = { api.listBarTableAvailability() },
@@ -977,9 +979,11 @@ class MainActivity : Activity() {
       val b = barId.text.toString().trim()
       val t = tableId.text.toString().trim()
       val at = time.text.toString().trim()
+      val la = latest.text.toString().trim()
+      val ph = phone.text.toString().trim()
       val g = guests.text.toString().trim().toIntOrNull()
-      if (b.isEmpty() || t.isEmpty() || at.isEmpty() || g == null || g <= 0) {
-        status.text = "请填全 酒吧/桌位/时间/人数"
+      if (b.isEmpty() || t.isEmpty() || at.isEmpty() || la.isEmpty() || ph.isEmpty() || g == null || g <= 0) {
+        status.text = "请填全 酒吧/桌位/时间/最晚到店时间/客人手机号/人数"
         return@button
       }
       runBackground(
@@ -988,6 +992,7 @@ class MainActivity : Activity() {
             idempotencyKey = "byod_resv_${System.currentTimeMillis()}",
             barId = b, tableId = t, reservationTime = at, guestCount = g,
             salespersonUserId = store.session?.staffId,
+            latestArrivalAt = la, customerPhone = ph,
           ))
         },
         onSuccess = { r -> status.text = "订位成功：${r.id ?: "-"}(定金 ${statusZh(r.depositStatus ?: "not_required")})" },
@@ -996,7 +1001,7 @@ class MainActivity : Activity() {
     }
     setContentView(screen(
       title = "酒吧空位 / 帮客订位",
-      children = listOf(status, list, barId, tableId, time, guests, reserveButton,
+      children = listOf(status, list, barId, tableId, time, latest, phone, guests, reserveButton,
         backButton()),
     ))
   }

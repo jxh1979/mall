@@ -1,13 +1,13 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 
 /**
  * 1.8 客人端"我的票"安全投影：只给客人可见字段；
  * 内部分账（allocated_revenue_cent）、商户/场地内部 id、完整核销码均不出网。
- * AUD-077：transferState 标记转赠中("transferring")供"我的票"显示冻结态;其余为 null。
+ * AUD-077：transferState 标记转赠待领取("transferring")供"我的票"展示;clients-R40 起在途不冻结,原持有人照常可出示与核销。其余为 null。
  * TK-13（ENUM L148「“我的票”按对应人份或次份显示补偿标注及其实际有效期」；BSM L862）：compensationKind 标注补偿补发行
  * （full_reissue＝全园故障/场次提前结束完整补发，挂原票原人份；null＝原票行）；补偿行的 validTo 即该人份实际补偿有效期。
  */
@@ -26,7 +26,7 @@ public record CustomerTicketResponse(
         String parentTicketId,
         int slotIndex,
         String ticketNo,
-        // AUD-077：转赠中标记(null=正常;"transferring"=该 slot 有在途转赠,冻结中不可用)。
+        // AUD-077：转赠待领取标记(null=正常;"transferring"=该 slot 有在途转赠;clients-R40 起不冻结,仍可出示动态码与核销)。
         String transferState,
         String compensationKind
 ) {

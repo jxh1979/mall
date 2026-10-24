@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -447,15 +447,35 @@ public class BarOrderService {
      */
     /** 员工/工作机扫码下单：经 BarService（staff-token + bar.order.create）；强制本商户会话（跨商户防护）。 */
     BarOrderRecord placeScanOrder(String sessionId, BarOrderRequest request) {
-        return createScanOrder(sessionId, request, true, null);
+        return createScanOrder(sessionId, request, true, null, "app", "miniapp");
     }
 
     /**
-     * 客人自助扫码下单（customer-token，经 CustomerService 跨域调入）：merchant 取自会话（客人无 scope）、
-     * customerId=下单客人本人；不做员工 scope 校验（客人非商户用户，会话商户即权威）。
+     * ROOT-03-R7 客人扫码点单成单（BSM 第 1025 行「下单时即时付款、付款成功订单才成立，不挂账；酒水必须先完成付款才能出品上台。付款成功后所点酒水计入该桌位
+     * 当前账单」）：只在客人在线付款确认成功后由 CustomerBarScanOrderService 调入。merchant 取自会话（客人无 scope）、customerId＝会员本人或空（非会员，
+     * ENUM 第 129 行）；来源与创建端＝客人端（app/miniapp）。落单即进出品流转，并随即记一张已结清的账单（结算渠道 aggregate_pay＝聚合支付已收），
+     * 关台时不再向客人收这一笔。
      */
-    public BarOrderRecord placeCustomerScanOrder(String sessionId, BarOrderRequest request, String customerId) {
-        return createScanOrder(sessionId, request, false, customerId);
+    public BarOrderRecord placePaidCustomerScanOrder(String sessionId, BarOrderRequest request, String customerId, String terminal) {
+        BarOrderRecord order = createScanOrder(sessionId, request, false, customerId, terminal, terminal);
+        Instant now = Instant.now();
+        long total = order.totalAmountCent();
+        BarBillRecord bill = repository.saveBill(new BarBillRecord("bill_" + slug(order.id()), "BILL" + now.toEpochMilli(),
+                order.id(), order.barId(), order.merchantId(), order.tableId(), order.reservationId(), total, 0L, 0L, total, total,
+                CURRENCY_CNY, "paid", "settled", order.salesStaffId(), null, now, now, false, null, null, null, 0, 0L, now));
+        repository.saveBillSettlement(new BarBillSettlementRecord("settle_" + slug(order.id()), bill.id(), "aggregate_pay",
+                null, null, total, order.merchantId(), now));
+        return repository.saveOrder(new BarOrderRecord(order.id(), order.barId(), order.merchantId(), order.tableId(),
+                order.reservationId(), order.customerId(), order.orderSource(), order.status(), total, order.currency(),
+                order.createdTerminal(), order.deviceId(), order.salesStaffId(), order.createdAt(), now, order.orderType(), now));
+    }
+
+    /** ROOT-03-R7：扫码点单功能标志关时，客人下单（收款前）即拒绝，不收了钱才成不了单。 */
+    public void requireScanOrderEnabled() {
+        if (!scanOrderEnabled) {
+            throw ApiException.conflict("BAR_SCAN_ORDER_DISABLED",
+                    "扫码点单未开启（功能开关 bar.scan_order.enabled 为关）");
+        }
     }
 
     /**
@@ -465,7 +485,8 @@ public class BarOrderService {
      * 功能标志 bar.scan_order.enabled 默认关 → 关时拒（上线前灰度/急停开关）。
      */
     private BarOrderRecord createScanOrder(
-            String sessionId, BarOrderRequest request, boolean enforceStaffMerchantScope, String customerIdOverride) {
+            String sessionId, BarOrderRequest request, boolean enforceStaffMerchantScope, String customerIdOverride,
+            String orderSource, String createdTerminal) {
         if (!scanOrderEnabled) {
             throw ApiException.conflict("BAR_SCAN_ORDER_DISABLED",
                     "扫码点单未开启（功能开关 bar.scan_order.enabled 为关）");
@@ -498,7 +519,7 @@ public class BarOrderService {
                 actual.serviceUserIds(),
                 actual.paymentMode());
         // merchant 取自会话（权威，修员工 scope 兜底 + 支持客人无 scope）；customerId 客人路径=本人。
-        return createOrderInternal(derived, "app", "miniapp", session.merchantId(), customerIdOverride);
+        return createOrderInternal(derived, orderSource, createdTerminal, session.merchantId(), customerIdOverride);
     }
 
     BarOrderItemRecord addOrderItem(String orderId, BarOrderRequest request) {

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -10,6 +10,9 @@ import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
+import com.complex.platform.finance.PaymentIntentRecord;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -19,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +37,17 @@ public class TicketOrderService {
     // 结算 S11 渠道费按 ticket_orders.sales_channel 解析（channel_fee_configs 渠道专属>通用）才拿得到该渠道费率。
     private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel",
             "meituan", "dianping", "douyin", "koubei", "eleme", "alipay", "wechat");
+    /**
+     * ROOT-03-R29（BSM 第 892、986 行）：按购票手机号归到会员本人的销售渠道——第三方渠道回流（各渠道码）与一体机辅助购票（短信验证绑定）；
+     * 员工后台代售与客人自助（已带本人）不在内。
+     */
+    static final Set<String> MEMBER_LINKABLE_CHANNELS = Set.of("kiosk", "channel",
+            "meituan", "dianping", "douyin", "koubei", "eleme", "alipay", "wechat");
+
+    // ROOT-03-R29 一体机辅助购票的客人手机号短信核验（实现在客人域，@Lazy 断开客人域→票务域的构造环）。未注入即不能一体机售票（fail-closed）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    KioskBuyerVerifier kioskBuyerVerifier;
 
     private final TicketingRepository repository;
     private final TicketPricingService pricingService;
@@ -61,6 +76,22 @@ public class TicketOrderService {
     @org.springframework.context.annotation.Lazy
     com.complex.platform.finance.FinanceService financeService;
 
+    // ROOT-03-R17 自动出票成功/失败留痕；R20 储值笔原路退回原卡。字段注入免改构造点，单测未注入为 null。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.evidence.AuditEventService auditEventService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.customer.StoredValueService storedValueService;
+
+    // ROOT-03-R17/R18：在线到账后出票放在保存点里——出票失败只回滚出票，已到账的收款事实保留并原路待退。单测无事务管理器时直接执行。
+    private org.springframework.transaction.support.TransactionTemplate savepoint;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setTransactionManager(org.springframework.transaction.PlatformTransactionManager transactionManager) {
+        savepoint = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        savepoint.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_NESTED);
+    }
+
     @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
@@ -74,7 +105,32 @@ public class TicketOrderService {
     }
 
     TicketOrderRecord createOrder(TicketOrderRequest request) {
+        return createOrder(request, null);
+    }
+
+    /**
+     * eligibleVariants 非空＝客人自助下单（ROOT-03-R27）：不收客户端价格规则，由系统在客人符合的资格价与动态公开价中取最低，并另存全部命中资格价；
+     * 为空＝员工与一体机代客路径，维持按所选价格规则计价。
+     */
+    TicketOrderRecord createOrder(TicketOrderRequest request, Set<String> eligibleVariants) {
         TicketOrderRequest actual = requireRequest(request);
+        String buyerCustomerId = trimToNull(actual.customerId());
+        String buyerPhone = trimToNull(actual.buyerPhone());
+        String requestedChannel = trimToNull(actual.salesChannel());
+        if ("kiosk".equals(requestedChannel)) {
+            // ROOT-03-R29（BSM 第 986 行「客人用手机号短信验证绑定，在官方 App/小程序查看门票」）：一体机辅助购票必录客人手机号并当场核验，
+            // 核验在任何扣库存之前；已注册会员直接归本人，未注册的注册时再按手机号归集。
+            if (buyerPhone == null || trimToNull(actual.smsCode()) == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "一体机购票须录入客人手机号并填写客人收到的短信验证码");
+            }
+            if (kioskBuyerVerifier == null) {
+                throw ApiException.conflict("KIOSK_BUYER_VERIFICATION_UNAVAILABLE", "客人手机号短信核验不可用，暂不能一体机购票");
+            }
+            buyerCustomerId = kioskBuyerVerifier.verify(buyerPhone, actual.smsCode().trim());
+        } else if (buyerCustomerId == null && buyerPhone != null && MEMBER_LINKABLE_CHANNELS.contains(requestedChannel)) {
+            // 第三方渠道回流：该手机号已是会员的直接归本人（BSM 第 892 行「按渠道来源在“我的订单/我的票”统一展示」）。
+            buyerCustomerId = repository.findMemberIdByPhone(buyerPhone).orElse(null);
+        }
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         // 复核§3(V260)：存档=软下线。前端列表虽已隐藏，终端/H5 直传 id 下单也必须拒——放库存扣减前，拒单不动库存。
@@ -105,7 +161,11 @@ public class TicketOrderService {
         LocalDate visitDate = actual.visitDate() == null ? LocalDate.now() : actual.visitDate();
         String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
         TicketPriceRuleRecord priceRule = null;
-        if (trimToNull(actual.priceRuleId()) != null) {
+        TicketPricingService.CustomerPrice customerPrice = eligibleVariants == null ? null
+                : pricingService.resolveCustomerPrice(ticketType, visitDate, salesChannel, eligibleVariants);
+        if (customerPrice != null) {
+            priceRule = customerPrice.selected();
+        } else if (trimToNull(actual.priceRuleId()) != null) {
             priceRule = repository.findPriceRuleById(actual.priceRuleId())
                     .orElseThrow(() -> ApiException.notFound("PRICE_RULE_NOT_FOUND", "价格规则不存在或已被删除"));
             if (!ticketType.id().equals(priceRule.ticketTypeId())) {
@@ -115,8 +175,10 @@ public class TicketOrderService {
                 throw ApiException.conflict("TICKET_PRICE_RULE_NOT_SELLABLE", "该价格规则已下线（存档/待删除），不可下单");
             }
         }
-        long unitPrice = pricingService.resolveUnitPrice(ticketType, priceRule, visitDate);
-        DynamicPriceResult dynamicPrice = pricingService.applyPublishedDynamicPricing(
+        long unitPrice = customerPrice != null ? customerPrice.baseUnitCent()
+                : pricingService.resolveUnitPrice(ticketType, priceRule, visitDate);
+        DynamicPriceResult dynamicPrice = customerPrice != null ? customerPrice.publicPrice()
+                : pricingService.applyPublishedDynamicPricing(
                 ticketType.id(),
                 visitDate,
                 salesChannel,
@@ -125,13 +187,14 @@ public class TicketOrderService {
         );
         long baseAmount = unitPrice * quantity;
         long dynamicAdjustment = dynamicPrice.adjustmentCent() * quantity;
-        long finalAmount = dynamicPrice.finalUnitPriceCent() * quantity;
+        // R27：客人价＝动态公开价与各资格价中最低的一项（不叠加）；基础价、动态价照存，选中规则落 price_rule_id。
+        long finalAmount = (customerPrice != null ? customerPrice.finalUnitCent() : dynamicPrice.finalUnitPriceCent()) * quantity;
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
         TicketOrderRecord saved = repository.saveTicketOrder(new TicketOrderRecord(
                 "ticket_order_" + slug,
                 "TO" + now.toEpochMilli() + slug.substring(0, Math.min(6, slug.length())).toUpperCase(Locale.ROOT),
-                trimToNull(actual.customerId()),
+                buyerCustomerId,
                 ticketType.id(),
                 priceRule == null ? null : priceRule.id(),
                 quantity,
@@ -156,6 +219,9 @@ public class TicketOrderService {
                 orderBarId,
                 projectId
         ));
+        if (customerPrice != null) {
+            repository.saveTicketOrderPriceHits(saved.id(), customerPrice.hits());
+        }
         eventPublisher.publishEvent(new TicketRewardFacts.OrderCreated(saved.id()));
         return saved;
     }
@@ -181,8 +247,9 @@ public class TicketOrderService {
             throw ApiException.badRequest("VALIDATION_FAILED", "业务订单类型必须为票务订单（ticket_order）");
         }
         long amountCent = requirePositiveLong(actual.amountCent(), "amount_cent");
-        if (amountCent != order.amountCent()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "支付金额必须等于票务订单金额");
+        // ROOT-03-R20：可分多个渠道付，每笔付的是此刻的待付金额（订单金额减已成功各笔）。
+        if (amountCent != order.amountCent() - paidAmountCent(orderId)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "支付金额必须等于票务订单待付金额");
         }
         String currency = trimToDefault(actual.currency(), CURRENCY_CNY);
         if (!CURRENCY_CNY.equals(currency)) {
@@ -207,6 +274,10 @@ public class TicketOrderService {
      *
      * <p>修因果倒置：此前非 admin 渠道无支付成功回调，订单永卡 unpaid 无法出票（issueOrder 反写 paid 是错误来源）。
      * 现 paid 由支付确认产生（内部确认 / 真实回调共用本入口）；出票仍要求 paid（admin 渠道豁免不变）。
+     *
+     * <p>ROOT-03-R17（BSM 第 859 行「确因出票失败的款项自动原路退回」）：订单已取消（超时或全园故障）后的到账、停售期间的到账一律登记原路待退，
+     * 不再报错丢钱。ROOT-03-R20（操作员原话「一个订单可分多个渠道支付，但最终必须完成一次支付才算完成」）：每笔须等于此刻待付金额，
+     * 合计足额才置已付；与待付不符的到账（已付足后又到账、改用储值补付后旧渠道单迟到）本笔原路待退、订单不动。
      */
     TicketOrderRecord confirmPayment(String orderId, ConfirmTicketOrderPaymentRequest request) {
         ConfirmTicketOrderPaymentRequest actual = requireRequest(request);
@@ -214,11 +285,7 @@ public class TicketOrderService {
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // P0 越权修复（审计 A3）：商户用户只能确认自身受理订单的支付（跨商户 IDOR）。
         enforceMerchantScope(order.merchantId());
-        // 已取消单仍不可恢复受理；故障期间迟到的实际款只记录收款并原路待退，库存不再释放。
         boolean suspended = amusementSalesSuspendedAtProject(order.ticketTypeId(), resolveOriginalOrderProjectId(order));
-        if ("cancelled".equals(order.status()) && !"paid".equals(order.payStatus()) && !suspended) {
-            throw ApiException.conflict("ORDER_CANCELLED", "票务订单已取消");
-        }
         String intentId = requireText(actual.paymentIntentId(), "payment_intent_id");
         TicketPaymentIntentRecord intent = repository.findTicketPaymentIntentById(intentId)
                 .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或已被删除"));
@@ -226,25 +293,29 @@ public class TicketOrderService {
         if (!order.id().equals(intent.businessOrderId()) || !"ticket_order".equals(intent.businessOrderType())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "该支付意向不属于此票务订单");
         }
-        // 金额校验：意图金额必须等于订单金额，防止少付标记已付。
-        if (intent.amountCent() != order.amountCent()) {
-            throw ApiException.conflict("PAYMENT_AMOUNT_MISMATCH", "支付意向金额与票务订单金额不一致");
-        }
         Instant now = Instant.now();
-        // 支付意图置 succeeded（幂等：已 succeeded 跳过）。
-        if (!"succeeded".equals(intent.status())) {
+        boolean replay = "succeeded".equals(intent.status());
+        long paidBefore = paidAmountCent(order.id()) - (replay ? intent.amountCent() : 0L);
+        boolean cancelled = "cancelled".equals(order.status());
+        boolean refused = cancelled || (suspended && !"paid".equals(order.payStatus()));
+        // 金额校验：未取消的订单每笔须等于此刻待付金额，不符的本笔不受理（原路待退），防止少付标记已付。
+        boolean mismatched = !replay && !refused && intent.amountCent() != order.amountCent() - paidBefore;
+        // 支付意图置 succeeded（幂等：已 succeeded 跳过）；不受理的那笔置 rejected，不计入已付。
+        if (!replay) {
             repository.saveTicketPaymentIntent(new TicketPaymentIntentRecord(
                     intent.id(), intent.businessOrderType(), intent.businessOrderId(), intent.amountCent(),
-                    intent.currency(), intent.channel(), "succeeded", intent.createdAt(), now));
+                    intent.currency(), intent.channel(), mismatched ? "rejected" : "succeeded", intent.createdAt(), now));
+        }
+        if (mismatched) {
+            recordRejectedPayment(order, intent, actual.gatewayRef(),
+                    "到账金额与票务订单 " + order.id() + " 待付金额不一致，本笔不受理，核实后原路退款");
+            return order;
         }
         // 拒收单每一笔实际到账分别待退；已受理成功订单仍直接重放，不因故障倒退。
-        boolean rejectedPayment = "cancelled".equals(order.status())
-                || (suspended && !"paid".equals(order.payStatus()));
-        if (rejectedPayment) {
-            if (financeService == null) throw ApiException.conflict("REFUND_SERVICE_UNAVAILABLE", "退款待办服务未接线");
-            financeService.recordRejectedTicketPaymentRefund("ticket_payment_rejection", intent.id(), order.amountCent(),
-                    intent.channel(), actual.gatewayRef(), order.merchantId(), order.barId(), order.projectId(),
-                    "全园故障停售后确认收款，原票订单 " + order.id() + " 取消，核实后原路退款");
+        if (refused) {
+            recordRejectedPayment(order, intent, actual.gatewayRef(), suspended
+                    ? "全园故障停售后确认收款，原票订单 " + order.id() + " 取消，核实后原路退款"
+                    : "票务订单 " + order.id() + " 已取消后确认收款，不再受理，核实后原路退款");
             if (repository.atomicCancelUnpaidOrder(order.id(), now) > 0) {
                 repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
             }
@@ -253,13 +324,170 @@ public class TicketOrderService {
         if ("paid".equals(order.payStatus())) {
             return order;
         }
+        // R20：合计未足额（储值先付一部分）订单保持待付。
+        if (!refused && paidBefore + intent.amountCent() < order.amountCent()) {
+            return order;
+        }
         // V231：支付确认成功即支付时刻，写 paid_at=now（与 pay_status→paid 同事务）。
         return repository.updateTicketOrder(new TicketOrderRecord(
                 order.id(), order.orderNo(), order.customerId(), order.ticketTypeId(), order.priceRuleId(),
                 order.quantity(), order.visitDate(), order.salesChannel(), order.buyerPhone(), order.amountCent(),
                 order.dynamicPricingRuleId(), order.baseAmountCent(), order.dynamicAdjustmentCent(), order.currency(),
-                "paid", order.issueStatus(), suspended ? "cancelled" : order.status(), order.createdAt(), now, order.merchantId(), now,
+                "paid", order.issueStatus(), refused ? "cancelled" : order.status(), order.createdAt(), now, order.merchantId(), now,
                 order.barId(), order.projectId()));
+    }
+
+    /** ROOT-03-R20：已成功付款合计（储值与在线各笔）。 */
+    public long paidAmountCent(String orderId) {
+        return repository.listTicketPaymentIntentsByOrder(orderId).stream()
+                .filter(intent -> "succeeded".equals(intent.status()))
+                .mapToLong(TicketPaymentIntentRecord::amountCent).sum();
+    }
+
+    /** 不受理的到账登记原路待退（与故障停售拒收同一来源类型，金额＝本笔实际到账）。 */
+    private void recordRejectedPayment(TicketOrderRecord order, TicketPaymentIntentRecord payment, String gatewayRef, String reason) {
+        if (financeService == null) throw ApiException.conflict("REFUND_SERVICE_UNAVAILABLE", "退款待办服务未接线");
+        financeService.recordRejectedTicketPaymentRefund("ticket_payment_rejection", payment.id(), payment.amountCent(),
+                payment.channel(), gatewayRef, order.merchantId(), order.barId(), order.projectId(), reason);
+    }
+
+    /**
+     * ROOT-03-R17/R20：订单不再成交时，已收各笔一律原路退回——储值笔回原卡（先赠后本由储值域内置），在线笔登记原路待退。
+     * 退款编号由原付款派生，重复调用不重复退。
+     */
+    private void refundAllReceived(TicketOrderRecord order, String reason) {
+        for (TicketPaymentIntentRecord payment : repository.listTicketPaymentIntentsByOrder(order.id())) {
+            if (!"succeeded".equals(payment.status())) {
+                continue;
+            }
+            if ("stored_value".equals(payment.channel())) {
+                if (storedValueService == null) throw ApiException.conflict("REFUND_SERVICE_UNAVAILABLE", "储值退回服务未接线");
+                storedValueService.refundConsumption(payment.id(), payment.amountCent(), reason, "ticketrev_back_" + payment.id());
+            } else {
+                recordRejectedPayment(order, payment, null, reason);
+            }
+        }
+    }
+
+    /**
+     * ROOT-03-R17（BSM 第 859 行「客人付款成功后必须出票」）：付款成功（订单已付）即由系统出票，不等员工手工出票。
+     * 出票逻辑与员工出票同一条（{@link #issueOrder}），已出过票直接返回原票；成功、失败都留痕，失败原样抛出由调用方决定回滚或原路退回。
+     */
+    public IssuedTicketResponse issuePaidOrderAutomatically(String orderId) {
+        try {
+            IssuedTicketResponse issued = issueOrder(orderId,
+                    new StatusChangeRequest("auto_issue_" + orderId, null, "付款成功自动出票", List.of()));
+            if (auditEventService != null) {
+                auditEventService.recordSuccess("ticket_order.auto_issued", "not_applicable", "ticket_order", orderId, null, null,
+                        Map.of("entitlement_count", issued.issuedEntitlements().size()));
+            }
+            return issued;
+        } catch (RuntimeException failure) {
+            if (auditEventService != null) {
+                auditEventService.recordFailure("ticket_order.auto_issue_failed", "not_applicable", "ticket_order", orderId, null, null,
+                        codeOf(failure));
+            }
+            throw failure;
+        }
+    }
+
+    /** 在线到账确认结果：issueFailed＝本次确认时出票失败，已收各笔原路待退、订单已取消。 */
+    public record OnlineSettlement(TicketOrderRecord order, boolean issueFailed) {
+    }
+
+    /**
+     * ROOT-03-R4/R17/R18 在线到账确认内核（客人回前台确认、服务端结算作业、超时取消作业共用）：先向渠道核验本笔已成功（渠道未启用、未成功一律
+     * 409，不改订单），再按 {@link #confirmPayment} 回写；订单因此付足即在保存点里自动出票，出票失败只回滚出票，已收各笔原路待退并取消订单。
+     * customerId 非空时只许本人订单。
+     */
+    public OnlineSettlement settleOnlinePayment(String orderId, String paymentIntentId, String customerId) {
+        TicketOrderRecord order = repository.findTicketOrderByIdForUpdate(requireText(orderId, "order_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
+        if (customerId != null && !customerId.equals(order.customerId())) {
+            throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "该订单不属于当前客人");
+        }
+        TicketPaymentIntentRecord intent = repository.findTicketPaymentIntentById(requireText(paymentIntentId, "payment_intent_id"))
+                .filter(found -> order.id().equals(found.businessOrderId()) && "ticket_order".equals(found.businessOrderType()))
+                .orElseThrow(() -> ApiException.notFound("PAYMENT_INTENT_NOT_FOUND", "支付意向不存在或不属于此订单"));
+        if (financeService == null) throw ApiException.conflict("PAYMENT_GATEWAY_UNAVAILABLE", "支付渠道未接线");
+        PaymentIntentRecord confirmed = financeService.confirmOnlinePaymentIntent(intent.id(), null, null);
+        TicketOrderRecord after = confirmPayment(order.id(),
+                new ConfirmTicketOrderPaymentRequest(null, intent.id(), confirmed.gatewayRef()));
+        if (!"paid".equals(after.payStatus()) || "cancelled".equals(after.status()) || "issued".equals(after.issueStatus())) {
+            return new OnlineSettlement(after, false);
+        }
+        try {
+            inSavepoint(() -> issuePaidOrderAutomatically(order.id()));
+            return new OnlineSettlement(repository.findTicketOrderById(order.id()).orElse(after), false);
+        } catch (RuntimeException issueFailure) {
+            TicketOrderRecord current = repository.findTicketOrderById(order.id()).orElse(after);
+            refundAllReceived(current, "付款成功但出票失败（" + codeOf(issueFailure) + "），原路退回");
+            TicketOrderRecord cancelledOrder = repository.updateTicketOrder(new TicketOrderRecord(
+                    current.id(), current.orderNo(), current.customerId(), current.ticketTypeId(), current.priceRuleId(),
+                    current.quantity(), current.visitDate(), current.salesChannel(), current.buyerPhone(), current.amountCent(),
+                    current.dynamicPricingRuleId(), current.baseAmountCent(), current.dynamicAdjustmentCent(), current.currency(),
+                    current.payStatus(), current.issueStatus(), "cancelled", current.createdAt(), Instant.now(), current.merchantId(),
+                    current.paidAt(), current.barId(), current.projectId()));
+            repository.releaseTicketStock(current.ticketTypeId(), current.quantity());
+            return new OnlineSettlement(cancelledOrder, true);
+        }
+    }
+
+    /**
+     * ROOT-03-R4（BSM 第 859 行「通过官方 App/小程序购票……查看支付结果」）客人本人订单发起在线付款：金额由服务端定＝此刻待付金额（R20 扣除已成功各笔），
+     * 不收客户端金额；同一订单尚未付款的旧在线付款单一律作废，只留本次一笔。
+     */
+    public PaymentIntentRecord createCustomerOnlinePayment(String orderId, String customerId, String channel, String idempotencyKey) {
+        TicketOrderRecord order = repository.findTicketOrderByIdForUpdate(requireText(orderId, "order_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
+        if (!requireText(customerId, "customer_id").equals(order.customerId())) {
+            throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "该订单不属于当前客人");
+        }
+        requirePaymentOpen(order);
+        if (!"unpaid".equals(order.payStatus())) {
+            throw ApiException.conflict("ORDER_NOT_PAYABLE", "订单不在待支付状态");
+        }
+        if (financeService == null) throw ApiException.conflict("PAYMENT_GATEWAY_UNAVAILABLE", "支付渠道未接线");
+        Instant now = Instant.now();
+        for (TicketPaymentIntentRecord pending : repository.listTicketPaymentIntentsByOrder(order.id())) {
+            if (!"created".equals(pending.status())) {
+                continue;
+            }
+            // ROOT-03-R18（BSM 第 859 行「客人付款成功后必须出票」）：作废前先向渠道查这笔——客人已在渠道付款只是没回前台的，按同一确认内核到账出票、
+            // 不再拉起新的一笔，返回这笔已成功的付款；渠道确认未付或渠道未启用（不可能付成）的才作废。
+            if (financeService.gatewayReportsPaid(pending.id())
+                    && "paid".equals(settleOnlinePayment(order.id(), pending.id(), customerId).order().payStatus())) {
+                return financeService.findPaymentIntent(pending.id()).orElseThrow();
+            }
+            if (financeService.voidPendingPaymentIntent(pending.id())) {
+                repository.saveTicketPaymentIntent(new TicketPaymentIntentRecord(pending.id(), pending.businessOrderType(),
+                        pending.businessOrderId(), pending.amountCent(), pending.currency(), pending.channel(), "voided",
+                        pending.createdAt(), now));
+            }
+        }
+        long remaining = order.amountCent() - paidAmountCent(order.id());
+        PaymentIntentRecord intent = financeService.createPaymentIntent(new PaymentIntentRequest(
+                "tkpay_" + sha256Hex(customerId + "|" + order.id() + "|" + requireText(idempotencyKey, "idempotency_key")).substring(0, 40),
+                null, List.of(), "ticket_order", order.id(), remaining, CURRENCY_CNY, channel));
+        repository.saveTicketPaymentIntent(new TicketPaymentIntentRecord(intent.id(), "ticket_order", order.id(), remaining,
+                CURRENCY_CNY, intent.channel(), "created", now, now));
+        return intent;
+    }
+
+    private <T> T inSavepoint(Supplier<T> work) {
+        return savepoint == null ? work.get() : savepoint.execute(status -> work.get());
+    }
+
+    private static String codeOf(RuntimeException failure) {
+        return failure instanceof ApiException api ? api.code() : failure.getClass().getSimpleName();
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 hashing unavailable", exception);
+        }
     }
 
     /**
@@ -293,12 +521,37 @@ public class TicketOrderService {
     int cancelExpiredUnpaidOrders(Instant cutoff) {
         int released = 0;
         for (TicketOrderRecord order : repository.listExpiredUnpaidOrders(cutoff)) {
+            // ROOT-03-R18：取消前先向渠道查该单待付的在线付款单，已付的照常出票、不取消。
+            if (settledByPendingOnlinePayment(order)) {
+                continue;
+            }
             if (repository.atomicCancelUnpaidOrder(order.id(), Instant.now()) > 0) {
                 repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
+                // ROOT-03-R20：未足额超时取消的，已收各笔原路退回。
+                refundAllReceived(order, "票务订单 " + order.id() + " 超时未付足取消，已收款原路退回");
                 released++;
             }
         }
         return released;
+    }
+
+    private boolean settledByPendingOnlinePayment(TicketOrderRecord order) {
+        if (financeService == null) {
+            return false;
+        }
+        for (TicketPaymentIntentRecord pending : repository.listTicketPaymentIntentsByOrder(order.id())) {
+            if (!"created".equals(pending.status())) {
+                continue;
+            }
+            try {
+                if ("paid".equals(inSavepoint(() -> settleOnlinePayment(order.id(), pending.id(), null)).order().payStatus())) {
+                    return true;
+                }
+            } catch (RuntimeException notPaid) {
+                // 渠道未启用、未付款或非渠道付款单：照常超时取消。
+            }
+        }
+        return false;
     }
 
     IssuedTicketResponse issueOrder(String orderId, StatusChangeRequest request) {

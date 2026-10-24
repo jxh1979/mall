@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -84,7 +84,8 @@ class ParkingPaymentJdbcIntegrationTests {
         session = f.session("P1", "粤A12345", entered.toString());
         due = businessDays.businessDate(entered.plus(Duration.ofMinutes(30))).equals(businessDays.businessDate(now)) ? 500 : 1000;
         when(gateway.initiatePayment(any())).thenAnswer(inv -> new PaymentGatewayResult(PaymentGatewayResult.Status.PENDING, GATEWAY,
-                "ref_" + UUID.randomUUID(), "pending"));
+                "ref_" + UUID.randomUUID(), "pending", null, null,
+                new com.complex.platform.finance.gateway.PaymentClientLaunch("miniapp_wechat", Map.of("timeStamp", "1700000000"))));
     }
 
     @Test
@@ -114,12 +115,15 @@ class ParkingPaymentJdbcIntegrationTests {
 
     @Test
     void requestShapedLikeCustomerClient() throws Exception {
-        mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "web").header("X-Customer-Token", token)
+        mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"parking_session_id\":\"" + session + "\",\"idempotency_key\":\"cust-web-" + f.suffix + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.parking_session_id").value(session))
-                .andExpect(jsonPath("$.data.receiver_entity_id").value(company));
+                .andExpect(jsonPath("$.data.receiver_entity_id").value(company))
+                // ROOT-03-R18：缴费发起响应带 App/小程序拉起参数（渠道原样签发）。
+                .andExpect(jsonPath("$.data.launch.kind").value("miniapp_wechat"))
+                .andExpect(jsonPath("$.data.launch.params.timeStamp").value("1700000000"));
     }
 
     /** BSM「员工车辆由所属主体登记车牌后，按后台配置免费或折扣」：停车系统标为员工车辆的，客人端应缴按本项目员工优惠（50%）计。 */
@@ -162,11 +166,11 @@ class ParkingPaymentJdbcIntegrationTests {
 
     private ResultActions lookup(String plate) throws Exception {
         return mockMvc.perform(get("/api/v1/customer/parking/sessions").param("project_id", f.project).param("plate_no", plate)
-                .header("X-Terminal-Type", "web").header("X-Customer-Token", token));
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token));
     }
 
     private ResultActions pay(String key) throws Exception {
-        return mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "web").header("X-Customer-Token", token)
+        return mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"parking_session_id\":\"" + session + "\",\"idempotency_key\":\"" + key + "\"}"));
     }
@@ -181,7 +185,7 @@ class ParkingPaymentJdbcIntegrationTests {
                 new PaymentGatewayRequest("parking_fee", paymentId, ((Number) intent.get("amount_cent")).longValue(), "CNY", "wechat",
                         ref, null, null)));
         return mockMvc.perform(post("/api/v1/customer/parking/payments/" + paymentId + "/confirm")
-                .header("X-Terminal-Type", "web").header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content("{}"));
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content("{}"));
     }
 
     private static String id(ResultActions result) throws Exception {

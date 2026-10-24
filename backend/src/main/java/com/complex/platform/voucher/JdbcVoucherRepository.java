@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -157,6 +157,12 @@ class JdbcVoucherRepository implements VoucherRepository {
         return jdbcTemplate.query(
                 "SELECT " + INSTANCE_COLS + " FROM voucher_instances WHERE id = :id",
                 new MapSqlParameterSource("id", id), this::mapInstance).stream().findFirst();
+    }
+
+    @Override
+    public void lockInstance(String id) {
+        jdbcTemplate.query("SELECT id FROM voucher_instances WHERE id = :id FOR UPDATE",
+                new MapSqlParameterSource("id", id), (rs, n) -> rs.getString(1));
     }
 
     @Override
@@ -340,7 +346,12 @@ class JdbcVoucherRepository implements VoucherRepository {
                    vi.customer_id AS customer_id, vi.status AS status,
                    CASE WHEN vi.status = 'issued' THEN 1 ELSE 0 END AS remaining_times,
                    vi.expires_at AS expires_at, vd.face_value_cent AS face_value_cent,
-                   vd.redeem_method AS redeem_method, vi.code AS code, vi.issued_at AS sort_time
+                   vd.redeem_method AS redeem_method, vi.code AS code, vi.issued_at AS sort_time,
+                   CASE WHEN vi.status = 'revoked' THEN vi.revoke_reason END AS invalid_reason,
+                   CASE WHEN vi.status = 'revoked' AND vi.source_type = 'points_redemption'
+                        THEN (SELECT COALESCE(SUM(l.points_delta), 0)::bigint FROM customer_points_ledger l
+                               WHERE l.source_type = 'points_voucher_refund' AND l.source_id = vi.source_ref) END AS points_refunded,
+                   (vd.transferable AND vi.status = 'issued' AND (vi.expires_at IS NULL OR vi.expires_at > now())) AS transferable
               FROM voucher_instances vi
               JOIN voucher_definitions vd ON vd.id = vi.definition_id
              WHERE (:merchant_scope IS NULL OR vd.merchant_id = :merchant_scope OR vd.merchant_id IS NULL)
@@ -350,7 +361,8 @@ class JdbcVoucherRepository implements VoucherRepository {
                    o.customer_id AS customer_id, ie.status AS status,
                    GREATEST(ie.total_times - ie.used_times, 0) AS remaining_times,
                    ie.valid_to AS expires_at, CAST(NULL AS BIGINT) AS face_value_cent,
-                   'external_reflow' AS redeem_method, CAST(NULL AS VARCHAR) AS code, ie.created_at AS sort_time
+                   'external_reflow' AS redeem_method, CAST(NULL AS VARCHAR) AS code, ie.created_at AS sort_time,
+                   CAST(NULL AS VARCHAR) AS invalid_reason, CAST(NULL AS BIGINT) AS points_refunded, FALSE AS transferable
               FROM issued_entitlements ie
               JOIN partner_voucher_configs pvc ON pvc.entitlement_template_id = ie.entitlement_template_id
               JOIN entitlement_templates et ON et.id = ie.entitlement_template_id
@@ -368,7 +380,8 @@ class JdbcVoucherRepository implements VoucherRepository {
                 .addValue("limit", pageSize)
                 .addValue("offset", (long) (page - 1) * pageSize);
         List<VoucherOverviewRecord> items = jdbcTemplate.query(
-                "SELECT id, source, name, voucher_kind, customer_id, status, remaining_times, expires_at, face_value_cent, redeem_method, code FROM ("
+                "SELECT id, source, name, voucher_kind, customer_id, status, remaining_times, expires_at, face_value_cent, redeem_method, code,"
+                        + " invalid_reason, points_refunded, transferable FROM ("
                         + OVERVIEW_UNION
                         + ") all_vouchers ORDER BY sort_time DESC, id DESC LIMIT :limit OFFSET :offset",
                 params,
@@ -383,10 +396,50 @@ class JdbcVoucherRepository implements VoucherRepository {
                         nullableInstant(rs, "expires_at"),
                         rs.getObject("face_value_cent", Long.class),
                         rs.getString("redeem_method"),
-                        rs.getString("code")));
+                        rs.getString("code"),
+                        rs.getString("invalid_reason"),
+                        rs.getObject("points_refunded", Long.class),
+                        rs.getBoolean("transferable")));
         Long total = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM (" + OVERVIEW_UNION + ") all_vouchers", params, Long.class);
         return new PageResponse<>(items, page, pageSize, total == null ? 0L : total);
+    }
+
+    // ── ROOT-03-R32 券动态核销码 ───────────────────────────────────────────
+
+    @Override
+    public void insertRedeemCode(String id, String voucherInstanceId, String customerId, String codeHash, Instant issuedAt,
+            Instant expiresAt, int refreshIntervalSeconds) {
+        jdbcTemplate.update("""
+                INSERT INTO voucher_redeem_codes (id, voucher_instance_id, customer_id, code_hash, issued_at, expires_at,
+                    refresh_interval_seconds, status)
+                VALUES (:id, :instance, :customer, :hash, :issued_at, :expires_at, :interval, 'active')
+                """, new MapSqlParameterSource()
+                .addValue("id", id).addValue("instance", voucherInstanceId).addValue("customer", customerId).addValue("hash", codeHash)
+                .addValue("issued_at", timestampWithTimeZone(issuedAt)).addValue("expires_at", timestampWithTimeZone(expiresAt))
+                .addValue("interval", refreshIntervalSeconds));
+    }
+
+    @Override
+    public int revokeActiveRedeemCodes(String voucherInstanceId) {
+        return jdbcTemplate.update("UPDATE voucher_redeem_codes SET status = 'revoked' WHERE voucher_instance_id = :instance AND status = 'active'",
+                new MapSqlParameterSource("instance", voucherInstanceId));
+    }
+
+    @Override
+    public Optional<ActiveRedeemCode> findActiveRedeemCode(String codeHash, Instant now) {
+        return jdbcTemplate.query("""
+                SELECT voucher_instance_id, customer_id FROM voucher_redeem_codes
+                 WHERE code_hash = :hash AND status = 'active' AND expires_at > :now
+                """, new MapSqlParameterSource().addValue("hash", codeHash).addValue("now", timestampWithTimeZone(now)),
+                (rs, n) -> new ActiveRedeemCode(rs.getString("voucher_instance_id"), rs.getString("customer_id"))).stream().findFirst();
+    }
+
+    @Override
+    public void consumeRedeemCode(String codeHash, String redemptionId) {
+        jdbcTemplate.update("UPDATE voucher_redeem_codes SET status = 'consumed', consumed_redemption_id = :redemption"
+                + " WHERE code_hash = :hash AND status = 'active'",
+                new MapSqlParameterSource().addValue("hash", codeHash).addValue("redemption", redemptionId));
     }
 
     // ── 行映射 ─────────────────────────────────────────────────────────────

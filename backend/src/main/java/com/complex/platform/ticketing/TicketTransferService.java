@@ -1,5 +1,7 @@
 package com.complex.platform.ticketing;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.BlindIndex;
 import com.complex.platform.common.crypto.PiiCipher;
@@ -16,22 +18,24 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
 
 /**
  * AUD-077 门票权益转赠状态机。转赠单位=人员权益组 slot=(parent_ticket_id, slot_index)。
- * 冻结=该 slot 存在 status='pending' 转赠记录(部分唯一索引物理保证同 slot 最多一笔在途);
- * 撤回/领取全落同一行 CAS(UPDATE ... WHERE status='pending'),数据库行锁先提交者赢("以系统先成功者为准")。
- * 权益消费冻结在 atomicUseEntitlement 的 NOT EXISTS 子句 + 核销主链 requireSlotNotTransferring 双闸。
+ * 同 slot 最多一笔在途(部分唯一索引);撤回/领取全落同一行 CAS(UPDATE ... WHERE status='pending'),数据库行锁先提交者赢。
+ * clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，
+ * 其余动作自动失效并提示」）：在途不冻结；核销成功即作废在途（atomicUseEntitlement），再次转赠先作废前一笔，领取与二者争同一人份权益行锁。
  */
 @Service
 public class TicketTransferService {
 
     private static final String CHANNEL_PHONE = "phone";
     private static final String CHANNEL_LINK = "link";
+    /** clients-R40 在途转赠被原持有人的动作作废：核销（atomicUseEntitlement 写入）、再次转赠。 */
+    private static final String VOID_HOLDER_REDEEMED = "holder_redeemed";
+    private static final String VOID_HOLDER_RETRANSFERRED = "holder_retransferred";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final TicketingRepository repository;
@@ -80,17 +84,18 @@ public class TicketTransferService {
         }
         int slotIndex = resolveSlotIndex(parent, req.slotIndex());
 
-        // 我=当前持有人。
+        // slot 全部权益未核销且 active(多次票首核后/任何已核销/已冻结 → 拒)。锁定读(FOR UPDATE)排除并发核销。
+        List<IssuedEntitlementRecord> slotEntitlements =
+                repository.listIssuedEntitlementsByParentSlotForUpdate(parentTicketId, slotIndex);
+
+        // 我=当前持有人。BSM 第 809 行「以先处理成功的那个动作为准」：持有人在拿到人份行锁之后读——与对方领取并发时在锁上等到领取提交，
+        // 票已归对方即失效，不留下一笔可被第三人领走的在途转赠。
         String holder = repository.findSlotHolder(parentTicketId, slotIndex)
                 .map(TicketSlotHolderRecord::holderCustomerId)
                 .orElse(parent.currentHolderCustomerId());
         if (holder == null || !holder.equals(initiator)) {
             throw ApiException.forbidden("TICKET_TRANSFER_NOT_HOLDER", "只有当前持票人可以转赠");
         }
-
-        // slot 全部权益未核销且 active(多次票首核后/任何已核销/已冻结 → 拒)。锁定读(FOR UPDATE)排除并发核销。
-        List<IssuedEntitlementRecord> slotEntitlements =
-                repository.listIssuedEntitlementsByParentSlotForUpdate(parentTicketId, slotIndex);
         if (slotEntitlements.isEmpty()) {
             throw ApiException.conflict("TICKET_TRANSFER_SLOT_EMPTY", "该票没有可转赠的权益");
         }
@@ -102,6 +107,8 @@ public class TicketTransferService {
         }
 
         Instant now = clock.instant();
+        // clients-R40：原持有人再次转赠＝前一笔在途转赠作废（领取方锁同一人份权益行，先提交者为准）。
+        repository.voidPendingTransfersForSlot(parentTicketId, slotIndex, VOID_HOLDER_RETRANSFERRED, now);
         String id = "tkt_transfer_" + UUID.randomUUID().toString().replace("-", "");
         String receiverPhone = null;
         String receiverPhoneHash = null;
@@ -125,13 +132,7 @@ public class TicketTransferService {
                 id, parentTicketId, slotIndex, initiator, channel,
                 receiverPhone, receiverPhoneHash, receiverPhoneMasked, claimCode, null,
                 "pending", null, now, null, null, null, now);
-        try {
-            repository.saveTicketTransfer(record);
-        } catch (DuplicateKeyException duplicate) {
-            // 撞 uq_ticket_transfers_pending(同 slot 已有在途) 或 claim_code 唯一 → 视为已在途。
-            throw ApiException.conflict("TICKET_TRANSFER_ALREADY_PENDING",
-                    "该票已有一笔转赠在等待领取,请先撤回");
-        }
+        repository.saveTicketTransfer(record);
 
         // 手机号渠道:发短信含领取入口(复用短信触发范式;正式模板报备中,通道未装配则跳过,不阻塞转赠)。
         if (CHANNEL_PHONE.equals(channel) && notificationService != null && plainReceiverPhone != null) {
@@ -149,7 +150,7 @@ public class TicketTransferService {
         }
 
         // 成功/失败审计统一由 TicketingService 包装层(executeWrite)按契约事件 ticket_transfer.created/create_failed 记录。
-        return TicketTransferResponse.of(record, resolveTicketName(parentTicketId), true);
+        return TicketTransferResponse.of(record, resolveTicketName(parentTicketId), true, sessionLimit(parentTicketId));
     }
 
     // ── 确认领取 ─────────────────────────────────────────────────────────────
@@ -163,10 +164,10 @@ public class TicketTransferService {
 
         // 幂等:已领取且受赠人=我(网络重试) → 直接成功,不双写。
         if ("claimed".equals(transfer.status()) && claimer.equals(transfer.receiverCustomerId())) {
-            return TicketTransferResponse.of(transfer, resolveTicketName(transfer.parentTicketId()), false);
+            return respond(transfer, false);
         }
         if (!"pending".equals(transfer.status())) {
-            throw statusConflict(transfer.status());
+            throw statusConflict(transfer);
         }
         // 渠道授权:link 必带匹配 claim_code;phone 校验登录手机号盲索引=受赠手机号。
         if (CHANNEL_LINK.equals(transfer.channel())) {
@@ -181,12 +182,22 @@ public class TicketTransferService {
             }
         }
 
-        // AUD-018 领取前复验:该 slot 权益必须仍全部未核销且 active(封堵竞态/历史残留的"已用票在途转赠"被领取)。
-        for (IssuedEntitlementRecord e : repository.listIssuedEntitlementsByParentSlot(
-                transfer.parentTicketId(), transfer.slotIndex())) {
+        // AUD-018 领取前复验:该 slot 权益必须仍全部未核销且 active。clients-R40：锁定读，与核销、改转争同一人份行锁，先提交者为准——
+        // 后到的领取读到原持有人已核销（在途已作废）或已改转（在途已作废）即失效并提示。
+        List<IssuedEntitlementRecord> slotEntitlements = repository.listIssuedEntitlementsByParentSlotForUpdate(
+                transfer.parentTicketId(), transfer.slotIndex());
+        TicketTransferRecord current = repository.findTicketTransferById(id).orElse(transfer);
+        if (!"pending".equals(current.status())) {
+            throw statusConflict(current);
+        }
+        for (IssuedEntitlementRecord e : slotEntitlements) {
             if (e.usedTimes() > 0 || !"active".equals(e.status())) {
                 throw ApiException.conflict("TICKET_TRANSFER_SLOT_USED", "该票已核销过,不能领取");
             }
+        }
+        // clients-R40（BSM 第 809 行「若该人份权益所绑定的场次已经结束……此时不发生领取」）。
+        if (sessionLimit(transfer.parentTicketId()).ended()) {
+            throw ApiException.conflict("TICKET_TRANSFER_SESSION_ENDED", "该权益所在场次已结束、权益已终结");
         }
         Instant now = clock.instant();
         int rows = repository.claimTicketTransfer(id, claimer, now);
@@ -194,9 +205,9 @@ public class TicketTransferService {
             // 竞态输家:重读定局(撤回/被他人先领)。
             TicketTransferRecord latest = repository.findTicketTransferById(id).orElse(transfer);
             if ("claimed".equals(latest.status()) && claimer.equals(latest.receiverCustomerId())) {
-                return TicketTransferResponse.of(latest, resolveTicketName(latest.parentTicketId()), false);
+                return respond(latest, false);
             }
-            throw statusConflict(latest.status());
+            throw statusConflict(latest);
         }
         // 赢家:同事务原子改 slot 持有人=受赠人;单人票同步父票 current_holder 保持一致。
         repository.upsertSlotHolder(transfer.parentTicketId(), transfer.slotIndex(), claimer, now);
@@ -209,8 +220,7 @@ public class TicketTransferService {
             }
         });
         // 成功/失败审计统一由 TicketingService 包装层(executeWrite)按契约事件 ticket_transfer.claimed/claim_failed 记录。
-        TicketTransferRecord claimed = repository.findTicketTransferById(id).orElse(transfer);
-        return TicketTransferResponse.of(claimed, resolveTicketName(transfer.parentTicketId()), false);
+        return respond(repository.findTicketTransferById(id).orElse(transfer), false);
     }
 
     // ── 撤回 ────────────────────────────────────────────────────────────────
@@ -223,25 +233,24 @@ public class TicketTransferService {
             throw ApiException.forbidden("TICKET_TRANSFER_NOT_INITIATOR", "只有发起人可以撤回转赠");
         }
         if ("revoked".equals(transfer.status())) {
-            return TicketTransferResponse.of(transfer, resolveTicketName(transfer.parentTicketId()), true); // 幂等
+            return respond(transfer, true); // 幂等
         }
         if (!"pending".equals(transfer.status())) {
-            throw statusConflict(transfer.status());
+            throw statusConflict(transfer);
         }
         Instant now = clock.instant();
         int rows = repository.revokeTicketTransfer(id, me, now);
         if (rows == 0) {
             TicketTransferRecord latest = repository.findTicketTransferById(id).orElse(transfer);
             if ("revoked".equals(latest.status())) {
-                return TicketTransferResponse.of(latest, resolveTicketName(latest.parentTicketId()), true);
+                return respond(latest, true);
             }
-            throw statusConflict(latest.status()); // 撤回时对方已先领 → 409 已被领取
+            throw statusConflict(latest); // 撤回时对方已先领 → 409 已被领取
         }
         // 撤回:解冻,持有人不变(仍是发起人),无需改 slot holder。
         auditEventService.recordSuccess("ticket_transfer.revoked", "not_applicable", "ticket_transfer", id,
                 null, null, Map.of("parent_ticket_id", transfer.parentTicketId(), "slot_index", transfer.slotIndex()));
-        TicketTransferRecord revoked = repository.findTicketTransferById(id).orElse(transfer);
-        return TicketTransferResponse.of(revoked, resolveTicketName(transfer.parentTicketId()), true);
+        return respond(repository.findTicketTransferById(id).orElse(transfer), true);
     }
 
     // ── 领取预览(不算领取) ──────────────────────────────────────────────────
@@ -250,17 +259,18 @@ public class TicketTransferService {
         TicketTransferRecord transfer = repository.findTicketTransferByClaimCode(code)
                 .orElseThrow(() -> ApiException.notFound("TICKET_TRANSFER_NOT_FOUND", "转赠记录不存在或已被删除"));
         if (!"pending".equals(transfer.status())) {
-            throw statusConflict(transfer.status());
+            throw statusConflict(transfer);
         }
         TicketInstanceRecord parent = repository.findTicketInstanceById(transfer.parentTicketId()).orElse(null);
         List<IssuedEntitlementRecord> slotEntitlements =
                 repository.listIssuedEntitlementsByParentSlot(transfer.parentTicketId(), transfer.slotIndex());
         String entType = slotEntitlements.isEmpty() ? null : slotEntitlements.get(0).entitlementType();
         int totalTimes = slotEntitlements.stream().mapToInt(IssuedEntitlementRecord::totalTimes).max().orElse(1);
+        FirstSessionWindow.Limit limit = sessionLimit(transfer.parentTicketId());
         return new TicketTransferPreviewResponse(
                 transfer.id(), transfer.parentTicketId(), transfer.slotIndex(), transfer.channel(),
                 transfer.status(), resolveTicketName(transfer.parentTicketId()),
-                parent == null ? 1 : parent.numPeople(), totalTimes);
+                parent == null ? 1 : parent.numPeople(), totalTimes, limit.restricted(), limit.label(), limit.ended());
     }
 
     // ── 我的待领取(手机号渠道) / 我发起的 ──────────────────────────────────────
@@ -284,7 +294,16 @@ public class TicketTransferService {
     /** 票到期/退款作废:把该父票在途转赠 pending→voided(解冻),供上层再走到期/退款规则。返回作废条数。 */
     @Transactional
     public int voidPendingTransfersForParent(String parentTicketId, String reason, Instant now) {
-        int voided = repository.voidPendingTransfersForParent(parentTicketId, reason, now);
+        return auditVoided(parentTicketId, reason, repository.voidPendingTransfersForParent(parentTicketId, reason, now));
+    }
+
+    /** 账户注销/拉黑:只作废本人持有的这一人份上的在途转赠(第十三批第 12 条「只作废本人那几份」)。返回作废条数。 */
+    @Transactional
+    public int voidPendingTransfersForSlot(String parentTicketId, int slotIndex, String reason, Instant now) {
+        return auditVoided(parentTicketId, reason, repository.voidPendingTransfersForSlot(parentTicketId, slotIndex, reason, now));
+    }
+
+    private int auditVoided(String parentTicketId, String reason, int voided) {
         if (voided > 0) {
             auditEventService.recordSuccess("ticket_transfer.voided", "not_applicable", "ticket_transfer",
                     parentTicketId, null, null, Map.of("reason", reason == null ? "system" : reason, "count", voided));
@@ -295,12 +314,32 @@ public class TicketTransferService {
     // ── helpers ─────────────────────────────────────────────────────────────
     private List<TicketTransferResponse> toResponses(List<TicketTransferRecord> records, boolean includeClaimCode) {
         Map<String, String> nameByParent = new LinkedHashMap<>();
+        Map<String, FirstSessionWindow.Limit> limitByParent = new LinkedHashMap<>();
         List<TicketTransferResponse> out = new ArrayList<>();
         for (TicketTransferRecord r : records) {
             String name = nameByParent.computeIfAbsent(r.parentTicketId(), this::resolveTicketName);
-            out.add(TicketTransferResponse.of(r, name, includeClaimCode));
+            out.add(TicketTransferResponse.of(r, name, includeClaimCode, limitByParent.computeIfAbsent(r.parentTicketId(), this::sessionLimit)));
         }
         return out;
+    }
+
+    private TicketTransferResponse respond(TicketTransferRecord r, boolean includeClaimCode) {
+        return TicketTransferResponse.of(r, resolveTicketName(r.parentTicketId()), includeClaimCode, sessionLimit(r.parentTicketId()));
+    }
+
+    /**
+     * clients-R40（BSM 第 809 行「受赠人……同样受「多人票各人须在同一场次内完成入场」的约束——同票已有人完成检票环节的，受赠人只能在该人已开启的
+     * 同一场次内完成入场，该场次结束后这份权益即告终结」）：多人票且首场次已开启才有限制。
+     */
+    private FirstSessionWindow.Limit sessionLimit(String parentTicketId) {
+        TicketInstanceRecord parent = repository.findTicketInstanceById(parentTicketId).orElse(null);
+        if (parent == null || parent.numPeople() <= 1) {
+            return FirstSessionWindow.Limit.NONE;
+        }
+        return repository.findFirstSession(parentTicketId)
+                .map(session -> new FirstSessionWindow.Limit(true, session.label(),
+                        session.end() != null && !clock.instant().isBefore(session.end())))
+                .orElse(FirstSessionWindow.Limit.NONE);
     }
 
     private int resolveSlotIndex(TicketInstanceRecord parent, Integer requested) {
@@ -323,7 +362,12 @@ public class TicketTransferService {
                 .orElse(null);
     }
 
-    private ApiException statusConflict(String status) {
+    private ApiException statusConflict(TicketTransferRecord transfer) {
+        String status = transfer.status();
+        if ("voided".equals(status) && (VOID_HOLDER_REDEEMED.equals(transfer.voidReason())
+                || VOID_HOLDER_RETRANSFERRED.equals(transfer.voidReason()))) {
+            return ApiException.conflict("TICKET_TRANSFER_VOIDED", "原持有人已使用或已改转他人，本次转赠已失效");
+        }
         return switch (status == null ? "" : status) {
             case "claimed" -> ApiException.conflict("TICKET_TRANSFER_ALREADY_CLAIMED", "该转赠已被领取");
             case "revoked" -> ApiException.conflict("TICKET_TRANSFER_ALREADY_REVOKED", "该转赠已被撤回");

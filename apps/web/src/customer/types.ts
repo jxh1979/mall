@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 // 客人端响应类型（对齐后端 customer 域 record，camelCase 化后口径）
 
 export type TicketProduct = {
@@ -222,11 +222,15 @@ export type BarScanMenuItem = {
   soldOut: boolean;
 };
 
+// ROOT-03-R7：扫码点单待付单（付款成功前不成单；barOrderId 在付款确认成功后才有）。
 export type BarScanOrder = {
-  id: string;
+  scanOrderId: string;
+  tableId: string;
+  amountCent: number;
   status: string;
-  totalAmountCent: number;
-  orderSource: string;
+  barOrderId?: string | null;
+  paymentIntentId: string;
+  gatewayStatus?: string;
 };
 
 // 积分商城：兑换目录项（安全投影，不含库存定位等内部字段）+ 兑换记录。
@@ -278,11 +282,17 @@ export type VoucherTransfer = {
   claimedAt?: string | null;
 };
 
-// TK-21-R3（BSM「账户注销」：注销前提醒名下储值卡余额）：注销预览每张卡的本金/赠送金（后端 CustomerDeregisterPreviewResponse）。
+// TK-21-R3（BSM「账户注销」：注销前提醒名下储值卡余额）：注销预览每张卡的本金/赠送金（后端 CustomerDeregisterPreviewResponse.StoredValueCard）。
 export type DeregisterPreviewCard = {
   accountId: string;
   cardScope: string; // project=综合体通用卡 | merchant=商户级卡
   merchantId: string | null;
   principalCent: number;
   bonusCent: number;
+};
+
+// ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额」）：注销预览＝各卡余额＋名下在保管存酒（与「我的存酒」同一投影）。
+export type DeregisterPreview = {
+  storedValueCards: DeregisterPreviewCard[];
+  savedBottles: { id: string; barProjectId: string; bottleName: string; remainingQuantity: number; unit: string; expireAt: string | null }[];
 };

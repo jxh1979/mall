@@ -2,7 +2,7 @@ package com.complex.platform.gate;
 
 import com.complex.platform.auth.AuthCookies;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -10,6 +10,8 @@ import com.complex.platform.access.staff.StaffProfileRecord;
 import com.complex.platform.access.staff.StaffDeviceCredentialRecord;
 import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.customer.CustomerRepository;
+import com.complex.platform.customer.CustomerSessionRecord;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.DeviceSigningKeyStore;
 import com.complex.platform.terminal.TerminalDeviceRecord;
@@ -47,8 +49,11 @@ import org.springframework.web.util.WebUtils;
  * 旧实现在自报头为空/不在 DEVICE_BOUND_TYPES 时早退，客户端不发头或改报 web 即免签名写入，
  * <b>把 enforce 翻开也没用</b>。反查复用验签本来就要做的那一次查询，不新增查库次数。
  *
- * <p>web/app 资金旁路（①）：web enforce 下拒 {@code Authorization: Bearer} 自报（合法后台走 Cookie 会话）；
- * app enforce 下拒写（客人端无公司设备凭证；app 资金是否要客人侧证明属业务口径，见 PRD）。
+ * <p>web/app 资金旁路（①）：web enforce 下拒 {@code Authorization: Bearer} 自报（合法后台走 Cookie 会话）。
+ *
+ * <p>ROOT-03-R2 客人两端（PGM 第 745 行「客人手机应用、客人小程序、Web 前端（业务人员，客人无网页端）」）：客人路径上带有效客人会话时，
+ * 会话锁定的登录端（app/miniapp）即可信终端，自报类型与之不符一律拒；没有客人会话的 app/miniapp 写请求只放行取码、登录、注册、登出，
+ * 其余 enforce 下拒、grace 下留痕放行。公司设备凭证不适用于客人自己的手机。
  *
  * <p>分级强制 {@code off|grace|enforce}（默认 grace=生产安全态）。读请求不因缺签名被拒。
  * <b>实际翻 enforce 依赖客户端实现签名 + 登记密钥（客户端侧工作，本 PR 不含）；本 PR 让服务端 ready-to-enforce。</b>
@@ -62,6 +67,13 @@ public class DeviceCredentialVerifier {
     static final String STAFF_PRIVATE_PHONE = "staff_private_phone";
     static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", STAFF_PRIVATE_PHONE);
     private static final String STAFF_WORK_PHONE = "staff_work_phone";
+    static final String CUSTOMER_PATH_PREFIX = "/api/v1/customer/";
+    /** 客人取码、登录、注册、登出：此时尚无（或已失去）客人会话。 */
+    private static final String CUSTOMER_AUTH_PREFIX = "/api/v1/customer/auth/";
+    /** ROOT-03-R7 非会员扫码点单的两个写口：下单、付款确认。 */
+    private static final java.util.regex.Pattern CUSTOMER_SCAN_ORDER_PATH =
+            java.util.regex.Pattern.compile("/api/v1/customer/bar-tables/[^/]+/scan-orders(/[^/]+/confirm)?");
+    static final Set<String> CUSTOMER_TERMINALS = Set.of("app", "miniapp");
     private static final String EVENT = "terminal.device_credential";
     /** 哨兵：⑤ deviceId 与所用密钥归属不符（内部返回，非真实密钥）。 */
     private static final String INVALID_OWNER = " OWNER_MISMATCH";
@@ -73,6 +85,7 @@ public class DeviceCredentialVerifier {
     private final DeviceSigningKeyStore deviceSigningKeyStore;
     private final AuthorizationService authorizationService;
     private final AuditEventService auditEventService;
+    private final CustomerRepository customerRepository;
     private final Clock clock;
 
     private final Mode defaultMode;
@@ -86,16 +99,18 @@ public class DeviceCredentialVerifier {
             DeviceSigningKeyStore deviceSigningKeyStore,
             AuthorizationService authorizationService,
             AuditEventService auditEventService,
+            CustomerRepository customerRepository,
             @Value("${access.device_credential.enforcement.default:grace}") String defaultMode,
             @Value("${access.device_credential.enforcement.staff_work_phone:}") String staffWorkPhoneMode,
             @Value("${access.device_credential.enforcement.tablet:}") String tabletMode,
             @Value("${access.device_credential.enforcement.kiosk:}") String kioskMode,
             @Value("${access.device_credential.enforcement.web:}") String webMode,
             @Value("${access.device_credential.enforcement.app:}") String appMode,
+            @Value("${access.device_credential.enforcement.miniapp:}") String miniappMode,
             @Value("${access.device_credential.timestamp_tolerance_seconds:300}") long toleranceSeconds) {
         this(deviceRepository, staffRepository, deviceSigningKeyStore, authorizationService, auditEventService,
-                Clock.systemUTC(), defaultMode, staffWorkPhoneMode, tabletMode, kioskMode, webMode, appMode,
-                toleranceSeconds);
+                customerRepository, Clock.systemUTC(), defaultMode, staffWorkPhoneMode, tabletMode, kioskMode, webMode,
+                appMode, miniappMode, toleranceSeconds);
     }
 
     DeviceCredentialVerifier(
@@ -104,6 +119,7 @@ public class DeviceCredentialVerifier {
             DeviceSigningKeyStore deviceSigningKeyStore,
             AuthorizationService authorizationService,
             AuditEventService auditEventService,
+            CustomerRepository customerRepository,
             Clock clock,
             String defaultMode,
             String staffWorkPhoneMode,
@@ -111,12 +127,14 @@ public class DeviceCredentialVerifier {
             String kioskMode,
             String webMode,
             String appMode,
+            String miniappMode,
             long toleranceSeconds) {
         this.deviceRepository = deviceRepository;
         this.staffRepository = staffRepository;
         this.deviceSigningKeyStore = deviceSigningKeyStore;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
+        this.customerRepository = customerRepository;
         this.clock = clock;
         this.defaultMode = parseMode(defaultMode, Mode.GRACE);
         this.perTypeMode = new LinkedHashMap<>();
@@ -125,6 +143,7 @@ public class DeviceCredentialVerifier {
         putIfSet("kiosk", kioskMode);
         putIfSet("web", webMode);
         putIfSet("app", appMode);
+        putIfSet("miniapp", miniappMode);
         this.toleranceSeconds = toleranceSeconds > 0 ? toleranceSeconds : 300;
     }
 
@@ -143,6 +162,16 @@ public class DeviceCredentialVerifier {
         String claimed = trim(request.getHeader("X-Terminal-Type"));
         String deviceId = trim(request.getHeader("X-Device-Id"));
         boolean write = isWrite(request.getMethod());
+
+        // ROOT-03-R2：客人路径带有效客人会话 → 会话锁定的登录端即可信终端；自报类型不符任何模式都拒
+        // （小程序会话拿到 App 端用、或改报别的端绕过本端开关）。
+        CustomerSessionRecord session = activeCustomerSession(request);
+        if (session != null) {
+            if (session.scene() == null || !CUSTOMER_TERMINALS.contains(session.scene()) || !session.scene().equals(claimed)) {
+                reject(claimed, deviceId, "terminal_session_mismatch");
+            }
+            return new TerminalIdentityHolder.VerifiedTerminal(session.scene(), null, true);
+        }
 
         // 服务端反查优先：登记类型压过自报头（不发头 / 改报 web 都不能绕过设备绑定型验签）。
         // 这一次查询下传 tryVerify 复用，不重复查库。
@@ -188,11 +217,27 @@ public class DeviceCredentialVerifier {
                     }
                     audit(terminalType, deviceId, hasBearer(request) ? "grace_bearer_self_reported_web" : "grace_web_without_session", "success");
                 }
-            } else if ("app".equals(terminalType)) {
-                if (modeFor("app") == Mode.ENFORCE) {
-                    reject("app", deviceId, "app_requires_customer_proof");
+            } else if (terminalType != null && CUSTOMER_TERMINALS.contains(terminalType)) {
+                // ROOT-03-R2：客人两端的证明＝已验证客人会话（上面已放行）；无会话只放行取码、登录、注册、登出。
+                String uri = request.getRequestURI();
+                if (uri != null && uri.startsWith(CUSTOMER_AUTH_PREFIX)) {
+                    audit(terminalType, deviceId, "customer_auth_without_session", "success");
+                } else if (uri != null && CUSTOMER_SCAN_ORDER_PATH.matcher(uri).matches()) {
+                    // ROOT-03-R7（ENUM 第 129 行「扫码点单身份：非会员可以浏览、点单和付款」）：扫码点单下单与付款确认不要求客人会话。
+                    audit(terminalType, deviceId, "customer_scan_order_without_session", "success");
+                } else {
+                    if (modeFor(terminalType) == Mode.ENFORCE) {
+                        // 带了客人令牌、但会话已过期或已失效：仍拒绝，报 401 与 CustomerService.requireCustomer 同码——客户端约定 401 才回登录页；
+                        // 完全不带令牌的写请求照旧按无终端证明 403。
+                        if (uri != null && uri.startsWith(CUSTOMER_PATH_PREFIX)
+                                && (trim(request.getHeader("X-Customer-Token")) != null || hasBearer(request))) {
+                            audit(terminalType, deviceId, "customer_session_expired", "failure");
+                            throw ApiException.unauthorized("CUSTOMER_UNAUTHENTICATED", "客人登录已过期，请重新登录");
+                        }
+                        reject(terminalType, deviceId, "customer_session_required");
+                    }
+                    audit(terminalType, deviceId, "grace_allow_app_write", "success");
                 }
-                audit("app", deviceId, "grace_allow_app_write", "success");
             } else {
                 Mode mode = terminalType == null ? defaultMode : modeFor(terminalType);
                 if (mode == Mode.ENFORCE) {
@@ -286,6 +331,24 @@ public class DeviceCredentialVerifier {
             }
         }
         return deviceSigningKeyStore.findActivePublicKey(deviceId).filter(k -> !k.isBlank()).orElse(null);
+    }
+
+    /** 客人路径上 X-Customer-Token（或 Bearer）对应的有效未过期客人会话；没有则 null。 */
+    private CustomerSessionRecord activeCustomerSession(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        if (customerRepository == null || uri == null || !uri.startsWith(CUSTOMER_PATH_PREFIX)) {
+            return null;
+        }
+        String token = trim(request.getHeader("X-Customer-Token"));
+        if (token == null && hasBearer(request)) {
+            token = trim(request.getHeader("Authorization").substring("Bearer ".length()));
+        }
+        if (token == null) {
+            return null;
+        }
+        return customerRepository.findSessionByToken(token)
+                .filter(s -> "active".equals(s.status()) && s.expiresAt() != null && s.expiresAt().isAfter(clock.instant()))
+                .orElse(null);
     }
 
     private AccessActor currentActorQuietly() {

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -41,10 +41,23 @@ public class BarEntryService {
     }
 
 
+    // 操作员裁决第十三批第 7 条（员工代订核对受限）：按客人手机号查会员，必经（不可缺省）。字段注入 + @Lazy 解循环依赖；手工构造的单测须注入桩。
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.customer.CustomerService customerService;
+
+    /**
+     * 员工代客订台。ROOT-03-R19：最晚到店时间必填（BSM 第 1062 行）；提交成功即占台（ENUM 第 100 行「员工代订提交成功时，该台位即进入已预留……
+     * 员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」），台位已被占或已开台 409 BAR_TABLE_ALREADY_RESERVED，整笔不落库。
+     * 裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」：手机号只用于核对，不落库。
+     */
     BarReservationRecord createReservation(BarReservationRequest request, String customerId, String orderSource, String terminal) {
         BarReservationRequest actual = requireRequest(request);
+        Instant latestArrivalAt = requireInstant(actual.latestArrivalAt(), "latest_arrival_at");
+        String customerPhone = requireText(actual.customerPhone(), "customer_phone");
         BarTableRecord table = repository.findTableById(requireText(actual.tableId(), "table_id"))
                 .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
+        customerService.requireStaffBookable(customerPhone);
         String barId = requireText(actual.barId(), "bar_id");
         if (!barId.equals(table.barId())) {
             throw ApiException.conflict("BAR_SCOPE_MISMATCH", "订台台位不在本酒吧");
@@ -93,14 +106,49 @@ public class BarEntryService {
                 depositIntentId,
                 null,
                 null
-        ));
+        ).withLatestArrivalAt(latestArrivalAt));
+        if (!repository.holdTable(saved.id(), saved.tableId())) {
+            throw tableAlreadyReserved();
+        }
         if ("pending".equals(depositStatus)) {
             auditEventService.recordSuccess("bar.reservation_deposit_required", "bar.reservation.create",
                     "bar_reservation", saved.id(), null, actual.idempotencyKey(),
                     Map.of("deposit_amount_cent", depositAmountCent, "deposit_mode", rule.mode(),
                             "deposit_intent_id", String.valueOf(depositIntentId)));
         }
-        return saved;
+        return repository.findReservationById(saved.id()).orElse(saved);
+    }
+
+    // ROOT-03-R19 抢台失败的定金原路退回（客人会话与结算作业里登记，不过员工范围闸）。字段注入 + @Lazy：手工构造的单测不涉及定金到账。
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.finance.FinanceService financeService;
+
+    /**
+     * ROOT-03-R19（ENUM 第 100 行「客人自助订台支付定金成功……该台位即进入已预留。一个台位同一时刻只能存在一笔有效预留……冲突时先支付定金者得」）：
+     * 客人定金到账确认时占台（调用方提供事务，定金已置已支付）。抢不到——已被先付者或员工代订占着，或台位已开台、不可用——时本订台取消、不占台，
+     * 已收定金按原付款渠道登记原路待退（退款处理中，实际退款由财务按原路办理并核实），返回 false。
+     */
+    public boolean holdOnDepositPaid(BarReservationRecord paid, String originalPaymentRef) {
+        if (repository.holdTable(paid.id(), paid.tableId())) {
+            return true;
+        }
+        BarReservationRecord lost = repository.saveReservation(paid.withStatus("cancelled", Instant.now()));
+        String refundId = financeService.recordRejectedTicketPaymentRefund("bar_deposit_rejection", lost.id(),
+                lost.depositAmountCent(), lost.depositChannel(), originalPaymentRef, lost.merchantId(), lost.barId(),
+                "订台定金到账时该台位已被先付定金者预订，原路退回");
+        auditEventService.recordSuccess("bar.reservation_deposit_refund_on_conflict", "bar.reservation.manage",
+                "bar_reservation", lost.id(), null, "deposit-conflict:" + lost.id(),
+                Map.of("deposit_amount_cent", lost.depositAmountCent(),
+                        "deposit_channel", String.valueOf(lost.depositChannel()),
+                        "refund_status", "requested",
+                        "refund_id", refundId));
+        return false;
+    }
+
+    /** ROOT-03-R19：台位已被有效预留占着或正在使用（已开台、待清台、停用）。 */
+    public static ApiException tableAlreadyReserved() {
+        return ApiException.conflict("BAR_TABLE_ALREADY_RESERVED", "该台位已被预订或正在使用，请选择其他台位");
     }
 
     /** T16：scope 优先级 table_type/time_slot > bar；listDepositRules 已按 scope_type 倒序返回。 */
@@ -174,6 +222,30 @@ public class BarEntryService {
     BarReservationRecord cancelReservation(String reservationId, BarReservationCancelRequest request) {
         BarReservationCancelRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
+        return cancel(reservation, actual.noShow() != null && actual.noShow(), false, actual.idempotencyKey());
+    }
+
+    /**
+     * ROOT-03-R19（BSM 第 1062 行「超过最晚到店时间未到店的，系统自动释放该台位——已付定金的按爽约规则没收定金，未付定金的直接作废」）：
+     * 超时作业逐笔调用（无登录上下文，不过商户范围闸）。按爽约取消并释放台位；已到店开台（占台已释放）或已取消的跳过。
+     * @return 是否释放了这一笔
+     */
+    boolean expireOverdue(String reservationId, Instant now) {
+        BarReservationRecord reservation = repository.findReservationByIdForUpdate(reservationId).orElse(null);
+        if (reservation == null || !"reserved".equals(reservation.status()) || "released".equals(reservation.holdStatus())
+                || reservation.latestArrivalAt() == null || !reservation.latestArrivalAt().isBefore(now)) {
+            return false;
+        }
+        BarReservationRecord released = cancel(reservation, true, true, "reservation-timeout:" + reservation.id());
+        auditEventService.recordSuccess("bar.reservation_timeout_released", "bar.reservation.manage",
+                "bar_reservation", released.id(), null, "reservation-timeout:" + released.id(),
+                Map.of("latest_arrival_at", reservation.latestArrivalAt().toString(),
+                        "deposit_status", released.depositStatus()));
+        return true;
+    }
+
+    /** timedOut＝超时释放作业（BSM 第 1062 行「未付定金的直接作废」→ ENUM 第 103 行定金状态「已超时释放」）。 */
+    private BarReservationRecord cancel(BarReservationRecord reservation, boolean noShow, boolean timedOut, String idempotencyKey) {
         if ("cancelled".equals(reservation.status())) {
             throw ApiException.conflict("BAR_RESERVATION_ALREADY_CANCELLED", "该订台已取消，请勿重复操作");
         }
@@ -182,7 +254,6 @@ public class BarEntryService {
                     "订金已结算，订台不能再取消");
         }
         Instant now = Instant.now();
-        boolean noShow = actual.noShow() != null && actual.noShow();
         String settlement;
         String event;
         if (reservation.depositAmountCent() <= 0L || !"paid".equals(reservation.depositStatus())) {
@@ -202,19 +273,27 @@ public class BarEntryService {
                 event = "bar.reservation_deposit_forfeited";
             }
         }
-        String depositStatus = settlement == null ? reservation.depositStatus() : "settled";
+        String depositStatus = settlement != null ? "settled"
+                : timedOut && "pending".equals(reservation.depositStatus()) ? "timeout_released" : reservation.depositStatus();
         // 第十批 TK-24：取消的退还/没收同样记 deposit_settled_at，并保留定金渠道等原付款留痕。
         BarReservationRecord cancelled = reservation.withDepositState(depositStatus, settlement,
                 reservation.depositChannel(), reservation.depositPaidAt(),
                 settlement == null ? reservation.depositSettledAt() : now, now).withStatus("cancelled", now);
+        // ENUM 第 105 行邀请函名额随卡座而在：订台取消或超时作废后邀请函一并失效，未接受的不能再接受、已接受的不再取码入场。
+        if ("active".equals(cancelled.invitationStatus())) {
+            cancelled = cancelled.withInvitation(cancelled.invitationToken(), cancelled.invitationSignature(),
+                    cancelled.invitationCapacity(), "revoked", cancelled.invitationIssuedAt(), now);
+        }
         BarReservationRecord saved = repository.saveReservation(cancelled);
+        // ROOT-03-R19（ENUM 第 100 行「已预留只能经取消订台、超时释放、到店开台三条路径退出」）：取消即释放占台。
+        repository.releaseHold(saved.id());
         if (settlement != null) {
             auditEventService.recordSuccess(event, "bar.reservation.manage",
-                    "bar_reservation", saved.id(), null, actual.idempotencyKey(),
+                    "bar_reservation", saved.id(), null, idempotencyKey,
                     Map.of("deposit_amount_cent", saved.depositAmountCent(),
                             "deposit_settlement", settlement, "no_show", noShow));
         }
-        return saved;
+        return repository.findReservationById(saved.id()).orElse(saved);
     }
 
     private BarDepositRuleRecord resolveDepositRuleByBar(String barId, String tableType) {
@@ -444,7 +523,8 @@ public class BarEntryService {
 
     /**
      * 门口入场核验（staff/设备，复用 bar.table.guest_checkin）：核验成员已确认，标 entered，已入场 ≤ capacity。
-     * credential_payload = 成员标识（朋友的 customer_id/手机）。持函免通票：此路径不校验通票，确认成员即可入场。
+     * credential_payload = 成员本人的动态入场码（客人端 GET /api/v1/customer/bar-invitations/{reservation_id}/entry-code）。
+     * 持函免通票：此路径不校验通票，确认成员即可入场。
      */
     BarReservationInvitationMemberRecord verifyInvitationEntry(String reservationId, VerificationRequest request) {
         VerificationRequest actual = requireRequest(request);
@@ -471,10 +551,15 @@ public class BarEntryService {
             throw ApiException.forbidden("BAR_INVITATION_SIGNATURE_INVALID",
                     "卡座邀请签名无效（绑定信息被篡改）");
         }
-        String memberIdentifier = requireText(actual.credentialPayload(), "credential_payload");
+        // ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：
+        // 只认客人端签发、本订台、未过期的动态入场码，不再接受客人号/手机号明文。
+        String memberId = invitationSigner.verifyEntryCode(requireText(actual.credentialPayload(), "credential_payload"),
+                        reservation.id(), Instant.now())
+                .orElseThrow(() -> ApiException.conflict("BAR_INVITATION_ENTRY_CODE_INVALID",
+                        "入场码无效或已过期，请客人在 App/小程序刷新后出示本人动态入场码"));
         List<BarReservationInvitationMemberRecord> members = repository.listInvitationMembers(reservation.id());
         BarReservationInvitationMemberRecord member = members.stream()
-                .filter(item -> memberIdentifier.equals(item.memberIdentifier()) && !"revoked".equals(item.status()))
+                .filter(item -> memberId.equals(item.id()) && !"revoked".equals(item.status()))
                 .findFirst()
                 .orElseThrow(() -> ApiException.conflict("BAR_INVITATION_MEMBER_NOT_CONFIRMED",
                         "客人尚未确认该邀请"));
@@ -494,7 +579,7 @@ public class BarEntryService {
         repository.saveInvitationMember(entered);
         auditEventService.recordSuccess("bar.reservation_invitation_entered", "bar.table.guest_checkin",
                 "bar_reservation", reservation.id(), null, actual.idempotencyKey(),
-                Map.of("member_identifier", memberIdentifier));
+                Map.of("member_id", member.id()));
         return entered;
     }
 
@@ -513,14 +598,7 @@ public class BarEntryService {
     private BarReservationRecord withInvitation(
             BarReservationRecord reservation, String token, String signature, Integer capacity,
             String status, Instant issuedAt) {
-        return new BarReservationRecord(
-                reservation.id(), reservation.barId(), reservation.merchantId(), reservation.tableId(),
-                reservation.customerId(), reservation.reservedAt(), reservation.guestCount(),
-                reservation.allowedPassFreeGuestCount(), reservation.depositAmountCent(), reservation.depositStatus(),
-                reservation.orderSource(), reservation.salesStaffId(), reservation.status(), reservation.createdTerminal(),
-                reservation.deviceId(), reservation.evidenceAttachmentIds(), reservation.createdAt(), Instant.now(),
-                reservation.depositRule(), reservation.depositIntentId(), reservation.depositPaidAt(),
-                reservation.depositSettlement(), token, signature, capacity, status, issuedAt);
+        return reservation.withInvitation(token, signature, capacity, status, issuedAt, Instant.now());
     }
 
     private List<String> listFromMap(Map<String, Object> map, String... names) {

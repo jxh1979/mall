@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.time.Instant;
 import java.util.List;
@@ -160,6 +160,14 @@ public interface InventoryRepository {
     SavedBottleTransferRecord saveSavedBottleTransfer(SavedBottleTransferRecord transfer);
 
     // ===== FS-016 存酒持有人核验（default 实现只为不改动 NYI 桩仓；Jdbc 与单测内存仓各自实现） =====
+
+    /**
+     * ROOT-03-R21（BSM 第 863 行「注销后：客人的姓名、手机号……一律删除」）：清空本人各存酒（customer_id 为本人或登记手机哈希为本人）上的
+     * 客人姓名/昵称、手机号与手机哈希，返回行数。default 0（不改动 NYI 桩仓）。
+     */
+    default int clearSavedBottleCustomerIdentity(String customerId, String phoneHash) {
+        return 0;
+    }
 
     /** 客人端「我的存酒」：持有人 = customer_id 等于本人，或登记/受让手机哈希等于本人手机哈希；跨店汇总、仅 stored。 */
     default List<SavedBottleRecord> listStoredSavedBottlesByHolder(String customerId, String phoneHash) {

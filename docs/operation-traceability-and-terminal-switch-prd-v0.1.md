@@ -1,4 +1,4 @@
-# 全链路操作留痕与终端开关 PRD V0.03
+# 全链路操作留痕与终端开关 PRD V0.04
 
 > **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
 
@@ -837,6 +837,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-21 | 改 | 版本、能力开关消费形态 | V0.04：第十三批 ROOT-03-R33——退役 V097 `customer.native_client.enabled`（无消费点、关着不拒任何请求），客人两端开关以 V197 `terminal.enabled`（app、miniapp）为唯一口径；同批客人两端改为以已验证客人会话作终端证明、会话锁定登录端、生产翻强制校验，客人端可匿名读本端已关闭开关行（`GET /api/v1/customer/terminal-switches/effective`） | PGM「受控的十类终端」；PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」 |
 | 2026-10-17 | 增 | §6.3 终端能力开关 | terminal_type 取值集加受控第十一端 `dealer_portal`（独立经销商 Web 门户）：V454 重建 `chk_tcs_terminal_type` / `chk_tccr_terminal_type` 并插入总开关行，门户按统一终端开关逐请求强制、拒绝留痕 `terminal.access_rejected`、识别不出终端的写请求兜底关闭 | CG-11d；ENUM:233；BSM:1218 |
 | 2026-08-19 | 增 | §2.2 / §2.4 | DEC-R8-98 下游同步（本文为多端登录规则的主落点）：补同一账号允许多设备多端同时登录、不设同端挤下线；现场动作按执行设备绑定与该次登录会话定位到操作人并留痕；长短款补足、小费归属、提成归属按动作发生时的会话记录判定，不因账号同时在别处登录而转移；§2.4 责任链操作人字段取值口径同步 | BSM“同一账号允许在多台设备、多个端同时登录”条现文（DEC-R8-97-19）；RUN 20260819-002 |
 | 2026-08-11 | 增 | §1A / §2.3 / §8 / §9 | 增加拆单、合单、转台、并台、拆台、撤销转台的完整留痕覆盖，要求操作前后可邀请人数、最低消费额、邀请与成员归属、消费分配、完整前后快照及成功或阻断结果；不新增事件名、API 或字段 | OPS-MISS-005；DEC-R8-95；BSM“拆单 / 合单”；ENUM“账单操作” |
@@ -890,7 +891,7 @@ flowchart TD
   1. **第三方入站通道**(integration.{type}.sync):闸的是外部系统调入的 webhook/机器人上报,非后台按钮;
   2. **自动降级路由**(payment.gateway.enabled / face.verification.enabled / wecom.ai_qc.enabled):
      关闭时自动切换降级实现(离线收款/放行/关键词质检),后台按钮功能不受影响,无需禁用;
-  3. **设备端/客人端**(camera_scan / tablet / device_keystore / managed_work_devices / native_client):非 Web 后台;
+  3. **设备端/客人端**(camera_scan / tablet / device_keystore / managed_work_devices):非 Web 后台;原 native_client(V097 `customer.native_client.enabled`)无消费点,已于 V537 退役(第十三批 ROOT-03-R33),客人两端以 V197 `terminal.enabled` 的 app、miniapp 总开关为唯一口径;
   4. **自动短信开关**(sms.notify.*):自动流程,无按钮。
 - 端/模块级 terminal.enabled 开关已完整闭环:菜单整组隐藏(前端 gating)+ 逐请求硬拒
   (TERMINAL_DISABLED,总开关 AND 语义)——模块关闭时页面不可达,按钮天然不可点。

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -87,7 +87,7 @@ public class TicketVerificationService {
     /** 规则不允许（票不可用、次数用尽、场次/时段不符、归属不符、项目/场次状态、安全阻断等业务规则）→ rejected。 */
     static final Set<String> RULE_REJECTION_CODES = Set.of(
             "ENTITLEMENT_NOT_ACTIVE", "ENTITLEMENT_NOT_YET_VALID", "ENTITLEMENT_EXPIRED", "ENTITLEMENT_USED_UP", "ENTITLEMENT_USED",
-            "TICKET_INSTANCE_REFUND_IN_PROGRESS", "TICKET_TRANSFER_PENDING", "MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
+            "TICKET_INSTANCE_REFUND_IN_PROGRESS", "MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
             "ENTITLEMENT_PROVIDER_MISMATCH", "ENTITLEMENT_NOT_AMUSEMENT", "ENTITLEMENT_NOT_FOR_PROJECT",
             "AMUSEMENT_ONLINE_REQUIRED", "AMUSEMENT_PROJECT_UNRESOLVED", "AMUSEMENT_BUSINESS_DAY_REQUIRED",
             "PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH",
@@ -533,19 +533,6 @@ public class TicketVerificationService {
         });
     }
 
-    /**
-     * 方案3 转赠冻结守卫:该权益所属 slot 有 pending 转赠 → 拒核销(响亮,非静默)。
-     * 无父票/未分组(parentTicketId 空)跳过。与 atomicUseEntitlement 的 NOT EXISTS 兜底双闸,覆盖游乐 gateway 等直连消费路径。
-     */
-    private void requireSlotNotTransferring(IssuedEntitlementRecord entitlement) {
-        if (entitlement.parentTicketId() == null) {
-            return;
-        }
-        if (repository.existsPendingTransferForSlot(entitlement.parentTicketId(), entitlement.slotIndex())) {
-            throw ApiException.conflict("TICKET_TRANSFER_PENDING", "该票转赠确认中，暂不可用");
-        }
-    }
-
     private VerificationResponse verifyEntitlement(VerificationRequest request, String sourceType, String clientTaskId) {
         // 健壮性修复：先校验核销设备已注册，未注册直接干净 400，杜绝 FK 违反中止事务后的脏 500。
         requireRegisteredDevice(request);
@@ -648,8 +635,7 @@ public class TicketVerificationService {
         // 方案2 申请即冻结：父票非 active（退款申请中 refund_pending / 已退 refunded / 转赠中 transferring）→ 拒核销。
         // 与方案3 转赠冻结共用同一守卫；单人票/无父票不约束（parent 为空跳过）。
         requireParentTicketActive(entitlement);
-        // 方案3 转赠冻结：该 slot 有 pending 转赠 → 拒核销(响亮非静默)。与 atomicUseEntitlement NOT EXISTS 双闸。
-        requireSlotNotTransferring(entitlement);
+        // clients-R40（BSM 第 809 行「发起转赠后不冻结该权益」）：在途转赠不挡核销，消费成功即作废该人份在途转赠（atomicUseEntitlement）。
         if (entitlement.validFrom() != null && now.isBefore(entitlement.validFrom())) {
             throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID", "该权益尚未到生效时间");
         }
@@ -684,9 +670,6 @@ public class TicketVerificationService {
         }
         IssuedEntitlementRecord updated = repository.atomicUseEntitlement(entitlement.id(), now)
                 .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_USED_UP", "该权益剩余次数已用完"));
-        // AUD-018 消费后复检(新语句=新快照):发起转赠持 FOR UPDATE 锁时,本 UPDATE 解锁续跑的
-        // NOT EXISTS 可能仍用旧快照看不见刚提交的 pending → 此处复检,发现在途转赠即抛错回滚本次消费。
-        requireSlotNotTransferring(updated);
         // 发放已 fan-out 成单人权益（TicketOrderService：每张 num_people=1），每次核销一人；
         // 故本次核销人数恒 = 该权益 num_people(=1)，落 verified_people 记录。
         // （批4：原「verifiedPeople > num_people」是 fan-out 前的恒假死检查，已移除，核销语义不变。）
@@ -901,7 +884,6 @@ public class TicketVerificationService {
         if(!"active".equals(entitlement.status()))
             throw ApiException.conflict("ENTITLEMENT_NOT_ACTIVE","该权益未生效");
         requireParentTicketActive(entitlement);
-        requireSlotNotTransferring(entitlement);
         if(!DAY_WINDOW.equals(entitlement.consumptionWindow())) enforceMultiPersonSameSession(entitlement,now);
         if(entitlement.validFrom()!=null && now.isBefore(entitlement.validFrom()))
             throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID","该权益尚未到生效时间");

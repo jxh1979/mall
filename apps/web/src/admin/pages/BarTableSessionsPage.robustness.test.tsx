@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -19,6 +20,12 @@ function forbidden(): Response {
 }
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
+
+/** ROOT-03-R19 最晚到店时间、裁决第十三批第 7 条客人手机号：代客订台两项必填，每次照同一内容填写。 */
+function fillReservationRequiredFields() {
+  fireEvent.change(screen.getByTestId("bar-new-reservation-phone"), { target: { value: "13800000000" } });
+  fireEvent.change(screen.getByTestId("bar-new-reservation-latest"), { target: { value: "2030-06-20T23:00" } });
+}
 
 describe("BarTableSessionsPage 副资源降级（副资源加载健壮性批）", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -72,6 +79,7 @@ describe("BarTableSessionsPage 新建订台没拿到结果再点", () => {
 
     await waitFor(() => expect((screen.getByTestId("bar-new-reservation-bar") as HTMLSelectElement).value).toBe("bar-1"), { timeout: 5000 });
     fireEvent.change(screen.getByTestId("bar-new-reservation-table"), { target: { value: "t-1" } });
+    fillReservationRequiredFields();
     fireEvent.click(screen.getByTestId("bar-new-reservation-submit"));
     await waitFor(() => expect(screen.getByTestId("bar-create-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
     expect(posts).toHaveLength(1);
@@ -109,6 +117,7 @@ describe("BarTableSessionsPage 新建订台没拿到结果再点", () => {
 
     await waitFor(() => expect((screen.getByTestId("bar-new-reservation-bar") as HTMLSelectElement).value).toBe("bar-1"), { timeout: 5000 });
     fireEvent.change(screen.getByTestId("bar-new-reservation-table"), { target: { value: "t-7" } });
+    fillReservationRequiredFields();
     fireEvent.click(screen.getByTestId("bar-new-reservation-submit"));
     await waitFor(() => expect(screen.getByTestId("bar-create-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
     expect(posts).toHaveLength(1);
@@ -118,6 +127,7 @@ describe("BarTableSessionsPage 新建订台没拿到结果再点", () => {
     render(<BarTableSessionsPage {...props} />);
     await waitFor(() => expect((screen.getByTestId("bar-new-reservation-bar") as HTMLSelectElement).value).toBe("bar-1"), { timeout: 5000 });
     fireEvent.change(screen.getByTestId("bar-new-reservation-table"), { target: { value: "t-8" } });
+    fillReservationRequiredFields();
     fireEvent.click(screen.getByTestId("bar-new-reservation-submit"));
     await waitFor(() => expect(posts).toHaveLength(2), { timeout: 5000 });
     // 另一张订成了：表单清掉卡座号，按钮恢复可点。

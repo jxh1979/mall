@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -51,6 +51,7 @@ class BarServiceTests {
     private CapturingBarReceivableLedgerService receivableLedgerService;
     private AuthorizationService authorizationService;
     private BarService service;
+    private final BarInvitationTokenSigner invitationSigner = new BarInvitationTokenSigner("test-bar-invitation-secret");
     private BarBillingService billingService;
     private BarOrderService barOrderService;
     private StubCommissionRateConfigPort commissionRateStub;
@@ -152,7 +153,9 @@ class BarServiceTests {
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
         BarEntryService entryService = new BarEntryService(
                 barRepository, authorizationService, auditEventService, FaceVerificationRouter.alwaysDisabled(),
-                new BarInvitationTokenSigner("test-bar-invitation-secret"));
+                invitationSigner);
+        // 裁决第十三批第 7 条员工代订核对受限必经客人域：手工构造时注入桩（查不到受限会员＝照常代订）。
+        entryService.customerService = mock(com.complex.platform.customer.CustomerService.class);
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
                 receivableLedgerService, true);
@@ -451,7 +454,7 @@ class BarServiceTests {
         TestSecurityActors.asMerchantUser("merchant_a");
         assertThatThrownBy(() -> service.createReservation(new BarReservationRequest(
                 "resv-cp1", "create reservation", List.of(), "bar_1",
-                othersTable.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null)))
+                othersTable.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
@@ -832,7 +835,7 @@ class BarServiceTests {
                 "VIP RATIO", "card_seat", 100000L, 2, "active"));
         BarReservationRecord reservation = service.createReservation(new BarReservationRequest(
                 "resv-t16-ratio", "create reservation", List.of(), "bar_t16",
-                table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null));
+                table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
 
         assertThat(reservation.depositAmountCent()).isEqualTo(30000L);
         assertThat(reservation.depositStatus()).isEqualTo("pending");
@@ -852,7 +855,7 @@ class BarServiceTests {
                 "VIP FIXED", "card_seat", 100000L, 2, "active"));
         BarReservationRecord reservation = service.createReservation(new BarReservationRequest(
                 "resv-t16-fixed", "create reservation", List.of(), "bar_t16f",
-                table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null));
+                table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
 
         assertThat(reservation.depositAmountCent()).isEqualTo(20000L);
         assertThat(reservation.depositStatus()).isEqualTo("pending");
@@ -935,7 +938,7 @@ class BarServiceTests {
                 "VIP " + key, "card_seat", 100000L, 2, "active"));
         return service.createReservation(new BarReservationRequest(
                 "resv-" + key, "create reservation", List.of(), "bar_" + key,
-                table.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
+                table.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
     }
 
     @Test
@@ -1265,7 +1268,8 @@ class BarServiceTests {
         assertThat(invitation.invitationToken()).isNotBlank();
         assertThat(invitation.invitationSignature()).isNotBlank();
         assertThat(invitation.confirmedCount()).isEqualTo(1); // 持函人自动占一个名额
-        String holderId = "holder:" + reservation.id();
+        String holderMemberId = barRepository.listInvitationMembers(reservation.id()).stream()
+                .filter(BarReservationInvitationMemberRecord::isHolder).findFirst().orElseThrow().id();
 
         // 模拟朋友确认（客人端 confirm 落成员，此处直接落库以测门口入场闸）。
         Instant now = Instant.parse("2026-06-20T21:30:00Z");
@@ -1276,27 +1280,27 @@ class BarServiceTests {
                 "invm-friend-2", reservation.id(), "bar_1", "friend-2", "cust-friend-2",
                 false, "confirmed", now, null, null, now, now));
 
-        // 入场：持函人 + friend-1（2 = capacity）。
+        // 入场：持函人 + friend-1（2 = capacity），各凭本人动态入场码。
         assertThat(service.verifyReservationInvitationEntry(reservation.id(),
-                verification("entry-holder", holderId, "bar_1")).status()).isEqualTo("entered");
+                verification("entry-holder", entryCode(holderMemberId, reservation.id()), "bar_1")).status()).isEqualTo("entered");
         assertThat(service.verifyReservationInvitationEntry(reservation.id(),
-                verification("entry-friend-1", "friend-1", "bar_1")).status()).isEqualTo("entered");
+                verification("entry-friend-1", entryCode("invm-friend-1", reservation.id()), "bar_1")).status()).isEqualTo("entered");
 
         // 第三人入场超 capacity → 拒。
         assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
-                verification("entry-friend-2", "friend-2", "bar_1")))
+                verification("entry-friend-2", entryCode("invm-friend-2", reservation.id()), "bar_1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("BAR_INVITATION_CAPACITY_EXHAUSTED");
 
         // 未确认者入场 → 拒。
         assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
-                verification("entry-stranger", "stranger", "bar_1")))
+                verification("entry-stranger", entryCode("invm-stranger", reservation.id()), "bar_1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("BAR_INVITATION_MEMBER_NOT_CONFIRMED");
 
         // 跨吧入场 → 拒（持函免通票仅限定卡吧）。
         assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
-                verification("entry-crossbar", holderId, "bar_other")))
+                verification("entry-crossbar", entryCode(holderMemberId, reservation.id()), "bar_other")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("BAR_SCOPE_MISMATCH");
     }
@@ -1323,7 +1327,7 @@ class BarServiceTests {
                 issued.invitationIssuedAt()));
 
         assertThatThrownBy(() -> service.verifyReservationInvitationEntry(reservation.id(),
-                verification("entry-tampered", "friend-sig", "bar_1")))
+                verification("entry-tampered", entryCode("invm-sig-friend", reservation.id()), "bar_1")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("BAR_INVITATION_SIGNATURE_INVALID");
     }
@@ -3002,7 +3006,7 @@ class BarServiceTests {
         BarTableRecord tableB = createTable("depb", "bar_depa", "active", 60000L);
         BarReservationRecord b = service.createReservation(new BarReservationRequest(
                 "resv-depb", "create reservation", List.of(), "bar_depa", tableB.id(),
-                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
         service.payReservationDeposit(a.id(), new BarReservationDepositActionRequest("pay-depa", "pay", List.of(), "cash"));
         service.payReservationDeposit(b.id(), new BarReservationDepositActionRequest("pay-depb", "pay", List.of(), "cash"));
         BarTableSessionRecord sessionA = openSession("depa", a.tableId(), "bar_depa", a.id());
@@ -3437,7 +3441,7 @@ class BarServiceTests {
         merge("split-attr", a, b);
         BarReservationRecord reservationB = service.createReservation(new BarReservationRequest(
                 "resv-split-attr-b", "create reservation", List.of(), "bar_1", tableB.id(),
-                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
         // 复核 money B3 后并台期间在被并台位落单会归属其并台会话；这里模拟一笔无法确认归属的订单（无 bar_order_service_sources）。
         BarOrderRecord orphan = order("split-attr", "bar_1", tableB.id(), reservationB.id(), product("split-attr", "bar_1", 30000L), 1);
         barRepository.orderSessions.remove(orphan.id());
@@ -3490,7 +3494,7 @@ class BarServiceTests {
         BarTableRecord tableB = createTable("spld-b", "bar_spld", "active", 60000L);
         BarReservationRecord b = service.createReservation(new BarReservationRequest(
                 "resv-spld-b", "create reservation", List.of(), "bar_spld", tableB.id(),
-                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null));
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
         service.payReservationDeposit(a.id(), new BarReservationDepositActionRequest("pay-spld-a", "pay", List.of(), "cash"));
         service.payReservationDeposit(b.id(), new BarReservationDepositActionRequest("pay-spld-b", "pay", List.of(), "cash"));
         BarTableSessionRecord sessionA = openSession("spld-a", a.tableId(), "bar_spld", a.id());
@@ -4358,7 +4362,9 @@ class BarServiceTests {
                 Instant.parse("2026-06-20T21:00:00Z"),
                 allowedFreeGuests,
                 "staff_sales",
-                null
+                null,
+                null,
+                Instant.parse("2030-06-20T23:00:00Z"), "13800000000"
         ));
     }
 
@@ -4638,6 +4644,11 @@ class BarServiceTests {
         ));
     }
 
+    /** ROOT-03 clients-R6：门口只认成员本人动态入场码（客人端签发，窗口内有效）。 */
+    private String entryCode(String memberId, String reservationId) {
+        return invitationSigner.entryCode(memberId, reservationId, Instant.now().plusSeconds(60));
+    }
+
     private VerificationRequest verification(String idempotencyKey, String guestIdentifier, String barId) {
         return new VerificationRequest(
                 idempotencyKey,
@@ -4654,7 +4665,7 @@ class BarServiceTests {
         java.util.Set<String> activeReservedTableIds = java.util.Set.of();
 
         @Override
-        public java.util.Set<String> listActiveReservedTableIds(java.time.Instant since) {
+        public java.util.Set<String> listActiveReservedTableIds() {
             return activeReservedTableIds;
         }
 

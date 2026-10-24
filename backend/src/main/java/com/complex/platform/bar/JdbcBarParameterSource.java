@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -71,7 +71,8 @@ final class JdbcBarParameterSource {
                 .addValue("delete_requested_at", timestampWithTimeZone(reservation.deleteRequestedAt()))
                 .addValue("delete_reason", reservation.deleteReason())
                 .addValue("deposit_channel", reservation.depositChannel())
-                .addValue("deposit_settled_at", timestampWithTimeZone(reservation.depositSettledAt()));
+                .addValue("deposit_settled_at", timestampWithTimeZone(reservation.depositSettledAt()))
+                .addValue("latest_arrival_at", timestampWithTimeZone(reservation.latestArrivalAt()));
     }
 
     MapSqlParameterSource invitationMemberParameters(BarReservationInvitationMemberRecord member) {

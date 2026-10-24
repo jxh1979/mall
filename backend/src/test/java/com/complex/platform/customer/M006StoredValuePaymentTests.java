@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 // M006-027：现场储值扣款必须先核验报出的手机号和短信验证码。
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -49,7 +49,7 @@ class M006StoredValuePaymentTests {
         storedValue = new StoredValueService(customers, mock(FinanceService.class), audit, null, auth, null);
         ReflectionTestUtils.setField(storedValue, "ticketOrderService", mock(com.complex.platform.ticketing.TicketOrderService.class));
         customerService = new CustomerService(customers, new FixedCustomerOtpVerifier("123456"),
-                null, null, audit, null, null, bars, null, null,
+                null, null, audit, null, null, bars, null,
                 Clock.fixed(now, ZoneOffset.UTC), null, null);
         billing = new BarBillingService(bars, null, auth, audit);
         ReflectionTestUtils.setField(billing, "storedValueService", storedValue);

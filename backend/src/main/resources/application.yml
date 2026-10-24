@@ -1,3 +1,4 @@
+# 文件版本：V0.01
 server:
   port: ${COMPLEX_API_PORT:8080}
   address: ${COMPLEX_API_HOST:127.0.0.1}
@@ -122,7 +123,8 @@ access:
       kiosk: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_KIOSK:}
       # web：enforce 下拒「Authorization: Bearer 自报 web」（合法后台走 Cookie 会话，无客户端依赖，可先翻）。
       web: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_WEB:}
-      # app：enforce 下拒 app 写（客人端无公司设备凭证；app 资金是否要客人侧证明属业务口径）。
+      # app / miniapp（ROOT-03-R2）：证明＝已验证客人会话（会话锁定登录端）。enforce 下无客人会话的写请求只放行取码、登录、注册、登出。
       app: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_APP:}
+      miniapp: ${ACCESS_DEVICE_CREDENTIAL_ENFORCEMENT_MINIAPP:}
     # 签名时间窗（秒），配合 nonce 防重放；资金写动作叠加既有 idempotency_key 去重。
     timestamp_tolerance_seconds: ${ACCESS_DEVICE_CREDENTIAL_TOLERANCE_SECONDS:300}

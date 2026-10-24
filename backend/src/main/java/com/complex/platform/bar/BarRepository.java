@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -9,8 +9,37 @@ import java.util.Optional;
 public interface BarRepository {
     BarTableRecord saveTable(BarTableRecord table);
 
-    /** BYOD 一期:活跃预订(未取消,reserved_at 自 since 起)占用的桌位 id 集,空位视图标记用。 */
-    java.util.Set<String> listActiveReservedTableIds(java.time.Instant since);
+    /** BYOD 一期空位视图：正被有效预留占着的台位 id 集（ROOT-03-R19 按 hold_status='held'）。 */
+    java.util.Set<String> listActiveReservedTableIds();
+
+    /**
+     * ROOT-03-R19（ENUM 第 100 行）：在台位行锁下占台——台位非空闲（已开台、待清台、停用）或已被其它订台占着时返回 false 不占；
+     * 否则把该订台置为占台中。内存桩默认放行。
+     */
+    default boolean holdTable(String reservationId, String tableId) {
+        return true;
+    }
+
+    /** ROOT-03-R19：下单前预检（不加锁）——台位空闲且没有被占着才可订。内存桩默认可订。 */
+    default boolean isTableReservable(String tableId) {
+        return true;
+    }
+
+    /**
+     * ROOT-03-R19：取消、超时、到店开台三条路径退出占台。尚未占台（定金未付）的订台同样记为已退出，之后不再被当成未到店。内存桩默认无操作。
+     */
+    default void releaseHold(String reservationId) {
+    }
+
+    /** ROOT-03-R19（ENUM 第 100 行「排他锁」）：正占着该台位的那笔订台（一个台位同一时刻至多一笔）。内存桩默认没有。 */
+    default Optional<String> findHeldReservationId(String tableId) {
+        return Optional.empty();
+    }
+
+    /** ROOT-03-R19（BSM 第 1062 行）：超过最晚到店时间仍未到店的有效订台 id。内存桩默认无。 */
+    default List<String> listOverdueReservationIds(java.time.Instant now) {
+        return List.of();
+    }
 
     List<BarTableRecord> listTables(Optional<String> merchantScope);
 

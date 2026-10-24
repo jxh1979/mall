@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -39,6 +39,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-GOV-009", label: "审批链与节点裁决", route: "/admin/governance/approval-chain" },
   { pageId: "ADM-ACC-004", label: "组织层级与审批线", route: "/admin/access/org-hierarchy" },
   { pageId: "ADM-CUS-001", label: "客人账号管理", route: "/admin/customers/accounts" },
+  { pageId: "ADM-TKT-005", label: "学生认证审核", route: "/admin/ticketing/student-certifications" },
   { pageId: "ADM-CUS-002", label: "券台账管理", route: "/admin/customers/vouchers" },
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", route: "/admin/customers/loyalty-config" },
   { pageId: "ADM-CUS-005", label: "储值规则配置", route: "/admin/customers/stored-value-rules" },

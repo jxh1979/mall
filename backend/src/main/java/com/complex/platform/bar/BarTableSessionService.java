@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -83,6 +83,9 @@ public class BarTableSessionService {
         if (!table.id().equals(reservation.tableId())) {
             throw ApiException.conflict("BAR_TABLE_RESERVATION_MISMATCH", "该订台不是本台位的预订");
         }
+        requireNotHeldByOther(table.id(), reservation.id());
+        // ROOT-03-R19（ENUM 第 100 行「已预留只能经取消订台、超时释放、到店开台三条路径退出」）：到店开台即退出占台。
+        repository.releaseHold(reservation.id());
         return repository.saveTable(tableWithStatus(table, "opened", Instant.now()));
     }
 
@@ -123,12 +126,15 @@ public class BarTableSessionService {
         }
         BarReservationRecord reservation = null;
         String reservationId = trimToNull(actual.reservationId());
+        requireNotHeldByOther(table.id(), reservationId);
         if (reservationId != null) {
             reservation = repository.findReservationById(reservationId)
                     .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
             if (!barId.equals(reservation.barId()) || !table.id().equals(reservation.tableId())) {
                 throw ApiException.conflict("BAR_SCOPE_MISMATCH", "该订台不属于此台位会话");
             }
+            // ROOT-03-R19：到店开台即退出占台（ENUM 第 100 行三条退出路径之一）。
+            repository.releaseHold(reservation.id());
         }
         Instant now = Instant.now();
         repository.saveTable(tableWithStatus(table, "opened", now));
@@ -201,6 +207,7 @@ public class BarTableSessionService {
         if (!"active".equals(targetTable.status())) {
             throw ApiException.conflict("BAR_TABLE_NOT_TRANSFERABLE", "转入台位未启用");
         }
+        requireNotHeldByOther(targetTable.id(), null);
         // 第十批 TK-24-R2（BSM L1079「合并台组整体转台到目标台后……原台及原并台关系不再参加之后的……数值计算」
         // 「原台已经发生的消费金额随台结转」；DEC-R8-95）：转台前记下当前并台链与合计阈值；转台后旧链子会话改
         // merged_transferred（只保留消费与留款、不再参与阈值、并台与拆台），目标台成为新的独立起点。
@@ -550,6 +557,16 @@ public class BarTableSessionService {
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
         }
+    }
+
+    /**
+     * ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……已预留只能经取消订台、超时释放、到店开台三条路径退出」）：
+     * 台位正被有效预留占着时，只有带上占台的那笔订台到店开台才放行；散客开台、带别的订台号或转台转入都拒绝。
+     */
+    private void requireNotHeldByOther(String tableId, String reservationId) {
+        repository.findHeldReservationId(tableId).filter(held -> !held.equals(reservationId)).ifPresent(held -> {
+            throw ApiException.conflict("BAR_TABLE_ALREADY_RESERVED", "该台位已被预订占用；客人到店开台请填写该台位的订台号");
+        });
     }
 
     private BarTableRecord tableWithStatus(BarTableRecord table, String status, Instant updatedAt) {

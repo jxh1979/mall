@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -105,6 +105,7 @@ const IntegrationChannelMapsPage = React.lazy(() => import("./pages/IntegrationC
 const TerminalSwitchMatrixPage = React.lazy(() => import("./pages/TerminalSwitchMatrixPage").then((m) => ({ default: m.TerminalSwitchMatrixPage })));
 const TerminalDevicesPage = React.lazy(() => import("./pages/TerminalDevicesPage").then((m) => ({ default: m.TerminalDevicesPage })));
 const MdmWhitelistPage = React.lazy(() => import("./pages/MdmWhitelistPage").then((m) => ({ default: m.MdmWhitelistPage })));
+const StudentCertificationsPage = React.lazy(() => import("./pages/StudentCertificationsPage").then((m) => ({ default: m.StudentCertificationsPage })));
 const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
 const MemberLoyaltyConfigPage = React.lazy(() => import("./pages/MemberLoyaltyConfigPage").then((m) => ({ default: m.MemberLoyaltyConfigPage })));
 const StoredValueRulesPage = React.lazy(() => import("./pages/StoredValueRulesPage").then((m) => ({ default: m.StoredValueRulesPage })));
@@ -237,6 +238,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <PointsRecoveryWaiverPage {...props} />;
     case "ADM-TKT-004":
       return <TicketRewardConfigPage {...props} />;
+    case "ADM-TKT-005":
+      return <StudentCertificationsPage {...props} />;
     case "ADM-BAR-001":
       return <BarTableSessionsPage {...props} />;
     case "ADM-BAR-002":

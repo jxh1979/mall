@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -49,7 +49,8 @@ final class JdbcBarRowMapper {
                 base.capacity(), base.allowedPassFreeGuestCount(), base.minConsumptionCent(), base.currency(),
                 base.status(), base.createdAt(), base.updatedAt(),
                 nullableInstant(resultSet, "pending_clear_since"),
-                resultSet.getBoolean("pending_clear_overdue")
+                resultSet.getBoolean("pending_clear_overdue"),
+                resultSet.getString("held_reservation_id")
         );
     }
 
@@ -89,7 +90,9 @@ final class JdbcBarRowMapper {
                 nullableInstant(resultSet, "delete_requested_at"),
                 resultSet.getString("delete_reason"),
                 resultSet.getString("deposit_channel"),
-                nullableInstant(resultSet, "deposit_settled_at")
+                nullableInstant(resultSet, "deposit_settled_at"),
+                nullableInstant(resultSet, "latest_arrival_at"),
+                resultSet.getString("hold_status")
         );
     }
 

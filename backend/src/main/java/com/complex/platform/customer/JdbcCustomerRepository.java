@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -94,6 +94,16 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public boolean reRegisteredWithinOneYear(String customerId) {
+        Boolean within = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM customers c JOIN customer_deregistration_marks m ON m.phone_hash = c.phone_hash
+                                WHERE c.id = :id AND m.deregistered_at <= c.created_at
+                                  AND m.deregistered_at > c.created_at - INTERVAL '1 year')
+                """, Map.of("id", customerId), Boolean.class);
+        return Boolean.TRUE.equals(within);
+    }
+
+    @Override
     public Optional<CustomerSessionRecord> findSessionByToken(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
@@ -103,6 +113,12 @@ class JdbcCustomerRepository implements CustomerRepository {
                   FROM customer_sessions
                  WHERE customer_token_hash = :customer_token_hash
                 """, Map.of("customer_token_hash", sha256(token)), this::mapSession).stream().findFirst();
+    }
+
+    @Override
+    public int revokeSessionsOfCustomer(String customerId) {
+        return jdbcTemplate.update("UPDATE customer_sessions SET status = 'revoked' WHERE customer_id = :id AND status = 'active'",
+                Map.of("id", customerId));
     }
 
     @Override
@@ -465,18 +481,24 @@ class JdbcCustomerRepository implements CustomerRepository {
     @Override
     public List<CustomerBarReservationOptionResponse> listBarReservationOptions() {
         return jdbcTemplate.query("""
-                SELECT bar_id, id AS table_id, table_type, table_name, capacity,
-                       allowed_pass_free_guest_count, min_consumption_cent, currency, status
-                  FROM bar_tables
-                 WHERE status = 'active'
-                 ORDER BY bar_id, table_name, id
+                SELECT t.bar_id, t.id AS table_id, t.table_type, t.table_name, t.capacity,
+                       t.allowed_pass_free_guest_count, t.min_consumption_cent, t.currency, t.status,
+                       EXISTS (SELECT 1 FROM bar_reservations r WHERE r.table_id = t.id AND r.hold_status = 'held') AS reserved,
+                       CASE WHEN t.table_type IN ('card_seat', 'vip') THEN (
+                           SELECT (r.rule_json ->> 'rateBps')::int FROM bar_payroll_rules r JOIN merchants bm ON bm.id = t.bar_id
+                            WHERE r.rule_kind = 'charge' AND r.project_id = bm.project_id AND r.merchant_id IS NULL AND r.status = 'approved'
+                              AND r.effective_from <= (now() AT TIME ZONE 'Asia/Shanghai')::date
+                            ORDER BY r.effective_from DESC, r.id DESC LIMIT 1) ELSE 0 END AS service_fee_rate_bps
+                  FROM bar_tables t
+                 WHERE t.status = 'active'
+                 ORDER BY t.bar_id, t.table_name, t.id
                 """, this::mapBarReservationOption);
     }
 
     @Override
     public Optional<BarTableRecord> findActiveBarTableForReservation(String barId, String tableId, String tableType) {
         return jdbcTemplate.query("""
-                SELECT id, bar_id, table_code, table_name, table_type, capacity,
+                SELECT id, bar_id, merchant_id, table_code, table_name, table_type, capacity,
                        allowed_pass_free_guest_count, min_consumption_cent, currency,
                        status, created_at, updated_at
                   FROM bar_tables
@@ -528,19 +550,20 @@ class JdbcCustomerRepository implements CustomerRepository {
     public BarReservationRecord saveCustomerBarReservation(BarReservationRecord reservation) {
         jdbcTemplate.update("""
                 INSERT INTO bar_reservations (
-                    id, bar_id, table_id, customer_id, reserved_at, guest_count,
+                    id, bar_id, merchant_id, table_id, customer_id, reserved_at, guest_count,
                     allowed_pass_free_guest_count, deposit_amount_cent, deposit_status,
                     order_source, sales_staff_id, status, created_terminal, device_id,
-                    evidence_attachment_ids, created_at, updated_at
+                    evidence_attachment_ids, created_at, updated_at, latest_arrival_at
                 )
                 VALUES (
-                    :id, :bar_id, :table_id, :customer_id, :reserved_at, :guest_count,
+                    :id, :bar_id, :merchant_id, :table_id, :customer_id, :reserved_at, :guest_count,
                     :allowed_pass_free_guest_count, :deposit_amount_cent, :deposit_status,
                     :order_source, :sales_staff_id, :status, :created_terminal, :device_id,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at
+                    CAST(:evidence_attachment_ids AS jsonb), :created_at, :updated_at, :latest_arrival_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
+                    merchant_id = EXCLUDED.merchant_id,
                     table_id = EXCLUDED.table_id,
                     customer_id = EXCLUDED.customer_id,
                     reserved_at = EXCLUDED.reserved_at,
@@ -554,7 +577,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                     created_terminal = EXCLUDED.created_terminal,
                     device_id = EXCLUDED.device_id,
                     evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    latest_arrival_at = EXCLUDED.latest_arrival_at
                 """, barReservationParameters(reservation));
         return reservation;
     }
@@ -662,6 +686,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return new MapSqlParameterSource()
                 .addValue("id", reservation.id())
                 .addValue("bar_id", reservation.barId())
+                .addValue("merchant_id", reservation.merchantId())
                 .addValue("table_id", reservation.tableId())
                 .addValue("customer_id", reservation.customerId())
                 .addValue("reserved_at", timestampWithTimeZone(reservation.reservedAt()))
@@ -676,7 +701,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("device_id", reservation.deviceId())
                 .addValue("evidence_attachment_ids", writeJson(reservation.evidenceAttachmentIds()))
                 .addValue("created_at", timestampWithTimeZone(reservation.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(reservation.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(reservation.updatedAt()))
+                .addValue("latest_arrival_at", timestampWithTimeZone(reservation.latestArrivalAt()));
     }
 
     private CustomerRecord mapCustomer(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -792,7 +818,10 @@ class JdbcCustomerRepository implements CustomerRepository {
                 resultSet.getInt("allowed_pass_free_guest_count"),
                 resultSet.getLong("min_consumption_cent"),
                 resultSet.getString("currency"),
-                resultSet.getString("status")
+                resultSet.getString("status"),
+                resultSet.getBoolean("reserved"),
+                resultSet.getObject("service_fee_rate_bps", Integer.class),
+                0L
         );
     }
 
@@ -800,7 +829,7 @@ class JdbcCustomerRepository implements CustomerRepository {
         return new BarTableRecord(
                 resultSet.getString("id"),
                 resultSet.getString("bar_id"),
-                null,
+                resultSet.getString("merchant_id"),
                 resultSet.getString("table_code"),
                 resultSet.getString("table_name"),
                 resultSet.getString("table_type"),
@@ -1223,6 +1252,31 @@ class JdbcCustomerRepository implements CustomerRepository {
                  ORDER BY created_at DESC, id DESC LIMIT :size OFFSET :offset
                 """, new MapSqlParameterSource().addValue("customer", customerId).addValue("account", accountId)
                 .addValue("size", size).addValue("offset", (long) (page - 1) * size), this::mapStoredValueTransaction);
+    }
+
+    @Override
+    public List<CustomerStoredValueTransactionView> listStoredValueTransactionViews(String customerId, String accountId, int page, int size) {
+        return jdbcTemplate.query("""
+                SELECT t.id, t.account_id, t.customer_id, t.txn_type, t.amount_cent, t.balance_after_cent, t.payment_intent_id, t.reason,
+                       t.idempotency_key, t.created_at, t.paid_at, t.principal_cent, t.bonus_cent, t.original_txn_id,
+                       CASE WHEN t.txn_type = 'topup' THEN COALESCE(b.payment_channel, fpi.channel) END AS payment_channel,
+                       m.id AS merchant_id, m.merchant_name
+                  FROM customer_stored_value_transactions t
+                  LEFT JOIN customer_stored_value_accounts a ON a.id = t.account_id
+                  LEFT JOIN stored_value_topup_batches b ON b.id = t.id
+                  LEFT JOIN finance_payment_intents fpi ON fpi.id = t.payment_intent_id
+                  LEFT JOIN ticket_payment_intents tpi ON tpi.id = t.id
+                  LEFT JOIN ticket_orders o ON o.id = tpi.business_order_id
+                  LEFT JOIN merchants m ON t.txn_type = 'consume' AND m.id = COALESCE(a.merchant_id, o.bar_id)
+                 WHERE t.customer_id = :customer AND t.account_id = :account
+                 ORDER BY t.created_at DESC, t.id DESC LIMIT :size OFFSET :offset
+                """, new MapSqlParameterSource().addValue("customer", customerId).addValue("account", accountId)
+                .addValue("size", size).addValue("offset", (long) (page - 1) * size), (rs, n) -> new CustomerStoredValueTransactionView(
+                rs.getString("id"), rs.getString("account_id"), rs.getString("customer_id"), rs.getString("txn_type"),
+                rs.getLong("amount_cent"), rs.getLong("balance_after_cent"), rs.getString("payment_intent_id"), rs.getString("reason"),
+                rs.getString("idempotency_key"), nullableInstant(rs, "created_at"), nullableInstant(rs, "paid_at"),
+                rs.getLong("principal_cent"), rs.getLong("bonus_cent"), rs.getString("payment_channel"), rs.getString("merchant_id"),
+                rs.getString("merchant_name"), rs.getString("original_txn_id")));
     }
 
     @Override

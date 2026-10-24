@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { Alert, Button, Card, DatePicker, Empty, Form, Input, InputNumber, Result, Select, Space, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 
@@ -32,6 +33,7 @@ export function BarReservationPage({ service }: { service: CustomerService }): R
   const onSubmit = async (values: {
     tableId: string;
     reservationTime: { toISOString: () => string };
+    latestArrivalAt: { toISOString: () => string };
     guestCount: number;
     contactPhone?: string;
   }) => {
@@ -50,6 +52,7 @@ export function BarReservationPage({ service }: { service: CustomerService }): R
         tableId: option.tableId,
         tableType: option.tableType,
         reservationTime: values.reservationTime.toISOString(),
+        latestArrivalAt: values.latestArrivalAt.toISOString(),
         guestCount: values.guestCount,
         contactPhone: values.contactPhone,
       });
@@ -92,6 +95,9 @@ export function BarReservationPage({ service }: { service: CustomerService }): R
               />
             </Form.Item>
             <Form.Item name="reservationTime" label="到店时段" rules={[{ required: true, message: "请选择时段" }]}>
+              <DatePicker showTime style={{ width: "100%" }} />
+            </Form.Item>
+            <Form.Item name="latestArrivalAt" label="最晚到店时间" rules={[{ required: true, message: "请选择最晚到店时间" }]}>
               <DatePicker showTime style={{ width: "100%" }} />
             </Form.Item>
             <Form.Item name="guestCount" label="人数" rules={[{ required: true }]}>

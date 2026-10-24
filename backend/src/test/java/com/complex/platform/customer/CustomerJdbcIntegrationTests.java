@@ -1,11 +1,12 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import com.complex.platform.bar.BarReservationRecord;
-import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
 import com.complex.platform.bar.BarTableRecord;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -50,12 +51,16 @@ class CustomerJdbcIntegrationTests {
         assertThat(repository.findStoredValueTopupIntent(intentId).orElseThrow().merchantId()).isEqualTo("merchant_A");
     }
 
+    @Autowired
+    private CustomerTerms customerTerms;
+
     @Test
     void phoneLoginPersistsNonLeakingCustomerIdToRealPostgres() {
-        // 真实后端活证据：新客人经真实 CustomerService.phoneLogin 落真实 Postgres，主键不得内嵌明文手机号。
+        // 真实后端活证据：新客人经真实 CustomerService.register（ROOT-03-R3 起只有注册建号）落真实 Postgres，主键不得内嵌明文手机号。
         String phone = "13655667788";
-        CustomerLoginResponse response = customerService.phoneLogin(
-                new CustomerPhoneLoginRequest(phone, "000000", "miniapp"));
+        CustomerLoginResponse response = customerService.register(new com.complex.platform.customer.dto.CustomerRegisterRequest(
+                phone, "000000", java.time.LocalDate.parse("1990-05-01"),
+                customerTerms.current().memberTerms().version(), customerTerms.current().privacyPolicy().version()), "miniapp");
 
         Integer rows = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM customers WHERE id = ?", Integer.class, response.customerId());

@@ -1,8 +1,9 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public interface TicketingRepository {
@@ -30,6 +31,16 @@ public interface TicketingRepository {
      * #172(2026-07-19 拍板)：全场统一动态码刷新间隔（秒）。凡出示验证类二维码发凭证时读它决定刷新窗口，
      * 不再按票种各配。default 返回 15（兼容既有测试假实现；生产由 Jdbc 覆盖读 ticket_qr_refresh_config）。
      */
+    /** clients-R40：作废某人份的在途转赠（原持有人改转他人），返回作废条数。 */
+    default int voidPendingTransfersForSlot(String parentTicketId, int slotIndex, String reason, java.time.Instant now) {
+        return 0;
+    }
+
+    /** clients-R40：父票首场次（未开启返回空）。 */
+    default java.util.Optional<FirstSessionWindow.Session> findFirstSession(String parentTicketId) {
+        return java.util.Optional.empty();
+    }
+
     default int findQrRefreshIntervalSeconds() {
         return 15;
     }
@@ -282,6 +293,16 @@ public interface TicketingRepository {
     /** 退款单台账（后台“待确认拨付”看板的数据源）：按创建时间倒序。 */
     List<TicketRefundRecord> listTicketRefunds();
 
+    /** 第十三批第 11 条：客人本人提交的退票申请（requested_by＝客人编号），新到旧。default 从台账筛（测试双子）。 */
+    default List<TicketRefundRecord> listTicketRefundsByRequester(String requestedBy) {
+        return listTicketRefunds().stream().filter(refund -> requestedBy.equals(refund.requestedBy())).toList();
+    }
+
+    /** 第十三批第 11 条：批准时补填客人自助申请未填的责任主体（只填空的）。default 不落（测试双子）。 */
+    default int fillTicketRefundResponsibleEntity(String refundId, String responsibleEntityId) {
+        return 0;
+    }
+
     Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId);
 
     TerminalSyncTaskRecord saveTerminalSyncTask(TerminalSyncTaskRecord task);
@@ -336,6 +357,29 @@ public interface TicketingRepository {
     // TK-20-R3：该票务订单已成功的支付意图（最新一条；储值支付时 id = 储值消费流水 id、channel = stored_value）。default 供内存双子兼容。
     default Optional<TicketPaymentIntentRecord> findSucceededTicketPaymentIntentByOrder(String orderId) {
         return Optional.empty();
+    }
+
+    // ROOT-03-R20 组合支付：该票务订单的全部付款意向，按付款先后（updated_at、id 升序）——算已付与待付、超时退回、倒序退款都用它。
+    // default 供内存双子兼容。
+    default List<TicketPaymentIntentRecord> listTicketPaymentIntentsByOrder(String orderId) {
+        return findSucceededTicketPaymentIntentByOrder(orderId).map(List::of).orElse(List.of());
+    }
+
+    // ROOT-03-R20：本订单除指定退款单外已批准、已成功的退款合计（按收款相反顺序分配退款笔时，已退走的从后往前扣）。
+    default long sumApprovedRefundAmountByOrderExcluding(String orderId, String refundId) {
+        return 0L;
+    }
+
+    // ROOT-03-R27：客人订单命中的全部资格价（[{rule_id, variant_type, unit_price_cent, rule_updated_at}]，规则版本以规则更新时刻快照）。
+    default void saveTicketOrderPriceHits(String orderId, List<Map<String, Object>> priceHits) {
+    }
+
+    // ROOT-03-R20（BSM 第 1749 行）：批准时分到在线笔、待财务原路打款的各笔。内存桩不落。
+    default void saveTicketRefundPayoutItems(String refundId, List<TicketRefundRecord.PayoutItem> items) {
+    }
+
+    default List<Map<String, Object>> findTicketOrderPriceHits(String orderId) {
+        return List.of();
     }
 
     // 退款冻结（2a-3）：退款审批通过 → 把 active 权益置 refunded（不可再核销）。返回受影响行数（幂等：已 refunded 返回 0）。
@@ -441,4 +485,26 @@ public interface TicketingRepository {
     default List<TicketTransferRecord> listPendingTransfersByReceiverPhoneHash(String receiverPhoneHash) { return List.of(); }
     default List<TicketTransferRecord> listTicketTransfersByInitiator(String initiatorCustomerId) { return List.of(); }
     default List<TicketTransferRecord> listTicketTransfers() { return List.of(); }
+
+    // ── ROOT-03-R29 渠道票与一体机票按已验证手机号归集、我的票使用记录、渠道接入状态；R21 注销删购票手机号 ──
+    /** 该手机号已注册、未注销未关闭的会员编号（按 customers.phone_hash 盲索引）。default 无会员（测试双子）。 */
+    default Optional<String> findMemberIdByPhone(String phone) { return Optional.empty(); }
+    /**
+     * 注册时把尚未归属会员、按该手机号购买的 salesChannels 渠道订单归到本人：订单 customer_id、父票购票人与持有人、各人员权益组持有人。
+     * 返回归集的订单数。default 0（测试双子）。
+     */
+    default int linkUnclaimedOrdersToMember(String phone, String customerId, java.util.Set<String> salesChannels,
+            java.time.Instant now) { return 0; }
+    /** 一张票（权益）的使用记录：原核销记录（成功或已被冲正），新到旧。default 空（测试双子）。 */
+    default List<CustomerTicketUsageResponse> listTicketUsages(String entitlementId) { return List.of(); }
+    /** 第三方渠道售票能力开关（V071 integration.ticket_channel.sync 全局行）是否开启。default 关。 */
+    default boolean ticketChannelSyncEnabled() { return false; }
+    /** R21 注销：清空本人各订单的购票手机号与其盲索引，返回行数。default 0（测试双子）。 */
+    default int clearBuyerPhonesOfCustomer(String customerId) { return 0; }
+    /** R21 注销：本人当前持有的各人员权益组（含未核销）的权益。default 空（测试双子）。 */
+    default List<IssuedEntitlementRecord> listHeldEntitlements(String customerId) {
+        return listSlotHoldersByHolder(customerId).stream()
+                .flatMap(holder -> listIssuedEntitlementsByParentSlot(holder.parentTicketId(), holder.slotIndex()).stream())
+                .toList();
+    }
 }

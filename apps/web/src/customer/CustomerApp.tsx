@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import {
   CalendarOutlined,
   CarOutlined,
@@ -155,7 +155,7 @@ export default function CustomerApp(): React.ReactElement {
     setError(null);
     setErrorDetail(null);
     try {
-      const result = await customerPhoneLogin({ phone: values.phone, smsCode: values.smsCode, scene: "login" });
+      const result = await customerPhoneLogin({ phone: values.phone, smsCode: values.smsCode });
       const next: CustomerSession = {
         customerId: result.customerId,
         maskedPhone: result.maskedPhone,

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
@@ -20,8 +20,21 @@ public interface CustomerRepository {
 
     Optional<CustomerSessionRecord> findSessionByToken(String token);
 
+    /**
+     * ROOT-03-R27（ENUM 第 39 行「注销后重新注册的，重新注册时间与注销时间间隔不足一年不可再享新人资格」）：本账户手机号在本账户注册前一年内
+     * 注销过（注销记录只留手机号盲索引与时点，见 V537）。default 供内存双子兼容。
+     */
+    default boolean reRegisteredWithinOneYear(String customerId) {
+        return false;
+    }
+
     /** AUD-030：按 token 撤销会话（活动会话置 logged_out），登出后 token 立即失效。返回受影响行数（幂等：0=无匹配活动会话）。 */
     int revokeSessionByToken(String token);
+
+    /** ROOT-03-R21 注销：本人全部活动会话置 revoked。default 供内存双子兼容。 */
+    default int revokeSessionsOfCustomer(String customerId) {
+        return 0;
+    }
 
     CustomerConsentRecord saveConsent(CustomerConsentRecord consent);
 
@@ -223,6 +236,11 @@ public interface CustomerRepository {
 
     default CustomerStoredValueAccountRecord saveStoredValueAccount(CustomerStoredValueAccountRecord account) {
         throw new UnsupportedOperationException("saveStoredValueAccount not supported by this repository");
+    }
+
+    /** ROOT-03-R30 客人端「我的余额」逐笔（带支付通路、扣款商户、回冲原流水）。 */
+    default List<CustomerStoredValueTransactionView> listStoredValueTransactionViews(String customerId, String accountId, int page, int size) {
+        throw new UnsupportedOperationException("listStoredValueTransactionViews not supported");
     }
 
     default List<CustomerStoredValueTransactionRecord> listStoredValueTransactions(

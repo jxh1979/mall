@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 
@@ -505,6 +505,54 @@ public class TicketingService {
         );
     }
 
+    /**
+     * ROOT-03-R27 客人自助下单：不收价格规则，由系统在客人符合的资格价（eligibleVariants，客人域判定）与动态公开价中取最低，订单另存全部命中资格价。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.order.create")
+    @Transactional
+    public TicketOrderRecord createCustomerTicketOrder(TicketOrderRequest request, java.util.Set<String> eligibleVariants) {
+        return operations.executeWrite(
+                "createTicketOrder",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketOrderRecord.class,
+                TicketingWriteOperation.CREATE_TICKET_ORDER,
+                () -> orderService.createOrder(request, java.util.Objects.requireNonNull(eligibleVariants))
+        );
+    }
+
+    /** ROOT-03-R27：客人此刻买某票种的价格（基础价、命中资格价、最终价），供票种列表展示「我的价格」。 */
+    public TicketPricingService.CustomerPrice quoteCustomerPrice(String ticketTypeId, java.time.LocalDate visitDate,
+            String salesChannel, java.util.Set<String> eligibleVariants) {
+        TicketTypeRecord ticketType = repository.findTicketTypeById(operations.requireText(ticketTypeId, "ticket_type_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
+        return pricingService.resolveCustomerPrice(ticketType, visitDate, salesChannel, eligibleVariants);
+    }
+
+    /** ROOT-03-R4：客人本人订单发起在线付款（金额＝待付金额，服务端定）。 */
+    @Transactional
+    public com.complex.platform.finance.PaymentIntentRecord createCustomerOnlinePayment(String orderId, String customerId,
+            String channel, String idempotencyKey) {
+        return orderService.createCustomerOnlinePayment(orderId, customerId, channel, idempotencyKey);
+    }
+
+    /** ROOT-03-R4/R17/R18：在线到账确认（客人回前台确认与服务端结算作业共用；customerId 为空＝作业）。 */
+    @Transactional
+    public TicketOrderService.OnlineSettlement settleCustomerOnlinePayment(String orderId, String paymentIntentId, String customerId) {
+        return orderService.settleOnlinePayment(orderId, paymentIntentId, customerId);
+    }
+
+    /** ROOT-03-R20：订单已收各笔（只列成功的，按付款先后）。 */
+    public List<TicketPaymentIntentRecord> listOrderPayments(String orderId) {
+        return repository.listTicketPaymentIntentsByOrder(operations.requireText(orderId, "order_id")).stream()
+                .filter(intent -> "succeeded".equals(intent.status())).toList();
+    }
+
+    /** ROOT-03-R27：订单命中的全部资格价。 */
+    public List<java.util.Map<String, Object>> listOrderPriceHits(String orderId) {
+        return repository.findTicketOrderPriceHits(operations.requireText(orderId, "order_id"));
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "finance.payment_intent.create")
     @Transactional
     public TicketPaymentIntentRecord createTicketOrderPayIntent(String orderId, PaymentIntentRequest request) {
@@ -648,6 +696,15 @@ public class TicketingService {
     }
 
     /** AUD-076 展示层实时解析酒吧名（供客人端商品/订单/我的票展示；ID 快照、名字实时 join）。 */
+    /** ROOT-03 clients-R9（BSM 第 858、879 行）：票种所含权益名称（含赠饮），供客人端门票守则展示。 */
+    public List<String> ticketTypeEntitlementNames(String ticketTypeId) {
+        return repository.listTicketTypeEntitlements(ticketTypeId).stream()
+                .map(binding -> repository.findEntitlementTemplateById(binding.entitlementTemplateId())
+                        .map(EntitlementTemplateRecord::name).orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
     public String resolveBarName(String barId) {
         return catalogService.resolveBarName(barId);
     }
@@ -787,6 +844,127 @@ public class TicketingService {
         return out;
     }
 
+    /**
+     * ROOT-03-R29 我的票使用记录（BSM 第 862、880 行）：只许本人当前持有的票（人员权益组持有人；无持有人的按订单归属，与取码同口径），
+     * 他人 403 CUSTOMER_ORDER_FORBIDDEN。
+     */
+    public List<CustomerTicketUsageResponse> listCustomerTicketUsages(String ticketId, String customerId) {
+        String me = operations.requireText(customerId, "customer_id");
+        IssuedEntitlementRecord entitlement = repository.findIssuedEntitlementById(operations.requireText(ticketId, "ticket_id"))
+                .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "权益不存在或已被删除"));
+        String holder = entitlement.parentTicketId() == null ? null
+                : repository.findSlotHolder(entitlement.parentTicketId(), entitlement.slotIndex())
+                        .map(TicketSlotHolderRecord::holderCustomerId).orElse(null);
+        String owner = holder != null ? holder
+                : repository.findTicketOrderById(entitlement.orderId()).map(TicketOrderRecord::customerId).orElse(null);
+        if (!me.equals(owner)) {
+            throw ApiException.forbidden("CUSTOMER_ORDER_FORBIDDEN", "该票不属于当前客人");
+        }
+        return repository.listTicketUsages(entitlement.id());
+    }
+
+    /** ROOT-03-R29 第三方渠道接入状态（供客户端置灰）。 */
+    public record TicketChannelStatus(String channel, String name, boolean enabled) {
+    }
+
+    /**
+     * ROOT-03-R29（BSM 第 892 行「第三方团购（美团/大众点评/抖音）购买的票按渠道来源在“我的订单/我的票”统一展示，渠道未接入前相关入口置灰、
+     * 不展示伪造数据」）：三个渠道一律读唯一的渠道售票开关（V071 integration.ticket_channel.sync，出厂关），不返回任何订单样例。
+     */
+    public List<TicketChannelStatus> listTicketChannels() {
+        boolean enabled = repository.ticketChannelSyncEnabled();
+        return List.of(new TicketChannelStatus("meituan", "美团", enabled), new TicketChannelStatus("dianping", "大众点评", enabled),
+                new TicketChannelStatus("douyin", "抖音", enabled));
+    }
+
+    /** ROOT-03-R29 注册成功后（同一事务）：把该手机号此前买的、尚未归属会员的第三方渠道票与一体机票归到新会员。 */
+    public int linkUnclaimedOrdersToMember(String phone, String customerId) {
+        return repository.linkUnclaimedOrdersToMember(phone, customerId, TicketOrderService.MEMBER_LINKABLE_CHANNELS,
+                java.time.Instant.now());
+    }
+
+    // ROOT-03-R21 注销删人脸绑定（BSM 第 890 行「该人脸在该票用完或到期后删除」，第 863 行「注销后……人脸……一律删除」）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private TicketFacePhotoRepository facePhotos;
+
+    /** ROOT-03-R21 注销对本人未核销票的处置结果。 */
+    public record DeregistrationTickets(int forfeited, int refundableKept) {
+    }
+
+    /**
+     * ROOT-03-R21（BSM 第 863 行「未核销的票按本文件「退款」条的退票规则处理」；退款条「门票或权益一经开始核销（含部分核销）即不可退款」
+     * 「未到场、忘记使用或主动放弃均不构成退款理由」）：作废本人持有的各人份上的在途转赠（BSM 第 809 行「接收人确认领取后可以继续……再次转赠」，
+     * 第十三批第 12 条「只作废本人那几份未用权益」——别人已领取的人份及其再转赠不动）；可退与否按整张票判定（与
+     * {@link #listRefundableUnusedHeldTickets} 同一口径）——整张不可退（票种不可退，或已部分核销）或只持有部分人份的票，本人持有的完全未用的权益一律作废
+     * （同到期作废口径，不退款），随即删除不再有可用入场权益的人脸绑定；整张未用且票种可退的票原样保留、计数返回（注销时名下有此类票即先拒，
+     * 注销路径恒为 0；拉黑时保留）。
+     */
+    public DeregistrationTickets disposeHeldTicketsOnDeregistration(String customerId, java.time.Instant now) {
+        int forfeited = 0;
+        int refundableKept = 0;
+        java.util.Set<String> parents = new java.util.LinkedHashSet<>();
+        java.util.Set<String> refundable = listRefundableUnusedHeldTickets(customerId).stream()
+                .map(CustomerTicketResponse::id).collect(java.util.stream.Collectors.toSet());
+        for (IssuedEntitlementRecord e : repository.listHeldEntitlements(customerId)) {
+            if (e.parentTicketId() != null) {
+                parents.add(e.parentTicketId());
+            }
+            if (!"active".equals(e.status()) || e.usedTimes() > 0) {
+                continue;
+            }
+            if (refundable.contains(e.id())) {
+                refundableKept++;
+            } else {
+                forfeited += repository.forfeitEntitlement(e.id(), now);
+            }
+        }
+        if (transferService != null) {
+            for (TicketSlotHolderRecord holder : repository.listSlotHoldersByHolder(customerId)) {
+                transferService.voidPendingTransfersForSlot(holder.parentTicketId(), holder.slotIndex(), "account_deregistered", now);
+            }
+        }
+        if (facePhotos != null) {
+            for (String parentId : parents) {
+                facePhotos.deleteIfNoUsableEntry(parentId, now);
+            }
+        }
+        return new DeregistrationTickets(forfeited, refundableKept);
+    }
+
+    /**
+     * 操作员裁决第十三批第 8 条「先退票才能注销」：每个人份都归本人、票种允许退款且整张完全未用的票（退款以整张票为单位，任一权益已核销即整张不可退，
+     * 同 TicketRefundService 口径）；退款申请中仍列出，审批通过权益置已退后不再列出。返回「我的票」同一安全投影（逐权益一行）。
+     * 第 12 条「按不可退作废本人份（推荐）」：只持有部分人份的票不算「本人可退」、不列出，注销时按不可退作废本人那几份未用权益。
+     */
+    public List<CustomerTicketResponse> listRefundableUnusedHeldTickets(String customerId) {
+        java.util.Map<String, List<IssuedEntitlementRecord>> byTicket = new java.util.LinkedHashMap<>();
+        for (IssuedEntitlementRecord e : repository.listHeldEntitlements(customerId)) {
+            byTicket.computeIfAbsent(e.parentTicketId() == null ? e.id() : e.parentTicketId(), k -> new java.util.ArrayList<>()).add(e);
+        }
+        List<CustomerTicketResponse> out = new java.util.ArrayList<>();
+        for (List<IssuedEntitlementRecord> ticket : byTicket.values()) {
+            IssuedEntitlementRecord first = ticket.get(0);
+            TicketInstanceRecord parent = first.parentTicketId() == null ? null
+                    : repository.findTicketInstanceById(first.parentTicketId()).orElse(null);
+            TicketTypeRecord type = repository.findTicketTypeById(first.ticketTypeId()).orElse(null);
+            boolean unused = ticket.stream().allMatch(e -> "active".equals(e.status()) && e.usedTimes() == 0)
+                    && (parent == null || parent.firstUsedAt() == null);
+            // 第 12 条：与客人自助退票（TicketRefundService.requestCustomerRefund）同一口径，每个人份的持有人都是本人才算本人可退。
+            boolean wholeHeld = parent != null && java.util.stream.IntStream.rangeClosed(1, Math.max(1, parent.numPeople()))
+                    .allMatch(slot -> customerId.equals(repository.findSlotHolder(parent.id(), slot)
+                            .map(TicketSlotHolderRecord::holderCustomerId).orElse(null)));
+            if (wholeHeld && unused && type != null && type.refundable()) {
+                ticket.forEach(e -> out.add(CustomerTicketResponse.of(e, type.ticketName(), parent == null ? null : parent.ticketNo())));
+            }
+        }
+        return out;
+    }
+
+    /** ROOT-03-R21 注销删除个人信息：清空本人各订单的购票手机号及其盲索引。 */
+    public int clearBuyerPhonesOnDeregistration(String customerId) {
+        return repository.clearBuyerPhonesOfCustomer(customerId);
+    }
+
     /** AUD-077 后台客服只读转赠记录(纠纷排查,首期只读不撤回)。权限 ticket.transfer.read。 */
     public PageResponse<TicketTransferResponse> listTicketTransfers() {
         return operations.readPage(TicketingReadOperation.LIST_TICKET_TRANSFERS, transferService::listAllForAdmin);
@@ -831,6 +1009,28 @@ public class TicketingService {
                 TicketingWriteOperation.REJECT_TICKET_REFUND,
                 () -> refundService.rejectRefund(id, request)
         );
+    }
+
+    /**
+     * 操作员裁决第十三批第 11 条「客人端自助申请」：客人对本人可退的未用票申请退票，进入与员工退款同一套审批和原路退回。
+     * 幂等：operationId 绑定客人，同一客人同一幂等键重复提交返回同一申请（键不跨客人复用）。
+     */
+    @Transactional
+    public CustomerTicketRefundResponse requestCustomerTicketRefund(String customerId,
+            com.complex.platform.customer.dto.CustomerTicketRefundRequest request) {
+        return operations.executeWrite(
+                "requestCustomerTicketRefund:" + customerId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                CustomerTicketRefundResponse.class,
+                TicketingWriteOperation.REQUEST_CUSTOMER_TICKET_REFUND,
+                () -> refundService.customerView(refundService.requestCustomerRefund(customerId, request))
+        );
+    }
+
+    /** 操作员裁决第十三批第 11 条：客人本人退票申请及其状态（新到旧）。 */
+    public List<CustomerTicketRefundResponse> listCustomerTicketRefunds(String customerId) {
+        return refundService.listCustomerRefunds(customerId);
     }
 
     /** TK-05-R2/R3 登记通票安全事件（BSM:804 通票安全例外；须记录原因、当时情形），待夜班值班经理及以上批准。 */

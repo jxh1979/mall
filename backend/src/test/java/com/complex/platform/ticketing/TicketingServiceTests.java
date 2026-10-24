@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 // 文件版本：V0.03
 
@@ -3456,20 +3456,22 @@ class TicketingServiceTests {
         TestSecurityActors.clear();
         try {
             TestSecurityActors.asMerchantUser("mch_bar_a");
+            // ROOT-03-R29：一体机下单先核验客人手机号短信验证码（此处替身：验证通过、该号未注册）。
+            orderService.kioskBuyerVerifier = (phone, code) -> null;
             // 卖本店单店票 OK。
             TicketOrderRecord ok = service.createTicketOrder(new TicketOrderRequest(
                     "scope-ok", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
-                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_a"));
+                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_a", "000000"));
             assertThat(ok.barId()).isEqualTo("mch_bar_a");
             // 卖别家单店票 → 拒。
             assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
                     "scope-x", "c", List.of(), bTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
-                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_b")))
+                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_b", "000000")))
                     .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SCOPE_FORBIDDEN"));
             // 门口一体机卖综合体通票 → 拒（HTML:897/930）。
             assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
                     "scope-p", "c", List.of(), pass.id(), null, 1, LocalDate.parse("2026-06-20"),
-                    "kiosk", "13800138000", null, java.util.Map.of(), null)))
+                    "kiosk", "13800138000", null, java.util.Map.of(), null, "000000")))
                     .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SCOPE_FORBIDDEN"));
         } finally {
             TestSecurityActors.clear();

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -37,6 +37,8 @@ enum TicketingWriteOperation implements AuditedOperation {
     REQUEST_TICKET_REFUND("ticket_refund.requested", "ticket_refund.request_failed", "ticket.refund.request", "ticket_refund"),
     APPROVE_TICKET_REFUND("ticket_refund.approved", "ticket_refund.approve_failed", "ticket.refund.approve", "ticket_refund"),
     REJECT_TICKET_REFUND("ticket_refund.rejected", "ticket_refund.reject_failed", "ticket.refund.approve", "ticket_refund"),
+    // 操作员裁决第十三批第 11 条：客人端自助申请退票（客人 token，权限 not_applicable）。
+    REQUEST_CUSTOMER_TICKET_REFUND("customer.ticket_refund.requested", "customer.ticket_refund.request_failed", "not_applicable", "ticket_refund"),
     // 退款实际拨付确认（business-enum 退款单状态：只有“成功”才计入已退金额）：approved→success。
     CONFIRM_TICKET_REFUND_PAYOUT("ticket_refund.payout_confirmed", "ticket_refund.payout_confirm_failed", "ticket.refund.approve", "ticket_refund"),
     // TK-05-R2/R3 通票安全例外（BSM:804）：登记与夜班值班经理及以上批准。

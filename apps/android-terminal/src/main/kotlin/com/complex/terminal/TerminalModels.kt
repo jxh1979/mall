@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -641,6 +641,9 @@ data class BarReservationCreateRequest(
   val reservationTime: String,
   val guestCount: Int,
   val salespersonUserId: String? = null,
+  // ROOT-03-R19（BSM 第 1062 行「每一笔订台都必须填写最晚到店时间」）；操作员裁决第十三批第 7 条「员工代订必须录入客人手机号」。
+  val latestArrivalAt: String,
+  val customerPhone: String,
 )
 
 @Serializable

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -723,11 +723,11 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(customerId, phone,
                 "139****" + phone.substring(7), "active", null, null, Instant.now(), Instant.now()));
         String token = "token_cg08b_" + suffix;
-        customerRepository.saveSession(new CustomerSessionRecord("session_cg08b_" + suffix, customerId, token, "web",
+        customerRepository.saveSession(new CustomerSessionRecord("session_cg08b_" + suffix, customerId, token, "miniapp",
                 Instant.now(), Instant.now().plusSeconds(3600), "active"));
         TestSecurityActors.clear();
         String body = mockMvc.perform(get("/api/v1/customer/orders/" + orderId + "/tickets")
-                        .header("X-Customer-Token", token))
+                        .header("X-Customer-Token", token).header("X-Terminal-Type", "miniapp"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         List<Map<String, Object>> items = com.jayway.jsonpath.JsonPath.read(body, "$.data.items");
         assertThat(items).filteredOn(r -> "full_reissue".equals(r.get("compensation_kind")))

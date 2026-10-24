@@ -1,5 +1,7 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.PageResponse;
 import java.time.Instant;
 import java.util.List;
@@ -37,6 +39,13 @@ public interface VoucherRepository {
 
     Optional<VoucherInstanceRecord> findInstanceById(String id);
 
+    /**
+     * 操作员裁决第十三批第 9 条「和门票一致不冻结……先成功的动作为准」：锁住该券实例行（SELECT … FOR UPDATE），转赠发起、领取与核销在同一行锁上
+     * 串行，锁后再读即见先提交者的结果。default 空操作（内存测试替身）。
+     */
+    default void lockInstance(String id) {
+    }
+
     Optional<VoucherInstanceRecord> findInstanceByCode(String code);
 
     /** 幂等插入（ON CONFLICT DO NOTHING）；false＝已存在。 */
@@ -66,4 +75,26 @@ public interface VoucherRepository {
 
     /** "全部券"聚合（读层并入）：统一台账实例 ∪ V282 通票第三方合作券权益实例。 */
     PageResponse<VoucherOverviewRecord> overview(String merchantScope, String customerId, int page, int pageSize);
+
+    /** ROOT-03-R32 券动态核销码（V541 voucher_redeem_codes）：未过期的 active 码所属券与签发对象。 */
+    record ActiveRedeemCode(String voucherInstanceId, String customerId) {
+    }
+
+    default void insertRedeemCode(String id, String voucherInstanceId, String customerId, String codeHash, Instant issuedAt,
+            Instant expiresAt, int refreshIntervalSeconds) {
+        throw new UnsupportedOperationException("insertRedeemCode");
+    }
+
+    /** 撤销该券全部 active 码（取新码、转赠领取时）。 */
+    default int revokeActiveRedeemCodes(String voucherInstanceId) {
+        return 0;
+    }
+
+    default Optional<ActiveRedeemCode> findActiveRedeemCode(String codeHash, Instant now) {
+        return Optional.empty();
+    }
+
+    /** 核销成功同事务把该码置 consumed。 */
+    default void consumeRedeemCode(String codeHash, String redemptionId) {
+    }
 }

@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { Alert, Button, Card, Empty, Input, InputNumber, List, Result, Space, Spin, Typography } from "antd";
 import { useState } from "react";
 
@@ -6,10 +7,10 @@ import type { BarScanMenuItem, BarScanOrder } from "../types";
 
 const { Paragraph, Text } = Typography;
 
-// ⑧ 扫码点单（绑桌台会话 + 继承入场闸）：扫桌台二维码得 sessionId -> 看菜单 -> 选数量 -> 自助下单。
-// 年龄已在场馆入场闸核验，点单不重复核龄；bar/桌台由会话定位，客人端只提交所点商品。
+// ⑧ 扫码点单（ROOT-03-R7）：扫散台固定桌台码得 tableId -> 看菜单 -> 选数量 -> 下单即付款（付款成功才成单）。
+// 年龄已在场馆入场闸核验，点单不重复核龄；当前开台会话由后端按桌台定位，客人端只提交所点商品。
 export function BarScanOrderPage({ service }: { service: CustomerService }) {
-  const [sessionId, setSessionId] = useState("");
+  const [tableId, setTableId] = useState("");
   const [menu, setMenu] = useState<BarScanMenuItem[] | null>(null);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
@@ -18,9 +19,9 @@ export function BarScanOrderPage({ service }: { service: CustomerService }) {
   const [order, setOrder] = useState<BarScanOrder | null>(null);
 
   const loadMenu = async () => {
-    const id = sessionId.trim();
+    const id = tableId.trim();
     if (!id) {
-      setError("请输入或扫码桌台会话编号");
+      setError("请扫描桌台二维码");
       return;
     }
     setLoading(true);
@@ -49,7 +50,7 @@ export function BarScanOrderPage({ service }: { service: CustomerService }) {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await service.placeBarScanOrder(sessionId.trim(), items);
+      const created = await service.placeBarScanOrder(tableId.trim(), items);
       setOrder(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "下单失败");
@@ -62,13 +63,13 @@ export function BarScanOrderPage({ service }: { service: CustomerService }) {
     <Card title="扫码点单">
       <Space direction="vertical" style={{ width: "100%" }} size="middle">
         <Paragraph type="secondary">
-          扫描桌台二维码后在此点单。下单记到当前桌台；年龄已在入场时核验，点单无需重复核验。
+          扫描散台桌台二维码后在此点单。下单即付款，付款成功后计入本桌当前账单；年龄已在入场时核验，点单无需重复核验。
         </Paragraph>
         <Space.Compact style={{ width: "100%" }}>
           <Input
-            placeholder="桌台会话编号（扫码自动带入）"
-            value={sessionId}
-            onChange={(event) => setSessionId(event.target.value)}
+            placeholder="桌台编号（扫码自动带入）"
+            value={tableId}
+            onChange={(event) => setTableId(event.target.value)}
             data-testid="scan-session-input"
           />
           <Button type="primary" onClick={() => void loadMenu()} loading={loading} data-testid="scan-load-menu">
@@ -82,8 +83,8 @@ export function BarScanOrderPage({ service }: { service: CustomerService }) {
         {order ? (
           <Result
             status="success"
-            title="点单成功"
-            subTitle={`订单 ${order.id}，合计 ¥${(order.totalAmountCent / 100).toFixed(2)}`}
+            title="待付款"
+            subTitle={`点单 ${order.scanOrderId}，合计 ¥${(order.amountCent / 100).toFixed(2)}，付款成功后订单才成立`}
           />
         ) : null}
 

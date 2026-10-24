@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -201,7 +201,8 @@ class TicketRewardJdbcIntegrationTests {
     @Test void deregistrationThenVerificationCorrectionDoesNotCreateNewRecovery() throws Exception {
         Fixture f=seed();Use use=confirmedSpentUse(f);customerService.deregisterAccount(customerToken(f.member()));reverseUse(use);
         assertThat(recoveries.outstanding(f.member())).isZero();
-        assertThat(jdbc.queryForObject("SELECT original_points FROM customer_points_recoveries WHERE reward_id=?",Long.class,only(f).id())).isEqualTo(40);
+        // ROOT-03-R21（BSM「积分、券一律清零」）：注销已把剩余 60 分清零，奖励冲正的 100 分全无余额可扣，登记即作废、不追偿。
+        assertThat(jdbc.queryForObject("SELECT original_points FROM customer_points_recoveries WHERE reward_id=?",Long.class,only(f).id())).isEqualTo(100);
         assertThat(jdbc.queryForObject("SELECT status FROM customer_points_recoveries WHERE reward_id=?",String.class,only(f).id())).isEqualTo("cancelled");
         assertThat(jdbc.queryForObject("SELECT remaining_points FROM customer_points_recoveries WHERE reward_id=?",Long.class,only(f).id())).isZero();
     }

@@ -1,9 +1,11 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { ExitNoticePolicySection } from "./CustomerFacingSettingsSections";
 
 // 储值规则配置（会员忠诚度 PRD §7 储值）。后端既有端点：
 //   GET  /api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}（合并返回发卡+资金+退款规则）
@@ -155,6 +157,7 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
         <label>配置缘由<input aria-label="赠送比例配置缘由" value={bonusReason} onChange={(e) => setBonusReason(e.target.value)} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="stored-value-bonus-policy-save" onClick={() => void saveBonusPolicy()}>保存赠送比例</PermissionButton>
       </div>
+      <ExitNoticePolicySection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
 
       <div className="admin-form-row" data-testid="stored-value-merchant-filter">
         <label>商户 id<input aria-label="商户 id" placeholder="商户 id" value={merchantInput} onChange={(e) => setMerchantInput(e.target.value)} /></label>

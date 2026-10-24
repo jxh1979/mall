@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -38,12 +38,16 @@ class TerminalRequestSerializationTest {
           reservationTime = "2026-07-02T20:00:00Z",
           guestCount = 4,
           salespersonUserId = "usr_staff_1",
+          latestArrivalAt = "2026-07-02T22:00:00Z",
+          customerPhone = "13800000000",
         ),
       ),
     ).jsonObject
     assertEquals("tbl_1", resv["table_id"]?.toString()?.trim('"'))
     assertEquals("2026-07-02T20:00:00Z", resv["reservation_time"]?.toString()?.trim('"'))
     assertEquals("usr_staff_1", resv["salesperson_user_id"]?.toString()?.trim('"'))
+    assertEquals("2026-07-02T22:00:00Z", resv["latest_arrival_at"]?.toString()?.trim('"'))
+    assertEquals("13800000000", resv["customer_phone"]?.toString()?.trim('"'))
   }
 
   @Test

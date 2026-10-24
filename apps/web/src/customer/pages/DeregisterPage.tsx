@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { Alert, Button, Card, Checkbox, Empty, List, message, Spin, Typography } from "antd";
 import { useEffect, useState } from "react";
 
@@ -30,7 +30,7 @@ export function DeregisterPage({ service, onDeregistered }: { service: CustomerS
     setLoading(true);
     setError(null);
     service.getDeregisterPreview()
-      .then((rows) => { if (active) setCards(rows ?? []); })
+      .then((preview) => { if (active) setCards(preview?.storedValueCards ?? []); })
       .catch((err) => { if (active) setError(err instanceof Error ? err.message : "注销预览加载失败"); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
