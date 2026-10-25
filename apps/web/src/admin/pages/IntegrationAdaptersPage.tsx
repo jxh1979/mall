@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -18,9 +18,38 @@ const SCENARIO_LABELS: Record<string, string> = {
   failure_retry: "失败重试",
 };
 
+// 适配器类型：后端 IntegrationValidation.ADAPTER_TYPES 闭集（= OpenAPI ProviderAdapterRequest.adapter_type 枚举、DB CHECK）→ 中文业务名，接口仍用原码。
+const ADAPTER_TYPE_LABELS: Record<string, string> = {
+  payment: "支付",
+  ticket_channel: "票务渠道",
+  face_age: "人脸年龄核验",
+  wecom: "企业微信",
+  robot: "机器人",
+  video: "视频",
+  device: "设备",
+  retail: "零售",
+  catering: "餐饮",
+  parking: "停车系统",
+};
+
+// 接入模式：后端 IntegrationValidation.MODES 闭集（新增必填）→ 中文名，接口仍用原码。
+const MODE_LABELS: Record<string, string> = {
+  mock: "模拟",
+  sandbox: "沙箱联调",
+  production: "生产",
+};
+
+function adapterTypeLabel(code?: string) {
+  if (!code) return "—";
+  return ADAPTER_TYPE_LABELS[code] ?? code;
+}
+
 export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<ProviderAdapterRow[]>([]);
-  const [credentialRef, setCredentialRef] = React.useState("");
+  // OBS-14-01：新增按后端 ProviderAdapterRequest 真实契约填写（供应商编码、类型、接入模式均必填；凭证引用不在新增请求里）。
+  const [providerCode, setProviderCode] = React.useState("");
+  const [adapterType, setAdapterType] = React.useState("");
+  const [mode, setMode] = React.useState("");
   const [formError, setFormError] = React.useState("");
   // 引导式流程 phase-6：新增供应商适配器收起为主按钮 + 分步引导弹窗（模拟测试是动作不动）。
   const [adapterOpen, setAdapterOpen] = React.useState(false);
@@ -36,25 +65,24 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
     async () => {
       const adapters = await api.get<ProviderAdapterRow[]>("/api/v1/integration/provider-adapters");
       setRows(adapters);
-      setCredentialRef(adapters[0]?.credentialSecretRef ?? adapters[0]?.credentialRef ?? "");
     },
     { onError: setGlobalError, fallbackMessage: "供应商适配器读取失败" },
   );
 
-  // 凭证校验（步内 + 提交双保险）：只允许 cred:// 凭证引用，不允许明文密钥。
-  function credentialInvalid() {
-    return !credentialRef.startsWith("cred://");
+  // 步内校验（中文原因）：三项均为后端必填。
+  function adapterFormError() {
+    if (!providerCode.trim()) return "请填写供应商编码";
+    if (!adapterType) return "请选择适配器类型";
+    if (!mode) return "请选择接入模式";
+    return null;
   }
 
   async function saveAdapter() {
-    if (credentialInvalid()) {
-      setFormError("只能填写凭证引用（cred://…），不允许明文密钥。");
-      return;
-    }
     setFormError("");
     setAdapterSubmitting(true);
     try {
-      const adapter = await api.post<ProviderAdapterRow>("/api/v1/integration/provider-adapters", { providerCode: "provider-admin", adapterType: "reservation_resource", credentialSecretRef: credentialRef });
+      // 只发后端 ProviderAdapterRequest 接受的字段（幂等键由 AdminApi 自动补）。
+      const adapter = await api.post<ProviderAdapterRow>("/api/v1/integration/provider-adapters", { providerCode: providerCode.trim(), adapterType, mode });
       setRows((current) => [...current, adapter]);
       setActionResult(`已保存供应商适配器：${adapter.providerCode}`);
       setAdapterOpen(false);
@@ -75,25 +103,6 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
     } catch (testError) {
       setGlobalError(testError instanceof Error ? testError.message : "模拟测试失败");
     }
-  }
-
-  // 适配器类型（后端固定枚举，DB CHECK 约束）→ 中文业务名，展示层翻译，接口仍用原码。
-  const ADAPTER_TYPE_LABELS: Record<string, string> = {
-    payment: "支付",
-    ticket_channel: "票务渠道",
-    face_age: "人脸年龄核验",
-    wecom: "企业微信",
-    robot: "机器人",
-    video: "视频",
-    device: "设备",
-    retail: "零售",
-    catering: "餐饮",
-    reservation_resource: "预定资源",
-    parking: "停车系统",
-  };
-  function adapterTypeLabel(code?: string) {
-    if (!code) return "—";
-    return ADAPTER_TYPE_LABELS[code] ?? code;
   }
 
   function readyLabel(ready?: boolean) {
@@ -117,7 +126,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
     <section data-testid="integration-adapters-page">
       <AdminPageHeader title="供应商适配器" description="双向开放配置只保存接口地址、字段映射、签名方式和凭证引用；真实密钥不入库。" />
       <div className="admin-form-row" data-testid="integration-adapter-form">
-        <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.create"]} data-testid="integration-create-open" onClick={() => { setFormError(""); setAdapterOpen(true); }}>＋ 新增供应商适配器</PermissionButton>
+        <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.create"]} data-testid="integration-create-open" onClick={() => { setFormError(""); setProviderCode(""); setAdapterType(""); setMode(""); setAdapterOpen(true); }}>＋ 新增供应商适配器</PermissionButton>
         <select data-testid="integration-test-adapter" aria-label="测试适配器" value={testRow?.id ?? ""} onChange={(event) => setTestAdapterId(event.target.value)}>
           {rows.map((row) => <option key={row.id} value={row.id}>{`${row.providerCode} · ${adapterTypeLabel(row.adapterType)}`}</option>)}
         </select>
@@ -125,7 +134,6 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
           {Object.entries(SCENARIO_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
         <PermissionButton permissionsState={effectivePermissions} permissions={["integration.provider_adapter.test"]} data-testid="integration-test-mock" disabled={!testRow} onClick={() => void testMock()}>模拟测试</PermissionButton>
-        <span className="admin-muted-action">只填 cred:// 凭证引用，真实密钥不入库。</span>
       </div>
       {formError && !adapterOpen ? <div data-testid="integration-error" className="admin-inline-error">{formError}</div> : null}
       <GuidedFlowModal
@@ -140,20 +148,27 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
         onSubmit={() => void saveAdapter()}
         steps={[
           {
-            title: "凭证引用",
-            description: "填写供应商凭证引用（cred://...），真实密钥不入库。",
-            validate: () => (credentialInvalid() ? "只能填写凭证引用（cred://…），不允许明文密钥。" : null),
+            title: "适配器信息",
+            validate: adapterFormError,
             content: (
               <>
-                <label>凭证引用<input data-testid="integration-credential-ref" value={credentialRef} onChange={(event) => setCredentialRef(event.target.value)} placeholder="cred://..." /></label>
+                <label>供应商编码<input data-testid="integration-provider-code" value={providerCode} onChange={(event) => setProviderCode(event.target.value)} /></label>
+                <label>适配器类型<select data-testid="integration-adapter-type" value={adapterType} onChange={(event) => setAdapterType(event.target.value)}>
+                  <option value="">请选择适配器类型</option>
+                  {Object.entries(ADAPTER_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
+                <label>接入模式<select data-testid="integration-mode" value={mode} onChange={(event) => setMode(event.target.value)}>
+                  <option value="">请选择接入模式</option>
+                  {Object.entries(MODE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
               </>
             ),
           },
         ]}
         summary={[
-          { label: "供应商", value: "provider-admin" },
-          { label: "适配器类型", value: "预定资源" },
-          { label: "凭证引用", value: credentialRef.trim() || "未填写" },
+          { label: "供应商编码", value: providerCode.trim() },
+          { label: "适配器类型", value: adapterTypeLabel(adapterType) },
+          { label: "接入模式", value: MODE_LABELS[mode] ?? "—" },
         ]}
       />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>

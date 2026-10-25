@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { describe, it, expect } from "vitest";
 import { formatBusinessStatus } from "./statusLabels";
 
@@ -101,6 +101,13 @@ describe("formatBusinessStatus KPI前置批全局补充", () => {
     expect(formatBusinessStatus("unused")).toBe("未使用");
     expect(formatBusinessStatus("cash")).toBe("现金");
     expect(formatBusinessStatus("pos")).toBe("POS刷卡");
+  });
+
+  it("后台结果区会出现的后端状态码翻中文（OBS-14-02 复核：迁移里 status 类列的闭集取值）", () => {
+    expect(formatBusinessStatus("delivered")).toBe("已送达");
+    expect(formatBusinessStatus("calculated")).toBe("已计算");
+    expect(formatBusinessStatus("awaiting_takeover")).toBe("待明确接手");
+    expect(formatBusinessStatus("pending_identity_review")).toBe("待身份复核");
   });
 
   it("多义词不进全局表：保持既有值或原样兜底", () => {

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,7 +8,7 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, Provide
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 const ADAPTERS: ProviderAdapterRow[] = [
-  { id: "adapter-1", providerCode: "prov-a", adapterType: "reservation_resource", credentialSecretRef: "cred://a", productionReady: true },
+  { id: "adapter-1", providerCode: "prov-a", adapterType: "ticket_channel", credentialSecretRef: "cred://a", productionReady: true },
   { id: "adapter-2", providerCode: "prov-b", adapterType: "payment", credentialRef: "cred://b", productionReady: false },
 ];
 
@@ -64,7 +64,7 @@ describe("IntegrationAdaptersPage 行明细抽屉与零英文", () => {
   // OBS-13-05（PGM L287「按钮、提示、报错……必须全部为中文」；停车系统类型依据 BSM L1444）。
   it("按钮、页头、报错、类型名与结果回显无英文", async () => {
     const setActionResult = vi.fn();
-    const post = vi.fn(async (url: string) => (url === "/api/v1/integration/provider-adapters" ? { id: "adapter-new", providerCode: "provider-admin" } : {}));
+    const post = vi.fn(async (url: string) => (url === "/api/v1/integration/provider-adapters" ? { id: "adapter-new", providerCode: "prov-new" } : {}));
     const parking: ProviderAdapterRow = { id: "adapter-3", providerCode: "prov-park", adapterType: "parking", credentialRef: "cred://p", productionReady: false };
     renderPage({ api: makeApi([...ADAPTERS, parking], post), setActionResult });
     await waitFor(() => expect(screen.getByTestId("integration-test-mock")).toBeTruthy());
@@ -77,14 +77,20 @@ describe("IntegrationAdaptersPage 行明细抽屉与零英文", () => {
     expect(screen.getByTestId("integration-adapter-row-adapter-3").textContent).toContain("停车系统");
     expect(screen.getByTestId("integration-adapters-table").querySelectorAll("td[title]").length).toBe(0);
 
+    // OBS-14-01：新增弹窗的字段名、选项、步内报错与确认页全中文（供应商编码属系统内部标识符，原样显示）。
     fireEvent.click(screen.getByTestId("integration-create-open"));
-    fireEvent.change(screen.getByTestId("integration-credential-ref"), { target: { value: "plaintext-secret" } });
     fireEvent.click(screen.getByTestId("integration-next"));
-    await waitFor(() => expect(screen.getByTestId("integration-error").textContent).toContain("凭证引用"));
-    expect(screen.getByTestId("integration-error").textContent).not.toContain("credential_ref");
+    await waitFor(() => expect(screen.queryByTestId("integration-error")?.textContent).toBe("请填写供应商编码"));
+    expect(screen.getByTestId("integration").textContent ?? "").not.toMatch(/[A-Za-z]/);
 
-    fireEvent.change(screen.getByTestId("integration-credential-ref"), { target: { value: "cred://prod/provider/mock" } });
+    fireEvent.change(screen.getByTestId("integration-provider-code"), { target: { value: "prov-new" } });
+    fireEvent.change(screen.getByTestId("integration-adapter-type"), { target: { value: "parking" } });
+    fireEvent.change(screen.getByTestId("integration-mode"), { target: { value: "mock" } });
     fireEvent.click(screen.getByTestId("integration-next"));
+    const summary = screen.getByTestId("integration-summary").textContent ?? "";
+    expect(summary).toContain("停车系统");
+    expect(summary).toContain("模拟");
+    expect(summary).not.toMatch(/parking|mock|provider_code|adapter_type/);
     fireEvent.click(screen.getByTestId("integration-save"));
     await waitFor(() => expect(setActionResult).toHaveBeenCalled());
     const result = setActionResult.mock.calls[0]?.[0];

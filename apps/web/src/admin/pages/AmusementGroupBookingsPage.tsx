@@ -1,6 +1,7 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import React from "react";
+import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -33,7 +34,7 @@ function display(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number" || typeof value === "string") return String(value);
   if (Array.isArray(value)) return value.length ? value.join(" / ") : "-";
-  return JSON.stringify(value);
+  return formatActionResult(value);
 }
 
 // KPI 聚焦视图（照样板）：单表页，只有一张预约表；?kpi=bookings[&status=approved]。

@@ -1,5 +1,7 @@
 package com.complex.platform.common.api;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -24,6 +26,12 @@ class FieldLabelsTests {
         assertThat(FieldLabels.translate("active is required")).isEqualTo("启用状态未填写");
         assertThat(FieldLabels.translate("action is invalid")).isEqualTo("操作格式不正确");
         assertThat(FieldLabels.translate("order_id is required")).isEqualTo("订单未填写");
+    }
+
+    /** 票价规则的 variant_type 是人群/渠道（新人票、学生票、多人票、渠道价、会员价），不是商品规格；与后台票价规则页、结果区字典同口径（OBS-14-02 复核）。 */
+    @Test
+    void ticketPriceVariantTypeIsAudienceOrChannel() {
+        assertThat(FieldLabels.translate("variant_type is invalid")).isEqualTo("人群/渠道格式不正确");
     }
 
     @Test

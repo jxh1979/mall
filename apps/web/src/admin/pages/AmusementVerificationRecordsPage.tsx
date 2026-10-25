@@ -1,6 +1,7 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import React from "react";
+import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -54,7 +55,7 @@ function dimensionLabel(value?: string): string {
 function display(value: unknown) {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "number" || typeof value === "string") return String(value);
-  return JSON.stringify(value);
+  return formatActionResult(value);
 }
 
 function num(value: unknown): number {

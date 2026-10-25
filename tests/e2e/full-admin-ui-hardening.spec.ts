@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { test, expect, type Page } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -201,8 +202,8 @@ test.describe("full admin UI hardening acceptance", () => {
     await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-create").click();
     const result = page.getByTestId("admin-action-result");
-    await expect(result).toContainText("merchant_profile_created");
-    await expect(result).toContainText("retail");
+    await expect(result).toContainText("商户档案已创建");
+    await expect(result).toContainText("零售");
     await expect(result).toContainText("王经理");
     await expect(result).toContainText("13912345678");
   });

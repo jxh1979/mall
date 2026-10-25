@@ -1,4 +1,6 @@
+// 文件版本：V0.01
 import React from "react";
+import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -429,7 +431,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
           </div>
         )}
 
-        {showDetail && selected ? <pre className="admin-result" data-testid="audit-events-detail">{JSON.stringify({ beforeAfter: selected.beforeAfter ?? selected.before_after ?? selected.payload ?? {}, event: selected }, null, 2)}</pre> : null}
+        {showDetail && selected ? <pre className="admin-result" data-testid="audit-events-detail">{formatActionResult({ before_after: selected.beforeAfter ?? selected.before_after ?? selected.payload ?? {}, event: selected })}</pre> : null}
       </AdminDataState>
       </>
       )}

@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -966,10 +966,10 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("audit-events-filter-empty")).toContainText("无匹配审计事件");
         await page.getByTestId("audit-events-search").fill("event-trace-1");
         await page.getByTestId("audit-events-show-detail").click();
-        await expect(page.getByTestId("audit-events-detail")).toContainText("beforeAfter");
+        await expect(page.getByTestId("audit-events-detail")).toContainText("变更前后：");
         await page.getByTestId("audit-events-export-reason").fill("验收导出审计事件");
         await page.getByTestId("audit-events-export").click();
-        await expect(page.getByTestId("admin-action-result")).toContainText("audit_events_exported");
+        await expect(page.getByTestId("admin-action-result")).toContainText("审计事件已导出");
         await expect(page.getByTestId("admin-action-result")).toContainText("evidence.events_reported");
         continue;
       }
@@ -989,7 +989,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await page.getByTestId("business-analytics-lock-note").fill("总控周会复盘锁定");
         await page.getByTestId("business-analytics-lock-guided-next").click();
         await page.getByTestId("business-analytics-lock-snapshot").click();
-        await expect(page.getByTestId("admin-action-result")).toContainText("business_snapshot_locked");
+        await expect(page.getByTestId("admin-action-result")).toContainText("经营复盘已锁定");
         // V216 复盘锁真落库后不再返回 management_review_ready 状态,以审计键为准
         await expect(page.getByTestId("admin-action-result")).toContainText("analytics.review.locked");
         continue;
@@ -1031,13 +1031,13 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("organization-merchant-name").fill("二期测试商户");
     await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_profile_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("商户档案已创建");
     await expect(page.getByTestId("admin-action-result")).toContainText("Created Merchant");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-003")!);
     await page.getByTestId("subject-bindings-change-reason").fill("总控验收主体绑定变更");
     await page.getByTestId("subject-bindings-submit-change").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("binding_changed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("操作：主体绑定变更已提交");
     await expect(page.getByTestId("admin-action-result")).toContainText("evidence-full-admin");
 
     // 合同生命周期工作台（V162 重建）：起草合同为可审计写动作（商户/主体/起止日期必填，POST /api/v1/contracts）。
@@ -1051,7 +1051,7 @@ test.describe("full admin remaining pages acceptance", () => {
     await fillCnDate(page, page.getByLabel("到期日期"), "2027-06-30");
     await page.getByTestId("contract-draft-next").click(); // 填写信息 → 确认信息
     await page.getByTestId("contract-draft-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("contract_drafted");
+    await expect(page.getByTestId("admin-action-result")).toContainText("合同已起草");
     await expect(page.getByTestId("admin-action-result")).toContainText("merchant-1");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-005")!);
@@ -1060,74 +1060,71 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("admission-audits-export-reason").fill("总控导出准入审计片段");
     await page.getByTestId("admission-audits-guided-next").click();
     await page.getByTestId("admission-audits-export").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("admission_audit_exported");
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_admission_trace_ready");
+    await expect(page.getByTestId("admin-action-result")).toContainText("准入审计已导出");
+    await expect(page.getByTestId("admin-action-result")).toContainText("审计记录：商户准入追溯已就绪");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-admission-audit-export");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-006")!);
     await expect(page.getByTestId("supervisor-review-approve")).toBeDisabled();
     await page.getByTestId("supervisor-review-violation-summary").fill("合同主体与基础定义不一致");
     await page.getByTestId("supervisor-review-evaluate").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("supervisor_review_evaluated");
-    await expect(page.getByTestId("admin-action-result")).toContainText("pending_review");
-    await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已生成待复核记录：review-demo");
     await expect(page.getByTestId("supervisor-review-current-review")).toContainText("review-demo");
     await expect(page.getByTestId("supervisor-review-approve")).toBeEnabled();
     await page.getByTestId("supervisor-review-approval-comment").fill("证据齐备，同意放行");
     await page.getByTestId("supervisor-review-approve").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("supervisor_review_approved");
-    await expect(page.getByTestId("admin-action-result")).toContainText("approved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("复核单 review-demo 全部节点已通过，单据生效");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-TKT-002")!);
     await page.getByTestId("dynamic-pricing-simulate").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("finalPriceCent");
+    await expect(page.getByTestId("admin-action-result")).toContainText("最终价格");
     // 引导式流程 phase-3:新建定价规则改弹窗(规则名默认周末上浮/调整率默认10,均有效)→翻页→提交。
     await page.getByTestId("dynamic-pricing-create-open").click();
     await page.getByTestId("dynamic-pricing-guided-next").click();
     await page.getByTestId("dynamic-pricing-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("draft");
+    await expect(page.getByTestId("admin-action-result")).toContainText("草稿");
     await page.getByTestId("dynamic-pricing-publish").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("published");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已上架");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-TKT-003")!);
     await page.getByTestId("ticket-order-issue").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("issued");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已出票");
     await page.getByTestId("ticket-verification-preview").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("preview_ok");
+    await expect(page.getByTestId("admin-action-result")).toContainText("操作：核销已预检");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-BAR-002")!);
     await page.getByTestId("bar-order-create-bill").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("billed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("操作：酒吧账单已生成");
     await page.getByTestId("bar-order-deliver").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("delivered");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已送达");
     await page.getByTestId("bar-order-settle").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("paid");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已支付");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-BAR-003")!);
     await page.getByTestId("stored-wine-claim-code").fill("123456");
     await page.getByTestId("stored-wine-claim").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("claimed");
-    await expect(page.getByTestId("admin-action-result")).toContainText("claim_items");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已领取");
+    await expect(page.getByTestId("admin-action-result")).toContainText("领取明细");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-BAR-004")!);
     await page.getByTestId("bar-commission-calculate").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("calculated");
-    await expect(page.getByTestId("admin-action-result")).toContainText("includeTicketAmount");
-    await expect(page.getByTestId("admin-action-result")).toContainText("false");
+    await expect(page.getByTestId("admin-action-result")).toContainText("操作：酒吧提成已计算");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已计算");
+    await expect(page.getByTestId("admin-action-result")).not.toContainText("includeTicketAmount");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-INV-001")!);
     await page.getByTestId("inventory-movement-open").click();
     await page.getByTestId("inventory-movement-quantity").fill("1");
     await page.getByTestId("inventory-movement-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("inventory_stock_movement_created");
-    await expect(page.getByTestId("admin-action-result")).toContainText("from_location_id");
-    await expect(page.getByTestId("admin-action-result")).toContainText("items");
+    await expect(page.getByTestId("admin-action-result")).toContainText("出入库已登记");
+    await expect(page.getByTestId("admin-action-result")).toContainText("调出库位");
+    await expect(page.getByTestId("admin-action-result")).toContainText("明细项");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-FIN-002")!);
     await page.getByTestId("reconciliation-review-reason").fill("支付通道入账时间差异，待供应商对账单复核");
     await page.getByTestId("reconciliation-review-attachment").fill("att-recon-1");
     await page.getByTestId("reconciliation-review-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("reconciliation_difference_closed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("对账差异已关闭");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-recon-1");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-001")!);
@@ -1137,14 +1134,14 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("amusement-session-capacity").fill("12");
     await page.getByTestId("amusement-session-guided-next").click();
     await page.getByTestId("amusement-session-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_session_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("游乐场次已创建");
     await expect(page.getByTestId("admin-action-result")).toContainText("P0 Web Session");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-002")!);
     await page.getByTestId("amusement-group-booking-release-reason").fill("验收释放团体容量");
     await page.getByTestId("amusement-group-booking-release").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("group_booking_released");
-    await expect(page.getByTestId("admin-action-result")).toContainText("released");
+    await expect(page.getByTestId("admin-action-result")).toContainText("团体预订已释放");
+    await expect(page.getByTestId("admin-action-result")).toContainText("预订状态：已释放");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-003")!);
     await page.getByTestId("amusement-safety-create-open").click();
@@ -1154,34 +1151,34 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("amusement-safety-create-result").selectOption("fail");
     await page.getByTestId("amusement-safety-guided-next").click();
     await page.getByTestId("amusement-safety-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_inspection_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("安全巡检已创建");
     await page.getByTestId("amusement-safety-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_inspection_submitted");
+    await expect(page.getByTestId("admin-action-result")).toContainText("安全巡检已提交");
     await page.getByTestId("amusement-safety-rectify-note").fill("已更换防护垫并上传照片");
     await page.getByTestId("amusement-safety-rectify").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_rectified");
+    await expect(page.getByTestId("admin-action-result")).toContainText("安全整改已登记");
     await page.getByTestId("amusement-safety-recheck").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_rechecked");
+    await expect(page.getByTestId("admin-action-result")).toContainText("安全复查已登记");
     await page.getByTestId("amusement-safety-approve-reopen").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("amusement_safety_reopen_approved");
-    await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
+    await expect(page.getByTestId("admin-action-result")).toContainText("恢复开放已批准");
+    await expect(page.getByTestId("admin-action-result")).toContainText("证据附件");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-001")!);
     await page.getByTestId("merchant-work-order-create-open").click();
     await page.getByTestId("merchant-work-order-title").fill("排水异味投诉");
     await page.getByTestId("merchant-work-order-guided-next").click();
     await page.getByTestId("merchant-work-order-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_created");
-    await expect(page.getByTestId("admin-action-result")).toContainText("idempotencyKey");
+    await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已创建");
+    await expect(page.getByTestId("admin-action-result")).toContainText("提交编号");
     await page.getByTestId("merchant-work-order-assign").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_assigned");
+    await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已分派");
     await page.getByTestId("merchant-work-order-process-note").fill("已到场排查，等待商户确认");
     await page.getByTestId("merchant-work-order-process").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_processed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已处理");
     await page.getByTestId("merchant-work-order-resolution").fill("已维修完成，商户确认关闭");
     await page.getByTestId("merchant-work-order-close").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_work_order_closed");
-    await expect(page.getByTestId("admin-action-result")).toContainText("evidenceAttachmentIds");
+    await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已关闭");
+    await expect(page.getByTestId("admin-action-result")).toContainText("证据附件");
   });
 
   test("ADM-REM-03 risk, audit, analytics and integration pages cover empty/error/mobile states", async ({ page }) => {
@@ -1193,29 +1190,29 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("risk-alert-create-open").click();
     await page.getByTestId("risk-alert-summary-input").fill("员工异常折扣触发高风险预警");
     await page.getByTestId("risk-alert-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("risk_alert_created");
+    await expect(page.getByTestId("admin-action-result")).toContainText("风险告警已创建");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-risk-alert-create");
     await page.getByTestId("risk-alert-resolution-reason").fill("已复核订单、员工和支付证据，确认关闭");
     await page.getByTestId("risk-alert-resolve").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("risk_alert_resolved");
-    await expect(page.getByTestId("admin-action-result")).toContainText("resolved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("风险告警已处理");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已解决");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-INT-002")!);
     await page.getByTestId("integration-events-polling-note").fill("已完成 Webhook 与定时轮询一致性校验");
     await page.getByTestId("integration-events-log-polling").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("integration_polling_checked");
+    await expect(page.getByTestId("admin-action-result")).toContainText("接入轮询已检查");
     // 该页已从通用页升级为专属 IntegrationEventsPage：登记轮询校验 POST /integration/polling-checks，
     // 回显真实结果（status=recorded + 反伪造边界），不再是旧通用配置的 webhook_plus_polling_verified 占位。
     await expect(page.getByTestId("admin-action-result")).toContainText("platform_task_status_only_not_supplier_execution");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-polling");
     await page.getByTestId("integration-events-retry-reason").fill("供应商超时后人工触发重试");
     await page.getByTestId("integration-events-run-retry").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("integration_retry_run_now");
-    await expect(page.getByTestId("admin-action-result")).toContainText("ready");
+    await expect(page.getByTestId("admin-action-result")).toContainText("接入重试已立即执行");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已就绪");
     await page.getByTestId("integration-events-compensation-note").fill("已核对订单和券核销回流，处理补偿任务");
     await page.getByTestId("integration-events-resolve-compensation").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("integration_compensation_resolved");
-    await expect(page.getByTestId("admin-action-result")).toContainText("resolved");
+    await expect(page.getByTestId("admin-action-result")).toContainText("接入补偿已处理");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已解决");
     await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-compensation");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-EVD-001")!);
@@ -1309,7 +1306,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("vendor-inspection-templates-table")).toContainText("夜间安保模板");
         await expect(page.getByTestId("vendor-inspection-report-exception")).toBeVisible();
         await page.getByTestId("vendor-inspection-report-exception").click();
-        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_inspection_exception_reported");
+        await expect(page.getByTestId("admin-action-result")).toContainText("外包巡检异常已上报");
       }
       if (spec.pageId === "ADM-VND-003") {
         await expect(page.getByTestId("vendor-site-entries-table")).toContainText("店铺装修围挡施工");
@@ -1318,7 +1315,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await page.getByTestId("vendor-site-entry-completion-note").fill("完工材料已上传");
         await page.getByTestId("vendor-site-entry-completion-attachments").fill("att-completion-1");
         await page.getByTestId("vendor-site-entry-completion-upload").click();
-        await expect(page.getByTestId("admin-action-result")).toContainText("vendor_site_entry_completion_uploaded");
+        await expect(page.getByTestId("admin-action-result")).toContainText("外包完工资料已上传");
       }
     }
 

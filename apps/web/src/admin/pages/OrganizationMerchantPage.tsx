@@ -1,5 +1,6 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
+import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -63,7 +64,7 @@ function display(value: unknown) {
   if (typeof value === "boolean") return value ? "是" : "否";
   if (typeof value === "number" || typeof value === "string") return String(value);
   if (Array.isArray(value)) return value.length ? value.join(" / ") : "-";
-  return JSON.stringify(value);
+  return formatActionResult(value);
 }
 
 // KPI 聚焦视图（用户终裁：点 KPI 数字=带筛选参数重新进入本页，URL 变化+只渲染对应表，感知上进入新页面）。
