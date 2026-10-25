@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiRequests;
 import com.complex.platform.common.api.ApiResponse;
@@ -17,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class CustomerShowcaseController {
 
     private final CustomerShowcaseService service;
+    private final CustomerProjectSwitch projectSwitch;
 
-    public CustomerShowcaseController(CustomerShowcaseService service) {
+    public CustomerShowcaseController(CustomerShowcaseService service, CustomerProjectSwitch projectSwitch) {
         this.service = service;
+        this.projectSwitch = projectSwitch;
     }
 
     @GetMapping("/api/v1/customer/projects")
@@ -30,6 +32,8 @@ public class CustomerShowcaseController {
     @GetMapping("/api/v1/customer/amusement/projects")
     public ApiResponse<List<CustomerShowcaseService.AmusementProject>> listAmusementProjects(
             @RequestParam(name = "project_id", required = false) String projectId) {
+        // PGM 第 744 行：所查的就是 project_id 所指综合体，按它判按综合体的客人端开关（匿名，终端类型自报）。
+        projectSwitch.project(projectId);
         return ApiResponse.ok(service.listAmusementProjects(projectId));
     }
 

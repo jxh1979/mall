@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -52,10 +52,11 @@ public class CustomerPaymentService {
     private final AuditEventService audit;
     private final BarEntryService barEntry;
     private final TransactionTemplate transaction;
+    private final CustomerProjectSwitch projectSwitch;
 
     public CustomerPaymentService(CustomerService customers, TicketingService ticketing, FinanceService finance,
             BarRepository bars, IdempotencyService idempotency, AuditEventService audit, BarEntryService barEntry,
-            PlatformTransactionManager transactionManager) {
+            PlatformTransactionManager transactionManager, CustomerProjectSwitch projectSwitch) {
         this.customers = customers;
         this.ticketing = ticketing;
         this.finance = finance;
@@ -64,6 +65,7 @@ public class CustomerPaymentService {
         this.audit = audit;
         this.barEntry = barEntry;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.projectSwitch = projectSwitch;
     }
 
     @Transactional
@@ -71,6 +73,8 @@ public class CustomerPaymentService {
         String key = request == null ? null : request.idempotencyKey();
         try {
             CustomerRecord customer = customers.requireCustomerRecord(customerToken);
+            // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按订单综合体判按综合体的客人端开关（不取 X-Project-Id），先于幂等。
+            projectSwitch.ticketOrder(orderId, customer.id());
             String channel = channelFor(customers.sessionTerminal(customerToken), request == null ? null : request.channel());
             @SuppressWarnings("unchecked")
             Map<String, Object> view = idempotency.execute("customerTicketPayment:" + customer.id() + ":" + orderId, key, request,
@@ -88,6 +92,8 @@ public class CustomerPaymentService {
     public CustomerTicketOrderResponse confirmTicketPayment(String customerToken, String orderId, String paymentIntentId, String key) {
         try {
             CustomerRecord customer = customers.requireCustomerRecord(customerToken);
+            // 客人确认入口才判；服务端结算作业无请求上下文、不经此入口。
+            projectSwitch.ticketOrder(orderId, customer.id());
             TicketOrderService.OnlineSettlement settled = ticketing.settleCustomerOnlinePayment(orderId, paymentIntentId, customer.id());
             if (settled.issueFailed()) {
                 throw ApiException.conflict("TICKET_ISSUE_FAILED_REFUNDING", "付款成功但出票失败，款项将原路退回");
@@ -106,6 +112,8 @@ public class CustomerPaymentService {
         String key = request == null ? null : request.idempotencyKey();
         try {
             CustomerRecord customer = customers.requireCustomerRecord(customerToken);
+            // 按订台所属酒吧的综合体判，先于幂等。
+            projectSwitch.reservation(reservationId);
             String channel = channelFor(customers.sessionTerminal(customerToken), request == null ? null : request.channel());
             @SuppressWarnings("unchecked")
             Map<String, Object> view = idempotency.execute("customerDepositPayment:" + customer.id() + ":" + reservationId, key, request,
@@ -150,6 +158,8 @@ public class CustomerPaymentService {
     public BarReservationRecord confirmDepositPayment(String customerToken, String reservationId, String paymentIntentId, String key) {
         try {
             CustomerRecord customer = customers.requireCustomerRecord(customerToken);
+            // 作业侧 settleDeposit(customerId=null) 不经此入口。
+            projectSwitch.reservation(reservationId);
             BarReservationRecord saved = transaction.execute(status -> settleDeposit(reservationId, paymentIntentId, customer.id()));
             if ("cancelled".equals(saved.status())) {
                 if (!"paid".equals(saved.depositStatus())) {

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -102,6 +102,9 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     // PGM 第 736、744 行：按综合体的客人端开关由服务端按业务对象所属综合体判。字段注入：无容器的单测为 null。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard;
+    // 第十三批 D 段：其余客人接口同样按业务对象所属综合体判（无容器的单测为 null 不判）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private CustomerProjectSwitch projectSwitch;
 
     /** ROOT-03-R3 操作员裁决（第十三批第 3 条）「满 18 周岁（推荐）：与入场年龄一致，生日算下来不满 18 周岁不能注册」。 */
     static final int MIN_MEMBER_AGE = 18;
@@ -390,6 +393,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public PageResponse<CustomerTicketProductResponse> listTicketProducts(String barId, String customerToken) {
         // AUD-076 专属入口锁定：带 bar_id 只返回该酒吧单店票；不传=公共入口全量（通票 + 各家单店票）。
         String barFilter = barId == null || barId.isBlank() ? null : barId.trim();
+        // PGM 第 744 行：专属入口按该酒吧的综合体判；不带 bar_id 的公共列表跨综合体，不属单一综合体不判。
+        atProject(s -> s.merchant(barFilter));
         CustomerRecord viewer = null;
         if (trimToNull(customerToken) != null) {
             try {
@@ -470,6 +475,13 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         }
     }
 
+    /** PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按业务对象在服务端所属的综合体判（不取 X-Project-Id），写操作在幂等之前。 */
+    private void atProject(java.util.function.Consumer<CustomerProjectSwitch> check) {
+        if (projectSwitch != null) {
+            check.accept(projectSwitch);
+        }
+    }
+
     /**
      * ROOT-03-R27 客人购票资格（系统自动判定，BSM 第 733、756 行）：member——全部会员等级均有「票务会员价购买资格」（BSM 第 821 行），
      * 持本人有效会话的客人即会员；new_customer——同一手机号没买过（本账户无已付门票订单，BSM 第 781 行「同一手机号没买过才算新人」），
@@ -515,6 +527,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     /** 1.8 我的票：订单内票实例列表（先过账号状态闸与订单归属校验，无需手输票 id）。 */
     public PageResponse<com.complex.platform.ticketing.CustomerTicketResponse> listOrderTickets(String customerToken, String orderId) {
         CustomerRecord customer = requireCustomer(customerToken);
+        atProject(s -> s.ticketOrder(orderId, customer.id()));
         return readPage(
                 "customer.order_tickets_viewed",
                 "customer.order_tickets_view_failed",
@@ -526,6 +539,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
 
     public TicketCredentialResponse getTicketQr(String customerToken, String ticketId) {
         CustomerRecord customer = requireCustomer(customerToken);
+        atProject(s -> s.entitlement(ticketId));
         return ticketingService.getCustomerTicketCredential(ticketId, customer.id());
     }
 
@@ -684,6 +698,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         String terminal = sessionTerminal(customerToken);
         CustomerPointsRedemptionRequest actual = requireRequest(request);
         String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
+        // 兑换项所属综合体（为空＝全局可见，不判）。
+        atProject(s -> s.redemptionItem(trimToNull(actual.catalogItemId())));
         return executeWrite(
                 "redeemCustomerPoints:" + customer.id(),
                 key,
@@ -1018,6 +1034,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         CustomerRecord customer = requireCustomer(customerToken);
         CustomerBarInvitationConfirmRequest actual = requireRequest(request);
         String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
+        atProject(s -> s.reservationByInvitationToken(trimToNull(actual.invitationToken())));
         return executeWrite(
                 "confirmCustomerBarInvitation:" + customer.id(),
                 key,
@@ -1074,6 +1091,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public BarReservationInvitationRecord getMyBarInvitation(String customerToken, String reservationId) {
         CustomerRecord customer = requireCustomer(customerToken);
         String id = requireText(reservationId, "reservation_id");
+        atProject(s -> s.reservation(id));
         BarReservationRecord reservation = barRepository.findReservationById(id)
                 .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
         if (!customer.id().equals(reservation.customerId())) {
@@ -1102,6 +1120,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public com.complex.platform.bar.BarCustomerInvitationService.InvitationPreview previewBarInvitation(
             String customerToken, String invitationToken, String signature, String tableId, Integer capacity) {
         requireCustomer(customerToken);
+        atProject(s -> s.reservationByInvitationToken(trimToNull(invitationToken)));
         return operations.readSingle(AuditedOperation.of("customer.bar_invitation.previewed", "customer.bar_invitation.preview_failed",
                         "not_applicable", "bar_reservation"),
                 () -> barInvitations.preview(invitationToken, signature, tableId, capacity),
@@ -1118,6 +1137,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         CustomerRecord customer = requireCustomer(customerToken);
         String id = requireText(reservationId, "reservation_id");
         String member = requireText(memberId, "member_id");
+        atProject(s -> s.reservation(id));
         return executeWrite(
                 "removeCustomerBarInvitationMember:" + customer.id() + ":" + id + ":" + member,
                 idempotencyKey,
@@ -1134,6 +1154,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public com.complex.platform.bar.BarCustomerInvitationService.EntryCode getBarInvitationEntryCode(
             String customerToken, String reservationId) {
         String customerId = requireCustomer(customerToken).id();
+        atProject(s -> s.reservation(trimToNull(reservationId)));
         return operations.readSingle(AuditedOperation.of("customer.bar_invitation.entry_code_issued",
                         "customer.bar_invitation.entry_code_failed", "not_applicable", "bar_reservation"),
                 () -> barInvitations.entryCode(customerId, requireText(reservationId, "reservation_id")),
@@ -1240,6 +1261,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     /** ROOT-03-R29 我的票使用记录（BSM 第 862、880 行）：只许本人持有的票。 */
     public PageResponse<com.complex.platform.ticketing.CustomerTicketUsageResponse> listTicketUsages(String customerToken, String ticketId) {
         CustomerRecord customer = requireCustomer(customerToken);
+        atProject(s -> s.entitlement(ticketId));
         return readPage("customer.ticket_usages_viewed", "customer.ticket_usages_view_failed", "not_applicable",
                 "issued_entitlement", () -> ticketingService.listCustomerTicketUsages(ticketId, customer.id()));
     }
@@ -1262,6 +1284,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public com.complex.platform.inventory.SavedBottlePickupCodeResponse getSavedBottlePickupCode(
             String customerToken, String savedBottleId) {
         CustomerRecord customer = requireCustomer(customerToken);
+        // 存酒所在酒吧的综合体（与转存额度同口径）；只在客人入口判，员工侧存酒通路不动。
+        atProject(s -> s.savedBottle(savedBottleId));
         return inventoryService.issueSavedBottlePickupCode(savedBottleId, customer.id(), customer.phone());
     }
 
@@ -1269,6 +1293,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public com.complex.platform.inventory.SavedBottleVerificationCodeReceipt requestMySavedBottleRenewalCode(
             String customerToken, String savedBottleId) {
         CustomerRecord customer = requireCustomer(customerToken);
+        atProject(s -> s.savedBottle(savedBottleId));
         return inventoryService.requestSavedBottleRenewalCodeByCustomer(savedBottleId, customer.id(), customer.phone());
     }
 
@@ -1276,12 +1301,15 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public com.complex.platform.inventory.SavedBottleRenewalRecord renewMySavedBottle(
             String customerToken, String savedBottleId, com.complex.platform.customer.dto.CustomerSavedBottleRenewRequest request) {
         CustomerRecord customer = requireCustomer(customerToken);
+        atProject(s -> s.savedBottle(savedBottleId));
         return inventoryService.renewSavedBottleByCustomer(savedBottleId, customer.id(), customer.phone(), request);
     }
 
     public com.complex.platform.ticketing.TicketTransferResponse initiateTicketTransfer(
             String customerToken, com.complex.platform.customer.dto.CustomerTicketTransferRequest request) {
         CustomerRecord customer = requireCustomer(customerToken);
+        // 所转票的订单综合体；只在客人入口判（先于 TicketingService 的幂等），共用的票务方法不动。
+        atProject(s -> s.ticket(request == null ? null : trimToNull(request.parentTicketId())));
         return ticketingService.initiateTicketTransfer(customer.id(), customer.phone(), request);
     }
 
@@ -1289,18 +1317,21 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
             String customerToken, String transferId,
             com.complex.platform.customer.dto.CustomerTicketTransferClaimRequest request) {
         CustomerRecord customer = requireCustomer(customerToken);
+        atProject(s -> s.ticketTransfer(transferId));
         // AUD-006 幂等键随请求体透传至 TicketingService 包装层(executeWrite)。
         return ticketingService.claimTicketTransfer(customer.id(), customer.phone(), transferId, request);
     }
 
     public com.complex.platform.ticketing.TicketTransferResponse revokeTicketTransfer(String customerToken, String transferId) {
         CustomerRecord customer = requireCustomer(customerToken);
+        atProject(s -> s.ticketTransfer(transferId));
         return ticketingService.revokeTicketTransfer(customer.id(), transferId);
     }
 
     public com.complex.platform.ticketing.TicketTransferPreviewResponse previewTicketTransfer(
             String customerToken, String claimCode) {
         requireCustomer(customerToken);
+        atProject(s -> s.ticketTransferByClaimCode(trimToNull(claimCode)));
         return ticketingService.previewTicketTransfer(claimCode);
     }
 

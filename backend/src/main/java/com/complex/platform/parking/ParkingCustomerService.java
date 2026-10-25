@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -83,7 +83,10 @@ public class ParkingCustomerService {
 
     /** 客人端：本项目当日消费抵免。 */
     public Map<String, Object> credit(String customerId, String projectId) {
-        return credits.customerView(customerId, requireText(projectId, "project_id"));
+        String project = requireText(projectId, "project_id");
+        // PGM 第 744 行：按 project_id 所指项目在服务端判按综合体的客人端开关（与查费同口径）。
+        terminalSwitch.checkTerminalEnabledAtProject(project);
+        return credits.customerView(customerId, project);
     }
 
     /** 下单：锁停车记录，按应缴拉起支付意向；离场宽限内已缴的不能再下单。 */
