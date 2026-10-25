@@ -1,0 +1,8 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{unknown}}" id="link-unknown" class="card">
+    <view class="alert warn">无法识别的链接</view>
+    <button id="to-home" bindtap="toHome">回到首页</button>
+  </view>
+  <view wx:else class="hint">正在打开……</view>
+</view>

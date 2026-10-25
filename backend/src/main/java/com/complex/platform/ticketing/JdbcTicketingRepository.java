@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -790,25 +790,6 @@ class JdbcTicketingRepository implements TicketingRepository {
                   FROM ticket_refunds
                  ORDER BY created_at DESC, id
                 """, Map.of(), rowMapper::mapTicketRefund);
-    }
-
-    @Override
-    public List<TicketRefundRecord> listTicketRefundsByRequester(String requestedBy) {
-        return jdbcTemplate.query("""
-                SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
-                       requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
-                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items
-                  FROM ticket_refunds
-                 WHERE requested_by = :requested_by
-                 ORDER BY created_at DESC, id
-                """, Map.of("requested_by", requestedBy), rowMapper::mapTicketRefund);
-    }
-
-    @Override
-    public int fillTicketRefundResponsibleEntity(String refundId, String responsibleEntityId) {
-        return jdbcTemplate.update(
-                "UPDATE ticket_refunds SET responsible_entity_id = :entity WHERE id = :id AND responsible_entity_id IS NULL",
-                Map.of("id", refundId, "entity", responsibleEntityId));
     }
 
     @Override
@@ -1708,6 +1689,22 @@ class JdbcTicketingRepository implements TicketingRepository {
                  WHERE id = :id
                    AND status = 'active'
                    AND used_times = 0
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("updated_at", now.atOffset(java.time.ZoneOffset.UTC)));
+    }
+
+    @Override
+    public int forfeitHeldEntitlement(String id, java.time.Instant now) {
+        // ROOT-03-R21 注销／拉黑：未核销的在效权益一律作废（含已开始使用的剩余次数）；已用完的（核销只加 used_times、用满仍 active）不动——
+        // ENUM 第 41 行「已使用」「已作废」是两种状态，BSM 第 863 行只处置「未核销的票」。已非此态返回 0。
+        return jdbcTemplate.update("""
+                UPDATE issued_entitlements
+                   SET status = 'forfeited',
+                       updated_at = :updated_at
+                 WHERE id = :id
+                   AND status = 'active'
+                   AND used_times < total_times
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("updated_at", now.atOffset(java.time.ZoneOffset.UTC)));

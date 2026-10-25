@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -73,7 +74,8 @@ function checkSchemaProperties(openapi, schema, label, visited = new Set()) {
 }
 
 const webEntryFile = 'apps/web/src/main.tsx';
-const webApiClientFile = 'apps/web/src/customer/client/customerClient.ts';
+// 客人端请求协议已移到三端共用的客人业务模块（ROOT-03-R1）。
+const webApiClientFile = 'packages/customer-core/src/client.ts';
 const adminApiClientFile = 'apps/web/src/admin/client/adminClient.ts';
 const androidClientFile = 'apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt';
 const openapiFile = 'docs/openapi/openapi-p0.json';
@@ -82,7 +84,7 @@ const webEntrySource = read(webEntryFile);
 const webApiClientSource = read(webApiClientFile);
 const adminApiClientSource = read(adminApiClientFile);
 expectContains(webApiClientFile, webApiClientSource, 'function normalizeRequestBody', 'customer outgoing snake_case request normalizer');
-expectContains(webApiClientFile, webApiClientSource, 'init.body = JSON.stringify(normalizeRequestBody(body, idempotencyKey))', 'customer normalized request body');
+expectContains(webApiClientFile, webApiClientSource, 'requestBody = JSON.stringify(normalizeRequestBody(body, idempotencyKey))', 'customer normalized request body');
 expectNotContains(webEntryFile, webEntrySource, 'body: JSON.stringify(body)', 'direct POST JSON body without OpenAPI field normalization');
 expectNotContains(webApiClientFile, webApiClientSource, 'body: JSON.stringify(body)', 'direct POST JSON body without OpenAPI field normalization');
 expectContains(adminApiClientFile, adminApiClientSource, 'function normalizeRequestBody', 'admin outgoing snake_case request normalizer');

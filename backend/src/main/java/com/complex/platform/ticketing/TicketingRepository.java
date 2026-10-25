@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.util.List;
 import java.util.Map;
@@ -293,16 +293,6 @@ public interface TicketingRepository {
     /** 退款单台账（后台“待确认拨付”看板的数据源）：按创建时间倒序。 */
     List<TicketRefundRecord> listTicketRefunds();
 
-    /** 第十三批第 11 条：客人本人提交的退票申请（requested_by＝客人编号），新到旧。default 从台账筛（测试双子）。 */
-    default List<TicketRefundRecord> listTicketRefundsByRequester(String requestedBy) {
-        return listTicketRefunds().stream().filter(refund -> requestedBy.equals(refund.requestedBy())).toList();
-    }
-
-    /** 第十三批第 11 条：批准时补填客人自助申请未填的责任主体（只填空的）。default 不落（测试双子）。 */
-    default int fillTicketRefundResponsibleEntity(String refundId, String responsibleEntityId) {
-        return 0;
-    }
-
     Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId);
 
     TerminalSyncTaskRecord saveTerminalSyncTask(TerminalSyncTaskRecord task);
@@ -404,6 +394,14 @@ public interface TicketingRepository {
      * default 返回 0 兼容既有测试双子。
      */
     default int forfeitEntitlement(String id, java.time.Instant now) {
+        return 0;
+    }
+
+    /**
+     * ROOT-03-R21 注销／拉黑：把本人持有的未核销权益置 forfeited（含已开始使用的多次票剩余次数，不退款；仅 active 且未用完才置，幂等）。返回受影响行数。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default int forfeitHeldEntitlement(String id, java.time.Instant now) {
         return 0;
     }
 

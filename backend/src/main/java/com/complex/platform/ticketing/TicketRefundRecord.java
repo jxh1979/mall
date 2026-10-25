@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.util.List;
@@ -54,12 +54,6 @@ public record TicketRefundRecord(
         return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
                 approvedAt, createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot,
                 payoutItems);
-    }
-
-    /** 操作员裁决第十三批第 11 条：批准时补填客人自助申请未填的责任主体。 */
-    public TicketRefundRecord withResponsibleEntityId(String entityId) {
-        return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
-                approvedAt, createdAt, updatedAt, merchantId, reasonCode, entityId, ticketTypeRefundableSnapshot, payoutItems);
     }
 
     public TicketRefundRecord withPayoutItems(List<PayoutItem> items) {

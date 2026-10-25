@@ -1,0 +1,35 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>停车缴费需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" id="parking-paused" class="alert warn">该综合体停车缴费暂停服务，请稍后再试</view>
+  <view wx:else class="card">
+    <picker wx:if="{{projects.length > 1}}" id="project-picker" range="{{projectNames}}" value="{{projectIndex}}" bindchange="onProject">
+      <view class="field">停车场所在综合体：{{projectIndex >= 0 ? projectNames[projectIndex] : '请选择停车场所在综合体'}}</view>
+    </picker>
+    <view wx:if="{{!projectId && !projects.length}}" class="alert warn">请用微信扫停车场出口的二维码进入本页</view>
+    <view class="field row">
+      <input id="code" value="{{code}}" placeholder="车牌号或临时码" bindinput="onCode" />
+      <button id="lookup" size="mini" type="primary" disabled="{{busy || !projectId}}" bindtap="lookup">查询停车费</button>
+    </view>
+    <view wx:if="{{credit}}" id="parking-credit" class="hint">{{credit}}</view>
+    <view wx:if="{{error}}" class="alert error">{{error}}</view>
+    <view wx:if="{{quote}}" id="quote" class="card">
+      <view>车辆：{{quote.vehicle}}</view>
+      <view>入场时间：{{quote.enteredText}}</view>
+      <view>停车费：{{quote.grossText}}</view>
+      <view wx:if="{{quote.offsetText}}">{{quote.offsetText}}</view>
+      <view>已缴：{{quote.paidText}}</view>
+      <view>应缴：<text id="due">{{quote.dueText}}</text></view>
+    </view>
+    <button wx:if="{{quote && quote.payable && !payment}}" id="pay" type="primary" disabled="{{busy}}" bindtap="pay">{{quote.payLabel}}</button>
+    <view wx:if="{{unavailable}}" id="parking-unavailable" class="alert warn">{{unavailableText}}</view>
+    <view wx:if="{{awaiting}}" class="alert info">
+      尚未确认收款，支付完成后点下方按钮确认
+      <button id="parking-confirm" size="mini" disabled="{{busy}}" bindtap="confirm">我已完成支付</button>
+    </view>
+    <view wx:if="{{paidText}}" id="grace" class="alert success">{{paidText}}</view>
+  </view>
+</view>

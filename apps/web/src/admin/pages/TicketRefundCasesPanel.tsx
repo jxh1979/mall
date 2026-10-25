@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { hasPermissions } from "../security/PermissionGate";
@@ -44,8 +44,6 @@ export function TicketRefundCasesPanel({ api, effectivePermissions, selectedOrde
   const [instanceIds, setInstanceIds] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [decisionNote, setDecisionNote] = React.useState("");
-  // 操作员裁决第十三批第 11 条「客人端自助申请」：客人自助申请的退票不填责任主体，批准时由审批人补填。
-  const [decisionEntityId, setDecisionEntityId] = React.useState("");
   const [safety, setSafety] = React.useState({ instanceId: "", slot: "1", reason: "", situation: "", entityId: "" });
   const [events, setEvents] = React.useState<TicketSafetyEventRow[]>([]);
 
@@ -87,15 +85,6 @@ export function TicketRefundCasesPanel({ api, effectivePermissions, selectedOrde
     return true;
   }
 
-  function validateApproval(refund: TicketRefundRow) {
-    if (!validateDecision()) return false;
-    if (!refund.responsibleEntityId && !decisionEntityId.trim()) {
-      setFormError("该退款是客人自助申请的，没有责任主体，请先填写退款责任主体再批准。");
-      return false;
-    }
-    return true;
-  }
-
   function requestSafetyEvent() {
     if (!safety.instanceId.trim() || !safety.reason.trim() || !safety.situation.trim() || !safety.entityId.trim()) {
       return setFormError("请填写票实例编号、原因、当时情形与责任主体。");
@@ -129,7 +118,6 @@ export function TicketRefundCasesPanel({ api, effectivePermissions, selectedOrde
       {canApprove ? (
         <div className="admin-form-row">
           <input data-testid="ticket-refund-decision-note" aria-label="审批意见" placeholder="审批意见（批准、驳回或批准安全事件时必填）" value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} />
-          <input data-testid="ticket-refund-decision-entity" aria-label="批准时补填的责任主体" placeholder="责任主体（客人自助申请的退款批准时补填，法律主体编号）" value={decisionEntityId} onChange={(event) => setDecisionEntityId(event.target.value)} />
         </div>
       ) : null}
       {pendingRefunds.length > 0 ? (
@@ -151,12 +139,9 @@ export function TicketRefundCasesPanel({ api, effectivePermissions, selectedOrde
                         <HighRiskConfirm label="批准退款" impact={refund.reasonCode === "master_override"
                           ? "五种情形之外的退款只能由持授权 U 盘密钥的最高权限逐笔放行，只对当前这一笔生效；批准后冻结所退票并发起原路退回。"
                           : "批准后冻结所退票并发起原路退回，钱打出后再确认拨付。"}
-                          disabled={busy} precheck={() => validateApproval(refund)}
+                          disabled={busy} precheck={validateDecision}
                           onConfirm={() => void runAction("ticket_refund_approved", () => api.post(
-                            `/api/v1/ticketing/refunds/${encodeURIComponent(refund.id)}/approve`, {
-                              action: "approve", reason: decisionNote.trim(),
-                              ...(refund.responsibleEntityId ? {} : { responsibleEntityId: decisionEntityId.trim() }),
-                            }))}
+                            `/api/v1/ticketing/refunds/${encodeURIComponent(refund.id)}/approve`, { action: "approve", reason: decisionNote.trim() }))}
                           data-testid={`ticket-refund-approve-${refund.id}`} />
                         <HighRiskConfirm label="驳回退款" impact="驳回后该票解冻恢复可用，不退款。" disabled={busy} precheck={validateDecision}
                           onConfirm={() => void runAction("ticket_refund_rejected", () => api.post(

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.bar.BarReservationInvitationMemberRecord;
@@ -441,30 +441,6 @@ public class CustomerController {
             @RequestHeader(name = "Authorization", required = false) String authorization
     ) {
         return ApiResponse.ok(service.listOutgoingTicketTransfers(requireCustomerToken(customerToken, authorization)));
-    }
-
-    /** 操作员裁决第十三批第 11 条「客人端自助申请」：本人可退的未用票（整张）申请退票，提交后走与员工退款同一套审批和原路退回。 */
-    @PostMapping("/ticket-refunds")
-    public ApiResponse<com.complex.platform.ticketing.CustomerTicketRefundResponse> requestTicketRefund(
-            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
-            @RequestHeader(name = "Authorization", required = false) String authorization,
-            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody @jakarta.validation.Valid com.complex.platform.customer.dto.CustomerTicketRefundRequest request
-    ) {
-        String token = requireCustomerToken(customerToken, authorization);
-        String key = firstNonBlank(idempotencyKey, request.idempotencyKey());
-        requireIdempotencyKey(key);
-        return ApiResponse.ok(service.requestTicketRefund(token,
-                new com.complex.platform.customer.dto.CustomerTicketRefundRequest(key, request.ticketInstanceId())));
-    }
-
-    /** 操作员裁决第十三批第 11 条：本人退票申请及其状态（新到旧）。 */
-    @GetMapping("/ticket-refunds")
-    public ApiResponse<PageResponse<com.complex.platform.ticketing.CustomerTicketRefundResponse>> listTicketRefunds(
-            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
-            @RequestHeader(name = "Authorization", required = false) String authorization
-    ) {
-        return ApiResponse.ok(service.listTicketRefunds(requireCustomerToken(customerToken, authorization)));
     }
 
     private String requireCustomerToken(String customerToken, String authorization) {

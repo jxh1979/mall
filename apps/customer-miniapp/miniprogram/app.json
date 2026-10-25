@@ -1,0 +1,44 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/orders/index",
+    "pages/bar/index",
+    "pages/me/index",
+    "pages/login/index",
+    "pages/buy/index",
+    "pages/transfer/index",
+    "pages/parking/index",
+    "pages/reserve/index",
+    "pages/reservations/index",
+    "pages/invitation/index",
+    "pages/scan/index",
+    "pages/points/index",
+    "pages/wallet/index",
+    "pages/vouchers/index",
+    "pages/bottles/index",
+    "pages/complaints/index",
+    "pages/student/index",
+    "pages/account/index",
+    "pages/deregister/index",
+    "pages/link/index",
+    "pages/paused/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "综合体客人端",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f5f5"
+  },
+  "tabBar": {
+    "color": "#595959",
+    "selectedColor": "#0958d9",
+    "backgroundColor": "#ffffff",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/orders/index", "text": "票与订单" },
+      { "pagePath": "pages/bar/index", "text": "酒吧" },
+      { "pagePath": "pages/me/index", "text": "我的" }
+    ]
+  },
+  "style": "v2"
+}

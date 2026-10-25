@@ -1,0 +1,29 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>尚未登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">账户功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view class="card">
+      <view class="section-title">账户</view>
+      <view id="account-phone">登录手机号：{{maskedPhone || '—'}}</view>
+    </view>
+    <view class="card">
+      <view class="section-title">会员条款与隐私条款</view>
+      <view wx:if="{{error}}" class="alert error">{{error}}</view>
+      <view wx:elif="{{!terms}}" class="hint">加载中……</view>
+      <block wx:else>
+        <view id="terms-member">
+          <view class="section-title">会员条款（版本 {{terms.memberTerms.version}}）</view>
+          <text class="terms">{{terms.memberTerms.content}}</text>
+        </view>
+        <view id="terms-privacy">
+          <view class="section-title">隐私条款（版本 {{terms.privacyPolicy.version}}）</view>
+          <text class="terms">{{terms.privacyPolicy.content}}</text>
+        </view>
+      </block>
+    </view>
+  </block>
+</view>

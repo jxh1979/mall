@@ -1,0 +1,74 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>转赠与领取门票需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <block wx:else>
+    <view wx:if="{{error}}" class="alert error">{{error}}</view>
+
+    <view class="card">
+      <view class="section-title">送出我的票</view>
+      <view class="hint">选好送法后点某张票的“转赠给他”。按完整人份送出；对方点“确认领取”前，你仍可自己使用或改转他人，以先成功的为准，其余自动失效。</view>
+      <view class="actions">
+        <button id="channel-phone" size="mini" type="{{channel === 'phone' ? 'primary' : 'default'}}" bindtap="pickPhone">填手机号</button>
+        <button id="channel-link" size="mini" type="{{channel === 'link' ? 'primary' : 'default'}}" bindtap="pickLink">微信分享 / 二维码</button>
+      </view>
+      <view wx:if="{{channel === 'phone'}}" class="field"><input id="receiver-phone" type="number" value="{{receiverPhone}}" placeholder="受赠人手机号" bindinput="onReceiverPhone" /></view>
+      <view wx:if="{{loading}}" class="hint">加载中……</view>
+      <view wx:elif="{{!slots.length}}" class="hint">暂无可转赠的票</view>
+      <view wx:for="{{slots}}" wx:key="key" class="item">
+        {{item.ticketName}} 第 {{item.slotIndex}} 位 <text wx:if="{{item.pending}}" class="tag orange">转赠待领取</text>
+        <button id="initiate-{{item.key}}" size="mini" disabled="{{busy}}" data-key="{{item.key}}" bindtap="initiate">{{item.pending ? '改转他人' : '转赠给他'}}</button>
+      </view>
+      <view wx:if="{{created}}" id="transfer-result" class="card">
+        <view wx:if="{{createdLimit}}" id="transfer-session-limit" class="alert warn">{{createdLimit}}</view>
+        <block wx:if="{{created.channel === 'link' && created.claimCode}}">
+          <view>领取码：{{created.claimCode}}（对方打开你分享的领取入口，或在下方“凭领取码领取”里粘贴后点“确认领取”）</view>
+          <image wx:if="{{claimQr}}" id="claim-qr" class="qr" src="{{claimQr}}" mode="aspectFit" />
+          <view wx:else class="hint">客人链接域名未配置，暂不能生成领取二维码，可分享给微信好友或把领取码告诉对方。</view>
+          <button id="transfer-share" type="primary" open-type="share">分享给微信好友</button>
+        </block>
+        <view wx:else>已发起转赠，已给对方发送领取通知，等待对方确认领取。</view>
+      </view>
+    </view>
+
+    <view id="incoming" class="card">
+      <view class="section-title">待我领取</view>
+      <view wx:if="{{incomingNotice}}" class="alert warn">{{incomingNotice}}</view>
+      <view wx:if="{{!incoming.length}}" class="hint">没有待领取的转赠</view>
+      <view wx:for="{{incoming}}" wx:key="id" class="item">
+        {{item.ticketName || '门票'}} <text class="hint">{{item.limit}}</text>
+        <button wx:if="{{!item.sessionEnded}}" id="incoming-claim-{{item.id}}" size="mini" type="primary" disabled="{{busy}}" data-id="{{item.id}}" bindtap="claimIncoming">确认领取</button>
+        <button wx:else size="mini" disabled="{{true}}">确认领取</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">凭领取码 / 二维码领取</view>
+      <view class="field row">
+        <input id="claim-code" value="{{claimCode}}" placeholder="粘贴领取码" bindinput="onClaimCode" />
+        <button id="claim-lookup" size="mini" disabled="{{busy}}" bindtap="previewInput">查看</button>
+      </view>
+      <button id="scan-claim" size="mini" disabled="{{busy}}" bindtap="scanClaim">扫领取二维码</button>
+      <view wx:if="{{scanNotice}}" id="scan-notice" class="alert warn">{{scanNotice}}</view>
+      <view wx:if="{{preview}}" id="claim-preview" class="card">
+        <view>{{preview.ticketName || '门票'}}（{{preview.numPeople}} 人 · {{preview.totalTimes}} 次）</view>
+        <view wx:if="{{previewLimit}}" class="alert {{preview.sessionEnded ? 'error' : 'warn'}}">{{previewLimit}}</view>
+        <button wx:if="{{!preview.sessionEnded}}" id="claim-confirm" type="primary" disabled="{{busy}}" bindtap="claimPreview">确认领取</button>
+        <button wx:else id="claim-confirm-disabled" disabled="{{true}}">确认领取</button>
+      </view>
+    </view>
+
+    <view id="outgoing" class="card">
+      <view class="section-title">我发起的转赠</view>
+      <view wx:if="{{outgoingNotice}}" class="alert warn">{{outgoingNotice}}</view>
+      <view wx:if="{{!outgoing.length}}" class="hint">暂无转赠记录</view>
+      <view wx:for="{{outgoing}}" wx:key="id" class="item">
+        {{item.ticketName || '门票'}} <text class="tag">{{item.statusText}}</text>
+        <view class="hint">{{item.target}}<block wx:if="{{item.limit}}">；{{item.limit}}</block></view>
+        <button wx:if="{{item.status === 'pending'}}" id="revoke-{{item.id}}" size="mini" type="warn" disabled="{{busy}}" data-id="{{item.id}}" bindtap="revoke">撤回</button>
+      </view>
+    </view>
+  </block>
+</view>

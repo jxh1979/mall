@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "票与订单",
+  "usingComponents": {
+    "order-payment": "../../components/order-payment/index",
+    "dynamic-code": "../../components/dynamic-code/index"
+  }
+}

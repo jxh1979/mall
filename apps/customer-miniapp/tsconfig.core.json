@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "lib": ["ES2022"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmitOnError": true,
+    "rootDir": "../../packages/customer-core/src",
+    "outDir": "miniprogram/core"
+  },
+  "include": ["../../packages/customer-core/src/**/*.ts"],
+  "exclude": ["../../packages/customer-core/src/**/*.test.ts"]
+}

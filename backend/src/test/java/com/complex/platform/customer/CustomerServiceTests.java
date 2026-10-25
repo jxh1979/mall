@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -85,8 +85,7 @@ class CustomerServiceTests {
         auditEventRepository = new InMemoryAuditEventRepository();
         ticketingService = Mockito.mock(TicketingService.class);
         // ROOT-03-R21：注销处置名下未核销票（替身：无票）。
-        when(ticketingService.disposeHeldTicketsOnDeregistration(any(), any()))
-                .thenReturn(new TicketingService.DeregistrationTickets(0, 0));
+        when(ticketingService.disposeHeldTicketsOnDeregistration(any(), any())).thenReturn(0);
         inventoryService = Mockito.mock(InventoryService.class);
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         AuditedOperationExecutor operations = new AuditedOperationExecutor(

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- 文件版本：V0.01 -->
+<!-- 应用名（app_name、title_activity_main）由 app/build.gradle 按调试包／发行包注入，不在此处写死。 -->
+<resources>
+    <string name="package_name">com.complex.customer.dev</string>
+    <string name="custom_url_scheme">com.complex.customer.dev</string>
+</resources>

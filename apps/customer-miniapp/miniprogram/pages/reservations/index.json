@@ -1,0 +1,4 @@
+{
+  "navigationBarTitleText": "我的订台",
+  "usingComponents": { "dynamic-code": "../../components/dynamic-code/index" }
+}

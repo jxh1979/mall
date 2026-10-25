@@ -1,0 +1,39 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{paused}}" class="alert warn">酒吧功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view class="hint">扫散台桌台二维码点单（卡座不开放扫码点单，须服务员先开台）。下单即付款，付款成功后计入本桌当前账单。</view>
+    <button id="scan-start" bindtap="scanTable">{{tableId ? '重新扫桌台码' : '扫桌台二维码'}}</button>
+    <view wx:if="{{error}}" id="scan-error" class="alert error">{{error}}</view>
+    <view wx:if="{{paid}}" id="scan-paid" class="alert success">付款成功，已计入本桌账单</view>
+    <view wx:if="{{tableId && !menu && !error}}" class="hint">加载中……</view>
+
+    <view wx:if="{{menu}}" id="menu" class="card">
+      <view class="section-title">菜单</view>
+      <view wx:if="{{!menu.length}}" class="hint">该桌台暂无可点商品</view>
+      <view wx:for="{{menu}}" wx:key="productId" id="item-{{item.productId}}" class="item row">
+        <view style="flex: 1;" class="{{item.soldOut ? 'hint' : ''}}">{{item.productName}} {{item.priceText}} <text wx:if="{{item.soldOut}}" class="tag">已售完</text></view>
+        <button id="minus-{{item.productId}}" size="mini" disabled="{{!item.count}}" data-id="{{item.productId}}" bindtap="minus">－</button>
+        <text>{{item.count}}</text>
+        <button id="add-{{item.productId}}" size="mini" disabled="{{item.soldOut}}" data-id="{{item.productId}}" bindtap="add">＋</button>
+      </view>
+      <block wx:if="{{lines.length}}">
+        <button id="scan-pay" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="pay">下单并支付 {{totalText}}</button>
+      </block>
+      <view wx:if="{{unavailable}}" id="scan-unavailable" class="alert warn">{{unavailableText}}</view>
+      <view wx:if="{{awaitingIntentId}}" class="alert info">
+        支付完成后点下方按钮确认结果
+        <button id="scan-recheck" size="mini" disabled="{{busy}}" bindtap="recheck">我已完成支付</button>
+      </view>
+      <view wx:if="{{payError}}" id="scan-pay-error" class="alert error">{{payError}}</view>
+    </view>
+
+    <view wx:if="{{bill.length}}" id="bill" class="card">
+      <view class="section-title">本桌当前账单</view>
+      <view wx:for="{{bill}}" class="item">
+        {{item.line}} <text class="tag {{item.served ? 'green' : 'orange'}}">{{item.served ? '已上菜' : '未上菜'}}</text>
+      </view>
+      <view id="bill-total">合计 {{billTotal}}</view>
+    </view>
+  </block>
+</view>

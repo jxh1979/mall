@@ -1,0 +1,26 @@
+/* 文件版本：V0.01 */
+/* 小程序全局样式（页面与开了 addGlobalClass 的组件共用）。 */
+page { background: #f5f5f5; color: #262626; font-size: 28rpx; }
+.page { padding: 24rpx; }
+.card { background: #ffffff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 24rpx; }
+.title { font-size: 40rpx; font-weight: 600; margin-bottom: 24rpx; }
+.section-title { font-size: 32rpx; font-weight: 600; margin: 16rpx 0; }
+.hint { color: #8c8c8c; font-size: 24rpx; margin: 8rpx 0; }
+.alert { border-radius: 12rpx; padding: 16rpx 20rpx; margin: 12rpx 0; }
+.alert.info { background: #e6f4ff; color: #0958d9; }
+.alert.warn { background: #fffbe6; color: #ad6800; }
+.alert.error { background: #fff1f0; color: #cf1322; }
+.alert.success { background: #f6ffed; color: #389e0d; }
+.field { background: #ffffff; border-radius: 12rpx; padding: 20rpx; margin: 12rpx 0; }
+.row { display: flex; align-items: center; gap: 16rpx; }
+.row input { flex: 1; }
+.tag { display: inline-block; font-size: 22rpx; padding: 2rpx 12rpx; border-radius: 8rpx; background: #f0f0f0; margin-right: 8rpx; }
+.tag.green { background: #f6ffed; color: #389e0d; }
+.tag.orange { background: #fff7e6; color: #d46b08; }
+.item { border-top: 1rpx solid #f0f0f0; padding: 16rpx 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }
+.mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: flex-end; z-index: 10; }
+.sheet { background: #ffffff; width: 100%; border-radius: 24rpx 24rpx 0 0; padding: 24rpx; max-height: 85vh; overflow-y: auto; }
+.qr { width: 440rpx; height: 440rpx; display: block; margin: 16rpx auto; }
+.terms { white-space: pre-wrap; display: block; color: #595959; font-size: 24rpx; }
+.check { display: flex; align-items: center; margin: 12rpx 0; }

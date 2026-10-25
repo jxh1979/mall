@@ -1,0 +1,52 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>提交与查看投诉需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">投诉功能暂停服务，请稍后再试，或通过企业微信联系客服</view>
+  <block wx:else>
+    <view class="card">
+      <view class="section-title">提交投诉</view>
+      <view wx:if="{{error}}" id="complaint-error" class="alert error">{{error}}</view>
+      <view wx:if="{{submitted}}" id="complaint-submitted" class="alert success">{{submitted}}</view>
+      <picker wx:if="{{projects.length > 1}}" id="project-picker" range="{{projectNames}}" value="{{projectIndex}}" bindchange="onProject">
+        <view class="field">投诉所在综合体：{{projectNames[projectIndex]}}</view>
+      </picker>
+      <view class="field"><input id="complaint-title" maxlength="100" value="{{title}}" placeholder="投诉标题" bindinput="onTitle" /></view>
+      <view class="field"><textarea id="complaint-description" maxlength="4000" value="{{description}}" placeholder="文字留言" bindinput="onDescription" /></view>
+      <view class="actions">
+        <button id="add-image" size="mini" disabled="{{files.length >= maxFiles}}" bindtap="addImage">添加照片</button>
+        <button id="add-video" size="mini" disabled="{{files.length >= maxFiles}}" bindtap="addVideo">添加视频</button>
+        <button wx:if="{{!recording}}" id="record-start" size="mini" disabled="{{files.length >= maxFiles}}" bindtap="startRecord">录语音</button>
+        <button wx:else id="record-stop" size="mini" type="warn" bindtap="stopRecord">停止录音</button>
+      </view>
+      <view id="files">
+        <view wx:if="{{!files.length}}" class="hint">可添加照片、视频、语音，合计最多 {{maxFiles}} 个。</view>
+        <view wx:for="{{files}}" wx:key="path" class="item row">
+          <text style="flex: 1;">{{item.name}}</text>
+          <button id="remove-file-{{index}}" size="mini" data-index="{{index}}" bindtap="removeFile">移除</button>
+        </view>
+      </view>
+      <button id="complaint-submit" type="primary" loading="{{busy}}" disabled="{{busy || recording}}" bindtap="submit">提交投诉</button>
+    </view>
+
+    <view id="mine" class="card">
+      <view class="section-title">我的投诉</view>
+      <view wx:if="{{mineError}}" class="alert error">{{mineError}}</view>
+      <view wx:if="{{!mine.length}}" class="hint">暂无投诉</view>
+      <view wx:for="{{mine}}" wx:key="workOrderId" id="complaint-{{item.workOrderId}}" class="item">
+        <view>{{item.title}} <text class="tag">{{item.statusLabel}}</text></view>
+        <view class="hint">{{item.meta}}</view>
+        <view wx:if="{{item.resolution}}">处理结论：{{item.resolution}}</view>
+        <view wx:else class="hint">处理中，有结论后可评价</view>
+        <view wx:if="{{item.rated}}">满意度 {{item.satisfaction}} 分</view>
+        <view wx:elif="{{item.rateable}}" class="actions">
+          <text>请评满意度：</text>
+          <button wx:for="{{scores}}" wx:for-item="score" wx:key="*this" id="rate-{{item.workOrderId}}-{{score}}" size="mini" disabled="{{rating}}"
+            data-id="{{item.workOrderId}}" data-score="{{score}}" bindtap="rate">{{score}} 分</button>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

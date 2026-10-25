@@ -1,0 +1,7 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view class="card">
+    <view class="title">本端暂停服务</view>
+    <view class="hint">请稍后再试，或到现场服务台咨询。</view>
+  </view>
+</view>

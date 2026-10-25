@@ -1,0 +1,7 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{paused}}" id="bar-paused" class="alert warn">酒吧功能暂停服务，请稍后再试</view>
+  <view wx:else class="card">
+    <button wx:for="{{entries}}" wx:key="key" id="entry-{{item.key}}" class="entry" data-url="{{item.url}}" bindtap="openEntry">{{item.title}}</button>
+  </view>
+</view>

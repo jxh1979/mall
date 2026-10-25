@@ -1,0 +1,14 @@
+<!-- 文件版本：V0.01 -->
+<view class="card">
+  <view class="section-title">{{title}}</view>
+  <block wx:if="{{status === 'shown'}}">
+    <image id="qr-image" class="qr" src="{{src}}" mode="aspectFit" />
+    <view id="qr-countdown" class="hint">{{secondsLeft}} 秒后失效，到点自动换新码；截图无效，现场须在线核验。</view>
+  </block>
+  <view wx:elif="{{status === 'loading'}}" class="hint">正在获取二维码……</view>
+  <block wx:elif="{{status === 'failed'}}">
+    <view id="qr-hidden" class="alert warn">二维码已隐藏，请联网后重试{{message ? '（' + message + '）' : ''}}</view>
+    <button id="qr-retry" size="mini" bindtap="retry">重新获取</button>
+  </block>
+  <view wx:else id="qr-hidden" class="hint">二维码已隐藏，回到本页后自动换新码。</view>
+</view>

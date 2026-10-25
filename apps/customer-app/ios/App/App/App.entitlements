@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 文件版本：V0.01
+     客人 iPhone App 发行构建（Release）的权限声明：通用链接 applinks:<客人深链主机>，让 https://<客人深链主机>/c/… 的客人链接直接用本应用打开
+     （正式域名的 apple-app-site-association 部署前系统不会用本应用打开）。只在发行构建引用；调试构建不带——苹果的通用链接不支持 IP 地址主机。 -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:$(VITE_CUSTOMER_LINK_HOST)</string>
+	</array>
+</dict>
+</plist>

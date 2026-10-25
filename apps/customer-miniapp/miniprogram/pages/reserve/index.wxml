@@ -1,0 +1,55 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>订台需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">酒吧功能暂停服务，请稍后再试</view>
+  <view wx:elif="{{reservation}}" id="reservation-result" class="card">
+    <view wx:if="{{paid}}" id="deposit-paid" class="alert success">定金已支付，台位已为你预留。邀请函由酒吧确认订台后签发，可在「我的订台」查看与转发。</view>
+    <block wx:else>
+      <view class="section-title">订台已提交，待支付定金 {{depositText}}</view>
+      <view class="hint">定金付款成功后台位才为你预留；台位被他人先付定金订走时，已付定金原路退回。</view>
+      <button id="deposit-pay" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="payDeposit">支付定金 {{depositText}}</button>
+      <view wx:if="{{unavailable}}" id="deposit-unavailable" class="alert warn">{{unavailableText}}</view>
+      <view wx:if="{{awaitingIntentId}}" class="alert info">
+        支付完成后点下方按钮确认结果
+        <button id="deposit-recheck" size="mini" disabled="{{busy}}" bindtap="recheck">我已完成支付</button>
+      </view>
+      <view wx:if="{{payError}}" id="deposit-error" class="alert error">{{payError}}</view>
+    </block>
+  </view>
+  <block wx:else>
+    <view wx:if="{{loadError}}" class="alert error">可订台位加载失败：{{loadError}}</view>
+    <view wx:if="{{loading}}" class="hint">加载中……</view>
+    <view wx:elif="{{!options.length}}" class="hint">暂无可订台位</view>
+    <view wx:for="{{options}}" wx:key="tableId" id="option-{{item.tableId}}" class="card">
+      <view>{{item.tableName}} <text class="tag">{{item.typeText}}</text></view>
+      <view class="hint">{{item.ruleText}}</view>
+      <view wx:if="{{item.reason}}" class="alert warn">{{item.reason}}</view>
+      <view wx:else>{{item.depositText}}</view>
+      <button id="pick-{{item.tableId}}" size="mini" type="{{picked && picked.tableId === item.tableId ? 'primary' : 'default'}}"
+        disabled="{{item.reason !== ''}}" data-id="{{item.tableId}}" bindtap="pick">{{picked && picked.tableId === item.tableId ? '已选' : '选这个'}}</button>
+    </view>
+    <view wx:if="{{picked}}" id="reserve-form" class="card">
+      <view class="section-title">订 {{picked.tableName}}</view>
+      <view wx:if="{{error}}" id="reserve-error" class="alert error">{{error}}</view>
+      <picker id="reserve-date" mode="date" value="{{reserveDate}}" bindchange="onReserveDate">
+        <view class="field">到店日期：{{reserveDate || '请选择'}}</view>
+      </picker>
+      <picker id="reserve-time" mode="time" value="{{reserveTime}}" bindchange="onReserveTime">
+        <view class="field">到店时间：{{reserveTime || '请选择'}}</view>
+      </picker>
+      <picker id="latest-date" mode="date" value="{{latestDate}}" bindchange="onLatestDate">
+        <view class="field">最晚到店日期：{{latestDate || '请选择'}}</view>
+      </picker>
+      <picker id="latest-time" mode="time" value="{{latestTime}}" bindchange="onLatestTime">
+        <view class="field">最晚到店时间：{{latestTime || '请选择'}}</view>
+      </picker>
+      <view id="deposit-rules" class="hint">定金不抵扣消费、不计入最低消费累计；在该台位的消费达到该台位适用的最低消费后，定金原路退回；到店未达最低消费、爽约或超时取消的，定金按规则没收。超过最晚到店时间未到店的，台位自动释放、定金按爽约规则没收。</view>
+      <view class="field row">人数<input id="guests" type="number" value="{{guests}}" bindinput="onGuests" /></view>
+      <view class="field"><input id="contact-phone" type="number" value="{{contactPhone}}" placeholder="联系手机号（可不填）" bindinput="onPhone" /></view>
+      <button id="reserve-submit" type="primary" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">提交订台（下一步付定金）</button>
+    </view>
+  </block>
+</view>

@@ -1,5 +1,6 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // ROOT-06 R6：统一发布包构建器与安装向导的沙箱演练（BSM「能自动识别环境的安装包 + 内附教程」条，BSM:1973、1974、1966、1967）。
+// ROOT-03 R16：包里登记客人安卓 App（有则带上、教程写包内位置），客人 iPhone App 与微信小程序未登记入口即写「尚未发布」。
 // 只在临时目录里跑：COMPLEX_INSTALL_ROOT 指向沙箱根，systemctl/nginx/psql 等系统命令全部换成 PATH 前置的假命令；
 // 不碰本机系统、不需数据库与 Maven。环境识别按第十三批操作员裁决第 6 条：插了授权 U 盘即生产，否则测试。
 import { test, after } from "node:test";
@@ -32,6 +33,8 @@ put(`${art}/server/complex-api.jar`, "fake-jar");
 put(`${art}/server/web/index.html`, "<html>后台</html>");
 put(`${art}/clients/staff-android/complex-terminal-test.apk`, "apk-for-test");
 put(`${art}/clients/staff-android/complex-terminal-prod.apk`, "apk-for-prod");
+// 客人安卓 App 只有测试环境的调试包（生产缺正式包名与中文名时不出）。
+put(`${art}/clients/guest-android/complex-customer-test.apk`, "guest-apk-for-test");
 
 const SECRET_NOTE = "do-not-ship-0001";
 const entry = (env, host) => ({
@@ -121,6 +124,10 @@ test("构建器：包内容、哈希、迁移清单、登记表白名单与教�
   assert.equal(manifest.migrations.length, sqlCount);
   assert.deepEqual(manifest.clients.staff_android, { test: "complex-terminal-test.apk", prod: "complex-terminal-prod.apk" });
   assert.deepEqual(manifest.clients.guest_ios, { test: null, prod: null });
+  assert.deepEqual(manifest.clients.guest_wechat, { test: null, prod: null });
+  assert.deepEqual(manifest.clients.guest_android, { test: "complex-customer-test.apk", prod: null }, "客人安卓 App 未登记进包");
+  assert.equal(read(path.join(pkg, "clients/guest-android/complex-customer-test.apk")), "guest-apk-for-test");
+  assert.ok(!exists(path.join(pkg, "clients/guest-android/complex-customer-prod.apk")));
   assert.equal(spawnSync("sha256sum", ["-c", "SHA256SUMS", "--quiet"], { cwd: pkg }).status, 0);
   for (const file of walk(pkg)) assert.ok(!read(file).includes(SECRET_NOTE), `登记表多余键被带进包：${file}`);
 
@@ -129,6 +136,10 @@ test("构建器：包内容、哈希、迁移清单、登记表白名单与教�
   assert.doesNotMatch(guide, /@[^@\s<>"']+@/, "教程还有未替换的占位");
   assert.ok(guide.includes("test.example.internal") && guide.includes("prod.example.internal"), "教程未渲染各环境地址");
   assert.ok(guide.includes("尚未发布"), "客人端入口缺失时应写尚未发布");
+  const rowOf = (label) => guide.match(new RegExp(`<tr><td>${label}</td>.*?</tr>`))?.[0] ?? "";
+  assert.match(rowOf("测试环境"), /clients\/guest-android\/complex-customer-test\.apk/, "教程测试环境行应写客人安卓 App 在包内的位置");
+  assert.equal((rowOf("测试环境").match(/尚未发布/g) ?? []).length, 2, "测试环境行：客人 iPhone App 与微信小程序写尚未发布");
+  assert.equal((rowOf("生产环境").match(/尚未发布/g) ?? []).length, 3, "生产环境行：客人三端都写尚未发布");
   for (const script of ["安装.sh", "U盘首次制钥.sh"]) {
     const messages = [...read(path.join(pkg, script)).matchAll(/\bstop "([^"]+)"/g)].map((m) => m[1]);
     assert.ok(messages.length >= 3, `${script} 停止提示过少`);

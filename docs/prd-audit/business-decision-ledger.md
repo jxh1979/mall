@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.52
+文档版本：V0.53
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3822,3 +3822,32 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 ### 复核后有依据直接修（不弹窗，非新裁决）
 
 - 没配定金规则的酒吧客人不能自助订台：依据 BSM L1062「客人自助订台必须支付定金」。落地 `CustomerService.createBarReservation`（`POST /api/v1/customer/bar-reservations`）：本酒吧未配置定金规则（或按规则算出无定金可付）时客人自助订台 409 `BAR_SELF_RESERVATION_UNAVAILABLE`「该酒吧暂未开放自助订台」，去掉原「无匹配规则按 0／不收定金下单」的向后兼容分支；员工代订（`BarEntryService.createReservation`）不受影响；OpenAPI 客人自助订台接口错误码同步。
+
+## 2026-10-25 第十三批 C 段：操作员更正与客人端落地补记（文档同步，HTML 不改）
+
+### 来源与范围
+
+控制席第十三批 C 段（batch15，工作树 `feature/business-code-batch15-20261024`，ROOT-03 客人三端的三个客户端工程）。2026-10-25 操作员更正第十三批第 8、11、12 条，原文记录于控制席任务书 `B15-BRIEF.md`「2026-10-25 操作员更正（取代第 8、11、12 条；原文逐字）」节（本机 `html-audit-20261017/`，不在仓内）。上节第十三批 B 段（V0.52 追加）表中第 8、11、12 行已被本节取代，该节历史字节不改；第 1～5、9 条的客人端界面在本 C 段落地，见下「客人端落地补记」。三份业务 HTML 一句不改。本节追加时，原台账除文档版本 V0.52→V0.53 外，其他历史字节保持。
+
+### 操作员更正（逐字）
+
+操作员原话：「呃，有一点我弄错了，即使注销，门票是不可以退的，除非碰上特殊安全情况。这一点我是我弄错了，要修改一下。」
+
+| 编号 | 处理 | 落地代码位置 |
+|---|---|---|
+| 8 | 改为：客人注销时，名下未核销的票一律作废、不退款，不因此拦注销（BSM L804「未到场、忘记使用或主动放弃均不构成退款理由」）；碰上通票安全例外的，仍按原规则由夜班值班经理及以上批准、员工在后台办理。 | `CustomerService.deregisterAccount`（`POST /api/v1/customer/deregister`）去掉「名下有可退未用票即 409 `CUSTOMER_REFUNDABLE_TICKETS_HELD`」的拦截；注销与拉黑（`CustomerService.blacklistCustomer`）共用的处置 `CustomerService.disposeHoldingsOnAccountClosure` → `TicketingService.disposeHeldTicketsOnDeregistration`：本人持有的完全未用权益一律置作废（同到期作废口径，不退款、不建退款单），不再保留票种可退的整票，随后删除不再有可用入场权益的人脸绑定；注销审计 `customer.account.deregistration_disposed` 只记作废数 `tickets_forfeited`。注销预览 `CustomerService.deregisterPreview`（`GET /api/v1/customer/deregister/preview`）不再列可退票（`CustomerDeregisterPreviewResponse` 去掉 `refundableTickets`），`TicketingService.listRefundableUnusedHeldTickets` 删除。客人端注销页 `apps/customer-app/src/pages/DeregisterPage.tsx`、`apps/customer-miniapp/miniprogram/pages/deregister/` 不列可退票、不设退票入口。通票安全例外照旧（本节未改）：`TicketingService.requestTicketSafetyEvent`／`approveTicketSafetyEvent`（`POST /api/v1/ticketing/safety-events`、`POST /api/v1/ticketing/safety-events/{safety_event_id}/approve`），后台「出票与核销追踪」页 `TicketOrdersPage` 的 `TicketRefundCasesPanel` 登记与批准。OpenAPI 注销与注销预览说明同步。 |
+| 11 | 撤回：操作员选「撤掉（推荐）」——门票除安全例外不退，客人端不设退票入口；安全例外和票种规则允许的退款仍由员工在后台办理。服务端客人退票接口、三端入口和审批时补填责任主体一并撤回。 | 删客人退票两条接口 `POST /api/v1/customer/ticket-refunds`、`GET /api/v1/customer/ticket-refunds`：`CustomerController.requestTicketRefund`／`listTicketRefunds`、`CustomerService.requestTicketRefund`／`listTicketRefunds`、`TicketingService.requestCustomerTicketRefund`／`listCustomerTicketRefunds`、`TicketRefundService.requestCustomerRefund`／`listCustomerRefunds`／`customerView`，请求与响应 `CustomerTicketRefundRequest`、`CustomerTicketRefundResponse`，写操作 `TicketingWriteOperation.REQUEST_CUSTOMER_TICKET_REFUND`，`TicketingRepository`／`JdbcTicketingRepository.listTicketRefundsByRequester`；`TicketRefundService.requestRefund` 回到只由员工发起（原单商户范围校验、责任主体必填）。审批时补填责任主体撤回：`TicketRefundService.approveRefund` 去掉补填分支，`TicketingRepository`／`JdbcTicketingRepository.fillTicketRefundResponsibleEntity`、`TicketRefundRecord.withResponsibleEntityId`、`StatusChangeRequest.responsibleEntityId` 删除，后台 `TicketRefundCasesPanel` 去掉「批准时补填的责任主体」输入。三端不设退票入口：`apps/customer-app/src/pages/MyOrdersPage.tsx`、`apps/customer-miniapp/miniprogram/pages/orders/` 不读退票申请、不显示「申请退票」，三端共用客人业务模块 `packages/customer-core/src/service.ts` 无退票申请调用。OpenAPI（`docs/openapi/openapi-p0.yaml`／`.json`）删这两条操作，接口验收矩阵与契约闭包附录重建，`security-baseline-latest.json` 操作计数 1143→1141。 |
+| 12 | 不再适用：注销时本人持有的未用权益一律作废（含只持有部分人份的），不再区分「本人可退整票」；注销与拉黑只作废本人持有人份上的在途转赠、不动他人转赠（B 段已修）保持不变。 | `TicketingService.disposeHeldTicketsOnDeregistration` 不再按整票可退区分：只持有部分人份的票同样只作废本人持有人份上的完全未用权益，别人已领取的人份不动；在途转赠只作废本人持有人份上的（`TicketTransferService.voidPendingTransfersForSlot`，B 段已修，未改）。客人端无单独界面。 |
+
+### 客人端落地补记
+
+上节第十三批 B 段第 1～5 条注明「客人端界面随 C 段（三个客户端）落地」，第 9 条在 B 段登记了服务端落地位置、其客人端界面（券转赠）同在本 C 段做；现已落地。官方客人 App（Android 与 iPhone 共用 `apps/customer-app`）与微信小程序（`apps/customer-miniapp`）都经三端共用的客人业务模块 `packages/customer-core/src/service.ts` 调同一组 `/api/v1/customer/*` 接口。
+
+| 编号 | 官方客人 App（`apps/customer-app/src`） | 微信小程序（`apps/customer-miniapp/miniprogram`） |
+|---|---|---|
+| 1 | `pages/StudentCertificationPage.tsx`（先单独同意证件采集〔记同意编号与版本〕，才可选证件照片〔1～9 张〕并填学信网在线验证码提交；注明审核通过后学生资格有效到报告上的预计毕业日期；`applyStudentCertification`／`getStudentCertification`） | `pages/student/` |
+| 2 | `pages/WalletPage.tsx`「商户储值卡退出公告」卡片（展示公示中的公告：可用到哪天、能否退及退回比例、怎么退、找谁退；`listMerchantCardExitNotices`） | `pages/wallet/` |
+| 3 | `components/CustomerAuthShell.tsx`（未注册的手机号转注册：填生日、阅读并同意会员条款与隐私条款，注明须年满 18 周岁，满 18 周岁由服务端判定；`getTerms`／`register`） | `pages/login/` |
+| 4 | `pages/BarReservationPage.tsx`（付定金后注明邀请函由酒吧确认后签发）、`pages/MyReservationsPage.tsx`（未签发注明「邀请函待酒吧确认订台后签发」，签发后查看、转发与管理名单）、`pages/InvitationAcceptPage.tsx`（被邀请人预览与确认接受）；客人端不签发 | `pages/reserve/`、`pages/reservations/`、`pages/invitation/` |
+| 5 | `pages/HomePage.tsx`（综合体介绍与活动公告只展示经审批发布的，服务端未发布即为空、不展示；`listProjects`） | `pages/home/` |
+| 9 | `pages/VoucherWalletPage.tsx`（券种允许的可转赠，发起后不冻结：对方确认领取前仍可自用或改转他人；`initiateVoucherTransfer`／`listOutgoingVoucherTransfers`） | `pages/vouchers/` |

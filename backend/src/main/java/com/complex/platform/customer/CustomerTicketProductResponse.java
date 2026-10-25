@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 public record CustomerTicketProductResponse(
         String ticketTypeId,
@@ -24,7 +24,9 @@ public record CustomerTicketProductResponse(
         Integer validityDays,
         String usageScope,
         java.util.List<String> entitlements,
-        String ageLimitText
+        String ageLimitText,
+        // PGM 第 736 行「可以按全局、综合体……开关」：票种所属综合体，客人端购票带 X-Project-Id（与下单同一口径，不唯一为空）。
+        String projectId
 ) {
     // AUD-076 7 参兼容构造（无 bar）→ barId/barName=null（既有测试/控制器 mock 零改动）。
     public CustomerTicketProductResponse(
@@ -38,6 +40,6 @@ public record CustomerTicketProductResponse(
             String ticketTypeId, String ticketName, Long weekdayPriceCent, Long weekendPriceCent,
             Long holidayPriceCent, String currency, String status, String barId, String barName) {
         this(ticketTypeId, ticketName, weekdayPriceCent, weekendPriceCent, holidayPriceCent, currency, status,
-                barId, barName, null, null, false, null, null, java.util.List.of(), null);
+                barId, barName, null, null, false, null, null, java.util.List.of(), null, null);
     }
 }

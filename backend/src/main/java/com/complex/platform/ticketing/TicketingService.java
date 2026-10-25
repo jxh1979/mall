@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 
@@ -883,39 +883,31 @@ public class TicketingService {
                 java.time.Instant.now());
     }
 
+    /** 票种所属综合体（PGM 第 736 行按综合体的终端开关）：与下单定订单综合体同一口径，关联多个或无法确定时为空。 */
+    public String saleProjectIdOf(String ticketTypeId) {
+        return orderService.resolveSaleProjectId(ticketTypeId, false);
+    }
+
     // ROOT-03-R21 注销删人脸绑定（BSM 第 890 行「该人脸在该票用完或到期后删除」，第 863 行「注销后……人脸……一律删除」）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private TicketFacePhotoRepository facePhotos;
 
-    /** ROOT-03-R21 注销对本人未核销票的处置结果。 */
-    public record DeregistrationTickets(int forfeited, int refundableKept) {
-    }
-
     /**
-     * ROOT-03-R21（BSM 第 863 行「未核销的票按本文件「退款」条的退票规则处理」；退款条「门票或权益一经开始核销（含部分核销）即不可退款」
-     * 「未到场、忘记使用或主动放弃均不构成退款理由」）：作废本人持有的各人份上的在途转赠（BSM 第 809 行「接收人确认领取后可以继续……再次转赠」，
-     * 第十三批第 12 条「只作废本人那几份未用权益」——别人已领取的人份及其再转赠不动）；可退与否按整张票判定（与
-     * {@link #listRefundableUnusedHeldTickets} 同一口径）——整张不可退（票种不可退，或已部分核销）或只持有部分人份的票，本人持有的完全未用的权益一律作废
-     * （同到期作废口径，不退款），随即删除不再有可用入场权益的人脸绑定；整张未用且票种可退的票原样保留、计数返回（注销时名下有此类票即先拒，
-     * 注销路径恒为 0；拉黑时保留）。
+     * ROOT-03-R21（BSM 第 863 行「未核销的票按本文件「退款」条的退票规则处理」「注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除」；
+     * 退款条「未到场、忘记使用或主动放弃均不构成退款理由」；2026-10-25 操作员更正「即使注销，门票是不可以退的，除非碰上特殊安全情况」）：
+     * 注销与拉黑共用。本人持有的未核销权益一律作废（不退款；含已开始使用的多次票剩余次数——注销后客人已无法出示动态码；已用完的保持「已使用」、不改作废，ENUM 第 41 行「已使用」「已作废」是两种状态；含只持有部分人份的票，
+     * 只作废本人持有的人份，别人已领取的人份不动），随即删除不再有可用入场权益的人脸绑定；
+     * 作废本人持有的各人份上的在途转赠（BSM 第 809 行「接收人确认领取后可以继续……再次转赠」——别人已领取的人份及其再转赠不动）。返回作废的权益数。
      */
-    public DeregistrationTickets disposeHeldTicketsOnDeregistration(String customerId, java.time.Instant now) {
+    public int disposeHeldTicketsOnDeregistration(String customerId, java.time.Instant now) {
         int forfeited = 0;
-        int refundableKept = 0;
         java.util.Set<String> parents = new java.util.LinkedHashSet<>();
-        java.util.Set<String> refundable = listRefundableUnusedHeldTickets(customerId).stream()
-                .map(CustomerTicketResponse::id).collect(java.util.stream.Collectors.toSet());
         for (IssuedEntitlementRecord e : repository.listHeldEntitlements(customerId)) {
             if (e.parentTicketId() != null) {
                 parents.add(e.parentTicketId());
             }
-            if (!"active".equals(e.status()) || e.usedTimes() > 0) {
-                continue;
-            }
-            if (refundable.contains(e.id())) {
-                refundableKept++;
-            } else {
-                forfeited += repository.forfeitEntitlement(e.id(), now);
+            if ("active".equals(e.status()) && e.usedTimes() < e.totalTimes()) {
+                forfeited += repository.forfeitHeldEntitlement(e.id(), now);
             }
         }
         if (transferService != null) {
@@ -928,36 +920,7 @@ public class TicketingService {
                 facePhotos.deleteIfNoUsableEntry(parentId, now);
             }
         }
-        return new DeregistrationTickets(forfeited, refundableKept);
-    }
-
-    /**
-     * 操作员裁决第十三批第 8 条「先退票才能注销」：每个人份都归本人、票种允许退款且整张完全未用的票（退款以整张票为单位，任一权益已核销即整张不可退，
-     * 同 TicketRefundService 口径）；退款申请中仍列出，审批通过权益置已退后不再列出。返回「我的票」同一安全投影（逐权益一行）。
-     * 第 12 条「按不可退作废本人份（推荐）」：只持有部分人份的票不算「本人可退」、不列出，注销时按不可退作废本人那几份未用权益。
-     */
-    public List<CustomerTicketResponse> listRefundableUnusedHeldTickets(String customerId) {
-        java.util.Map<String, List<IssuedEntitlementRecord>> byTicket = new java.util.LinkedHashMap<>();
-        for (IssuedEntitlementRecord e : repository.listHeldEntitlements(customerId)) {
-            byTicket.computeIfAbsent(e.parentTicketId() == null ? e.id() : e.parentTicketId(), k -> new java.util.ArrayList<>()).add(e);
-        }
-        List<CustomerTicketResponse> out = new java.util.ArrayList<>();
-        for (List<IssuedEntitlementRecord> ticket : byTicket.values()) {
-            IssuedEntitlementRecord first = ticket.get(0);
-            TicketInstanceRecord parent = first.parentTicketId() == null ? null
-                    : repository.findTicketInstanceById(first.parentTicketId()).orElse(null);
-            TicketTypeRecord type = repository.findTicketTypeById(first.ticketTypeId()).orElse(null);
-            boolean unused = ticket.stream().allMatch(e -> "active".equals(e.status()) && e.usedTimes() == 0)
-                    && (parent == null || parent.firstUsedAt() == null);
-            // 第 12 条：与客人自助退票（TicketRefundService.requestCustomerRefund）同一口径，每个人份的持有人都是本人才算本人可退。
-            boolean wholeHeld = parent != null && java.util.stream.IntStream.rangeClosed(1, Math.max(1, parent.numPeople()))
-                    .allMatch(slot -> customerId.equals(repository.findSlotHolder(parent.id(), slot)
-                            .map(TicketSlotHolderRecord::holderCustomerId).orElse(null)));
-            if (wholeHeld && unused && type != null && type.refundable()) {
-                ticket.forEach(e -> out.add(CustomerTicketResponse.of(e, type.ticketName(), parent == null ? null : parent.ticketNo())));
-            }
-        }
-        return out;
+        return forfeited;
     }
 
     /** ROOT-03-R21 注销删除个人信息：清空本人各订单的购票手机号及其盲索引。 */
@@ -1009,28 +972,6 @@ public class TicketingService {
                 TicketingWriteOperation.REJECT_TICKET_REFUND,
                 () -> refundService.rejectRefund(id, request)
         );
-    }
-
-    /**
-     * 操作员裁决第十三批第 11 条「客人端自助申请」：客人对本人可退的未用票申请退票，进入与员工退款同一套审批和原路退回。
-     * 幂等：operationId 绑定客人，同一客人同一幂等键重复提交返回同一申请（键不跨客人复用）。
-     */
-    @Transactional
-    public CustomerTicketRefundResponse requestCustomerTicketRefund(String customerId,
-            com.complex.platform.customer.dto.CustomerTicketRefundRequest request) {
-        return operations.executeWrite(
-                "requestCustomerTicketRefund:" + customerId,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                CustomerTicketRefundResponse.class,
-                TicketingWriteOperation.REQUEST_CUSTOMER_TICKET_REFUND,
-                () -> refundService.customerView(refundService.requestCustomerRefund(customerId, request))
-        );
-    }
-
-    /** 操作员裁决第十三批第 11 条：客人本人退票申请及其状态（新到旧）。 */
-    public List<CustomerTicketRefundResponse> listCustomerTicketRefunds(String customerId) {
-        return refundService.listCustomerRefunds(customerId);
     }
 
     /** TK-05-R2/R3 登记通票安全事件（BSM:804 通票安全例外；须记录原因、当时情形），待夜班值班经理及以上批准。 */

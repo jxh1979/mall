@@ -1,0 +1,38 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view class="actions">
+    <button wx:for="{{entries}}" wx:key="key" id="entry-{{item.key}}" class="entry" type="primary" size="mini" data-url="{{item.url}}" bindtap="open">{{item.title}}</button>
+  </view>
+  <view wx:if="{{projectError}}" class="alert error">综合体信息加载失败：{{projectError}}</view>
+  <view wx:for="{{projects}}" wx:key="projectId" id="project-{{item.projectId}}" class="card project">
+    <view class="title">{{item.projectName}}</view>
+    <view wx:if="{{item.address}}" class="hint">{{item.address}}</view>
+    <text wx:if="{{item.intro}}" class="terms">{{item.intro}}</text>
+    <view wx:if="{{item.announcement}}" class="alert info">
+      <view class="section-title">活动公告</view>
+      <text class="terms">{{item.announcement}}</text>
+    </view>
+    <view wx:if="{{item.venues.length}}">
+      <view class="section-title">营业时间</view>
+      <view wx:for="{{item.venues}}" wx:for-item="venue" wx:key="venueName">{{venue.venueName}}：{{venue.text}}</view>
+    </view>
+    <view wx:if="{{item.amusements.length}}" id="amusement-{{item.projectId}}">
+      <view class="section-title">游乐项目</view>
+      <view wx:for="{{item.amusements}}" wx:for-item="ride" wx:key="id" class="item">
+        <view>{{ride.name}}</view>
+        <view wx:if="{{!ride.sessions.length}}" class="hint">暂无可预定场次</view>
+        <view wx:for="{{ride.sessions}}" wx:for-item="session" wx:key="id" class="hint">{{session.text}}</view>
+      </view>
+    </view>
+  </view>
+  <view id="products" class="card">
+    <view class="section-title">可售票种</view>
+    <view wx:if="{{productError}}" class="alert error">票种加载失败：{{productError}}</view>
+    <view wx:if="{{loading}}" class="hint">加载中……</view>
+    <view wx:elif="{{!products.length}}" class="hint">暂无可售票种</view>
+    <view wx:for="{{products}}" wx:key="id" class="item">
+      <view>{{item.name}} <text class="tag">{{item.statusText}}</text></view>
+      <view class="hint">{{item.priceText}}</view>
+    </view>
+  </view>
+</view>

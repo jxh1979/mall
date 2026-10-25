@@ -1,0 +1,18 @@
+// 文件版本：V0.01
+// minSdk 26：扫码插件（ionbarcode-android）要求，与员工端一致。
+ext {
+    minSdkVersion = 26
+    compileSdkVersion = 36
+    targetSdkVersion = 36
+    androidxActivityVersion = '1.11.0'
+    androidxAppCompatVersion = '1.7.1'
+    androidxCoordinatorLayoutVersion = '1.3.0'
+    androidxCoreVersion = '1.17.0'
+    androidxFragmentVersion = '1.8.9'
+    coreSplashScreenVersion = '1.2.0'
+    androidxWebkitVersion = '1.14.0'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.3.0'
+    androidxEspressoCoreVersion = '3.7.0'
+    cordovaAndroidVersion = '14.0.1'
+}

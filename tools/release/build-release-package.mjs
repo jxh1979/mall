@@ -1,7 +1,7 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 统一发布包构建器（ROOT-06；BSM:1973「最终要提供一个能自动检测运行环境的安装包」、BSM:1974「安装包里附带一份简单的使用教程」）。
-// 产出 <out>/complex-<版本>-<提交>/ 及同名 .tar.gz：安装向导、U 盘首次制钥、keyvault 脚本、服务端与网页产物、按环境的员工 App、
-// 教程、manifest.json 与 SHA256SUMS。环境识别在安装时做（插了授权 U 盘即生产，第十三批操作员裁决第 6 条），出包只决定包支持哪些环境。
+// 产出 <out>/complex-<版本>-<提交>/ 及同名 .tar.gz：安装向导、U 盘首次制钥、keyvault 脚本、服务端与网页产物、按环境的员工 App
+// 与客人安卓 App（ROOT-03，不在服务器上安装，教程写包内位置）、教程、manifest.json 与 SHA256SUMS。环境识别在安装时做（插了授权 U 盘即生产，第十三批操作员裁决第 6 条），出包只决定包支持哪些环境。
 // 用法：node tools/release/build-release-package.mjs [--environments 登记表] [--out 目录] [--artifacts-from 已构建产物目录（仅测试用）]
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -64,24 +64,35 @@ function buildFromSource(registry, outDir) {
   copy(path.join(root, "backend/target", jar), path.join(art, "server/complex-api.jar"));
   copy(path.join(root, "apps/web/dist"), path.join(art, "server/web"));
   const signed = SIGNING_VARS.every((k) => process.env[k]);
+  const guestReleaseNamed = process.env.CUSTOMER_ANDROID_APPLICATION_ID && process.env.CUSTOMER_ANDROID_APP_NAME;
   for (const e of registry) {
     if (Object.keys(REQUIRED).some((k) => !String(e[k] ?? "").trim())) continue;
     if (e.env === "prod" && !signed) continue; // 没有正式签名不出生产员工 App，decideSupportedEnvironments 记原因
     const variant = e.env === "prod" ? "release" : "debug";
-    run("node", ["tools/run-android-gradle.mjs", "--project", "apps/android-terminal/android-app", "--require-android-sdk",
-      `:app:assemble${variant === "release" ? "Release" : "Debug"}`],
-    { COMPLEX_ANDROID_API_BASE_URL: e.api_base_url, COMPLEX_ANDROID_API_ALLOWED_HOSTS: e.allowed_hosts });
+    const task = `:app:assemble${variant === "release" ? "Release" : "Debug"}`;
+    run("node", ["tools/run-android-gradle.mjs", "--project", "apps/android-terminal/android-app", "--require-android-sdk", task],
+      { COMPLEX_ANDROID_API_BASE_URL: e.api_base_url, COMPLEX_ANDROID_API_ALLOWED_HOSTS: e.allowed_hosts });
     copy(path.join(root, `apps/android-terminal/android-app/app/build/outputs/apk/${variant}/app-${variant}.apk`),
       path.join(art, `clients/staff-android/complex-terminal-${e.env}.apk`));
+    // 客人安卓 App：页面资源按本环境的服务地址与对外地址（客人链接主机）打包；生产缺正式包名或中文名不出，教程写尚未发布；
+    // 其余发行包资料由 apps/customer-app/android/app/build.gradle 的发行包检查把关，不齐即构建失败、整包停止。
+    if (e.env === "prod" && !guestReleaseNamed) continue;
+    const guestEnv = { VITE_CUSTOMER_API_BASE_URL: e.api_base_url, VITE_CUSTOMER_LINK_HOST: e.public_host };
+    run("npm", ["run", variant === "release" ? "build" : "build:android-debug", "--workspace", "apps/customer-app"], guestEnv);
+    run("npm", ["exec", "--workspace", "apps/customer-app", "--", "cap", "sync", "android"], guestEnv);
+    run("gradle", ["-p", "apps/customer-app/android", "--console=plain", task], guestEnv);
+    copy(path.join(root, `apps/customer-app/android/app/build/outputs/apk/${variant}/app-${variant}.apk`),
+      path.join(art, `clients/guest-android/complex-customer-${e.env}.apk`));
   }
   return art;
 }
 
-function guideEntries(registry, supported) {
+function guideEntries(registry, supported, guestApks) {
   const rows = registry.filter((e) => supported.includes(e.env)).map((e) => {
     const entryOf = (v) => (v ? html(v) : "尚未发布");
+    const guestAndroid = guestApks[e.env] ? `安装包内 <code>clients/guest-android/${html(guestApks[e.env])}</code>（未上架应用商店）` : "尚未发布";
     return `<tr><td>${LABEL[e.env]}</td><td><code>https://${html(e.public_host)}/</code></td>`
-      + `<td><code>https://${html(e.public_host)}/complex-terminal.apk</code></td><td>尚未发布</td>`
+      + `<td><code>https://${html(e.public_host)}/complex-terminal.apk</code></td><td>${guestAndroid}</td>`
       + `<td>${entryOf(e.guest_entries?.ios)}</td><td>${entryOf(e.guest_entries?.wechat)}</td></tr>`;
   });
   return `<table><tr><th>环境</th><th>后台网址</th><th>员工手机 App 下载</th><th>客人安卓 App</th><th>客人 iPhone App</th><th>微信小程序</th></tr>${rows.join("")}</table>`;
@@ -125,8 +136,12 @@ function main() {
   for (const f of ["nginx-complex.conf.tmpl", "complex-api.service.tmpl"]) copy(path.join(root, "ops/release", f), path.join(pkg, "config", f));
   copy(path.join(art, "server/complex-api.jar"), path.join(pkg, "server/complex-api.jar"));
   copy(path.join(art, "server/web"), path.join(pkg, "server/web"));
+  const guestApks = Object.fromEntries(supported
+    .map((env) => [env, `complex-customer-${env}.apk`])
+    .filter(([, f]) => fs.existsSync(path.join(art, "clients/guest-android", f))));
   for (const env of supported) {
     copy(path.join(art, "clients/staff-android", staffApks[env]), path.join(pkg, "clients/staff-android", staffApks[env]));
+    if (guestApks[env]) copy(path.join(art, "clients/guest-android", guestApks[env]), path.join(pkg, "clients/guest-android", guestApks[env]));
   }
 
   // 安装器读的配置：只含白名单字段（对外地址、证书路径），不带登记表其他键。
@@ -145,7 +160,7 @@ function main() {
 
   const guide = fs.readFileSync(path.join(root, "ops/release/guide/使用教程.html"), "utf8")
     .replaceAll("@版本@", html(`${version}-${commit}`))
-    .replaceAll("@各端入口@", guideEntries(registry, supported));
+    .replaceAll("@各端入口@", guideEntries(registry, supported, guestApks));
   fs.mkdirSync(path.join(pkg, "教程"), { recursive: true });
   fs.writeFileSync(path.join(pkg, "教程/使用教程.html"), guide);
 
@@ -170,7 +185,7 @@ function main() {
     migrations,
     clients: {
       staff_android: perEnv((e) => staffApks[e.env]),
-      guest_android: perEnv(() => null), // 客人安卓 App 工程尚未产出（ROOT-03），产出后按员工 App 同法构建
+      guest_android: perEnv((e) => guestApks[e.env]),
       guest_ios: perEnv((e) => e.guest_entries?.ios),
       guest_wechat: perEnv((e) => e.guest_entries?.wechat),
     },

@@ -1,0 +1,54 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>查看我的订台需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">酒吧功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view wx:if="{{error}}" class="alert error">我的订台加载失败：{{error}}</view>
+    <view wx:if="{{loading && !rows.length}}" class="hint">加载中……</view>
+    <view wx:elif="{{!rows.length && !error}}" class="hint">暂无订台</view>
+    <view wx:for="{{rows}}" wx:key="reservationId" id="reservation-{{item.reservationId}}" class="card">
+      <view>{{item.title}} <text class="tag">{{item.statusText}}</text></view>
+      <view class="hint">{{item.timeLine}}</view>
+      <view>{{item.depositLine}}</view>
+      <block wx:if="{{item.payable}}">
+        <button id="pay-{{item.reservationId}}" size="mini" type="primary" disabled="{{busy}}" data-id="{{item.reservationId}}" bindtap="payDeposit">支付定金</button>
+        <block wx:if="{{payId === item.reservationId}}">
+          <view wx:if="{{payUnavailable}}" id="pay-unavailable" class="alert warn">{{unavailableText}}</view>
+          <view wx:if="{{awaitingIntentId}}" class="alert info">
+            支付完成后点下方按钮确认结果
+            <button id="pay-recheck" size="mini" disabled="{{busy}}" bindtap="recheck">我已完成支付</button>
+          </view>
+          <view wx:if="{{payError}}" id="pay-error" class="alert error">{{payError}}</view>
+        </block>
+      </block>
+      <view wx:if="{{item.invitationPending}}" class="hint">邀请函待酒吧确认订台后签发</view>
+      <block wx:if="{{item.invitationStatus === 'active'}}">
+        <button wx:if="{{openId !== item.reservationId}}" id="invitation-open-{{item.reservationId}}" size="mini" data-id="{{item.reservationId}}" bindtap="openInvitation">查看邀请函</button>
+        <block wx:else>
+          <view wx:if="{{invitationError}}" class="alert error">{{invitationError}}</view>
+          <view wx:elif="{{!invitation}}" class="hint">加载中……</view>
+          <view wx:else id="invitation-detail">
+            <view class="section-title">{{invitation.title}}</view>
+            <view wx:if="{{notice}}" class="alert info">{{notice}}</view>
+            <view class="hint">{{invitation.countLine}}</view>
+            <block wx:if="{{invitation.qr}}">
+              <image id="invitation-qr" class="qr" src="{{invitation.qr}}" mode="aspectFit" />
+              <view class="hint">邀请函二维码只用于转发与接受，不能凭它入场；朋友接受后凭本人的动态入场码入场。</view>
+            </block>
+            <view wx:else class="hint">客人链接域名未配置，暂不能生成邀请函二维码，可直接分享给微信好友。</view>
+            <button id="invitation-share" type="primary" size="mini" open-type="share">转发给朋友</button>
+            <view class="section-title">邀请名单</view>
+            <view wx:for="{{invitation.members}}" wx:for-item="m" wx:key="id" id="member-{{m.id}}" class="item">
+              {{m.name}} <text class="tag {{m.status === 'entered' ? 'green' : ''}}">{{m.statusText}}</text>
+              <button wx:if="{{m.removable}}" id="remove-{{m.id}}" size="mini" type="warn" disabled="{{busy}}" data-id="{{m.id}}" bindtap="removeMember">移出</button>
+            </view>
+            <dynamic-code wx:if="{{invitation.holderConfirmed}}" id="entry-code" kind="entry" target-id="{{openId}}" title="我的动态入场码" />
+          </view>
+        </block>
+      </block>
+    </view>
+  </block>
+</view>

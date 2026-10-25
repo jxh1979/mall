@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -12,6 +12,7 @@ import com.complex.platform.customer.CustomerService;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.evidence.EvidenceFileStorage;
+import com.complex.platform.gate.TerminalSwitchGuard;
 import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -60,14 +61,16 @@ public class CustomerComplaintService {
     private final EvidenceFileStorage storage;
     private final NamedParameterJdbcTemplate jdbc;
     private final AuditedOperationExecutor operations;
+    private final TerminalSwitchGuard terminalSwitch;
 
     public CustomerComplaintService(FacilityWorkOrderService workOrders, CustomerService customers, EvidenceFileStorage storage,
-            NamedParameterJdbcTemplate jdbc, AuditedOperationExecutor operations) {
+            NamedParameterJdbcTemplate jdbc, AuditedOperationExecutor operations, TerminalSwitchGuard terminalSwitch) {
         this.workOrders = workOrders;
         this.customers = customers;
         this.storage = storage;
         this.jdbc = jdbc;
         this.operations = operations;
+        this.terminalSwitch = terminalSwitch;
     }
 
     /** clients-R8 提交投诉：文字＋最多 9 个照片/视频/语音；工单类型投诉、来源 customer、提单方＝本人。幂等键必填。 */
@@ -75,6 +78,9 @@ public class CustomerComplaintService {
     public ComplaintView submit(String customerToken, String idempotencyKey, String projectId, String title, String description,
             List<MultipartFile> files) {
         CustomerRecord customer = customers.requireCustomerRecord(customerToken);
+        // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以客人所选综合体（即工单所属综合体）在服务端判
+        // （不取 X-Project-Id），先于幂等。
+        terminalSwitch.checkTerminalEnabledAtProject(trimToNull(projectId));
         List<MultipartFile> actualFiles = files == null ? List.of() : files.stream().filter(f -> f != null && !f.isEmpty()).toList();
         SubmitFingerprint fingerprint = new SubmitFingerprint(projectId, title, description,
                 actualFiles.stream().map(f -> f.getOriginalFilename() + ":" + f.getSize()).toList());
@@ -122,6 +128,12 @@ public class CustomerComplaintService {
     @Transactional
     public ComplaintView rate(String customerToken, String workOrderId, String idempotencyKey, Integer score) {
         CustomerRecord customer = customers.requireCustomerRecord(customerToken);
+        // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人这张投诉工单所属综合体在服务端判
+        // （不取 X-Project-Id），先于幂等；不是本人的工单这里不判，由评分时按本人校验拒绝。
+        terminalSwitch.checkTerminalEnabledAtProject(jdbc.query(
+                "SELECT project_id FROM facility_work_orders WHERE id = :id AND source = 'customer' AND reporter_id = :customer_id",
+                new MapSqlParameterSource("id", trimToNull(workOrderId)).addValue("customer_id", customer.id()),
+                (rs, n) -> rs.getString(1)).stream().findFirst().orElse(null));
         return operations.executeWrite("rateCustomerComplaint:" + customer.id() + ":" + workOrderId, idempotencyKey,
                 new RateRequest(idempotencyKey, score), ComplaintView.class,
                 AuditedOperation.of("customer.complaint_rated", "customer.complaint_rate_failed", "not_applicable", BUSINESS_TYPE),

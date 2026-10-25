@@ -1,0 +1,73 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>查看余额需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">储值功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view wx:if="{{error}}" class="alert error">钱包加载失败：{{error}}</view>
+
+    <view wx:if="{{notices.length}}" id="exit-notices" class="card">
+      <view class="section-title">商户储值卡退出公告</view>
+      <view wx:for="{{notices}}" wx:key="id" class="item">
+        <view>{{item.merchantName || item.merchantId}} <text wx:if="{{item.holdsCard}}" class="tag orange">你持有该商户的卡</text></view>
+        <view wx:for="{{item.lines}}" wx:for-item="line" wx:key="*this" class="hint">{{line}}</view>
+      </view>
+    </view>
+
+    <view id="cards" class="card">
+      <view class="section-title">我的储值卡</view>
+      <view wx:if="{{loading}}" class="hint">加载中……</view>
+      <view wx:elif="{{!cards.length && !error}}" class="hint">暂无储值卡</view>
+      <view wx:for="{{cards}}" wx:key="id" id="card-{{item.id}}" class="item">
+        <view>{{item.label}} <text wx:if="{{item.fundText}}" class="tag">{{item.fundText}}</text><text class="tag {{item.status === 'active' ? 'green' : ''}}">{{item.statusText}}</text></view>
+        <view>{{item.balanceText}}</view>
+        <view class="hint">{{item.splitText}}</view>
+        <button id="pick-{{item.id}}" size="mini" type="{{item.id === selectedId ? 'primary' : 'default'}}" data-id="{{item.id}}" bindtap="pick">{{item.id === selectedId ? '已选' : '选这张'}}</button>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">充值</view>
+      <view wx:if="{{topupDone}}" id="topup-done" class="alert success">充值已到账</view>
+      <view id="topup-rules">
+        <block wx:if="{{rules}}">
+          <view>充值前请阅读本卡规则</view>
+          <view>扣款顺序：{{rules.consumeOrderText}}</view>
+          <view>赠送金：{{rules.bonusRuleText}}</view>
+          <view>退卡：{{rules.refundRuleText}}</view>
+        </block>
+        <view wx:elif="{{rulesError}}" class="alert warn">充值规则暂时读不到，读到规则后才能充值</view>
+        <view wx:elif="{{selectedId}}" class="hint">正在读取本卡充值规则……</view>
+        <view wx:else class="hint">请先选一张储值卡</view>
+      </view>
+      <view class="field row">充值金额（元）<input id="topup-amount" type="digit" value="{{amountText}}" bindinput="onAmount" /></view>
+      <view class="hint">小程序内充值使用微信支付。</view>
+      <button id="topup-pay" type="primary" loading="{{busy}}" disabled="{{busy || !rules}}" bindtap="topup">充值</button>
+      <view wx:if="{{unavailable}}" id="topup-unavailable" class="alert warn">{{unavailableText}}</view>
+      <view wx:if="{{awaitingIntentId}}" class="alert info">
+        支付完成后点下方按钮确认到账
+        <button id="topup-recheck" size="mini" disabled="{{busy}}" bindtap="recheck">我已完成支付</button>
+      </view>
+      <view wx:if="{{payError}}" id="topup-error" class="alert error">{{payError}}</view>
+      <view class="hint">在对应订单中可选择储值余额支付；现场消费报手机号并验证短信后按账单扣款。商户预收卡退卡请到店办理。</view>
+    </view>
+
+    <view id="transactions" class="card">
+      <view class="section-title">交易记录</view>
+      <view wx:if="{{historyError}}" class="alert error">{{historyError}}</view>
+      <view wx:elif="{{!transactions.length}}" class="hint">暂无交易记录</view>
+      <view wx:for="{{transactions}}" wx:key="id" class="item">
+        <view>{{item.title}}</view>
+        <view class="hint">{{item.detail}}</view>
+        <view class="hint">{{item.after}}</view>
+      </view>
+      <view class="actions">
+        <button id="history-prev" size="mini" disabled="{{historyPage === 1}}" bindtap="prevPage">上一页</button>
+        <text>第 {{historyPage}} 页</text>
+        <button id="history-next" size="mini" disabled="{{!hasNext}}" bindtap="nextPage">下一页</button>
+      </view>
+    </view>
+  </block>
+</view>

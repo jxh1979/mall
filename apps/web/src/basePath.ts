@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 // 子路径部署统一路径模型（用户裁决"App 真正支持子路径"）。
 // 部署形态：门户 portal.py 把 App 挂在 /complex/ 下，并用 rewrite_html 给
 // href/src 资源自动补 /complex 前缀——故 vite base 保持 "/"（根路径构建），
@@ -28,11 +29,12 @@ export function withBase(path: string): string {
 
 /**
  * 入口壳选择（纯逻辑，便于单测）。入参为已 stripBase 剥掉部署前缀的 App 内路径。
- * "/admin*" → 后台；"/dealer*" → 独立经销商门户；根路径与客人入口 → 客人端；其余兜底客人端。
+ * "/admin*" → 后台；"/dealer*" → 独立经销商门户；根路径与其余路径 → 客人引导提示页
+ * （PGM「Web 前端（业务人员，客人无网页端）」：客人功能只在官方 App 与小程序）。
  */
-export function selectShell(path: string): "admin" | "customer" | "dealer" {
+export function selectShell(path: string): "admin" | "dealer" | "notice" {
   if (path.startsWith("/admin")) return "admin";
-  // CG-11d：独立经销商 Web 门户（受控第十一端 dealer_portal）单独成壳，与后台、客人端隔离。
+  // CG-11d：独立经销商 Web 门户（受控第十一端 dealer_portal）单独成壳，与后台隔离。
   if (path.startsWith("/dealer")) return "dealer";
-  return "customer";
+  return "notice";
 }

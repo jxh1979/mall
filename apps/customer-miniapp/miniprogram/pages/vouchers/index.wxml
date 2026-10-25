@@ -1,0 +1,93 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>查看与领取券需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">券包暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view wx:if="{{error}}" class="alert error">券包加载失败：{{error}}</view>
+    <view class="hint">这里汇总你名下的所有券（积分兑换券、活动赠券、通票合作券）。可用的券可「使用」出示动态券码给店员或核销点扫码，券种允许的可「转赠」给他人。</view>
+
+    <view class="card">
+      <view class="section-title">凭领取码 / 二维码领取</view>
+      <view class="field row">
+        <input id="claim-code" value="{{claimCode}}" placeholder="粘贴对方给你的领取码" bindinput="onClaimCode" />
+        <button id="claim-lookup" size="mini" disabled="{{busy}}" bindtap="previewInput">查看</button>
+      </view>
+      <button id="claim-scan" size="mini" disabled="{{busy}}" bindtap="scanClaim">扫领取二维码</button>
+      <view wx:if="{{scanNotice}}" id="scan-notice" class="alert warn">{{scanNotice}}</view>
+      <view wx:if="{{preview}}" id="claim-preview" class="card">
+        <view>{{preview.voucherName || '券'}}</view>
+        <button id="claim-confirm" type="primary" disabled="{{busy}}" bindtap="claimPreview">确认领取</button>
+      </view>
+    </view>
+
+    <view wx:if="{{incoming.length}}" id="incoming" class="card">
+      <view class="section-title">待你领取</view>
+      <view wx:for="{{incoming}}" wx:key="id" class="item">
+        {{item.voucherName || '券'}} <text class="hint">有人把券转赠给你</text>
+        <button id="incoming-claim-{{item.id}}" size="mini" type="primary" disabled="{{busy}}" data-id="{{item.id}}" bindtap="claimIncoming">领取</button>
+      </view>
+    </view>
+
+    <view wx:if="{{outgoing.length}}" id="outgoing" class="card">
+      <view class="section-title">我发起的转赠</view>
+      <view wx:for="{{outgoing}}" wx:key="id" class="item">
+        {{item.voucherName || '券'}} <view class="hint">{{item.target}}</view>
+        <button id="revoke-{{item.id}}" size="mini" type="warn" disabled="{{busy}}" data-id="{{item.id}}" bindtap="revoke">撤回</button>
+      </view>
+    </view>
+
+    <view wx:if="{{loading}}" class="hint">加载中……</view>
+    <view wx:for="{{groups}}" wx:for-item="group" wx:key="key" id="group-{{group.key}}" class="card">
+      <view class="section-title">{{group.title}}</view>
+      <view wx:if="{{!group.items.length}}" class="hint">暂无</view>
+      <view wx:for="{{group.items}}" wx:for-item="v" wx:key="id" id="voucher-{{v.id}}" class="item">
+        <view>{{v.name}} <text class="tag {{group.key === 'available' ? 'green' : ''}}">{{v.statusText}}</text><text wx:if="{{v.remainText}}" class="tag orange">{{v.remainText}}</text></view>
+        <view wx:for="{{v.lines}}" wx:for-item="line" wx:key="*this" class="hint">{{line}}</view>
+        <view wx:if="{{v.usable}}" class="actions">
+          <button id="use-{{v.id}}" size="mini" type="primary" data-id="{{v.id}}" bindtap="openUse">使用</button>
+          <button wx:if="{{v.transferable}}" id="transfer-{{v.id}}" size="mini" data-id="{{v.id}}" bindtap="openTransfer">转赠</button>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view wx:if="{{useVoucher}}" class="mask">
+    <view id="use-sheet" class="sheet">
+      <dynamic-code id="voucher-code" kind="voucher" target-id="{{useVoucher.id}}" title="{{useVoucher.name}}" />
+      <button id="use-close" bindtap="closeUse">关闭</button>
+    </view>
+  </view>
+
+  <view wx:if="{{transferVoucher}}" class="mask">
+    <view id="transfer-sheet" class="sheet">
+      <view class="section-title">转赠：{{transferVoucher.name}}</view>
+      <view wx:if="{{transferResult}}" id="transfer-result">
+        <view class="alert success">转赠已发起，等待对方领取。对方确认领取前，你仍可自己使用这张券或改转他人，以先成功的为准，其余自动失效；也可在「我发起的转赠」里撤回。</view>
+        <block wx:if="{{transferResult.channel === 'link' && transferResult.claimCode}}">
+          <view>领取码：{{transferResult.claimCode}}（对方打开你分享的领取入口，或在券包「凭领取码领取」里粘贴后点「确认领取」）</view>
+          <image wx:if="{{transferQr}}" id="transfer-qr" class="qr" src="{{transferQr}}" mode="aspectFit" />
+          <view wx:else class="hint">客人链接域名未配置，暂不能生成领取二维码，可分享给微信好友或把领取码告诉对方。</view>
+          <button id="transfer-share" type="primary" open-type="share">分享给微信好友</button>
+        </block>
+        <view wx:else>已通知 {{transferResult.receiverPhoneMasked || '对方'}}，对方用该手机号登录后可在券包领取。</view>
+        <button id="transfer-close" bindtap="closeTransfer">完成</button>
+      </view>
+      <block wx:else>
+        <view class="actions">
+          <button id="channel-phone" size="mini" type="{{channel === 'phone' ? 'primary' : 'default'}}" bindtap="pickPhone">指定手机号</button>
+          <button id="channel-link" size="mini" type="{{channel === 'link' ? 'primary' : 'default'}}" bindtap="pickLink">微信分享 / 二维码</button>
+        </view>
+        <view wx:if="{{channel === 'phone'}}" class="field"><input id="receiver-phone" type="number" value="{{receiverPhone}}" placeholder="接收人手机号" bindinput="onReceiverPhone" /></view>
+        <view wx:else class="hint">将生成一次性领取码，可分享给任意一位会员，对方打开后确认领取。</view>
+        <view class="hint">对方确认领取前，你仍可自己使用这张券或改转他人，以先成功的为准，其余自动失效。</view>
+        <view class="actions">
+          <button id="transfer-submit" type="primary" size="mini" loading="{{busy}}" disabled="{{busy}}" bindtap="submitTransfer">确认转赠</button>
+          <button id="transfer-cancel" size="mini" disabled="{{busy}}" bindtap="closeTransfer">取消</button>
+        </view>
+      </block>
+    </view>
+  </view>
+</view>

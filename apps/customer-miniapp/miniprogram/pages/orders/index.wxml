@@ -1,0 +1,80 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>查看订单与门票需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">票务功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view class="actions">
+      <button wx:if="{{showTransfer}}" id="open-transfer" size="mini" data-url="/pages/transfer/index" bindtap="openPage">门票转赠</button>
+      <button id="open-buy" size="mini" type="primary" data-url="/pages/buy/index" bindtap="openPage">购票</button>
+    </view>
+
+    <view id="orders" class="card">
+      <view class="section-title">我的订单</view>
+      <view wx:if="{{error}}" id="orders-error" class="alert error">订单加载失败：{{error}}</view>
+      <view wx:if="{{channels.length}}" id="channels" class="actions">
+        <text class="hint">第三方渠道购票：</text>
+        <button wx:for="{{channels}}" wx:key="channel" size="mini" id="channel-{{item.channel}}" disabled="{{!item.enabled}}"
+          type="{{channelFilter === item.channel ? 'primary' : 'default'}}" data-channel="{{item.channel}}" bindtap="pickChannel">{{item.enabled ? item.name : item.name + '（渠道未接入）'}}</button>
+      </view>
+      <view wx:if="{{loading}}" class="hint">加载中……</view>
+      <view wx:elif="{{!shownOrders.length}}" class="hint">暂无订单</view>
+      <view wx:for="{{shownOrders}}" wx:key="id" id="order-{{item.id}}" class="item">
+        <view>订单 {{item.orderNo}} <text class="tag">{{item.channelText}}</text><text class="tag">{{item.payText}}</text><text class="tag">{{item.issueText}}</text></view>
+        <view class="hint">{{item.summary}}</view>
+        <order-payment wx:if="{{item.payable}}" id="payment-{{item.id}}" order="{{item}}" bind:change="onOrderChange" />
+      </view>
+    </view>
+
+    <view id="tickets" class="card">
+      <view class="section-title">我的票</view>
+      <view wx:if="{{ticketsError}}" class="alert error">我的票加载失败：{{ticketsError}}</view>
+      <view wx:elif="{{!groups.length}}" class="hint">暂无持有的票</view>
+      <view wx:for="{{groups}}" wx:for-item="group" wx:key="key" id="group-{{group.key}}" class="item">
+        <view>
+          {{group.name}}
+          <text class="tag {{group.active ? 'green' : ''}}">{{group.statusText}}</text>
+          <text wx:if="{{group.numPeople > 1}}" class="tag">{{group.numPeople}} 人票</text>
+          <text wx:if="{{group.transferring}}" class="tag orange">转赠待领取</text>
+          <text wx:if="{{group.ticketNo}}" class="hint">票号 {{group.ticketNo}}</text>
+        </view>
+        <view class="hint">{{group.remainText}}</view>
+        <view class="actions">
+          <block wx:for="{{group.members}}" wx:for-item="m" wx:key="id">
+            <button id="qr-{{m.id}}" size="mini" type="primary" disabled="{{!m.active}}" data-id="{{m.id}}" bindtap="openQr">{{m.label}}</button>
+            <button id="usages-{{m.id}}" size="mini" data-id="{{m.id}}" data-name="{{m.name}}" bindtap="openUsages">使用记录</button>
+          </block>
+        </view>
+        <view wx:for="{{group.compensations}}" wx:for-item="c" wx:key="key" class="actions">
+          <text class="tag orange">{{c.label}}</text>
+          <block wx:for="{{c.members}}" wx:for-item="m" wx:key="id">
+            <button id="qr-{{m.id}}" size="mini" type="primary" disabled="{{!m.active}}" data-id="{{m.id}}" bindtap="openQr">{{m.label}}</button>
+            <button id="usages-{{m.id}}" size="mini" data-id="{{m.id}}" data-name="{{m.name}}" bindtap="openUsages">使用记录</button>
+          </block>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view wx:if="{{qrTicketId}}" class="mask">
+    <view id="qr-sheet" class="sheet">
+      <dynamic-code id="code" kind="ticket" target-id="{{qrTicketId}}" title="验票二维码" />
+      <button id="qr-close" bindtap="closeQr">关闭</button>
+    </view>
+  </view>
+
+  <view wx:if="{{usages}}" class="mask">
+    <view id="usages" class="sheet">
+      <view class="section-title">使用记录 · {{usages.name}}</view>
+      <view wx:if="{{usages.error}}" class="alert error">{{usages.error}}</view>
+      <view wx:if="{{!usages.rows}}" class="hint">加载中……</view>
+      <view wx:elif="{{!usages.rows.length && !usages.error}}" class="hint">暂无使用记录</view>
+      <view wx:for="{{usages.rows}}" wx:key="time" class="item">
+        <text class="tag {{item.success ? 'green' : ''}}">{{item.label}}</text> {{item.time}} <text class="hint">{{item.merchant}}</text>
+      </view>
+      <button id="usages-close" bindtap="closeUsages">关闭</button>
+    </view>
+  </view>
+</view>

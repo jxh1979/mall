@@ -1,18 +1,24 @@
+// 文件版本：V0.01
 import { expect, test, type Page } from "@playwright/test";
 import { installCustomerMockApi } from "./support/customer-mock-api";
 
 // 客人端两端一致性验收：购票 / 订台 / 积分 / 钱包真实流程跑通 UI -> mock 后端 -> UI 回显。
-// 与 web-ui-real-backend.spec.ts（真实后端，默认 skip）互补：本 spec 用 mock 后端保证可在
-// 无网/无后端环境下持续验收客旅闭环；真实后端 E2E 基建（REAL_BACKEND_E2E）仍是上层手段。
+// 跑在客人专用构建 apps/customer-app 上（PGM「Web 前端（业务人员，客人无网页端）」：apps/web 已不含客人壳）。
+// 与 web-ui-real-backend.spec.ts（真实后端，默认 skip）互补：本 spec 用 mock 后端保证可在无网/无后端环境下持续验收客旅闭环。
 
-async function customerLogin(page: Page, path = "/customer") {
-  await page.goto(path);
+async function customerLogin(page: Page) {
+  await page.goto("/");
   await expect(page.getByTestId("customer-login-view")).toBeVisible();
   await page.getByTestId("login-phone").fill("13800138888");
   await page.getByTestId("login-sms").fill("123456");
   await page.getByTestId("login-submit").click();
   await expect(page.getByTestId("customer-app")).toBeVisible();
-  await expect(page.getByTestId("customer-phone")).toContainText("138****8888");
+}
+
+// 移动布局：底部标签进入，再点二级页入口。
+async function openPage(page: Page, tab: "home" | "tickets" | "bar" | "me", entry: string) {
+  await page.getByTestId(`customer-tab-${tab}`).click();
+  await page.getByTestId(`customer-entry-${entry}`).click();
 }
 
 async function selectAntdOption(page: Page, triggerTestId: string, optionText: string | RegExp) {
@@ -28,16 +34,19 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await installCustomerMockApi(page);
     await customerLogin(page);
 
-    await expect(page.getByText("首页 / 票种").first()).toBeVisible();
+    await expect(page.locator(".customer-page-title")).toHaveText("首页");
+    await page.getByTestId("customer-tab-me").click();
+    await expect(page.getByTestId("customer-phone")).toContainText("138****8888");
     await page.getByTestId("customer-logout").click();
     await expect(page.getByTestId("customer-login-view")).toBeVisible();
   });
 
-  test("CUST-02 buy ticket creates order and aggregate payment intent", async ({ page }) => {
+  // BSM「通过官方 App/小程序购票、预定、确认订单、查看支付结果」；OpenAPI：支付渠道未配置时客户端显示「支付暂不可用，未扣款」。
+  test("CUST-02 buy ticket creates order and shows payment unavailable when no gateway is configured", async ({ page }) => {
     await installCustomerMockApi(page);
     await customerLogin(page);
 
-    await page.getByRole("menuitem", { name: "购票" }).click();
+    await openPage(page, "home", "buy");
     await expect(page.getByTestId("buy-ticket-page")).toBeVisible();
 
     await selectAntdOption(page, "buy-ticket-type", "周末通票");
@@ -45,39 +54,41 @@ test.describe("customer journey acceptance (mock backend)", () => {
 
     const result = page.getByTestId("buy-ticket-result");
     await expect(result).toBeVisible();
-    await expect(result).toContainText("订单已创建");
     await expect(result).toContainText("TO-CUST-1");
-    await expect(result).toContainText("已发起聚合支付");
+    await expect(result.getByTestId("order-payment-remaining")).toContainText("还需支付 ¥99.00");
+    await result.getByTestId("order-pay-online").click();
+    await expect(result.getByTestId("order-payment-unavailable")).toContainText("支付暂不可用，未扣款");
+    await expect(result).not.toContainText("支付成功");
   });
 
-  test("CUST-03 bar reservation creates reservation and deposit intent", async ({ page }) => {
+  // BSM「订台页面须写明该卡座适用的最低消费金额与服务费比例」「客人自助订台必须支付定金……每一笔订台都必须填写最晚到店时间」：
+  // 下单后付定金走本人订台定金在线付款；支付渠道未配置时显示「支付暂不可用，未扣款」，不显示定金已付。
+  test("CUST-03 bar reservation shows table rules then deposit payment is unavailable", async ({ page }) => {
     await installCustomerMockApi(page);
     await customerLogin(page);
 
-    await page.getByRole("menuitem", { name: "订台" }).click();
+    await openPage(page, "bar", "reserve");
     await expect(page.getByTestId("bar-reservation-page")).toBeVisible();
+    await expect(page.getByTestId("reservation-option-table-1")).toContainText("最低消费 ¥1000.00");
+    await expect(page.getByTestId("reservation-option-table-1")).toContainText("服务费 10%");
 
-    await selectAntdOption(page, "reservation-table", /A01 卡座/);
-    // 到店时段：在 DatePicker(showTime) 输入框直接键入日期时间并回车确认，规避面板动画不稳。
-    const timeInput = page.getByTestId("bar-reservation-page").locator(".ant-picker input");
-    await timeInput.click();
-    await timeInput.fill("2026-06-20 19:30:00");
-    await timeInput.press("Enter");
-
+    await page.getByTestId("reservation-pick-table-1").click();
+    await page.getByLabel("到店时间", { exact: true }).fill("2026-06-20T19:30");
+    await page.getByLabel("最晚到店时间", { exact: true }).fill("2026-06-20T20:30");
     await page.getByTestId("reservation-submit").click();
 
     const result = page.getByTestId("reservation-result");
-    await expect(result).toBeVisible();
-    await expect(result).toContainText("订台已创建");
-    await expect(result).toContainText("定金");
-    await expect(result).toContainText("已发起定金支付意图");
+    await expect(result).toContainText("待支付定金 ¥200.00");
+    await result.getByTestId("deposit-pay").click();
+    await expect(result.getByTestId("deposit-unavailable")).toContainText("支付暂不可用，未扣款");
+    await expect(result).not.toContainText("定金已支付");
   });
 
   test("CUST-04 points page shows balance/level and check-in accrues streak", async ({ page }) => {
     await installCustomerMockApi(page);
     await customerLogin(page);
 
-    await page.getByRole("menuitem", { name: "积分 / 签到" }).click();
+    await openPage(page, "me", "points");
     await expect(page.getByTestId("points-page")).toBeVisible();
     // antd Statistic 千分位渲染为 1,280
     await expect(page.getByText(/1[,，]?280/)).toBeVisible();
@@ -93,7 +104,7 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await installCustomerMockApi(page);
     await customerLogin(page);
 
-    await page.getByRole("menuitem", { name: "储值 / 会员" }).click();
+    await openPage(page, "me", "wallet");
     await expect(page.getByTestId("wallet-page")).toBeVisible();
     // ⑧ 储值钱包（AUD-061）多卡模型：分卡余额（通用卡 + 商户卡）。
     const firstCard = page.getByTestId("wallet-card-item").first();
@@ -106,24 +117,22 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await customerLogin(page);
 
     // 先购票，再到「我的订单」核对两端一致（订单进入列表）。
-    await page.getByRole("menuitem", { name: "购票" }).click();
+    await openPage(page, "home", "buy");
     await selectAntdOption(page, "buy-ticket-type", "周末通票");
     await page.getByTestId("buy-ticket-submit").click();
     await expect(page.getByTestId("buy-ticket-result")).toContainText("TO-CUST-1");
 
-    await page.getByRole("menuitem", { name: "我的订单 / 票 / 二维码" }).click();
+    await openPage(page, "tickets", "orders");
     await expect(page.getByTestId("my-orders-page")).toBeVisible();
     await expect(page.getByTestId("order-item").first()).toContainText("TO-CUST-1");
 
-    // 1.8：订单直接展开票实例，点票出码（无需手输票 ID）。
-    await page.getByTestId("order-tickets-toggle").first().click();
+    // 我的票＝本人当前持有的票，点票出码（无需手输票 ID）。
     await expect(page.getByTestId("ticket-item").first()).toContainText("周末通票");
     await expect(page.getByTestId("ticket-item").first()).toContainText("剩余 1/1 次");
     await page.getByTestId("ticket-qr-open").first().click();
     await expect(page.getByTestId("ticket-qr-view")).toBeVisible();
     await expect(page.getByTestId("qr-code").locator("svg")).toBeVisible();
     // 1.7 口径：二维码可见但凭证明文不落 DOM。
-    await expect(page.getByTestId("ticket-qr-view")).toContainText("ent-1");
     await expect(page.locator("body")).not.toContainText("cred-customer-1");
   });
 
@@ -131,7 +140,7 @@ test.describe("customer journey acceptance (mock backend)", () => {
     await installCustomerMockApi(page, { orderFailure: true });
     await customerLogin(page);
 
-    await page.getByRole("menuitem", { name: "购票" }).click();
+    await openPage(page, "home", "buy");
     await selectAntdOption(page, "buy-ticket-type", "周末通票");
     await page.getByTestId("buy-ticket-submit").click();
 

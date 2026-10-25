@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -164,18 +164,118 @@ class ParkingPaymentJdbcIntegrationTests {
         assertThat(((Number) diff.get("difference_amount_cent")).longValue()).isEqualTo(100L);
     }
 
+    /**
+     * PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」、第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：
+     * 关掉本项目的小程序后，停车缴费按停车记录所属项目在服务端判开关——不带 X-Project-Id 或把头写成另一个（开着的）项目都缴不了、不建缴费单；
+     * 另一项目照常缴费。判开关先于幂等：开关开着时成功过的同一幂等键，关掉后重放也 403，拿不到第一次的缓存结果。
+     */
+    @Test
+    void closedProjectParkingPaymentRejectedWithoutOrWithForgedProjectHeader() throws Exception {
+        OtherLot other = otherLot();
+        String replayKey = "sw_replay_" + f.suffix;
+        pay(session, replayKey, null).andExpect(status().isOk());
+        closeCustomerTerminal(f.project);
+        pay(session, replayKey, null).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+
+        for (String header : new String[] {null, other.project()}) {
+            pay(session, "sw_" + UUID.randomUUID(), header).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        }
+        // 只有开关开着时那一笔。
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM parking_payments WHERE session_id=?", Integer.class, session)).isEqualTo(1);
+        pay(other.session(), "sw_open_" + f.suffix, other.project()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.parking_session_id").value(other.session()))
+                .andExpect(jsonPath("$.data.receiver_entity_id").value(other.company()));
+    }
+
+    /**
+     * PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按车牌查费按 project_id 参数所指项目、缴费确认按缴费单所属项目在服务端判开关——
+     * 不带 X-Project-Id 或把头写成另一个（开着的）项目都查不了、确认不了（缴费单仍待支付）；另一项目照常查费与确认。
+     * 判开关先于「重复确认返回原结果」：开关开着时已确认成已缴的缴费单，关掉后再确认也 403（仍是已缴）。
+     */
+    @Test
+    void closedProjectParkingLookupAndConfirmRejectedWithoutOrWithForgedProjectHeader() throws Exception {
+        OtherLot other = otherLot();
+        String paymentId = id(pay("cf_" + f.suffix).andExpect(status().isOk()));
+        String otherPayment = id(pay(other.session(), "cf_open_" + f.suffix, other.project()).andExpect(status().isOk()));
+        // 本项目另一辆在场车：开关开着时缴费并确认成已缴。
+        String paidSession = f.session("P3_" + f.suffix, "粤A67890", Instant.now().minus(Duration.ofMinutes(50)).toString());
+        String paidPayment = id(pay(paidSession, "cf_paid_" + f.suffix, null).andExpect(status().isOk()));
+        confirm(paidPayment).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("paid"));
+        closeCustomerTerminal(f.project);
+
+        for (String header : new String[] {null, other.project()}) {
+            lookup(f.project, "粤A12345", header).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+            confirm(paymentId, header).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM parking_payments WHERE id=?", String.class, paymentId)).isEqualTo("pending");
+        confirm(paidPayment).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(jdbc.queryForObject("SELECT status FROM parking_payments WHERE id=?", String.class, paidPayment)).isEqualTo("paid");
+        lookup(other.project(), "粤B54321", other.project()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.parking_session_id").value(other.session()));
+        confirm(otherPayment, other.project()).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("paid"));
+    }
+
+    private record OtherLot(String project, String company, String session) {
+    }
+
+    /** 另一个（开着的）项目：有停车策略、唯一的城市项目公司与一辆 50 分钟前入场的在场车。 */
+    private OtherLot otherLot() {
+        ParkingFixture other = new ParkingFixture(jdbc, "pay2");
+        other.policy();
+        String otherCompany = "pk_cpc_" + other.suffix;
+        jdbc.update("INSERT INTO business_entities(id,entity_name,entity_role,status,created_at,updated_at) VALUES(?,'城市项目公司','project_company','active',now(),now())",
+                otherCompany);
+        jdbc.update("INSERT INTO business_entity_projects(business_entity_id,project_id) VALUES(?,?)", otherCompany, other.project);
+        return new OtherLot(other.project, otherCompany,
+                other.session("P2_" + other.suffix, "粤B54321", Instant.now().minus(Duration.ofMinutes(50)).toString()));
+    }
+
+    /** 关掉该项目的小程序（按综合体的端总开关）。 */
+    private void closeCustomerTerminal(String projectId) {
+        jdbc.update("""
+                INSERT INTO terminal_capability_switches (id, terminal_type, capability_code, scope_type, scope_id, enabled, reason, created_at, updated_at)
+                VALUES (?, 'miniapp', 'terminal.enabled', 'project', ?, FALSE, '停用该综合体客人端', now(), now())""", "tcs_pk_" + f.suffix, projectId);
+    }
+
     private ResultActions lookup(String plate) throws Exception {
-        return mockMvc.perform(get("/api/v1/customer/parking/sessions").param("project_id", f.project).param("plate_no", plate)
-                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token));
+        return lookup(f.project, plate, null);
+    }
+
+    /** 客人端按车牌查费真实请求形状（蛇形查询参数）；projectHeader 非空时另带 X-Project-Id。 */
+    private ResultActions lookup(String projectId, String plate, String projectHeader) throws Exception {
+        var request = get("/api/v1/customer/parking/sessions").param("project_id", projectId).param("plate_no", plate)
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token);
+        if (projectHeader != null) {
+            request.header("X-Project-Id", projectHeader);
+        }
+        return mockMvc.perform(request);
     }
 
     private ResultActions pay(String key) throws Exception {
-        return mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token)
+        return pay(session, key, null);
+    }
+
+    /** 客人端缴费真实请求形状（蛇形键）；projectHeader 非空时另带 X-Project-Id。 */
+    private ResultActions pay(String sessionId, String key, String projectHeader) throws Exception {
+        var request = post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"parking_session_id\":\"" + session + "\",\"idempotency_key\":\"" + key + "\"}"));
+                .content("{\"parking_session_id\":\"" + sessionId + "\",\"idempotency_key\":\"" + key + "\"}");
+        if (projectHeader != null) {
+            request.header("X-Project-Id", projectHeader);
+        }
+        return mockMvc.perform(request);
     }
 
     private ResultActions confirm(String paymentId) throws Exception {
+        return confirm(paymentId, null);
+    }
+
+    /** 客人端缴费确认；projectHeader 非空时另带 X-Project-Id。 */
+    private ResultActions confirm(String paymentId, String projectHeader) throws Exception {
         Map<String, Object> intent = jdbc.queryForMap("""
                 SELECT i.id, i.gateway_ref, i.amount_cent FROM finance_payment_intents i
                   JOIN parking_payments p ON p.payment_intent_id = i.id WHERE p.id=?""", paymentId);
@@ -184,8 +284,12 @@ class ParkingPaymentJdbcIntegrationTests {
         when(gateway.queryStatus(ref)).thenReturn(new PaymentGatewayResult(PaymentGatewayResult.Status.SUCCEEDED, GATEWAY, ref, "", null,
                 new PaymentGatewayRequest("parking_fee", paymentId, ((Number) intent.get("amount_cent")).longValue(), "CNY", "wechat",
                         ref, null, null)));
-        return mockMvc.perform(post("/api/v1/customer/parking/payments/" + paymentId + "/confirm")
-                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content("{}"));
+        var request = post("/api/v1/customer/parking/payments/" + paymentId + "/confirm")
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content("{}");
+        if (projectHeader != null) {
+            request.header("X-Project-Id", projectHeader);
+        }
+        return mockMvc.perform(request);
     }
 
     private static String id(ResultActions result) throws Exception {
