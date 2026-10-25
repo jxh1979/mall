@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -10,6 +10,7 @@ import { accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdm
 import { stripBase, withBase } from "../basePath";
 import { forgetWriteOperations } from "../shared/operationKey";
 import { ReplayedNotice } from "../shared/ReplayedNotice";
+import { ActionResultView } from "./components/ActionResultView";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
@@ -822,7 +823,8 @@ export default function AdminApp() {
             </React.Suspense>
           </PermissionGate>
           )}
-          {actionResult ? <pre className="admin-result" role="status" aria-live="polite" data-testid="admin-action-result">{typeof actionResult === "string" ? actionResult : JSON.stringify(actionResult, null, 2)}</pre> : null}
+          {/* OBS-14-02：结果对象按中文键名逐行展示（不再整段 JSON 上屏）。 */}
+          {actionResult ? <ActionResultView value={actionResult} /> : null}
         </main>
       </section>
     </div>

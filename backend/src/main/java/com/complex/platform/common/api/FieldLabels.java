@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -259,7 +259,7 @@ public final class FieldLabels {
         p("delivered_items", "交付明细");
         p("quantity", "数量");
         p("unit", "单位");
-        p("variant_type", "规格类型");
+        p("variant_type", "人群/渠道");
         p("tip_amount_cent", "小费金额");
         p("minimum_spend_cent", "最低消费");
         p("additional_min_consumption_cent", "追加最低消费");

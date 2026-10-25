@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -104,7 +104,7 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("ticket-publish-reason").fill("e2e 上架验证");
     await page.getByTestId("ticket-policy-next").click();
     await page.getByTestId("ticket-publish").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("published");
+    await expect(page.getByTestId("admin-action-result")).toContainText("票务规则已发布");
   });
 
   test("ADM-MVP-04 bar table session blocks over-limit check-in and records valid check-in", async ({ page }) => {
@@ -118,20 +118,20 @@ test.describe("full admin MVP acceptance", () => {
 
     await page.getByTestId("bar-checkin-count").fill("4");
     await page.getByTestId("bar-checkin-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("checked_in");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已入座");
 
     await page.getByTestId("bar-session-select-session-1").check();
     await page.getByTestId("bar-transfer-target-table").fill("table-2");
     await page.getByTestId("bar-transfer-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("transferred");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已转移");
 
     await page.getByTestId("bar-merge-target-session").fill("session-2");
     await page.getByTestId("bar-merge-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("merged");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已合并");
 
     await page.getByTestId("bar-renew-minutes").fill("60");
     await page.getByTestId("bar-renew-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("renewed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已续期");
   });
 
   test("ADM-MVP-05 finance ledger requires adjustment reason and supports partial payment", async ({ page }) => {
@@ -144,26 +144,28 @@ test.describe("full admin MVP acceptance", () => {
 
     await page.getByTestId("finance-payment-reason").fill("客户部分付款");
     await page.getByTestId("finance-payment-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("partial");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：部分收付");
     // 导出后端已落地（FinanceController.exportArApItems / OpenAPI finance_ar_ap.exported）：点击后真导出并回显 exported 快照，不再是“接口未就绪”占位。
     await page.getByTestId("finance-export").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("exported");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已导出");
   });
 
-  test("ADM-MVP-06 integration adapter rejects plaintext secret and supports mock test", async ({ page }) => {
+  test("ADM-MVP-06 integration adapter requires provider code, type and mode and supports mock test", async ({ page }) => {
     await installMockApi(page);
     await adminLogin(page, "/admin/integrations/adapters");
 
-    // 引导式流程 phase-6：新增适配器改分步引导弹窗——先开弹窗，凭证填在步内，「下一步」触发步内校验。
+    // 引导式流程 phase-6：新增适配器改分步引导弹窗，「下一步」触发步内校验。
+    // OBS-14-01：按后端 ProviderAdapterRequest 真实契约填写——供应商编码、类型（闭集）、接入模式均必填；凭证引用不在新增请求里。
     await page.getByTestId("integration-create-open").click();
-    await page.getByTestId("integration-credential-ref").fill("plaintext-secret");
     await page.getByTestId("integration-next").click();
-    await expect(page.getByTestId("integration-error")).toContainText("凭证引用");
+    await expect(page.getByTestId("integration-error")).toContainText("请填写供应商编码");
 
-    await page.getByTestId("integration-credential-ref").fill("cred://prod/provider/mock");
+    await page.getByTestId("integration-provider-code").fill("prov-park");
+    await page.getByTestId("integration-adapter-type").selectOption("parking");
+    await page.getByTestId("integration-mode").selectOption("mock");
     await page.getByTestId("integration-next").click();
     await page.getByTestId("integration-save").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("provider");
+    await expect(page.getByTestId("admin-action-result")).toContainText("已保存供应商适配器");
     await page.getByTestId("integration-test-mock").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("模拟测试通过");
   });
@@ -177,7 +179,7 @@ test.describe("full admin MVP acceptance", () => {
 
     await page.getByTestId("ops-evidence-ref").fill("evidence://nas/restore-drill/20260616");
     await page.getByTestId("ops-verify-blocker").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("verified");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已核验");
   });
 
   test("ADM-MVP-08 role permission and mobile layout are enforceable", async ({ page }) => {

@@ -1,5 +1,6 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
+import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -49,7 +50,7 @@ function display(value: unknown) {
   if (typeof value === "boolean") return value ? "是" : "否";
   if (typeof value === "number" || typeof value === "string") return String(value);
   if (Array.isArray(value)) return value.length ? value.join(" / ") : "-";
-  return JSON.stringify(value);
+  return formatActionResult(value);
 }
 
 function byMerchant<T extends { merchantId?: string; id?: string }>(rows: T[], merchantId: string) {
