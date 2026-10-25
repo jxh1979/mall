@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { ApiError } from "../../shared/apiError";
 import { PermissionButton } from "../security/Can";
@@ -137,6 +137,71 @@ export function TicketExpiryReminderSection({ api, setActionResult, setGlobalErr
         <label>上限（小时）<input aria-label="到期提醒上限" type="number" min="1" value={maxHours} onChange={(e) => setMaxHours(e.target.value)} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={["ticket.product.manage"]}
           data-testid="ticket-expiry-reminder-save" onClick={() => void save()}>保存到期提醒</PermissionButton>
+      </div>
+    </div>
+  );
+}
+
+type ArrivalReminderPolicy = { projectId?: string; remindMinutes?: number; minMinutes?: number | null; maxMinutes?: number | null };
+
+/** 第十四批 OBS-13-03（BSM 第 1596 行「最晚到店时间前提醒（提前量业务参数，按项目可配，出厂默认 30 分钟，须同时配置上下限）」）：票务策略页内。 */
+export function BarArrivalReminderSection({ api, setActionResult, setGlobalError, effectivePermissions }: SectionProps) {
+  const [projectId, setProjectId] = React.useState("");
+  const [current, setCurrent] = React.useState<ArrivalReminderPolicy | null>(null);
+  const [minutes, setMinutes] = React.useState("");
+  const [minMinutes, setMinMinutes] = React.useState("");
+  const [maxMinutes, setMaxMinutes] = React.useState("");
+
+  function path(): string {
+    return `/api/v1/bar/arrival-reminder-policies/${encodeURIComponent(projectId.trim())}`;
+  }
+
+  async function load() {
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    try {
+      const policy = await api.get<ArrivalReminderPolicy>(path());
+      setCurrent(policy ?? null);
+      setMinutes(String(policy?.remindMinutes ?? ""));
+      setMinMinutes(policy?.minMinutes == null ? "" : String(policy.minMinutes));
+      setMaxMinutes(policy?.maxMinutes == null ? "" : String(policy.maxMinutes));
+    } catch (err) {
+      setGlobalError(errorText(err, "最晚到店前提醒参数读取失败"));
+    }
+  }
+
+  async function save() {
+    const value = wholeNumber(minutes);
+    const min = wholeNumber(minMinutes);
+    const max = wholeNumber(maxMinutes);
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (value === null || min === null || max === null || min > value || value > max) {
+      setGlobalError("提前分钟数与上下限须同时填写（整数分钟，下限不小于 1），分钟数须在上下限之间");
+      return;
+    }
+    try {
+      await api.put(path(), { remindMinutes: value, minMinutes: min, maxMinutes: max });
+      setActionResult(`已保存最晚到店前提醒：项目 ${projectId.trim()}，最晚到店前 ${value} 分钟（下限 ${min}、上限 ${max} 分钟）`);
+      void load();
+    } catch (err) {
+      setGlobalError(errorText(err, "最晚到店前提醒参数保存失败"));
+    }
+  }
+
+  return (
+    <div className="admin-preview" data-testid="bar-arrival-reminder-policy">
+      <strong>最晚到店前提醒（按项目；出厂提前 30 分钟；须同时配置上下限）：</strong>
+      订台仍占着台位的，在最晚到店时间前按此提前量给客人发短信提醒。
+      <div className="admin-form-grid" style={{ marginTop: 8 }}>
+        <label>项目 id<input aria-label="到店前提醒项目 id" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <button type="button" data-testid="bar-arrival-reminder-query" onClick={() => void load()}>查询</button>
+        <span className="admin-muted-action" data-testid="bar-arrival-reminder-current">
+          {current ? `当前：最晚到店前 ${current.remindMinutes} 分钟${current.minMinutes == null ? "（出厂值，上下限未配置）" : `，下限 ${current.minMinutes}、上限 ${current.maxMinutes} 分钟`}` : "未查询"}
+        </span>
+        <label>最晚到店前提醒（分钟）<input aria-label="最晚到店前提醒（分钟）" type="number" min="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} /></label>
+        <label>下限<input aria-label="到店前提醒下限" type="number" min="1" value={minMinutes} onChange={(e) => setMinMinutes(e.target.value)} /></label>
+        <label>上限<input aria-label="到店前提醒上限" type="number" min="1" value={maxMinutes} onChange={(e) => setMaxMinutes(e.target.value)} /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={["bar.reservation.manage"]}
+          data-testid="bar-arrival-reminder-save" onClick={() => void save()}>保存到店前提醒</PermissionButton>
       </div>
     </div>
   );

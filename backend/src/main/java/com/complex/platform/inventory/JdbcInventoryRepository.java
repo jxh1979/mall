@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -828,6 +828,24 @@ class JdbcInventoryRepository implements InventoryRepository {
                  ORDER BY expire_at ASC, id
                 """, new MapSqlParameterSource()
                 .addValue("now", offset(now)), rowMapper::mapSavedBottle);
+    }
+
+    @Override
+    public List<SavedBottleRecord> listExpiredSavedBottlesPendingStock(String bottleId) {
+        return jdbcTemplate.query("""
+                SELECT sb.*
+                  FROM saved_bottles sb
+                 WHERE sb.status = 'expired'
+                   AND sb.remaining_quantity > 0
+                   AND (CAST(:id AS VARCHAR) IS NULL OR sb.id = :id)
+                   AND NOT EXISTS (
+                        SELECT 1 FROM inventory_stock_movements m
+                         WHERE m.item_id = sb.item_id
+                           AND m.business_type = 'saved_bottle_to_stock'
+                           AND m.business_id = sb.id)
+                 ORDER BY sb.updated_at ASC, sb.id
+                   FOR UPDATE OF sb
+                """, new MapSqlParameterSource().addValue("id", bottleId), rowMapper::mapSavedBottle);
     }
 
     @Override
@@ -2117,6 +2135,27 @@ class JdbcInventoryRepository implements InventoryRepository {
                 """, Map.of("merchant_id", merchantId), rowMapper::mapWarehouse);
     }
 
+    @Override
+    public List<WarehouseRecord> listActiveSavedBottleWarehouses(String projectId, String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                  FROM warehouses
+                 WHERE project_id = :project_id
+                   AND merchant_id IS NOT DISTINCT FROM CAST(:merchant_id AS VARCHAR)
+                   AND warehouse_type = 'saved_bottle'
+                   AND status = 'active'
+                 ORDER BY created_at, id
+                """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("merchant_id", merchantId),
+                rowMapper::mapWarehouse);
+    }
+
+    @Override
+    public boolean isSavedBottleWarehouse(String locationId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM warehouses WHERE id = :id AND warehouse_type = 'saved_bottle')",
+                new MapSqlParameterSource().addValue("id", locationId), Boolean.class));
+    }
+
     // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
     public List<WarehouseRecord> listWarehousesByProject(String projectId) {
         return jdbcTemplate.query("""
@@ -2145,12 +2184,14 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_high_value_reviews (
                     id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
-                    review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id
+                    review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id,
+                    created_by, supervisor_approved_by, finance_approved_by
                 )
                 VALUES (
                     :id, :subject_type, :subject_id,
                     CAST(:photo_attachment_ids AS jsonb), CAST(:video_attachment_ids AS jsonb),
-                    :review_status, :reviewer_user_id, :reason, :created_at, :reviewed_at, :merchant_id
+                    :review_status, :reviewer_user_id, :reason, :created_at, :reviewed_at, :merchant_id,
+                    :created_by, :supervisor_approved_by, :finance_approved_by
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     subject_type = EXCLUDED.subject_type,
@@ -2160,7 +2201,9 @@ class JdbcInventoryRepository implements InventoryRepository {
                     review_status = EXCLUDED.review_status,
                     reviewer_user_id = EXCLUDED.reviewer_user_id,
                     reason = EXCLUDED.reason,
-                    reviewed_at = EXCLUDED.reviewed_at
+                    reviewed_at = EXCLUDED.reviewed_at,
+                    supervisor_approved_by = EXCLUDED.supervisor_approved_by,
+                    finance_approved_by = EXCLUDED.finance_approved_by
                 """, new MapSqlParameterSource()
                 .addValue("id", review.id())
                 .addValue("subject_type", review.subjectType())
@@ -2172,7 +2215,10 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("reason", review.reason())
                 .addValue("created_at", offset(review.createdAt()))
                 .addValue("reviewed_at", offset(review.reviewedAt()))
-                .addValue("merchant_id", review.merchantId()));
+                .addValue("merchant_id", review.merchantId())
+                .addValue("created_by", review.createdBy())
+                .addValue("supervisor_approved_by", review.supervisorApprovedBy())
+                .addValue("finance_approved_by", review.financeApprovedBy()));
         return review;
     }
 
@@ -2180,7 +2226,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<InventoryHighValueReviewRecord> findHighValueReviewByIdForUpdate(String id) {
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
-                       review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id
+                       review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id,
+                       created_by, supervisor_approved_by, finance_approved_by
                   FROM inventory_high_value_reviews
                  WHERE id = :id
                    FOR UPDATE
@@ -2191,7 +2238,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryHighValueReviewRecord> listHighValueReviews() {
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
-                       review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id
+                       review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id,
+                       created_by, supervisor_approved_by, finance_approved_by
                   FROM inventory_high_value_reviews
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapHighValueReview);

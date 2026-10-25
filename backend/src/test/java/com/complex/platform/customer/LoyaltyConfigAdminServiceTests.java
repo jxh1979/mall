@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,7 +36,7 @@ class LoyaltyConfigAdminServiceTests {
         when(repository.saveMemberLevel(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, "prj_HACK", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active"));
+                null, "prj_HACK", "gold", "金卡", 2, 5000L, 15000, "active"));
 
         ArgumentCaptor<CustomerMemberLevelRecord> saved = ArgumentCaptor.forClass(CustomerMemberLevelRecord.class);
         org.mockito.Mockito.verify(repository).saveMemberLevel(saved.capture());
@@ -47,19 +49,9 @@ class LoyaltyConfigAdminServiceTests {
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, null, "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active")))
+                null, null, "gold", "金卡", 2, 5000L, 15000, "active")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("project_id is required");
-    }
-
-    @Test
-    void keepPeriodDaysMustBePositive() {
-        when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
-
-        assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, "prj_A", "gold", "金卡", 2, 5000L, 3000L, 0, 30, 15000, "active")))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("keep_period_days");
     }
 
     @Test
@@ -68,7 +60,7 @@ class LoyaltyConfigAdminServiceTests {
         when(repository.listMemberLevels("prj_A")).thenReturn(java.util.List.of());
 
         assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
-                "member_level_ghost", "prj_A", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active")))
+                "member_level_ghost", "prj_A", "gold", "金卡", 2, 5000L, 15000, "active")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("未找到");
     }

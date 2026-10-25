@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -160,6 +160,33 @@ class SavedBottleNotificationIntegrationTest {
         assertThat(logCount("expiring", EXPIRING_PHONE)).isEqualTo(1);
     }
 
+    /**
+     * OBS-13-04（BSM 第 1598 行「存酒到期提醒」不在可关闭范围内，不得按类或按条关闭）：总开关、存酒域开关、事件开关全关，
+     * 到期提醒照发；「存酒已过期」不在名单内，仍按开关跳过。
+     */
+    @Test
+    void expiringReminderStillSendsWhenAllSwitchesOffWhileExpiredNoticeStaysClosable() {
+        setSwitch("sms_notification", false);
+        setSwitch("sms.notify.stored_wine", false);
+        setSwitch("sms.notify.stored_wine.expiring", false);
+        setSwitch("sms.notify.stored_wine.expired", false);
+        String prefix = unique("mandatory");
+        Instant now = Instant.parse("2026-06-29T12:00:00Z");
+        insertCustomer(prefix + "_expired_customer", EXPIRED_PHONE);
+        insertCustomer(prefix + "_expiring_customer", EXPIRING_PHONE);
+        insertInventoryItem(prefix + "_expired_item", prefix + "_expired_sku", "Expired Syrah");
+        insertInventoryItem(prefix + "_expiring_item", prefix + "_expiring_sku", "Expiring Riesling");
+        insertStoredBottle(prefix + "_expired_bottle", prefix + "_expired_customer", prefix + "_expired_item", "Expired Syrah",
+                now.minusSeconds(3600));
+        insertStoredBottle(prefix + "_expiring_bottle", prefix + "_expiring_customer", prefix + "_expiring_item", "Expiring Riesling",
+                now.plusSeconds(3 * 86400));
+
+        notificationJob.runOnce(now);
+
+        assertThat(logValue("expiring", EXPIRING_PHONE, "status")).isEqualTo("sent");
+        assertThat(logValue("expired", EXPIRED_PHONE, "status")).isEqualTo("skipped_switch_off");
+    }
+
     @Test
     void createSavedBottleWritesSkippedNotificationLogWhenMainSwitchOff() {
         setSwitch("sms_notification", false);
@@ -262,20 +289,13 @@ class SavedBottleNotificationIntegrationTest {
         jdbcTemplate.update("""
                 DELETE FROM idempotency_records
                  WHERE idempotency_key LIKE 'sw_notif_%'
-                    OR idempotency_key IN (
-                        SELECT request_id
-                          FROM notification_send_log
-                         WHERE domain = 'stored_wine'
-                           AND recipient IN (?, ?, ?, ?, ?)
-                    )
                     OR idempotency_key LIKE 'swexpired:sw_notif_%'
                     OR idempotency_key LIKE 'swexpiring:sw_notif_%'
-                """, DEPOSIT_PHONE, CLAIM_PHONE, SWITCH_OFF_PHONE, EXPIRED_PHONE, EXPIRING_PHONE);
-        jdbcTemplate.update("""
-                DELETE FROM notification_send_log
-                 WHERE domain = 'stored_wine'
-                   AND recipient IN (?, ?, ?, ?, ?)
-                """, DEPOSIT_PHONE, CLAIM_PHONE, SWITCH_OFF_PHONE, EXPIRED_PHONE, EXPIRING_PHONE);
+                """);
+        // 收件人手机号落密文（V547）：取出解密后按测试手机号筛。
+        com.complex.platform.support.NotificationSendLogRows.delete(jdbcTemplate, com.complex.platform.support.NotificationSendLogRows.ids(
+                jdbcTemplate, piiCipher, "stored_wine", null,
+                java.util.Set.of(DEPOSIT_PHONE, CLAIM_PHONE, SWITCH_OFF_PHONE, EXPIRED_PHONE, EXPIRING_PHONE)::contains));
         jdbcTemplate.update("""
                 DELETE FROM saved_bottle_claims
                  WHERE saved_bottle_id IN (
@@ -312,38 +332,22 @@ class SavedBottleNotificationIntegrationTest {
     }
 
     private int logCount(String event, String recipient) {
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT count(*)
-                  FROM notification_send_log
-                 WHERE domain = 'stored_wine'
-                   AND event_key = ?
-                   AND recipient = ?
-                """, Integer.class, event, recipient);
-        return count == null ? 0 : count;
+        return logIds(event, recipient).size();
     }
 
     private String logValue(String event, String recipient, String column) {
-        return jdbcTemplate.queryForObject("""
-                SELECT %s
-                  FROM notification_send_log
-                 WHERE domain = 'stored_wine'
-                   AND event_key = ?
-                   AND recipient = ?
-                 ORDER BY created_at DESC
-                 LIMIT 1
-                """.formatted(column), String.class, event, recipient);
+        return jdbcTemplate.queryForObject("SELECT %s FROM notification_send_log WHERE id = ?".formatted(column), String.class,
+                logIds(event, recipient).getFirst());
     }
 
     private String logParam(String event, String recipient, String key) {
-        return jdbcTemplate.queryForObject("""
-                SELECT params ->> ?
-                  FROM notification_send_log
-                 WHERE domain = 'stored_wine'
-                   AND event_key = ?
-                   AND recipient = ?
-                 ORDER BY created_at DESC
-                 LIMIT 1
-                """, String.class, key, event, recipient);
+        return jdbcTemplate.queryForObject("SELECT params ->> ? FROM notification_send_log WHERE id = ?", String.class, key,
+                logIds(event, recipient).getFirst());
+    }
+
+    /** 收件人手机号落密文（V547），按明文筛行须解密后比。 */
+    private java.util.List<String> logIds(String event, String recipient) {
+        return com.complex.platform.support.NotificationSendLogRows.ids(jdbcTemplate, piiCipher, "stored_wine", event, recipient::equals);
     }
 
     private String maskPhone(String phone) {

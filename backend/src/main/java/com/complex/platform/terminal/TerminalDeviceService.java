@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -8,6 +8,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.notification.NotificationSwitchResolver;
 import com.complex.platform.terminal.dto.CapabilitySwitchRequest;
 import com.complex.platform.terminal.dto.DeviceBindRequest;
 import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
@@ -704,6 +705,11 @@ public class TerminalDeviceService {
                     // 改写成 device 行，守卫按模块解析不到 → 关了开关接口照放行（活证据抓到的真 bug）。
                     java.util.Optional<TerminalCapabilitySwitchRecord> existing =
                             repository.findCapabilitySwitchById(switchId);
+                    // OBS-13-04：BSM 第 1598 行不可关闭的短信「不得按类或按条关闭」；第三方接入 PRD §11A.4「尝试按类或按条关闭一律拒绝并给出中文报错」。
+                    if (!actual.enabled() && NotificationSwitchResolver.isMandatorySwitch(existing
+                            .map(TerminalCapabilitySwitchRecord::capabilityCode).orElse(actual.capabilityCode()))) {
+                        throw ApiException.conflict("SMS_NOTIFICATION_NOT_CLOSABLE", "该短信提醒属于不可关闭的通知，不能关闭");
+                    }
                     if (existing.isPresent()) {
                         TerminalCapabilitySwitchRecord current = existing.get();
                         return repository.saveCapabilitySwitch(new TerminalCapabilitySwitchRecord(

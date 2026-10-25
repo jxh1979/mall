@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
@@ -18,6 +18,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>逻辑在可直接调用的 {@link #releaseOverdue}，每笔独立事务、失败只记日志不中断本轮；@Scheduled 只做薄包装，
  * bar.reservation-timeout.scheduled.enabled=true 才执行（prod 开）。
+ *
+ * <p>第十四批 OBS-13-03-R3：每轮释放前先发最晚到店时间前提醒（BSM 第 1596 行，见 {@link BarArrivalReminderService}）。
  */
 @Component
 public class BarReservationTimeoutJob {
@@ -26,14 +28,16 @@ public class BarReservationTimeoutJob {
 
     private final BarRepository repository;
     private final BarEntryService entryService;
+    private final BarArrivalReminderService arrivalReminders;
     private final TransactionTemplate perReservation;
     private final boolean scheduledEnabled;
 
     public BarReservationTimeoutJob(BarRepository repository, BarEntryService entryService,
-            PlatformTransactionManager transactionManager,
+            BarArrivalReminderService arrivalReminders, PlatformTransactionManager transactionManager,
             @Value("${bar.reservation-timeout.scheduled.enabled:false}") boolean scheduledEnabled) {
         this.repository = repository;
         this.entryService = entryService;
+        this.arrivalReminders = arrivalReminders;
         this.perReservation = new TransactionTemplate(transactionManager);
         this.scheduledEnabled = scheduledEnabled;
     }
@@ -41,6 +45,11 @@ public class BarReservationTimeoutJob {
     @Scheduled(fixedDelayString = "${bar.reservation-timeout.scheduled.fixed-delay-ms:60000}")
     public void scheduledRelease() {
         if (scheduledEnabled) {
+            try {
+                arrivalReminders.remindApproaching(Instant.now());
+            } catch (RuntimeException notReminded) {
+                log.warn("bar arrival reminders skipped this round: {}", notReminded.getClass().getSimpleName());
+            }
             releaseOverdue();
         }
     }

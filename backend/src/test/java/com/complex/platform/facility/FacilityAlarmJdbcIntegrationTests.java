@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -558,6 +558,19 @@ class FacilityAlarmJdbcIntegrationTests {
         return jdbc.queryForObject("SELECT count(*) FROM facility_alarm_contact_attempts WHERE alarm_id = ?", Integer.class, alarmId);
     }
 
+    /** OBS-13-06（PGM L823「告警来源支持人工上报与远程/物联自动采集两种」）：员工人工上报入口不能自行声明物联来源，不落接警单。 */
+    @Test
+    void selfDeclaredIotAlarmRejectedAndNoAlarmOpened() throws Exception {
+        TestSecurityActors.asPlatformAdmin();
+        FacilityEquipmentStatusRequest request = json.readValue("""
+                {"status":"alarm","alarm_source":"iot","alarm_note":"轿厢困人","priority":"urgent","idempotency_key":"st_%s"}
+                """.formatted(UUID.randomUUID()), FacilityEquipmentStatusRequest.class);
+        assertThatThrownBy(() -> equipment.changeStatus(equipmentId, request))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM facility_alarms WHERE equipment_id = ?", Integer.class, equipmentId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM facility_equipment WHERE id = ?", String.class, equipmentId)).isEqualTo("normal");
+    }
+
     private List<String> channels(String alarmId, String userId, int round) {
         return jdbc.queryForList("SELECT channel FROM facility_alarm_contact_attempts WHERE alarm_id = ? AND user_id = ? AND round = ?",
                 String.class, alarmId, userId, round);
@@ -571,7 +584,7 @@ class FacilityAlarmJdbcIntegrationTests {
     private String raiseAlarm(String priority) throws Exception {
         TestSecurityActors.asPlatformAdmin();
         equipment.changeStatus(equipmentId, json.readValue("""
-                {"status":"alarm","alarm_source":"iot","alarm_note":"轿厢困人","priority":"%s","idempotency_key":"st_%s"}
+                {"status":"alarm","alarm_source":"manual","alarm_note":"轿厢困人","priority":"%s","idempotency_key":"st_%s"}
                 """.formatted(priority, UUID.randomUUID()), FacilityEquipmentStatusRequest.class));
         List<String> ids = jdbc.queryForList("SELECT id FROM facility_alarms WHERE equipment_id = ? ORDER BY created_at DESC",
                 String.class, equipmentId);

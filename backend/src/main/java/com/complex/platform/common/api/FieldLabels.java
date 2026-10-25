@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -493,6 +493,9 @@ public final class FieldLabels {
         p("close_reason", "关闭原因");
         p("handle_minutes", "处理时长");
         p("response_minutes", "响应时长");
+        p("remind_minutes", "最晚到店前提醒分钟数");
+        p("min_minutes", "分钟数下限");
+        p("max_minutes", "分钟数上限");
         p("reported_channel", "上报渠道");
         p("robot_task_ref", "机器人任务号");
         p("scenario", "场景");

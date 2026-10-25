@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -164,7 +165,7 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("integration-save").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("provider");
     await page.getByTestId("integration-test-mock").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("mock_passed");
+    await expect(page.getByTestId("admin-action-result")).toContainText("模拟测试通过");
   });
 
   test("ADM-MVP-07 ops readiness cannot verify blocker without evidence ref", async ({ page }) => {

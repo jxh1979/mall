@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -75,6 +75,9 @@ import static com.complex.platform.common.Strings.requireText;
 public class InventoryService implements com.complex.platform.finance.SavedBottleRemedyRecoveryPort {
     @org.springframework.beans.factory.annotation.Autowired PurchaseWorkflowService purchaseWorkflow;
     @org.springframework.beans.factory.annotation.Autowired InventoryTransferFlowService transferFlow;
+    /** OBS-13-02：到期存酒逐瓶转库存走本类代理的小事务（同 LoyaltyService.evaluateLevels 范式）；单测未注入时直接调用。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    org.springframework.context.ApplicationContext applicationContext;
 
     // FS-016（BSM L1073/L1198）：客人短信验证码端口 + 按手机号限速（与 CustomerService.enforceOtpRateLimit 同口径）。
     // 字段注入：不改 13 参构造器与各单测；单测直接置桩。未注入 = 短信服务不可用，核验 fail-closed。
@@ -413,6 +416,63 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         int noticeDays = Math.max(0, expiringNoticeDays);
         processExpiringSavedBottleNotifications(actualNow, noticeDays);
         processExpiredSavedBottleNotifications(actualNow);
+        postExpiredSavedBottlesToStock(actualNow);
+    }
+
+    /**
+     * OBS-13-02（BSM L1072「存酒到期后，系统自动结束客户存酒权益，该瓶酒先转为所在酒吧的自有库存资产；转为库存时不确认收入」；L1194 库存流水
+     * 「回库（……客人存酒到期转为酒吧自有库存）」；L863「放弃的存酒按存酒到期规则转为所在酒吧的自有库存资产」）：已结束权益（到期或注销放弃，
+     * status=expired）且尚未入库的瓶逐瓶小事务转入库存；失败（没有或不止一个在用存酒库房、盘点冻结）只留失败审计，下一次作业再试。
+     */
+    private void postExpiredSavedBottlesToStock(Instant now) {
+        InventoryService self = applicationContext != null ? applicationContext.getBean(InventoryService.class) : this;
+        List<SavedBottleRecord> bottles;
+        try {
+            bottles = repository.listExpiredSavedBottlesPendingStock(null);
+        } catch (RuntimeException exception) {
+            log.warn("failed to list expired saved bottles pending stock", exception);
+            return;
+        }
+        for (SavedBottleRecord bottle : bottles) {
+            try {
+                self.postExpiredSavedBottleToStock(bottle.id(), now);
+            } catch (RuntimeException exception) {
+                auditEventService.recordFailure("bar.saved_bottle.return_to_stock_failed", "not_applicable", "saved_bottle",
+                        bottle.id(), null, null, codeOf(exception));
+            }
+        }
+    }
+
+    /**
+     * 单瓶转库存：数量按标签剩余量（BSM L1169），单价不由本流水自定——库存成本引擎按既有无价入库口径落成本（有基准按当前均价，无基准成本列为空；
+     * 回库单价与科目由财务按 R6-D08 复核确定，B-03/E-14）；不写任何收入、应收应付或结算行。入账库房＝所在酒吧在用的存酒库房；
+     * 交平台保管的瓶（操作员裁决补充第十四批第 3 条）＝接收保管的娱乐平台公司在该项目的存酒库房（平台库房无商户归属）。
+     */
+    @Transactional
+    public void postExpiredSavedBottleToStock(String savedBottleId, Instant now) {
+        SavedBottleRecord bottle = repository.listExpiredSavedBottlesPendingStock(savedBottleId).stream().findFirst().orElse(null);
+        if (bottle == null) {
+            return;
+        }
+        String projectId = repository.findBarProjectId(bottle.merchantId()).orElse(null);
+        String owner = bottle.custodianEntityId() == null ? bottle.merchantId() : null;
+        List<WarehouseRecord> warehouses = projectId == null ? List.of() : repository.listActiveSavedBottleWarehouses(projectId, owner);
+        if (warehouses.size() != 1) {
+            throw ApiException.conflict(warehouses.isEmpty() ? "SAVED_BOTTLE_STOCK_WAREHOUSE_MISSING" : "SAVED_BOTTLE_STOCK_WAREHOUSE_AMBIGUOUS",
+                    "须有且只有一个在用的存酒库房接收到期存酒");
+        }
+        String warehouseId = warehouses.getFirst().id();
+        if (repository.hasActiveStocktakeForWarehouse(warehouseId)) {
+            throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED", "仓库正在盘点中，盘点结束前库存变动已冻结");
+        }
+        int quantity = bottle.remainingQuantity();
+        repository.atomicIncreaseStockBalance(bottle.itemId(), warehouseId, quantity,
+                "balance_" + slug(bottle.itemId() + ":" + warehouseId), owner, warehouseId, projectId);
+        repository.saveStockMovement(new StockMovementRecord("movement_" + slug(bottle.id() + ":to_stock"), "return",
+                bottle.itemId(), null, warehouseId, quantity, null, null, "saved_bottle_to_stock", bottle.id(), null, null,
+                List.of(), "completed", now, owner), projectId);
+        auditEventService.recordSuccess("bar.saved_bottle.returned_to_stock", "not_applicable", "saved_bottle", bottle.id(),
+                null, null, Map.of("warehouse_id", warehouseId, "quantity", quantity));
     }
 
     private void processExpiringSavedBottleNotifications(Instant now, int noticeDays) {
@@ -807,7 +867,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     /**
      * ROOT-03-R21（BSM 第 863 行「客人可以选择不取存酒……放弃的存酒按存酒到期规则转为所在酒吧的自有库存资产」）：注销时客人已确认放弃的
-     * 名下在保管存酒，按到期作业同一写法置 expired（不发到期短信，现行到期回库流水另项补齐后同路生效），逐瓶留痕；随后清空本人各存酒上的
+     * 名下在保管存酒，按到期作业同一写法置 expired（不发到期短信；由存酒到期作业同路转入库存，OBS-13-02），逐瓶留痕；随后清空本人各存酒上的
      * 客人姓名/昵称与手机号（同条「注销后……个人信息一律删除」）。返回放弃的瓶数。
      */
     public int abandonSavedBottlesOnDeregistration(String customerId, String customerPhone, Instant now) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -394,10 +394,8 @@ class ServiceOrderSafetyTests {
     }
 
     private int feeNotified(String phone) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM notification_send_log WHERE domain='service' AND event_key='catalog_fee_changed' AND recipient=?",
-                Integer.class, phone);
-        return count == null ? 0 : count;
+        // 收件人手机号落密文（V547），按明文筛行须解密后比。
+        return com.complex.platform.support.NotificationSendLogRows.ids(jdbcTemplate, piiCipher, "service", "catalog_fee_changed", phone::equals).size();
     }
 
     /** 草案生效日=明日营业日:今日下单锁旧版本 V1;生效日到了(改为昨日)再下单 → 新版本 V2;先前订单完成仍按旧快照分账。 */

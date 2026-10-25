@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 // 客人端业务服务层（三端共用）：封装客人用到的真实端点（客人接口 customer 前缀等），接口以 docs/openapi/openapi-p0.yaml 为准。
 // 请求经注入的 CustomerApi 发出（各端自带 transport），本文件不依赖浏览器。
 
@@ -15,6 +15,7 @@ import type {
   CustomerComplaint,
   CustomerConsent,
   CustomerSavedBottle,
+  LevelNotice,
   MerchantCardExitNotice,
   PointsLedgerEntry,
   SavedBottlePickupCode,
@@ -137,6 +138,16 @@ export class CustomerService {
   // clients-R10 本人即将到期的未核销票（启动与回前台拉取并弹出）。
   listTicketExpiryReminders(): Promise<TicketExpiryReminder[]> {
     return this.api.get<TicketExpiryReminder[]>("/api/v1/customer/ticket-expiry-reminders");
+  }
+
+  // OBS-13-01 本人未读的会员等级通知（降级预警、已保级、降级补发；启动与回前台拉取并弹出）。
+  listLevelNotices(): Promise<LevelNotice[]> {
+    return this.api.get<LevelNotice[]>("/api/v1/customer/level-notices");
+  }
+
+  // 客人点「知道了」：回写本人通知已读，之后不再返回。
+  markLevelNoticeRead(noticeId: string): Promise<null> {
+    return this.api.post<null>(`/api/v1/customer/level-notices/${encodeURIComponent(noticeId)}/read`, {});
   }
 
   // ROOT-03-R29 我的票使用记录（只许本人持有的票）。

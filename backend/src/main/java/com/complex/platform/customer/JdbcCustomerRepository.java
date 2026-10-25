@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -188,7 +188,7 @@ class JdbcCustomerRepository implements CustomerRepository {
     private static final String POINTS_SELECT = """
             SELECT id, customer_id, balance, level, recent_summary::text AS recent_summary,
                    frozen_points, account_status, level_period_start, keep_threshold_progress,
-                   grace_until, last_check_in_date, check_in_streak, created_at, updated_at
+                   protection_until, last_check_in_date, check_in_streak, created_at, updated_at
               FROM customer_points_accounts
             """;
 
@@ -197,12 +197,12 @@ class JdbcCustomerRepository implements CustomerRepository {
         jdbcTemplate.update("""
                 INSERT INTO customer_points_accounts (
                     id, customer_id, balance, level, recent_summary, frozen_points, account_status,
-                    level_period_start, keep_threshold_progress, grace_until, last_check_in_date,
+                    level_period_start, keep_threshold_progress, protection_until, last_check_in_date,
                     check_in_streak, created_at, updated_at
                 )
                 VALUES (
                     :id, :customer_id, :balance, :level, CAST(:recent_summary AS jsonb), :frozen_points, :account_status,
-                    :level_period_start, :keep_threshold_progress, :grace_until, :last_check_in_date,
+                    :level_period_start, :keep_threshold_progress, :protection_until, :last_check_in_date,
                     :check_in_streak, :created_at, :updated_at
                 )
                 ON CONFLICT (customer_id) DO UPDATE SET
@@ -213,7 +213,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                     account_status = EXCLUDED.account_status,
                     level_period_start = EXCLUDED.level_period_start,
                     keep_threshold_progress = EXCLUDED.keep_threshold_progress,
-                    grace_until = EXCLUDED.grace_until,
+                    protection_until = EXCLUDED.protection_until,
                     last_check_in_date = EXCLUDED.last_check_in_date,
                     check_in_streak = EXCLUDED.check_in_streak,
                     updated_at = EXCLUDED.updated_at
@@ -644,7 +644,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("account_status", account.accountStatus() == null ? "active" : account.accountStatus())
                 .addValue("level_period_start", timestampWithTimeZone(account.levelPeriodStart()))
                 .addValue("keep_threshold_progress", account.keepThresholdProgress())
-                .addValue("grace_until", timestampWithTimeZone(account.graceUntil()))
+                .addValue("protection_until", timestampWithTimeZone(account.protectionUntil()))
                 .addValue("last_check_in_date", sqlDate(account.lastCheckInDate()))
                 .addValue("check_in_streak", account.checkInStreak())
                 .addValue("created_at", timestampWithTimeZone(account.createdAt()))
@@ -749,7 +749,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                 resultSet.getString("account_status"),
                 nullableInstant(resultSet, "level_period_start"),
                 resultSet.getLong("keep_threshold_progress"),
-                nullableInstant(resultSet, "grace_until"),
+                nullableInstant(resultSet, "protection_until"),
                 localDate(resultSet, "last_check_in_date"),
                 resultSet.getInt("check_in_streak"),
                 nullableInstant(resultSet, "created_at"),
@@ -860,13 +860,11 @@ class JdbcCustomerRepository implements CustomerRepository {
         jdbcTemplate.update("""
                 INSERT INTO customer_member_levels (
                     id, project_id, level_code, level_name, level_rank, upgrade_threshold,
-                    keep_threshold, keep_period_days, grace_days, point_multiplier_basis_points,
-                    status, created_at, updated_at
+                    point_multiplier_basis_points, status, created_at, updated_at
                 )
                 VALUES (
                     :id, :project_id, :level_code, :level_name, :level_rank, :upgrade_threshold,
-                    :keep_threshold, :keep_period_days, :grace_days, :point_multiplier_basis_points,
-                    :status, :created_at, :updated_at
+                    :point_multiplier_basis_points, :status, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
@@ -874,9 +872,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                     level_name = EXCLUDED.level_name,
                     level_rank = EXCLUDED.level_rank,
                     upgrade_threshold = EXCLUDED.upgrade_threshold,
-                    keep_threshold = EXCLUDED.keep_threshold,
-                    keep_period_days = EXCLUDED.keep_period_days,
-                    grace_days = EXCLUDED.grace_days,
                     point_multiplier_basis_points = EXCLUDED.point_multiplier_basis_points,
                     status = EXCLUDED.status,
                     updated_at = EXCLUDED.updated_at
@@ -887,9 +882,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 .addValue("level_name", level.levelName())
                 .addValue("level_rank", level.levelRank())
                 .addValue("upgrade_threshold", level.upgradeThreshold())
-                .addValue("keep_threshold", level.keepThreshold())
-                .addValue("keep_period_days", level.keepPeriodDays())
-                .addValue("grace_days", level.graceDays())
                 .addValue("point_multiplier_basis_points", level.pointMultiplierBasisPoints())
                 .addValue("status", level.status())
                 .addValue("created_at", timestampWithTimeZone(level.createdAt()))
@@ -1069,9 +1061,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("level_name"),
                 rs.getInt("level_rank"),
                 rs.getLong("upgrade_threshold"),
-                rs.getLong("keep_threshold"),
-                rs.getInt("keep_period_days"),
-                rs.getInt("grace_days"),
                 rs.getInt("point_multiplier_basis_points"),
                 rs.getString("status"),
                 nullableInstant(rs, "created_at"),

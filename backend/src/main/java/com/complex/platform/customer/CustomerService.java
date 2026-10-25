@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -752,7 +752,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                             account.accountStatus(),
                             account.levelPeriodStart(),
                             account.keepThresholdProgress(),
-                            account.graceUntil(),
+                            account.protectionUntil(),
                             account.lastCheckInDate(),
                             account.checkInStreak(),
                             account.createdAt(),
@@ -842,7 +842,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                                 account.id(), account.customerId(), balanceAfter, account.level(),
                                 Map.of("last_voucher_refund_id", id, "last_refunded_points", voucher.totalPoints()),
                                 account.frozenPoints(), account.accountStatus(), account.levelPeriodStart(),
-                                account.keepThresholdProgress(), account.graceUntil(), account.lastCheckInDate(),
+                                account.keepThresholdProgress(), account.protectionUntil(), account.lastCheckInDate(),
                                 account.checkInStreak(), account.createdAt(), now
                         ));
                         repository.savePointsLedger(new CustomerPointsLedgerRecord(

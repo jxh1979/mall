@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -58,6 +58,7 @@ class BarReservationHoldJdbcIntegrationTests {
     @Autowired private ObjectMapper json;
     @Autowired private CustomerRepository customers;
     @Autowired private BarReservationTimeoutJob timeoutJob;
+    @Autowired private BarRepository bars;
     @MockitoBean private PaymentGatewayRouter gateway;
 
     private CustomerTicketPaymentFixture f;
@@ -341,6 +342,19 @@ class BarReservationHoldJdbcIntegrationTests {
         staffReserve("staff-bad-phone", "12345")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void staffBookingKeepsEnteredPhoneEncryptedForReservationSms() throws Exception {
+        // OBS-13-03-R1（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：员工代订没有会员编号，
+        // 录入的客人手机号是订台短信唯一收件人来源——规范化后加密留存，库内不落明文。
+        String phone = "135" + String.format("%08d", Math.floorMod(f.suffix.hashCode() + 3, 100_000_000));
+        String formatted = phone.substring(0, 3) + " " + phone.substring(3, 7) + "-" + phone.substring(7);
+        String reservation = CustomerTicketPaymentFixture.read(staffReserve("staff-phone", formatted)
+                .andExpect(status().isOk()), "$.data.id");
+        assertThat(bars.findReservationCustomerPhone(reservation)).contains(phone);
+        assertThat(jdbc.queryForObject("SELECT customer_phone FROM bar_reservations WHERE id = ?", String.class, reservation))
+                .startsWith("enc:v1:").isNotEqualTo(phone);
     }
 
     // ---------- helpers ----------

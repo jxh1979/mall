@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,6 +56,7 @@ class BarServiceTests {
     private BarOrderService barOrderService;
     private StubCommissionRateConfigPort commissionRateStub;
     private com.complex.platform.access.staff.JdbcStaffRepository staffRepositoryStub;
+    private com.complex.platform.finance.FinanceService financeServiceStub;
     private StubHighValueDecisionService highValueStub;
     private com.complex.platform.evidence.EvidenceEventRepository evidenceRepositoryStub;
 
@@ -156,6 +157,9 @@ class BarServiceTests {
                 invitationSigner);
         // 裁决第十三批第 7 条员工代订核对受限必经客人域：手工构造时注入桩（查不到受限会员＝照常代订）。
         entryService.customerService = mock(com.complex.platform.customer.CustomerService.class);
+        // 第十四批 OBS-13-03-R6：免费时限内取消登记原路待退经财务域，手工构造时注入桩。
+        financeServiceStub = mock(com.complex.platform.finance.FinanceService.class);
+        entryService.financeService = financeServiceStub;
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
                 receivableLedgerService, true);
@@ -890,19 +894,25 @@ class BarServiceTests {
     }
 
     @Test
-    void cancelBeforeFreeWindowRefundsDeposit() {
-        // 免没收时限 30 分钟，预约在远未来 → 取消属早于时限 → 退定金 refunded。
+    void cancelBeforeFreeWindowRegistersOriginalRouteRefund() {
+        // 免没收时限 30 分钟，预约在远未来 → 取消属早于时限 → 按原付款渠道登记原路待退；第十四批 OBS-13-03-R6（BSM L1062
+        // 「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」）：定金保持已支付（退款处理中），不当场记已退。
         BarReservationRecord reservation = reservationWithFixedDeposit("refund", 20000L, 30);
         service.payReservationDeposit(reservation.id(),
                 new BarReservationDepositActionRequest("pay-refund", "pay", List.of(), "aggregate_pay"));
+        when(financeServiceStub.recordRejectedTicketPaymentRefund(org.mockito.ArgumentMatchers.eq("bar_deposit_rejection"),
+                org.mockito.ArgumentMatchers.eq(reservation.id()), org.mockito.ArgumentMatchers.eq(20000L),
+                org.mockito.ArgumentMatchers.eq("aggregate_pay"), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), anyString()))
+                .thenReturn("refund_rejected_stub");
 
         BarReservationRecord cancelled = service.cancelReservation(reservation.id(),
                 new BarReservationCancelRequest("cancel-refund", "cancel", List.of(), false, "customer"));
         assertThat(cancelled.status()).isEqualTo("cancelled");
-        assertThat(cancelled.depositSettlement()).isEqualTo("refunded");
-        assertThat(cancelled.depositStatus()).isEqualTo("settled");
-        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
-                .contains("bar.reservation_deposit_refunded");
+        assertThat(cancelled.depositStatus()).isEqualTo("paid");
+        assertThat(auditEventRepository.events).filteredOn(e -> "bar.reservation_deposit_refunded".equals(e.eventName()))
+                .singleElement().satisfies(e -> assertThat(e.metadata()).containsEntry("refund_status", "requested")
+                        .containsEntry("refund_id", "refund_rejected_stub"));
     }
 
     @Test

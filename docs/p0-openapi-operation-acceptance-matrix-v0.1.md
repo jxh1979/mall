@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.30
+# P0 OpenAPI Operation 验收矩阵 V0.31
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1141 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1145 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -216,7 +216,7 @@
 | inventory | `POST` | `/api/v1/inventory/saved-bottles/renewals/{id}/review` | `reviewSavedBottleRenewal` | 当班营销主管复核员工代办转存（复核人不得是经办人；decision=approve 从当前到期日顺延，decision=reject 驳回：到期日不动、不计转存次数、须带 reason） | `SavedBottleRenewalRequest` | `bar.saved_bottle.renewal.review` | `staff-token` | `project-bar-customer` | web, tablet, staff_work_phone | 是 | `bar.saved_bottle.renewal_reviewed` | `bar.saved_bottle.renewal_review_failed` |
 | inventory | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | `cancelSavedBottle` | 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废) | `object` | `bar.saved_bottle.manage` | `staff-token` | `project-bar-customer` | tablet, web, staff_work_phone | 是 | `bar.saved_bottle.cancelled` | `bar.saved_bottle.cancel_failed` |
 | inventory | `GET` | `/api/v1/inventory/high-value-reviews` | `listHighValueReviews` | 查询库存域高价值复核单(报损/盘点差异/存酒作废) | `-` | `inventory.high_value.review` | `staff-token` | `project-warehouse-bar` | web, tablet, mobile_admin | 否 | `inventory.high_value_review.viewed` | `inventory.high_value_review.view_failed` |
-| inventory | `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | `reviewHighValue` | 主管复核高价值动作(approve生效/reject回滚) | `object` | `inventory.high_value.review` | `staff-token` | `project-warehouse-bar` | web, tablet, mobile_admin | 是 | `inventory.high_value_review_decided` | `inventory.high_value_review_decide_failed` |
+| inventory | `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | `reviewHighValue` | 复核高价值动作(approve生效/reject回滚)；存酒库房存货处置须门店主管与财务两道审批 | `object` | `inventory.high_value.review` | `staff-token` | `project-warehouse-bar` | web, tablet, mobile_admin | 是 | `inventory.high_value_review_decided` | `inventory.high_value_review_decide_failed` |
 | inventory | `POST` | `/api/v1/inventory/stock-adjustments` | `createStockAdjustment` | 盘点差异、报损、报溢 | `StockAdjustmentRequest` | `inventory.stock.adjust` | `staff-token` | `project-warehouse` | web, staff_work_phone | 是 | `inventory.counted` | `inventory.adjustment_failed` |
 | inventory | `GET` | `/api/v1/inventory/stock-balances` | `listStockBalances` | 查询库存余额 | `-` | `inventory.stock.view` | `staff-token` | `project` | web | 否 | `inventory.stock_balance.viewed` | `inventory.stock_balance.viewed_failed` |
 | inventory | `POST` | `/api/v1/inventory/stock-in` | `createStockIn` | 入库 | `StockInRequest` | `inventory.stock.move` | `staff-token` | `project-warehouse` | web, staff_work_phone | 是 | `inventory.inbound_confirmed` | `inventory.inbound_failed` |
@@ -1152,6 +1152,8 @@
 | customer | `POST` | `/api/v1/customer/stored-value/sms` | `requestCustomerStoredValueSmsCode` | 储值付款短信验证码 | `object` | `not_applicable` | `customer-token` | `self` | app, miniapp | 否 | `customer.otp_requested` | `customer.otp_request_failed` |
 | customer | `GET` | `/api/v1/customer/merchant-card-exit-notices` | `listCustomerMerchantCardExitNotices` | 商户储值卡退出公告（客人端） | `-` | `not_applicable` | `customer-token` | `self` | app, miniapp | 否 | `not_applicable` | `not_applicable` |
 | customer | `GET` | `/api/v1/customer/ticket-expiry-reminders` | `listCustomerTicketExpiryReminders` | 未核销票到期提醒（App/小程序启动与回前台拉取） | `-` | `not_applicable` | `customer-token` | `self` | app, miniapp | 否 | `not_applicable` | `not_applicable` |
+| customer | `GET` | `/api/v1/customer/level-notices` | `listCustomerLevelNotices` | 本人未读会员等级通知（App/小程序启动与回前台拉取并弹出） | `-` | `not_applicable` | `customer-token` | `self` | app, miniapp | 否 | `not_applicable` | `not_applicable` |
+| customer | `POST` | `/api/v1/customer/level-notices/{notice_id}/read` | `markCustomerLevelNoticeRead` | 会员等级通知标记已读（客人点「知道了」） | `-` | `not_applicable` | `customer-token` | `self` | app, miniapp | 否 | `member.level_notice.read` | `member.level_notice.read_failed` |
 | customer | `GET` | `/api/v1/customer/projects` | `listCustomerProjects` | 综合体介绍、营业时间与活动公告（客人端首页） | `-` | `public` | `public` | `public-project` | app, miniapp | 否 | `not_applicable` | `not_applicable` |
 | customer | `GET` | `/api/v1/customer/amusement/projects` | `listCustomerAmusementProjects` | 可预定游乐项目与场次（客人端只读） | `-` | `public` | `public` | `public-project` | app, miniapp | 否 | `not_applicable` | `not_applicable` |
 | customer | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | `getMerchantCardExitNoticePolicy` | 查商户卡退出公示天数（全平台） | `-` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
@@ -1160,6 +1162,8 @@
 | merchant-portal | `POST` | `/api/v1/merchant-portal/card-exit-notices` | `publishMerchantCardExitNotice` | 商户专区·发布本商户储值卡退出公告 | `object` | `merchant.portal.card_exit_notice.publish` | `staff-token` | `merchant` | web, merchant_portal | 是 | `stored_value.exit_notice_published` | `stored_value.exit_notice_publish_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | `getTicketExpiryReminderPolicy` | 查未核销票到期提醒提前小时数（按项目） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | ticketing | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | `saveTicketExpiryReminderPolicy` | 配置未核销票到期提醒提前小时数及上下限（按项目） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket.expiry_reminder_policy_updated` | `ticket.expiry_reminder_policy_update_failed` |
+| bar | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | `getBarArrivalReminderPolicy` | 查最晚到店时间前提醒提前分钟数（按项目） | `-` | `bar.reservation.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| bar | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | `saveBarArrivalReminderPolicy` | 配置最晚到店时间前提醒提前分钟数及上下限（按项目） | `object` | `bar.reservation.manage` | `staff-token` | `project` | web | 是 | `bar.arrival_reminder_policy_updated` | `bar.arrival_reminder_policy_update_failed` |
 | customer | `GET` | `/api/v1/home-contents/{project_id}` | `getCustomerHomeContent` | 查客人端首页已发布与待审批的综合体介绍与活动公告 | `-` | `customer.home_content.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `POST` | `/api/v1/home-contents/{project_id}/publish` | `publishCustomerHomeContent` | 提交发布客人端首页综合体介绍与活动公告（审批后生效） | `object` | `customer.home_content.manage` | `staff-token` | `project` | web | 是 | `customer.home_content_published` | `customer.home_content_publish_failed` |
 

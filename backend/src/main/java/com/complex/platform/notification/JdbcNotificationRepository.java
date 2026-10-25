@@ -1,8 +1,11 @@
 package com.complex.platform.notification;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,10 +27,13 @@ class JdbcNotificationRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    // PGM L876「客人和员工的手机号……一律加密存放」：收件人手机号写时 encrypt、读时 decrypt（V547）；发送器拿内存里的明文，下发不变。
+    private final PiiCipher piiCipher;
 
-    JdbcNotificationRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcNotificationRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper, PiiCipher piiCipher) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.piiCipher = piiCipher;
     }
 
     public NotificationSendLogRecord insert(NotificationSendLogRecord record) {
@@ -90,7 +96,7 @@ class JdbcNotificationRepository {
                 .addValue("channel", record.channel())
                 .addValue("domain", record.domain())
                 .addValue("event_key", record.eventKey())
-                .addValue("recipient", record.recipient())
+                .addValue("recipient", piiCipher.encrypt(record.recipient()))
                 .addValue("template_code", record.templateCode())
                 .addValue("params", writeJson(record.params()))
                 .addValue("status", record.status())
@@ -107,7 +113,7 @@ class JdbcNotificationRepository {
                 resultSet.getString("channel"),
                 resultSet.getString("domain"),
                 resultSet.getString("event_key"),
-                resultSet.getString("recipient"),
+                piiCipher.decrypt(resultSet.getString("recipient")),
                 resultSet.getString("template_code"),
                 readObjectMap(resultSet.getString("params")),
                 resultSet.getString("status"),

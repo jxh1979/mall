@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -49,7 +49,8 @@ public class BarEntryService {
     /**
      * 员工代客订台。ROOT-03-R19：最晚到店时间必填（BSM 第 1062 行）；提交成功即占台（ENUM 第 100 行「员工代订提交成功时，该台位即进入已预留……
      * 员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」），台位已被占或已开台 409 BAR_TABLE_ALREADY_RESERVED，整笔不落库。
-     * 裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」：手机号只用于核对，不落库。
+     * 裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」：手机号核对受限会员并加密留存，
+     * 供 BSM 第 1596 行订台短信（员工代订没有会员编号，这是唯一收件人来源；第十四批 OBS-13-03）。
      */
     BarReservationRecord createReservation(BarReservationRequest request, String customerId, String orderSource, String terminal) {
         BarReservationRequest actual = requireRequest(request);
@@ -110,6 +111,11 @@ public class BarEntryService {
         if (!repository.holdTable(saved.id(), saved.tableId())) {
             throw tableAlreadyReserved();
         }
+        // 与 CustomerService.requireStaffBookable 同一规范化（去空格与横线后 11 位）。
+        repository.saveReservationCustomerPhone(saved.id(), customerPhone.replaceAll("[\\s-]", ""));
+        if (notifier != null) {
+            notifier.notifyStaffBooked(saved);
+        }
         if ("pending".equals(depositStatus)) {
             auditEventService.recordSuccess("bar.reservation_deposit_required", "bar.reservation.create",
                     "bar_reservation", saved.id(), null, actual.idempotencyKey(),
@@ -124,6 +130,16 @@ public class BarEntryService {
     @org.springframework.context.annotation.Lazy
     com.complex.platform.finance.FinanceService financeService;
 
+    // 第十四批 OBS-13-03 订台短信（BSM 第 1596 行）。手工构造的单测为空即不发。
+    @org.springframework.beans.factory.annotation.Autowired
+    BarReservationNotifier notifier;
+
+    private void sms(BarReservationRecord reservation, String event) {
+        if (notifier != null) {
+            notifier.notify(reservation, event);
+        }
+    }
+
     /**
      * ROOT-03-R19（ENUM 第 100 行「客人自助订台支付定金成功……该台位即进入已预留。一个台位同一时刻只能存在一笔有效预留……冲突时先支付定金者得」）：
      * 客人定金到账确认时占台（调用方提供事务，定金已置已支付）。抢不到——已被先付者或员工代订占着，或台位已开台、不可用——时本订台取消、不占台，
@@ -131,6 +147,7 @@ public class BarEntryService {
      */
     public boolean holdOnDepositPaid(BarReservationRecord paid, String originalPaymentRef) {
         if (repository.holdTable(paid.id(), paid.tableId())) {
+            sms(paid, "confirmed");
             return true;
         }
         BarReservationRecord lost = repository.saveReservation(paid.withStatus("cancelled", Instant.now()));
@@ -143,6 +160,7 @@ public class BarEntryService {
                         "deposit_channel", String.valueOf(lost.depositChannel()),
                         "refund_status", "requested",
                         "refund_id", refundId));
+        sms(lost, "cancelled");
         return false;
     }
 
@@ -222,7 +240,9 @@ public class BarEntryService {
     BarReservationRecord cancelReservation(String reservationId, BarReservationCancelRequest request) {
         BarReservationCancelRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
-        return cancel(reservation, actual.noShow() != null && actual.noShow(), false, actual.idempotencyKey());
+        BarReservationRecord cancelled = cancel(reservation, actual.noShow() != null && actual.noShow(), false, actual.idempotencyKey());
+        sms(cancelled, "cancelled");
+        return cancelled;
     }
 
     /**
@@ -241,6 +261,10 @@ public class BarEntryService {
                 "bar_reservation", released.id(), null, "reservation-timeout:" + released.id(),
                 Map.of("latest_arrival_at", reservation.latestArrivalAt().toString(),
                         "deposit_status", released.depositStatus()));
+        // 未付定金、从未占台的自助订台超时作废，没有台位被释放，不发超时释放台位通知。
+        if ("held".equals(reservation.holdStatus())) {
+            sms(released, "timeout_released");
+        }
         return true;
     }
 
@@ -254,23 +278,22 @@ public class BarEntryService {
                     "订金已结算，订台不能再取消");
         }
         Instant now = Instant.now();
-        String settlement;
-        String event;
-        if (reservation.depositAmountCent() <= 0L || !"paid".equals(reservation.depositStatus())) {
-            // 无定金或定金未支付：直接取消，无退/没收。
-            settlement = null;
-            event = "bar.reservation_deposit_refunded";
-        } else {
+        String settlement = null;
+        String refundId = null;
+        // 无定金或定金未支付：直接取消，无退/没收。
+        if (reservation.depositAmountCent() > 0L && "paid".equals(reservation.depositStatus())) {
             BarDepositRuleRecord rule = resolveDepositRuleByBar(reservation.barId(), null);
             int freeBeforeMinutes = rule == null ? 0 : rule.cancelFreeBeforeMinutes();
             long minutesToReservation = ChronoUnit.MINUTES.between(now, reservation.reservedAt());
             boolean withinFreeWindow = !noShow && minutesToReservation >= freeBeforeMinutes;
             if (withinFreeWindow) {
-                settlement = "refunded";
-                event = "bar.reservation_deposit_refunded";
+                // 第十四批 OBS-13-03-R6（BSM 第 1062 行「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」）：免费时限内取消
+                // 只按原付款渠道登记原路待退，定金保持已支付（退款处理中）；财务核实退款成功后才回写已退还并发定金原路退回通知。
+                refundId = financeService.recordRejectedTicketPaymentRefund("bar_deposit_rejection", reservation.id(),
+                        reservation.depositAmountCent(), reservation.depositChannel(), originalPaymentRef(reservation),
+                        reservation.merchantId(), reservation.barId(), "免费时限内取消订台，定金原路退回");
             } else {
                 settlement = "forfeited";
-                event = "bar.reservation_deposit_forfeited";
             }
         }
         String depositStatus = settlement != null ? "settled"
@@ -288,12 +311,26 @@ public class BarEntryService {
         // ROOT-03-R19（ENUM 第 100 行「已预留只能经取消订台、超时释放、到店开台三条路径退出」）：取消即释放占台。
         repository.releaseHold(saved.id());
         if (settlement != null) {
-            auditEventService.recordSuccess(event, "bar.reservation.manage",
+            auditEventService.recordSuccess("bar.reservation_deposit_forfeited", "bar.reservation.manage",
                     "bar_reservation", saved.id(), null, idempotencyKey,
                     Map.of("deposit_amount_cent", saved.depositAmountCent(),
                             "deposit_settlement", settlement, "no_show", noShow));
+            sms(saved, "deposit_forfeited");
+        }
+        if (refundId != null) {
+            auditEventService.recordSuccess("bar.reservation_deposit_refunded", "bar.reservation.manage",
+                    "bar_reservation", saved.id(), null, idempotencyKey,
+                    Map.of("deposit_amount_cent", saved.depositAmountCent(),
+                            "refund_status", "requested", "refund_id", refundId, "no_show", noShow));
         }
         return repository.findReservationById(saved.id()).orElse(saved);
+    }
+
+    /** 原付款渠道单号（客人在线付款的付款意向；员工登记定金没有意向时为空）。 */
+    private String originalPaymentRef(BarReservationRecord reservation) {
+        return reservation.depositIntentId() == null ? null
+                : financeService.findPaymentIntent(reservation.depositIntentId())
+                        .map(com.complex.platform.finance.PaymentIntentRecord::gatewayRef).orElse(null);
     }
 
     private BarDepositRuleRecord resolveDepositRuleByBar(String barId, String tableType) {

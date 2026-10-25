@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -838,32 +838,36 @@ class JdbcFinanceRepository implements FinanceRepository {
         return count != null && count > 0;
     }
 
+    // OBS-13-07（BSM L1681 官方 App/小程序与第三方渠道分开汇总）：自营售票渠道，即 TicketOrderService.SALES_CHANNELS 去掉 channel
+    // 与各第三方渠道码；第三方渠道回流出的票 sales_channel 记具体渠道码（meituan、douyin 等），一律归渠道售票源。
+    private static final String SELF_SALES_CHANNELS = "('admin', 'kiosk', 'miniapp', 'app', 'web')";
+
     @Override
     public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
         // 官方售票：ticket_orders 已支付(paid)，以 visit_date 为经营日；金额=实付分，count=单数。
-        // 仅归集非渠道售票；成功退款按 succeeded_at 落在经营日窗口 [from, to) 冲减本源收入。
+        // 仅归集自营售票（SELF_SALES_CHANNELS）；成功退款按 succeeded_at 落在经营日窗口 [from, to) 冲减本源收入。
         // 财务确认：revenue.net = 自营售票 + 酒吧 − 退款（不含第三方回流）；退款冲减按经营日发生。
         return aggregateTotals("""
                 SELECT COALESCE(SUM(o.amount_cent), 0) AS amount_cent,
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
-                         WHERE ro.sales_channel <> 'channel'
+                         WHERE ro.sales_channel IN %1$s
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
                            AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
-                   AND o.sales_channel <> 'channel'
+                   AND o.sales_channel IN %1$s
                    AND o.visit_date = :business_date
-                """, businessDate, fromInclusive, toExclusive);
+                """.formatted(SELF_SALES_CHANNELS), businessDate, fromInclusive, toExclusive);
     }
 
     @Override
     public DailyCloseSourceTotals aggregateChannelTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
-        // P1#15：第三方渠道售票接入真实数据源。ticket_orders.sales_channel='channel'（V009 售票渠道枚举中的渠道售票，
-        // 区别于自营 admin/kiosk/miniapp/app/web）已支付(paid)，以 visit_date 为经营日；金额=实付分，count=单数。
+        // P1#15：第三方渠道售票接入真实数据源。ticket_orders.sales_channel 不在 SELF_SALES_CHANNELS（字面 channel 及 meituan、
+        // douyin 等渠道码，第三方渠道回流本地出票记具体渠道码；OBS-13-07）已支付(paid)，以 visit_date 为经营日；金额=实付分，count=单数。
         // 退款（冲减当日净收入）：ticket_refunds 按渠道售票订单、created_at 落经营日窗口 [from, to) 归集为 refund_cent。
         // 跨域只读：仅读 ticketing 域既有表，不改其写。
         return aggregateTotals("""
@@ -871,16 +875,16 @@ class JdbcFinanceRepository implements FinanceRepository {
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
-                         WHERE ro.sales_channel = 'channel'
+                         WHERE ro.sales_channel NOT IN %1$s
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
                            AND r.succeeded_at < :to) AS refund_cent,
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
-                   AND o.sales_channel = 'channel'
+                   AND o.sales_channel NOT IN %1$s
                    AND o.visit_date = :business_date
-                """, businessDate, fromInclusive, toExclusive);
+                """.formatted(SELF_SALES_CHANNELS), businessDate, fromInclusive, toExclusive);
     }
 
     @Override
@@ -938,7 +942,9 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
-        // 第三方回流（餐饮/零售）：integration_order_syncs 回流已 synced 的 order 类，以 created_at 落在经营日窗口归集。
+        // 第三方回流（餐饮/零售）：只计已入账（sync_type='order'、status='synced'）且已按门店映射落商户的餐饮/零售回流订单，
+        // 以 created_at 落在经营日窗口归集；谓词与 analytics THIRDPARTY_REVENUE_WHERE 一致（OBS-13-07）。
+        // 渠道团购票（business_type='ticket'）已本地出票、计入渠道售票源；映射缺失（merchant_id 为空）按 BSM L1548 挂差异、不入账。
         // 财务确认：第三方回流仅作商户结算口径单列展示，不计入平台 revenue.net（净收入派生时剔除本源）。
         return aggregateTotals("""
                 SELECT COALESCE(SUM(amount_cent), 0) AS amount_cent,
@@ -947,6 +953,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                   FROM integration_order_syncs
                  WHERE sync_type = 'order'
                    AND status = 'synced'
+                   AND business_type IN ('catering', 'retail')
+                   AND merchant_id IS NOT NULL
                    AND created_at >= :from
                    AND created_at < :to
                 """, businessDate, fromInclusive, toExclusive);
@@ -990,7 +998,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
-                         WHERE ro.sales_channel <> 'channel'
+                         WHERE ro.sales_channel IN %1$s
                            AND ro.merchant_id = :merchant_id
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
@@ -998,10 +1006,10 @@ class JdbcFinanceRepository implements FinanceRepository {
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
-                   AND o.sales_channel <> 'channel'
+                   AND o.sales_channel IN %1$s
                    AND o.visit_date = :business_date
                    AND o.merchant_id = :merchant_id
-                """, businessDate, from, to, scopeId);
+                """.formatted(SELF_SALES_CHANNELS), businessDate, from, to, scopeId);
     }
 
     @Override
@@ -1015,7 +1023,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                        (SELECT COALESCE(SUM(r.refund_amount_cent), 0)
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
-                         WHERE ro.sales_channel = 'channel'
+                         WHERE ro.sales_channel NOT IN %1$s
                            AND ro.merchant_id = :merchant_id
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
@@ -1023,10 +1031,10 @@ class JdbcFinanceRepository implements FinanceRepository {
                        COUNT(*) AS order_count
                   FROM ticket_orders o
                  WHERE o.pay_status = 'paid'
-                   AND o.sales_channel = 'channel'
+                   AND o.sales_channel NOT IN %1$s
                    AND o.visit_date = :business_date
                    AND o.merchant_id = :merchant_id
-                """, businessDate, from, to, scopeId);
+                """.formatted(SELF_SALES_CHANNELS), businessDate, from, to, scopeId);
     }
 
     @Override

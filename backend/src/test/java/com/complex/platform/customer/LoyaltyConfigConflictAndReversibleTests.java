@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,7 +38,7 @@ class LoyaltyConfigConflictAndReversibleTests {
 
     private static CustomerMemberLevelRecord level(String id, String projectId, String code, String status) {
         Instant now = Instant.now();
-        return new CustomerMemberLevelRecord(id, projectId, code, "名", 1, 0L, 0L, 365, 0, 10000, status, now, now);
+        return new CustomerMemberLevelRecord(id, projectId, code, "名", 1, 0L, 10000, status, now, now);
     }
 
     // ---- 问题1：重复创建 → 409（含对已停用/归档项的冲突） ----
@@ -49,7 +51,7 @@ class LoyaltyConfigConflictAndReversibleTests {
                 .thenReturn(List.of(level("member_level_old", "prj_A", "gold", "archived")));
 
         assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, "prj_A", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active")))
+                null, "prj_A", "gold", "金卡", 2, 5000L, 15000, "active")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.status()).isEqualTo(HttpStatus.CONFLICT));
         // 冲突时不得落库。
@@ -90,7 +92,7 @@ class LoyaltyConfigConflictAndReversibleTests {
         when(repository.saveMemberLevel(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CustomerMemberLevelRecord saved = service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, "prj_A", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active"));
+                null, "prj_A", "gold", "金卡", 2, 5000L, 15000, "active"));
 
         assertThat(saved.levelCode()).isEqualTo("gold");
         assertThat(saved.id()).startsWith("member_level_");
@@ -107,7 +109,7 @@ class LoyaltyConfigConflictAndReversibleTests {
         when(repository.saveMemberLevel(any())).thenAnswer(inv -> inv.getArgument(0));
 
         CustomerMemberLevelRecord saved = service.saveMemberLevel(new MemberLevelConfigRequest(
-                "member_level_x", "prj_A", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active"));
+                "member_level_x", "prj_A", "gold", "金卡", 2, 5000L, 15000, "active"));
 
         assertThat(saved.id()).isEqualTo("member_level_x");
         assertThat(saved.status()).isEqualTo("active"); // 停用项被改回 active（可逆）
@@ -122,7 +124,7 @@ class LoyaltyConfigConflictAndReversibleTests {
         when(repository.listMemberLevelsByProject("prj_A")).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
-                "member_level_other_project", "prj_HACK", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active")))
+                "member_level_other_project", "prj_HACK", "gold", "金卡", 2, 5000L, 15000, "active")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.status()).isEqualTo(HttpStatus.NOT_FOUND));
         // 定位查询严格走 token scope prj_A，绝不用请求体 prj_HACK。
@@ -137,7 +139,7 @@ class LoyaltyConfigConflictAndReversibleTests {
         when(repository.saveMemberLevel(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, "prj_HACK", "gold", "金卡", 2, 5000L, 3000L, 365, 30, 15000, "active"));
+                null, "prj_HACK", "gold", "金卡", 2, 5000L, 15000, "active"));
 
         ArgumentCaptor<CustomerMemberLevelRecord> saved = ArgumentCaptor.forClass(CustomerMemberLevelRecord.class);
         verify(repository).saveMemberLevel(saved.capture());

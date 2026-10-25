@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -161,7 +161,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [inspectionRecords, setInspectionRecords] = React.useState<InspectionRecordRow[]>([]);
   const [policyRows, setPolicyRows] = React.useState<FacilityWorkOrderPolicyRow[]>(DEFAULT_POLICIES);
   const [equipmentForm, setEquipmentForm] = React.useState({ name: "", equipmentType: "elevator", brand: "", responsibleUserId: "", maintenanceCycleDays: "90", spaceId: "" });
-  const [statusForm, setStatusForm] = React.useState({ equipmentId: "", status: "normal", alarmSource: "manual", alarmNote: "", priority: "" });
+  const [statusForm, setStatusForm] = React.useState({ equipmentId: "", status: "normal", alarmNote: "", priority: "" });
   const [alarmRows, setAlarmRows] = React.useState<FacilityAlarmDetailRow[]>([]);
   const [myAlarms, setMyAlarms] = React.useState<FacilityAlarmRow[]>([]);
   const [dutyRows, setDutyRows] = React.useState<FacilityAlarmDutyRow[]>([]);
@@ -267,7 +267,8 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
     }
     await api.post(`/api/v1/facility/equipment/${encodeURIComponent(statusForm.equipmentId.trim())}/status`, {
       status: statusForm.status,
-      alarmSource: statusForm.status === "alarm" ? statusForm.alarmSource : undefined,
+      // OBS-13-06（PGM L823「告警来源支持人工上报与远程/物联自动采集两种」）：后台是员工人工上报，来源固定手工；物联来源只留给真实设备接入。
+      alarmSource: statusForm.status === "alarm" ? "manual" : undefined,
       alarmNote: statusForm.alarmNote.trim() || undefined,
       priority: needsPriority ? statusForm.priority : undefined,
     });
@@ -858,7 +859,6 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         <div className="admin-inline-form" data-testid="facility-equipment-status-form">
           <input data-testid="facility-equipment-status-id" aria-label="状态设备 id" placeholder="设备 id" value={statusForm.equipmentId} onChange={(event) => setStatusForm({ ...statusForm, equipmentId: event.target.value })} />
           <select data-testid="facility-equipment-status" aria-label="设备状态" value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })}>{EQUIPMENT_STATUSES.filter(([value]) => value !== "retired").map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <select data-testid="facility-equipment-alarm-source" aria-label="告警源" value={statusForm.alarmSource} onChange={(event) => setStatusForm({ ...statusForm, alarmSource: event.target.value })}><option value="manual">手工</option><option value="iot">物联网</option></select>
           <select data-testid="facility-equipment-status-priority" aria-label="告警优先级" value={statusForm.priority} onChange={(event) => setStatusForm({ ...statusForm, priority: event.target.value })}><option value="">告警/故障须选优先级</option>{PRIORITIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-equipment-alarm-note" aria-label="告警说明" placeholder="告警说明" value={statusForm.alarmNote} onChange={(event) => setStatusForm({ ...statusForm, alarmNote: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-equipment-status-change" onClick={() => void changeEquipmentStatus()}>状态变更/告警上报</PermissionButton>

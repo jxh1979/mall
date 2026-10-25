@@ -1,9 +1,9 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 小程序入口（app.js）：启动与回前台拉终端开关（PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」：本端被关或拉取失败 → 本端暂停服务；
 // 模块被关只隐藏该模块入口）；已登录时弹未核销票到期提醒（BSM「未核销的票在到期前通过官方 App 或小程序弹出的到期提醒」），
 // 点「知道了」后本次运行内不再弹同一张票。
 import path from "node:path";
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 
 import { fail, fire, flush, freshModules, header, installWx, mount, ok, q, require, ROOT } from "./helpers.js";
 
@@ -39,6 +39,29 @@ test("expiryReminderPopsOnShowAndNotRepeatedAfterDismiss", async () => {
   app.onShow();
   await flush();
   expect(wx.showModal).toHaveBeenCalledTimes(1);
+});
+
+// OBS-13-01（BSM L820）：降级预警、「已保级」与降级补发通知只在站内弹出（BSM L1596 客人短信清单不含等级通知）；点「知道了」回写已读。
+test("levelNoticePopsOnShowAndMarksReadOnConfirm", async () => {
+  const { wx, requests } = installWx({
+    ...SESSION,
+    "GET /api/v1/customer/terminal-switches/effective": ok([]),
+    "GET /api/v1/customer/level-notices": ok([
+      { id: "lvn-1", notice_type: "downgrade_warning", current_level: "gold", current_level_name: "金卡", target_level: "silver",
+        target_level_name: "银卡", cycle_end: "2031-06-15T04:00:00Z", created_at: "2031-05-17T04:00:00Z" },
+    ]),
+    "POST /api/v1/customer/level-notices/lvn-1/read": ok(null),
+  }, TOKEN);
+  const app = loadApp();
+  app.onLaunch();
+  app.onShow();
+  await vi.waitFor(() => expect(wx.showModal.mock.calls.some((c) => c[0].title === "会员等级通知")).toBe(true));
+  const modal = wx.showModal.mock.calls.find((c) => c[0].title === "会员等级通知")[0];
+  expect(modal).toMatchObject({ showCancel: false, confirmText: "知道了" });
+  expect(modal.content).toContain("将降至银卡");
+  expect(modal.content).toContain("这只是提醒");
+  expect(modal.content).not.toContain("silver");
+  await vi.waitFor(() => expect(requests.some((r) => r.key === "POST /api/v1/customer/level-notices/lvn-1/read")).toBe(true));
 });
 
 test("terminalClosedOrSwitchFetchFailureShowsPausedPage", async () => {

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -169,19 +169,30 @@ class StoredValueNotificationIntegrationTest {
         }
     }
 
+    /**
+     * OBS-13-04（BSM 第 1598 行「涉及客人金额发生变化的通知（储值消费扣款、储值充值到账……）」不在可关闭范围内，不得按类或按条关闭）：
+     * 总开关、储值域开关、充值与扣款事件开关全关，充值到账与消费扣款照发。
+     */
     @Test
-    void settleTopupWritesSkippedNotificationLogWhenMainSwitchOff() {
+    void topupAndConsumeStillSendWhenMainDomainAndEventSwitchesAllOff() {
         setSwitch("sms_notification", false);
+        setSwitch("sms.notify.stored_value", false);
+        setSwitch("sms.notify.stored_value.topup", false);
+        setSwitch("sms.notify.stored_value.consume", false);
         String prefix = unique("off");
         String customerId = prefix + "_customer";
         String phone = uniquePhone();
         insertCustomer(customerId, phone);
+        String merchantId = prefix + "_merchant";
 
-        settleTopup(customerId, 3_000L, prefix, null);
+        settleTopup(customerId, 3_000L, prefix, merchantId);
+        TestSecurityActors.asMerchantUser(merchantId);
+        storedValueService.consumeInternal(customerId, null, merchantId, 1_000L, "不可关闭扣款通知", prefix + "_consume");
 
         assertThat(logCount("topup", phone)).isEqualTo(1);
-        assertThat(logValue("topup", phone, "status")).isEqualTo("skipped_switch_off");
-        assertThat(logValue("topup", phone, "reason")).isEqualTo("switch_off:sms_notification");
+        assertThat(logValue("topup", phone, "status")).isEqualTo("sent");
+        assertThat(logCount("consume", phone)).isEqualTo(1);
+        assertThat(logValue("consume", phone, "status")).isEqualTo("sent");
     }
 
     @Test
@@ -279,23 +290,11 @@ class StoredValueNotificationIntegrationTest {
         // 删 customer/account 会级联触碰不可变账本致整事务回滚；finance_payment_intents 亦被 delete_only 触发器锁。
         // 用例已用每次随机 UUID 客户号 + 手机号前缀（15588…）自隔离，残留行属 append-only 留痕（按设计永久），
         // 故此处仅清理可删的 notification_send_log / idempotency_records。
-        jdbcTemplate.update("""
-                DELETE FROM idempotency_records
-                 WHERE idempotency_key LIKE 'sv_notif_%'
-                    OR idempotency_key IN (
-                        SELECT request_id
-                          FROM notification_send_log
-                         WHERE domain = 'stored_value'
-                           AND (recipient LIKE ?
-                                OR recipient IN ('15500020001', '15500020002', '15500020003'))
-                    )
-                """, TEST_PHONE_PREFIX + "%");
-        jdbcTemplate.update("""
-                DELETE FROM notification_send_log
-                 WHERE domain = 'stored_value'
-                   AND (recipient LIKE ?
-                        OR recipient IN ('15500020001', '15500020002', '15500020003'))
-                """, TEST_PHONE_PREFIX + "%");
+        jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE 'sv_notif_%'");
+        // 收件人手机号落密文（V547）：取出解密后按测试手机号筛。
+        com.complex.platform.support.NotificationSendLogRows.delete(jdbcTemplate, com.complex.platform.support.NotificationSendLogRows.ids(
+                jdbcTemplate, piiCipher, "stored_value", null,
+                r -> r.startsWith(TEST_PHONE_PREFIX) || java.util.Set.of("15500020001", "15500020002", "15500020003").contains(r)));
     }
 
     private String idFor(String capabilityCode) {
@@ -303,38 +302,22 @@ class StoredValueNotificationIntegrationTest {
     }
 
     private int logCount(String event, String recipient) {
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT count(*)
-                  FROM notification_send_log
-                 WHERE domain = 'stored_value'
-                   AND event_key = ?
-                   AND recipient = ?
-                """, Integer.class, event, recipient);
-        return count == null ? 0 : count;
+        return logIds(event, recipient).size();
     }
 
     private String logValue(String event, String recipient, String column) {
-        return jdbcTemplate.queryForObject("""
-                SELECT %s
-                  FROM notification_send_log
-                 WHERE domain = 'stored_value'
-                   AND event_key = ?
-                   AND recipient = ?
-                 ORDER BY created_at DESC
-                 LIMIT 1
-                """.formatted(column), String.class, event, recipient);
+        return jdbcTemplate.queryForObject("SELECT %s FROM notification_send_log WHERE id = ?".formatted(column), String.class,
+                logIds(event, recipient).getFirst());
     }
 
     private String logParam(String event, String recipient, String key) {
-        return jdbcTemplate.queryForObject("""
-                SELECT params ->> ?
-                  FROM notification_send_log
-                 WHERE domain = 'stored_value'
-                   AND event_key = ?
-                   AND recipient = ?
-                 ORDER BY created_at DESC
-                 LIMIT 1
-                """, String.class, key, event, recipient);
+        return jdbcTemplate.queryForObject("SELECT params ->> ? FROM notification_send_log WHERE id = ?", String.class, key,
+                logIds(event, recipient).getFirst());
+    }
+
+    /** 收件人手机号落密文（V547），按明文筛行须解密后比。 */
+    private java.util.List<String> logIds(String event, String recipient) {
+        return com.complex.platform.support.NotificationSendLogRows.ids(jdbcTemplate, piiCipher, "stored_value", event, recipient::equals);
     }
 
     private String maskPhone(String phone) {

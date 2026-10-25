@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -272,6 +272,7 @@ public class MerchantConsumptionRewardService {
         if (growthBack > 0) {
             jdbc.update("INSERT INTO customer_growth_ledger(id, customer_id, merchant_reward_id, change_type, growth_delta, created_at) VALUES (?, ?, ?, 'reverse', ?, ?)",
                     "growth_reverse_" + step, r.customerId(), r.id(), -growthBack, ts(at));
+            loyalty.regrade(r.customerId(), at, true); // 裁决补充（第十四批）第 2 条：冲回后立即按当前滚动周期成长值重新定级。
         }
         boolean pointsGone = r.points() > 0 && points == 0;
         String status = !pointsGone ? r.status() : confirmed ? "reversed" : "cancelled";
@@ -298,7 +299,7 @@ public class MerchantConsumptionRewardService {
 
     private static CustomerPointsAccountRecord account(CustomerPointsAccountRecord a, long balance, long growth, Instant at) {
         return new CustomerPointsAccountRecord(a.id(), a.customerId(), balance, a.level(), a.recentSummary(), a.frozenPoints(), a.accountStatus(),
-                a.levelPeriodStart(), growth, a.graceUntil(), a.lastCheckInDate(), a.checkInStreak(), a.createdAt(), at);
+                a.levelPeriodStart(), growth, a.protectionUntil(), a.lastCheckInDate(), a.checkInStreak(), a.createdAt(), at);
     }
 
     private record Fact(String merchantId, String format, String projectId, Instant paidAt, String member,
@@ -348,10 +349,11 @@ public class MerchantConsumptionRewardService {
         if (growth > 0) {
             customers.savePoints(new CustomerPointsAccountRecord(account.id(), account.customerId(), account.balance(), account.level(),
                     account.recentSummary(), account.frozenPoints(), account.accountStatus(), account.levelPeriodStart(),
-                    Math.addExact(account.keepThresholdProgress(), growth), account.graceUntil(), account.lastCheckInDate(),
+                    Math.addExact(account.keepThresholdProgress(), growth), account.protectionUntil(), account.lastCheckInDate(),
                     account.checkInStreak(), account.createdAt(), f.completedAt()));
             jdbc.update("INSERT INTO customer_growth_ledger(id, customer_id, merchant_reward_id, change_type, growth_delta, created_at) VALUES (?, ?, ?, 'earn', ?, ?)",
                     "growth_" + id, f.member(), id, growth, ts(f.completedAt()));
+            loyalty.regrade(f.member(), f.completedAt(), false); // OBS-13-01（BSM L820）：达到门槛立即升级。
         }
         if (points > 0) {
             customers.savePointsLedger(new CustomerPointsLedgerRecord("ledger_earn_" + id, f.member(), points, account.balance(),

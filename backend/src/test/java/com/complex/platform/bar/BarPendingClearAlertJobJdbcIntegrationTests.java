@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,6 +30,7 @@ class BarPendingClearAlertJobJdbcIntegrationTests {
 
     @Autowired private BarPendingClearAlertJob job;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private com.complex.platform.common.crypto.PiiCipher piiCipher;
 
     private final String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     private final String bar = "pcj_bar_" + suffix;
@@ -72,8 +73,9 @@ class BarPendingClearAlertJobJdbcIntegrationTests {
     }
 
     private List<String> recipients(String tag) {
+        // 收件人手机号落密文（V547），读出解密后比。
         return jdbc.queryForList("SELECT recipient FROM notification_send_log WHERE domain='bar' AND event_key='pending_clear_overdue' "
-                + "AND params->>'table_id' = ? ORDER BY recipient", String.class, tableId(tag));
+                + "AND params->>'table_id' = ?", String.class, tableId(tag)).stream().map(piiCipher::decrypt).sorted().toList();
     }
 
     private String tableId(String tag) {

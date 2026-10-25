@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -12,7 +12,7 @@ import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDra
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { Tabs } from "antd";
 import { RowActions, type RowAction } from "../components/RowActions";
-import { TicketExpiryReminderSection } from "./CustomerFacingSettingsSections";
+import { BarArrivalReminderSection, TicketExpiryReminderSection } from "./CustomerFacingSettingsSections";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -808,6 +808,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </div>
       </div>
       <TicketExpiryReminderSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
+      <BarArrivalReminderSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
       <Tabs
         type="card"
         data-testid="ticketing-tabs"

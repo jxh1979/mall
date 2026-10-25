@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -35,6 +35,11 @@ public class TicketRewardConfigService {
     public static final String MANAGE = "ticket.reward.config.manage";
     /** 第十一批 TK-04-a：按商户业态全国生效的商户消费积分获取率与成长值规则（BSM L822；操作员 2026-10-21 裁决补充第 4 条）。 */
     static final Set<String> MERCHANT_KINDS = Set.of("merchant_points","merchant_growth");
+    /** OBS-13-01（BSM L820）：会员等级滚动统计周期（月）、保护期（月）、降级提前通知天数，全平台统一、值与上下限同配、须审批、只对后续周期生效。 */
+    static final String LEVEL_ROLLING_MONTHS = "level_rolling_months";
+    static final String LEVEL_PROTECTION_MONTHS = "level_protection_months";
+    static final String LEVEL_NOTICE_DAYS = "level_notice_days";
+    static final Set<String> LEVEL_KINDS = Set.of(LEVEL_ROLLING_MONTHS, LEVEL_PROTECTION_MONTHS, LEVEL_NOTICE_DAYS);
     private static final Set<String> BUSINESS_FORMATS = Set.of("bar","catering","retail","amusement","media","other");
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -64,7 +69,7 @@ public class TicketRewardConfigService {
             throw invalid("须填写规则内容及未来生效时间");
         scope(r.projectId(),MANAGE);
         String kind=requireText(r.kind(),"kind");
-        if(!Set.of("points","growth","national","sales_contract","recovery_waiver","merchant_points","merchant_growth").contains(kind)) throw invalid("不支持的奖励配置类型");
+        if(!Set.of("points","growth","national","sales_contract","recovery_waiver","merchant_points","merchant_growth").contains(kind) && !LEVEL_KINDS.contains(kind)) throw invalid("不支持的奖励配置类型");
         validate(r);
         requireApproverScope(r);
         return idempotency.execute("ticketRewardConfig",requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
@@ -125,6 +130,13 @@ public class TicketRewardConfigService {
         return jdbc.query("SELECT * FROM ticket_reward_config_versions WHERE kind=? AND ticket_type_id IS NOT DISTINCT FROM ? AND project_id IS NOT DISTINCT FROM ? AND business_format IS NOT DISTINCT FROM ? AND status='approved' AND published_at<effective_at AND effective_at<=? ORDER BY effective_at DESC LIMIT 1",this::map,kind,ticketType,project,businessFormat,Timestamp.from(at)).stream().findFirst();
     }
 
+    /** 会员等级参数：某时点已审批且已生效的最新一版（出厂版本由 V543 落库；HTML 无提前公告要求，不看公告）。
+     *  拟定生效时间已过才批准的版本不生效、须重新提交（BSM L820「只对后续周期生效，不追溯已确认的等级」，同其他类型「公告须早于生效」）。 */
+    long levelParam(String kind,Instant at) {
+        return jdbc.query("SELECT * FROM ticket_reward_config_versions WHERE kind=? AND status='approved' AND approved_at<=effective_at AND effective_at<=? ORDER BY effective_at DESC LIMIT 1",this::map,kind,Timestamp.from(at))
+                .stream().findFirst().map(c->c.values().fixedValue()).orElseThrow(()->ApiException.conflict("LEVEL_PARAM_REQUIRED","缺少已审批生效的会员等级参数"));
+    }
+
     public List<TicketRewardConfig> publishedRules(String ticketType,String project) {
         return jdbc.query("SELECT * FROM ticket_reward_config_versions WHERE kind IN ('points','growth') AND (?::text IS NULL OR ticket_type_id=?) AND (?::text IS NULL OR project_id=?) AND status='approved' AND published_at IS NOT NULL ORDER BY effective_at DESC,kind",this::map,ticketType,ticketType,project,project);
     }
@@ -141,6 +153,12 @@ public class TicketRewardConfigService {
         if("recovery_waiver".equals(r.kind())) {
             if(r.projectId()!=null || r.ticketTypeId()!=null) throw invalid("豁免线不可限定项目或票种");
             range(v.fixedValue(),v.minimumValue(),v.maximumValue());
+            return;
+        }
+        if(LEVEL_KINDS.contains(r.kind())) {
+            if(r.projectId()!=null || r.ticketTypeId()!=null) throw invalid("会员等级参数全平台统一，不可限定项目或票种");
+            range(v.fixedValue(),v.minimumValue(),v.maximumValue());
+            if(v.minimumValue()<1) throw invalid("会员等级参数及其下限须不小于 1");
             return;
         }
         if(MERCHANT_KINDS.contains(r.kind())) {
@@ -234,8 +252,8 @@ public class TicketRewardConfigService {
         List<String> companies=jdbc.queryForList("SELECT COALESCE((SELECT company_id FROM staff_profiles WHERE user_id=u.id AND status='active' AND registration_status='approved' ORDER BY updated_at DESC LIMIT 1),(SELECT organization_id FROM user_position_assignments WHERE user_id=u.id AND assigned_at<=now()),u.organization_id) FROM access_users u WHERE u.id=? AND u.status='active' AND NOT EXISTS(SELECT 1 FROM staff_profiles s WHERE s.user_id=u.id AND (s.status<>'active' OR s.registration_status<>'approved'))",String.class,approver);
         if(companies.size()!=1 || companies.getFirst()==null)throw invalid("最终审批人尚无有效的所属公司");
         String company=companies.getFirst();
-        // 成长值基础规则由全国平台审批（会员与等级 PRD §4）；业态积分获取率由该业态对应域主管公司审批（DEC-R8-93）。
-        boolean nationwide=Set.of("national","recovery_waiver","merchant_growth").contains(r.kind());
+        // 成长值基础规则与等级参数由全国平台审批（会员与等级 PRD §4）；业态积分获取率由该业态对应域主管公司审批（DEC-R8-93）。
+        boolean nationwide=Set.of("national","recovery_waiver","merchant_growth").contains(r.kind()) || LEVEL_KINDS.contains(r.kind());
         if("merchant_points".equals(r.kind())) {
             if(!formatDomainCompanies(r.businessFormat()).contains(company))throw invalid("最终审批人须属于该商户业态对应的域主管公司");
             return;

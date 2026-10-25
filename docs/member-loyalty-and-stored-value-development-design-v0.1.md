@@ -1,4 +1,4 @@
-# 会员忠诚度 · 储值开发设计 V0.03（付费会员已废止）
+# 会员忠诚度 · 储值开发设计 V0.04（付费会员已废止）
 
 > 生成日期：2026-06-24。性质：**据当前实现回填（source-driven）**——`LoyaltyService` 与 `StoredValueService` 已有部分后端能力，但与现行 HTML 仍有明确差距；`MembershipService` 已不存在，付费会员表已由 V290 删除。本文只记录当前代码事实和待改造差距，业务口径以三份 HTML 和现行会员、积分、储值 PRD 为准。
 
@@ -15,14 +15,16 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 | 账 | 落点（`customer_points_accounts`） | 行为 |
 |---|---|---|
 | **可用积分** | `balance` (BIGINT) | 兑换/扣减消耗；获取时增加。`deductPoints` 扣此账。 |
-| **保级进度（代码列，不等同业务成长值）** | `keep_threshold_progress` (BIGINT，V089) | 当前实现把积分确认值累加到该列并用它算等级；兑换扣 `balance` 不影响。该列不是 HTML 要求的独立成长值账。 |
+| **保级进度（代码列，不等同业务成长值）** | `keep_threshold_progress` (BIGINT，V089) | 积分确认值等仍累加到该列，但自第十四批 OBS-13-01（V543）起等级不再读它。该列不是 HTML 要求的独立成长值账。 |
 | 冻结额 | `frozen_points` (V089) | 账户冻结时挂起。 |
 | 账户状态 | `account_status`（active/frozen） | `freeze`/`unfreeze`。 |
-| 保级周期 | `level_period_start` / `grace_until`（V089） | 等级评估窗口与宽限。 |
+| 本轮保护期 | `level_period_start` / `protection_until`（V543 由 `grace_until` 改名） | 最近一次等级变化时点（升级时即本轮保护期起点；期末保级不更新，作三项等级参数取版本的时点）与本轮保护期截止。 |
 
-**等级计算关键**：`LoyaltyService.evaluateAccount` 用 `highestQualified(levels, account.keepThresholdProgress())` 取等级，不看 `balance`。因此兑换扣 `balance` 不会直接降低等级；但 `keep_threshold_progress` 仍混入积分倍率、签到奖励等非成长值事实，不能据此声称成长值独立账已实现。
+**等级计算关键（2026-10-25 第十四批 OBS-13-01，V543）**：`LoyaltyService.evaluateAccount` 按 `customer_growth_ledger` 在滚动统计周期内的成长值净额取等级，不看 `balance` 与 `keep_threshold_progress`，兑换、签到、消费积分都不影响等级。
 
-## 2. 会员等级（升级 / 保级 / 降级 / 宽限）
+## 2. 会员等级（升级 / 保护期 / 降级预警 / 降级）
+
+> **实现现状（2026-10-25 第十四批 OBS-13-01，V543）**：本节以下 2026-08 前的「保级门槛＋考核周期＋宽限期」描述已不再是代码事实。现行实现见 `member-and-tier-product-prd-v1.0.md` §8 实现现状：三项等级参数（滚动统计周期、保护期、提前通知天数）落 `ticket_reward_config_versions` 版本化审批；成长值入账即时升级、升级起保护期；每日作业发降级预警、「已保级」并在保护期结束当日定级、补发降级通知；成长值冲回即时重定；通知落 `customer_level_notices` 由客人端弹出。`customer_member_levels` 的 `keep_threshold`／`keep_period_days`／`grace_days` 三列保留默认值、不再读写；对应单测已删，判级由 `LoyaltyLevelProtectionJdbcIntegrationTests` 守。
 
 落 `customer_member_levels`（V089）：`level_code`/`level_rank`/`upgrade_threshold`（升级门槛）/`keep_threshold`（保级门槛）/`keep_period_days`（保级周期）/`grace_days`（宽限）/`point_multiplier_basis_points`（积分倍率，10000=1x）。
 
@@ -35,20 +37,20 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
    "会员可直接降至实际符合的等级，不要求逐级下降"相反。单测 `LoyaltyServiceTests.periodEndDowngradesDirectlyToQualifiedLevelAcrossTiers` 守这条。
 3. 单账户手动评估 `evaluateLevel(customerId)` 过权限闸 `customer.loyalty.evaluate`。
 
-### 2.1 待办：成长值口径尚未落地（HTML-05 未闭合，勿视为已完成）
+### 2.1 待办：成长值口径尚未全部落地（HTML-05 未闭合；表中标「已闭合」的三行除外，其余勿视为已完成）
 
 上面的降级落点修正只是**止血**，等级体系与业务 HTML 的口径差距仍在，本批**未做**，如实登记为待办：
 
 | 待办 | HTML 口径 | 代码现状 | 影响 |
 |---|---|---|---|
 | **成长值这本账在代码里根本不存在** | 速查表§二"成长值与可用积分是两套独立账，积分兑换不扣成长值" | 全仓 `成长值`/`growth_value`/`growthValue` 零命中；`LoyaltyService` 把**本次积分**直接累加进 `keep_threshold_progress`（`earnPoints`/`earnPointsPending`/确认路径三处），且该数值**已经吃过等级倍率和生日倍率** | 等级由"加了倍率的积分"决定，高等级会自我加速升级；PRD §9"等级倍率不得放大成长值"被违反 |
-| **保级窗口不是滚动十二个月** | 速查表§二/PRD §7"评估时点向前滚动后台配置的统计周期（全平台统一可配，出厂默认 12 个月）内的有效成长值" | `keep_period_days` 固定周期 + 到期把 `keep_threshold_progress` **清零重攒**（`applyLevelChange(resetPeriod=true)`） | 同样的消费节奏，落在周期边界两侧结果不同；不是滚动窗口 |
+| **保级窗口不是滚动十二个月**（**已由第十四批 OBS-13-01（V543）闭合**：按滚动统计周期内的成长值定级） | 速查表§二/PRD §7"评估时点向前滚动后台配置的统计周期（全平台统一可配，出厂默认 12 个月）内的有效成长值" | `keep_period_days` 固定周期 + 到期把 `keep_threshold_progress` **清零重攒**（`applyLevelChange(resetPeriod=true)`） | 同样的消费节奏，落在周期边界两侧结果不同；不是滚动窗口 |
 | **票务积分未按票种规则算** | 速查表§二"票务订单不读取商户业态规则，而按票种或票务产品已审批生效的积分规则、成长值规则分别计算" | `TicketOrderService` 走项目×受理商户的通用积分累计率 | 票种差异化积分/成长值无法配置 |
 | **票务积分确认与成长值确认未拆开** | 票务积分在退款期结束且对应票款未退款时确认，未使用或到期未用仍有积分；票务成长值只按实际核销人次确认 | 支付成功只写 `pending`；`LoyaltyPointsConsumer` 仍在核销事件上按 `verifiedUnits/totalUnits` 确认积分并同步增加 `keep_threshold_progress`；到期作废任务不终结未核销订单的 `pending` 积分 | 已支付未退款但未核销的票无法按期获得可用积分，核销又把积分值混入成长进度 |
-| **签到奖励错误进入保级进度** | 签到按连续天数阶梯奖励积分，不产生成长值 | `LoyaltyService.checkIn` 同时增加 `balance` 与 `keep_threshold_progress` | 签到会错误推动等级 |
+| **签到奖励错误进入保级进度**（**已由第十四批 OBS-13-01（V543）闭合**：等级只读成长值流水，签到不再推动等级） | 签到按连续天数阶梯奖励积分，不产生成长值 | `LoyaltyService.checkIn` 同时增加 `balance` 与 `keep_threshold_progress` | 签到会错误推动等级 |
 | **生日月仍可配置** | 生日加倍只限生日当天 | `birthdayMultiplierBasisPoints` 和后台配置仍接受 `birthday_month` | 非生日当天也可能命中生日倍率 |
 | **生日规则锁定缺失** | 生日倍率按支付成功时点锁定适用时点和规则版本 | 积分入账时读取当前生日规则，积分流水没有支付时点、适用时点和生日规则版本快照 | 后续配置变化可能改写订单应适用的倍率 |
-| **降级提前三十天通知未实现** | 速查表§二"降级前提前三十天通知"、PRD §8.3 | 只有 `grace_until` 宽限期，无通知触发点 | 会员被静默降级 |
+| **降级提前三十天通知未实现**（**已由第十四批 OBS-13-01（V543）闭合**：降级预警、「已保级」与降级补发通知已有） | 速查表§二"降级前提前三十天通知"、PRD §8.3 | 只有 `grace_until` 宽限期，无通知触发点 | 会员被静默降级 |
 
 修这几条要动成长值独立账本（新表/新列 + 明细带发生时间做滚动窗口）与票务规则读取，属独立批次，不在本次止血范围内。
 

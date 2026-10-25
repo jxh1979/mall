@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -887,7 +887,7 @@ class CustomerServiceTests {
             customerRepository.savePoints(new CustomerPointsAccountRecord(
                     current.id(), current.customerId(), 0L, current.level(),
                     Map.of(), current.frozenPoints(), current.accountStatus(), current.levelPeriodStart(),
-                    current.keepThresholdProgress(), current.graceUntil(), current.lastCheckInDate(),
+                    current.keepThresholdProgress(), current.protectionUntil(), current.lastCheckInDate(),
                     current.checkInStreak(), current.createdAt(), Instant.parse("2026-06-14T00:00:01Z")
             ));
         };

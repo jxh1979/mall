@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TicketRewardConfigPage } from "./TicketRewardConfigPage";
@@ -58,4 +58,33 @@ it("商户业态规则提交体含 business_format，全国参数含商户消费
   fireEvent.click(screen.getByText("提交审批"));
   await waitFor(()=>expect(bodies).toHaveLength(1));
   expect(bodies[0]).toMatchObject({kind:"merchant_points",business_format:"bar",project_id:null,ticket_type_id:null,final_approver_id:"u_domain",values:{fixed_value:1000,minimum_value:100,maximum_value:10000}});
+});
+
+// OBS-13-01（BSM L820「滚动统计周期／保护期／提前通知天数（业务参数，全平台统一可配……须同时配置上下限）」「变更须经审批、只对后续周期生效」）：
+// 三项等级参数全国生效、不选综合体和票种，值与上下限同配后提交审批，无需公告。
+it("会员等级保护期全平台统一，值与上下限同配提交审批",async()=>{
+  const bodies:Record<string,unknown>[]=[];
+  vi.stubGlobal("fetch",vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const url=String(input);if(init?.method==="POST")bodies.push(JSON.parse(String(init.body)));let data:unknown=[];
+    if(url.includes("/platform/projects"))data=[{id:"p1",name:"长沙项目"}];
+    if(url.includes("/ticket-reward-configs")&&init?.method!=="POST")data=[{id:"r7",kind:"level_protection_months",version:"V0.01",status:"approved",effective_at:"2000-01-01T00:00:00Z",values:{fixed_value:12}}];
+    if(init?.method==="POST")data={id:"r8",kind:"level_protection_months",version:"V0.02",status:"pending_review",effective_at:"2099-01-01T00:00:00Z",values:{}};
+    return new Response(JSON.stringify({success:true,code:"OK",data}),{headers:{"Content-Type":"application/json"}});
+  }));
+  const props:AdminPageProps={api:new AdminApi("test"),user:{id:"u",username:"admin",accountType:"platform_admin"},setActionResult:vi.fn(),setGlobalError:vi.fn(),effectivePermissions:{status:"ready",value:{grants:["ticket.reward.config.view","ticket.reward.config.manage"],denies:[],wildcard:false}}};
+  render(<TicketRewardConfigPage {...props}/>);
+  await waitFor(()=>expect(screen.queryByRole("option",{name:"会员等级保护期（月）"})).not.toBeNull());
+  fireEvent.change(screen.getByLabelText("配置类型"),{target:{value:"level_protection_months"}});
+  expect(screen.queryByLabelText("综合体")).not.toBeInTheDocument();
+  await waitFor(()=>expect(screen.queryByText("无需公告")).not.toBeNull());
+  fireEvent.change(screen.getByLabelText("保护期（月）"),{target:{value:"6"}});
+  fireEvent.change(screen.getByLabelText("保护期下限（月）"),{target:{value:"1"}});
+  fireEvent.change(screen.getByLabelText("保护期上限（月）"),{target:{value:"24"}});
+  fireEvent.change(screen.getByLabelText("生效时间"),{target:{value:"2099-01-01T08:00"}});
+  fireEvent.change(screen.getByLabelText("变更原因"),{target:{value:"保护期调整"}});
+  fireEvent.change(screen.getByLabelText("最终审批人账号"),{target:{value:"u_platform"}});
+  fireEvent.click(screen.getByText("提交审批"));
+  await waitFor(()=>expect(bodies).toHaveLength(1));
+  expect(bodies[0]).toMatchObject({kind:"level_protection_months",project_id:null,ticket_type_id:null,final_approver_id:"u_platform",values:{fixed_value:6,minimum_value:1,maximum_value:24}});
+  expect(bodies[0]).not.toHaveProperty("business_format");
 });

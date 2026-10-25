@@ -1,6 +1,6 @@
 package com.complex.platform.notification;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -130,6 +130,23 @@ class NotificationServiceTest {
                 .isEqualTo("failed");
         assertThat(auditCount("sms.notification.failed", result.id())).isEqualTo(1);
         assertThat(auditCount("sms.notification.sent", result.id())).isZero();
+    }
+
+    @Test
+    void mandatoryEventIgnoresMainSwitchAndFailsHonestlyWithUnconfiguredSender() {
+        // OBS-13-04（BSM 第 1598 行储值充值到账等客人金额变化通知不在可关闭范围内）：总开关关（出厂即关）也不记跳过，
+        // 照常交给发送器；未接短信供应商时如实记失败。
+        NotificationService unconfigured = new NotificationService(
+                notificationRepository, switchResolver, new UnconfiguredSmsSender(), idempotencyService, auditEventService);
+
+        NotificationSendLogRecord result = unconfigured.notify(
+                "stored_value", "topup", "+15551234567", "sms.stored_value.topup",
+                Map.of("amount_cent", 5000), "sms-mandatory-topup");
+
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(result.reason()).isEqualTo("SMS_PROVIDER_NOT_CONFIGURED");
+        assertThat(auditCount("sms.notification.failed", result.id())).isEqualTo(1);
+        assertThat(auditCount("sms.notification.skipped", result.id())).isZero();
     }
 
     private NotificationSendLogRecord notifyStoredWineDeposit(String requestId) {
