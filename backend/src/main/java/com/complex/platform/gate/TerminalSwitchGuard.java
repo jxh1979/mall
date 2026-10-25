@@ -1,5 +1,7 @@
 package com.complex.platform.gate;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.terminal.TerminalCanaryDecision;
@@ -89,12 +91,20 @@ public class TerminalSwitchGuard {
      * 顶替客户端自报的 X-Project-Id，其余层与 {@link #check} 相同。取不到唯一综合体（为空）时不判。
      */
     public void checkTerminalEnabledAtProject(String projectId) {
+        checkAtProject(MASTER_CAPABILITY, projectId);
+    }
+
+    /**
+     * 同 {@link #checkTerminalEnabledAtProject}，判的是指定能力码（模块级开关，如 customer.stored_value.topup）：PGM 第 736 行
+     * 「可以按全局、综合体、商户、业务系统、模块……开关」，运营可按综合体单独停某个模块。
+     */
+    public void checkAtProject(String capabilityCode, String projectId) {
         if (projectId == null || projectId.isBlank()) {
             return;
         }
         Map<String, String> scopes = GateRequestContext.orderedScopes();
         scopes.put("project", projectId);
-        check(MASTER_CAPABILITY, scopes);
+        check(capabilityCode, scopes);
     }
 
     private void check(String capabilityCode, Map<String, String> scopes) {

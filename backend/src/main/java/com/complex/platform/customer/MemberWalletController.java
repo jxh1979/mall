@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -46,13 +46,18 @@ public class MemberWalletController {
     private final VoucherService voucherService;
     private final VoucherTransferService voucherTransferService;
     private final AuditedOperationExecutor operations;
+    // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按卡、订单、券所属综合体在服务端判（不取 X-Project-Id），
+    // 在本客人入口判、早于 @GuardedAction 切面与幂等；储值充值、入账、储值付票另按该动作的模块能力码（与 @GuardedAction 同码）
+    // 在同一综合体判（PGM 第 736 行按模块开关）。StoredValueService、VoucherService 等共用方法不动。
+    private final CustomerProjectSwitch projectSwitch;
 
     public MemberWalletController(CustomerService customerService, StoredValueService storedValueService,
                                   LoyaltyService loyaltyService,
                                   CustomerRepository repository,
                                   VoucherService voucherService,
                                   VoucherTransferService voucherTransferService,
-                                  AuditedOperationExecutor operations) {
+                                  AuditedOperationExecutor operations,
+                                  CustomerProjectSwitch projectSwitch) {
         this.customerService = customerService;
         this.storedValueService = storedValueService;
         this.loyaltyService = loyaltyService;
@@ -60,6 +65,7 @@ public class MemberWalletController {
         this.voucherService = voucherService;
         this.voucherTransferService = voucherTransferService;
         this.operations = operations;
+        this.projectSwitch = projectSwitch;
     }
 
     // ---- 储值 ----
@@ -72,6 +78,7 @@ public class MemberWalletController {
             @PathVariable("order_id") String orderId,
             @Valid @RequestBody com.complex.platform.customer.dto.StoredValueConsumeRequest request) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        projectSwitch.ticketOrder(orderId, customerId, "customer.stored_value.consume");
         return ApiResponse.ok(customerService.orderView(storedValueService.payTicketOrder(customerId, orderId,
                 request.accountId(), request.phone(), request.smsCode(), request.amountCent(), request.idempotencyKey())));
     }
@@ -93,6 +100,7 @@ public class MemberWalletController {
             @Valid @RequestBody StoredValueTopupRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        projectSwitch.card(request.projectId(), request.merchantId(), "customer.stored_value.topup");
         return ApiResponse.ok(storedValueService.topup(customerId, request.projectId(), request.merchantId(),
                 request.amountCent() == null ? 0L : request.amountCent(), request.channel(), request.idempotencyKey()));
     }
@@ -104,6 +112,8 @@ public class MemberWalletController {
             @Valid @RequestBody StoredValueSettleRequest request
     ) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        // 按充值时服务端绑定的卡范围判；settleTopupFromGateway 作业不经此入口。
+        projectSwitch.topupIntent(request.paymentIntentId(), customerId, "customer.stored_value.topup");
         return ApiResponse.ok(storedValueService.settleTopup(customerId, request.projectId(), request.merchantId(), request.paymentIntentId()));
     }
 
@@ -116,6 +126,7 @@ public class MemberWalletController {
     ) {
         // B1d⑤：merchant_id 非空=查商户级卡；为空=查综合体通用卡。
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        projectSwitch.card(projectId, merchantId);
         return ApiResponse.ok(repository.findStoredValueAccount(customerId, projectId, merchantId).orElse(null));
     }
 
@@ -130,6 +141,7 @@ public class MemberWalletController {
         if (page < 1 || size < 1 || size > 100) {
             throw com.complex.platform.common.api.ApiException.badRequest("VALIDATION_FAILED", "分页参数无效");
         }
+        projectSwitch.storedValueAccount(accountId, customerId);
         if (repository.listStoredValueAccountsByCustomer(customerId).stream()
                 .noneMatch(account -> accountId.equals(account.id()))) {
             throw com.complex.platform.common.api.ApiException.notFound(
@@ -146,6 +158,7 @@ public class MemberWalletController {
             @RequestParam(name = "project_id", required = false) String projectId,
             @RequestParam(name = "merchant_id", required = false) String merchantId) {
         customerService.resolveCustomerId(token(customerToken, authorization));
+        projectSwitch.card(projectId, merchantId);
         return ApiResponse.ok(storedValueService.topupRules(projectId, merchantId));
     }
 
@@ -185,6 +198,8 @@ public class MemberWalletController {
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @PathVariable("voucher_instance_id") String voucherInstanceId) {
         String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+        // 商户券按发券商户的综合体判；平台通用券不属单一综合体，不判。
+        projectSwitch.voucher(voucherInstanceId);
         return ApiResponse.ok(voucherService.issueCustomerRedeemCode(voucherInstanceId, customerId));
     }
 
@@ -198,6 +213,7 @@ public class MemberWalletController {
             @Valid @RequestBody CustomerVoucherTransferRequest request
     ) {
         CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+        projectSwitch.voucher(request.voucherInstanceId());
         return ApiResponse.ok(operations.executeWrite("initiateVoucherTransfer:" + customer.id(), request.idempotencyKey(), request,
                 VoucherTransferResponse.class, INITIATE_VOUCHER_TRANSFER,
                 () -> voucherTransferService.initiate(customer.id(), customer.phone(), request),
@@ -214,6 +230,7 @@ public class MemberWalletController {
     ) {
         CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
         String claimCode = request == null ? null : request.claimCode();
+        projectSwitch.voucherTransfer(transferId);
         // 幂等照门票转赠领取（operationId 绑定客人＋转赠单）；成功/失败记 voucher_transfer.claimed / claim_failed。
         return ApiResponse.ok(operations.executeWrite("claimVoucherTransfer:" + customer.id() + ":" + transferId,
                 request == null ? null : request.idempotencyKey(), request, VoucherTransferResponse.class, CLAIM_VOUCHER_TRANSFER,
@@ -233,6 +250,7 @@ public class MemberWalletController {
             @PathVariable("transfer_id") String transferId
     ) {
         CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+        projectSwitch.voucherTransfer(transferId);
         return ApiResponse.ok(voucherTransferService.revoke(customer.id(), transferId));
     }
 
@@ -244,6 +262,7 @@ public class MemberWalletController {
             @RequestParam("claim_code") String claimCode
     ) {
         customerService.requireCustomerRecord(token(customerToken, authorization));
+        projectSwitch.voucherTransferByClaimCode(claimCode);
         return ApiResponse.ok(voucherTransferService.preview(claimCode));
     }
 

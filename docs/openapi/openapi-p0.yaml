@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.29
+  version: V0.30
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -3066,6 +3066,8 @@ paths:
           $ref: "#/components/responses/Success"
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -3073,7 +3075,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-      description: 被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。
+      description: 被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不占名额。
       x-failure-codes:
         - BAR_INVITATION_SIGNATURE_INVALID
         - BAR_INVITATION_CAPACITY_EXHAUSTED
@@ -3109,6 +3111,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以订台所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
   /api/v1/customer/bar-invitations/preview:
     get:
       tags:
@@ -3116,7 +3119,7 @@ paths:
         - bar
       operationId: previewCustomerBarInvitation
       summary: 扫邀请函二维码预览
-      description: ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。
+      description: ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -3161,6 +3164,8 @@ paths:
           $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -3175,7 +3180,7 @@ paths:
         - bar
       operationId: removeCustomerBarInvitationMember
       summary: 开卡人移出尚未入场的被邀请人
-      description: ROOT-03 clients-R6（BSM 第 870 行「作为开卡人……可把尚未入场的被邀请人移出邀请函、收回其名额；名额释放后可再邀请他人。被邀请人一旦完成核销入场，开卡人不得再将其移出……每一次邀请、接受、移出都记录操作人与时间」）：只许开卡人本人（否则 403 CUSTOMER_RESERVATION_FORBIDDEN）；已入场 409 BAR_INVITATION_MEMBER_ENTERED；成功后该成员置已取消、名额释放。重复移出返回原结果。
+      description: ROOT-03 clients-R6（BSM 第 870 行「作为开卡人……可把尚未入场的被邀请人移出邀请函、收回其名额；名额释放后可再邀请他人。被邀请人一旦完成核销入场，开卡人不得再将其移出……每一次邀请、接受、移出都记录操作人与时间」）：只许开卡人本人（否则 403 CUSTOMER_RESERVATION_FORBIDDEN）；已入场 409 BAR_INVITATION_MEMBER_ENTERED；成功后该成员置已取消、名额释放。重复移出返回原结果。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以订台所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不移出。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -3239,7 +3244,7 @@ paths:
         - bar
       operationId: getCustomerBarInvitationEntryCode
       summary: 本人动态入场码
-      description: ROOT-03 clients-R6（BSM 第 870 行「该名额自动关联到接受人本人的动态入场码，到店出示本人的动态入场码入场」；BSM 第 585 行）：已接受未入场的本人（含开卡人自己）取动态入场码，窗口＝全场统一二维码刷新间隔，返回 {reservation_id, member_id, code, expires_at, refresh_interval_seconds}，码不落库，过期即作废。未接受 409 BAR_INVITATION_MEMBER_NOT_CONFIRMED，已入场 409 BAR_INVITATION_MEMBER_ENTERED。
+      description: ROOT-03 clients-R6（BSM 第 870 行「该名额自动关联到接受人本人的动态入场码，到店出示本人的动态入场码入场」；BSM 第 585 行）：已接受未入场的本人（含开卡人自己）取动态入场码，窗口＝全场统一二维码刷新间隔，返回 {reservation_id, member_id, code, expires_at, refresh_interval_seconds}，码不落库，过期即作废。未接受 409 BAR_INVITATION_MEMBER_NOT_CONFIRMED，已入场 409 BAR_INVITATION_MEMBER_ENTERED。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以订台所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不出码。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -3260,6 +3265,8 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "401":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
@@ -3376,7 +3383,7 @@ paths:
         - customer
       operationId: listCustomerTicketProducts
       summary: 客人可购票种和票价
-      description: ROOT-03-R27：带有效客人会话（X-Customer-Token 或 Bearer）时每个票种另给 my_price_cent（今日按本人资格系统判定的最低价）与 my_price_basis（会员价／新人价／学生价；动态公开价最低时为空）；匿名或会话失效时两者为空。 ROOT-03 clients-R9（BSM 第 858 行「购票前须以门票守则的形式向客人告知该票的规则，包括能否退款、有效期、年龄限制与可使用范围」；第 879 行「展示……赠饮权益」）：每个票种带 refundable、validity_days、usage_scope（单店票＝所属酒吧名，通票＝综合体通票）、entitlements（所含权益名称）、age_limit_text（全场 18 岁以上方可入场）；带客人会话时另给 my_price_cent 与 my_price_basis。 PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」：每个票种带 project_id（所属综合体，与下单确定订单综合体同一口径；关联多个或无法确定时为空），客人端购票请求带 X-Project-Id 取该值，后端按综合体的终端开关拒绝。
+      description: ROOT-03-R27：带有效客人会话（X-Customer-Token 或 Bearer）时每个票种另给 my_price_cent（今日按本人资格系统判定的最低价）与 my_price_basis（会员价／新人价／学生价；动态公开价最低时为空）；匿名或会话失效时两者为空。 ROOT-03 clients-R9（BSM 第 858 行「购票前须以门票守则的形式向客人告知该票的规则，包括能否退款、有效期、年龄限制与可使用范围」；第 879 行「展示……赠饮权益」）：每个票种带 refundable、validity_days、usage_scope（单店票＝所属酒吧名，通票＝综合体通票）、entitlements（所含权益名称）、age_limit_text（全场 18 岁以上方可入场）；带客人会话时另给 my_price_cent 与 my_price_basis。 PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」：每个票种带 project_id（所属综合体，与下单确定订单综合体同一口径；关联多个或无法确定时为空），客人端购票请求带 X-Project-Id 取该值，后端按综合体的终端开关拒绝。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，带 bar_id 时按综合体的客人端终端开关以该酒吧所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；不带 bar_id 的公共列表跨综合体，不判。
       security: []
       x-permission: public
       x-data-scope: public-project
@@ -3391,6 +3398,8 @@ paths:
         "200":
           $ref: "#/components/responses/Page"
         "400":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -3425,11 +3434,14 @@ paths:
           $ref: "#/components/responses/Success"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不出码。
   /api/v1/evidence/attachments/upload-intents:
     post:
       tags:
@@ -12651,7 +12663,7 @@ paths:
         - customer
       operationId: customerStoredValueTopup
       summary: 客人储值充值（绑支付意图）
-      description: ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。客户端未回前台入账的，由服务端结算作业按充值绑定的卡范围查单入账。
+      description: ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。客户端未回前台入账的，由服务端结算作业按充值绑定的卡范围查单入账。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所充卡的综合体（商户卡取发卡商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建支付意向；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判。
       x-permission: customer.stored_value.topup
       x-data-scope: customer
       x-terminal-allowed:
@@ -12682,7 +12694,7 @@ paths:
         - customer
       operationId: customerStoredValueSettle
       summary: 客人储值充值入账（支付成功后）
-      description: CG-06a：入账时按项目赠送比例拆为本金（实付）与赠送金两段分别记账（ENUM「储值卡类型与收款主体」），余额＝本金＋赠送金；topup 流水记录两段拆分；商户级卡赠送金为 0。
+      description: CG-06a：入账时按项目赠送比例拆为本金（实付）与赠送金两段分别记账（ENUM「储值卡类型与收款主体」），余额＝本金＋赠送金；topup 流水记录两段拆分；商户级卡赠送金为 0。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以充值时服务端绑定的卡范围所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不入账；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判；服务端结算作业不经本接口。
       x-permission: customer.stored_value.topup
       x-data-scope: customer
       x-terminal-allowed:
@@ -12715,7 +12727,7 @@ paths:
         - customer
       operationId: customerStoredValueAccount
       summary: 客人储值账户查询
-      description: CG-06a：返回 principal_cent（未消费本金）与 bonus_cent（未使用赠送金）分列（BSM「我的余额」：含本金与赠送金分列），balance_cent 为两段之和。
+      description: CG-06a：返回 principal_cent（未消费本金）与 bonus_cent（未使用赠送金）分列（BSM「我的余额」：含本金与赠送金分列），balance_cent 为两段之和。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取该商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；两者都为空不判。
       x-permission: customer.stored_value.view
       x-data-scope: customer
       x-terminal-allowed:
@@ -12741,6 +12753,8 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "401":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -12797,7 +12811,7 @@ paths:
         - customer
       operationId: getCustomerVoucherRedeemCode
       summary: 我的券动态核销码（按全场统一刷新间隔过期）
-      description: ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：只许本人持有、当前可核销的统一台账券（他人 403 VOUCHER_NOT_HOLDER；已核销/已过期/已作废 409）；有在途转赠照常取码（操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。每次取码先撤旧码，返回 {voucher_instance_id, code, expires_at, refresh_interval_seconds}，有效期＝全场统一动态码刷新间隔；明文只在本响应出现。
+      description: ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：只许本人持有、当前可核销的统一台账券（他人 403 VOUCHER_NOT_HOLDER；已核销/已过期/已作废 409）；有在途转赠照常取码（操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。每次取码先撤旧码，返回 {voucher_instance_id, code, expires_at, refresh_interval_seconds}，有效期＝全场统一动态码刷新间隔；明文只在本响应出现。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以发券商户的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不出码；无发券商户的积分兑换券取兑换来源目录项的综合体；两者都没有的平台通用券不属单一综合体（任意核销点可核），不判。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -12834,7 +12848,7 @@ paths:
         - customer
       operationId: getCustomerStoredValueTopupRules
       summary: 充值前规则告知（扣款顺序、赠送金性质、退卡口径）
-      description: ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，bonus_bps＝项目赠送比例，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。
+      description: ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，bonus_bps＝项目赠送比例，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取该商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -12863,6 +12877,8 @@ paths:
           $ref: "#/components/responses/Success"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
@@ -12872,7 +12888,7 @@ paths:
         - customer
       operationId: listCustomerStoredValueTransactions
       summary: 我的余额逐笔记录
-      description: ROOT-03-R30（BSM 第 868 行「每笔充值（时间、金额、本金与赠送金拆分、支付通路）、每笔扣款（商户、扣减的本金与赠送金各多少）、每笔退款与回冲（含回冲顺序结果）」）：只许本人卡（否则 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；每笔带 principal_cent/bonus_cent、充值行 payment_channel、扣款行 merchant_id/merchant_name（通票为空＝综合体）、回冲行 original_txn_id。page 从 1 起，size 1～100。
+      description: ROOT-03-R30（BSM 第 868 行「每笔充值（时间、金额、本金与赠送金拆分、支付通路）、每笔扣款（商户、扣减的本金与赠送金各多少）、每笔退款与回冲（含回冲顺序结果）」）：只许本人卡（否则 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；每笔带 principal_cent/bonus_cent、充值行 payment_channel、扣款行 merchant_id/merchant_name（通票为空＝综合体）、回冲行 original_txn_id。page 从 1 起，size 1～100。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人储值卡所属综合体（商户卡取发卡商户的综合体）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -12912,6 +12928,8 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "401":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
@@ -13037,7 +13055,7 @@ paths:
         - customer
       operationId: listCustomerAmusementProjects
       summary: 可预定游乐项目与场次（客人端只读）
-      description: ROOT-03 clients-R9（BSM 第 878 行「连接游乐系统，展示可预定项目和场次」）：匿名可读。该综合体开放中的游乐项目（amusement_project_id、project_name、open_status）及尚未结束、待开或开放中的场次（sessions：session_id、start_time、end_time、capacity、used_capacity、status）。
+      description: ROOT-03 clients-R9（BSM 第 878 行「连接游乐系统，展示可预定项目和场次」）：匿名可读。该综合体开放中的游乐项目（amusement_project_id、project_name、open_status）及尚未结束、待开或开放中的场次（sessions：session_id、start_time、end_time、capacity、used_capacity、status）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以project_id 所指综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: public
       x-data-scope: public-project
       x-terminal-allowed:
@@ -13059,6 +13077,8 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "400":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -19150,6 +19170,7 @@ paths:
       operationId: redeemCustomerPoints
       summary: 提交积分兑换
       x-auth-context: customer-token
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以兑换项所属综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不扣积分；兑换项不属单一综合体（全局可见）的不判。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -20437,7 +20458,7 @@ paths:
         - miniapp
       operationId: listCustomerBarScanMenu
       summary: 扫码点单查看菜单
-      description: ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。返回本酒吧在售商品（不含内部结算价）；沽清商品 sold_out=true 置灰不隐藏（ENUM 第 111 行）。
+      description: ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。返回本酒吧在售商品（不含内部结算价）；沽清商品 sold_out=true 置灰不隐藏（ENUM 第 111 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以台位所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-idempotency-required: false
       x-audit-event-success: not_applicable
       x-audit-event-failure: not_applicable
@@ -20452,6 +20473,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -20472,7 +20495,7 @@ paths:
         - miniapp
       operationId: createCustomerBarScanOrder
       summary: 扫码点单下单（即时付款）
-      description: ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。按商品现价计价，只落待付单与在线付款单，返回 {scan_order_id, table_id, amount_cent, status=pending, payment_intent_id, channel, gateway_status, payment_url, launch}，此时不成单、不出品；付款成功确认后才成单。ROOT-03-R24（BSM 第 1069 行）：任一行带 is_gift=true 400 BAR_SCAN_ORDER_GIFT_NOT_ALLOWED。沽清 409 PRODUCT_SOLD_OUT；扫码点单开关关时 409 BAR_SCAN_ORDER_DISABLED；支付渠道未启用时 gateway_status 为 RESERVED/NOT_CONFIGURED、不带拉起参数，客户端显示「支付暂不可用」、不成单。
+      description: ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。按商品现价计价，只落待付单与在线付款单，返回 {scan_order_id, table_id, amount_cent, status=pending, payment_intent_id, channel, gateway_status, payment_url, launch}，此时不成单、不出品；付款成功确认后才成单。ROOT-03-R24（BSM 第 1069 行）：任一行带 is_gift=true 400 BAR_SCAN_ORDER_GIFT_NOT_ALLOWED。沽清 409 PRODUCT_SOLD_OUT；扫码点单开关关时 409 BAR_SCAN_ORDER_DISABLED；支付渠道未启用时 gateway_status 为 RESERVED/NOT_CONFIGURED、不带拉起参数，客户端显示「支付暂不可用」、不成单。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以台位所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建待付单。
       x-idempotency-required: true
       x-audit-event-success: customer.bar_scan_order.created
       x-audit-event-failure: customer.bar_scan_order.create_failed
@@ -20519,7 +20542,7 @@ paths:
         - miniapp
       operationId: confirmCustomerBarScanOrder
       summary: 扫码点单回前台确认付款（查单）
-      description: ROOT-03 clients-R7：渠道查单成功才在该桌当前开台会话上成单（计入本桌当前账单、进出品流转，并记一张已结清的账单，不挂账），返回 status=paid 与 bar_order_id；渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、未确认收款 409 PAYMENT_NOT_SUCCEEDED，不成单。付款成功时该桌已结束接待的，已收款登记原路待退（退款来源 bar_scan_order_rejection），返回 409 BAR_SCAN_ORDER_SESSION_CLOSED_REFUNDING；下单后到账前所点酒水被沽清或下架、扫码点单被关、或改了价（账单金额≠实付）而成不了单的，同样只回滚成单、已收款登记原路待退，返回 409 BAR_SCAN_ORDER_REJECTED_REFUNDING（结算作业不再反复重试）。重复确认返回现状；客户端未回前台的由服务端结算作业查单成单。
+      description: ROOT-03 clients-R7：渠道查单成功才在该桌当前开台会话上成单（计入本桌当前账单、进出品流转，并记一张已结清的账单，不挂账），返回 status=paid 与 bar_order_id；渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、未确认收款 409 PAYMENT_NOT_SUCCEEDED，不成单。付款成功时该桌已结束接待的，已收款登记原路待退（退款来源 bar_scan_order_rejection），返回 409 BAR_SCAN_ORDER_SESSION_CLOSED_REFUNDING；下单后到账前所点酒水被沽清或下架、扫码点单被关、或改了价（账单金额≠实付）而成不了单的，同样只回滚成单、已收款登记原路待退，返回 409 BAR_SCAN_ORDER_REJECTED_REFUNDING（结算作业不再反复重试）。重复确认返回现状；客户端未回前台的由服务端结算作业查单成单。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以台位所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；服务端结算作业不经本接口。
       x-idempotency-required: true
       x-audit-event-success: customer.bar_scan_order.paid
       x-audit-event-failure: customer.bar_scan_order.pay_failed
@@ -20562,6 +20585,8 @@ paths:
           $ref: "#/components/responses/Success"
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -20582,7 +20607,7 @@ paths:
         - miniapp
       operationId: getCustomerBarTableCurrentBill
       summary: 本桌当前账单
-      description: ROOT-03 clients-R7（BSM 第 1025 行「付款成功后所点酒水计入该桌位当前账单，账单上逐项列出物品名称与价格，并分别标注已上菜与未上菜……此后新客人看到的是一张空账单，看不到上一位客人的消费」）：只列该散台当前开台会话已成单、未撤的酒水（product_name、unit_price_cent、quantity、amount_cent、served），不含任何客人身份；未开台为空账单。
+      description: ROOT-03 clients-R7（BSM 第 1025 行「付款成功后所点酒水计入该桌位当前账单，账单上逐项列出物品名称与价格，并分别标注已上菜与未上菜……此后新客人看到的是一张空账单，看不到上一位客人的消费」）：只列该散台当前开台会话已成单、未撤的酒水（product_name、unit_price_cent、quantity、amount_cent、served），不含任何客人身份；未开台为空账单。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以台位所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-idempotency-required: false
       x-audit-event-success: not_applicable
       x-audit-event-failure: not_applicable
@@ -20597,6 +20622,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -26020,7 +26047,7 @@ paths:
         - customer
       operationId: listCustomerTicketUsages
       summary: 我的票使用记录
-      description: ROOT-03-R29（BSM 第 862 行「查看我的订单、我的票、我的权益和使用记录」；第 880 行「核销后客人能看到使用记录」）：只许本人当前持有的票（人员权益组持有人；无持有人的按订单归属，与取码同口径），他人 403 CUSTOMER_ORDER_FORBIDDEN。每条：结果（success/reversed 与中文 成功/已冲正）、时间、核销商户；不含员工、设备与凭证。
+      description: ROOT-03-R29（BSM 第 862 行「查看我的订单、我的票、我的权益和使用记录」；第 880 行「核销后客人能看到使用记录」）：只许本人当前持有的票（人员权益组持有人；无持有人的按订单归属，与取码同口径），他人 403 CUSTOMER_ORDER_FORBIDDEN。每条：结果（success/reversed 与中文 成功/已冲正）、时间、核销商户；不含员工、设备与凭证。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -26388,7 +26415,7 @@ paths:
         - customer
       operationId: listCustomerOrderTickets
       summary: 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id）
-      description: TK-13（ENUM L148「“我的票”按对应人份或次份显示补偿标注及其实际有效期，不额外增加专用通知渠道」；BSM L862）：每条票实例带 compensation_kind——full_reissue＝全园故障（或场次提前结束）完整补发的补偿行，挂原票原人份（parent_ticket_id、slot_index），其 valid_to 即该人份实际补偿有效期；null＝原票行。
+      description: TK-13（ENUM L148「“我的票”按对应人份或次份显示补偿标注及其实际有效期，不额外增加专用通知渠道」；BSM L862）：每条票实例带 compensation_kind——full_reissue＝全园故障（或场次提前结束）完整补发的补偿行，挂原票原人份（parent_ticket_id、slot_index），其 valid_to 即该人份实际补偿有效期；null＝原票行。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人订单所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -30478,6 +30505,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: "customer-token"
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以存酒所在酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不出码。
   /api/v1/customer/saved-bottles/{saved_bottle_id}/renewal-code:
     post:
       tags:
@@ -30512,6 +30540,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: "customer-token"
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以存酒所在酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不发码。
   /api/v1/customer/saved-bottles/{saved_bottle_id}/renew:
     post:
       tags:
@@ -30566,6 +30595,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: "customer-token"
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以存酒所在酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不顺延。
   /api/v1/customer/ticket-transfers:
     post:
       tags:
@@ -30618,7 +30648,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-      description: " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：在途不冻结——原持有人仍可核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；场次已结束不阻止发起。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。"
+      description: " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：在途不冻结——原持有人仍可核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；场次已结束不阻止发起。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所转票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建转赠。"
   /api/v1/customer/ticket-transfers/{transfer_id}/claim:
     post:
       tags:
@@ -30665,7 +30695,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-      description: " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：与核销、改转争同一人份行锁，先成功者为准；原持有人已核销或已改转时 409 TICKET_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）；该人份权益所在场次已结束 409 TICKET_TRANSFER_SESSION_ENDED（不发生领取）。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。"
+      description: " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：与核销、改转争同一人份行锁，先成功者为准；原持有人已核销或已改转时 409 TICKET_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）；该人份权益所在场次已结束 409 TICKET_TRANSFER_SESSION_ENDED（不发生领取）。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不改归属。"
       x-failure-codes:
         - TICKET_TRANSFER_VOIDED
         - TICKET_TRANSFER_SESSION_ENDED
@@ -30702,6 +30732,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不撤回。
   /api/v1/customer/ticket-transfers/preview:
     get:
       tags:
@@ -30727,6 +30758,8 @@ paths:
           $ref: "#/components/responses/Success"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -30734,7 +30767,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-      description: " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：领取预览不算领取。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。session_ended=true 时客户端提示「该权益所在场次已结束、权益已终结」并禁用确认领取。"
+      description: " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：领取预览不算领取。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。session_ended=true 时客户端提示「该权益所在场次已结束、权益已终结」并禁用确认领取。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以领取码对应转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。"
   /api/v1/customer/ticket-transfers/incoming:
     get:
       tags:
@@ -36242,7 +36275,7 @@ paths:
         - customer
       operationId: initiateCustomerVoucherTransfer
       summary: 发起券转赠(手机号/微信链接/二维码)
-      description: 操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」：在途不冻结——原持有人仍可出示动态码核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；与领取争同一券行锁，券已被对方领走时 403 VOUCHER_TRANSFER_NOT_HOLDER。
+      description: 操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」：在途不冻结——原持有人仍可出示动态码核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；与领取争同一券行锁，券已被对方领走时 403 VOUCHER_TRANSFER_NOT_HOLDER。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所转券发券商户的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建转赠；无发券商户的积分兑换券取兑换来源目录项的综合体；两者都没有的平台通用券不属单一综合体（任意核销点可核），不判。
       x-permission: not_applicable
       x-data-scope: customer
       x-terminal-allowed:
@@ -36292,7 +36325,7 @@ paths:
         - customer
       operationId: claimCustomerVoucherTransfer
       summary: 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得)
-      description: 操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」：与原持有人核销、改转争同一券行锁，先成功者为准；原持有人已核销或已改转时 409 VOUCHER_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）。
+      description: 操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」：与原持有人核销、改转争同一券行锁，先成功者为准；原持有人已核销或已改转时 409 VOUCHER_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠券发券商户的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不改归属；无发券商户的积分兑换券取兑换来源目录项的综合体；两者都没有的平台通用券不属单一综合体（任意核销点可核），不判。
       x-failure-codes:
         - VOUCHER_TRANSFER_VOIDED
       x-permission: not_applicable
@@ -36367,6 +36400,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠券发券商户的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不撤回；无发券商户的积分兑换券取兑换来源目录项的综合体；两者都没有的平台通用券不属单一综合体（任意核销点可核），不判。
   /api/v1/customer/voucher-transfers/preview:
     get:
       tags:
@@ -36392,6 +36426,8 @@ paths:
           $ref: "#/components/responses/Success"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
         "409":
@@ -36399,6 +36435,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+      description: PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以领取码对应转赠券发券商户的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；无发券商户的积分兑换券取兑换来源目录项的综合体；两者都没有的平台通用券不属单一综合体（任意核销点可核），不判。
   /api/v1/customer/voucher-transfers/incoming:
     get:
       tags:
@@ -42165,7 +42202,7 @@ paths:
         - customer
       operationId: listPublishedTicketRewardRules
       summary: 查看已公布门票积分及成长值规则
-      description: 查看已公布门票积分及成长值规则
+      description: 查看已公布门票积分及成长值规则 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以 project_id 所指综合体（只带 ticket_type_id 时取票种所属综合体）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；两者都不带的跨综合体列表不判。
       x-permission: not_applicable
       x-data-scope: customer
       x-auth-context: public
@@ -50456,7 +50493,7 @@ paths:
         - customer
       operationId: getCustomerParkingCredit
       summary: 客人查看本日停车消费抵免
-      description: BSM「停车场」章「连接客人端，客人在官方 App/小程序缴费并查看消费抵免」、「消费抵免」条：按同一客人在本项目当前营业日的酒吧账单与商户有效消费累计判断门槛（门票不计入，第十二批操作员裁决补充第 3 条；收银识别的会员优先、否则下单客人；已退部分排除；服务点单须收款时已识别会员），返回 status（available 可用／used 已使用／revoked 消费退款后已撤销／not_reached 未达门槛）、eligible_amount_cent 已累计、threshold_cent 门槛与 credit_minutes 抵免时长；同一客人每日一次，达到门槛的多倍不增加次数。项目未配置 409 PARKING_POLICY_NOT_CONFIGURED。
+      description: BSM「停车场」章「连接客人端，客人在官方 App/小程序缴费并查看消费抵免」、「消费抵免」条：按同一客人在本项目当前营业日的酒吧账单与商户有效消费累计判断门槛（门票不计入，第十二批操作员裁决补充第 3 条；收银识别的会员优先、否则下单客人；已退部分排除；服务点单须收款时已识别会员），返回 status（available 可用／used 已使用／revoked 消费退款后已撤销／not_reached 未达门槛）、eligible_amount_cent 已累计、threshold_cent 门槛与 credit_minutes 抵免时长；同一客人每日一次，达到门槛的多倍不增加次数。项目未配置 409 PARKING_POLICY_NOT_CONFIGURED。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以project_id 所指项目在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -50480,6 +50517,8 @@ paths:
           $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
         "500":
@@ -50491,7 +50530,7 @@ paths:
         - customer
       operationId: payCustomerTicketOrderWithStoredValue
       summary: 客人本人订单储值付款（可只付一部分）
-      description: 储值付款须本人卡、本人手机号＋短信验证码（场景 customer.stored_value.consume）；项目卡只用于原订单项目、商户卡只用于该商户单店票。ROOT-03-R20（操作员原话「一个订单可分多个渠道支付，但最终必须完成一次支付才算完成」）：amount_cent 可选，只付一部分（不超过待付金额，否则 400 VALIDATION_FAILED），其余在线补足；不填＝付清待付金额；合计足额才置已付。ROOT-03-R17（BSM 第 859 行「客人付款成功后必须出票」）：付足即同一事务自动出票（审计 ticket_order.auto_issued），出票失败整笔回滚——余额不扣、订单仍待付，返回出票失败的原错误码（审计 ticket_order.auto_issue_failed）。同一请求编号重复提交不重复扣款。响应为订单视图（订单字段＋paid_amount_cent、remaining_cent、payments、price_hits）。
+      description: 储值付款须本人卡、本人手机号＋短信验证码（场景 customer.stored_value.consume）；项目卡只用于原订单项目、商户卡只用于该商户单店票。ROOT-03-R20（操作员原话「一个订单可分多个渠道支付，但最终必须完成一次支付才算完成」）：amount_cent 可选，只付一部分（不超过待付金额，否则 400 VALIDATION_FAILED），其余在线补足；不填＝付清待付金额；合计足额才置已付。ROOT-03-R17（BSM 第 859 行「客人付款成功后必须出票」）：付足即同一事务自动出票（审计 ticket_order.auto_issued），出票失败整笔回滚——余额不扣、订单仍待付，返回出票失败的原错误码（审计 ticket_order.auto_issue_failed）。同一请求编号重复提交不重复扣款。响应为订单视图（订单字段＋paid_amount_cent、remaining_cent、payments、price_hits）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人订单所属综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不扣款；按综合体单独停用储值消费模块（能力码 customer.stored_value.consume）同样按该综合体判。
       x-permission: customer.stored_value.consume
       x-data-scope: self
       x-terminal-allowed:
@@ -50568,7 +50607,7 @@ paths:
         - customer
       operationId: startCustomerTicketPayment
       summary: 客人本人订单发起在线付款
-      description: ROOT-03 clients-R4（BSM 第 859 行「通过官方 App/小程序购票、预定、确认订单、查看支付结果」）：只许本人待付订单；金额由服务端定＝此刻待付金额（ROOT-03-R20：订单金额减已成功各笔，储值可先付一部分），不收客户端金额；同一订单尚未付款的旧在线付款单作废前先向渠道查单（ROOT-03-R18）：渠道已收款的按同一确认内核到账出票、不再拉起新的一笔，直接返回那笔已成功的付款（gateway_status=SUCCEEDED，无 launch），客户端按已付处理；渠道确认未付或渠道未启用的才作废（status=voided），只留本次一笔；已取消 409 ORDER_CANCELLED、已付 409 ORDER_NOT_PAYABLE。响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。
+      description: ROOT-03 clients-R4（BSM 第 859 行「通过官方 App/小程序购票、预定、确认订单、查看支付结果」）：只许本人待付订单；金额由服务端定＝此刻待付金额（ROOT-03-R20：订单金额减已成功各笔，储值可先付一部分），不收客户端金额；同一订单尚未付款的旧在线付款单作废前先向渠道查单（ROOT-03-R18）：渠道已收款的按同一确认内核到账出票、不再拉起新的一笔，直接返回那笔已成功的付款（gateway_status=SUCCEEDED，无 launch），客户端按已付处理；渠道确认未付或渠道未启用的才作废（status=voided），只留本次一笔；已取消 409 ORDER_CANCELLED、已付 409 ORDER_NOT_PAYABLE。响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人订单所属综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不发起付款。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -50630,7 +50669,7 @@ paths:
         - customer
       operationId: confirmCustomerTicketPayment
       summary: 客人回前台确认在线付款（查单）
-      description: 只认支付渠道查单成功：渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、渠道未确认收款 409 PAYMENT_NOT_SUCCEEDED，订单一律不变（不入账、不出票）。成功即记已付并同一事务自动出票（ROOT-03-R17，审计 ticket_order.auto_issued）；出票失败时收款不回滚，已收各笔原路待退（储值笔回原卡、在线笔登记原路待退 source_type=ticket_payment_rejection）、订单取消，返回 409 TICKET_ISSUE_FAILED_REFUNDING。订单已超时取消后才到账的，本笔原路待退、返回已取消的订单；与待付金额不符的到账本笔原路待退、订单不动。重复确认返回订单现状、不重复出票。客户端未回前台的由服务端结算作业（customer.payment.settle.scheduled.enabled）用同一内核查单入账出票。响应为订单视图。
+      description: 只认支付渠道查单成功：渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、渠道未确认收款 409 PAYMENT_NOT_SUCCEEDED，订单一律不变（不入账、不出票）。成功即记已付并同一事务自动出票（ROOT-03-R17，审计 ticket_order.auto_issued）；出票失败时收款不回滚，已收各笔原路待退（储值笔回原卡、在线笔登记原路待退 source_type=ticket_payment_rejection）、订单取消，返回 409 TICKET_ISSUE_FAILED_REFUNDING。订单已超时取消后才到账的，本笔原路待退、返回已取消的订单；与待付金额不符的到账本笔原路待退、订单不动。重复确认返回订单现状、不重复出票。客户端未回前台的由服务端结算作业（customer.payment.settle.scheduled.enabled）用同一内核查单入账出票。响应为订单视图。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人订单所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；服务端结算作业不经本接口。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -50694,7 +50733,7 @@ paths:
         - customer
       operationId: startCustomerDepositPayment
       summary: 客人本人订台发起定金在线付款
-      description: ROOT-03 clients-R4（BSM 第 860 行「官方 App 和小程序都可以订台，订台需要支付定金」）：只许本人订台、定金待支付；金额＝该订台定金（服务端定）；收款主体＝订台所属的酒吧商户（商户直收，BSM 第 1062 行「定金直接进该卡座所属的酒吧商户」）。同一订台尚未付款的旧定金付款单作废前先向渠道查单（ROOT-03-R18）：渠道已收款的按到账处理（置已支付并占台）、不再拉起，直接返回那笔已成功的付款（gateway_status=SUCCEEDED，无 launch）；渠道确认未付的才作废。台位已被别人的有效预留占着或已开台 409 BAR_TABLE_ALREADY_RESERVED，不拉起付款（ENUM 第 100 行「冲突时先支付定金者得」，免得付了钱才被原路退回）；已取消或定金非待支付 409 BAR_DEPOSIT_NOT_PAYABLE。响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。
+      description: ROOT-03 clients-R4（BSM 第 860 行「官方 App 和小程序都可以订台，订台需要支付定金」）：只许本人订台、定金待支付；金额＝该订台定金（服务端定）；收款主体＝订台所属的酒吧商户（商户直收，BSM 第 1062 行「定金直接进该卡座所属的酒吧商户」）。同一订台尚未付款的旧定金付款单作废前先向渠道查单（ROOT-03-R18）：渠道已收款的按到账处理（置已支付并占台）、不再拉起，直接返回那笔已成功的付款（gateway_status=SUCCEEDED，无 launch）；渠道确认未付的才作废。台位已被别人的有效预留占着或已开台 409 BAR_TABLE_ALREADY_RESERVED，不拉起付款（ENUM 第 100 行「冲突时先支付定金者得」，免得付了钱才被原路退回）；已取消或定金非待支付 409 BAR_DEPOSIT_NOT_PAYABLE。响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以订台所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不发起付款。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -50756,7 +50795,7 @@ paths:
         - customer
       operationId: confirmCustomerDepositPayment
       summary: 客人回前台确认定金在线付款（查单）
-      description: 只认本订台当前定金付款单，渠道查单成功才按员工登记定金同口径置已支付并落付款渠道（第十批 TK-24：达标退回按此原路；审计 bar.reservation_deposit_paid）；渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、未确认收款 409 PAYMENT_NOT_SUCCEEDED，订台不变。重复确认返回原结果。客户端未回前台的由服务端结算作业查单入账。ROOT-03-R19（ENUM 第 100 行「客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得」）：到账即占台；台位已被先付者或员工代订占着、或已开台不可用时，本订台取消、已收定金按原付款渠道登记原路待退（退款来源 bar_deposit_rejection），返回 409 BAR_TABLE_ALREADY_RESERVED。订台已取消（员工取消或超时释放）后才到账的定金，同样登记原路待退（bar_deposit_rejection）、付款单正常入账，返回 409 BAR_DEPOSIT_NOT_PAYABLE（结算作业不再反复重试）。
+      description: 只认本订台当前定金付款单，渠道查单成功才按员工登记定金同口径置已支付并落付款渠道（第十批 TK-24：达标退回按此原路；审计 bar.reservation_deposit_paid）；渠道未启用 409 PAYMENT_GATEWAY_UNAVAILABLE、未确认收款 409 PAYMENT_NOT_SUCCEEDED，订台不变。重复确认返回原结果。客户端未回前台的由服务端结算作业查单入账。ROOT-03-R19（ENUM 第 100 行「客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得」）：到账即占台；台位已被先付者或员工代订占着、或已开台不可用时，本订台取消、已收定金按原付款渠道登记原路待退（退款来源 bar_deposit_rejection），返回 409 BAR_TABLE_ALREADY_RESERVED。订台已取消（员工取消或超时释放）后才到账的定金，同样登记原路待退（bar_deposit_rejection）、付款单正常入账，返回 409 BAR_DEPOSIT_NOT_PAYABLE（结算作业不再反复重试）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以订台所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；服务端结算作业不经本接口。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:

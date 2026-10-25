@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -17,7 +17,8 @@ public class TicketRewardController {
     private final PointsRecoveryService recoveries;
     private final MerchantConsumptionRewardService merchantRewards;
     private final com.complex.platform.evidence.AuditedOperationExecutor operations;
-    public TicketRewardController(TicketRewardConfigService configs,TicketRewardService rewards,CustomerService customers,PointsRecoveryService recoveries,MerchantConsumptionRewardService merchantRewards,com.complex.platform.evidence.AuditedOperationExecutor operations){this.configs=configs;this.rewards=rewards;this.customers=customers;this.recoveries=recoveries;this.merchantRewards=merchantRewards;this.operations=operations;}
+    private final CustomerProjectSwitch projectSwitch;
+    public TicketRewardController(TicketRewardConfigService configs,TicketRewardService rewards,CustomerService customers,PointsRecoveryService recoveries,MerchantConsumptionRewardService merchantRewards,com.complex.platform.evidence.AuditedOperationExecutor operations,CustomerProjectSwitch projectSwitch){this.configs=configs;this.rewards=rewards;this.customers=customers;this.recoveries=recoveries;this.merchantRewards=merchantRewards;this.operations=operations;this.projectSwitch=projectSwitch;}
     @GetMapping("/loyalty/ticket-reward-configs")
     public ApiResponse<List<TicketRewardConfig>> list(@RequestParam(name="project_id",required=false)String project){return audited("ticket.reward.config.listed",TicketRewardConfigService.VIEW,project,()->configs.list(project));}
     @PostMapping("/loyalty/ticket-reward-configs")
@@ -26,7 +27,10 @@ public class TicketRewardController {
     public ApiResponse<TicketRewardConfig> publish(@PathVariable String id,@RequestBody TicketRewardConfig.PublishRequest request){return audited("ticket.reward.config.publish.completed",TicketRewardConfigService.MANAGE,id,()->configs.publish(id,request));}
     public record PublishedRule(String id,String ticketTypeId,String ticketName,String projectId,String projectName,String kind,String version,long fixedValue,Instant effectiveAt,Instant publishedAt){}
     @GetMapping("/customer/ticket-reward-rules")
-    public ApiResponse<List<PublishedRule>> rules(@RequestParam(name="ticket_type_id",required=false)String type,@RequestParam(name="project_id",required=false)String project){return audited("ticket.reward.rules.viewed","not_applicable",type,()->configs.announcements(type,project));}
+    public ApiResponse<List<PublishedRule>> rules(@RequestParam(name="ticket_type_id",required=false)String type,@RequestParam(name="project_id",required=false)String project){
+        // PGM 第 744 行：给了票种取票种所属综合体、否则取 project_id 判按综合体的客人端开关（匿名，终端类型自报）；两者都不带＝跨综合体列表，不判。
+        projectSwitch.ticketTypeOrProject(type,project);
+        return audited("ticket.reward.rules.viewed","not_applicable",type,()->configs.announcements(type,project));}
     public record RewardSummary(List<TicketUseRewardRecord> rewards,long pendingRecovery){}
     @GetMapping("/customer/ticket-rewards")
     public ApiResponse<RewardSummary> ownRewards(@RequestHeader(name="X-Customer-Token",required=false)String token,@RequestHeader(name="Authorization",required=false)String authorization){

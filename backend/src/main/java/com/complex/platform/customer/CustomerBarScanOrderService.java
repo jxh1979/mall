@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -72,10 +72,11 @@ public class CustomerBarScanOrderService {
     private final ObjectMapper json;
     private final TransactionTemplate transaction;
     private final TransactionTemplate savepoint;
+    private final CustomerProjectSwitch projectSwitch;
 
     public CustomerBarScanOrderService(CustomerService customers, BarRepository bars, BarOrderService barOrders,
             FinanceService finance, IdempotencyService idempotency, AuditEventService audit, JdbcTemplate jdbc,
-            ObjectMapper json, PlatformTransactionManager transactionManager) {
+            ObjectMapper json, PlatformTransactionManager transactionManager, CustomerProjectSwitch projectSwitch) {
         this.customers = customers;
         this.bars = bars;
         this.barOrders = barOrders;
@@ -87,10 +88,13 @@ public class CustomerBarScanOrderService {
         this.transaction = new TransactionTemplate(transactionManager);
         this.savepoint = new TransactionTemplate(transactionManager);
         this.savepoint.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_NESTED);
+        this.projectSwitch = projectSwitch;
     }
 
     /** 菜单：本酒吧在售商品（沽清的置灰标 sold_out，不隐藏），不含内部结算价。 */
     public PageResponse<CustomerBarMenuItemResponse> menu(String tableId) {
+        // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：扫码点单可不登录、终端类型自报，综合体按台位所属酒吧在服务端取。
+        projectSwitch.table(tableId);
         BarTableSessionRecord session = openLooseSession(tableId);
         List<CustomerBarMenuItemResponse> items = bars.listProducts(Optional.ofNullable(session.merchantId())).stream()
                 .filter(p -> session.barId().equals(p.barId()) && "active".equals(p.status()) && p.archivedAt() == null
@@ -109,6 +113,7 @@ public class CustomerBarScanOrderService {
             String terminal = CustomerService.requireCustomerTerminal(TerminalIdentityHolder.trustedTerminalType(null));
             String customerId = customerToken == null ? null : customers.resolveCustomerIdQuietly(customerToken).orElse(null);
             String key = requireText(idempotencyKey, "idempotency_key");
+            projectSwitch.table(tableId);
             Map<String, Object> view = idempotency.execute("customerBarScanOrder:" + requireText(tableId, "table_id"), key, request,
                     () -> createPending(tableId, customerId, terminal, request), Map.class);
             id = (String) view.get("scan_order_id");
@@ -124,6 +129,8 @@ public class CustomerBarScanOrderService {
     /** 回前台确认：不加事务——确认内核在自己的事务里提交，成不了单的原路待退须先落库，再向客人报 409。 */
     public Map<String, Object> confirm(String tableId, String scanOrderId, String idempotencyKey) {
         try {
+            // 客人确认入口才判；服务端结算作业直接调 settle，不经此入口。
+            projectSwitch.table(tableId);
             Map<String, Object> view = transaction.execute(status -> settle(scanOrderId, requireText(tableId, "table_id")));
             if ("refunding".equals(view.get("status"))) {
                 if (SESSION_CLOSED.equals(view.get("reject_code"))) {
@@ -193,6 +200,7 @@ public class CustomerBarScanOrderService {
 
     /** 本桌当前账单：只列当前开台会话已成单的酒水（不含已撤的），没开台＝空账单。 */
     public CurrentBill currentBill(String tableId) {
+        projectSwitch.table(tableId);
         BarTableRecord table = looseTable(tableId);
         Optional<String> session = openSessionId(table.id());
         if (session.isEmpty()) {
