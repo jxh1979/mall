@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -204,6 +204,89 @@ class CustomerComplaintJdbcIntegrationTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("pending_review"));
     }
 
+    /**
+     * PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」、第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：
+     * 关掉本综合体的小程序后，投诉按客人所选综合体（project_id）在服务端判开关——不带 X-Project-Id 或把头写成另一个（开着的）综合体都提交不了、
+     * 不建工单；另一综合体照常提交。判开关先于幂等：开关开着时成功过的同一幂等键，关掉后重放也 403，拿不到第一次的缓存结果。
+     */
+    @Test
+    void closedProjectComplaintRejectedWithoutOrWithForgedProjectHeader() throws Exception {
+        String other = otherProject();
+        String replayKey = "cc_replay_" + suffix;
+        submitAt(project, null, replayKey).andExpect(status().isOk());
+        closeCustomerTerminal();
+        submitAt(project, null, replayKey).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+
+        for (String header : new String[] {null, other}) {
+            submitAt(project, header).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        }
+        // 只有开关开着时那一单。
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM facility_work_orders WHERE reporter_id = ?", Integer.class, customerId))
+                .isEqualTo(1);
+        submitAt(other, other).andExpect(status().isOk()).andExpect(jsonPath("$.data.work_order_id").exists());
+    }
+
+    /**
+     * PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：满意度评分按工单所属综合体在服务端判开关——不带 X-Project-Id 或把头写成
+     * 另一个（开着的）综合体都评不了（评分仍为空）；另一综合体的投诉照常评分。判开关先于幂等：开关开着时用同一幂等键评过分的本人投诉，
+     * 关掉后重放也 403，拿不到第一次的缓存结果。
+     */
+    @Test
+    void closedProjectComplaintRatingRejectedWithoutOrWithForgedProjectHeader() throws Exception {
+        String other = otherProject();
+        String id = read(submitAt(project, null).andExpect(status().isOk()), "$.data.work_order_id");
+        resolve(id);
+        String otherId = read(submitAt(other, other).andExpect(status().isOk()), "$.data.work_order_id");
+        String replayId = read(submitAt(project, null).andExpect(status().isOk()), "$.data.work_order_id");
+        // 另一综合体的投诉与本综合体用于重放的那张直接置为已写处理结论（待回访），本用例只看开关。
+        jdbc.update("UPDATE facility_work_orders SET status = 'pending_review', resolution = '已处理' WHERE id IN (?, ?)", otherId, replayId);
+        String replayKey = "rate_replay_" + suffix;
+        rate(token, replayId, 3, null, replayKey).andExpect(status().isOk()).andExpect(jsonPath("$.data.satisfaction").value(3));
+        closeCustomerTerminal();
+        rate(token, replayId, 3, null, replayKey).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+
+        for (String header : new String[] {null, other}) {
+            rate(token, id, 4, header).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        }
+        assertThat(jdbc.queryForObject("SELECT satisfaction FROM facility_work_orders WHERE id = ?", Integer.class, id)).isNull();
+        rate(token, otherId, 5, other).andExpect(status().isOk()).andExpect(jsonPath("$.data.satisfaction").value(5));
+    }
+
+    /** 另一个（开着的）综合体。 */
+    private String otherProject() {
+        String other = "prj_cc2_" + suffix;
+        jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
+                + " VALUES (?, 'complex', '投诉测试综合体二', 'active', now(), now())", other);
+        return other;
+    }
+
+    /** 关掉本综合体的小程序（按综合体的端总开关）。 */
+    private void closeCustomerTerminal() {
+        jdbc.update("""
+                INSERT INTO terminal_capability_switches (id, terminal_type, capability_code, scope_type, scope_id, enabled, reason, created_at, updated_at)
+                VALUES (?, 'miniapp', 'terminal.enabled', 'project', ?, FALSE, '停用该综合体客人端', now(), now())""", "tcs_cc_" + suffix, project);
+    }
+
+    /** 客人端投诉真实请求形状（multipart、蛇形键）：所选综合体放 project_id；header 非空时另带 X-Project-Id。 */
+    private ResultActions submitAt(String projectId, String header) throws Exception {
+        return submitAt(projectId, header, "cc_" + UUID.randomUUID());
+    }
+
+    private ResultActions submitAt(String projectId, String header, String idempotencyKey) throws Exception {
+        var request = multipart("/api/v1/customer/complaints")
+                .param("idempotency_key", idempotencyKey)
+                .param("project_id", projectId)
+                .param("title", "包厢太吵")
+                .param("description", "客人端文字留言");
+        request.header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token);
+        if (header != null) {
+            request.header("X-Project-Id", header);
+        }
+        return mockMvc.perform(request);
+    }
+
     private ResultActions submit(String customerToken, String title, List<MockMultipartFile> files) throws Exception {
         var request = multipart("/api/v1/customer/complaints")
                 .param("idempotency_key", "cc_" + UUID.randomUUID())
@@ -215,10 +298,23 @@ class CustomerComplaintJdbcIntegrationTests {
     }
 
     private ResultActions rate(String customerToken, String id, int score) throws Exception {
-        return mockMvc.perform(post("/api/v1/customer/complaints/" + id + "/satisfaction")
+        return rate(customerToken, id, score, null);
+    }
+
+    private ResultActions rate(String customerToken, String id, int score, String header) throws Exception {
+        return rate(customerToken, id, score, header, "rate_" + UUID.randomUUID());
+    }
+
+    /** 客人端评分真实请求形状（蛇形键）；header 非空时另带 X-Project-Id。 */
+    private ResultActions rate(String customerToken, String id, int score, String header, String idempotencyKey) throws Exception {
+        var request = post("/api/v1/customer/complaints/" + id + "/satisfaction")
                 .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", customerToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(JSON.writeValueAsString(Map.of("idempotency_key", "rate_" + UUID.randomUUID(), "score", score))));
+                .content(JSON.writeValueAsString(Map.of("idempotency_key", idempotencyKey, "score", score)));
+        if (header != null) {
+            request.header("X-Project-Id", header);
+        }
+        return mockMvc.perform(request);
     }
 
     private ResultActions staffPost(RequestPostProcessor who, String path, Map<String, Object> body) throws Exception {

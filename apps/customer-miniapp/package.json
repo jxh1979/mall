@@ -1,0 +1,20 @@
+{
+  "name": "apps-customer-miniapp",
+  "private": true,
+  "version": "0.1.0",
+  "documentVersion": "V0.01",
+  "description": "微信小程序（原生 WXML/WXSS/JS）：客人端，复用三端共用的客人业务模块，不用 web-view。",
+  "scripts": {
+    "build": "node scripts/build-core.mjs",
+    "test": "node scripts/build-core.mjs && vitest run",
+    "test:unit": "node scripts/build-core.mjs && vitest run",
+    "check-release": "node scripts/check-release.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "miniprogram-simulate": "1.6.2",
+    "qrcode-generator": "2.0.4",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.9"
+  }
+}

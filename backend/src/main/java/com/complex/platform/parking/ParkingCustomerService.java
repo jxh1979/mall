@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -13,6 +13,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
+import com.complex.platform.gate.TerminalSwitchGuard;
 import com.complex.platform.settlement.JdbcSettlementTransactionRepository;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -46,10 +47,11 @@ public class ParkingCustomerService {
     private final BusinessDayResolver businessDays;
     private final IdempotencyService idempotency;
     private final AuditEventService audit;
+    private final TerminalSwitchGuard terminalSwitch;
 
     public ParkingCustomerService(JdbcTemplate jdbc, ParkingService parking, ParkingCreditService credits, FinanceService finance,
             JdbcSettlementTransactionRepository settlement, BusinessDayResolver businessDays, IdempotencyService idempotency,
-            AuditEventService audit) {
+            AuditEventService audit, TerminalSwitchGuard terminalSwitch) {
         this.jdbc = jdbc;
         this.parking = parking;
         this.credits = credits;
@@ -58,11 +60,14 @@ public class ParkingCustomerService {
         this.businessDays = businessDays;
         this.idempotency = idempotency;
         this.audit = audit;
+        this.terminalSwitch = terminalSwitch;
     }
 
     /** 查在场车辆：入场时间、停车费（抵免前与抵免后）、本次可用消费抵免、平台已收、应缴与离场宽限截止。 */
     public Map<String, Object> lookup(String customerId, String projectId, String plateNo, String tempCode) {
         String project = requireText(projectId, "project_id");
+        // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以 project_id 所指项目在服务端判（不取 X-Project-Id）。
+        terminalSwitch.checkTerminalEnabledAtProject(project);
         String plate = trimToNull(plateNo) == null ? null : ParkingService.plate(plateNo);
         String temp = trimToNull(tempCode);
         if (plate == null && temp == null) {
@@ -88,6 +93,12 @@ public class ParkingCustomerService {
         try {
             if (r == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请选择停车记录");
+            }
+            // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以停车记录所属项目在服务端判（不取 X-Project-Id），先于幂等。
+            String requestedSession = trimToNull(r.parkingSessionId());
+            if (requestedSession != null) {
+                terminalSwitch.checkTerminalEnabledAtProject(jdbc.query("SELECT project_id FROM parking_sessions WHERE id=?",
+                        (rs, n) -> rs.getString(1), requestedSession).stream().findFirst().orElse(null));
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> out = idempotency.execute("parkingCustomerPay:" + customerId, key, r, () -> {
@@ -171,6 +182,8 @@ public class ParkingCustomerService {
             Map<String, Object> p = jdbc.queryForList("SELECT * FROM parking_payments WHERE id=? AND customer_id=? FOR UPDATE",
                             requireText(paymentId, "payment_id"), customerId).stream().findFirst()
                     .orElseThrow(() -> ApiException.notFound("PARKING_PAYMENT_NOT_FOUND", "缴费记录不存在"));
+            // PGM 第 744 行：按综合体的客人端终端开关以缴费单所属项目在服务端判（不取 X-Project-Id），先于「重复确认返回原结果」。
+            terminalSwitch.checkTerminalEnabledAtProject((String) p.get("project_id"));
             if ("paid".equals(p.get("status"))) {
                 return payment(paymentId);
             }

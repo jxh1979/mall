@@ -1,0 +1,32 @@
+<!-- 文件版本：V0.01 -->
+<view class="payment">
+  <view id="pay-summary">{{summary}}</view>
+  <view class="actions">
+    <button id="sv-open" size="mini" disabled="{{busy}}" bindtap="openStoredValue">储值余额支付</button>
+    <button id="pay-online" size="mini" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="payOnline">{{onlineLabel}}</button>
+  </view>
+  <view wx:if="{{unavailable}}" id="pay-unavailable" class="alert warn">{{unavailableText}}</view>
+  <view wx:if="{{awaitingIntentId}}" class="alert info">
+    支付完成后点下方按钮确认结果
+    <button id="pay-recheck" size="mini" disabled="{{busy}}" bindtap="recheck">我已完成支付</button>
+  </view>
+  <view wx:if="{{error}}" id="pay-error" class="alert error">{{error}}</view>
+
+  <view wx:if="{{svOpen}}" class="mask">
+    <view class="sheet" id="sv-sheet">
+      <view class="section-title">订单储值支付</view>
+      <view wx:if="{{svError}}" id="sv-error" class="alert error">{{svError}}</view>
+      <picker wx:if="{{cards.length}}" id="sv-card" range="{{cardLabels}}" value="{{cardIndex}}" bindchange="onCard">
+        <view class="field">付款储值卡：{{cardLabels[cardIndex]}}</view>
+      </picker>
+      <view wx:if="{{svAmountText}}" id="sv-amount">{{svAmountText}}</view>
+      <view class="field"><input id="sv-phone" type="number" value="{{phone}}" placeholder="付款手机号" bindinput="onPhone" /></view>
+      <button id="sv-send" size="mini" disabled="{{svBusy}}" bindtap="requestCode">发送扣款验证码</button>
+      <view class="field"><input id="sv-code" type="number" value="{{smsCode}}" placeholder="短信验证码" bindinput="onCode" /></view>
+      <view class="actions">
+        <button id="sv-pay" type="primary" size="mini" loading="{{svBusy}}" disabled="{{svBusy || !cards.length}}" bindtap="payStoredValue">确认余额支付</button>
+        <button id="sv-cancel" size="mini" disabled="{{svBusy}}" bindtap="closeStoredValue">取消</button>
+      </view>
+    </view>
+  </view>
+</view>

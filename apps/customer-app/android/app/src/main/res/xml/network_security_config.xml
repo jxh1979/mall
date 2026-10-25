@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 文件版本：V0.01 -->
+<!-- 发行包网络策略：只认系统证书、不许明文 http（160 等私网自签证书一律不信任）。调试包由 src/debug 同名文件覆盖。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

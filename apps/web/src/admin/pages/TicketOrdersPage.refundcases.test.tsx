@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,8 +11,6 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 const REFUNDS = [
   { id: "r-req", targetId: "o1", refundAmountCent: 9900, status: "requested", reasonCode: "master_override", responsibleEntityId: "be_x", requestedBy: "usr_a" },
   { id: "r-ok", targetId: "o1", refundAmountCent: 9900, status: "approved", reasonCode: "event_cancelled" },
-  // 操作员裁决第十三批第 11 条：客人自助申请的退票（理由固定为票种规则明确允许，未填责任主体）。
-  { id: "r-cus", targetId: "o1", refundAmountCent: 5000, status: "requested", reasonCode: "ticket_type_rule", requestedBy: "cus_1" },
 ];
 const EVENTS = [
   { id: "tse-1", parentTicketId: "tkt_1", slotIndex: 2, reason: "情绪失控", situation: "场内冲突", outcome: "refund", status: "pending", requestedBy: "usr_a" },
@@ -89,6 +87,8 @@ describe("TicketOrdersPage 退款理由闭集与通票安全例外（TK-05）", 
     await waitFor(() => expect(screen.queryByTestId("ticket-refund-pending-row-r-req")).not.toBeNull());
     expect(screen.getByTestId("ticket-refund-pending-row-r-req").textContent).toContain("最高权限逐笔放行");
     expect(screen.queryByTestId("ticket-refund-pending-row-r-ok")).toBeNull();
+    // 2026-10-25 操作员更正撤回客人自助退票：退款都由员工发起时填责任主体，批准处不再设补填栏。
+    expect(screen.queryByTestId("ticket-refund-decision-entity")).toBeNull();
 
     await userEvent.click(screen.getByTestId("ticket-refund-approve-r-req"));
     await waitFor(() => expect(screen.getByTestId("ticket-orders-error").textContent).toContain("审批意见"));
@@ -100,22 +100,6 @@ describe("TicketOrdersPage 退款理由闭集与通票安全例外（TK-05）", 
     await waitFor(() => expect(screen.getByTestId("ticket-refund-reject-r-req")).not.toBeDisabled());
     await userEvent.click(screen.getByTestId("ticket-refund-reject-r-req"));
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/ticketing/refunds/r-req/reject", { action: "reject", reason: "逐笔放行" }));
-  });
-
-  it("客人自助申请的退票没有责任主体，批准时须补填并随批准提交（第十三批裁决第 11 条）", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    const post = renderPage(["ticket.refund.approve", "ticket.refund.view"]);
-    await waitFor(() => expect(screen.queryByTestId("ticket-refund-pending-row-r-cus")).not.toBeNull());
-
-    await userEvent.type(screen.getByTestId("ticket-refund-decision-note"), "票种允许退款");
-    await userEvent.click(screen.getByTestId("ticket-refund-approve-r-cus"));
-    await waitFor(() => expect(screen.queryByTestId("ticket-orders-error")?.textContent ?? "").toContain("责任主体"));
-    expect(post).not.toHaveBeenCalled();
-
-    await userEvent.type(screen.getByTestId("ticket-refund-decision-entity"), "be_amusement");
-    await userEvent.click(screen.getByTestId("ticket-refund-approve-r-cus"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/ticketing/refunds/r-cus/approve",
-      { action: "approve", reason: "票种允许退款", responsibleEntityId: "be_amusement" }));
   });
 
   it("登记通票安全事件带人份与当时情形；待批准事件可批准，已批准事件显示批准人与依据", async () => {

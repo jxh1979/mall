@@ -1,0 +1,131 @@
+// 文件版本：V0.01
+// 官方客人 App（Android）。调试包：包名 com.complex.customer.dev、中文名「综合体客人端（开发）」、深链主机 160（未部署 App Links 关联文件，只供调试）。
+// 发行包：正式包名、中文名、签名（与员工端同一套 COMPLEX_ANDROID_SIGNING_*）、正式接口地址与客人深链主机都由出包机环境变量给出；
+// 缺任一项或仍为开发值，排好任务后、执行任何任务前即失败并逐项给中文原因（外部资料到位前只出调试包）。
+apply plugin: 'com.android.application'
+
+def env = System.getenv()
+def signing = ["STORE_FILE", "STORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD"].collectEntries { [(it): env["COMPLEX_ANDROID_SIGNING_${it}".toString()] ?: ""] }
+def hasSigning = signing.values().every { it }
+
+android {
+    namespace = "com.complex.customer.dev"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.complex.customer.dev"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        // 与 apps/customer-app/package.json 的 version 同值（请求头 X-Client-Version，按版本关停用；tools/customer-android.test.mjs 断言）。
+        versionName "0.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        resValue "string", "app_name", "综合体客人端（开发）"
+        resValue "string", "title_activity_main", "综合体客人端（开发）"
+        manifestPlaceholders = [customerLinkHost: "192.168.88.160"]
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (hasSigning) {
+            release {
+                storeFile file(signing.STORE_FILE)
+                storePassword signing.STORE_PASSWORD
+                keyAlias signing.KEY_ALIAS
+                keyPassword signing.KEY_PASSWORD
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            resValue "string", "app_name", env.CUSTOMER_ANDROID_APP_NAME ?: ""
+            resValue "string", "title_activity_main", env.CUSTOMER_ANDROID_APP_NAME ?: ""
+            manifestPlaceholders = [customerLinkHost: env.VITE_CUSTOMER_LINK_HOST ?: ""]
+            if (hasSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        if (env.CUSTOMER_ANDROID_APPLICATION_ID) {
+            variant.applicationId.set(env.CUSTOMER_ANDROID_APPLICATION_ID)
+        }
+    }
+}
+
+// 发行包不许连的私网与本机地址：localhost、*.local、10/8、127/8、169.254/16、172.16/12、192.168/16、IPv6 字面量。
+def isPrivateHost = { String host ->
+    def h = host.toLowerCase()
+    return h == "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.startsWith("[") ||
+        h ==~ /(10|127)(\.\d{1,3}){3}/ || h ==~ /169\.254(\.\d{1,3}){2}/ ||
+        h ==~ /172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}/ || h ==~ /192\.168(\.\d{1,3}){2}/
+}
+
+def releaseProblems = {
+    def problems = []
+    def appId = env.CUSTOMER_ANDROID_APPLICATION_ID ?: ""
+    if (!appId) problems << "缺正式包名（CUSTOMER_ANDROID_APPLICATION_ID）"
+    else if (appId == android.defaultConfig.applicationId) problems << "正式包名不能用开发包名 ${appId}"
+    def appName = env.CUSTOMER_ANDROID_APP_NAME ?: ""
+    if (!appName) problems << "缺正式中文应用名（CUSTOMER_ANDROID_APP_NAME）"
+    else if (appName.contains("开发")) problems << "正式中文应用名不能带「开发」：${appName}"
+    if (!hasSigning) problems << "缺发行签名（COMPLEX_ANDROID_SIGNING_STORE_FILE、_STORE_PASSWORD、_KEY_ALIAS、_KEY_PASSWORD 四项都要有，与员工端同一套）"
+    else if (!file(signing.STORE_FILE).isFile()) problems << "发行签名库文件不存在：${signing.STORE_FILE}"
+    def api = env.VITE_CUSTOMER_API_BASE_URL ?: ""
+    def apiMatch = api =~ /^https:\/\/([^\/:?#]+)(:\d+)?(\/.*)?$/
+    if (!api) problems << "缺正式接口地址（VITE_CUSTOMER_API_BASE_URL）"
+    else if (!apiMatch.matches()) problems << "正式接口地址须为 https：${api}"
+    else if (isPrivateHost(apiMatch.group(1))) problems << "正式接口地址不能是私网或本机地址：${api}"
+    else if (!fileTree("src/main/assets/public").matching { include "**/*.js" }.any { it.getText("UTF-8").contains(api) }) {
+        problems << "页面资源不是按正式接口地址打包的（请带发行环境变量重新构建客人页面并 cap sync android）"
+    }
+    def linkHost = env.VITE_CUSTOMER_LINK_HOST ?: ""
+    if (!linkHost) problems << "缺客人深链主机（VITE_CUSTOMER_LINK_HOST）"
+    else if (!(linkHost ==~ /[A-Za-z0-9.-]+/) || isPrivateHost(linkHost)) problems << "客人深链主机不能是私网或本机地址（须为正式域名）：${linkHost}"
+    return problems
+}
+
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.project == project && it.name.contains("Release") }) {
+        def problems = releaseProblems()
+        if (problems) {
+            throw new GradleException("客人 App 发行包不能构建（外部资料到位前只能构建调试包 assembleDebug）：\n- " + problems.join("\n- "))
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

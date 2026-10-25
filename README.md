@@ -1,6 +1,6 @@
 # 综合体管理系统（Entertainment Complex Management）
 
-版本：V0.03
+版本：V0.04
 
 > 文档goal(2026-06-20)：本 README 为仓库第一入口，供产品、开发、测试、运营、第三方供应商快速理解项目并上手。所有命令与数字均经实证（`ls`/`grep`/OpenAPI 统计/Surefire 报告/Playwright `--list`），不臆造。
 >
@@ -23,6 +23,7 @@
 | 前端 | **React 19 + Vite 8 + Ant Design 5 + TypeScript 5.7**，单元测试 **Vitest 4** | `apps/web/package.json` |
 | 前端 E2E | **Playwright 1.61** | 根 `package.json`、`playwright.config.ts` |
 | 终端 | **Android 终端**（Gradle/Kotlin DSL，工作手机/平板/一体机 kiosk） | `apps/android-terminal/`、`apps/android-terminal/README.md` |
+| 客人端 | **官方客人 App**（Android、iPhone，Capacitor 8.5.3 本地打包客人页面）＋**微信小程序**（原生 WXML/WXSS/JS），三端共用 `@complex/customer-core` | `apps/customer-app/`、`apps/customer-miniapp/`、`packages/customer-core/`、`docs/customer-app-miniapp-development-design-v0.1.md` §1.4 |
 
 > 正式技术栈口径以 `docs/00-current-effective-document-entry-v0.1.md` §2 为准。废止路线：TypeScript / SQLite / Prisma / Fastify 后端仅为历史预研原型，不得作为正式开发、测试、部署、安全审计依据（`apps/api` 已于 2026-06-15 物理移除）。
 
@@ -35,8 +36,12 @@ complex-management/
 │   ├── README.md           # 后端本地启动说明
 │   └── src/main/resources/db/migration/   # Flyway 迁移（版本以目录为准）
 ├── apps/
-│   ├── web/                # React + Vite + antd 管理端（含 ticketing/bar/amusement 模块）
+│   ├── web/                # React + Vite + antd 管理端（含 ticketing/bar/amusement 模块；客人无网页端）
+│   ├── customer-app/       # 官方客人 App 客人专用构建入口（android/、ios/ 为 Capacitor 原生壳）
+│   ├── customer-miniapp/   # 微信小程序（原生，miniprogram/）
 │   └── android-terminal/   # Android 终端（android-app/，Gradle）
+├── packages/
+│   └── customer-core/      # 客人三端共用的纯 TS 客人业务模块
 ├── docs/                   # 全部产品/开发/契约/验收/运营文档（第一入口见 docs/00-...）
 │   └── openapi/            # 机器可读 P0 契约：openapi-p0.yaml / openapi-p0.json
 ├── ops/
@@ -92,6 +97,18 @@ npm run verify:ui                       # Playwright E2E（mock 后端）
 npm run verify:ui:real-backend:seeded   # 真实后端 E2E（带种子数据）
 npm run verify:closed-loop-runtime      # 闭环运行态总验收（后端测试 + 前端 typecheck/build + 常规与真实后端 UI）
 ```
+
+### 4.5 客人三端（官方客人 App 与微信小程序）
+
+```bash
+npm run dev:customer-app                                  # 客人页面开发服务（vite，:5174）
+ANDROID_HOME=/home/james/android-sdk ANDROID_SDK_ROOT=/home/james/android-sdk npm run customer-android:apk   # 160 构建客人 Android 调试包
+npm run verify:customer-android                           # Android 工程静态检查与发行包拒绝预演
+npm run verify:customer-ios                               # iPhone 工程静态检查（构建只在 GitHub Actions ios-customer-app 工作流）
+npm test --workspace apps/customer-miniapp                # 小程序 simulate 单测与结构检查（开发者工具编译与真机未验证）
+```
+
+导入微信开发者工具的步骤、各端已验证与未验证项、外部资料缺失时的表现见 `docs/customer-app-miniapp-development-design-v0.1.md` §1.4。
 
 ## 5. 当前基线（脚本自动回填，勿手改数字）
 

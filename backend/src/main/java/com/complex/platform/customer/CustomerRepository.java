@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
@@ -68,6 +68,11 @@ public interface CustomerRepository {
     List<CustomerBarReservationOptionResponse> listBarReservationOptions();
 
     Optional<BarTableRecord> findActiveBarTableForReservation(String barId, String tableId, String tableType);
+
+    /** 商户（酒吧）所属综合体 merchants.project_id（PGM 第 736 行按综合体的终端开关）。 */
+    default Optional<String> findMerchantProjectId(String merchantId) {
+        return Optional.empty();
+    }
 
     // P0#3 订台定金：读 bar_deposit_rules（V073）按 bar 解析启用规则（scope_type DESC 优先）。
     List<BarDepositRuleRecord> listDepositRules(String barId);

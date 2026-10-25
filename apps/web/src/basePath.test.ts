@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// 文件版本：V0.01
 import { afterEach, describe, expect, it } from "vitest";
 import { selectShell, stripBase, withBase } from "./basePath";
 
@@ -20,10 +21,11 @@ describe("selectShell（入口壳选择，入参已 stripBase）", () => {
     expect(selectShell("/dealer/orders")).toBe("dealer");
     expect(selectShell(stripBase("/complex/dealer"))).toBe("dealer");
   });
-  it("根路径与客人入口 → 客人端", () => {
-    expect(selectShell("/")).toBe("customer");
-    expect(selectShell("/customer")).toBe("customer");
-    expect(selectShell("/ticketing")).toBe("customer");
+  // PGM「Web 前端（业务人员，客人无网页端）」：根路径、原客人入口与浏览器里打开的客人链接只给客人引导提示页。
+  it("rootAndUnknownPathsRenderCustomerNoticeNotCustomerApp", () => {
+    for (const path of ["/", "/customer", "/ticketing", "/bar", "/amusement", "/c/table", "/anything"]) {
+      expect(selectShell(path), path).toBe("notice");
+    }
   });
 });
 
@@ -32,9 +34,9 @@ describe("stripBase（纯函数自检前缀）", () => {
     expect(stripBase("/complex/admin")).toBe("/admin");
     expect(selectShell(stripBase("/complex/admin"))).toBe("admin");
   });
-  it("/complex/ → / → 客人端", () => {
+  it("/complex/ → / → 客人引导提示页", () => {
     expect(stripBase("/complex/")).toBe("/");
-    expect(selectShell(stripBase("/complex/"))).toBe("customer");
+    expect(selectShell(stripBase("/complex/"))).toBe("notice");
   });
   it("dev 根路径 /admin 原样", () => {
     expect(stripBase("/admin")).toBe("/admin");

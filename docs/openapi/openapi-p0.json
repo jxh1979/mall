@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.28",
+    "version": "V0.29",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -4104,7 +4104,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "客人订台选项（空闲中的台位）。ROOT-03-R19：reserved=true 表示该台位正被有效预留占着（ENUM 第 100 行），照常列出但不可下单。 ROOT-03 clients-R9（BSM 第 860 行「订台页面须写明该卡座适用的最低消费金额与服务费比例」）：每个台位带 min_consumption_cent、service_fee_rate_bps（卡座与包厢取所属项目当日已批准的收费规则，未配置为空；散台与吧台位为 0）、deposit_amount_cent（按本酒吧定金规则现算，0＝免定金）与 reserved。"
+        "description": "客人订台选项（空闲中的台位）。ROOT-03-R19：reserved=true 表示该台位正被有效预留占着（ENUM 第 100 行），照常列出但不可下单。 ROOT-03 clients-R9（BSM 第 860 行「订台页面须写明该卡座适用的最低消费金额与服务费比例」）：每个台位带 min_consumption_cent、service_fee_rate_bps（卡座与包厢取所属项目当日已批准的收费规则，未配置为空；散台与吧台位为 0）、deposit_amount_cent（按本酒吧定金规则现算，0＝免定金）与 reserved。 PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」：每个台位带 project_id（所属酒吧的综合体），客人端订台请求带 X-Project-Id 取该值，后端按综合体的终端开关拒绝。"
       }
     },
     "/api/v1/customer/bar-reservations": {
@@ -4135,6 +4135,9 @@
           "400": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -4143,7 +4146,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "客人自助订台。latest_arrival_at 必填（缺失 400 VALIDATION_FAILED）。ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。定金付款确认成功时占台。BSM 第 1062 行「客人自助订台必须支付定金」：本酒吧未配定金规则时 409 BAR_SELF_RESERVATION_UNAVAILABLE（该酒吧暂未开放自助订台），员工代订不受影响。订台归台位所属的酒吧商户（BSM 第 1062 行「定金直接进该卡座所属的酒吧商户」），该酒吧员工在后台可见、可确认并签发邀请函（第十三批裁决第 4 条）。受限客人 403 CUSTOMER_RESTRICTED。",
+        "description": "客人自助订台。latest_arrival_at 必填（缺失 400 VALIDATION_FAILED）。ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。定金付款确认成功时占台。BSM 第 1062 行「客人自助订台必须支付定金」：本酒吧未配定金规则时 409 BAR_SELF_RESERVATION_UNAVAILABLE（该酒吧暂未开放自助订台），员工代订不受影响。订台归台位所属的酒吧商户（BSM 第 1062 行「定金直接进该卡座所属的酒吧商户」），该酒吧员工在后台可见、可确认并签发邀请函（第十三批裁决第 4 条）。受限客人 403 CUSTOMER_RESTRICTED。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以台位所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不建订台。",
         "x-failure-codes": [
           "BAR_TABLE_ALREADY_RESERVED",
           "BAR_SELF_RESERVATION_UNAVAILABLE",
@@ -4663,6 +4666,9 @@
           "400": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -4671,7 +4677,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。 订单保存 project_id 项目快照，含游乐权益的票必须先确定唯一项目；储值付款仅允许平台通用卡或与原订单项目一致的项目通用卡。 ROOT-03-R27（BSM 第 733 行「符合后台规则时系统自动判断可用」、第 756 行「多种资格价不叠加，选择最终价格最低的一项」）：价格由系统按客人资格自动判定，请求不收 price_rule_id（带即 400 VALIDATION_FAILED）；会员价对全部会员、新人价仅本账户无已付门票订单且不是注销后一年内重新注册、学生价须学生资格、团体价与渠道价不对客人自助开放，与动态公开价一起取最低；订单 price_rule_id＝选中的资格价规则（公开价最低时为空），全部命中资格价见我的订单 price_hits。"
+        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。 订单保存 project_id 项目快照，含游乐权益的票必须先确定唯一项目；储值付款仅允许平台通用卡或与原订单项目一致的项目通用卡。 ROOT-03-R27（BSM 第 733 行「符合后台规则时系统自动判断可用」、第 756 行「多种资格价不叠加，选择最终价格最低的一项」）：价格由系统按客人资格自动判定，请求不收 price_rule_id（带即 400 VALIDATION_FAILED）；会员价对全部会员、新人价仅本账户无已付门票订单且不是注销后一年内重新注册、学生价须学生资格、团体价与渠道价不对客人自助开放，与动态公开价一起取最低；订单 price_rule_id＝选中的资格价规则（公开价最低时为空），全部命中资格价见我的订单 price_hits。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以票种所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不建单。"
       }
     },
     "/api/v1/customer/ticket-products": {
@@ -4681,7 +4687,7 @@
         ],
         "operationId": "listCustomerTicketProducts",
         "summary": "客人可购票种和票价",
-        "description": "ROOT-03-R27：带有效客人会话（X-Customer-Token 或 Bearer）时每个票种另给 my_price_cent（今日按本人资格系统判定的最低价）与 my_price_basis（会员价／新人价／学生价；动态公开价最低时为空）；匿名或会话失效时两者为空。 ROOT-03 clients-R9（BSM 第 858 行「购票前须以门票守则的形式向客人告知该票的规则，包括能否退款、有效期、年龄限制与可使用范围」；第 879 行「展示……赠饮权益」）：每个票种带 refundable、validity_days、usage_scope（单店票＝所属酒吧名，通票＝综合体通票）、entitlements（所含权益名称）、age_limit_text（全场 18 岁以上方可入场）；带客人会话时另给 my_price_cent 与 my_price_basis。",
+        "description": "ROOT-03-R27：带有效客人会话（X-Customer-Token 或 Bearer）时每个票种另给 my_price_cent（今日按本人资格系统判定的最低价）与 my_price_basis（会员价／新人价／学生价；动态公开价最低时为空）；匿名或会话失效时两者为空。 ROOT-03 clients-R9（BSM 第 858 行「购票前须以门票守则的形式向客人告知该票的规则，包括能否退款、有效期、年龄限制与可使用范围」；第 879 行「展示……赠饮权益」）：每个票种带 refundable、validity_days、usage_scope（单店票＝所属酒吧名，通票＝综合体通票）、entitlements（所含权益名称）、age_limit_text（全场 18 岁以上方可入场）；带客人会话时另给 my_price_cent 与 my_price_basis。 PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」：每个票种带 project_id（所属综合体，与下单确定订单综合体同一口径；关联多个或无法确定时为空），客人端购票请求带 X-Project-Id 取该值，后端按综合体的终端开关拒绝。",
         "security": [],
         "x-permission": "public",
         "x-data-scope": "public-project",
@@ -13636,57 +13642,11 @@
           }
         ],
         "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "idempotency_key",
-                  "action",
-                  "reason"
-                ],
-                "properties": {
-                  "idempotency_key": {
-                    "type": "string",
-                    "description": "幂等键；同一状态变更重试必须复用。",
-                    "maxLength": 128
-                  },
-                  "action": {
-                    "type": "string",
-                    "description": "状态动作编码；必须使用后端枚举，不得提交任意文案。",
-                    "maxLength": 64
-                  },
-                  "reason": {
-                    "type": "string",
-                    "description": "状态变更原因；暂停、作废、退款、驳回等动作必须填写。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    },
-                    "description": "证据附件 ID 列表；用于关联状态变更依据。",
-                    "maxItems": 50
-                  },
-                  "responsible_entity_id": {
-                    "type": "string",
-                    "description": "退款责任主体（主体主数据中在用的法律主体）。操作员裁决第十三批第 11 条：只在退款单还没有责任主体时（客人自助申请的退票）必填，由批准的员工补填；已有责任主体的退款不改、忽略此字段。缺失或不在用 400 REFUND_RESPONSIBLE_ENTITY_REQUIRED。",
-                    "maxLength": 64
-                  }
-                }
-              }
-            }
-          }
+          "$ref": "#/components/requestBodies/StatusChange"
         },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
           },
           "403": {
             "$ref": "#/components/responses/Error"
@@ -34753,7 +34713,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "TK-21-R3 / ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额，客人可以选择不取存酒、放弃余额，径行注销；放弃的存酒按存酒到期规则转为所在酒吧的自有库存资产……注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除……积分、券一律清零，未核销的票按本文件「退款」条的退票规则处理」；ENUM 第 68 行「已注销会员的手机号可以重新注册，新账户与原账户之间不建立任何关联」）：名下有在保管存酒而 abandon_saved_bottles 不为 true 时 409 CUSTOMER_SAVED_BOTTLES_HELD、不改任何数据；放弃的存酒置到期（转酒吧自有）；储值按 waive_balance 处理；可用与冻结积分清零、未核销券作废、在途转赠作废；票种不允许退款的未用票作废（主动放弃不构成退款理由）；已部分核销或只持有部分人份的，作废本人持有的未用权益（操作员裁决第十三批第 12 条）；名下有每个人份都归本人、票种允许退款且整张未用的票时 409 CUSTOMER_REFUNDABLE_TICKETS_HELD、不改任何数据（操作员裁决第十三批第 8 条「先退票才能注销」：提醒先申请退票，退完才能注销）；最后删除手机号、盲索引、掩码与生日（同号可重新注册、与原账户无关联），会话全部撤销，订单购票手机号清空，学生认证证件照片与学信网验证码删除；本人投诉附件按操作员裁决第十三批第 10 条「作为工单材料保留」不删，附件行与工单只留随机客人编号（不可反查，与钱账留存同一做法），有工单查看权限的员工照常查看；只留注销时点与手机号盲索引的一年期标记。同一事务。"
+        "description": "TK-21-R3 / ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额，客人可以选择不取存酒、放弃余额，径行注销；放弃的存酒按存酒到期规则转为所在酒吧的自有库存资产……注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除……积分、券一律清零，未核销的票按本文件「退款」条的退票规则处理」；ENUM 第 68 行「已注销会员的手机号可以重新注册，新账户与原账户之间不建立任何关联」）：名下有在保管存酒而 abandon_saved_bottles 不为 true 时 409 CUSTOMER_SAVED_BOTTLES_HELD、不改任何数据；放弃的存酒置到期（转酒吧自有）；储值按 waive_balance 处理；可用与冻结积分清零、未核销券作废、在途转赠作废；本人持有的未核销权益（含已开始使用的多次票剩余次数）一律作废、不退款、不因此拦注销（BSM 第 804 行「未到场、忘记使用或主动放弃均不构成退款理由」；2026-10-25 操作员更正「即使注销，门票是不可以退的，除非碰上特殊安全情况」；含只持有部分人份的，只作废本人持有的人份）；一人多次票父票再无可用入场权益时人脸绑定随即删除；最后删除手机号、盲索引、掩码与生日（同号可重新注册、与原账户无关联），会话全部撤销，订单购票手机号清空，学生认证证件照片与学信网验证码删除；本人投诉附件按操作员裁决第十三批第 10 条「作为工单材料保留」不删，附件行与工单只留随机客人编号（不可反查，与钱账留存同一做法），有工单查看权限的员工照常查看；只留注销时点与手机号盲索引的一年期标记。同一事务。"
       }
     },
     "/api/v1/customer/deregister/preview": {
@@ -34762,8 +34722,8 @@
           "customer"
         ],
         "operationId": "previewCustomerDeregistration",
-        "summary": "客人注销预览（提醒名下各储值卡本金/赠送金、名下存酒与可退款的未用票）",
-        "description": "TK-21-R3 / ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额」）：返回 {stored_value_cards:[account_id、card_scope、merchant_id、principal_cent、bonus_cent], saved_bottles:[与「我的存酒」同一投影：id、bar_project_id、bottle_name、remaining_quantity、unit、expire_at……], refundable_tickets:[与「我的票」同一投影：id、ticket_name、status、parent_ticket_id、ticket_no……，每个人份都归本人、票种允许退款且整张未用的票（操作员裁决第十三批第 8 条「先退票才能注销」）]}。",
+        "summary": "客人注销预览（提醒名下各储值卡本金/赠送金与名下存酒）",
+        "description": "TK-21-R3 / ROOT-03-R21（BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额」）：返回 {stored_value_cards:[account_id、card_scope、merchant_id、principal_cent、bonus_cent], saved_bottles:[与「我的存酒」同一投影：id、bar_project_id、bottle_name、remaining_quantity、unit、expire_at……]}。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -68033,7 +67993,7 @@
         ],
         "operationId": "findCustomerParkingSession",
         "summary": "客人按车牌或临时码查在场车辆停车费",
-        "description": "BSM「停车场」L1433「无牌车在入口扫码领取临时码、出口凭码缴费」、L1435：返回 parking_session_id、入场时间、停车费（按本项目下发给停车系统的同一套规则试算：先扣免费时长，剩余按营业日切段、不足一小时按一小时、每日封顶；停车系统认定为员工车辆的再按本项目员工优惠减免）、平台已收、应缴与离场宽限截止。HP-P01 消费抵免（BSM「停车场」章「消费抵免」条）：先扣免费时长再扣该车入场营业日本人可用的消费抵免时长（或已用在本次停车上的抵免），另返回 gross_fee_cent 抵免前停车费、fee_cent 抵免后停车费、credit_status、credit_minutes、credit_offset_hours 实际抵掉的计费小时数（按实际少收的钱折回：整次停车累计不抵免应缴与累计实缴之差÷小时费率，不足一小时按一小时，不超过抵免覆盖的计费小时；一分没少收为 0）与 credit_id（确实少收才有值；已用在本次停车上的抵免续缴时也带上，此时 credit_offset_hours 可为 0，第十二批操作员裁决补充第 4、11 条）。未找到在场车辆 404 PARKING_SESSION_NOT_FOUND；项目未配置 409 PARKING_POLICY_NOT_CONFIGURED。",
+        "description": "BSM「停车场」L1433「无牌车在入口扫码领取临时码、出口凭码缴费」、L1435：返回 parking_session_id、入场时间、停车费（按本项目下发给停车系统的同一套规则试算：先扣免费时长，剩余按营业日切段、不足一小时按一小时、每日封顶；停车系统认定为员工车辆的再按本项目员工优惠减免）、平台已收、应缴与离场宽限截止。HP-P01 消费抵免（BSM「停车场」章「消费抵免」条）：先扣免费时长再扣该车入场营业日本人可用的消费抵免时长（或已用在本次停车上的抵免），另返回 gross_fee_cent 抵免前停车费、fee_cent 抵免后停车费、credit_status、credit_minutes、credit_offset_hours 实际抵掉的计费小时数（按实际少收的钱折回：整次停车累计不抵免应缴与累计实缴之差÷小时费率，不足一小时按一小时，不超过抵免覆盖的计费小时；一分没少收为 0）与 credit_id（确实少收才有值；已用在本次停车上的抵免续缴时也带上，此时 credit_offset_hours 可为 0，第十二批操作员裁决补充第 4、11 条）。未找到在场车辆 404 PARKING_SESSION_NOT_FOUND；项目未配置 409 PARKING_POLICY_NOT_CONFIGURED。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以 project_id 所指项目在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -68085,6 +68045,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "404": {
             "$ref": "#/components/responses/Error"
           },
@@ -68105,7 +68068,7 @@
         ],
         "operationId": "createCustomerParkingPayment",
         "summary": "客人停车缴费下单",
-        "description": "BSM「停车场」L1435「出口扫码支付，或在官方 App/小程序提前缴费后在离场宽限时限内离场……不做车牌绑定无感支付」、L1445「停车费收入归城市项目公司」：按应缴拉起支付意向（business_order_type=parking_fee），收款主体为本项目唯一有效的城市项目公司（否则 409 CITY_PROJECT_COMPANY_MISSING）；离场宽限内已缴 409 PARKING_ALREADY_PAID；无需缴费 409 PARKING_NO_FEE_DUE；已出场 409 PARKING_SESSION_EXITED。不保存车牌与账户的代扣绑定。HP-P01 消费抵免：带实际抵掉计费小时的抵免下单即预占（同一次抵免只一笔能用；本客人另一辆在场车已占用时本笔按无抵免计），须城市项目公司有且仅有一条已生效的停车抵免每小时内部结算价（内部结算价目录品类 parking_credit，否则 409 PARKING_CREDIT_PRICE_MISSING，不按 0 计）并随缴费固化；抵免把应缴抵到 0 元时直接记 0 元已缴（无支付意向）并置抵免已使用、按组成比例分担成本，停车系统按缴费记录放行。已用在本次停车上的抵免续缴时随缴费带上，缴费成功按整次停车累计重算实际抵掉小时与成本（可升可降）；累计一分没少收的（如带抵免缴费后停到每日封顶），抵免退回可用、不计成本、未并入月度内部结算的分担删除（第十二批操作员裁决补充第 11 条「一分没少收＝没用掉抵免、不计成本」）。 ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。",
+        "description": "BSM「停车场」L1435「出口扫码支付，或在官方 App/小程序提前缴费后在离场宽限时限内离场……不做车牌绑定无感支付」、L1445「停车费收入归城市项目公司」：按应缴拉起支付意向（business_order_type=parking_fee），收款主体为本项目唯一有效的城市项目公司（否则 409 CITY_PROJECT_COMPANY_MISSING）；离场宽限内已缴 409 PARKING_ALREADY_PAID；无需缴费 409 PARKING_NO_FEE_DUE；已出场 409 PARKING_SESSION_EXITED。不保存车牌与账户的代扣绑定。HP-P01 消费抵免：带实际抵掉计费小时的抵免下单即预占（同一次抵免只一笔能用；本客人另一辆在场车已占用时本笔按无抵免计），须城市项目公司有且仅有一条已生效的停车抵免每小时内部结算价（内部结算价目录品类 parking_credit，否则 409 PARKING_CREDIT_PRICE_MISSING，不按 0 计）并随缴费固化；抵免把应缴抵到 0 元时直接记 0 元已缴（无支付意向）并置抵免已使用、按组成比例分担成本，停车系统按缴费记录放行。已用在本次停车上的抵免续缴时随缴费带上，缴费成功按整次停车累计重算实际抵掉小时与成本（可升可降）；累计一分没少收的（如带抵免缴费后停到每日封顶），抵免退回可用、不计成本、未并入月度内部结算的分担删除（第十二批操作员裁决补充第 11 条「一分没少收＝没用掉抵免、不计成本」）。 ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以停车记录所属项目在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建缴费单。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -68152,6 +68115,9 @@
           "401": {
             "$ref": "#/components/responses/Error"
           },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
           "404": {
             "$ref": "#/components/responses/Error"
           },
@@ -68172,7 +68138,7 @@
         ],
         "operationId": "confirmCustomerParkingPayment",
         "summary": "客人停车缴费确认",
-        "description": "支付意向经渠道核验成功才记已缴（PAYMENT_NOT_SUCCEEDED／PAYMENT_GATEWAY_UNAVAILABLE 时不记），离场宽限截止＝缴费时刻＋本项目离场宽限时限；收入按支付意向成功写内部核算（source_type=parking_fee）。重复确认返回原结果。带抵免的缴费成功后抵免置已使用：成本＝实际抵掉的计费小时数×首次使用时固化的每小时内部结算价，按组成有效消费金额比例由各承担商户分担（尾差单列由城市项目公司承担），按月并入城市项目公司对承担商户的普通内部结算应收（source_type=parking_credit_cost）；抵免已被撤销的本笔照常记已缴、不产生抵免成本。",
+        "description": "支付意向经渠道核验成功才记已缴（PAYMENT_NOT_SUCCEEDED／PAYMENT_GATEWAY_UNAVAILABLE 时不记），离场宽限截止＝缴费时刻＋本项目离场宽限时限；收入按支付意向成功写内部核算（source_type=parking_fee）。重复确认返回原结果。带抵免的缴费成功后抵免置已使用：成本＝实际抵掉的计费小时数×首次使用时固化的每小时内部结算价，按组成有效消费金额比例由各承担商户分担（尾差单列由城市项目公司承担），按月并入城市项目公司对承担商户的普通内部结算应收（source_type=parking_credit_cost）；抵免已被撤销的本笔照常记已缴、不产生抵免成本。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以缴费单所属项目在服务端判（不取客户端自报的 X-Project-Id，先于重复确认返回原结果），该综合体客人端已关→403 TERMINAL_DISABLED，不记已缴。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -68220,6 +68186,9 @@
             "$ref": "#/components/responses/Success"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
             "$ref": "#/components/responses/Error"
           },
           "404": {
@@ -68878,7 +68847,7 @@
         ],
         "operationId": "submitCustomerComplaint",
         "summary": "客人提交投诉（文字＋照片、视频、语音）",
-        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：multipart 提交，建「投诉」工单（来源 customer、提单方＝客人本人、时限按「投诉×普通」策略），附件 0～9 个，类型由服务端按扩展名判定（照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm、语音 m4a/aac/mp3/amr/wav，其他 400 VALIDATION_FAILED，不建工单）。project_id 须为存在的综合体，title 必填。幂等键必填。",
+        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：multipart 提交，建「投诉」工单（来源 customer、提单方＝客人本人、时限按「投诉×普通」策略），附件 0～9 个，类型由服务端按扩展名判定（照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm、语音 m4a/aac/mp3/amr/wav，其他 400 VALIDATION_FAILED，不建工单）。project_id 须为存在的综合体，title 必填。幂等键必填。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以客人所选综合体（project_id，即工单所属综合体）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建工单。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -68964,7 +68933,7 @@
         ],
         "operationId": "rateCustomerComplaint",
         "summary": "客人对本人投诉评满意度",
-        "description": "ROOT-03-R26（BSM 第 1385 行「满意度在回访/验收时由提单方评分……客人投诉由客人自行在客人端提交，客人即为提单方」）：只许本人投诉；已写处理结论（待回访、待验收、已验收、已关闭）后才可评，否则 409 COMPLAINT_NOT_RESOLVED；score 1～5；同单只评一次（409 FACILITY_SATISFACTION_ALREADY_RATED）；他人投诉 403 CUSTOMER_COMPLAINT_FORBIDDEN。评分不作为关闭条件，员工关闭不改写客人评分。",
+        "description": "ROOT-03-R26（BSM 第 1385 行「满意度在回访/验收时由提单方评分……客人投诉由客人自行在客人端提交，客人即为提单方」）：只许本人投诉；已写处理结论（待回访、待验收、已验收、已关闭）后才可评，否则 409 COMPLAINT_NOT_RESOLVED；score 1～5；同单只评一次（409 FACILITY_SATISFACTION_ALREADY_RATED）；他人投诉 403 CUSTOMER_COMPLAINT_FORBIDDEN。评分不作为关闭条件，员工关闭不改写客人评分。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以投诉工单所属综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不记评分。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -70531,104 +70500,6 @@
           }
         },
         "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/customer/ticket-refunds": {
-      "post": {
-        "tags": [
-          "customer"
-        ],
-        "operationId": "requestCustomerTicketRefund",
-        "summary": "客人自助申请退票（只对本人名下、票种允许退款、整张未使用的票）",
-        "description": "操作员裁决第十三批第 11 条「客人端自助申请」（「在客人 App／小程序加「申请退票」：只对本人可退的未用票，提交后走与员工退款同一套审批和原路退回」）：按整张票申请（ticket_instance_id＝「我的票」里的 parent_ticket_id，该票每个人份的持有人都须是本人），理由固定为 ticket_type_rule（票种规则明确允许），金额由服务端按该票出票时定格的实付分摊额算定；客人不填退款责任主体等员工字段，由批准的员工在 /api/v1/ticketing/refunds/{refund_id}/approve 补填。提交即冻结该票（退款中），进入后台退款审批（与员工发起的退款同一入口），批准后同样按收款相反顺序原路退回（储值部分当场回原卡）。同一幂等键重复提交返回同一申请。拒绝：该票不归本人 403 CUSTOMER_ORDER_FORBIDDEN；票不存在 404 TICKET_INSTANCE_NOT_FOUND；票种不允许退款 409 TICKET_TYPE_NOT_REFUNDABLE；已开始核销 409 TICKET_INSTANCE_VERIFIED_NO_REFUND；已在退款申请中 409 TICKET_INSTANCE_REFUND_IN_PROGRESS；有在途转赠 409 TICKET_TRANSFER_PENDING_NO_REFUND；订单未支付 409 TICKET_ORDER_NOT_REFUNDABLE。响应只含客人可见字段（id、ticket_instance_id、ticket_no、ticket_name、refund_amount_cent、status、created_at、updated_at）。",
-        "x-permission": "not_applicable",
-        "x-data-scope": "customer",
-        "x-terminal-allowed": [
-          "miniapp",
-          "app"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "customer.ticket_refund.requested",
-        "x-audit-event-failure": "customer.ticket_refund.request_failed",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "ticket_instance_id"
-                ],
-                "properties": {
-                  "idempotency_key": {
-                    "type": "string",
-                    "description": "操作幂等键；重复提交时必须返回同一申请。也可放在 Idempotency-Key 请求头。",
-                    "maxLength": 128
-                  },
-                  "ticket_instance_id": {
-                    "type": "string",
-                    "description": "要退的票（父票实例 id，即「我的票」的 parent_ticket_id）；必须是本人名下的整张票。",
-                    "maxLength": 64
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "customer-token"
-      },
-      "get": {
-        "tags": [
-          "customer"
-        ],
-        "operationId": "listCustomerTicketRefunds",
-        "summary": "我的退票申请及其状态",
-        "description": "操作员裁决第十三批第 11 条：本人提交的退票申请（新到旧），每条带对应的票（ticket_instance_id、ticket_no、ticket_name）、退款金额（分）与状态（requested 已申请、approved 已通过待原路打款、rejected 已驳回、success 成功）；不含审批人、发起人、商户与责任主体等内部字段。",
-        "x-permission": "not_applicable",
-        "x-data-scope": "customer",
-        "x-terminal-allowed": [
-          "miniapp",
-          "app"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "customer.ticket_refunds_viewed",
-        "x-audit-event-failure": "customer.ticket_refunds_view_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Page"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "customer-token"
       }
     }
   },

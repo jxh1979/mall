@@ -1,0 +1,4 @@
+{
+  "navigationBarTitleText": "购票",
+  "usingComponents": { "order-payment": "../../components/order-payment/index" }
+}

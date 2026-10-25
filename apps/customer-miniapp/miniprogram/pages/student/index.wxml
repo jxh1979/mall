@@ -1,0 +1,32 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>学生认证须先登录会员后单独申请</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">账户功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view wx:if="{{error}}" id="student-error" class="alert error">{{error}}</view>
+    <view wx:if="{{loading}}" class="hint">加载中……</view>
+    <view wx:if="{{current}}" id="student-status" class="alert {{current.tone}}">{{current.line}}</view>
+    <block wx:if="{{!loading && canApply}}">
+      <view wx:if="{{consentId}}" id="student-form" class="card">
+        <view class="section-title">提交学生认证</view>
+        <button id="add-photo" size="mini" disabled="{{photos.length >= maxPhotos}}" bindtap="addPhoto">添加学生证件照片</button>
+        <view id="student-files">
+          <view wx:if="{{!photos.length}}" class="hint">至少 1 张、最多 {{maxPhotos}} 张。</view>
+          <view wx:for="{{photos}}" wx:key="path" class="item">{{item.name}}</view>
+        </view>
+        <view class="field"><input id="chsi-code" value="{{chsiCode}}" placeholder="学信网在线验证码" bindinput="onChsi" /></view>
+        <view class="hint">填写学信网《学籍在线验证报告》上的在线验证码，审核通过后学生资格有效到报告上的预计毕业日期。</view>
+        <button id="student-submit" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">提交认证</button>
+      </view>
+      <view wx:else id="student-consent" class="card">
+        <view class="section-title">学生证件采集同意</view>
+        <text class="terms">{{consentScope}}</text>
+        <view class="hint">{{consentVersion}}</view>
+        <button id="consent-agree" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="agree">同意并继续</button>
+      </view>
+    </block>
+  </block>
+</view>

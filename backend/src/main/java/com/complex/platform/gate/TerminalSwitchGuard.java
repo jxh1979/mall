@@ -81,11 +81,27 @@ public class TerminalSwitchGuard {
      * 最高层关闭行），再叠加最细的灰度层。两段都只能"关"，不能把已关的翻回"开"。
      */
     public void check(String capabilityCode) {
+        check(capabilityCode, GateRequestContext.orderedScopes());
+    }
+
+    /**
+     * 按服务端自己取得的综合体判端总开关（PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」）：综合体层用业务对象所属综合体
+     * 顶替客户端自报的 X-Project-Id，其余层与 {@link #check} 相同。取不到唯一综合体（为空）时不判。
+     */
+    public void checkTerminalEnabledAtProject(String projectId) {
+        if (projectId == null || projectId.isBlank()) {
+            return;
+        }
+        Map<String, String> scopes = GateRequestContext.orderedScopes();
+        scopes.put("project", projectId);
+        check(MASTER_CAPABILITY, scopes);
+    }
+
+    private void check(String capabilityCode, Map<String, String> scopes) {
         if (capabilityCode == null || capabilityCode.isBlank()) {
             return;
         }
         String terminalType = GateRequestContext.terminalType();
-        Map<String, String> scopes = GateRequestContext.orderedScopes();
 
         Optional<TerminalCapabilitySwitchRecord> effective;
         try {

@@ -1,6 +1,7 @@
+// 文件版本：V0.01
 import type { Page, Route } from "@playwright/test";
 
-// 客人端 mock 后端：覆盖 /api/v1/customer/* 与购票/订台所需的 finance/payment-intents。
+// 客人端 mock 后端：覆盖 /api/v1/customer/*（购票与订台定金都走客人本人订单／订台在线付款，不再调 finance/payment-intents）。
 // 与 admin mock-api 一致使用 { code, message, data } 信封；列表直接返回数组（unwrap 拆 data）。
 // 写操作维护最小状态，使「下单 -> 支付意图」「订台 -> 定金意图」「签到累计」可被两端验收。
 
@@ -46,7 +47,8 @@ function createState() {
       { ticket_type_id: "ticket-2", ticket_name: "夜场单人票", weekday_price_cent: 6900, weekend_price_cent: 8900, holiday_price_cent: 9900, currency: "CNY", status: "active" },
     ],
     reservationOptions: [
-      { bar_id: "bar-main", table_id: "table-1", table_type: "卡座", table_name: "A01 卡座", capacity: 6, allowed_pass_free_guest_count: 2, min_consumption_cent: 100000, currency: "CNY", status: "available" },
+      { bar_id: "bar-main", table_id: "table-1", table_type: "card_seat", table_name: "A01 卡座", capacity: 6, allowed_pass_free_guest_count: 2, min_consumption_cent: 100000, currency: "CNY", status: "available",
+        reserved: false, service_fee_rate_bps: 1000, deposit_amount_cent: 20000 },
     ],
     orders: [] as Record<string, unknown>[],
     checkIns: [] as Record<string, unknown>[],
@@ -63,6 +65,12 @@ function listRoutes(pathname: string, state: CustomerMockState, options: Custome
     ];
   }
   switch (pathname) {
+    // 我的票＝本人当前持有的票（GET /customer/my-tickets），按父票聚合。
+    case "/api/v1/customer/my-tickets":
+      return [
+        { id: "ent-1", ticket_name: "周末通票", entitlement_type: "ticket", status: "active", total_times: 1, used_times: 0, remaining_times: 1, num_people: 1, valid_from: now, valid_to: "2026-12-31T23:59:59.000Z",
+          parent_ticket_id: "pt-1", slot_index: 1, ticket_no: "TK-CUST-1", transfer_state: null, compensation_kind: null },
+      ];
     case "/api/v1/customer/ticket-products":
       return state.ticketProducts;
     case "/api/v1/customer/bar-reservation-options":
@@ -117,7 +125,7 @@ function handleWrite(route: Route, pathname: string, state: CustomerMockState, o
       price_rule_id: null,
       quantity,
       visit_date: bodyValue(body, "visit_date", "visitDate") ?? "2026-06-20",
-      sales_channel: "customer_web",
+      sales_channel: "app",
       buyer_phone: bodyValue(body, "contact_phone", "contactPhone") ?? "138****8888",
       amount_cent: 9900 * quantity,
       currency: "CNY",
@@ -149,15 +157,16 @@ function handleWrite(route: Route, pathname: string, state: CustomerMockState, o
     });
   }
 
-  if (pathname === "/api/v1/finance/payment-intents") {
-    return json(route, {
-      id: "intent-1",
-      status: "pending",
-      business_order_type: bodyValue(body, "business_order_type", "businessOrderType"),
-      business_order_id: bodyValue(body, "business_order_id", "businessOrderId"),
-      amount_cent: bodyValue(body, "amount_cent", "amountCent"),
-      channel: bodyValue(body, "channel", "channel") ?? "aggregate_pay",
-    });
+  // 客人本人订单发起在线付款：支付渠道未配置（拉起参数为空），客户端应显示「支付暂不可用，未扣款」。
+  if (/^\/api\/v1\/customer\/orders\/[^/]+\/payments$/.test(pathname)) {
+    return json(route, { payment_intent_id: "pi-1", business_order_id: pathname.split("/")[5], amount_cent: 9900, channel: "wechat",
+      gateway_status: "NOT_CONFIGURED", payment_url: null, launch: null });
+  }
+
+  // 客人本人订台定金在线付款：支付渠道未配置（拉起参数为空）。
+  if (/^\/api\/v1\/customer\/bar-reservations\/[^/]+\/deposit-payments$/.test(pathname)) {
+    return json(route, { payment_intent_id: "pi-dep-1", business_order_id: pathname.split("/")[5], amount_cent: 20000, channel: "wechat",
+      gateway_status: "NOT_CONFIGURED", payment_url: null, launch: null });
   }
 
   if (pathname === "/api/v1/customer/check-ins") {

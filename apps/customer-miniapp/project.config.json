@@ -1,0 +1,23 @@
+{
+  "description": "综合体客人端微信小程序。appid 为游客 touristappid（只能本地编译，不能上传）；正式 AppID 只放 project.private.config.json，上传前 npm run check-release。",
+  "projectname": "customer-miniapp",
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "miniprogram/",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true
+  },
+  "scripts": {
+    "beforeCompile": "npm run build",
+    "beforePreview": "npm run build",
+    "beforeUpload": "npm run build && npm run check-release"
+  },
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  }
+}

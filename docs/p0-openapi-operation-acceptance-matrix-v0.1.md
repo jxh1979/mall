@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.28
+# P0 OpenAPI Operation 验收矩阵 V0.29
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1143 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1141 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -310,7 +310,7 @@
 | ticketing | `GET` | `/api/v1/ticketing/refunds` | `listTicketRefunds` | 查询退款单列表 | `-` | `ticket.refund.view` | `staff-token` | `project-order` | web, merchant_portal | 否 | `ticket_refund.viewed` | `ticket_refund.view_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/refunds` | `requestTicketRefund` | 退款或撤销申请 | `RefundRequest` | `ticket.refund.request` | `staff-token` | `project-order` | web, merchant_portal | 是 | `ticket_refund.requested` | `ticket_refund.request_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/refunds/{refund_id}/confirm-payout` | `confirmTicketRefundPayout` | 退款确认拨付 | `StatusChangeRequest` | `ticket.refund.approve` | `staff-token` | `project-order` | web | 是 | `ticket_refund.payout_confirmed` | `ticket_refund.payout_confirm_failed` |
-| ticketing | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | `approveTicketRefund` | 退款审批 | `object` | `ticket.refund.approve` | `staff-token` | `project-order` | web | 是 | `ticket_refund.approved` | `ticket_refund.approve_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | `approveTicketRefund` | 退款审批 | `StatusChangeRequest` | `ticket.refund.approve` | `staff-token` | `project-order` | web | 是 | `ticket_refund.approved` | `ticket_refund.approve_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/safety-events` | `listTicketSafetyEvents` | 查询通票安全事件 | `-` | `ticket.refund.view` | `staff-token` | `project-order` | web, merchant_portal | 否 | `ticket_safety_event.viewed` | `ticket_safety_event.view_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/safety-events` | `requestTicketSafetyEvent` | 登记通票安全事件 | `TicketSafetyEventRequest` | `ticket.refund.request` | `staff-token` | `project-order` | web, merchant_portal | 是 | `ticket_safety_event.requested` | `ticket_safety_event.request_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/safety-events/{safety_event_id}/approve` | `approveTicketSafetyEvent` | 批准通票安全事件 | `StatusChangeRequest` | `ticket.refund.approve` | `staff-token` | `project-order` | web | 是 | `ticket_safety_event.approved` | `ticket_safety_event.approve_failed` |
@@ -694,7 +694,7 @@
 | customer | `GET` | `/api/v1/customer-churn-alert-setting` | `getCustomerChurnAlertSetting` | 查同号注销与注册频次预警上限（全平台） | `-` | `customer.account.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `PUT` | `/api/v1/customer-churn-alert-setting` | `configureCustomerChurnAlertSetting` | 配置同号一年内注销与注册合计次数上限（全平台，值与上下限同配） | `CustomerChurnAlertSettingRequest` | `customer.account.manage` | `staff-token` | `platform` | web | 是 | `customer.churn_alert_setting.configured` | `customer.churn_alert_setting.config_failed` |
 | customer | `POST` | `/api/v1/customer/deregister` | `deregisterCustomerAccount` | 客人自助注销本人账号（个人信息删除、积分券清零、名下存酒须确认放弃） | `CustomerDeregisterRequest` | `not_applicable` | `customer-token` | `self` | miniapp | 否 | `customer.account.deregistered` | `customer.account.deregister_failed` |
-| customer | `GET` | `/api/v1/customer/deregister/preview` | `previewCustomerDeregistration` | 客人注销预览（提醒名下各储值卡本金/赠送金、名下存酒与可退款的未用票） | `-` | `not_applicable` | `customer-token` | `self` | miniapp | 否 | `customer.account.deregister_previewed` | `customer.account.deregister_preview_failed` |
+| customer | `GET` | `/api/v1/customer/deregister/preview` | `previewCustomerDeregistration` | 客人注销预览（提醒名下各储值卡本金/赠送金与名下存酒） | `-` | `not_applicable` | `customer-token` | `self` | miniapp | 否 | `customer.account.deregister_previewed` | `customer.account.deregister_preview_failed` |
 | customer | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | `listCustomerOrderTickets` | 客人查询本人订单内票实例/权益（安全投影；点票出码，无需手输票 id） | `-` | `not_applicable` | `customer-token` | `self` | miniapp | 否 | `customer.order_tickets_viewed` | `customer.order_tickets_view_failed` |
 | facility | `GET` | `/api/v1/facility/site-entry-reports` | `listSiteEntryReports` | 查看进场报备/验收单列表（外包只见本机构，平台全量） | `-` | `facility.site_entry.view_assigned` | `staff-token` | `self` | web | 否 | `facility.site_entry.viewed` | `facility.site_entry.view_failed` |
 | facility | `POST` | `/api/v1/facility/site-entry-reports` | `createSiteEntryReport` | 外包创建进场报备单（施工/装修进场前报备） | `object` | `facility.site_entry.create_assigned` | `staff-token` | `self` | web | 是 | `facility.site_entry.create_assigned` | `facility.site_entry.create_failed` |
@@ -1162,8 +1162,6 @@
 | ticketing | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | `saveTicketExpiryReminderPolicy` | 配置未核销票到期提醒提前小时数及上下限（按项目） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket.expiry_reminder_policy_updated` | `ticket.expiry_reminder_policy_update_failed` |
 | customer | `GET` | `/api/v1/home-contents/{project_id}` | `getCustomerHomeContent` | 查客人端首页已发布与待审批的综合体介绍与活动公告 | `-` | `customer.home_content.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `POST` | `/api/v1/home-contents/{project_id}/publish` | `publishCustomerHomeContent` | 提交发布客人端首页综合体介绍与活动公告（审批后生效） | `object` | `customer.home_content.manage` | `staff-token` | `project` | web | 是 | `customer.home_content_published` | `customer.home_content_publish_failed` |
-| customer | `GET` | `/api/v1/customer/ticket-refunds` | `listCustomerTicketRefunds` | 我的退票申请及其状态 | `-` | `not_applicable` | `customer-token` | `customer` | miniapp, app | 否 | `customer.ticket_refunds_viewed` | `customer.ticket_refunds_view_failed` |
-| customer | `POST` | `/api/v1/customer/ticket-refunds` | `requestCustomerTicketRefund` | 客人自助申请退票（只对本人名下、票种允许退款、整张未使用的票） | `object` | `not_applicable` | `customer-token` | `customer` | miniapp, app | 是 | `customer.ticket_refund.requested` | `customer.ticket_refund.request_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 

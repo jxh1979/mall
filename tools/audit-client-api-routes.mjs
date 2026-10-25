@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -9,6 +10,17 @@ const scanTargets = [
     name: 'web',
     dir: path.join(rootDir, 'apps', 'web', 'src'),
     extensions: new Set(['.ts', '.tsx', '.js', '.jsx']),
+  },
+  {
+    // 三端共用的客人业务模块与客人 App（ROOT-03 客人三端）。
+    name: 'customer-core',
+    dir: path.join(rootDir, 'packages', 'customer-core', 'src'),
+    extensions: new Set(['.ts']),
+  },
+  {
+    name: 'customer-app',
+    dir: path.join(rootDir, 'apps', 'customer-app', 'src'),
+    extensions: new Set(['.ts', '.tsx']),
   },
   {
     name: 'android-terminal',

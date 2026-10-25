@@ -1,0 +1,39 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>购票需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <block wx:else>
+    <view wx:if="{{lockedBarId}}" id="locked-bar" class="alert info">当前酒吧：{{lockedBarName}}（您正通过该酒吧的专属入口购票，仅展示本酒吧单店票）</view>
+    <view wx:if="{{error}}" id="error" class="alert error">{{error}}</view>
+    <view class="card">
+      <picker id="product-picker" range="{{labels}}" value="{{index}}" bindchange="onPick">
+        <view class="field">票种：{{index >= 0 ? labels[index] : '请选择票种'}}</view>
+      </picker>
+      <block wx:if="{{rules}}">
+        <view wx:if="{{rules.myPrice}}" id="my-price">{{rules.myPrice}}</view>
+        <view id="ticket-rules" class="card">
+          <view class="section-title">门票守则</view>
+          <view>能否退款：{{rules.refund}}</view>
+          <view>有效期：{{rules.validity}}</view>
+          <view>年龄限制：{{rules.age}}</view>
+          <view>可使用范围：{{rules.scope}}</view>
+          <view wx:if="{{rules.entitlements}}">所含权益：{{rules.entitlements}}</view>
+        </view>
+      </block>
+      <view class="field row">数量<input id="quantity" type="number" value="{{quantity}}" bindinput="onQuantity" /></view>
+      <picker id="visit-date" mode="date" value="{{visitDate}}" bindchange="onDate">
+        <view class="field">游玩日期：{{visitDate || '可不选'}}</view>
+      </picker>
+      <view class="field"><input id="contact-phone" type="number" value="{{contactPhone}}" placeholder="联系手机号（可不填）" bindinput="onPhone" /></view>
+      <button id="submit" type="primary" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">已阅读门票守则，提交订单</button>
+    </view>
+    <view wx:if="{{order}}" id="result" class="card">
+      <view class="section-title">订单 {{order.orderNo}}</view>
+      <view wx:if="{{order.payStatus === 'paid'}}" id="paid" class="alert success">支付成功，{{order.issueStatus === 'issued' ? '已出票，可在「票与订单」出示验票码' : '正在出票，请稍后在「票与订单」查看'}}</view>
+      <order-payment wx:elif="{{order.status === 'created'}}" id="payment" order="{{order}}" bind:change="onOrderChange" />
+      <view wx:else class="alert warn">订单已不可支付，请到「票与订单」查看状态</view>
+    </view>
+  </block>
+</view>

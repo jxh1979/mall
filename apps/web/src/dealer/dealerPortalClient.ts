@@ -1,5 +1,5 @@
-// 文件版本：V0.02
-import { unwrap } from "../customer/client/customerClient";
+// 文件版本：V0.03
+import { unwrap } from "@complex/customer-core/client";
 
 function getApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;

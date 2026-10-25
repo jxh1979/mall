@@ -1,0 +1,132 @@
+/* 文件版本：V0.01 */
+/* 客人 App 移动布局：顶部标题栏（二级页带返回）、底部四标签、刘海与底部安全区留白。 */
+:root {
+  color-scheme: light;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #f4f6f7;
+  color: #111827;
+}
+
+.customer-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-top: env(safe-area-inset-top);
+}
+
+.customer-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 0 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.customer-page-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.customer-content {
+  flex: 1;
+  padding: 12px 12px calc(72px + env(safe-area-inset-bottom));
+  outline: none;
+}
+
+.customer-entry-list {
+  margin-top: 12px;
+}
+
+.customer-tabbar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+}
+
+.customer-tabbar button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  background: none;
+  border: 0;
+  color: #6b7280;
+  font: inherit;
+  font-size: 12px;
+}
+
+.customer-tabbar button[aria-current="page"] {
+  color: #0958d9;
+}
+
+/* 触控目标 ≥44px。 */
+.customer-shell .ant-btn,
+.auth-shell .ant-btn,
+.auth-shell .ant-input-affix-wrapper {
+  min-height: 44px;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  background: #eef4f3;
+}
+
+.auth-content {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.auth-panel {
+  width: min(420px, 100%);
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #dbe5e3;
+  border-radius: 8px;
+}
+
+.brand.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 20px;
+  font-size: 18px;
+}
+
+.status-alert {
+  margin-bottom: 16px;
+}

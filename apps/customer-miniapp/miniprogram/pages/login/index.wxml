@@ -1,0 +1,34 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view class="title">{{mode === 'register' ? '注册会员' : '手机号登录'}}</view>
+  <view wx:if="{{notice && !error}}" id="notice" class="alert warn">{{notice}}</view>
+  <view wx:if="{{error}}" id="error" class="alert error">{{error}}</view>
+  <view wx:if="{{mode === 'register'}}" class="alert info">该手机号尚未注册：填写生日、阅读并同意会员条款与隐私条款后即可注册。须年满 18 周岁。</view>
+
+  <view class="field"><input id="phone" type="number" value="{{phone}}" placeholder="手机号" bindinput="onPhone" /></view>
+  <view class="field row">
+    <input id="sms" type="number" value="{{smsCode}}" placeholder="短信验证码" bindinput="onSms" />
+    <button id="send-code" size="mini" disabled="{{busy}}" bindtap="requestCode">获取验证码</button>
+  </view>
+  <view wx:if="{{sent}}" id="sent" class="hint">{{sent}}</view>
+
+  <block wx:if="{{mode === 'register'}}">
+    <picker id="birth" mode="date" end="{{today}}" value="{{birthDate}}" bindchange="onBirth">
+      <view class="field">生日：{{birthDate || '请选择生日'}}</view>
+    </picker>
+    <view wx:if="{{terms}}" id="terms" class="card">
+      <view class="section-title">会员条款（{{terms.memberTerms.version}}）</view>
+      <text class="terms">{{terms.memberTerms.content}}</text>
+      <view class="section-title">隐私条款（{{terms.privacyPolicy.version}}）</view>
+      <text class="terms">{{terms.privacyPolicy.content}}</text>
+    </view>
+    <view wx:else class="hint">正在加载会员条款与隐私条款……</view>
+    <checkbox-group id="agree" bindchange="onAgree">
+      <label class="check"><checkbox value="member" checked="{{agreeMember}}" />我已阅读并同意会员条款</label>
+      <label class="check"><checkbox value="privacy" checked="{{agreePrivacy}}" />我已阅读并同意隐私条款</label>
+    </checkbox-group>
+  </block>
+
+  <button id="submit" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">{{mode === 'register' ? '注册并登录' : '登录'}}</button>
+  <button id="mode-switch" class="hint" bindtap="switchMode">{{mode === 'register' ? '已有账号，返回登录' : '新用户注册'}}</button>
+</view>

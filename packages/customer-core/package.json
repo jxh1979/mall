@@ -1,0 +1,24 @@
+{
+  "name": "@complex/customer-core",
+  "private": true,
+  "version": "0.1.0",
+  "documentVersion": "V0.01",
+  "description": "三端（Android/iPhone 官方客人 App、微信小程序）共用的客人业务模块：纯 TS，不依赖 DOM/window/fetch，各端注入请求适配。",
+  "type": "module",
+  "sideEffects": false,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.9"
+  }
+}

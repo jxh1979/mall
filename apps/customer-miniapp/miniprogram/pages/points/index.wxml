@@ -1,0 +1,77 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>查看积分需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">积分功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view id="points-summary" class="card">
+      <view class="section-title">会员积分</view>
+      <view wx:if="{{error}}" class="alert error">积分加载失败：{{error}}</view>
+      <view wx:if="{{loading}}" class="hint">加载中……</view>
+      <view wx:elif="{{summary}}">积分余额 {{summary.balance}} <text class="tag orange">{{summary.levelText}}</text></view>
+    </view>
+
+    <view id="points-ledger" class="card">
+      <view class="section-title">积分明细</view>
+      <view wx:if="{{notices.ledger}}" class="alert warn">{{notices.ledger}}</view>
+      <view wx:if="{{!ledger.length}}" class="hint">暂无积分明细</view>
+      <view wx:for="{{ledger}}" wx:key="id" class="item">{{item.text}}<view class="hint">{{item.time}}</view></view>
+    </view>
+
+    <view id="ticket-rewards" class="card">
+      <view class="section-title">门票积分与成长值</view>
+      <view class="hint">奖励归实际使用会员。门票积分按核销时已公布生效的固定值计算，不随会员等级变化；等待期内有退款待处理时继续等待。</view>
+      <view wx:if="{{notices.ticket}}" class="alert warn">{{notices.ticket}}</view>
+      <view wx:if="{{pendingRecovery > 0}}" id="points-recovery" class="alert warn">待追回 {{pendingRecovery}} 积分；新增积分先抵扣待追回部分，结清前暂停兑换。</view>
+      <view wx:if="{{!ticketRewards.length}}" class="hint">暂无门票奖励记录</view>
+      <view wx:for="{{ticketRewards}}" wx:key="id" class="item">{{item.text}}<view class="hint">{{item.status}}</view></view>
+    </view>
+
+    <view id="merchant-rewards" class="card">
+      <view class="section-title">消费积分与成长值</view>
+      <view class="hint">商户消费在整笔消费全部完成后计算；积分等待期内有退款待处理时继续等待，已退款部分不计。</view>
+      <view wx:if="{{notices.merchant}}" class="alert warn">{{notices.merchant}}</view>
+      <view wx:if="{{!merchantRewards.length}}" class="hint">暂无消费奖励记录</view>
+      <view wx:for="{{merchantRewards}}" wx:key="id" class="item">{{item.text}}<view class="hint">{{item.status}}</view></view>
+    </view>
+
+    <view id="reward-rules" class="card">
+      <view class="section-title">门票奖励规则公告</view>
+      <view wx:if="{{notices.rules}}" class="alert warn">{{notices.rules}}</view>
+      <view wx:if="{{!rules.length}}" class="hint">暂无已发布规则</view>
+      <view wx:for="{{rules}}" wx:key="id" class="item">{{item.text}}<view class="hint">{{item.time}}</view></view>
+    </view>
+
+    <view class="card">
+      <view class="section-title">连续签到</view>
+      <view class="hint">每日签到累积连续天数，按阶梯发放积分。</view>
+      <view wx:if="{{notices.checkIns}}" class="alert warn">{{notices.checkIns}}</view>
+      <button id="check-in" type="primary" size="mini" disabled="{{busy}}" bindtap="checkIn">今日签到</button>
+      <view id="check-ins">
+        <view wx:if="{{!checkIns.length}}" class="hint">暂无签到记录</view>
+        <view wx:for="{{checkIns}}" wx:key="id" class="item">{{item.text}}</view>
+      </view>
+    </view>
+
+    <view id="catalog" class="card">
+      <view class="section-title">积分商城</view>
+      <view class="hint">用积分兑换礼品；兑换即按目录扣减积分并扣库存。</view>
+      <view wx:if="{{notices.items}}" class="alert warn">{{notices.items}}</view>
+      <view wx:if="{{!items.length}}" class="hint">暂无可兑换礼品</view>
+      <view wx:for="{{items}}" wx:key="id" class="item">
+        {{item.itemName}} <text class="tag">{{item.typeText}}</text>
+        <view class="hint">{{item.pointsCost}} 积分 · 库存 {{item.stockQuantity}}</view>
+        <button id="redeem-{{item.id}}" size="mini" type="primary" disabled="{{busy || !item.redeemable}}" data-id="{{item.id}}" bindtap="redeem">{{item.label}}</button>
+      </view>
+    </view>
+
+    <view id="redemptions" class="card">
+      <view class="section-title">兑换记录</view>
+      <view wx:if="{{notices.redemptions}}" class="alert warn">{{notices.redemptions}}</view>
+      <view wx:if="{{!redemptions.length}}" class="hint">暂无兑换记录</view>
+      <view wx:for="{{redemptions}}" wx:key="id" class="item">{{item.text}}</view>
+    </view>
+  </block>
+</view>

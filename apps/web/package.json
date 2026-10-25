@@ -2,6 +2,7 @@
   "name": "apps-web",
   "private": true,
   "version": "0.1.0",
+  "documentVersion": "V0.01",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
@@ -13,6 +14,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",
+    "@complex/customer-core": "0.1.0",
     "antd": "^5.22.5",
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",

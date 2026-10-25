@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -484,6 +484,7 @@ class JdbcCustomerRepository implements CustomerRepository {
                 SELECT t.bar_id, t.id AS table_id, t.table_type, t.table_name, t.capacity,
                        t.allowed_pass_free_guest_count, t.min_consumption_cent, t.currency, t.status,
                        EXISTS (SELECT 1 FROM bar_reservations r WHERE r.table_id = t.id AND r.hold_status = 'held') AS reserved,
+                       (SELECT m.project_id FROM merchants m WHERE m.id = t.bar_id) AS project_id,
                        CASE WHEN t.table_type IN ('card_seat', 'vip') THEN (
                            SELECT (r.rule_json ->> 'rateBps')::int FROM bar_payroll_rules r JOIN merchants bm ON bm.id = t.bar_id
                             WHERE r.rule_kind = 'charge' AND r.project_id = bm.project_id AND r.merchant_id IS NULL AND r.status = 'approved'
@@ -511,6 +512,12 @@ class JdbcCustomerRepository implements CustomerRepository {
                 "table_id", tableId,
                 "table_type", tableType
         ), this::mapBarTable).stream().findFirst();
+    }
+
+    @Override
+    public Optional<String> findMerchantProjectId(String merchantId) {
+        return jdbcTemplate.queryForList("SELECT project_id FROM merchants WHERE id = :id AND project_id IS NOT NULL",
+                Map.of("id", merchantId), String.class).stream().findFirst();
     }
 
     @Override
@@ -821,7 +828,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 resultSet.getString("status"),
                 resultSet.getBoolean("reserved"),
                 resultSet.getObject("service_fee_rate_bps", Integer.class),
-                0L
+                0L,
+                resultSet.getString("project_id")
         );
     }
 

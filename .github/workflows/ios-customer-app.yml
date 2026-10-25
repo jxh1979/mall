@@ -1,0 +1,106 @@
+# 文件版本：V0.01
+name: ios-customer-app
+# 客人 iPhone App（apps/customer-app/ios，Capacitor 8.5.3）的模拟器构建与启动冒烟（ROOT-03-R13）。
+# 160 是 Linux、没有 Xcode，iPhone 包只能在这里构建；只做不签名的模拟器调试构建（CODE_SIGNING_ALLOWED=NO），
+# 不产出可装到客人 iPhone 的 .ipa（Apple 开发者团队、发行证书与描述文件未到位）。iPhone 端是否构建通过，只认本工作流的成功运行。
+# 只在客人 App、三端共用模块或本文件变化时触发：仓库私有，macOS 运行分钟按 Linux 的 10 倍计入账户额度（单次约 15～25 分钟实耗）；
+# 额度用尽时作业排队或失败，此时 iPhone 端结论为「未验证」。私有库免费版不能设必需检查，本工作流只是可见信号，不阻断合并。
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/customer-app/**"
+      - "packages/customer-core/**"
+      - ".github/workflows/ios-customer-app.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/customer-app/**"
+      - "packages/customer-core/**"
+      - ".github/workflows/ios-customer-app.yml"
+permissions:
+  contents: read
+concurrency:
+  group: ios-customer-app-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    env:
+      # 固定 Xcode：macos-26 镜像（20261013 版）默认 26.6，选 26.5——镜像带同版本的 iOS 26.5 模拟器运行时。镜像移除该版本时「选定 Xcode」一步失败，按镜像说明改这里。
+      XCODE_APP: /Applications/Xcode_26.5.app
+      BUNDLE_ID: com.complex.customer.dev
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1（AUD-068：固定完整 commit SHA，防可变标签漂移）
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0（同上）
+        with:
+          node-version: "22"
+      - name: 选定 Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+      - name: 安装依赖
+        run: npm ci --ignore-scripts
+      - name: 构建客人页面
+        run: npm run build --workspace apps/customer-app
+      - name: 同步页面资源与插件到 iOS 工程
+        run: npm exec --workspace apps/customer-app -- cap sync ios
+      # 交付的包 loggingBehavior 为 none（原生桥不打插件参数与请求头）；只有这里的冒烟包改为 production，
+      # 让「页面已加载」「页面已调用原生能力」写进应用输出供冒烟判定。CI 里没有客人账号与令牌。
+      - name: 冒烟包打开原生桥日志
+        run: |
+          node -e 'const fs=require("fs");const f="apps/customer-app/ios/App/App/capacitor.config.json";const c=JSON.parse(fs.readFileSync(f,"utf8"));c.loggingBehavior="production";fs.writeFileSync(f,JSON.stringify(c,null,2))'
+      - name: 选模拟器
+        run: |
+          UDID=$(xcrun simctl list devices available -j | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8")).devices;const p=Object.keys(d).filter(r=>r.includes(".iOS-")).sort().reverse().flatMap(r=>d[r]).find(x=>x.name.startsWith("iPhone"));if(!p)process.exit(1);console.log(p.udid)')
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl list devices available | grep "$UDID"
+      - name: 模拟器构建（不签名）
+        run: |
+          xcodebuild -project apps/customer-app/ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "id=$SIM_UDID" -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO build
+      - name: 检查安装包
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          OUT="$RUNNER_TEMP/ios-smoke"
+          mkdir -p "$OUT"
+          test "$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist")" = "$BUNDLE_ID"
+          test "$(plutil -extract CFBundleDisplayName raw "$APP/Info.plist")" = "综合体客人端（开发）"
+          test "$(plutil -extract CFBundleDevelopmentRegion raw "$APP/Info.plist")" = "zh-Hans"
+          test -f "$APP/public/index.html"
+          if grep -rqE "AdminApp|DealerPortalApp|admin-shell|dealer-portal" "$APP/public"; then echo "客人包里混入了员工端代码"; exit 1; fi
+          (cd "$APP" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256) > "$OUT/App.app.sha256.txt"
+          shasum -a 256 "$OUT/App.app.sha256.txt"
+      - name: 模拟器启动冒烟
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/App.app"
+          OUT="$RUNNER_TEMP/ios-smoke"
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcrun simctl install "$SIM_UDID" "$APP"
+          xcrun simctl launch --console-pty "$SIM_UDID" "$BUNDLE_ID" > "$OUT/console.log" 2>&1 &
+          LAUNCHER=$!
+          ready=""
+          for _ in $(seq 1 90); do
+            if grep -q "WebView loaded" "$OUT/console.log" && grep -q "To Native ->" "$OUT/console.log"; then ready=1; break; fi
+            kill -0 "$LAUNCHER" 2>/dev/null || break
+            sleep 1
+          done
+          sleep 5
+          xcrun simctl io "$SIM_UDID" screenshot "$OUT/screenshot.png" || true
+          xcrun simctl spawn "$SIM_UDID" log show --last 5m --style compact --predicate 'process == "App"' > "$OUT/system.log" 2>&1 || true
+          cat "$OUT/console.log"
+          test -n "$ready" || { echo "启动冒烟失败：90 秒内没等到页面加载并调用原生能力"; exit 1; }
+          kill -0 "$LAUNCHER" 2>/dev/null || { echo "启动冒烟失败：应用启动后退出"; exit 1; }
+          xcrun simctl terminate "$SIM_UDID" "$BUNDLE_ID" || true
+      - name: 上传冒烟证据（截图、应用输出、系统日志、安装包文件 sha256 清单）
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2（同上）
+        with:
+          name: ios-customer-app-smoke
+          path: ${{ runner.temp }}/ios-smoke
+          if-no-files-found: warn
+          retention-days: 14

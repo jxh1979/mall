@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -99,6 +99,9 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     @org.springframework.beans.factory.annotation.Autowired
     @org.springframework.context.annotation.Lazy
     private com.complex.platform.bar.BarCustomerInvitationService barInvitations;
+    // PGM 第 736、744 行：按综合体的客人端开关由服务端按业务对象所属综合体判。字段注入：无容器的单测为 null。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard;
 
     /** ROOT-03-R3 操作员裁决（第十三批第 3 条）「满 18 周岁（推荐）：与入场年龄一致，生日算下来不满 18 周岁不能注册」。 */
     static final int MIN_MEMBER_AGE = 18;
@@ -428,6 +431,10 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         if (trimToNull(actual.priceRuleId()) != null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "价格由系统按客人资格自动计算，不能自选价格规则");
         }
+        // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：综合体按票种所属综合体（与下单定订单综合体同一口径）取，不信 X-Project-Id。
+        if (trimToNull(actual.ticketTypeId()) != null) {
+            requireProjectTerminalEnabled(ticketingService.saleProjectIdOf(actual.ticketTypeId()));
+        }
         return executeWrite(
                 "createCustomerTicketOrder:" + customer.id(),
                 key,
@@ -455,6 +462,12 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                     ), ticketPriceEligibility(customer));
                 }
         );
+    }
+
+    private void requireProjectTerminalEnabled(String projectId) {
+        if (terminalSwitchGuard != null) {
+            terminalSwitchGuard.checkTerminalEnabledAtProject(projectId);
+        }
     }
 
     /**
@@ -920,6 +933,10 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         String terminal = sessionTerminal(customerToken);
         CustomerBarReservationRequest actual = requireRequest(request);
         String key = firstNonBlank(idempotencyKey, actual.idempotencyKey());
+        // PGM 第 744 行：综合体按台位所属酒吧的 merchants.project_id 取（与订台选项回带的 project_id 同源），不信 X-Project-Id。
+        if (trimToNull(actual.barId()) != null) {
+            requireProjectTerminalEnabled(repository.findMerchantProjectId(actual.barId().trim()).orElse(null));
+        }
         return executeWrite(
                 "createCustomerBarReservation:" + customer.id(),
                 key,
@@ -1281,20 +1298,6 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         return ticketingService.revokeTicketTransfer(customer.id(), transferId);
     }
 
-    /** 操作员裁决第十三批第 11 条「客人端自助申请」：本人可退的未用票申请退票，走与员工退款同一套审批和原路退回。 */
-    public com.complex.platform.ticketing.CustomerTicketRefundResponse requestTicketRefund(
-            String customerToken, com.complex.platform.customer.dto.CustomerTicketRefundRequest request) {
-        CustomerRecord customer = requireCustomer(customerToken);
-        return ticketingService.requestCustomerTicketRefund(customer.id(), request);
-    }
-
-    /** 操作员裁决第十三批第 11 条：本人退票申请及其状态。 */
-    public PageResponse<com.complex.platform.ticketing.CustomerTicketRefundResponse> listTicketRefunds(String customerToken) {
-        CustomerRecord customer = requireCustomer(customerToken);
-        return readPage("customer.ticket_refunds_viewed", "customer.ticket_refunds_view_failed", "not_applicable",
-                "ticket_refund", () -> ticketingService.listCustomerTicketRefunds(customer.id()));
-    }
-
     public com.complex.platform.ticketing.TicketTransferPreviewResponse previewTicketTransfer(
             String customerToken, String claimCode) {
         requireCustomer(customerToken);
@@ -1441,8 +1444,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     }
 
     /** 账户关闭时名下权益处置的计数（注销审计用）。 */
-    private record ClosureDisposal(long pointsCleared, int vouchersRevoked,
-            com.complex.platform.ticketing.TicketingService.DeregistrationTickets tickets) {
+    private record ClosureDisposal(long pointsCleared, int vouchersRevoked, int ticketsForfeited) {
     }
 
     /**
@@ -1472,11 +1474,10 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
      * 新账户与原账户之间不建立任何关联」）。
      * <ol>
      *   <li>名下有在保管存酒而未确认放弃 → 409 CUSTOMER_SAVED_BOTTLES_HELD，不改任何数据；</li>
-     *   <li>操作员裁决第十三批第 8 条「先退票才能注销」：名下有每个人份都归本人、票种允许退款且整张未用的票 → 409 CUSTOMER_REFUNDABLE_TICKETS_HELD，不改任何数据，
-     *       退完（权益已退）才能注销；</li>
      *   <li>储值卡：waiveBalance=true 本金与赠送金作废、卡 closed；false 按「储值」条关闭各卡登记待退（TK-21-R3）；</li>
      *   <li>放弃的存酒按到期规则置 expired（与到期作业同一写法）；积分清零、本人未核销券作废、在途转赠作废；</li>
-     *   <li>未核销票按退票规则：票种不可退的未用权益作废；已部分核销或只持有部分人份的，作废本人持有的未用权益（操作员裁决第十三批第 12 条）；</li>
+     *   <li>未核销票按退票规则（BSM 第 804 行「未到场、忘记使用或主动放弃均不构成退款理由」；2026-10-25 操作员更正「即使注销，门票是不可以退的，
+     *       除非碰上特殊安全情况」）：本人持有的未用权益一律作废、不退款、不因此拦注销（含只持有部分人份的，只作废本人持有的人份）；</li>
      *   <li>状态改已注销并写注销标记（只留手机号盲索引与时点，供一年计数与新人判定）；</li>
      *   <li>最后删除个人信息：手机号、盲索引、掩码、生日置空（同号可重新注册且与本账户无关联），会话全部撤销，订单购票手机号清空，
      *       学生认证证件照片与学信网验证码删除；钱账只留随机不可反推的客人编号。本人投诉附件按操作员裁决第十三批第 10 条「作为工单材料保留」
@@ -1495,11 +1496,6 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                     customer.id(), null, null, "CUSTOMER_SAVED_BOTTLES_HELD");
             throw ApiException.conflict("CUSTOMER_SAVED_BOTTLES_HELD", "名下尚有 " + bottles.size() + " 份存酒，请确认放弃存酒后再注销");
         }
-        if (!ticketingService.listRefundableUnusedHeldTickets(customer.id()).isEmpty()) {
-            auditEventService.recordFailure("customer.account.deregister_failed", "customer.account.manage", "customer",
-                    customer.id(), null, null, "CUSTOMER_REFUNDABLE_TICKETS_HELD");
-            throw ApiException.conflict("CUSTOMER_REFUNDABLE_TICKETS_HELD", "名下尚有可退款的未使用门票，请先申请退票，退完后再注销");
-        }
         ClosureDisposal disposed = disposeHoldingsOnAccountClosure(customer.id(), now);
         if (storedValueService != null) {
             if (waiveBalance) {
@@ -1511,7 +1507,6 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         int bottlesAbandoned = inventoryService.abandonSavedBottlesOnDeregistration(customer.id(), customer.phone(), now);
         long pointsCleared = disposed.pointsCleared();
         int vouchersRevoked = disposed.vouchersRevoked();
-        com.complex.platform.ticketing.TicketingService.DeregistrationTickets tickets = disposed.tickets();
         CustomerRecord deregistered = changeAccountStatus(customer.id(), "deregistered", null, "self-service deregistration",
                 "customer.account.deregistered", "customer.account.deregister_failed");
         // 注销标记取注销前的手机号盲索引，须在删除个人信息之前。
@@ -1525,14 +1520,13 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                 null, deregistered.lastLoginAt(), deregistered.createdAt(), now, null));
         auditEventService.recordSuccess("customer.account.deregistration_disposed", "not_applicable", "customer", customer.id(),
                 null, null, Map.of("saved_bottles_abandoned", bottlesAbandoned, "points_cleared", pointsCleared,
-                        "vouchers_revoked", vouchersRevoked, "tickets_forfeited", tickets.forfeited(),
-                        "refundable_tickets_kept", tickets.refundableKept(), "certificate_photos_deleted", certificatePhotos));
+                        "vouchers_revoked", vouchersRevoked, "tickets_forfeited", disposed.ticketsForfeited(),
+                        "certificate_photos_deleted", certificatePhotos));
         return cleared;
     }
 
     /**
-     * TK-21-R3 / ROOT-03-R21 注销预览：本人各未销户储值卡的本金/赠送金与名下在保管存酒（供注销前提醒与「放弃余额」「放弃存酒」选择）；
-     * 操作员裁决第十三批第 8 条「先退票才能注销」：另列每个人份都归本人、票种允许退款且整张未用的票，供注销页提醒客人先申请退票。
+     * TK-21-R3 / ROOT-03-R21 注销预览：本人各未销户储值卡的本金/赠送金与名下在保管存酒（供注销前提醒与「放弃余额」「放弃存酒」选择）。
      */
     public com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse deregisterPreview(String customerToken) {
         // 复核 authz M1：按 OpenAPI 声明记 customer.account.deregister_previewed / customer.account.deregister_preview_failed。
@@ -1548,12 +1542,9 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                     inventoryService.listSavedBottlesForCustomer(customer.id(), customer.phone()).stream()
                             .map(bottle -> com.complex.platform.customer.dto.CustomerSavedBottleResponse.from(bottle,
                                     ticketingService.resolveBarName(bottle.barProjectId()))).toList();
-            List<com.complex.platform.ticketing.CustomerTicketResponse> refundableTickets =
-                    ticketingService.listRefundableUnusedHeldTickets(customer.id());
             auditEventService.recordSuccess("customer.account.deregister_previewed", "not_applicable", "customer",
-                    customer.id(), null, null, Map.of("open_cards", cards.size(), "saved_bottles", bottles.size(),
-                            "refundable_tickets", refundableTickets.size()));
-            return new com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse(cards, bottles, refundableTickets);
+                    customer.id(), null, null, Map.of("open_cards", cards.size(), "saved_bottles", bottles.size()));
+            return new com.complex.platform.customer.dto.CustomerDeregisterPreviewResponse(cards, bottles);
         } catch (ApiException e) {
             auditEventService.recordFailure("customer.account.deregister_preview_failed", "not_applicable", "customer",
                     "unknown", null, null, e.code());
@@ -1613,7 +1604,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                 ticketType.validityDays(),
                 ticketType.barId() == null ? "综合体通票" : ticketingService.resolveBarName(ticketType.barId()),
                 ticketingService.ticketTypeEntitlementNames(ticketType.id()),
-                AGE_LIMIT_TEXT
+                AGE_LIMIT_TEXT,
+                ticketingService.saleProjectIdOf(ticketType.id())
         );
     }
 

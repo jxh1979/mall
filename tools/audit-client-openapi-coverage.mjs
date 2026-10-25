@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,6 +11,8 @@ const scanFiles = [
   'apps/web/src/main.tsx',
   'apps/web/src/admin/adminPageConfigs.ts',
   'apps/web/src/admin/client/adminClient.ts',
+  // ROOT-03-R1：三端共用的客人接口路径。
+  'packages/customer-core/src/service.ts',
   'apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt',
   'apps/android-terminal/src/main/kotlin/com/complex/terminal/P0Fixture.kt',
   'apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt',
@@ -161,7 +163,9 @@ for (const [clientPath, references] of clientRoutes.entries()) {
 }
 
 for (const methodRoute of clientMethodRoutes.values()) {
-  const contractPath = contractPaths.find((candidate) => matchesOpenApiPath(methodRoute.clientPath, candidate));
+  // 客户端通配段也会匹配契约里的字面段：任一匹配的契约路径声明了该方法即算覆盖。
+  const candidates = contractPaths.filter((candidate) => matchesOpenApiPath(methodRoute.clientPath, candidate));
+  const contractPath = candidates.find((candidate) => contractMethodsByPath.get(candidate)?.has(methodRoute.method)) ?? candidates[0];
   const contractMethods = contractPath ? contractMethodsByPath.get(contractPath) : null;
 
   if (contractPath && contractMethods && !contractMethods.has(methodRoute.method)) {

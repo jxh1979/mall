@@ -1,0 +1,14 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view class="card">
+    <block wx:if="{{loggedIn}}">
+      <view id="phone">已登录{{maskedPhone ? '：' + maskedPhone : ''}}</view>
+      <button wx:for="{{entries}}" wx:key="key" id="entry-{{item.key}}" class="entry" data-key="{{item.key}}" bindtap="openEntry">{{item.title}}</button>
+      <button id="logout" bindtap="logout">退出登录</button>
+    </block>
+    <block wx:else>
+      <view>尚未登录</view>
+      <button id="to-login" type="primary" bindtap="toLogin">登录 / 注册</button>
+    </block>
+  </view>
+</view>

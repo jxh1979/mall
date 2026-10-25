@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,13 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.support.CustomerTicketPaymentFixture;
-import com.complex.platform.support.StaffRequestFixture;
 import com.complex.platform.ticketing.TicketingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,16 +22,13 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * ROOT-03-R21 账户注销闭环真库、真接口（客人端请求按真实形状：POST /api/v1/customer/deregister 蛇形
  * {"waive_balance":true,"abandon_saved_bottles":true}）。BSM 第 863 行「发起注销时系统须提醒其名下尚有存酒与储值卡余额，客人可以选择不取存酒、
  * 放弃余额，径行注销……注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除……积分、券一律清零，未核销的票按本文件「退款」条的退票规则处理」；
+ * 2026-10-25 操作员更正：注销时名下未核销的票一律作废、不退款、不拦注销（含只持有部分人份的，只作废本人持有的人份）。
  * ENUM 第 68 行「已注销会员的手机号可以重新注册，新账户与原账户之间不建立任何关联」。
  */
 @SpringBootTest(properties = {
@@ -55,7 +49,6 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
     @Autowired private LoyaltyService loyalty;
     @Autowired private CustomerService customerService;
     @Autowired private TicketingRepository tickets;
-    @Autowired private PlatformTransactionManager txManager;
 
     private CustomerTicketPaymentFixture f;
 
@@ -91,7 +84,9 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.stored_value_cards[0].account_id").value(f.accountId))
                 .andExpect(jsonPath("$.data.stored_value_cards[0].principal_cent").value(20_000))
                 .andExpect(jsonPath("$.data.saved_bottles[0].id").value(bottle))
-                .andExpect(jsonPath("$.data.saved_bottles[0].bottle_name").value("注销测试威士忌"));
+                .andExpect(jsonPath("$.data.saved_bottles[0].bottle_name").value("注销测试威士忌"))
+                // 2026-10-25 操作员更正：注销时票一律作废、不退款，预览不再列「可退票」。
+                .andExpect(jsonPath("$.data.refundable_tickets").doesNotExist());
     }
 
     @Test
@@ -138,36 +133,16 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
     }
 
     @Test
-    void refundableUnusedTicketBlocksDeregistrationUntilRefunded() throws Exception {
-        // 操作员裁决第十三批第 8 条「先退票才能注销」：名下有可退的未用票时，注销页提醒客人先申请退票，退完才能注销。
+    void refundableUnusedTicketForfeitedOnDeregistrationWithoutRefund() throws Exception {
+        // 2026-10-25 操作员更正（取代第十三批第 8 条）：「即使注销，门票是不可以退的，除非碰上特殊安全情况」；BSM 第 804 行
+        // 「未到场、忘记使用或主动放弃均不构成退款理由」：票种允许退款的整张未用票，注销时同样作废、不退款、不拦注销。
         String order = paidOrder();
         jdbc.update("UPDATE ticket_types SET refundable = TRUE WHERE id = ?", f.ticketTypeId);
-        String ticket = jdbc.queryForObject("SELECT id FROM issued_entitlements WHERE order_id = ?", String.class, order);
-        mockMvc.perform(get("/api/v1/customer/deregister/preview").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", f.token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.refundable_tickets.length()").value(1))
-                .andExpect(jsonPath("$.data.refundable_tickets[0].id").value(ticket));
-        deregisterRefusedForRefundableTickets();
-        assertThat(accountStatus(f.customerId)).isEqualTo("active");
-        assertThat(jdbc.queryForList("SELECT status FROM issued_entitlements WHERE order_id = ?", String.class, order))
-                .containsOnly("active");
-
-        // 退票走后台真实接口（蛇形键）：申请后处理中仍拦；审批通过（权益已退）后名下再无此类票，即可注销。
-        StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
-        String entity = jdbc.queryForObject("SELECT business_entity_id FROM merchants WHERE id = ?", String.class, f.merchantId);
-        String refund = CustomerTicketPaymentFixture.read(staffPost(
-                staffs.staff("usr_dereg_req_" + f.suffix, "platform_admin", f.projectId, null, "ticket.refund.request"),
-                "/api/v1/ticketing/refunds", Map.of("target_id", order, "reason", "客人注销前申请退票",
-                        "reason_code", "ticket_type_rule", "responsible_entity_id", entity))
-                .andExpect(status().isOk()), "$.data.id");
-        deregisterRefusedForRefundableTickets();
-        staffPost(staffs.staff("usr_dereg_apv_" + f.suffix, "platform_admin", f.projectId, null, "ticket.refund.approve"),
-                "/api/v1/ticketing/refunds/" + refund + "/approve", Map.of("action", "approve", "reason", "票种允许退款"))
-                .andExpect(status().isOk());
-        assertThat(jdbc.queryForList("SELECT status FROM issued_entitlements WHERE order_id = ?", String.class, order))
-                .containsOnly("refunded");
         deregister(Map.of("waive_balance", true)).andExpect(status().isOk());
         assertThat(accountStatus(f.customerId)).isEqualTo("deregistered");
+        assertThat(jdbc.queryForList("SELECT status FROM issued_entitlements WHERE order_id = ?", String.class, order))
+                .containsOnly("forfeited");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_refunds WHERE target_id = ?", Integer.class, order)).isZero();
     }
 
     @Test
@@ -189,28 +164,60 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
                 String.class, order, drink);
         assertThat(tickets.atomicUseEntitlement(entry, Instant.now())).isPresent();
 
-        mockMvc.perform(get("/api/v1/customer/deregister/preview").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", f.token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.refundable_tickets.length()").value(0));
         deregister(Map.of("waive_balance", true)).andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT status FROM issued_entitlements WHERE order_id = ? AND entitlement_template_id = ?",
                 String.class, order, drink)).isEqualTo("forfeited");
+        // ENUM 第 41 行「已使用」「已作废」是两种状态，BSM 第 863 行只处置「未核销的票」：已用完的通票入场（核销只加 used_times、用满仍 active）
+        // 保持原状、不改作废，注销留痕的作废计数也不算它。
+        Map<String, Object> used = jdbc.queryForMap("SELECT status, used_times FROM issued_entitlements WHERE id = ?", entry);
+        assertThat(used.get("status")).isEqualTo("active");
+        assertThat(used.get("used_times")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT metadata->>'tickets_forfeited' FROM audit_events"
+                + " WHERE event_name = 'customer.account.deregistration_disposed' AND business_id = ?", String.class, f.customerId))
+                .isEqualTo("1");
     }
 
     @Test
-    void buyerHoldingOnlyPartOfRefundableTicketNotBlockedAndOnlyOwnSlotForfeited() throws Exception {
-        // 操作员裁决第十三批第 12 条「按不可退作废本人份（推荐）」：只持有部分人份的票不算「本人可退」，不拦注销；注销时只作废本人那几份未用权益。
+    void startedMultiUsePassRemainingTimesForfeitedAndFaceDeletedWithoutRefund() throws Exception {
+        // BSM 第 863 行「注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除」；2026-10-25 操作员更正「即使注销，门票是不可以退的」：
+        // 一人多次通票（3 次）已核销 1 次、首次核销时留了人脸——注销时剩余次数一并作废（不退款），父票再无可用入场权益，人脸绑定随即删除。
+        jdbc.update("UPDATE entitlement_templates SET entitlement_type = 'entry', default_total_times = 3 WHERE id IN"
+                + " (SELECT entitlement_template_id FROM ticket_type_entitlements WHERE ticket_type_id = ?)", f.ticketTypeId);
+        jdbc.update("UPDATE ticket_type_entitlements SET total_times = 3 WHERE ticket_type_id = ?", f.ticketTypeId);
+        String order = paidOrder();
+        String entry = jdbc.queryForObject("SELECT id FROM issued_entitlements WHERE order_id = ?", String.class, order);
+        assertThat(tickets.atomicUseEntitlement(entry, Instant.now())).isPresent();
+        String parent = jdbc.queryForObject("SELECT parent_ticket_id FROM issued_entitlements WHERE id = ?", String.class, entry);
+        String consent = "consent_mutf_dereg_" + f.suffix;
+        jdbc.update("INSERT INTO customer_consents (id, customer_id, consent_type, accepted, version, source_terminal, accepted_at,"
+                + " created_at, updated_at) VALUES (?, ?, 'multi_use_ticket_face', TRUE, 'multi_use_face_notice_v1', 'dev_dereg',"
+                + " now(), now(), now())", consent, f.customerId);
+        jdbc.update("INSERT INTO ticket_face_photos (id, ticket_instance_id, photo_ciphertext, content_type, captured_at, consent_id,"
+                + " first_verification_id) VALUES (?, ?, ?, 'image/jpeg', now(), ?, ?)", "tfp_dereg_" + f.suffix, parent,
+                "v1:face".getBytes(java.nio.charset.StandardCharsets.UTF_8), consent, "tv_dereg_" + f.suffix);
+
+        deregister(Map.of("waive_balance", true)).andExpect(status().isOk());
+
+        Map<String, Object> left = jdbc.queryForMap("SELECT status, used_times FROM issued_entitlements WHERE id = ?", entry);
+        assertThat(left.get("status")).isEqualTo("forfeited");
+        assertThat(left.get("used_times")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_face_photos WHERE ticket_instance_id = ?", Integer.class, parent))
+                .isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_refunds WHERE target_id = ?", Integer.class, order)).isZero();
+    }
+
+    @Test
+    void buyerHoldingOnlyPartOfTicketForfeitsOnlyOwnSlot() throws Exception {
+        // 2026-10-25 操作员更正：注销时本人持有的未用权益一律作废（含只持有部分人份的），他人持有的人份不动。
         SharedTicket t = refundableTwoPersonTicketSecondSlotClaimed();
-        preview(f.token).andExpect(jsonPath("$.data.refundable_tickets.length()").value(0));
         deregister(f.token, Map.of("waive_balance", true)).andExpect(status().isOk());
         assertThat(slotStatus(t.parent(), 1)).isEqualTo("forfeited");
         assertThat(slotStatus(t.parent(), 2)).isEqualTo("active");
     }
 
     @Test
-    void receiverHoldingOnlyPartOfRefundableTicketNotBlockedAndOnlyOwnSlotForfeited() throws Exception {
+    void receiverHoldingOnlyPartOfTicketForfeitsOnlyOwnSlot() throws Exception {
         SharedTicket t = refundableTwoPersonTicketSecondSlotClaimed();
-        preview(t.receiverToken()).andExpect(jsonPath("$.data.refundable_tickets.length()").value(0));
         deregister(t.receiverToken(), Map.of("waive_balance", true)).andExpect(status().isOk());
         assertThat(slotStatus(t.parent(), 1)).isEqualTo("active");
         assertThat(slotStatus(t.parent(), 2)).isEqualTo("forfeited");
@@ -218,7 +225,7 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
 
     @Test
     void buyerDeregistrationVoidsOnlyOwnSlotTransfersNotReceiversRetransfer() throws Exception {
-        // BSM 第 809 行「接收人确认领取后可以继续……再次转赠」「以先处理成功的那个动作为准」；操作员裁决第十三批第 12 条「只作废本人那几份未用权益」：
+        // BSM 第 809 行「接收人确认领取后可以继续……再次转赠」「以先处理成功的那个动作为准」；2026-10-25 操作员更正「注销与拉黑只作废本人持有人份上的在途转赠」：
         // A 的可退双人票第 2 人份已归 B、B 再转给 C 未领取；A 注销只作废 A 本人人份上的在途转赠，B→C 照旧在途。
         SharedTicket t = refundableTwoPersonTicketSecondSlotClaimed();
         String own = startLinkTransfer(f.token, t.parent(), 1, "dereg-own-" + f.suffix);
@@ -304,16 +311,11 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(body)));
     }
 
-    private ResultActions preview(String token) throws Exception {
-        return mockMvc.perform(get("/api/v1/customer/deregister/preview").header("X-Terminal-Type", "miniapp")
-                .header("X-Customer-Token", token)).andExpect(status().isOk());
-    }
-
     private record SharedTicket(String parent, String receiverToken) {
     }
 
     /**
-     * 可退票种的双人票：整张归买票人时仍列为可退、拦注销；随后买票人把第 2 人份转给 B、B 确认领取（客人端真实请求，蛇形键）。
+     * 可退票种的双人票：买票人把第 2 人份转给 B、B 确认领取（客人端真实请求，蛇形键）。
      */
     private SharedTicket refundableTwoPersonTicketSecondSlotClaimed() throws Exception {
         jdbc.update("UPDATE ticket_types SET refundable = TRUE WHERE id = ?", f.ticketTypeId);
@@ -322,8 +324,6 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
         f.payWithStoredValue(order, null).andExpect(status().isOk());
         assertThat(f.entitlements(order)).isEqualTo(2);
         String parent = jdbc.queryForObject("SELECT id FROM ticket_instances WHERE order_id = ?", String.class, order);
-        preview(f.token).andExpect(jsonPath("$.data.refundable_tickets.length()").value(2));
-        deregisterRefusedForRefundableTickets();
 
         String receiver = "cus_dereg_b_" + f.suffix;
         String receiverToken = "cust_token_dereg_b_" + f.suffix;
@@ -365,28 +365,6 @@ class CustomerDeregisterClosureJdbcIntegrationTests {
 
     private String transferStatus(String transfer) {
         return jdbc.queryForObject("SELECT status FROM ticket_transfers WHERE id = ?", String.class, transfer);
-    }
-
-    /** 名下有可退未用票 → 注销 409；该请求在保存点里执行并回滚（生产里每个请求各自一个事务、被拒即整笔回滚）。 */
-    private void deregisterRefusedForRefundableTickets() {
-        TransactionTemplate ownRequest = new TransactionTemplate(txManager);
-        ownRequest.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
-        ownRequest.executeWithoutResult(tx -> {
-            try {
-                deregister(Map.of("waive_balance", true, "abandon_saved_bottles", true))
-                        .andExpect(status().isConflict())
-                        .andExpect(jsonPath("$.detail_code").value("CUSTOMER_REFUNDABLE_TICKETS_HELD"));
-            } catch (Exception e) {
-                throw new IllegalStateException(e);
-            }
-            tx.setRollbackOnly();
-        });
-    }
-
-    private ResultActions staffPost(RequestPostProcessor staff, String path, Map<String, Object> body) throws Exception {
-        Map<String, Object> actual = new LinkedHashMap<>(body);
-        actual.put("idempotency_key", "dereg-" + UUID.randomUUID());
-        return mockMvc.perform(post(path).with(staff).contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(actual)));
     }
 
     private String paidOrder() throws Exception {

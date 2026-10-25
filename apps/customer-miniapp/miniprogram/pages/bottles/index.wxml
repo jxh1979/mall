@@ -1,0 +1,40 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>查看我的存酒需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">存酒功能暂停服务，请稍后再试</view>
+  <block wx:else>
+    <view wx:if="{{error}}" class="alert error">我的存酒加载失败：{{error}}</view>
+    <view wx:if="{{loading && !bottles.length}}" class="hint">加载中……</view>
+    <view wx:elif="{{!bottles.length && !error}}" class="hint">名下暂无存酒</view>
+    <view wx:for="{{bottles}}" wx:key="id" id="bottle-{{item.id}}" class="card">
+      <view class="section-title">{{item.title}}</view>
+      <view>{{item.line}}</view>
+      <view>{{item.expireText}}</view>
+      <view class="hint">{{item.where}}</view>
+      <view class="actions">
+        <button id="code-{{item.id}}" size="mini" type="primary" data-id="{{item.id}}" bindtap="toggleCode">{{showingId === item.id ? '收起取酒码' : '出示取酒码'}}</button>
+        <button id="renew-{{item.id}}" size="mini" data-id="{{item.id}}" bindtap="openRenew">转存</button>
+      </view>
+      <dynamic-code wx:if="{{showingId === item.id}}" id="bottle-code" kind="bottle" target-id="{{item.id}}" title="动态取酒码" />
+    </view>
+  </block>
+
+  <view wx:if="{{renewing}}" class="mask">
+    <view id="renew-sheet" class="sheet">
+      <view class="section-title">转存：{{renewing.bottleName}}</view>
+      <view wx:if="{{renewResult}}" id="renew-result" class="alert success">{{renewResult}}</view>
+      <block wx:else>
+        <view wx:if="{{renewError}}" id="renew-error" class="alert error">{{renewError}}</view>
+        <view>当前{{renewing.expireText}}。验证码发到你的注册手机号。</view>
+        <button id="renew-send" size="mini" disabled="{{busy}}" bindtap="sendCode">{{sent ? '重新发送验证码' : '发送验证码'}}</button>
+        <view wx:if="{{sent}}" class="hint">验证码已发送</view>
+        <view class="field"><input id="renew-sms" type="number" value="{{smsCode}}" placeholder="短信验证码" bindinput="onSms" /></view>
+        <button id="renew-confirm" type="primary" size="mini" loading="{{busy}}" disabled="{{busy}}" bindtap="confirmRenew">确认转存</button>
+      </block>
+      <button id="renew-close" disabled="{{busy}}" bindtap="closeRenew">关闭</button>
+    </view>
+  </view>
+</view>

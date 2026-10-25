@@ -1,0 +1,36 @@
+<!-- 文件版本：V0.01 -->
+<view class="page">
+  <view wx:if="{{!loggedIn}}" id="login-required" class="card">
+    <view>注销账号需要先登录</view>
+    <button id="to-login" type="primary" size="mini" bindtap="toLogin">登录 / 注册</button>
+  </view>
+  <view wx:elif="{{paused}}" class="alert warn">账户功能暂停服务，请稍后再试</view>
+  <view wx:elif="{{error}}" class="alert error">{{error}}</view>
+  <view wx:elif="{{loading}}" class="hint">加载中……</view>
+  <view wx:else class="card">
+    <view class="section-title">注销账号</view>
+    <view>注销后账号不能再登录和使用，个人信息一律删除，积分与券清零。请先核对：</view>
+    <view wx:if="{{notice}}" id="deregister-notice" class="alert error">{{notice}}</view>
+
+    <view wx:if="{{preview.bottles.length}}" id="deregister-bottles">
+      <view class="section-title">名下存酒</view>
+      <view wx:for="{{preview.bottles}}" wx:key="id" class="item">{{item.text}}</view>
+      <checkbox-group id="abandon-bottles" bindchange="onAbandon">
+        <label class="check"><checkbox value="abandon" checked="{{abandonBottles}}" />放弃名下全部存酒（转为所在酒吧的自有库存）</label>
+      </checkbox-group>
+    </view>
+
+    <view id="deregister-cards">
+      <view wx:if="{{!preview.hasBalance}}" class="hint">名下没有储值卡余额</view>
+      <block wx:else>
+        <view wx:for="{{preview.cards}}" wx:key="accountId" class="item">{{item.text}}</view>
+        <view>不放弃余额：{{preview.hasPrincipal ? '需退还的本金会自动生成待退事项并通知发卡主体，按原退款路径退还；' : ''}}赠送金不退现、作废。</view>
+        <checkbox-group id="waive" bindchange="onWaive">
+          <label class="check"><checkbox value="waive" checked="{{waive}}" />放弃全部余额（归发卡主体）</label>
+        </checkbox-group>
+      </block>
+    </view>
+
+    <button id="deregister-submit" type="warn" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">确认注销</button>
+  </view>
+</view>

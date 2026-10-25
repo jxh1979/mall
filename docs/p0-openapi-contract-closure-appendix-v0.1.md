@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.28
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.29
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1143 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1141 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 406 | 人工权限矩阵正文未覆盖 305 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2286 | 人工事件矩阵正文未覆盖 2241 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1143 | 人工任务映射正文未逐项覆盖 1137 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 686 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2282 | 人工事件矩阵正文未覆盖 2237 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1141 | 人工任务映射正文未逐项覆盖 1135 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 685 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -342,7 +342,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 75 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, listMyCustomerBarReservations, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, previewCustomerBarInvitation, removeCustomerBarInvitationMember, getCustomerBarInvitationEntryCode, createCustomerConsent ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 73 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, listMyCustomerBarReservations, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, previewCustomerBarInvitation, removeCustomerBarInvitationMember, getCustomerBarInvitationEntryCode, createCustomerConsent ... | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
@@ -1146,10 +1146,6 @@
 | `customer.ticket_order.created` | success | `createCustomerTicketOrder` | `POST` | `/api/v1/customer/ticket-orders` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_view_failed` | failure | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
 | `customer.ticket_products_viewed` | success | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | CUS/TIC-客人购票 | `public` | 接口级事件，以本附录为准 |
-| `customer.ticket_refund.request_failed` | failure | `requestCustomerTicketRefund` | `POST` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.ticket_refund.requested` | success | `requestCustomerTicketRefund` | `POST` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.ticket_refunds_view_failed` | failure | `listCustomerTicketRefunds` | `GET` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
-| `customer.ticket_refunds_viewed` | success | `listCustomerTicketRefunds` | `GET` | `/api/v1/customer/ticket-refunds` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_incoming_view_failed` | failure | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_incoming_viewed` | success | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.ticket_transfer_outgoing_view_failed` | failure | `listOutgoingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -3049,7 +3045,7 @@
 | CUS-客人端 | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | 全部券聚合（读层并入不搬表：统一台账 ∪ 通票第三方合作券 V282） | `customer.voucher.view` | `voucher.overview_viewed` / `voucher.overview_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏） | `customer.voucher.view` | `voucher.redemptions_viewed` / `voucher.redemptions_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | 按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
-| CUS-客人端 | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | 客人注销预览（提醒名下各储值卡本金/赠送金、名下存酒与可退款的未用票） | `not_applicable` | `customer.account.deregister_previewed` / `customer.account.deregister_preview_failed` | miniapp | operation 级补充 |
+| CUS-客人端 | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | 客人注销预览（提醒名下各储值卡本金/赠送金与名下存酒） | `not_applicable` | `customer.account.deregister_previewed` / `customer.account.deregister_preview_failed` | miniapp | operation 级补充 |
 | CUS-客人端 | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.voucher_transfer_preview_viewed` / `customer.voucher_transfer_preview_view_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | 提交发布客人端首页综合体介绍与活动公告（审批后生效） | `customer.home_content.manage` | `customer.home_content_published` / `customer.home_content_publish_failed` | web | operation 级补充 |
 | CUS-客人端 | `rateCustomerComplaint` | `POST` | `/api/v1/customer/complaints/{work_order_id}/satisfaction` | 客人对本人投诉评满意度 | `not_applicable` | `customer.complaint_rated` / `customer.complaint_rate_failed` | app, miniapp | operation 级补充 |
@@ -3096,7 +3092,6 @@
 | CUS/TIC-客人购票 | `listCustomerTicketChannels` | `GET` | `/api/v1/customer/ticket-channels` | 第三方渠道接入状态（匿名可读，供客户端置灰） | `public` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerTicketExpiryReminders` | `GET` | `/api/v1/customer/ticket-expiry-reminders` | 未核销票到期提醒（App/小程序启动与回前台拉取） | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerTicketProducts` | `GET` | `/api/v1/customer/ticket-products` | 客人可购票种和票价 | `public` | `customer.ticket_products_viewed` / `customer.ticket_products_view_failed` | miniapp, app, kiosk | operation 级补充 |
-| CUS/TIC-客人购票 | `listCustomerTicketRefunds` | `GET` | `/api/v1/customer/ticket-refunds` | 我的退票申请及其状态 | `not_applicable` | `customer.ticket_refunds_viewed` / `customer.ticket_refunds_view_failed` | miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `listCustomerTicketUsages` | `GET` | `/api/v1/customer/tickets/{ticket_id}/usages` | 我的票使用记录 | `not_applicable` | `customer.ticket_usages_viewed` / `customer.ticket_usages_view_failed` | app, miniapp | operation 级补充 |
 | CUS/TIC-客人购票 | `listIncomingCustomerTicketTransfers` | `GET` | `/api/v1/customer/ticket-transfers/incoming` | 待我领取的转赠(手机号渠道) | `not_applicable` | `customer.ticket_transfer_incoming_viewed` / `customer.ticket_transfer_incoming_view_failed` | miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `listMyTickets` | `GET` | `/api/v1/customer/my-tickets` | 我的票(持有人视角:自购未转+受赠,含转赠中标记) | `not_applicable` | `customer.my_tickets_viewed` / `customer.my_tickets_view_failed` | miniapp, app | operation 级补充 |
@@ -3104,7 +3099,6 @@
 | CUS/TIC-客人购票 | `listPublishedTicketRewardRules` | `GET` | `/api/v1/customer/ticket-reward-rules` | 查看已公布门票积分及成长值规则 | `not_applicable` | `ticket.reward.rules.viewed` / `ticket.reward.rules.viewed.failed` | miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `payCustomerTicketOrderWithStoredValue` | `POST` | `/api/v1/customer/orders/{order_id}/stored-value/pay` | 客人本人订单储值付款（可只付一部分） | `customer.stored_value.consume` | `stored_value.consume` / `customer.stored_value.pay_failed` | app, miniapp | operation 级补充 |
 | CUS/TIC-客人购票 | `previewCustomerTicketTransfer` | `GET` | `/api/v1/customer/ticket-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.ticket_transfer_preview_viewed` / `customer.ticket_transfer_preview_view_failed` | miniapp, app | operation 级补充 |
-| CUS/TIC-客人购票 | `requestCustomerTicketRefund` | `POST` | `/api/v1/customer/ticket-refunds` | 客人自助申请退票（只对本人名下、票种允许退款、整张未使用的票） | `not_applicable` | `customer.ticket_refund.requested` / `customer.ticket_refund.request_failed` | miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `ticket_transfer.revoked` / `ticket_transfer.revoke_failed` | miniapp, app | operation 级补充 |
 | CUS/TIC-客人购票 | `startCustomerTicketPayment` | `POST` | `/api/v1/customer/orders/{order_id}/payments` | 客人本人订单发起在线付款 | `not_applicable` | `customer.payment_created` / `customer.payment_create_failed` | app, miniapp | operation 级补充 |
 | EVD-事件证据 | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | 关联证据附件到业务对象 | `evidence.attachment.create` | `evidence.attachment_bound` / `evidence.attachment_bind_failed` | web, staff_work_phone, tablet | operation 级补充 |

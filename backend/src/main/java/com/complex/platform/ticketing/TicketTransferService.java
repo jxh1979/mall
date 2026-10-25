@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.BlindIndex;
@@ -297,7 +297,10 @@ public class TicketTransferService {
         return auditVoided(parentTicketId, reason, repository.voidPendingTransfersForParent(parentTicketId, reason, now));
     }
 
-    /** 账户注销/拉黑:只作废本人持有的这一人份上的在途转赠(第十三批第 12 条「只作废本人那几份」)。返回作废条数。 */
+    /**
+     * 账户注销/拉黑:只作废本人持有的这一人份上的在途转赠(2026-10-25 操作员更正「注销与拉黑只作废本人持有人份上的在途转赠、不动他人转赠（B 段已修）保持不变」;
+     * BSM 第 809 行「接收人确认领取后可以继续……再次转赠」)。返回作废条数。
+     */
     @Transactional
     public int voidPendingTransfersForSlot(String parentTicketId, int slotIndex, String reason, Instant now) {
         return auditVoided(parentTicketId, reason, repository.voidPendingTransfersForSlot(parentTicketId, slotIndex, reason, now));
