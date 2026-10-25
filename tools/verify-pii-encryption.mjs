@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 文件版本：V0.02
+// 文件版本：V0.03
 // PII 落库加密门禁(2026-07-05 立,防"buyer_phone 明文"类回归复发;2026-07-27 扩到全部主体)。
 // 口径:登记表列出所有"自然人手机号/PII 必须密文落库"的列 + 其写入文件;
 // 断言每处 addValue("<col>", ...) 都被 piiCipher.encrypt(...) 包裹。明文即 FAIL。
@@ -31,6 +31,10 @@ const REGISTRY = [
   { table: "saved_bottles", column: "customer_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
   { table: "saved_bottles", column: "transfer_to_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
   { table: "saved_bottle_transfers", column: "to_phone", writeFile: "backend/src/main/java/com/complex/platform/inventory/JdbcInventoryRepository.java" },
+  // ── 订台侧(V545；第十四批 OBS-13-03：员工代订录入的客人手机号，只供订台短信)──
+  { table: "bar_reservations", column: "customer_phone", writeFile: "backend/src/main/java/com/complex/platform/bar/JdbcBarRepository.java" },
+  // ── 短信发送留痕(V547；第十四批复核：各域短信收件人手机号，含员工代订录入的非会员手机号)──
+  { table: "notification_send_log", column: "recipient", writeFile: "backend/src/main/java/com/complex/platform/notification/JdbcNotificationRepository.java" },
   // ── 幂等重放响应体(V399；审计 20260902T183912Z XM-013)：服务层返回对象原样序列化落库，含订单 / 预订 / 客人档案的手机号，
   //    此前为 jsonb 明文且表无过期清理；现只存 enc:v1: 信封（库上 NOT VALID CHECK 守新写入，存量启动期回填）──
   { table: "idempotency_records", column: "response_body", writeFile: "backend/src/main/java/com/complex/platform/common/idempotency/JdbcIdempotencyRepository.java" },

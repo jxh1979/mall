@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -39,6 +39,15 @@ public interface BarRepository {
     /** ROOT-03-R19（BSM 第 1062 行）：超过最晚到店时间仍未到店的有效订台 id。内存桩默认无。 */
     default List<String> listOverdueReservationIds(java.time.Instant now) {
         return List.of();
+    }
+
+    /** OBS-13-03-R1：员工代订录入的客人手机号加密留存（只供订台短信，不进订台记录、不回显）。内存桩默认不存。 */
+    default void saveReservationCustomerPhone(String reservationId, String phone) {
+    }
+
+    /** OBS-13-03-R1：员工代订留存的客人手机号（解密后）。内存桩默认没有。 */
+    default Optional<String> findReservationCustomerPhone(String reservationId) {
+        return Optional.empty();
     }
 
     List<BarTableRecord> listTables(Optional<String> merchantScope);

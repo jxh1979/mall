@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -18,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
 
 /**
- * 会员忠诚度运营配置后台管理（会员忠诚度 PRD §3/§6）：会员等级档位/门槛/保级/倍率、连续签到阶梯、生日加倍规则。
+ * 会员忠诚度运营配置后台管理（会员忠诚度 PRD §3/§6）：会员等级档位/门槛/倍率、连续签到阶梯、生日加倍规则。
  * 查看需 customer.loyalty.view，维护需 customer.loyalty.manage（high, V089）。
  * 底层库/仓储已就绪（{@link CustomerRepository#saveMemberLevel} 等 + V089 表与 CHECK 约束）；本服务只补齐配置写路径。
  *
@@ -91,9 +93,6 @@ public class LoyaltyConfigAdminService {
                     requireText(r.levelName(), "level_name"),
                     (int) requireMin(r.levelRank(), 0, "level_rank"),
                     requireMinLong(r.upgradeThreshold(), 0, "upgrade_threshold"),
-                    requireMinLong(r.keepThreshold(), 0, "keep_threshold"),
-                    (int) requireMin(r.keepPeriodDays(), 1, "keep_period_days"),
-                    (int) requireMin(r.graceDays(), 0, "grace_days"),
                     (int) requireMin(r.pointMultiplierBasisPoints(), 1, "point_multiplier_basis_points"),
                     normalizeStatus(r.status(), LEVEL_STATUSES),
                     now,

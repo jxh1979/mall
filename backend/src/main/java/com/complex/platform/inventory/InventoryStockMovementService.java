@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -102,18 +102,24 @@ final class InventoryStockMovementService {
                     // V350 归一：命中判定（物品进货价 > 后台单一阈值 / 手工标记 / 阈值未配置 / 进货价未知）→
                     // 不直接扣减：建 pending 复核单（要求照片+视频双证据各非空）+ 调整置 pending_review（库存不变）。
                     // 主管 approve 后由 applyDecisionEffect 真正扣减并置 completed；reject 置 rejected（不扣）。
+                    // OBS-13-02（BSM L1072「转库存之后的报废……必须走审批并保留操作记录」；第十四批第 4 条门店主管与财务审批）：
+                    // 存酒库房里的报损族（报废）不论高低价值一律先审批；证据沿用既有报损口径——高价值才强制照片+视频。
                     String subjectType = HIGH_VALUE_SUBJECT_BY_TYPE.get(adjustmentType);
-                    if (subjectType != null && isHighValue(itemId, merchantId)) {
+                    boolean savedBottleDisposal = TYPED_DAMAGE_FAMILY.contains(adjustmentType)
+                            && repository.isSavedBottleWarehouse(locationId);
+                    boolean highValue = subjectType != null && isHighValue(itemId, merchantId);
+                    if (highValue || savedBottleDisposal) {
                         StockAdjustmentRecord pending = repository.saveStockAdjustment(new StockAdjustmentRecord(
                                 adjustmentId, itemId, locationId, adjustmentType, quantity, reason,
                                 safeList(actual.evidenceAttachmentIds()), "pending_review", now, merchantId,
                                 unitCostCents));
                         highValueReviewService.createPending(
                                 actual.idempotencyKey(),
-                                subjectType,
+                                savedBottleDisposal ? InventoryHighValueReviewService.SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL : subjectType,
                                 pending.id(),
                                 actual.photoAttachmentIds(),
-                                actual.videoAttachmentIds());
+                                actual.videoAttachmentIds(),
+                                highValue);
                         return pending;
                     }
 
@@ -340,12 +346,19 @@ final class InventoryStockMovementService {
             requireNoActiveStocktake(targetLocationId);
         }
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        // OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；第十四批第 4 条门店主管与财务审批）：
+        // 存酒库房的存货只来自到期/放弃存酒转入，从这里出库（赠送、内部使用等）不直接扣减；调拨不是处置，照常。
+        boolean savedBottleDisposal = decreaseSource && !increaseTarget && repository.isSavedBottleWarehouse(sourceLocationId);
         StockMovementRecord last = null;
         for (Map<String, Object> item : requireItems(actual.items(), "items")) {
             String itemId = requireItemText(item, "item_id");
             // C1/C4：出库/移库前校验物料存在 + 归属当前商户（跨商户扣减 403，不存在 404）。
             requireItemOwnership(itemId);
             int quantity = requirePositiveItemQuantity(item, "quantity");
+            if (savedBottleDisposal) {
+                last = requestSavedBottleStockDisposal(actual, movementType, itemId, sourceLocationId, quantity, merchantId);
+                continue;
+            }
             if (decreaseSource) {
                 decreaseBalance(itemId, sourceLocationId, quantity);
                 consumeBatchesFefo(itemId, sourceLocationId, quantity);
@@ -370,6 +383,23 @@ final class InventoryStockMovementService {
             );
         }
         return last;
+    }
+
+    /**
+     * 存酒库房出库待审：落 pending_review 调整单（类型取本次出库类型、原因取 operator_note 必填）＋存酒库房处置复核单，库存不动；
+     * 门店主管与财务都批后由复核生效回调扣减并写同类型流水，驳回不扣。返回的流水记录状态为 pending_review（尚未入账，仅回显）。
+     */
+    private StockMovementRecord requestSavedBottleStockDisposal(
+            StockMovementRequest actual, String movementType, String itemId, String locationId, int quantity, String merchantId) {
+        StockAdjustmentRecord pending = repository.saveStockAdjustment(new StockAdjustmentRecord(
+                "adjust_" + slug(actual.idempotencyKey() + ":" + itemId + ":" + movementType), itemId, locationId, movementType,
+                quantity, requireText(actual.operatorNote(), "operator_note"), safeList(actual.evidenceAttachmentIds()),
+                "pending_review", Instant.now(), merchantId, null));
+        highValueReviewService.createPending(actual.idempotencyKey(),
+                InventoryHighValueReviewService.SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL, pending.id(), List.of(), List.of(), false);
+        return new StockMovementRecord("movement_" + slug(pending.id() + ":hv_approve"), movementType, itemId, locationId, null,
+                quantity, null, null, "inventory_stock_adjustment", pending.id(), trimToNull(actual.traceCode()), null,
+                pending.evidenceAttachmentIds(), "pending_review", pending.createdAt(), merchantId);
     }
 
     private StockMovementRecord saveMovement(

@@ -58,6 +58,7 @@ ar_ap_payments,inherited,ar_ap_item_id,ar_ap_item_id -> ar_ap_items/finance_ar_a
 audit_events,direct,merchant_id,merchant_id column on audit_events,ready for project/merchant scoped query enforcement,V0.07,covered
 auth_credentials,inherited,user_id/session,user_id/session -> access_users -> organization scope,must join through scope path before multi-complex rollout,V0.07,covered
 auth_sessions,inherited,user_id/session,user_id/session -> access_users -> organization scope,must join through scope path before multi-complex rollout,V0.07,covered
+bar_arrival_reminder_policies,direct,project_id,project_id column on bar_arrival_reminder_policies,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_bill_adjustments,inherited,bill/order linkage,bill/order linkage -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_bill_operations,inherited,bill/order linkage,bill/order linkage -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_bill_settlements,direct,merchant_id,merchant_id column on bar_bill_settlements,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -126,6 +127,7 @@ customer_deregistration_marks,single_complex_default,P0_SINGLE_COMPLEX,single-co
 customer_growth_ledger,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 customer_home_content_drafts,direct,project_id,project_id column on customer_home_content_drafts,ready for project/merchant scoped query enforcement,V0.07,covered
 customer_home_contents,direct,project_id,project_id column on customer_home_contents,ready for project/merchant scoped query enforcement,V0.07,covered
+customer_level_notices,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 customer_member_levels,direct,project_id,project_id column on customer_member_levels,ready for project/merchant scoped query enforcement,V0.07,covered
 customer_otp_codes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 customer_points_accounts,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,V0.07,covered

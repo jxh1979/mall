@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.30
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.31
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1141 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1145 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 406 | 人工权限矩阵正文未覆盖 305 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2282 | 人工事件矩阵正文未覆盖 2237 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1141 | 人工任务映射正文未逐项覆盖 1135 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 685 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2290 | 人工事件矩阵正文未覆盖 2245 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1145 | 人工任务映射正文未逐项覆盖 1139 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 687 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -126,8 +126,8 @@
 | `bar.production_ticket.view` | staff-token | project-bar-table | 1 | listBarProductionTicketEvents | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.create` | staff-token | project-bar, project-merchant-space | 2 | createBarReservation, listBarTableAvailability | 已在权限矩阵正文出现 |
 | `bar.reservation.invitation.manage` | staff-token | project-bar | 2 | issueBarReservationInvitation, revokeBarReservationInvitation | OpenAPI 补充，以本附录为准 |
-| `bar.reservation.manage` | staff-token | project-bar | 3 | payBarReservationDeposit, checkInBarReservationDeposit, cancelBarReservation | OpenAPI 补充，以本附录为准 |
-| `bar.reservation.view` | staff-token | project-bar, project-bar-table | 2 | listBarReservations, getBarReservationInvitation | 已在权限矩阵正文出现 |
+| `bar.reservation.manage` | staff-token | project, project-bar | 4 | payBarReservationDeposit, checkInBarReservationDeposit, cancelBarReservation, saveBarArrivalReminderPolicy | OpenAPI 补充，以本附录为准 |
+| `bar.reservation.view` | staff-token | project, project-bar, project-bar-table | 3 | listBarReservations, getBarReservationInvitation, getBarArrivalReminderPolicy | 已在权限矩阵正文出现 |
 | `bar.saved_bottle.manage` | staff-token | project-bar-customer, project-bar-table | 20 | listSavedBottles, createSavedBottle, claimSavedBottle, lookupSavedBottlesByPhone, transferSavedBottle, requestSavedBottleVerificationCode, dispenseSavedBottleManualPickup, listSavedBottleRenewals, renewSavedBottle, cancelSavedBottle, disputeSavedBottle, registerSavedBottleRemedy ... | 已在权限矩阵正文出现 |
 | `bar.saved_bottle.manual_pickup_policy.manage` | staff-token | project | 1 | configureSavedBottleManualPickupPolicy | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.manual_pickup.confirm_marketing` | staff-token | project-bar-customer | 1 | confirmSavedBottleManualPickupMarketing | OpenAPI 补充，以本附录为准 |
@@ -342,7 +342,7 @@
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
-| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 73 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, listMyCustomerBarReservations, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, previewCustomerBarInvitation, removeCustomerBarInvitationMember, getCustomerBarInvitationEntryCode, createCustomerConsent ... | 已在权限矩阵正文出现 |
+| `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 75 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, listMyCustomerBarReservations, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, previewCustomerBarInvitation, removeCustomerBarInvitationMember, getCustomerBarInvitationEntryCode, createCustomerConsent ... | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
 | `ops.production_readiness.view` | staff-token | project | 1 | listProductionReadinessItems | 已在权限矩阵正文出现 |
@@ -753,6 +753,8 @@
 | `auth.logout_failed` | failure | `logout` | `POST` | `/api/v1/auth/logout` | AUTH-登录会话 | `authenticated` | 接口级事件，以本附录为准 |
 | `auth.token_refresh_failed` | failure | `refreshToken` | `POST` | `/api/v1/auth/refresh` | AUTH-登录会话 | `authenticated` | 接口级事件，以本附录为准 |
 | `auth.token.refreshed` | success | `refreshToken` | `POST` | `/api/v1/auth/refresh` | AUTH-登录会话 | `authenticated` | 接口级事件，以本附录为准 |
+| `bar.arrival_reminder_policy_update_failed` | failure | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
+| `bar.arrival_reminder_policy_updated` | success | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `bar.bill_operation.list` | success | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.bill_operation.list_failed` | failure | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.bill_reopen_failed` | failure | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | BAR-酒吧经营 | `bar.bill.reopen` | 接口级事件，以本附录为准 |
@@ -1958,6 +1960,8 @@
 | `media_show.view_failed` | failure | `getMediaPerformanceShow` | `GET` | `/api/v1/settlement/media-shows/{id}` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
 | `media_show.viewed` | success | `getMediaPerformanceShow` | `GET` | `/api/v1/settlement/media-shows/{id}` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
 | `member.level_changed` | success | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
+| `member.level_notice.read` | success | `markCustomerLevelNoticeRead` | `POST` | `/api/v1/customer/level-notices/{notice_id}/read` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `member.level_notice.read_failed` | failure | `markCustomerLevelNoticeRead` | `POST` | `/api/v1/customer/level-notices/{notice_id}/read` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.view_failed` | failure | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_billing.bill.viewed` | success | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_expense.auto_sync_failed` | failure | `syncMerchantExpenseAuto` | `POST` | `/api/v1/finance/merchant-expenses/sync-auto` | FIN-财务台账 | `finance.merchant_expense.manage` | 接口级事件，以本附录为准 |
@@ -2015,6 +2019,8 @@
 | `not_applicable` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `findCustomerParkingSession` | `GET` | `/api/v1/customer/parking/sessions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `findCustomerParkingSession` | `GET` | `/api/v1/customer/parking/sessions` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getBarArrivalReminderPolicy` | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getBarArrivalReminderPolicy` | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getContractDepositMonths` | `GET` | `/api/v1/contracts/deposit-months` | P0-待归类 | `contract.deposit_months.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getContractDepositMonths` | `GET` | `/api/v1/contracts/deposit-months` | P0-待归类 | `contract.deposit_months.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | P0-待归类 | `contract.deposit_refund_wait.manage` | 接口级事件，以本附录为准 |
@@ -2053,6 +2059,8 @@
 | `not_applicable` | failure | `listCustomerBlacklistRequests` | `GET` | `/api/v1/customer-blacklist-requests` | CUS-客人端 | `customer.blacklist.request` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listCustomerEffectiveTerminalSwitches` | `GET` | `/api/v1/customer/terminal-switches/effective` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listCustomerEffectiveTerminalSwitches` | `GET` | `/api/v1/customer/terminal-switches/effective` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listCustomerLevelNotices` | `GET` | `/api/v1/customer/level-notices` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listCustomerLevelNotices` | `GET` | `/api/v1/customer/level-notices` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listCustomerMerchantCardExitNotices` | `GET` | `/api/v1/customer/merchant-card-exit-notices` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listCustomerMerchantCardExitNotices` | `GET` | `/api/v1/customer/merchant-card-exit-notices` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listCustomerProjects` | `GET` | `/api/v1/customer/projects` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
@@ -2929,6 +2937,7 @@
 | BAR-酒吧经营 | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | 退菜退酒审批决策（通过/驳回） | `bar.order_item.void` | `bar.order_item_void.decide` / `bar.order_item_void.decide_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `deliverBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | 出酒或送达确认 | `bar.order.create` | `bar.order_delivered` / `bar.order_deliver_failed` | tablet, staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `draftBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules` | 保存完整规则草案 | `bar.payroll.manage` | `bar.payroll_rule.drafted` / `bar.payroll_rule.draft_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `getBarArrivalReminderPolicy` | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | 查最晚到店时间前提醒提前分钟数（按项目） | `bar.reservation.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | BAR-酒吧经营 | `getBarBillRefundContext` | `GET` | `/api/v1/bar/bills/{id}/refund-context` | 读取本账单真实退款来源及累计明细 | `bar.bill.refund` | `bar.refund_context.read` / `bar.refund_context.read_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `getBarReservationInvitation` | `GET` | `/api/v1/bar/reservations/{id}/invitation` | 查询订卡邀请函 | `bar.reservation.view` | `bar.reservation_invitation_viewed` / `bar.reservation_invitation_view_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `handoverBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-handover` | 登记真实服务交接 | `bar.table_session.transfer` | `bar.service.handover` / `bar.service.handover_failed` | web, tablet | operation 级补充 |
@@ -2965,6 +2974,7 @@
 | BAR-酒吧经营 | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | 续台（延长台位会话） | `bar.table_session.renew` | `bar.table_session.renew` / `bar.table_session.renew_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `revokeBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | 吊销订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_revoked` / `bar.reservation_invitation_revoke_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | 配置最晚到店时间前提醒提前分钟数及上下限（按项目） | `bar.reservation.manage` | `bar.arrival_reminder_policy_updated` / `bar.arrival_reminder_policy_update_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarCombo` | `POST` | `/api/v1/bar/catalog/combos` | 新增或修改酒吧套餐 | `bar.combo.manage` | `bar.combo.saved` / `bar.combo.saved_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories` | 新增或修改酒吧商品分类 | `bar.category.manage` | `bar.category.saved` / `bar.category.saved_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes` | 新增或修改退酒原因 | `bar.order_item.void_decide` | `bar.void_reason_code.saved` / `bar.void_reason_code.save_failed` | web, tablet | operation 级补充 |
@@ -3028,6 +3038,7 @@
 | CUS-客人端 | `listCustomerBlacklistRequests` | `GET` | `/api/v1/customer-blacklist-requests` | 黑名单申请列表（待批准在前） | `customer.blacklist.request` | `customer.blacklist_requests_viewed` / `not_applicable` | web | operation 级补充 |
 | CUS-客人端 | `listCustomerCheckIns` | `GET` | `/api/v1/customer/check-ins` | 客人签到记录 | `not_applicable` | `customer.check_ins_viewed` / `customer.check_ins_view_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `listCustomerEffectiveTerminalSwitches` | `GET` | `/api/v1/customer/terminal-switches/effective` | 客人端读取本端已关闭的开关行（匿名可读） | `public` | `not_applicable` / `not_applicable` | miniapp, app | operation 级补充 |
+| CUS-客人端 | `listCustomerLevelNotices` | `GET` | `/api/v1/customer/level-notices` | 本人未读会员等级通知（App/小程序启动与回前台拉取并弹出） | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `listCustomerMerchantCardExitNotices` | `GET` | `/api/v1/customer/merchant-card-exit-notices` | 商户储值卡退出公告（客人端） | `not_applicable` | `not_applicable` / `not_applicable` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | 我的订单 | `not_applicable` | `customer.orders_viewed` / `customer.orders_view_failed` | miniapp, app, kiosk | operation 级补充 |
 | CUS-客人端 | `listCustomerPointsRedemptionItems` | `GET` | `/api/v1/customer/points/redemption-items` | 查询积分兑换商品目录 | `not_applicable` | `customer.points.redemption_items_viewed` / `customer.points.redemption_items_view_failed` | app, miniapp | operation 级补充 |
@@ -3045,6 +3056,7 @@
 | CUS-客人端 | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | 全部券聚合（读层并入不搬表：统一台账 ∪ 通票第三方合作券 V282） | `customer.voucher.view` | `voucher.overview_viewed` / `voucher.overview_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏） | `customer.voucher.view` | `voucher.redemptions_viewed` / `voucher.redemptions_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | 按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
+| CUS-客人端 | `markCustomerLevelNoticeRead` | `POST` | `/api/v1/customer/level-notices/{notice_id}/read` | 会员等级通知标记已读（客人点「知道了」） | `not_applicable` | `member.level_notice.read` / `member.level_notice.read_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | 客人注销预览（提醒名下各储值卡本金/赠送金与名下存酒） | `not_applicable` | `customer.account.deregister_previewed` / `customer.account.deregister_preview_failed` | miniapp | operation 级补充 |
 | CUS-客人端 | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `customer.voucher_transfer_preview_viewed` / `customer.voucher_transfer_preview_view_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | 提交发布客人端首页综合体介绍与活动公告（审批后生效） | `customer.home_content.manage` | `customer.home_content_published` / `customer.home_content_publish_failed` | web | operation 级补充 |
@@ -3336,7 +3348,7 @@
 | INV-库存存酒 | `requestSavedBottleVerificationCode` | `POST` | `/api/v1/inventory/saved-bottles/{id}/verification-code` | 向当前持有人手机发送存酒短信验证码（scene=transfer\|claim\|renew） | `bar.saved_bottle.manage` | `bar.saved_bottle.verification_code_requested` / `bar.saved_bottle.verification_code_request_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `resolvePurchaseQuantity` | `POST` | `/api/v1/inventory/purchase-requests/{id}/resolutions` | 登记补货安排或发起余量终止审批 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `returnTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/return` | 借用归还（借出方收货扫码） | `inventory.transfer_order.manage` | `inventory.transfer_order_returned` / `inventory.transfer_order_return_failed` | web | operation 级补充 |
-| INV-库存存酒 | `reviewHighValue` | `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | 主管复核高价值动作(approve生效/reject回滚) | `inventory.high_value.review` | `inventory.high_value_review_decided` / `inventory.high_value_review_decide_failed` | web, tablet, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `reviewHighValue` | `POST` | `/api/v1/inventory/high-value-reviews/{id}/review` | 复核高价值动作(approve生效/reject回滚)；存酒库房存货处置须门店主管与财务两道审批 | `inventory.high_value.review` | `inventory.high_value_review_decided` / `inventory.high_value_review_decide_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewInventoryStocktakeVariance` | `POST` | `/api/v1/inventory/stocktakes/{id}/variances/{vid}/review` | 复核库存盘点差异（approved/rejected） | `inventory.stocktake.variance_review` | `inventory.stocktake.variance_reviewed` / `inventory.stocktake.variance_review_failed` | web | operation 级补充 |
 | INV-库存存酒 | `reviewPurchaseReturnFinance` | `POST` | `/api/v1/inventory/purchase-returns/{id}/finance-review` | 复核退供成本差额并冲应付或登记待回款 | `finance.ar_ap.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `reviewSavedBottleManualPickup` | `POST` | `/api/v1/inventory/saved-bottles/manual-pickups/{id}/review` | 人工例外取酒②另一名主管复核（复核人不得是发起人） | `bar.saved_bottle.manual_pickup.review` | `bar.saved_bottle.manual_pickup_reviewed` / `bar.saved_bottle.manual_pickup_review_failed` | web, tablet, staff_work_phone | operation 级补充 |

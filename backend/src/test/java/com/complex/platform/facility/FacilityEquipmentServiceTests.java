@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,9 +58,9 @@ class FacilityEquipmentServiceTests {
                 new FacilityEquipmentStatusRequest("alarm", null, "温度异常", "high", null)))
                 .isInstanceOf(ApiException.class);
         FacilityEquipmentRecord alarmed = service.changeStatus(rec.id(),
-                new FacilityEquipmentStatusRequest("alarm", "iot", "温度异常", "high", null));
+                new FacilityEquipmentStatusRequest("alarm", "manual", "温度异常", "high", null));
         assertThat(alarmed.status()).isEqualTo("alarm");
-        assertThat(alarmed.alarmSource()).isEqualTo("iot");
+        assertThat(alarmed.alarmSource()).isEqualTo("manual");
         assertThat(alarmed.alarmRaisedAt()).isNotNull();
     }
 

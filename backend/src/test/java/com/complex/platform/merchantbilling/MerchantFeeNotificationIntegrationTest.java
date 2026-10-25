@@ -1,5 +1,7 @@
 package com.complex.platform.merchantbilling;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.contract.ContractRenewalNotificationJob;
@@ -56,6 +58,7 @@ class MerchantFeeNotificationIntegrationTest {
         setSwitch("sms.notify.merchant_fee.utilities", true);
         setSwitch("sms.notify.merchant_fee.property", true);
         setSwitch("sms.notify.merchant_fee.renewal", true);
+        setSwitch("sms.notify.merchant_fee.rent_dunning", true);
     }
 
     @AfterEach
@@ -67,6 +70,7 @@ class MerchantFeeNotificationIntegrationTest {
         setSwitch("sms.notify.merchant_fee.utilities", true);
         setSwitch("sms.notify.merchant_fee.property", true);
         setSwitch("sms.notify.merchant_fee.renewal", true);
+        setSwitch("sms.notify.merchant_fee.rent_dunning", true);
         TestSecurityActors.clear();
     }
 
@@ -135,9 +139,9 @@ class MerchantFeeNotificationIntegrationTest {
         String requestId = "mfdun:" + dunning.id() + ":rent";
         assertThat(logCountByRequestId(requestId)).isEqualTo(1);
         assertThat(logValueByRequestId(requestId, "domain")).isEqualTo("merchant_fee");
-        assertThat(logValueByRequestId(requestId, "event_key")).isEqualTo("rent");
+        assertThat(logValueByRequestId(requestId, "event_key")).isEqualTo("rent_dunning");
         assertThat(logValueByRequestId(requestId, "recipient")).isEqualTo(phone);
-        assertThat(logValueByRequestId(requestId, "template_code")).isEqualTo("sms.merchant_fee.rent");
+        assertThat(logValueByRequestId(requestId, "template_code")).isEqualTo("sms.merchant_fee.rent_dunning");
         assertThat(logValueByRequestId(requestId, "status")).isEqualTo("sent");
         assertThat(logParamByRequestId(requestId, "dunning_id")).isEqualTo(dunning.id());
         assertThat(logParamByRequestId(requestId, "dunning_channel")).isEqualTo("sms");
@@ -172,9 +176,15 @@ class MerchantFeeNotificationIntegrationTest {
         assertThat(logCountByRequestId(requestId)).isEqualTo(1);
     }
 
+    /**
+     * OBS-13-04（BSM 第 1598 行「涉及商户应收应付金额发生变化的通知」不在可关闭范围内；BSM 第 1597 行异议期适用于房租、水电、物业等
+     * 非积分类商户账单）：总开关、商户费用域开关、房租事件开关全关，房租账单照发。
+     */
     @Test
-    void createBillWritesSkippedNotificationLogWhenMainSwitchOff() {
+    void createBillStillSendsRentBillWhenMainDomainAndEventSwitchesAllOff() {
         setSwitch("sms_notification", false);
+        setSwitch("sms.notify.merchant_fee", false);
+        setSwitch("sms.notify.merchant_fee.rent", false);
         String prefix = unique("off");
         String merchantId = prefix + "_merchant";
         String arApItemId = prefix + "_arap";
@@ -191,8 +201,38 @@ class MerchantFeeNotificationIntegrationTest {
         ));
 
         assertThat(logCount("rent", phone)).isEqualTo(1);
-        assertThat(logValue("rent", phone, "status")).isEqualTo("skipped_switch_off");
-        assertThat(logValue("rent", phone, "reason")).isEqualTo("switch_off:sms_notification");
+        assertThat(logValue("rent", phone, "status")).isEqualTo("sent");
+    }
+
+    /**
+     * OBS-13-04：催缴不改变应收应付金额，属 BSM 第 1598 行首句「管理员可在后台自行决定哪些提醒发短信」——催缴用独立事件键 rent_dunning，
+     * 关掉只跳过催缴，同一账单的出单通知照发；收件人仍按房租费用事件配置的指定接收人。
+     */
+    @Test
+    void dunningSwitchOffSkipsOnlyDunningAndKeepsRentRecipient() {
+        setSwitch("sms.notify.merchant_fee.rent_dunning", false);
+        String prefix = unique("dunoff");
+        String merchantId = prefix + "_merchant";
+        String arApItemId = prefix + "_arap";
+        String exactPhone = uniquePhone();
+        insertMerchant(merchantId, uniquePhone());
+        insertArApItem(arApItemId, merchantId, 128_800L);
+        recipientService.upsert(new MerchantFeeNotificationRecipientRequest(
+                merchantId, "rent", "Fee Owner", exactPhone, "staff_finance"));
+        MerchantBillRecord bill = merchantBillingService.createBill(createBillRequest(
+                prefix + "_create", merchantId, arApItemId, 128_800L,
+                List.of(new MerchantBillLineRequest("rent", "June rent", 128_800L))));
+
+        MerchantBillDunningRecord dunning = merchantBillingService.recordDunning(bill.id(), new MerchantBillDunningRequest(
+                prefix + "_dunning", "first reminder", "sms", "rent_overdue_first_notice", "sent",
+                Instant.parse("2026-06-29T02:00:00Z"), "staff_finance"));
+
+        assertThat(logValueByRequestId("mfbill:" + bill.id() + ":rent", "status")).isEqualTo("sent");
+        String dunningRequest = "mfdun:" + dunning.id() + ":rent";
+        assertThat(logValueByRequestId(dunningRequest, "event_key")).isEqualTo("rent_dunning");
+        assertThat(logValueByRequestId(dunningRequest, "recipient")).isEqualTo(exactPhone);
+        assertThat(logValueByRequestId(dunningRequest, "status")).isEqualTo("skipped_switch_off");
+        assertThat(logValueByRequestId(dunningRequest, "reason")).isEqualTo("switch_off:sms.notify.merchant_fee.rent_dunning");
     }
 
     @Test
@@ -398,18 +438,10 @@ class MerchantFeeNotificationIntegrationTest {
                     OR idempotency_key LIKE 'mfbill:mbill_mf_notif_%'
                     OR idempotency_key LIKE 'mfdun:mbill_dunning_mf_notif_%'
                     OR idempotency_key LIKE 'mfrenewal:mf_notif_%'
-                    OR idempotency_key IN (
-                        SELECT request_id
-                          FROM notification_send_log
-                         WHERE domain = 'merchant_fee'
-                           AND recipient LIKE ?
-                    )
-                """, PHONE_PREFIX + "%");
-        jdbcTemplate.update("""
-                DELETE FROM notification_send_log
-                 WHERE domain = 'merchant_fee'
-                   AND recipient LIKE ?
-                """, PHONE_PREFIX + "%");
+                """);
+        // 收件人手机号落密文（V547）：取出解密后按测试手机号前缀筛。
+        com.complex.platform.support.NotificationSendLogRows.delete(jdbcTemplate, com.complex.platform.support.NotificationSendLogRows.ids(
+                jdbcTemplate, piiCipher, "merchant_fee", null, r -> r.startsWith(PHONE_PREFIX)));
         jdbcTemplate.update("""
                 DELETE FROM merchant_bill_dunning_records
                  WHERE merchant_id LIKE 'mf_notif_%'
@@ -459,14 +491,7 @@ class MerchantFeeNotificationIntegrationTest {
     }
 
     private int logCount(String event, String recipient) {
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT count(*)
-                  FROM notification_send_log
-                 WHERE domain = 'merchant_fee'
-                   AND event_key = ?
-                   AND recipient = ?
-                """, Integer.class, event, recipient);
-        return count == null ? 0 : count;
+        return logIds(event, recipient).size();
     }
 
     private int logCountByRequestId(String requestId) {
@@ -479,36 +504,28 @@ class MerchantFeeNotificationIntegrationTest {
     }
 
     private String logValue(String event, String recipient, String column) {
-        return jdbcTemplate.queryForObject("""
-                SELECT %s
-                  FROM notification_send_log
-                 WHERE domain = 'merchant_fee'
-                   AND event_key = ?
-                   AND recipient = ?
-                 ORDER BY created_at DESC
-                 LIMIT 1
-                """.formatted(column), String.class, event, recipient);
+        return jdbcTemplate.queryForObject("SELECT %s FROM notification_send_log WHERE id = ?".formatted(column), String.class,
+                logIds(event, recipient).getFirst());
     }
 
     private String logValueByRequestId(String requestId, String column) {
-        return jdbcTemplate.queryForObject("""
+        String value = jdbcTemplate.queryForObject("""
                 SELECT %s
                   FROM notification_send_log
                  WHERE request_id = ?
                  LIMIT 1
                 """.formatted(column), String.class, requestId);
+        return "recipient".equals(column) ? piiCipher.decrypt(value) : value; // 收件人手机号落密文（V547）
     }
 
     private String logParam(String event, String recipient, String key) {
-        return jdbcTemplate.queryForObject("""
-                SELECT params ->> ?
-                  FROM notification_send_log
-                 WHERE domain = 'merchant_fee'
-                   AND event_key = ?
-                   AND recipient = ?
-                 ORDER BY created_at DESC
-                 LIMIT 1
-                """, String.class, key, event, recipient);
+        return jdbcTemplate.queryForObject("SELECT params ->> ? FROM notification_send_log WHERE id = ?", String.class, key,
+                logIds(event, recipient).getFirst());
+    }
+
+    /** 收件人手机号落密文（V547），按明文筛行须解密后比。 */
+    private java.util.List<String> logIds(String event, String recipient) {
+        return com.complex.platform.support.NotificationSendLogRows.ids(jdbcTemplate, piiCipher, "merchant_fee", event, recipient::equals);
     }
 
     private String logParamByRequestId(String requestId, String key) {

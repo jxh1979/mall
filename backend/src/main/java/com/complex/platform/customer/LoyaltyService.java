@@ -1,24 +1,28 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.GuardedAction;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 会员忠诚度 第1部分（gap-analysis §7A，D12 定稿）：
  * <ul>
- *   <li>等级降级/保级宽限（P1）：周期末按保级进度判定 升级/保级/宽限/降级，事件 member.level_changed。</li>
+ *   <li>会员等级（OBS-13-01，BSM L820）：按滚动统计周期内的成长值定级、达到门槛立即升级并起保护期，保护期结束前降级预警、
+ *       「已保级」与降级补发通知（客人端站内弹出），成长值冲回即时重定，事件 member.level_changed。</li>
  *   <li>积分过期清零 / 冻结 / 解冻（P1）：按批次 expire_at 到期清零 change_type=expire；账户级冻结/解冻。</li>
  *   <li>连续签到阶梯（P2）：每日签到 streak+1（断签重置），命中阶梯天数发奖励积分，事件 member.checked_in。</li>
  *   <li>生日加倍（P2）：获得积分时若命中生日窗口按倍率，叠加等级倍率。</li>
@@ -39,6 +43,13 @@ public class LoyaltyService {
 
     @org.springframework.beans.factory.annotation.Autowired
     private PointsRecoveryService pointsRecoveries;
+
+    /** 等级评估读成长值流水、等级参数版本与等级通知（OBS-13-01）。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private JdbcTemplate jdbc;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private TicketRewardConfigService configs;
 
     private final CustomerRepository repository;
     private final AuditEventService auditEventService;
@@ -347,8 +358,18 @@ public class LoyaltyService {
     }
 
     // ============================================================
-    // 等级评估（升级/保级/宽限/降级）—— 周期末按保级进度判定
+    // 等级评估（OBS-13-01；BSM L820「等级与成长值」；操作员裁决补充（第十四批）第 1、2 条）
+    //   按滚动统计周期内的成长值（customer_growth_ledger，冲回跟原获取那笔走）定级，签到与消费积分不推动等级；
+    //   达到门槛立即升级并起保护期；只有升级才起保护期，期末定级（保级或降级）后不再起新一轮，此后按滚动成长值定级直到下次升级；
+    //   保护期结束前按提前通知天数发降级预警，预警后至期末重新达到原门槛发「已保级」、到期不降（之后再跌回也不降）；
+    //   期末应降而未预警或实际降得比预警更低的照降并在生效后立即补发通知；成长值冲回后立即按当前滚动成长值重定，低于现级就降并通知。
+    //   三项参数取最近一次定级时点（level_period_start：升级或降级导致等级变化时更新（含期末降级、保护期外按滚动成长值降级、冲回重定），期末保级不更新）生效的版本——只对后续周期生效，
+    //   不在保护期的会员也不因改参当天整批降级，下次等级变化后才换用当时生效的新版本（第十四批第 5 条）。
     // ============================================================
+
+    static final String NOTICE_WARNING = "downgrade_warning";
+    static final String NOTICE_KEPT = "level_kept";
+    static final String NOTICE_DOWNGRADED = "downgraded";
 
     /** 单账户等级评估，供单测/手动后台触发（过权限闸）。 */
     @Transactional
@@ -356,10 +377,10 @@ public class LoyaltyService {
     public CustomerPointsAccountRecord evaluateLevel(String customerId, Instant now) {
         CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId)
                 .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "积分账户不存在或已被删除"));
-        return evaluateAccount(account, now);
+        return evaluateAccount(account, repository.listMemberLevels(null), now, false);
     }
 
-    /** 全量等级评估（定时作业逻辑本体，可单测直调；系统作业不过权限闸）。
+    /** 全量等级评估（每日作业逻辑本体，可单测直调；系统作业不过权限闸）。
      *  F2（审计三补三）：改 keyset 分页逐账户小事务（对齐 3.14 expirePoints 范式，去全表大事务），
      *  等级配置表在循环外取一次（原实现每账户重查一次 = 1+N）。 */
     public int evaluateLevels(Instant now) {
@@ -391,73 +412,141 @@ public class LoyaltyService {
         if (account == null) {
             return false;
         }
-        CustomerPointsAccountRecord after = evaluateAccount(account, levels, now);
+        CustomerPointsAccountRecord after = evaluateAccount(account, levels, now, false);
         return !account.level().equals(after.level());
     }
 
-    private CustomerPointsAccountRecord evaluateAccount(CustomerPointsAccountRecord account, Instant now) {
-        return evaluateAccount(account, repository.listMemberLevels(null), now);
+    /** 成长值入账或冲回后在同一事务内即时重算（门票核销、商户消费完成即记成长值；退款、核销冲正冲回成长值）。 */
+    void regrade(String customerId, Instant at, boolean reversal) {
+        repository.findPointsByCustomerIdForUpdate(customerId)
+                .ifPresent(account -> evaluateAccount(account, repository.listMemberLevels(null), at, reversal));
     }
 
     private CustomerPointsAccountRecord evaluateAccount(CustomerPointsAccountRecord account,
-            List<CustomerMemberLevelRecord> levels, Instant now) {
+            List<CustomerMemberLevelRecord> levels, Instant now, boolean reversal) {
         if (levels.isEmpty()) {
             return account;
         }
+        String customerId = account.customerId();
         CustomerMemberLevelRecord current = levelFor(levels, account.level());
-        // 1) 升级：保级进度达更高等级 upgrade_threshold 立即升级（不必等周期末）。
-        CustomerMemberLevelRecord upgradeTarget = highestQualified(levels, account.keepThresholdProgress());
-        if (upgradeTarget != null && upgradeTarget.levelRank() > rankOf(current)) {
-            return applyLevelChange(account, upgradeTarget, "upgrade", now, true);
+        Instant until = account.protectionUntil();
+        Instant cycleStart = account.levelPeriodStart() == null ? now : account.levelPeriodStart();
+        int rollingMonths = (int) configs.levelParam(TicketRewardConfigService.LEVEL_ROLLING_MONTHS, cycleStart);
+        long rolling = rollingGrowth(customerId, now, rollingMonths);
+        CustomerMemberLevelRecord qualified = highestQualified(levels, rolling);
+        // 达到门槛立即升级（可跨级），升级时点起享有当时生效的保护期。
+        if (rankOf(qualified) > rankOf(current)) {
+            int months = (int) configs.levelParam(TicketRewardConfigService.LEVEL_PROTECTION_MONTHS, now);
+            return applyLevelChange(account, qualified, "upgrade", now, months(now, months));
         }
-        // 2) 周期未到：维持现状。
-        Instant periodStart = account.levelPeriodStart() == null ? account.createdAt() : account.levelPeriodStart();
         if (current == null) {
             return account;
         }
-        Instant periodEnd = periodStart.plusSeconds((long) current.keepPeriodDays() * 86_400L);
-        if (now.isBefore(periodEnd)) {
-            return account;
+        boolean lower = rankOf(qualified) < rankOf(current);
+        // 保护期外按滚动成长值定级；成长值冲回不受保护期限制。降级生效后立即通知。
+        if (until == null || reversal) {
+            if (!lower) {
+                return account;
+            }
+            CustomerPointsAccountRecord changed = applyLevelChange(account, qualified, reversal ? "reversal" : "downgrade", now, null);
+            notice(customerId, NOTICE_DOWNGRADED, null, account.level(), qualified.levelCode(), now);
+            return changed;
         }
-        // 3) 周期末：达标→保级（重置周期/进度）。
-        if (account.keepThresholdProgress() >= current.keepThreshold()) {
-            return applyLevelChange(account, current, "keep", now, true);
+        boolean ended = !now.isBefore(until);
+        // 期末一律按保护期结束当日、届时滚动周期内的成长值定级（作业晚跑也按当日算）。
+        long growth = ended ? rollingGrowth(customerId, until, rollingMonths) : rolling;
+        String warned = cycleNotice(customerId, until, NOTICE_WARNING);
+        boolean kept = cycleNotice(customerId, until, NOTICE_KEPT) != null;
+        if (warned != null && !kept && growth >= current.upgradeThreshold()) {
+            notice(customerId, NOTICE_KEPT, until, account.level(), account.level(), now);
+            kept = true;
         }
-        // 4) 未达标：宽限期内→进入/维持宽限；超宽限→降级。
-        Instant graceEnd = periodEnd.plusSeconds((long) current.graceDays() * 86_400L);
-        if (now.isBefore(graceEnd)) {
-            if (account.graceUntil() == null) {
-                CustomerPointsAccountRecord graced = new CustomerPointsAccountRecord(
-                        account.id(), account.customerId(), account.balance(), account.level(),
-                        account.recentSummary(), account.frozenPoints(), account.accountStatus(),
-                        account.levelPeriodStart(), account.keepThresholdProgress(), graceEnd,
-                        account.lastCheckInDate(), account.checkInStreak(), account.createdAt(), now);
-                repository.savePoints(graced);
-                recordLevelChanged(account.customerId(), account.level(), account.level(), "grace");
-                return graced;
+        if (!ended) {
+            int noticeDays = (int) configs.levelParam(TicketRewardConfigService.LEVEL_NOTICE_DAYS, cycleStart);
+            if (warned == null && lower && !now.isBefore(until.minus(noticeDays, ChronoUnit.DAYS))) {
+                notice(customerId, NOTICE_WARNING, until, account.level(), qualified.levelCode(), now);
             }
             return account;
         }
-        // 速查表§二「到期直接降到对应等级」/系统地图同款：按当前进度重新定级，可一次跨多级下落，不是只降一级。
-        CustomerMemberLevelRecord target = highestQualified(levels, account.keepThresholdProgress());
-        boolean down = target != null && target.levelRank() < rankOf(current);
-        return applyLevelChange(account, down ? target : current, down ? "downgrade" : "keep", now, true);
+        CustomerMemberLevelRecord target = kept ? current : highestQualified(levels, growth);
+        if (rankOf(target) >= rankOf(current)) {
+            return applyLevelChange(account, current, "keep", now, null);
+        }
+        CustomerPointsAccountRecord changed = applyLevelChange(account, target, "downgrade", now, null);
+        // 期末晚处理（作业晚跑或期末后首笔成长值触发）时当前滚动成长值已高于期末定出的等级：达到门槛立即升级、起新一轮保护期，不发这次降级通知。
+        if (rankOf(qualified) > rankOf(target)) {
+            int months = (int) configs.levelParam(TicketRewardConfigService.LEVEL_PROTECTION_MONTHS, now);
+            return applyLevelChange(changed, qualified, "upgrade", now, months(now, months));
+        }
+        if (warned == null || rankOf(target) < rankOf(levelFor(levels, warned))) {
+            notice(customerId, NOTICE_DOWNGRADED, null, account.level(), target.levelCode(), now);
+        }
+        return changed;
     }
 
     private CustomerPointsAccountRecord applyLevelChange(CustomerPointsAccountRecord account,
-            CustomerMemberLevelRecord target, String reason, Instant now, boolean resetPeriod) {
-        String oldLevel = account.level();
-        String newLevel = target.levelCode();
+            CustomerMemberLevelRecord target, String reason, Instant now, Instant protectionUntil) {
+        // 期末保级不是等级变化，参数版本仍按原定级时点（第十四批第 5 条）。
+        Instant periodStart = "keep".equals(reason) ? account.levelPeriodStart() : now;
         CustomerPointsAccountRecord updated = new CustomerPointsAccountRecord(
-                account.id(), account.customerId(), account.balance(), newLevel, account.recentSummary(),
-                account.frozenPoints(), account.accountStatus(),
-                resetPeriod ? now : account.levelPeriodStart(),
-                resetPeriod ? 0L : account.keepThresholdProgress(),
-                null,
+                account.id(), account.customerId(), account.balance(), target.levelCode(), account.recentSummary(),
+                account.frozenPoints(), account.accountStatus(), periodStart, account.keepThresholdProgress(), protectionUntil,
                 account.lastCheckInDate(), account.checkInStreak(), account.createdAt(), now);
         repository.savePoints(updated);
-        recordLevelChanged(account.customerId(), oldLevel, newLevel, reason);
+        recordLevelChanged(account.customerId(), account.level(), target.levelCode(), reason);
         return updated;
+    }
+
+    /** 滚动统计周期（at 往前 months 个月，北京时间口径）内获取的成长值净额：冲回跟原获取那笔走，按获取时点判是否在窗口内。 */
+    private long rollingGrowth(String customerId, Instant at, int months) {
+        Long sum = jdbc.queryForObject("""
+                SELECT COALESCE(sum(g.growth_delta), 0) FROM customer_growth_ledger g
+                  JOIN customer_growth_ledger e ON e.customer_id = g.customer_id AND e.change_type = 'earn'
+                   AND COALESCE(e.reward_id, e.merchant_reward_id) = COALESCE(g.reward_id, g.merchant_reward_id)
+                 WHERE g.customer_id = ? AND g.created_at <= ? AND e.created_at > ? AND e.created_at <= ?
+                """, Long.class, customerId, Timestamp.from(at), Timestamp.from(months(at, -months)), Timestamp.from(at));
+        return sum == null ? 0 : sum;
+    }
+
+    private static Instant months(Instant at, int months) {
+        return at.atZone(LocalZone.ID).plusMonths(months).toInstant();
+    }
+
+    /** 本轮保护期内某类通知（预警、已保级各至多一次）的目标等级；没有返回 null。 */
+    private String cycleNotice(String customerId, Instant cycleEnd, String type) {
+        return jdbc.query("SELECT target_level FROM customer_level_notices WHERE customer_id = ? AND cycle_end = ? AND notice_type = ?",
+                (rs, n) -> rs.getString(1), customerId, Timestamp.from(cycleEnd), type).stream().findFirst().orElse(null);
+    }
+
+    private void notice(String customerId, String type, Instant cycleEnd, String currentLevel, String targetLevel, Instant at) {
+        jdbc.update("INSERT INTO customer_level_notices(id, customer_id, notice_type, cycle_end, current_level, target_level, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "lvn_" + UUID.randomUUID().toString().replace("-", ""), customerId, type, cycleEnd == null ? null : Timestamp.from(cycleEnd),
+                currentLevel, targetLevel, Timestamp.from(at));
+    }
+
+    /** 客人端弹出的本人等级通知（BSM L820 降级预警、「已保级」、降级补发；等级显示配置的中文名）。 */
+    public record LevelNotice(String id, String noticeType, String currentLevel, String currentLevelName, String targetLevel,
+            String targetLevelName, Instant cycleEnd, Instant createdAt) {}
+
+    /** 本人未读等级通知，新到旧。 */
+    public List<LevelNotice> listLevelNotices(String customerId) {
+        Map<String, String> names = new java.util.HashMap<>();
+        for (CustomerMemberLevelRecord level : repository.listMemberLevels(null)) {
+            names.putIfAbsent(level.levelCode(), level.levelName());
+        }
+        return jdbc.query("SELECT * FROM customer_level_notices WHERE customer_id = ? AND read_at IS NULL ORDER BY created_at DESC, id",
+                (rs, n) -> new LevelNotice(rs.getString("id"), rs.getString("notice_type"),
+                        rs.getString("current_level"), names.getOrDefault(rs.getString("current_level"), rs.getString("current_level")),
+                        rs.getString("target_level"), names.getOrDefault(rs.getString("target_level"), rs.getString("target_level")),
+                        TicketRewardConfigService.instant(rs, "cycle_end"), rs.getTimestamp("created_at").toInstant()), customerId);
+    }
+
+    /** 客人点「知道了」：只改本人的通知，他人或不存在 404；重复调用不改首次已读时间。 */
+    @Transactional
+    public void markLevelNoticeRead(String customerId, String noticeId) {
+        if (jdbc.update("UPDATE customer_level_notices SET read_at = COALESCE(read_at, now()) WHERE id = ? AND customer_id = ?", noticeId, customerId) == 0) {
+            throw ApiException.notFound("LEVEL_NOTICE_NOT_FOUND", "等级通知不存在");
+        }
     }
 
     // ============================================================
@@ -541,7 +630,7 @@ public class LoyaltyService {
         if (cleared > 0 || account.frozenPoints() > 0) {
             repository.savePoints(new CustomerPointsAccountRecord(account.id(), account.customerId(), 0, account.level(),
                     account.recentSummary(), 0, account.accountStatus(), account.levelPeriodStart(),
-                    account.keepThresholdProgress(), account.graceUntil(), account.lastCheckInDate(), account.checkInStreak(),
+                    account.keepThresholdProgress(), account.protectionUntil(), account.lastCheckInDate(), account.checkInStreak(),
                     account.createdAt(), now));
         }
         return cleared;
@@ -562,7 +651,7 @@ public class LoyaltyService {
         CustomerPointsAccountRecord frozen = new CustomerPointsAccountRecord(
                 account.id(), account.customerId(), account.balance(), account.level(), account.recentSummary(),
                 account.balance(), "frozen", account.levelPeriodStart(), account.keepThresholdProgress(),
-                account.graceUntil(), account.lastCheckInDate(), account.checkInStreak(), account.createdAt(), now);
+                account.protectionUntil(), account.lastCheckInDate(), account.checkInStreak(), account.createdAt(), now);
         repository.savePoints(frozen);
         auditEventService.recordSuccess("customer.points.frozen", "customer.points.freeze",
                 "customer_points", customerId, null, null,
@@ -582,7 +671,7 @@ public class LoyaltyService {
         CustomerPointsAccountRecord active = new CustomerPointsAccountRecord(
                 account.id(), account.customerId(), account.balance(), account.level(), account.recentSummary(),
                 0L, "active", account.levelPeriodStart(), account.keepThresholdProgress(),
-                account.graceUntil(), account.lastCheckInDate(), account.checkInStreak(), account.createdAt(), now);
+                account.protectionUntil(), account.lastCheckInDate(), account.checkInStreak(), account.createdAt(), now);
         repository.savePoints(active);
         auditEventService.recordSuccess("customer.points.unfrozen", "customer.points.freeze",
                 "customer_points", customerId, null, null,
@@ -623,7 +712,7 @@ public class LoyaltyService {
         CustomerPointsAccountRecord updated = new CustomerPointsAccountRecord(
                 account.id(), account.customerId(), balanceAfter, account.level(), account.recentSummary(),
                 account.frozenPoints(), account.accountStatus(), account.levelPeriodStart(), keepProgress,
-                account.graceUntil(), today, streak, account.createdAt(), now);
+                account.protectionUntil(), today, streak, account.createdAt(), now);
         repository.savePoints(updated);
         if (award > 0) {
             repository.savePointsLedger(new CustomerPointsLedgerRecord(
@@ -721,7 +810,7 @@ public class LoyaltyService {
                 account.id(), account.customerId(), balance, account.level(), account.recentSummary(),
                 account.frozenPoints(), account.accountStatus(),
                 account.levelPeriodStart() == null ? now : account.levelPeriodStart(),
-                keepProgress, account.graceUntil(), account.lastCheckInDate(), account.checkInStreak(),
+                keepProgress, account.protectionUntil(), account.lastCheckInDate(), account.checkInStreak(),
                 account.createdAt(), now);
     }
 

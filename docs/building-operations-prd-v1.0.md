@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.10·据需求重建）
+# 楼宇运营业务域 PRD（V1.11·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -24,7 +24,7 @@
 |---|---|---|---|
 | 设施设备 `facility_equipment` | `equipment_type` | `elevator` / `hvac` / `power` / `water_fire` | 电梯扶梯 / 暖通空调 / 配电供电 / 给排水消防 |
 | 设施设备 `facility_equipment` | `status` | `normal` / `alarm` / `fault` / `maintenance` / `disabled` / `retired` | 正常 / 告警 / 故障 / 维保中 / 停用 / 报废 |
-| 设施设备 `facility_equipment` | `alarm_source` | `manual` / `iot` | 人工上报 / 远程或物联自动采集；仅告警时填写 |
+| 设施设备 `facility_equipment` | `alarm_source` | `manual` / `iot` | 人工上报 / 远程或物联自动采集；仅告警时填写；后台状态变更入口为员工人工上报只记 `manual`，`iot` 留给物联设备真实接入后的记录 |
 | 工单策略 `facility_work_order_policy`、工单 `facility_work_orders` | `work_order_type` | `repair` / `cleaning` / `complaint` / `rectification` / `inspection` / `other`（V166 与 `FacilityWorkOrderService.TYPES` 均为 6 值） | **业务目标（ENUM「物业工单类型」）**：报修、保洁、投诉、整改、巡检、**内部协作工单**（内部部门间发起与流转）、其他服务请求。待实现：V166 的两处 CHECK、服务校验与策略种子补内部协作工单；本轮不改迁移或代码。 |
 | 工单策略/工单 | `priority` | `urgent` / `high` / `normal` | 用于匹配 SLA「类型 × 优先级」 |
 | 工单策略 | `acceptance_by` | `handler` / `supervisor` / `reporter` | 处理人完成即结 / 主管验收 / 提单方确认。复杂类（大型设备报修）的主管验收＋提单方确认两道不是可配的验收方式：关联了设备的报修单一律两道，没关联设备的普通报修按此配置（HP-F02，V531；第十二批操作员裁决 2026-10-21 第 12 条，见 §3） |
@@ -51,7 +51,7 @@
 - **设备维保类型业务目标**：逐字采用 ENUM「设备维保类型」的**定期保养、例行巡检、故障维修、安全检测、部件更换**。当前 V165 与 `FacilityEquipmentRequest` 均没有维保类型字段/约束，也没有维保记录与设施工单的关联，列入 §6 G 待建。
 - 每台设备单独配置 `maintenance_cycle_days`。下次维保到期 `next_maintenance_due` 由 `install_date` 或最近一次 `last_maintenance_at` 加周期派生并固化；`GET /maintenance-due` 读取到期清单。
 - **到期维保单业务目标**：到期提醒自动生成维保单。当前 `FacilityEquipmentService` 只提供到期清单查询和 `maintenance-done` 回写，未见到期扫描/自动创建设施工单的服务或定时任务，列入 §6 I 待建。
-- 状态改为 `alarm` 时必须带 `alarm_source=manual|iot`；离开 `alarm` 会清空告警源、备注和告警时间。
+- 状态改为 `alarm` 时必须带 `alarm_source`；此入口为员工人工上报，只收 `manual`，带 `iot` 或缺失拒绝（`VALIDATION_FAILED`，不落接警单），后台工作台不再提供告警来源下拉、固定按手工提交；物联来源须经真实设备接入，不能自行声明（第十四批 OBS-13-06，PGM「告警来源支持人工上报与远程/物联自动采集两种」）；离开 `alarm` 会清空告警源、备注和告警时间。
 - 状态改为 `alarm` 或 `fault` 时必须带优先级 `priority=urgent|high|normal`（紧急/高/普通，由上报人或物联网上报当场选；第十二批操作员裁决 2026-10-21 第 1 条），缺失或取值不对拒绝（`VALIDATION_FAILED`）。
 - 状态改为 `alarm` 或 `fault` 时发布 `FacilityEquipmentAlarmedEvent`（带设备项目、位置、四组台账分类、负责人与上报优先级），工单服务监听后自动生成 `repair` 工单：优先级取上报优先级，项目与位置取设备台账，`source=equipment_alarm`，标题为“设备告警: 设备名”；同一事务落接警单并首次派发（见 §3「自动告警接警」实现现状）。
 - 维保完成调用 `maintenance-done`：写 `last_maintenance_at=now`，状态回 `normal`，按维保周期重算 `next_maintenance_due`。
@@ -281,3 +281,4 @@
 | 2026-10-21 | 改 | §3 | 同批 V1.08：设备告警自动工单与员工手工建的关联设备报修单主管已验收后，退回返工只许承接人本人（旁人 403 `CONFIRMER_MISMATCH` 并记失败审计），待验收时主管验收不通过的退回照旧；后台工作台对这类已验收单的「退回返工」只给不是本次维修人的承接人本人显示；端点清单同步 | HP-F02；第十二批操作员裁决 2026-10-21 第 16 条「只许承接人本人（推荐）」 |
 | 2026-10-21 | 改 | 版本、§2 | 版本升至 V1.09：第十三批 ROOT-05——外部语音与短信未接供应商时如实记失败、不记已拨出／已发送，接警首次派发因此即转当班备用的实现现状 | BSM「外部语音服务按既有第三方接入规则对接，不自研语音通道」；第十三批任务 ROOT-05 |
 | 2026-10-22 | 改 | 版本、§3 | 版本升至 V1.10：第十三批 ROOT-03 B 段 B-account——工单来源加 customer（客人投诉）、客人投诉附件受控查看、客人投诉关闭须记录客人反馈、满意度由客人本人评的实现现状 | BSM「客户关怀部记录问题解决方案及客人反馈后可以关闭」；BSM「满意度在回访/验收时由提单方评分」；BSM「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」 |
+| 2026-10-25 | 改 | 版本、§1、§2 | 版本升至 V1.11：第十四批 OBS-13-06——后台设备状态变更是员工人工上报，告警来源只收手工（`manual`），自报物联网（`iot`）拒绝且不落接警单，工作台去掉告警来源下拉；`iot` 取值与展示留给物联设备真实接入 | PGM「告警来源支持人工上报与远程/物联自动采集两种」「餐饮、零售、机器人、视频、设备都按接口资料逐步接」 |

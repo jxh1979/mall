@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.30
+  version: V0.31
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2423,7 +2423,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号只用于核对、不落库）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。
+      description: 员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号核对后去掉空格与横线加密留存，只作订台短信收件人、不回显）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。第十四批 OBS-13-03（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：提交成功即给录入的手机号发订台成功确认短信，并知会代订人（员工档案姓名）。
       x-failure-codes:
         - BAR_TABLE_ALREADY_RESERVED
         - CUSTOMER_RESTRICTED
@@ -6772,7 +6772,8 @@ paths:
       tags:
         - inventory
       operationId: reviewHighValue
-      summary: 主管复核高价值动作(approve生效/reject回滚)
+      summary: 复核高价值动作(approve生效/reject回滚)；存酒库房存货处置须门店主管与财务两道审批
+      description: OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条门店主管与财务审批，同赔付方案审批）：subject_type=saved_bottle_stock_disposal 的复核单须带 role——supervisor 核 inventory.high_value.review（门店主管）、finance 核 finance.ar_ap.manage（财务）；审批人不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL），两道不得同一人（409 HIGH_VALUE_REVIEW_SAME_APPROVER）；只批一道时仍为 pending，两道都批才 approved 并扣库存、写同类型流水，任一道驳回即 rejected 不扣。其余复核对象不读 role、只认 inventory.high_value.review（持财务码 403）。
       x-permission: inventory.high_value.review
       x-data-scope: project-warehouse-bar
       x-terminal-allowed:
@@ -6814,6 +6815,12 @@ paths:
                   type: string
                   description: 复核结论/原因
                   maxLength: 255
+                role:
+                  type: string
+                  description: 审批角色：仅存酒库房存货处置（saved_bottle_stock_disposal）必填，supervisor＝门店主管、finance＝财务；其余复核对象不读
+                  enum:
+                    - supervisor
+                    - finance
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -6833,7 +6840,7 @@ paths:
       operationId: createStockAdjustment
       summary: 盘点差异、报损、报溢
       description: 报损(loss/damage/waste)与盘点差异(count_correction)命中高价值(数量×单价≥物料阈值)时不直接生效，返回 pending_review
-        调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。
+        调整单并建库存域内高价值复核单(需照片+视频双证据各非空)；主管经 high-value-reviews/{id}/review approve 后才扣减、reject 则不扣。非高价值或物料无阈值维持即时调整。OBS-13-02：来源库位为存酒库房（warehouse_type=saved_bottle，存货来自到期或注销放弃的存酒转入）的报损族（报废）不论高低价值一律返回 pending_review 调整单并建 saved_bottle_stock_disposal 复核单，须门店主管与财务经 high-value-reviews/{id}/review 两道批准后才扣减（BSM L1072；第十四批第 4 条），证据沿用报损口径（高价值才强制照片+视频）。
       x-permission: inventory.stock.adjust
       x-data-scope: project-warehouse
       x-terminal-allowed:
@@ -6912,6 +6919,7 @@ paths:
         - inventory
       operationId: createStockMovement
       summary: 库存移动或扣减
+      description: OBS-13-02：from_location_id 为存酒库房（warehouse_type=saved_bottle，存货来自到期或注销放弃的存酒转入）时，出库（赠送、内部使用等）不直接扣减——operator_note 必填作原因，落 pending_review 调整单（adjustment_type 取本次出库类型）并建 saved_bottle_stock_disposal 复核单，返回 status=pending_review 的流水回显（尚未入账）；门店主管与财务经 high-value-reviews/{id}/review 两道批准后才扣减并写同类型流水，驳回不扣（BSM L1072；第十四批第 4 条）。调拨不受影响：从存酒库房调拨出去后即按对应酒吧的正常库存处理，后续销售、报废、赠送、内部使用按普通库存规则（第十四批第 6 条）。
       x-permission: inventory.stock.move
       x-data-scope: project-warehouse
       x-terminal-allowed:
@@ -8190,7 +8198,7 @@ paths:
       summary: 创建typed库存流水
       description: 用于创建typed库存流水（movement_type=outbound）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。FS-018：movement_type
         为 damage/loss/waste（报损族）的请求不走本操作的直接扣减，而是转入库存调整契约——见独立声明的 /stock-movements/damage、/stock-movements/loss、/stock-movements/waste
-        （与 /stock-adjustments 同一实现，审计 inventory.counted / inventory.adjustment_failed）。
+        （与 /stock-adjustments 同一实现，审计 inventory.counted / inventory.adjustment_failed）。OBS-13-02：from_location_id 为存酒库房（warehouse_type=saved_bottle，存货来自到期或注销放弃的存酒转入）时，出库（赠送、内部使用等）不直接扣减——operator_note 必填作原因，落 pending_review 调整单（adjustment_type 取本次出库类型）并建 saved_bottle_stock_disposal 复核单，返回 status=pending_review 的流水回显（尚未入账）；门店主管与财务经 high-value-reviews/{id}/review 两道批准后才扣减并写同类型流水，驳回不扣（BSM L1072；第十四批第 4 条）。调拨不受影响：从存酒库房调拨出去后即按对应酒吧的正常库存处理，后续销售、报废、赠送、内部使用按普通库存规则（第十四批第 6 条）。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -8232,7 +8240,7 @@ paths:
         取 operator_note（必填）、库位取 from_location_id、照片/视频证据透传；命中高价值（最近一次实际到货价 ≥ 阈值、手工标记、阈值未配置或到货价未知）须
         photo_attachment_ids+video_attachment_ids 双证据，返回 pending_review 调整单并建高价值复核单，主管经 high-value-reviews/{id}/review approve 后才扣减、reject 不扣；非高价值即时调整并补流水。
         审计按该实现如实声明（成功 inventory.counted / 失败 inventory.adjustment_failed）；入口权限为 inventory.stock.move，实现上的 @GuardedAction(capability=inventory.stock.adjust)
-        只是终端能力开关，不是权限校验。
+        只是终端能力开关，不是权限校验。OBS-13-02：来源库位为存酒库房（warehouse_type=saved_bottle，存货来自到期或注销放弃的存酒转入）的报损族（报废）不论高低价值一律返回 pending_review 调整单并建 saved_bottle_stock_disposal 复核单，须门店主管与财务经 high-value-reviews/{id}/review 两道批准后才扣减（BSM L1072；第十四批第 4 条），证据沿用报损口径（高价值才强制照片+视频）。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -8264,7 +8272,7 @@ paths:
         取 operator_note（必填）、库位取 from_location_id、照片/视频证据透传；命中高价值（最近一次实际到货价 ≥ 阈值、手工标记、阈值未配置或到货价未知）须
         photo_attachment_ids+video_attachment_ids 双证据，返回 pending_review 调整单并建高价值复核单，主管经 high-value-reviews/{id}/review approve 后才扣减、reject 不扣；非高价值即时调整并补流水。
         审计按该实现如实声明（成功 inventory.counted / 失败 inventory.adjustment_failed）；入口权限为 inventory.stock.move，实现上的 @GuardedAction(capability=inventory.stock.adjust)
-        只是终端能力开关，不是权限校验。
+        只是终端能力开关，不是权限校验。OBS-13-02：来源库位为存酒库房（warehouse_type=saved_bottle，存货来自到期或注销放弃的存酒转入）的报损族（报废）不论高低价值一律返回 pending_review 调整单并建 saved_bottle_stock_disposal 复核单，须门店主管与财务经 high-value-reviews/{id}/review 两道批准后才扣减（BSM L1072；第十四批第 4 条），证据沿用报损口径（高价值才强制照片+视频）。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -8296,7 +8304,7 @@ paths:
         取 operator_note（必填）、库位取 from_location_id、照片/视频证据透传；命中高价值（最近一次实际到货价 ≥ 阈值、手工标记、阈值未配置或到货价未知）须
         photo_attachment_ids+video_attachment_ids 双证据，返回 pending_review 调整单并建高价值复核单，主管经 high-value-reviews/{id}/review approve 后才扣减、reject 不扣；非高价值即时调整并补流水。
         审计按该实现如实声明（成功 inventory.counted / 失败 inventory.adjustment_failed）；入口权限为 inventory.stock.move，实现上的 @GuardedAction(capability=inventory.stock.adjust)
-        只是终端能力开关，不是权限校验。
+        只是终端能力开关，不是权限校验。OBS-13-02：来源库位为存酒库房（warehouse_type=saved_bottle，存货来自到期或注销放弃的存酒转入）的报损族（报废）不论高低价值一律返回 pending_review 调整单并建 saved_bottle_stock_disposal 复核单，须门店主管与财务经 high-value-reviews/{id}/review 两道批准后才扣减（BSM L1072；第十四批第 4 条），证据沿用报损口径（高价值才强制照片+视频）。
       x-permission: inventory.stock.move
       x-data-scope: project
       x-terminal-allowed:
@@ -9436,7 +9444,7 @@ paths:
       summary: 修改端能力开关
       description: 后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如
         payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位
-        NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。
+        NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。第十四批 OBS-13-04（BSM 第 1598 行「下列三类不在可关闭范围内，不得按类或按条关闭」）：把不可关闭的短信事件开关（sms.notify.stored_value.topup/consume、sms.notify.stored_wine.expiring、sms.notify.bar_reservation.deposit_forfeited/deposit_refunded、sms.notify.merchant_fee.rent/utilities/property、sms.notify.points.bill、sms.notify.parking.credit_cost）置为关闭一律 409 SMS_NOTIFICATION_NOT_CLOSABLE「该短信提醒属于不可关闭的通知，不能关闭」，记失败审计，开关保持原值；这些事件发送时不看总开关、域开关、事件开关。商户费用催缴另用 sms.notify.merchant_fee.*_dunning 事件开关，仍可关闭。
       x-permission: terminal.switch.manage
       x-data-scope: project-device
       x-terminal-allowed:
@@ -11388,7 +11396,7 @@ paths:
         - bar
       operationId: cancelBarReservation
       summary: 订台取消/爽约（按时限退定金或没收）
-      description: 取消即退出占台。订台取消（含超时释放作业）时已签发的邀请函一并吊销（invitation_status=revoked）：未接受的不能再接受、已接受的取不到动态入场码、门口核验 409 BAR_INVITATION_NOT_ACTIVE（ENUM 第 105 行邀请函名额随卡座而在）。超时释放时未付定金记 deposit_status=timeout_released（已超时释放，ENUM 第 103 行），已付定金按爽约没收。
+      description: 取消即退出占台。订台取消（含超时释放作业）时已签发的邀请函一并吊销（invitation_status=revoked）：未接受的不能再接受、已接受的取不到动态入场码、门口核验 409 BAR_INVITATION_NOT_ACTIVE（ENUM 第 105 行邀请函名额随卡座而在）。超时释放时未付定金记 deposit_status=timeout_released（已超时释放，ENUM 第 103 行），已付定金按爽约没收。第十四批 OBS-13-03（BSM 第 1062 行「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」；BSM 第 1596 行）：已付定金在免费时限内取消只按原付款渠道登记原路待退（finance_refunds.source_type=bar_deposit_rejection），定金保持 deposit_status=paid（退款处理中），财务核实退款成功后才置 settled/refunded 并发定金原路退回短信；取消后发订台取消确认短信，没收时发定金没收短信。
       x-permission: bar.reservation.manage
       x-data-scope: project-bar
       x-terminal-allowed:
@@ -13027,6 +13035,64 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
+  /api/v1/customer/level-notices:
+    get:
+      tags:
+        - customer
+      operationId: listCustomerLevelNotices
+      summary: 本人未读会员等级通知（App/小程序启动与回前台拉取并弹出）
+      description: OBS-13-01（BSM 第 820 行「保护期结束前按后台配置的提前通知天数……向会员发出降级预警，告知按发出预警当日的成长值测算将降至哪一等级」「发出预警后至保护期结束前，会员成长值重新达到原等级门槛的，不降级，并向其发出「已保级」通知」「降级仍照常执行，并在降级生效后立即补发通知」；第 1596 行客人短信清单不含等级通知，只在官方 App／小程序站内弹出）：只返回本人未读的通知，新到旧——id、notice_type（downgrade_warning 降级预警／level_kept 已保级／downgraded 降级生效后补发）、current_level 与 current_level_name、target_level 与 target_level_name（预警＝按发出当日成长值测算将降至的等级，已保级＝原等级，降级＝新等级；名称取等级配置的中文名）、cycle_end（本轮保护期结束时点，保护期外按滚动成长值降级时为空）、created_at。应用关闭时的系统推送需推送凭证，未接入。
+      x-permission: not_applicable
+      x-data-scope: self
+      x-terminal-allowed:
+        - app
+        - miniapp
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
+  /api/v1/customer/level-notices/{notice_id}/read:
+    post:
+      tags:
+        - customer
+      operationId: markCustomerLevelNoticeRead
+      summary: 会员等级通知标记已读（客人点「知道了」）
+      description: OBS-13-01：只改本人的通知（他人的或不存在的 404 LEVEL_NOTICE_NOT_FOUND），已读后列表不再返回；重复调用不改首次已读时间，天然幂等、不要求幂等键。
+      x-permission: not_applicable
+      x-data-scope: self
+      x-terminal-allowed:
+        - app
+        - miniapp
+      x-idempotency-required: false
+      x-audit-event-success: member.level_notice.read
+      x-audit-event-failure: member.level_notice.read_failed
+      parameters:
+        - name: notice_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: customer-token
   /api/v1/customer/projects:
     get:
       tags:
@@ -13333,6 +13399,102 @@ paths:
                   minimum: 1
                   description: 下限。
                 max_hours:
+                  type: integer
+                  minimum: 1
+                  description: 上限。
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: 调整说明。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/arrival-reminder-policies/{project_id}:
+    get:
+      tags:
+        - bar
+      operationId: getBarArrivalReminderPolicy
+      summary: 查最晚到店时间前提醒提前分钟数（按项目）
+      description: 第十四批 OBS-13-03（BSM 第 1596 行「最晚到店时间前提醒（提前量业务参数，按项目可配，出厂默认 30 分钟，须同时配置上下限）」）：项目无自有配置时返回出厂行（project_id=__global__、30 分钟、min_minutes/max_minutes 为空）。
+      x-permission: bar.reservation.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    put:
+      tags:
+        - bar
+      operationId: saveBarArrivalReminderPolicy
+      summary: 配置最晚到店时间前提醒提前分钟数及上下限（按项目）
+      description: 第十四批 OBS-13-03（BSM 第 1596 行「最晚到店时间前提醒（提前量业务参数，按项目可配，出厂默认 30 分钟，须同时配置上下限）」）：参数值与上下限须同时填写，1 ≤ 下限 ≤ 参数值 ≤ 上限，否则 400 VALIDATION_FAILED；项目级参数，商户账号 403 CROSS_MERCHANT_FORBIDDEN；留痕含前后值。订台超时作业每轮先对仍占着台位、最晚到店时间落在提前量内的订台各发一次短信提醒（项目按订台 bar_id 取 merchants.project_id；未付定金未占台的自助订台不提醒）。
+      x-permission: bar.reservation.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.arrival_reminder_policy_updated
+      x-audit-event-failure: bar.arrival_reminder_policy_update_failed
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - remind_minutes
+                - min_minutes
+                - max_minutes
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。
+                remind_minutes:
+                  type: integer
+                  minimum: 1
+                  description: 最晚到店时间前多少分钟提醒（出厂 30）。
+                min_minutes:
+                  type: integer
+                  minimum: 1
+                  description: 下限。
+                max_minutes:
                   type: integer
                   minimum: 1
                   description: 上限。
@@ -42046,7 +42208,7 @@ paths:
         - loyalty
       operationId: submitTicketRewardConfig
       summary: 提交门票奖励规则或销售合同审批
-      description: 固定积分与成长值分别配置；核销时取已公布生效规则，积分不随会员等级变化。全国等待期及发行单价由全国权限审批，销售合同须业务、财务、法务平行通过并关联真实合同附件。
+      description: 固定积分与成长值分别配置；核销时取已公布生效规则，积分不随会员等级变化。全国等待期及发行单价由全国权限审批，销售合同须业务、财务、法务平行通过并关联真实合同附件。会员等级三项参数（滚动统计周期、保护期、降级提前通知天数）全平台统一、值与上下限同配，须顶层平台主管审批，只对此后起算的保护期与此后的等级变化生效，不在保护期的会员按最近一次定级时点生效的版本、不因改参当天降级（OBS-13-01，BSM 第 820 行；第十四批第 5 条）。
       x-permission: ticket.reward.config.manage
       x-data-scope: project-merchant
       x-auth-context: staff-token
@@ -61488,10 +61650,9 @@ components:
             - retired
         alarm_source:
           type: string
-          description: 告警来源；status=alarm 时必填。
+          description: 告警来源；status=alarm 时必填；此入口为员工人工上报，只能为 manual（物联自动采集须经真实设备接入，不能自行声明）。
           enum:
             - manual
-            - iot
         alarm_note:
           type: string
           description: 告警说明。
@@ -66282,8 +66443,12 @@ components:
               "sales_contract",
               "recovery_waiver",
               "merchant_points",
-              "merchant_growth"
+              "merchant_growth",
+              "level_rolling_months",
+              "level_protection_months",
+              "level_notice_days"
             ]
+          description: level_rolling_months（会员等级滚动统计周期，月）、level_protection_months（保护期，月）、level_notice_days（降级提前通知天数）为 OBS-13-01（BSM 第 820 行「业务参数，全平台统一可配……须同时配置上下限」「上述三项参数的变更须经审批、只对后续周期生效」）的三项会员等级参数：不可限定项目、票种、业态，values 须同填 fixed_value 与 minimum_value（不小于 1）、maximum_value，最终审批人须属顶层平台主体，审批通过到生效时间即用于此后起算的保护期与此后的等级变化（不在保护期的会员按最近一次定级时点生效的版本，第十四批第 5 条），无需公告；出厂值 12 个月、12 个月、30 天。
         ticket_type_id:
           type:
             - string

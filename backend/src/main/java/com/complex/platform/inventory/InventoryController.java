@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -415,7 +415,9 @@ public class InventoryController {
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid HighValueReviewDecisionRequest request
     ) {
-        authorizationService.requirePermission("inventory.high_value.review");
+        // OBS-13-02：存酒库房存货处置的财务一道（role=finance）核财务应收应付管理码，同赔付方案审批；其余照旧核主管复核码（服务层再按复核对象核一次）。
+        authorizationService.requirePermission("finance".equals(request == null ? null : request.role())
+                ? InventoryService.REMEDY_FINANCE_APPROVE : InventoryService.REMEDY_SUPERVISOR_APPROVE);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewHighValue(id, request));
     }

@@ -1,5 +1,7 @@
 package com.complex.platform.customer;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -17,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
-/** 会员忠诚度 第1部分逻辑单测：降级/宽限/保级、积分过期、冻结/解冻、连续签到阶梯、生日加倍。 */
+/** 会员忠诚度 第1部分逻辑单测：积分过期、冻结/解冻、连续签到阶梯、生日加倍（等级判定见 LoyaltyLevelProtectionJdbcIntegrationTests）。 */
 class LoyaltyServiceTests {
 
     private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
@@ -29,11 +31,11 @@ class LoyaltyServiceTests {
     private InMemoryLoyaltyRepository seededRepo() {
         InMemoryLoyaltyRepository repo = new InMemoryLoyaltyRepository();
         repo.saveCustomer(new CustomerRecord("c1", "13800000000", "138****0000", "active", null, T0, T0, T0));
-        // 等级：base(rank0,保级0) / silver(rank1,升级1000,保级500,周期30天,宽限7天,倍率1.5x)
+        // 等级：base(rank0) / silver(rank1,升级1000,倍率1.5x)
         repo.saveMemberLevel(new CustomerMemberLevelRecord(
-                "lv_base", null, "base", "基础", 0, 0, 0, 365, 0, 10000, "active", T0, T0));
+                "lv_base", null, "base", "基础", 0, 0, 10000, "active", T0, T0));
         repo.saveMemberLevel(new CustomerMemberLevelRecord(
-                "lv_silver", null, "silver", "白银", 1, 1000, 500, 30, 7, 15000, "active", T0, T0));
+                "lv_silver", null, "silver", "白银", 1, 1000, 15000, "active", T0, T0));
         return repo;
     }
 
@@ -174,71 +176,6 @@ class LoyaltyServiceTests {
         assertThat(awarded).isEqualTo(50);
     }
 
-    // ---- 等级升级 ----
-    @Test
-    void evaluateUpgradesWhenProgressMeetsThreshold() {
-        InMemoryLoyaltyRepository repo = seededRepo();
-        AuditEventService audit = new AuditEventService(new RecordingAudit());
-        serviceAt(repo, audit, T0).earnPoints("c1", 1200, "consume_amount", "o1", "buy", null);
-        // base account default level "base", period start T0
-        int changed = serviceAt(repo, audit, T0).evaluateLevels(T0);
-        assertThat(changed).isEqualTo(1);
-        assertThat(repo.points.get("c1").level()).isEqualTo("silver");
-    }
-
-    // ---- 周期末未达标：宽限内保留，超宽限降级 ----
-    @Test
-    void periodEndShortfallEntersGraceThenDowngrades() {
-        InMemoryLoyaltyRepository repo = seededRepo();
-        AuditEventService audit = new AuditEventService(new RecordingAudit());
-        // put account at silver, period start T0, low progress (below keep 500)
-        repo.points.put("c1", new CustomerPointsAccountRecord(
-                "p1", "c1", 100, "silver", Map.of(), 0L, "active", T0, 100L, null, null, 0, T0, T0));
-
-        // at T0+31d (period 30d ended), shortfall -> grace (within 7d grace), level kept
-        Instant afterPeriod = T0.plusSeconds(days(31));
-        CustomerPointsAccountRecord graced = serviceAt(repo, audit, afterPeriod).evaluateLevel("c1", afterPeriod);
-        assertThat(graced.level()).isEqualTo("silver");
-        assertThat(graced.graceUntil()).isNotNull();
-
-        // at T0+40d (> period 30 + grace 7 = 37) -> downgrade to base
-        Instant afterGrace = T0.plusSeconds(days(40));
-        CustomerPointsAccountRecord downgraded = serviceAt(repo, audit, afterGrace).evaluateLevel("c1", afterGrace);
-        assertThat(downgraded.level()).isEqualTo("base");
-    }
-
-    // ---- 跨级降级：进度跌穿两级时直接降到对应等级，不是只降一级 ----
-    // 依据：业务枚举速查表§二「到期直接降到对应等级」、业务系统地图「等级与成长值」同款口径。
-    @Test
-    void periodEndDowngradesDirectlyToQualifiedLevelAcrossTiers() {
-        InMemoryLoyaltyRepository repo = seededRepo();
-        AuditEventService audit = new AuditEventService(new RecordingAudit());
-        // 追加第三级：gold(rank2,升级3000,保级2000,周期30天,宽限7天)
-        repo.saveMemberLevel(new CustomerMemberLevelRecord(
-                "lv_gold", null, "gold", "黄金", 2, 3000, 2000, 30, 7, 20000, "active", T0, T0));
-        // 账户在 gold，进度只剩 100：既够不上 gold 保级(2000)，也够不上 silver 门槛(1000)。
-        repo.points.put("c1", new CustomerPointsAccountRecord(
-                "p1", "c1", 100, "gold", Map.of(), 0L, "active", T0, 100L, null, null, 0, T0, T0));
-
-        Instant afterGrace = T0.plusSeconds(days(40)); // 超过 周期30 + 宽限7
-        CustomerPointsAccountRecord downgraded = serviceAt(repo, audit, afterGrace).evaluateLevel("c1", afterGrace);
-        assertThat(downgraded.level()).isEqualTo("base"); // 直接落到 base，而非只降一级到 silver
-    }
-
-    // ---- 周期末达标：保级（重置周期/进度）----
-    @Test
-    void periodEndMeetingKeepThresholdKeepsLevel() {
-        InMemoryLoyaltyRepository repo = seededRepo();
-        AuditEventService audit = new AuditEventService(new RecordingAudit());
-        repo.points.put("c1", new CustomerPointsAccountRecord(
-                "p1", "c1", 600, "silver", Map.of(), 0L, "active", T0, 600L, null, null, 0, T0, T0));
-        Instant afterPeriod = T0.plusSeconds(days(31));
-        CustomerPointsAccountRecord kept = serviceAt(repo, audit, afterPeriod).evaluateLevel("c1", afterPeriod);
-        assertThat(kept.level()).isEqualTo("silver");
-        assertThat(kept.keepThresholdProgress()).isZero(); // reset
-        assertThat(kept.levelPeriodStart()).isEqualTo(afterPeriod); // new period
-    }
-
     // ===================== P0 清单#2 积分入账引擎：earn→confirm→deduct =====================
 
     /** E2E：支付入 pending（不计余额）→ 履约 confirm（计余额）→ 退款 deduct（按比例冲减已入账）。 */
@@ -356,7 +293,7 @@ class LoyaltyServiceTests {
         CustomerPointsAccountRecord acct = repo.points.get("c1");
         repo.points.put("c1", new CustomerPointsAccountRecord(acct.id(), acct.customerId(), 20,
                 acct.level(), acct.recentSummary(), acct.frozenPoints(), acct.accountStatus(),
-                acct.levelPeriodStart(), acct.keepThresholdProgress(), acct.graceUntil(),
+                acct.levelPeriodStart(), acct.keepThresholdProgress(), acct.protectionUntil(),
                 acct.lastCheckInDate(), acct.checkInStreak(), acct.createdAt(), acct.updatedAt()));
         long deducted = service.deductPoints("ticket_order", "o1", "ticket_refund", "r1", 10000);
         assertThat(deducted).isEqualTo(20);

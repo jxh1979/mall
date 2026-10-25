@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
@@ -35,6 +35,10 @@ public class BarDepositSettlementService {
         this.receivableLedgerService = receivableLedgerService;
         this.auditEventService = auditEventService;
     }
+
+    // 第十四批 OBS-13-03 订台短信（BSM 第 1596 行「定金没收通知」）。手工构造的单测为空即不发。
+    @org.springframework.beans.factory.annotation.Autowired
+    BarReservationNotifier notifier;
 
     /** 台组进度达到合计阈值时，把链内（含整体转台前旧链）仍为已支付待判的定金逐笔原路退回；已处置的跳过。 */
     public void evaluate(String sessionId) {
@@ -73,6 +77,9 @@ public class BarDepositSettlementService {
                     "bar_reservation", saved.id(), null, "deposit-close:" + saved.id(),
                     Map.of("deposit_amount_cent", saved.depositAmountCent(),
                             "deposit_settlement", "forfeited", "session_id", sessionId));
+            if (notifier != null) {
+                notifier.notify(saved, "deposit_forfeited");
+            }
         }
     }
 

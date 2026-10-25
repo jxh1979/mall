@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 // 客人端响应类型（对齐后端 customer 域 record，camelCase 化后口径）
 
 export type TicketProduct = {
@@ -128,6 +128,11 @@ export type CustomerProject = {
 // clients-R9（BSM「连接游乐系统，展示可预定项目和场次」）：开放中的游乐项目及尚未结束（待开或开放中）的场次（后端 CustomerShowcaseService.AmusementProject）。
 export type AmusementSession = { sessionId: string; startTime: string; endTime: string; capacity: number; usedCapacity: number; status: string };
 export type AmusementProject = { amusementProjectId: string; projectName: string; openStatus: string; sessions: AmusementSession[] };
+
+// OBS-13-01 会员等级通知（BSM L820）：downgrade_warning＝降级预警（targetLevel＝按发出当日成长值测算将降至的等级，cycleEnd＝保护期结束）；
+// level_kept＝已保级；downgraded＝降级生效后补发（targetLevel＝新等级）。等级名称为等级配置的中文名。
+export type LevelNotice = { id: string; noticeType: "downgrade_warning" | "level_kept" | "downgraded"; currentLevel: string; currentLevelName: string;
+  targetLevel: string; targetLevelName: string; cycleEnd: string | null; createdAt: string };
 
 // clients-R10 未核销票到期提醒（ticketId＝我的票的权益编号）。
 export type TicketExpiryReminder = { ticketId: string; parentTicketId: string | null; ticketName: string | null; orderId: string | null; validTo: string };

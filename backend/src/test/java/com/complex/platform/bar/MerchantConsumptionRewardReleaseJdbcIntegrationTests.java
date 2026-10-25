@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -165,6 +165,24 @@ class MerchantConsumptionRewardReleaseJdbcIntegrationTests {
         assertThat(rewards.release(id)).isTrue();
         assertThat(balance(member)).isEqualTo(15L);
         assertThat(((Number) reward(bill).get("confirmed_points")).longValue()).isEqualTo(15L);
+    }
+
+    // OBS-13-01（第十四批）：BSM L820「达到门槛立即升级」——商户消费成长值完成即记、不等每日作业即升级；
+    // 操作员裁决补充（第十四批）第 2 条：退款冲回成长值后立即按当前滚动周期成长值重新定级，低于现级就降并通知。
+    @Test
+    void merchantGrowthUpgradesAtOnceAndRefundReversalRegradesAtOnce() {
+        jdbc.update("INSERT INTO customer_member_levels(id,project_id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) VALUES(?,NULL,'base','新乐会员',0,0,10000,'active',now(),now()),(?,NULL,'silver','银卡',1,200,10000,'active',now(),now())", "lv_b_" + s, "lv_s_" + s);
+        String member = customer();
+        String bill = bill(member, 30_000L, true, now.minus(31, ChronoUnit.HOURS), now.minus(30, ChronoUnit.HOURS), now.minus(27, ChronoUnit.HOURS), "");
+        rewards.tryCreateForBarBill(bill);
+        assertThat(jdbc.queryForObject("SELECT level FROM customer_points_accounts WHERE customer_id=?", String.class, member))
+                .as("成长值 300 达银卡门槛即升级").isEqualTo("silver");
+        succeededRefund(bill, 30_000L, 15_000L, null);
+        rewards.reconcileBarBill(bill);
+        assertThat(jdbc.queryForObject("SELECT level FROM customer_points_accounts WHERE customer_id=?", String.class, member))
+                .as("冲回 150 后滚动成长值 150 低于银卡门槛").isEqualTo("base");
+        assertThat(jdbc.queryForList("SELECT notice_type||':'||target_level FROM customer_level_notices WHERE customer_id=?", String.class, member))
+                .containsExactly("downgraded:base");
     }
 
     @Test

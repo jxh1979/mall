@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -51,8 +51,17 @@ public class InventoryHighValueReviewService {
     static final String SUBJECT_SAVED_BOTTLE_VOID = "saved_bottle_void";
     static final String SUBJECT_DAMAGE_REPORT = "damage_report";
     static final String SUBJECT_STOCK_VARIANCE = "stock_variance";
+    /**
+     * OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条
+     * 「门店主管与财务审批」）：存酒库房（到期/放弃存酒转入）存货的出库与报废。subject 为待审调整单；门店主管与财务两道都批才扣库存，
+     * 同赔付方案审批（{@link InventoryService#approveSavedBottleRemedy}）：角色各核权限码、审批人不得是发起人、两道不得同一人。
+     */
+    static final String SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL = "saved_bottle_stock_disposal";
+    private static final String REVIEW_PERMISSION = "inventory.high_value.review";
     private static final Set<String> SUBJECT_TYPES =
-            Set.of(SUBJECT_SAVED_BOTTLE_VOID, SUBJECT_DAMAGE_REPORT, SUBJECT_STOCK_VARIANCE);
+            Set.of(SUBJECT_SAVED_BOTTLE_VOID, SUBJECT_DAMAGE_REPORT, SUBJECT_STOCK_VARIANCE, SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL);
+    private static final Set<String> ADJUSTMENT_SUBJECTS =
+            Set.of(SUBJECT_DAMAGE_REPORT, SUBJECT_STOCK_VARIANCE, SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL);
     private static final Set<String> DECISIONS = Set.of("approved", "rejected");
 
     private final InventoryRepository repository;
@@ -95,7 +104,13 @@ public class InventoryHighValueReviewService {
         return readPage(
                 "inventory.high_value_review.viewed",
                 "inventory.high_value_review.view_failed",
-                () -> repository.listHighValueReviews());
+                () -> {
+                    // 读路径按商户范围（同 reviewInternal 的 C3 口径）：有商户范围只列本商户的复核单；平台、项目账号空范围照旧全列。
+                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    return repository.listHighValueReviews().stream()
+                            .filter(review -> scope.isEmpty() || scope.get().equals(review.merchantId()))
+                            .toList();
+                });
     }
 
     /**
@@ -117,16 +132,31 @@ public class InventoryHighValueReviewService {
             List<String> photoAttachmentIds,
             List<String> videoAttachmentIds
     ) {
+        return createPending(idempotencySeed, subjectType, subjectId, photoAttachmentIds, videoAttachmentIds, true);
+    }
+
+    /** {@code requireDualEvidence=false} 仅用于存酒库房存货处置中非高价值的报废与出库（照片/视频不强制，不入复核单）。 */
+    InventoryHighValueReviewRecord createPending(
+            String idempotencySeed,
+            String subjectType,
+            String subjectId,
+            List<String> photoAttachmentIds,
+            List<String> videoAttachmentIds,
+            boolean requireDualEvidence
+    ) {
         String type = normalizeAllowed(subjectType, SUBJECT_TYPES, "subject_type");
         String subject = requireText(subjectId, "subject_id");
-        List<String> photos = requireNonEmptyList(photoAttachmentIds, "photo_attachment_ids");
-        List<String> videos = requireNonEmptyList(videoAttachmentIds, "video_attachment_ids");
+        List<String> photos = requireDualEvidence ? requireNonEmptyList(photoAttachmentIds, "photo_attachment_ids") : List.of();
+        List<String> videos = requireDualEvidence ? requireNonEmptyList(videoAttachmentIds, "video_attachment_ids") : List.of();
         // 双证据闭环：附件必须**真实存在**且类型对得上（照片栏必须是照片、视频栏必须是视频）。
         // 改造前只校两栏各自非空 —— 同一个随手编的假 id 填两栏就算「照片+视频双证据」。
-        requireEvidence(photos, videos);
+        if (requireDualEvidence) {
+            requireEvidence(photos, videos);
+        }
         Instant now = Instant.now();
         // C3：建单即落归属商户（当前 scope），供 reviewInternal 拒绝跨商户翻转。平台/项目管理员空 scope → null（放行）。
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        com.complex.platform.access.AccessActor creator = authorizationService.currentActor();
         InventoryHighValueReviewRecord review = repository.saveHighValueReview(new InventoryHighValueReviewRecord(
                 "hvr_" + slug(idempotencySeed + ":" + type + ":" + subject),
                 type,
@@ -138,7 +168,10 @@ public class InventoryHighValueReviewService {
                 null,
                 now,
                 null,
-                merchantId));
+                merchantId,
+                creator == null ? null : creator.id(),
+                null,
+                null));
         auditEventService.recordSuccess(
                 "inventory.high_value_review_created",
                 "inventory.high_value.review",
@@ -197,6 +230,11 @@ public class InventoryHighValueReviewService {
                         throw ApiException.conflict(
                                 "HIGH_VALUE_REVIEW_NOT_PENDING", "该高值复核不在待处理状态");
                     }
+                    if (SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL.equals(current.subjectType())) {
+                        return repository.saveHighValueReview(decideDisposal(current, actual, decision, onApprove));
+                    }
+                    // 审批角色只用于存酒库房存货处置：其余复核对象仍只认主管复核码（Controller 按 role 选码，这里堵住持财务码裁决普通复核）。
+                    authorizationService.requirePermission(REVIEW_PERMISSION);
                     if ("approved".equals(decision)) {
                         requireEvidence(current.photoAttachmentIds(), current.videoAttachmentIds());
                     }
@@ -215,6 +253,53 @@ public class InventoryHighValueReviewService {
                     }
                     return repository.saveHighValueReview(resolved);
                 });
+    }
+
+    /**
+     * 存酒库房存货处置的两道审批（同赔付方案审批 {@link InventoryService#approveSavedBottleRemedy}）：role=supervisor 核门店主管复核码、
+     * role=finance 核财务应收应付管理码；审批人不得是发起人；两道不得同一人；任一道驳回即驳回（不扣）；两道都批才回调扣库存。
+     */
+    private InventoryHighValueReviewRecord decideDisposal(
+            InventoryHighValueReviewRecord current,
+            HighValueReviewDecisionRequest actual,
+            String decision,
+            java.util.function.Consumer<InventoryHighValueReviewRecord> onApprove
+    ) {
+        String role = requireText(actual.role(), "role");
+        boolean supervisor = "supervisor".equals(role);
+        if (!supervisor && !"finance".equals(role)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "role 须为 supervisor（门店主管）或 finance（财务）");
+        }
+        authorizationService.requirePermission(supervisor ? InventoryService.REMEDY_SUPERVISOR_APPROVE : InventoryService.REMEDY_FINANCE_APPROVE);
+        String approver = authorizationService.currentActor().id();
+        if (approver.equals(current.createdBy())) {
+            throw ApiException.conflict("HIGH_VALUE_REVIEW_SELF_APPROVAL", "审批人不得是发起人");
+        }
+        String supervisorBy = current.supervisorApprovedBy();
+        String financeBy = current.financeApprovedBy();
+        if ("approved".equals(decision)) {
+            if (approver.equals(supervisor ? financeBy : supervisorBy)) {
+                throw ApiException.conflict("HIGH_VALUE_REVIEW_SAME_APPROVER", "门店主管审批与财务审批不得由同一人完成");
+            }
+            supervisorBy = supervisor ? approver : supervisorBy;
+            financeBy = supervisor ? financeBy : approver;
+        }
+        boolean done = "rejected".equals(decision) || (supervisorBy != null && financeBy != null);
+        InventoryHighValueReviewRecord resolved = new InventoryHighValueReviewRecord(
+                current.id(), current.subjectType(), current.subjectId(),
+                current.photoAttachmentIds(), current.videoAttachmentIds(),
+                done ? decision : "pending", approver, trimToNull(actual.reason()), current.createdAt(), done ? Instant.now() : null,
+                current.merchantId(), current.createdBy(), supervisorBy, financeBy);
+        if ("rejected".equals(decision)) {
+            applyRejectEffect(resolved);
+        } else if (done) {
+            // 高价值报废建单时已强制照片+视频（沿用报损口径），批准时照旧复核附件；非高价值处置未要求证据。
+            if (!current.photoAttachmentIds().isEmpty()) {
+                requireEvidence(current.photoAttachmentIds(), current.videoAttachmentIds());
+            }
+            onApprove.accept(resolved);
+        }
+        return resolved;
     }
 
     private void requireEvidence(List<String> photos, List<String> videos) {
@@ -246,10 +331,9 @@ public class InventoryHighValueReviewService {
                     b.customerPhone(), b.customerPhoneHash(), b.registrationPhotoRefs(), b.manualNote(),
                     b.transferredAt(), b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash(),
                     b.remedyOfSavedBottleId(), b.custodianEntityId(), b.pickupLocation(), b.handedOverAt(), b.handoverId()));
-        } else if (SUBJECT_DAMAGE_REPORT.equals(resolved.subjectType())
-                || SUBJECT_STOCK_VARIANCE.equals(resolved.subjectType())) {
+        } else if (ADJUSTMENT_SUBJECTS.contains(resolved.subjectType())) {
             StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());
-            // approve → 真正扣减（报损/盘点差异均为减少库存）+ 置 completed。
+            // approve → 真正扣减（报损/盘点差异/存酒库房处置均为减少库存）+ 置 completed；存酒库房处置的流水类型取原出库或报损类型。
             int affected = repository.atomicDecreaseStockBalance(
                     adjustment.itemId(), adjustment.locationId(), adjustment.quantity(),
                     authorizationService.currentMerchantScope().orElse(null));
@@ -297,8 +381,7 @@ public class InventoryHighValueReviewService {
 
     /** reject 收口：报损/盘点差异调整单由 {@code pending_review} 置 {@code rejected}（不扣减）。存酒维持冻结由 approve 不触发实现。 */
     private void applyRejectEffect(InventoryHighValueReviewRecord resolved) {
-        if (SUBJECT_DAMAGE_REPORT.equals(resolved.subjectType())
-                || SUBJECT_STOCK_VARIANCE.equals(resolved.subjectType())) {
+        if (ADJUSTMENT_SUBJECTS.contains(resolved.subjectType())) {
             StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());
             repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "rejected"));
         }

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
@@ -29,9 +29,10 @@ public class TicketRewardService {
     private final PointsRecoveryService recoveries;
     private final ApplicationEventPublisher events;
     private final AuditEventService audit;
+    private final LoyaltyService loyalty;
     public TicketRewardService(JdbcTemplate jdbc,CustomerRepository customers,TicketRewardConfigService configs,
-            PointsRecoveryService recoveries,ApplicationEventPublisher events,AuditEventService audit){
-        this.jdbc=jdbc;this.customers=customers;this.configs=configs;this.recoveries=recoveries;this.events=events;this.audit=audit;
+            PointsRecoveryService recoveries,ApplicationEventPublisher events,AuditEventService audit,LoyaltyService loyalty){
+        this.jdbc=jdbc;this.customers=customers;this.configs=configs;this.recoveries=recoveries;this.events=events;this.audit=audit;this.loyalty=loyalty;
     }
 
     @EventListener
@@ -91,6 +92,7 @@ public class TicketRewardService {
         CustomerPointsAccountRecord account=account(u.member(),u.at());
         customers.savePoints(balance(account,account.balance(),Math.addExact(account.keepThresholdProgress(),growth.values().fixedValue()),u.at()));
         jdbc.update("INSERT INTO customer_growth_ledger(id,customer_id,reward_id,change_type,growth_delta,created_at) VALUES(?,?,?,'earn',?,?)","growth_"+id,u.member(),id,growth.values().fixedValue(),Timestamp.from(u.at()));
+        loyalty.regrade(u.member(),u.at(),false); // OBS-13-01（BSM L820）：达到门槛立即升级。
         ledger(id,u.member(),points.values().fixedValue(),account.balance(),"earn","pending","核销门票待确认积分",u.at());
         audit.recordSuccess("ticket.reward.pending","not_applicable","ticket_use_reward",id,null,event.verificationId(),Map.of("customer_id",u.member(),"points",points.values().fixedValue(),"growth",growth.values().fixedValue(),"rule_id",points.id()));
     }
@@ -169,6 +171,7 @@ public class TicketRewardService {
         if("confirmed".equals(r.status()))ledger(r.id(),r.customerId(),-debit,a.balance()-debit,"deduct","reversed",deregistered?"门票奖励冲回；会员已注销，取消追偿："+debt:"门票奖励冲回；待追回："+pendingDebt,at);
         customers.updatePointsLedgerLifecycle("ledger_earn_"+r.id(),"reversed",null);
         jdbc.update("INSERT INTO customer_growth_ledger(id,customer_id,reward_id,change_type,growth_delta,created_at) VALUES(?,?,?,'reverse',?,?)","growth_reverse_"+r.id(),r.customerId(),r.id(),-r.growth(),Timestamp.from(at));
+        loyalty.regrade(r.customerId(),at,true); // 裁决补充（第十四批）第 2 条：冲回后立即按当前滚动周期成长值重新定级。
         if(debt>0)jdbc.update("INSERT INTO customer_points_recoveries(reward_id,customer_id,original_points,remaining_points,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",r.id(),r.customerId(),debt,pendingDebt,deregistered?"cancelled":"pending",Timestamp.from(at),Timestamp.from(at));
         jdbc.update("UPDATE ticket_use_rewards SET status=?,reversed_at=?,reversal_source=? WHERE id=?","confirmed".equals(r.status())?"reversed":"cancelled",Timestamp.from(at),source,r.id());
         audit.recordSuccess("ticket.reward.reversed","not_applicable","ticket_use_reward",r.id(),null,source,Map.of("recovered_points",debit,"pending_recovery",pendingDebt,"cancelled_recovery",deregistered?debt:0));
@@ -181,7 +184,7 @@ public class TicketRewardService {
         jdbc.update("INSERT INTO customer_points_accounts(id,customer_id,balance,level,recent_summary,frozen_points,account_status,level_period_start,keep_threshold_progress,check_in_streak,created_at,updated_at) VALUES(?,?,0,'base','{}',0,'active',?,0,0,?,?) ON CONFLICT(customer_id) DO NOTHING","points_"+customer,customer,Timestamp.from(at),Timestamp.from(at),Timestamp.from(at));
         return customers.findPointsByCustomerIdForUpdate(customer).orElseThrow();
     }
-    private CustomerPointsAccountRecord balance(CustomerPointsAccountRecord a,long balance,long growth,Instant at){return new CustomerPointsAccountRecord(a.id(),a.customerId(),balance,a.level(),a.recentSummary(),a.frozenPoints(),a.accountStatus(),a.levelPeriodStart(),growth,a.graceUntil(),a.lastCheckInDate(),a.checkInStreak(),a.createdAt(),at);}
+    private CustomerPointsAccountRecord balance(CustomerPointsAccountRecord a,long balance,long growth,Instant at){return new CustomerPointsAccountRecord(a.id(),a.customerId(),balance,a.level(),a.recentSummary(),a.frozenPoints(),a.accountStatus(),a.levelPeriodStart(),growth,a.protectionUntil(),a.lastCheckInDate(),a.checkInStreak(),a.createdAt(),at);}
     private void ledger(String id,String member,long delta,long balance,String type,String status,String description,Instant at){customers.savePointsLedger(new CustomerPointsLedgerRecord("ledger_"+type+"_"+id,member,delta,balance,type,id,description,null,null,false,at,type,status,"ticket_use",id));}
     private TicketUseRewardRecord find(String id){return jdbc.query("SELECT * FROM ticket_use_rewards WHERE id=?",this::map,id).getFirst();}
     private TicketUseRewardRecord locked(String id){return jdbc.query("SELECT * FROM ticket_use_rewards WHERE id=? FOR UPDATE",this::map,id).getFirst();}

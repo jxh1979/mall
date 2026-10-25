@@ -1,3 +1,4 @@
+// 文件版本：V0.01
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -8,7 +9,7 @@ import { PermissionButton } from "../security/Can";
 // 会员忠诚度运营配置（会员忠诚度 PRD §3 等级 / §6 连续签到 + 生日加倍）。后端新增端点 /api/v1/loyalty/config/*。
 type MemberLevelRow = {
   id: string; projectId?: string | null; levelCode: string; levelName: string; levelRank: number;
-  upgradeThreshold: number; keepThreshold: number; keepPeriodDays: number; graceDays: number;
+  upgradeThreshold: number;
   pointMultiplierBasisPoints: number; status: string;
 };
 type CheckInTierRow = { id: string; projectId?: string | null; streakDays: number; awardPoints: number; status: string };
@@ -28,15 +29,16 @@ function bpToMultiplier(bp?: number | null): string {
   return bp == null ? "—" : `${(bp / 10000).toFixed(2)} 倍`;
 }
 
-type LevelForm = { editingId: string; levelCode: string; levelName: string; levelRank: string; upgradeThreshold: string; keepThreshold: string; keepPeriodDays: string; graceDays: string; multiplier: string; status: string };
-const EMPTY_LEVEL: LevelForm = { editingId: "", levelCode: "", levelName: "", levelRank: "", upgradeThreshold: "", keepThreshold: "", keepPeriodDays: "365", graceDays: "0", multiplier: "1.0", status: "active" };
+type LevelForm = { editingId: string; levelCode: string; levelName: string; levelRank: string; upgradeThreshold: string; multiplier: string; status: string };
+const EMPTY_LEVEL: LevelForm = { editingId: "", levelCode: "", levelName: "", levelRank: "", upgradeThreshold: "", multiplier: "1.0", status: "active" };
 type TierForm = { editingId: string; streakDays: string; awardPoints: string; status: string };
 const EMPTY_TIER: TierForm = { editingId: "", streakDays: "", awardPoints: "", status: "active" };
 type BirthdayForm = { editingId: string; ruleName: string; windowType: string; multiplier: string; status: string };
 const EMPTY_BIRTHDAY: BirthdayForm = { editingId: "", ruleName: "", windowType: "birthday_day", multiplier: "2.0", status: "active" };
 
 /**
- * 会员等级与忠诚度配置页（ADM-CUS-004）：会员等级档位/门槛/保级/积分倍率、连续签到阶梯奖励、生日加倍规则。
+ * 会员等级与忠诚度配置页（ADM-CUS-004）：会员等级档位/升级门槛/积分倍率、连续签到阶梯奖励、生日加倍规则。
+ * OBS-13-01（BSM L820）：等级按滚动统计周期内的成长值定级；滚动统计周期、保护期、提前通知天数三项参数全平台统一，在「门票积分、成长值与销售责任」页提交审批。
  * 均按综合体（project_id）配置；平台管理员填综合体 id 查询/配置，项目级管理员由登录归属自动绑定（服务层覆盖）。
  * 查看需 customer.loyalty.view，维护需 customer.loyalty.manage。
  * 备注：列表仅显示生效中(active)配置；将某项改为停用/归档后即从列表隐去。
@@ -79,15 +81,12 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
     if (!levelForm.levelCode.trim() || !levelForm.levelName.trim()) { setGlobalError("请填写等级代码与等级名称"); return; }
     const mult = Math.round(Number(levelForm.multiplier) * 10000);
     if (!Number.isFinite(mult) || mult <= 0) { setGlobalError("积分倍率需为大于 0 的数字（如 1.0、1.5）"); return; }
-    if (Number(levelForm.keepPeriodDays) < 1) { setGlobalError("保级考核周期需为不小于 1 的天数"); return; }
     await api.post("/api/v1/loyalty/config/member-levels", {
       id: levelForm.editingId || null,
       projectId: writeProjectId(),
       levelCode: levelForm.levelCode.trim(), levelName: levelForm.levelName.trim(),
       levelRank: Number(levelForm.levelRank) || 0,
       upgradeThreshold: Number(levelForm.upgradeThreshold) || 0,
-      keepThreshold: Number(levelForm.keepThreshold) || 0,
-      keepPeriodDays: Number(levelForm.keepPeriodDays), graceDays: Number(levelForm.graceDays) || 0,
       pointMultiplierBasisPoints: mult, status: levelForm.status,
     });
     setActionResult({ action: levelForm.editingId ? "member_level_updated" : "member_level_created", levelCode: levelForm.levelCode.trim() });
@@ -124,7 +123,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
     <section data-testid="member-loyalty-config-page">
       <AdminPageHeader
         title="会员等级与忠诚度配置"
-        description="按综合体维护会员等级档位/升级门槛/保级/积分倍率、连续签到阶梯奖励、生日加倍规则。改配置不改代码；列表仅显示生效中配置。查看需会员忠诚度查看权限，维护需会员忠诚度维护权限。"
+        description="按综合体维护会员等级档位/升级门槛/积分倍率、连续签到阶梯奖励、生日加倍规则。改配置不改代码；列表仅显示生效中配置。查看需会员忠诚度查看权限，维护需会员忠诚度维护权限。"
       />
       <div className="admin-form-row" data-testid="loyalty-project-filter">
         <label>综合体 id<input aria-label="综合体 id 查询" placeholder="综合体 id（留空看平台缺省）" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
@@ -133,21 +132,21 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
       </div>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {/* ---- 会员等级 ---- */}
-        <h3>会员等级档位（按累计成长值自动升级；保级/宽限期到期才可能下调）</h3>
+        <h3>会员等级档位（按滚动统计周期内的成长值定级，达到升级门槛立即升级）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="member-levels-table">
-            <thead><tr><th>排序</th><th>代码</th><th>名称</th><th>升级门槛</th><th>保级门槛</th><th>考核周期(天)</th><th>宽限期(天)</th><th>积分倍率</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>排序</th><th>代码</th><th>名称</th><th>升级门槛</th><th>积分倍率</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               {levels.map((r) => (
                 <tr key={r.id} data-testid={`member-level-${r.id}`}>
                   <td>{r.levelRank}</td><td>{r.levelCode}</td><td>{r.levelName}</td>
-                  <td>{r.upgradeThreshold}</td><td>{r.keepThreshold}</td><td>{r.keepPeriodDays}</td><td>{r.graceDays}</td>
+                  <td>{r.upgradeThreshold}</td>
                   <td>{bpToMultiplier(r.pointMultiplierBasisPoints)}</td><td>{label(LEVEL_STATUSES, r.status)}</td>
                   <td><PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid={`member-level-edit-${r.id}`}
-                    onClick={() => setLevelForm({ editingId: r.id, levelCode: r.levelCode, levelName: r.levelName, levelRank: String(r.levelRank), upgradeThreshold: String(r.upgradeThreshold), keepThreshold: String(r.keepThreshold), keepPeriodDays: String(r.keepPeriodDays), graceDays: String(r.graceDays), multiplier: (r.pointMultiplierBasisPoints / 10000).toFixed(2), status: r.status })}>编辑</PermissionButton></td>
+                    onClick={() => setLevelForm({ editingId: r.id, levelCode: r.levelCode, levelName: r.levelName, levelRank: String(r.levelRank), upgradeThreshold: String(r.upgradeThreshold), multiplier: (r.pointMultiplierBasisPoints / 10000).toFixed(2), status: r.status })}>编辑</PermissionButton></td>
                 </tr>
               ))}
-              {levels.length === 0 && <tr><td colSpan={10} className="admin-muted-action">暂无等级配置。</td></tr>}
+              {levels.length === 0 && <tr><td colSpan={7} className="admin-muted-action">暂无等级配置。</td></tr>}
             </tbody>
           </table>
         </div>
@@ -155,10 +154,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
           <label>代码<input aria-label="等级代码" placeholder="gold" value={levelForm.levelCode} onChange={(e) => setLevelForm({ ...levelForm, levelCode: e.target.value })} /></label>
           <label>名称<input aria-label="等级名称" placeholder="金卡" value={levelForm.levelName} onChange={(e) => setLevelForm({ ...levelForm, levelName: e.target.value })} /></label>
           <label>排序<input aria-label="等级排序" type="number" min="0" value={levelForm.levelRank} onChange={(e) => setLevelForm({ ...levelForm, levelRank: e.target.value })} /></label>
-          <label>升级门槛<input aria-label="升级门槛" type="number" min="0" placeholder="累计成长值" value={levelForm.upgradeThreshold} onChange={(e) => setLevelForm({ ...levelForm, upgradeThreshold: e.target.value })} /></label>
-          <label>保级门槛<input aria-label="保级门槛" type="number" min="0" value={levelForm.keepThreshold} onChange={(e) => setLevelForm({ ...levelForm, keepThreshold: e.target.value })} /></label>
-          <label>考核周期(天)<input aria-label="考核周期天数" type="number" min="1" value={levelForm.keepPeriodDays} onChange={(e) => setLevelForm({ ...levelForm, keepPeriodDays: e.target.value })} /></label>
-          <label>宽限期(天)<input aria-label="宽限期天数" type="number" min="0" value={levelForm.graceDays} onChange={(e) => setLevelForm({ ...levelForm, graceDays: e.target.value })} /></label>
+          <label>升级门槛<input aria-label="升级门槛" type="number" min="0" placeholder="滚动统计周期内的成长值" value={levelForm.upgradeThreshold} onChange={(e) => setLevelForm({ ...levelForm, upgradeThreshold: e.target.value })} /></label>
           <label>积分倍率<input aria-label="积分倍率" type="number" min="0" step="0.1" placeholder="1.0" value={levelForm.multiplier} onChange={(e) => setLevelForm({ ...levelForm, multiplier: e.target.value })} /></label>
           <label>状态<select aria-label="等级状态" value={levelForm.status} onChange={(e) => setLevelForm({ ...levelForm, status: e.target.value })}>{LEVEL_STATUSES.map(([c, l]) => <option key={c} value={c}>{l}</option>)}</select></label>
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="member-level-save" onClick={() => void saveLevel()}>{levelForm.editingId ? "保存修改" : "新增等级"}</PermissionButton>

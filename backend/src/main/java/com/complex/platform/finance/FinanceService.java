@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1714,11 +1714,15 @@ public class FinanceService implements TerminationSettlementPort {
         // 复核 money I2（BSM L1062「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」）：订台定金达标原路退款应付
         // 实付结清 → 同一事务回写定金为「达标已原路退回」（挂应付时只是退款处理中，定金仍为已支付）。
         if (ticketPointsJdbc != null && "bar_deposit_refund".equals(updated.sourceType()) && "settled".equals(updated.status())) {
-            ticketPointsJdbc.update("""
+            int refunded = ticketPointsJdbc.update("""
                     UPDATE bar_reservations SET deposit_status='settled', deposit_settlement='refunded_on_threshold',
                            deposit_settled_at=now(), updated_at=now()
                      WHERE id=? AND deposit_status='paid'
                     """, updated.sourceId());
+            // 第十四批 OBS-13-03（BSM L1596「定金原路退回通知」）：实际退回后才发。
+            if (refunded == 1 && refundEvents != null) {
+                refundEvents.publishEvent(new BarDepositRefunded(updated.sourceId()));
+            }
         }
         // 第十一批 TK-04-b（BSM L823「退款成功时取消对应尚待确认积分」）：退款应付实付结清＝退款已实际退出，同一事务通知来源域回写。
         if (refundEvents != null && "refund".equals(updated.sourceType()) && "payable".equals(updated.direction())
@@ -2451,6 +2455,10 @@ public class FinanceService implements TerminationSettlementPort {
         if ("dealer_order_refund".equals(saved.sourceType())) {
             if (refundEvents == null) throw ApiException.conflict("DEALER_REFUND_SYNC_UNAVAILABLE", "经销退款结果同步不可用");
             refundEvents.publishEvent(new FinanceRefundStateChanged(saved));
+        }
+        // 第十四批 OBS-13-03（BSM L1062「只有实际退款成功才记为已退」）：订台定金原路待退核实成功 → 同一事务通知酒吧域回写已退还并发短信。
+        if (refundEvents != null && "bar_deposit_rejection".equals(saved.sourceType()) && "success".equals(saved.status())) {
+            refundEvents.publishEvent(new BarDepositRefunded(saved.targetId()));
         }
         return saved;
     }

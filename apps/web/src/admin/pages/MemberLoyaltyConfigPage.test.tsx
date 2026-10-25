@@ -1,10 +1,11 @@
+// 文件版本：V0.01
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MemberLoyaltyConfigPage } from "./MemberLoyaltyConfigPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
-const LEVELS = [{ id: "member_level_1", projectId: "prj_A", levelCode: "gold", levelName: "金卡", levelRank: 2, upgradeThreshold: 5000, keepThreshold: 3000, keepPeriodDays: 365, graceDays: 30, pointMultiplierBasisPoints: 15000, status: "active" }];
+const LEVELS = [{ id: "member_level_1", projectId: "prj_A", levelCode: "gold", levelName: "金卡", levelRank: 2, upgradeThreshold: 5000, pointMultiplierBasisPoints: 15000, status: "active" }];
 const TIERS = [{ id: "check_in_tier_1", projectId: "prj_A", streakDays: 7, awardPoints: 100, status: "active" }];
 const BIRTHDAYS = [{ id: "birthday_rule_1", projectId: "prj_A", ruleName: "生日双倍", windowType: "birthday_day", multiplierBasisPoints: 20000, status: "active" }];
 
@@ -47,6 +48,25 @@ describe("MemberLoyaltyConfigPage 会员等级与忠诚度(ADM-CUS-004)", () => 
       "/api/v1/loyalty/config/member-levels",
       expect.objectContaining({ levelCode: "silver", levelName: "银卡", pointMultiplierBasisPoints: 12000, projectId: "prj_A" }),
     ));
+  });
+
+  // OBS-13-01（BSM L820）：等级只按滚动统计周期内的成长值与升级门槛定级，保护期等三项参数全平台统一另行配置；
+  // HTML 没有每级的保级门槛、考核周期与宽限期，后台不再录入。
+  it("等级档位不再录入保级门槛、考核周期与宽限期", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(post));
+    await waitFor(() => expect(screen.getByTestId("member-levels-table").textContent).toContain("金卡"));
+    expect(screen.queryByLabelText("宽限期天数")).toBeNull();
+    expect(screen.queryByLabelText("保级门槛")).toBeNull();
+    expect(screen.queryByLabelText("考核周期天数")).toBeNull();
+    expect(screen.getByTestId("member-levels-table").textContent).not.toContain("宽限期");
+    fireEvent.change(screen.getByLabelText("综合体 id 查询"), { target: { value: "prj_A" } });
+    fireEvent.change(screen.getByLabelText("等级代码"), { target: { value: "silver" } });
+    fireEvent.change(screen.getByLabelText("等级名称"), { target: { value: "银卡" } });
+    fireEvent.click(screen.getByTestId("member-level-save"));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("graceDays");
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("keepThreshold");
   });
 
   it("签到天数小于 1 被前端拦下报错不发请求", async () => {

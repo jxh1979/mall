@@ -1,17 +1,31 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.common.BusinessDayResolver;
+import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -19,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class FinanceJdbcIntegrationTests {
 
@@ -27,6 +42,12 @@ class FinanceJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private BusinessDayResolver businessDayResolver;
 
     @Test
     void dailyCloseLockChecksAcceptNullMerchantScope() {
@@ -271,7 +292,9 @@ class FinanceJdbcIntegrationTests {
         Instant from = Instant.parse("2026-06-17T20:00:00Z");
         Instant to = Instant.parse("2026-06-18T20:00:00Z");
 
-        insertThirdpartySync("ios_tp_1", 120000L, Instant.parse("2026-06-18T12:00:00Z"));
+        insertMerchant("mch_tp_jdbc");
+        insertThirdpartySync("ios_tp_1", "catering", "order", "synced", "mch_tp_jdbc", 120000L,
+                Instant.parse("2026-06-18T12:00:00Z"));
 
         // 第三方源单列出该金额。
         FinanceRepository.DailyCloseSourceTotals thirdparty =
@@ -372,13 +395,107 @@ class FinanceJdbcIntegrationTests {
         LocalDate businessDate = LocalDate.parse("2026-06-18");
         Instant from = Instant.parse("2026-06-17T20:00:00Z");
         Instant to = Instant.parse("2026-06-18T20:00:00Z");
-        insertThirdpartySync("ios_scope_1", 120000L, Instant.parse("2026-06-18T12:00:00Z"));
+        insertMerchant("mch_tp_jdbc");
+        insertThirdpartySync("ios_scope_1", "catering", "order", "synced", "mch_tp_jdbc", 120000L,
+                Instant.parse("2026-06-18T12:00:00Z"));
 
         // 平台口径能看到 120000;商户口径必须归零。
         assertThat(repository.aggregateThirdpartyReflow(businessDate, from, to).amountCent()).isEqualTo(120000L);
         FinanceRepository.DailyCloseSourceTotals scoped =
                 repository.aggregateThirdpartyReflow(businessDate, from, to, "merchant", "merchant_scope_a");
         assertThat(scoped.amountCent()).isZero();
+    }
+
+    // ─── OBS-13-07：日结第三方回流源与官方/渠道售票源口径 ─────────────────────
+    @Test
+    void thirdpartyReflowCountsOnlyAttributedCateringRetailBookedOrders() {
+        // BSM L1548「回流订单按该映射认定商户，映射缺失的回流单挂差异，不得自动入账」；L1704 餐饮、零售回流；与看板 revenue.thirdparty 同谓词。
+        LocalDate date = LocalDate.parse("2097-06-24");
+        seedReflowRows("obs1307a", Instant.parse("2097-06-24T04:00:00Z"));
+        assertThat(repository.aggregateThirdpartyReflow(date,
+                Instant.parse("2097-06-23T20:00:00Z"), Instant.parse("2097-06-24T20:00:00Z")))
+                .isEqualTo(new FinanceRepository.DailyCloseSourceTotals(15000L, 0L, 2));
+    }
+
+    @Test
+    void channelReflowTicketWithConcreteChannelCodeCountsAsChannelTicketNotOfficial() {
+        // BSM L1681 官方 App/小程序与第三方渠道分开汇总：第三方渠道回流出的票记具体渠道码，只进渠道售票源、不进官方售票源。
+        LocalDate date = LocalDate.parse("2097-06-25");
+        Instant from = Instant.parse("2097-06-24T20:00:00Z");
+        Instant to = Instant.parse("2097-06-25T20:00:00Z");
+        seedSelfAndChannelTickets("obs1307b", "merchant_obs1307b", date, from);
+        FinanceRepository.DailyCloseSourceTotals official = new FinanceRepository.DailyCloseSourceTotals(10000L, 0L, 1);
+        FinanceRepository.DailyCloseSourceTotals channel = new FinanceRepository.DailyCloseSourceTotals(25000L, 4000L, 2);
+        assertThat(repository.aggregateOfficialTicket(date, from, to)).isEqualTo(official);
+        assertThat(repository.aggregateChannelTicket(date, from, to)).isEqualTo(channel);
+        assertThat(repository.aggregateOfficialTicket(date, from, to, "merchant", "merchant_obs1307b")).isEqualTo(official);
+        assertThat(repository.aggregateChannelTicket(date, from, to, "merchant", "merchant_obs1307b")).isEqualTo(channel);
+    }
+
+    @Test
+    void dailyCloseSummariesCountGroupBuyTicketOnceAndSkipUnmappedReflow() throws Exception {
+        // 前端真实请求形状（蛇形键）：日结六源汇总里团购票只进渠道售票源一次，映射缺失回流与团购票回流不进第三方回流源。
+        LocalDate date = LocalDate.parse("2097-06-26");
+        Instant inDay = businessDayResolver.startInstant(date).plusSeconds(3600);
+        String prefix = "obs1307e_" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        seedReflowRows(prefix, inDay);
+        seedSelfAndChannelTickets(prefix, prefix + "_mch_a", date, inDay);
+        RequestPostProcessor finance = financeActor("usr_" + prefix);
+        String body = mockMvc.perform(post("/api/v1/finance/daily-closes").with(finance)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"" + prefix + "\",\"operator_note\":\"日结\","
+                                + "\"business_date\":\"2097-06-26\",\"scope_type\":\"project\","
+                                + "\"scope_id\":\"project_" + prefix + "\",\"force_close\":false}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String dailyCloseId = JsonPath.read(body, "$.data.id");
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + dailyCloseId + "/summaries").with(finance))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'thirdparty_reflow')].amount_cent").value(15000))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'thirdparty_reflow')].order_count").value(2))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'channel_ticket')].amount_cent").value(25000))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].amount_cent").value(10000));
+    }
+
+    /** 两家已归属商户的餐饮/零售已入账回流（10000＋5000），另四条不该入第三方回流源：映射缺失、团购票、退款、失败。 */
+    private void seedReflowRows(String prefix, Instant inDay) {
+        String merchantA = prefix + "_mch_a";
+        String merchantB = prefix + "_mch_b";
+        insertMerchant(merchantA);
+        insertMerchant(merchantB);
+        insertThirdpartySync(prefix + "_c", "catering", "order", "synced", merchantA, 10000L, inDay);
+        insertThirdpartySync(prefix + "_r", "retail", "order", "synced", merchantB, 5000L, inDay);
+        insertThirdpartySync(prefix + "_unmapped", "catering", "order", "synced", null, 7000L, inDay);
+        insertThirdpartySync(prefix + "_ticket", "ticket", "order", "synced", merchantA, 9000L, inDay);
+        insertThirdpartySync(prefix + "_refund", "catering", "refund", "synced", merchantA, 2000L, inDay);
+        insertThirdpartySync(prefix + "_failed", "catering", "order", "failed", merchantA, 3000L, inDay);
+    }
+
+    /** 自营小程序票 10000；第三方渠道回流出的美团票 20000（成功退款 4000）与抖音票 5000。 */
+    private void seedSelfAndChannelTickets(String prefix, String merchant, LocalDate date, Instant refundAt) {
+        String type = seedTicketType();
+        insertTicketOrder(prefix + "_miniapp", type, merchant, 10000L, date, "miniapp");
+        insertTicketOrder(prefix + "_meituan", type, merchant, 20000L, date, "meituan");
+        insertTicketOrder(prefix + "_douyin", type, merchant, 5000L, date, "douyin");
+        insertTicketRefundForOrder(prefix + "_mt_refund", prefix + "_meituan", merchant, 4000L, refundAt, "success");
+    }
+
+    private RequestPostProcessor financeActor(String userId) {
+        String role = "role_" + userId;
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at)"
+                + " VALUES (?, ?, '日结回归', 'project', 'active', now())", role, role);
+        for (String permission : List.of("finance.daily_close.lock", "finance.daily_close.manage")) {
+            jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, permission);
+        }
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
+                + " VALUES (?, ?, 'platform_admin', 'org_1', NULL, 'active', now())", userId, userId);
+        jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, role);
+        AccessActor actor = new AccessActor(userId, userId, "platform_admin", "org_1", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private ArApItemRecord projItem(String id, String no, String merchant, String project, Instant now) {
@@ -446,12 +563,18 @@ class FinanceJdbcIntegrationTests {
                 ts, ts, succeeded);
     }
 
-    private void insertThirdpartySync(String id, long amountCent, Instant createdAt) {
+    private void insertMerchant(String id) {
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'catering', 'active', now(), now()) ON CONFLICT (id) DO NOTHING", id, id);
+    }
+
+    private void insertThirdpartySync(String id, String businessType, String syncType, String status,
+                                      String merchantId, long amountCent, Instant createdAt) {
         jdbcTemplate.update("""
-                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type,
-                                                     external_business_id, status, amount_cent, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, id, "meituan", "catering", "order", "ext_" + id, "synced", amountCent,
+                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, external_business_id,
+                                                     status, amount_cent, merchant_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, "meituan", businessType, syncType, "ext_" + id, status, amountCent, merchantId,
                 java.sql.Timestamp.from(createdAt), java.sql.Timestamp.from(createdAt));
     }
 

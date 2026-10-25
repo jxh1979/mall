@@ -1,13 +1,13 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 登录与注册（BSM「登录可支持手机号短信验证码和微信；创建会员身份必须完成手机号短信验证、填写生日、满足平台年龄要求，并同意当前会员条款
 // 和隐私条款。条件全部满足即自动创建有效会员，否则注册失败且不创建身份」；第十三批裁决第 3 条「满 18 周岁（推荐）」）：
 // 先取短信验证码再登录；未注册的手机号登录时服务端不建号（409 CUSTOMER_REGISTRATION_REQUIRED，验证码不被消费），转注册：填生日、
 // 阅读并逐份同意当前两份条款，同一验证码提交注册。年龄与条款版本由服务端判定，不满足即注册失败、不建会话。
-// 登录成功回到来的页面（没有则回首页）并拉一次到期提醒（本次运行中刚登录的客人不必等下次回前台）；令牌只交 lib/api.js 保存，不进页面路径。
+// 登录成功回到来的页面（没有则回首页）并拉一次到期提醒与会员等级通知（本次运行中刚登录的客人不必等下次回前台）；令牌只交 lib/api.js 保存，不进页面路径。
 // 微信登录外部资料未到，未做。
 const api = require('../../lib/api')
 const { todayText } = require('../../lib/format')
-const { remindExpiring } = require('../../lib/reminders')
+const { remindExpiring, remindLevelNotices } = require('../../lib/reminders')
 
 Component({
   data: {
@@ -89,6 +89,7 @@ Component({
           })
         api.saveSession(result)
         remindExpiring()
+        remindLevelNotices()
         wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/index' }) })
       } catch (err) {
         if (mode === 'login' && err && err.detailCode === 'CUSTOMER_REGISTRATION_REQUIRED') await this.toRegister()

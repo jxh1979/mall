@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -82,8 +82,10 @@ class BarInvitationCustomerJdbcIntegrationTests {
                 + " VALUES (?, ?, ?, '一号卡座', 'card_seat', 3, 3, 50000, 'CNY', 'active', now(), now())", tableId, barId, "T-INV-" + suffix);
         Timestamp now = Timestamp.from(Instant.now());
         jdbc.update("INSERT INTO bar_reservations (id, bar_id, table_id, customer_id, reserved_at, guest_count, allowed_pass_free_guest_count,"
-                + " deposit_amount_cent, deposit_status, order_source, status, created_terminal, created_at, updated_at, latest_arrival_at, hold_status)"
-                + " VALUES (?, ?, ?, ?, ?, 3, 3, 20000, 'paid', 'miniapp', 'reserved', 'miniapp', ?, ?, ?, 'held')",
+                + " deposit_amount_cent, deposit_status, deposit_channel, order_source, status, created_terminal, created_at, updated_at,"
+                + " latest_arrival_at, hold_status)"
+                // 已付定金都带原付款渠道（BSM 第 1062 行「每笔定金保留原订台单、原付款人、付款渠道和金额」）：取消时按原路登记待退。
+                + " VALUES (?, ?, ?, ?, ?, 3, 3, 20000, 'paid', 'wechat', 'miniapp', 'reserved', 'miniapp', ?, ?, ?, 'held')",
                 reservationId, barId, tableId, holderId, Timestamp.from(Instant.now().plusSeconds(3600)), now, now,
                 Timestamp.from(Instant.now().plusSeconds(7200)));
         // 裁决第 4 条：酒吧员工在后台确认订台后签发。

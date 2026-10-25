@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -100,5 +100,14 @@ describe("FacilityWorkbenchPage 设备接警（HP-F01）", () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/facility/alarms/falm-1/disposition",
       expect.objectContaining({ judgement: "停用该梯，等维保到场" })));
+  });
+
+  // OBS-13-06（PGM L823「告警来源支持人工上报与远程/物联自动采集两种」）：后台是员工人工上报，不提供物联网来源手选。
+  it("告警上报不提供物联网来源，固定按手工提交", async () => {
+    renderPage(makeApi(vi.fn(async () => ({}) as unknown)));
+
+    await waitFor(() => expect(screen.queryByTestId("facility-equipment-status-form")).not.toBeNull());
+    expect(screen.queryByTestId("facility-equipment-alarm-source")).toBeNull();
+    expect(screen.getByTestId("facility-equipment-status-form").textContent).not.toContain("物联网");
   });
 });

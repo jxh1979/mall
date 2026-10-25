@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -30,7 +30,6 @@ public class FacilityEquipmentService {
 
     static final Set<String> TYPES = Set.of("elevator", "hvac", "power", "water_fire");
     static final Set<String> STATUSES = Set.of("normal", "alarm", "fault", "maintenance", "disabled", "retired");
-    static final Set<String> ALARM_SOURCES = Set.of("manual", "iot");
     private static final Set<String> WORK_ORDER_TRIGGER_STATUSES = Set.of("alarm", "fault");
     private static final String PERM = "facility.equipment.manage";
 
@@ -202,7 +201,10 @@ public class FacilityEquipmentService {
         return rec;
     }
 
-    /** 状态变更/告警上报：置 alarm 须带 source(manual|iot)；置 alarm/fault 须带优先级；离开 alarm 清告警字段。 */
+    /**
+     * 状态变更/告警上报：置 alarm 须带 source，此入口为员工人工上报只收 manual（OBS-13-06，PGM L823「告警来源支持人工上报与远程/物联自动采集两种」，
+     * 物联告警须经真实设备接入）；置 alarm/fault 须带优先级；离开 alarm 清告警字段。
+     */
     @Transactional
     public FacilityEquipmentRecord changeStatus(String id, FacilityEquipmentStatusRequest request) {
         authorizationService.requirePlatformScope();
@@ -220,8 +222,8 @@ public class FacilityEquipmentService {
         String alarmNote = null;
         Instant alarmRaisedAt = null;
         if ("alarm".equals(target)) {
-            if (request.alarmSource() == null || !ALARM_SOURCES.contains(request.alarmSource())) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "告警来源必须为手工（manual）或物联网（iot）");
+            if (!"manual".equals(request.alarmSource())) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "告警来源只能是手工上报：此入口为员工人工上报，物联告警须经真实设备接入，不能自行声明");
             }
             alarmSource = request.alarmSource();
             alarmNote = request.alarmNote();
@@ -229,7 +231,7 @@ public class FacilityEquipmentService {
         }
         if (WORK_ORDER_TRIGGER_STATUSES.contains(target)
                 && (request.priority() == null || !FacilityWorkOrderService.PRIORITIES.contains(request.priority()))) {
-            // HP-F01（2026-10-21 操作员裁决补充第 1 条）：优先级由上报人（或物联网上报）当场选，决定接警响应时限。
+            // HP-F01（2026-10-21 操作员裁决补充第 1 条）：优先级由上报人（或物联网上报）当场选，决定接警响应时限；此入口为员工人工上报。
             throw ApiException.badRequest("VALIDATION_FAILED", "告警或故障上报须选择优先级：紧急（urgent）、高（high）或普通（normal）");
         }
         FacilityEquipmentRecord rec = withStatus(cur, target, alarmSource, alarmNote, alarmRaisedAt,

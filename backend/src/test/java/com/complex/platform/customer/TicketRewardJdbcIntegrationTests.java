@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +32,7 @@ class TicketRewardJdbcIntegrationTests {
     @Autowired TicketingRepository tickets;
     @Autowired ObjectMapper json;
     @Autowired TicketPointsBillingService billing;
+    @Autowired com.complex.platform.notification.ScaffoldSmsSender smsSender;
     @Autowired com.complex.platform.governance.review.SupervisorReviewService reviewService;
     @Autowired com.complex.platform.finance.FinanceService finance;
     @Autowired com.complex.platform.common.crypto.PiiCipher piiCipher;
@@ -277,10 +278,12 @@ class TicketRewardJdbcIntegrationTests {
         jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,contact_phone,status,created_at,updated_at) VALUES(?,'月结通知商户','bar',?,'active',now(),now())",merchant,piiCipher.encrypt("13800138000"));
         String rule=jdbc.queryForObject("SELECT id FROM ticket_points_billing_rules WHERE effective_month='2026-01-01'",String.class);
         jdbc.update("INSERT INTO ticket_points_monthly_bills(id,billing_month,billing_rule_id,seller_entity_id,seller_merchant_id,receiver_entity_id,project_id,amount_cent,created_at,visible_at,objection_deadline,due_date) VALUES(?,'2026-01-01',?,?,?,?,?,100,now(),'2026-02-01T08:00:00Z','2026-02-13','2026-02-16')",bill,rule,f.entity(),merchant,f.entity(),f.project());
-        billing.notifyPublishedBills();billing.notifyPublishedBills();
+        // OBS-13-04：积分月结出账属商户应收变化，不可关闭（BSM 第 1598 行），不再因总开关关而跳过——发送失败用替身失败模式模拟。
+        smsSender.fail("provider unavailable");
+        try{billing.notifyPublishedBills();billing.notifyPublishedBills();}finally{smsSender.reset();}
         assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_send_log WHERE request_id=?",Integer.class,"ticket-points-bill:"+bill)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT params->>'objection_deadline' FROM notification_send_log WHERE request_id=?",String.class,"ticket-points-bill:"+bill)).isEqualTo("2026-02-13");
-        assertThat(jdbc.queryForObject("SELECT status FROM notification_send_log WHERE request_id=?",String.class,"ticket-points-bill:"+bill)).isNotEqualTo("sent");
+        assertThat(jdbc.queryForObject("SELECT status FROM notification_send_log WHERE request_id=?",String.class,"ticket-points-bill:"+bill)).isEqualTo("failed");
         assertThat(jdbc.queryForObject("SELECT objection_deadline FROM ticket_points_monthly_bills WHERE id=?",java.time.LocalDate.class,bill)).isEqualTo(java.time.LocalDate.parse("2026-02-13"));
     }
 
@@ -550,6 +553,20 @@ class TicketRewardJdbcIntegrationTests {
     }
 
     private TicketUseRewardRecord only(Fixture f){return rewards.list(f.member()).getFirst();}
+    // OBS-13-01（第十四批）：BSM L820「达到门槛立即升级，升级后享有后台配置的保护期」——门票核销记成长值后不等每日作业即升级；
+    // 操作员裁决补充（第十四批）第 2 条「冲回后立即按当前滚动周期成长值重新定级，低于现级就降并通知」——保护期内也照降。
+    @Test void ticketGrowthUpgradesAtOnceAndReversalRegradesAtOnce() throws Exception {
+        String k=UUID.randomUUID().toString().replace("-","");
+        jdbc.update("INSERT INTO customer_member_levels(id,project_id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) VALUES(?,NULL,'base','新乐会员',0,0,10000,'active',now(),now()),(?,NULL,'silver','银卡',1,7,10000,'active',now(),now())","lv_b_"+k,"lv_s_"+k);
+        Fixture f=seed();Use u=use(f,1,1,"ticket",f.member());
+        rewards.used(new TicketRewardFacts.Used(u.verification(),u.credential()));
+        assertThat(customers.findPointsByCustomerId(f.member()).orElseThrow().level()).isEqualTo("silver");
+        assertThat(customers.findPointsByCustomerId(f.member()).orElseThrow().protectionUntil()).isEqualTo(at.atZone(com.complex.platform.common.LocalZone.ID).plusMonths(12).toInstant());
+        reverseUse(u);
+        assertThat(customers.findPointsByCustomerId(f.member()).orElseThrow().level()).isEqualTo("base");
+        assertThat(jdbc.queryForList("SELECT notice_type||':'||target_level FROM customer_level_notices WHERE customer_id=?",String.class,f.member())).containsExactly("downgraded:base");
+    }
+
     private Fixture seed() throws Exception {
         String key=UUID.randomUUID().toString().replace("-","");String type="tt_"+key,project="p_"+key,entity="be_"+key;
         jdbc.update("INSERT INTO business_entities(id,entity_name,entity_role,status,created_at,updated_at) VALUES(?,'奖励测试销售公司','platform','active',now(),now())",entity);

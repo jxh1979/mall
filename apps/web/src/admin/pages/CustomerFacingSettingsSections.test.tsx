@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -66,6 +66,33 @@ describe("客人端相关后台配置（ROOT-03 B 段券与展示组）", () => 
     fireEvent.click(screen.getByTestId("ticket-expiry-reminder-save"));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/v1/ticketing/expiry-reminder-policies/prj_1",
       { remindHours: 48, minHours: 12, maxHours: 72 }));
+  });
+
+  it("票务策略页：最晚到店前提醒按项目读出厂 30 分钟、值与上下限同配后 PUT（OBS-13-03）", async () => {
+    const api = makeApi((url) => (url.includes("arrival-reminder-policies")
+      ? { projectId: "__global__", remindMinutes: 30, minMinutes: null, maxMinutes: null } : []));
+    const p = props(api);
+    render(<TicketingPoliciesPage {...p} />);
+    await waitFor(() => expect(screen.queryByTestId("bar-arrival-reminder-policy")).not.toBeNull());
+    fireEvent.change(screen.getByLabelText("到店前提醒项目 id"), { target: { value: "prj_1" } });
+    fireEvent.click(screen.getByTestId("bar-arrival-reminder-query"));
+    await waitFor(() => expect(screen.getByTestId("bar-arrival-reminder-current").textContent).toContain("最晚到店前 30 分钟（出厂值"));
+    expect((screen.getByLabelText("最晚到店前提醒（分钟）") as HTMLInputElement).value).toBe("30");
+    fireEvent.change(screen.getByLabelText("最晚到店前提醒（分钟）"), { target: { value: "45" } });
+    fireEvent.click(screen.getByTestId("bar-arrival-reminder-save"));
+    expect(api.put).not.toHaveBeenCalled();
+    expect(p.setGlobalError).toHaveBeenCalledWith(expect.stringContaining("须同时填写"));
+    fireEvent.change(screen.getByLabelText("到店前提醒下限"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("到店前提醒上限"), { target: { value: "120" } });
+    fireEvent.click(screen.getByTestId("bar-arrival-reminder-save"));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/v1/bar/arrival-reminder-policies/prj_1",
+      { remindMinutes: 45, minMinutes: 10, maxMinutes: 120 }));
+    // PGM「展示给用户的一切文字……必须全部为中文」：保存结果区显示中文句子，不显示英文键名。
+    await waitFor(() => expect(p.setActionResult).toHaveBeenCalled());
+    const result = vi.mocked(p.setActionResult).mock.calls[0]?.[0];
+    expect(typeof result).toBe("string");
+    expect(String(result)).toContain("已保存最晚到店前提醒");
+    expect(String(result)).not.toMatch(/action|remindMinutes/);
   });
 
   it("商户专区我的合同页：发布储值卡退出公告，五项条件齐全、比例按百分比转基点", async () => {

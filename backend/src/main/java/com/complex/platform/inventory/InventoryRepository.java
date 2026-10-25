@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.time.Instant;
 import java.util.List;
@@ -152,6 +152,13 @@ public interface InventoryRepository {
                 .filter(bottle -> bottle.expireAt() != null)
                 .filter(bottle -> bottle.expireAt().isBefore(now))
                 .toList();
+    }
+
+    /**
+     * OBS-13-02：已结束权益（expired）、剩余量大于 0、尚未写过「到期转库存」回库流水的存酒（bottleId 非空时只取该瓶并加行锁）。
+     */
+    default List<SavedBottleRecord> listExpiredSavedBottlesPendingStock(String bottleId) {
+        return List.of();
     }
 
     SavedBottleClaimRecord saveSavedBottleClaim(SavedBottleClaimRecord claim);
@@ -377,6 +384,16 @@ public interface InventoryRepository {
     List<WarehouseRecord> listWarehouses();
 
     List<WarehouseRecord> listWarehousesByMerchant(String merchantId);
+
+    /** OBS-13-02：项目内归属该商户（merchantId 为空＝平台方）的在用存酒库房。 */
+    default List<WarehouseRecord> listActiveSavedBottleWarehouses(String projectId, String merchantId) {
+        return List.of();
+    }
+
+    /** OBS-13-02：库位是否为存酒库房（到期/放弃存酒转入的存货，出库与报废须审批）。 */
+    default boolean isSavedBottleWarehouse(String locationId) {
+        return false;
+    }
 
     // R5 T6：库存域内高价值复核（inventory_high_value_reviews）。
     InventoryHighValueReviewRecord saveHighValueReview(InventoryHighValueReviewRecord review);

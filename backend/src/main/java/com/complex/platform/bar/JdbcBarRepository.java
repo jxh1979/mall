@@ -1,8 +1,9 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.inventory.InventoryRepository;
 import com.complex.platform.inventory.StockMovementRecord;
@@ -26,6 +27,7 @@ class JdbcBarRepository implements BarRepository {
     private final JdbcBarParameterSource parameterSource;
     private final InventoryRepository inventoryRepository;
     private final TransactionTemplate transactionTemplate;
+    private final PiiCipher piiCipher;
 
     // C-1(V296)：注入库存仓储 + 事务管理器——酒吧域流水写入改道库存域成本管道（见本类
     // saveStockMovement），不再裸 INSERT inventory_stock_movements。
@@ -33,7 +35,8 @@ class JdbcBarRepository implements BarRepository {
             NamedParameterJdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
             InventoryRepository inventoryRepository,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            PiiCipher piiCipher
     ) {
         this.jdbcTemplate = jdbcTemplate;
         var jdbcObjectMapper = objectMapper.copy().findAndRegisterModules();
@@ -41,6 +44,7 @@ class JdbcBarRepository implements BarRepository {
         this.parameterSource = new JdbcBarParameterSource(jdbcObjectMapper);
         this.inventoryRepository = inventoryRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.piiCipher = piiCipher;
     }
 
     // ── 目录：桌位 / 预订 / 押金规则 / 商品 ──────────────────────────────────────
@@ -295,6 +299,19 @@ class JdbcBarRepository implements BarRepository {
                    AND latest_arrival_at < :now AND (hold_status IS NULL OR hold_status = 'held')
                  ORDER BY latest_arrival_at, id
                 """, Map.of("now", java.sql.Timestamp.from(now)), String.class);
+    }
+
+    // OBS-13-03-R1：员工代订录入的客人手机号只经 piiCipher 加密落库（V545 enc:v1: 信封 CHECK；verify-pii-encryption 登记）。
+    @Override
+    public void saveReservationCustomerPhone(String reservationId, String phone) {
+        jdbcTemplate.update("UPDATE bar_reservations SET customer_phone = :customer_phone WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", reservationId).addValue("customer_phone", piiCipher.encrypt(phone)));
+    }
+
+    @Override
+    public Optional<String> findReservationCustomerPhone(String reservationId) {
+        return jdbcTemplate.queryForList("SELECT customer_phone FROM bar_reservations WHERE id = :id AND customer_phone IS NOT NULL",
+                Map.of("id", reservationId), String.class).stream().findFirst().map(piiCipher::decrypt);
     }
 
     @Override

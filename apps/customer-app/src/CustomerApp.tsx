@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 // 官方客人 App 外壳（移动布局）：底部四标签（首页／票与订单／酒吧／我的）＋二级页，页面栈在内存里（不靠地址栏），
 // Android 返回键回上一页、首页再按退出；深链经 platform.onDeepLink 进入（只认 customer-core 白名单路由）。
 // 终端开关（PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」）：本端被关、本版本被关或拉取失败显示「本端暂停服务」；模块被关隐藏该模块入口。
@@ -29,6 +29,7 @@ import {
 import { CUSTOMER_APP_VERSION, CUSTOMER_LINK_HOST, createCustomerService } from "./api";
 import { CustomerAuthShell } from "./components/CustomerAuthShell";
 import { ReplayedNotice } from "./components/ReplayedNotice";
+import { LevelNoticeReminder } from "./components/LevelNoticeReminder";
 import { TicketExpiryReminder } from "./components/TicketExpiryReminder";
 import { AccountPage } from "./pages/AccountPage";
 import { BarReservationPage } from "./pages/BarReservationPage";
@@ -381,6 +382,7 @@ export default function CustomerApp(): React.ReactElement {
           </div>
         ) : renderPage(current)}
         <TicketExpiryReminder service={service} />
+        <LevelNoticeReminder service={service} />
       </main>
       <nav className="customer-tabbar" aria-label="底部导航">
         {TABS.map((tab) => (

@@ -1,5 +1,7 @@
 package com.complex.platform.merchantbilling;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -365,10 +367,11 @@ public class MerchantBillingService {
             return;
         }
         for (String event : merchantFeeEvents(bill.lines())) {
+            // OBS-13-04：账单出单不可关闭（BSM 第 1597、1598 行），催缴用独立事件键仍可关闭；收件人仍按费用事件配置。
             notifyMerchantFeeSafely(
-                    event,
+                    event + "_dunning",
                     resolveMerchantFeeRecipientPhone(bill.merchantId(), event),
-                    "sms.merchant_fee." + event,
+                    "sms.merchant_fee." + event + "_dunning",
                     merchantFeeDunningParams(bill, dunning, event),
                     "mfdun:" + dunning.id() + ":" + event,
                     bill.id());
