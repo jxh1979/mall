@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -461,7 +461,7 @@ class IntegrationServiceTests {
                 "mock-provider",
                 List.of(),
                 "production",
-                "test_ready",
+                "testing",
                 true,
                 true,
                 null,
@@ -480,7 +480,7 @@ class IntegrationServiceTests {
                 "ready-provider",
                 List.of("webhook", "polling"),
                 "production",
-                "test_ready",
+                "testing",
                 true,
                 true,
                 "manual-ledger:p0-provider",
@@ -494,7 +494,7 @@ class IntegrationServiceTests {
         );
 
         assertThat(ready.productionReady()).isTrue();
-        assertThat(ready.status()).isEqualTo("production_ready");
+        assertThat(ready.status()).isEqualTo("active");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("provider_adapter.production_ready_marked");
@@ -507,7 +507,7 @@ class IntegrationServiceTests {
                 "mock-provider",
                 List.of("webhook"),
                 "mock",
-                "mock_ready",
+                "pending",
                 true,
                 true,
                 "manual-ledger:p0-provider",
@@ -538,7 +538,7 @@ class IntegrationServiceTests {
     @Test
     void mockTestReturnsFailedWhenScenarioIndicatesFailure() {
         repository.providerAdapters.put("adapter-fail", adapter(
-                "adapter-fail", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                "adapter-fail", "mock-provider", List.of("webhook"), "mock", "pending",
                 true, true, "manual-ledger:p0-provider", false));
 
         AdapterTestRecord result = service.testProviderAdapterMock(
@@ -555,7 +555,7 @@ class IntegrationServiceTests {
     @Test
     void mockTestReturnsPassedWhenScenarioIndicatesSuccess() {
         repository.providerAdapters.put("adapter-ok", adapter(
-                "adapter-ok", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                "adapter-ok", "mock-provider", List.of("webhook"), "mock", "pending",
                 true, true, "manual-ledger:p0-provider", false));
 
         AdapterTestRecord result = service.testProviderAdapterMock(
@@ -570,7 +570,7 @@ class IntegrationServiceTests {
     @Test
     void mockTestRespectsExplicitMockPayloadForceStatus() {
         repository.providerAdapters.put("adapter-force", adapter(
-                "adapter-force", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                "adapter-force", "mock-provider", List.of("webhook"), "mock", "pending",
                 true, true, "manual-ledger:p0-provider", false));
 
         // scenario 语义为 passed（webhook 兜底），但 mockPayload.expect=failed 覆盖之。
@@ -586,7 +586,7 @@ class IntegrationServiceTests {
     @Test
     void mockTestDefaultsToPassedForUnknownScenario() {
         repository.providerAdapters.put("adapter-unknown", adapter(
-                "adapter-unknown", "mock-provider", List.of("webhook"), "mock", "mock_ready",
+                "adapter-unknown", "mock-provider", List.of("webhook"), "mock", "pending",
                 true, true, "manual-ledger:p0-provider", false));
 
         // auth 既非 success/failure 前缀，走兜底 passed（向后兼容）。
@@ -610,6 +610,54 @@ class IntegrationServiceTests {
                         "mock-disabled", "mock-provider", "webhook", Map.of(), "note", List.of())))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
                         assertThat(exception.code()).isEqualTo("PROVIDER_ADAPTER_NOT_TESTABLE"));
+    }
+
+    // 第十六批第 34 条（ENUM L211「接入状态 待接入、联调中、已启用、暂停、异常、已停用、归档」）：新建一律「待接入」；
+    // 修改按前端真实请求形状（蛇形键）只收七态、旧五态码不再收；只有改为「已启用」才标生产就绪（仍按生产条件校验）。
+    @Test
+    void providerAdapterAccessStatusUsesEnumSevenStates() throws Exception {
+        ProviderAdapterRecord created = service.createProviderAdapter(new ProviderAdapterRequest(
+                "seven-create", null, List.of(), "seven-provider", "payment", "mock", Map.of(), Map.of(), Map.of(), false));
+        assertThat(created.status()).isEqualTo("pending");
+
+        ObjectMapper snake = new ObjectMapper()
+                .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE);
+        String body = """
+                {"idempotency_key":"seven-%s","provider_code":"seven-provider","capabilities":["webhook","polling"],
+                 "environment":"production","status":"%s","webhook_enabled":true,"polling_check_enabled":true,
+                 "field_mapping_placeholder":{},"credential_secret_ref":"manual-ledger:seven-provider"}
+                """;
+        assertThatThrownBy(() -> service.updateProviderAdapter(created.id(),
+                snake.readValue(body.formatted("old", "test_ready"), ProviderAdapterUpdateRequest.class)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        for (String status : List.of("pending", "testing", "paused", "abnormal", "disabled", "archived")) {
+            ProviderAdapterRecord saved = service.updateProviderAdapter(created.id(),
+                    snake.readValue(body.formatted(status, status), ProviderAdapterUpdateRequest.class));
+            assertThat(saved.status()).isEqualTo(status);
+            assertThat(saved.productionReady()).isFalse();
+        }
+        ProviderAdapterRecord active = service.updateProviderAdapter(created.id(),
+                snake.readValue(body.formatted("active", "active"), ProviderAdapterUpdateRequest.class));
+        assertThat(active.status()).isEqualTo("active");
+        assertThat(active.productionReady()).isTrue();
+    }
+
+    // 第十六批第 34 条（第三方接入 PRD §5「暂停：临时停止回流或使用」「已停用：不再作为当前经营来源」「归档：历史接入关系」）：
+    // 暂停、已停用、归档的适配器与已停用同口径——回调不按其映射、不能做模拟测试。
+    @Test
+    void pausedOrArchivedAdapterIsNotUsedForMappingOrMockTests() {
+        repository.providerAdapters.put("map-adapter", withFieldMapping(adapter("map-adapter", "mock-provider", List.of("webhook"),
+                "production", "paused", true, true, "manual-ledger:p0-provider", false), Map.of("order_no", "payload.order_id"), true));
+        postWebhook("p0-default", "mock-provider", "payment.paid", "idem-paused", webhookPayload("evt-paused", "idem-paused"));
+        assertThat(repository.events.getFirst().eventStatus()).isEqualTo("accepted");
+
+        for (String status : List.of("paused", "archived")) {
+            repository.providerAdapters.put("adapter-" + status, adapter("adapter-" + status, "mock-provider", List.of("webhook"),
+                    "mock", status, true, true, "manual-ledger:p0-provider", false));
+            assertThatThrownBy(() -> service.testProviderAdapterMock("adapter-" + status, new ProviderAdapterTestRequest(
+                    "mock-" + status, "mock-provider", "webhook", Map.of(), "note", List.of())))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PROVIDER_ADAPTER_NOT_TESTABLE"));
+        }
     }
 
     @Test
@@ -792,7 +840,7 @@ class IntegrationServiceTests {
     void p0AutoReconciliationGeneratesDifferencesFromStandardModelWhenSwitchOn() {
         // 适配器 webhook 开 → 自动对账落库（非 dryRun）。
         repository.providerAdapters.put("recon-adapter", adapter(
-                "recon-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                "recon-adapter", "mock-provider", List.of("webhook"), "production", "active",
                 true, true, "manual-ledger:p0", true));
         // 第三方侧 actual：order_syncs 标准模型。
         service.createOrderSync(orderSyncRequest("a1", "ext-amount", "meituan", "mt-amount", 9900L, "synced"));
@@ -880,7 +928,7 @@ class IntegrationServiceTests {
                 .extracting(IntegrationOrderSyncRecord::externalBusinessId).contains("ext-a-2");
 
         // 软删映射后同门店号回流不再命中（inactive 绑定不参与反查）。
-        IntegrationChannelStoreMapRecord map = service.listChannelStoreMaps().items().stream()
+        IntegrationChannelStoreMapRecord map = service.listChannelStoreMaps(true, java.util.Set.of(), null).items().stream()
                 .filter(m -> "store-777".equals(m.externalStoreId())).findFirst().orElseThrow();
         service.archiveChannelStoreMap(map.id(),
                 new StatusChangeRequest("k-arch-1", "archive", "门店解绑", List.of()));
@@ -1133,7 +1181,7 @@ class IntegrationServiceTests {
     void ticketChannelAutoReconciliationDerivesExpectedFromLocalOrders() {
         // ticket 自动对账系统取数：平台侧期望=本地票订单实收（经端口直读），金额一致 → matched 零差异。
         repository.providerAdapters.put("tk-recon-adapter", adapter(
-                "tk-recon-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                "tk-recon-adapter", "mock-provider", List.of("webhook"), "production", "active",
                 true, true, "manual-ledger:p0", true));
         seedTicketTypeMap("mt-prod-1", "tt_pass", null);
         ticketIssuePort.amountCent = 8800L;
@@ -1153,7 +1201,7 @@ class IntegrationServiceTests {
     void ticketChannelAutoReconciliationFlagsAmountDifference() {
         // 渠道实收 9900 ≠ 本地订单 8800 → amount 差异（source_domain=thirdparty 进异常复核）。
         repository.providerAdapters.put("tk-recon-adapter", adapter(
-                "tk-recon-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                "tk-recon-adapter", "mock-provider", List.of("webhook"), "production", "active",
                 true, true, "manual-ledger:p0", true));
         seedTicketTypeMap("mt-prod-1", "tt_pass", null);
         ticketIssuePort.amountCent = 8800L;
@@ -1306,7 +1354,7 @@ class IntegrationServiceTests {
 
     private ProviderAdapterRecord webhookMappingAdapter(Map<String, Object> fieldMapping) {
         return withFieldMapping(
-                adapter("map-adapter", "mock-provider", List.of("webhook"), "production", "production_ready",
+                adapter("map-adapter", "mock-provider", List.of("webhook"), "production", "active",
                         true, true, "manual-ledger:p0-provider", true),
                 fieldMapping,
                 true);
@@ -1665,7 +1713,8 @@ class IntegrationServiceTests {
         }
 
         @Override
-        public List<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
+        public List<IntegrationChannelStoreMapRecord> listChannelStoreMaps(boolean unrestricted, java.util.Set<String> projectIds,
+                String merchantId) {
             return new ArrayList<>(channelStoreMaps.values());
         }
 

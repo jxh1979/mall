@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -78,9 +78,11 @@ final class IntegrationOrderSyncService {
                 "integration.order_sync.view", "integration_order_sync"), repository::listUnattributedOrderSyncs);
     }
 
-    PageResponse<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
+    PageResponse<IntegrationChannelStoreMapRecord> listChannelStoreMaps(boolean unrestricted, java.util.Set<String> projectIds,
+            String merchantId) {
         return executor.readPage(AuditedOperation.of("integration.channel_store_map.viewed", "integration.channel_store_map.view_failed",
-                "integration.channel_store_map.view", "integration_channel_store_map"), repository::listChannelStoreMaps);
+                "integration.channel_store_map.view", "integration_channel_store_map"),
+                () -> repository.listChannelStoreMaps(unrestricted, projectIds, merchantId));
     }
 
     IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRequest request) {
@@ -426,7 +428,7 @@ final class IntegrationOrderSyncService {
         // 开关解析：适配器 webhook 关 → 强制 dryRun（不伪造对账数据）。无适配器视为未接入 → 同样强制 dryRun。
         boolean switchOn = repository.listProviderAdapters().stream()
                 .filter(adapter -> request.providerCode().equals(adapter.providerCode()))
-                .filter(adapter -> !"disabled".equals(adapter.status()))
+                .filter(IntegrationValidation::adapterInUse)
                 .anyMatch(ProviderAdapterRecord::webhookEnabled);
         boolean requestedDryRun = request.dryRun() != null && request.dryRun();
         boolean dryRun = requestedDryRun || !switchOn;
@@ -780,7 +782,7 @@ final class IntegrationOrderSyncService {
     private ChannelMapping mapPayload(String channel, IntegrationOrderSyncRequest request, Map<String, Object> payload) {
         Optional<ProviderAdapterRecord> adapterOpt = repository.listProviderAdapters().stream()
                 .filter(adapter -> request.providerCode().equals(adapter.providerCode()))
-                .filter(adapter -> !"disabled".equals(adapter.status()))
+                .filter(IntegrationValidation::adapterInUse)
                 .findFirst();
         // 占位标准模型：渠道语义 + 标准业务字段对齐（即便开关 off / 无适配器也保留，便于自动对账取数）。
         Map<String, Object> projection = new LinkedHashMap<>();

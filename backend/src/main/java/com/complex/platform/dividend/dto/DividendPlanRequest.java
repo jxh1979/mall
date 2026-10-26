@@ -1,10 +1,12 @@
 package com.complex.platform.dividend.dto;
 
+// 文件版本：V0.01
+
 import java.util.List;
 
 /**
  * 分红方案配置（新建/修改共用）。凡涉数据皆可配：比例/税率/周期/基数构成开关全部可调，
- * 空缺字段按默认口径补齐（80/20、股息红利 20%、季度+月度预览、净利润全项）。
+ * 空缺字段按默认口径补齐（80/20、股息红利 20%、半年+月度预览、净利润全项）；periodType 取 monthly / quarterly / semiannual / annual。
  * 修改时 merchantId 不可变更；status 可置 'ended' 停用方案。
  *
  * <p>V303 扣除项三开关（可空=修改时不改现值 / 新建时默认关）：

@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -612,15 +612,17 @@ class JdbcContractRepository implements ContractRepository {
                 """, new MapSqlParameterSource().addValue("chain", chain).addValue("p", b.period()).addValue("ft", b.feeType()),
                 rs -> rs.next() ? rs.getObject(1, LocalDate.class) : null);
         String sourceId = b.contractId() + "|" + b.period() + rebillTag;    // 同 sourceType 内按期唯一
+        // 第 7 条（PGM:413「所有基础对象都要带“综合体项目归属”」；PGM:659）：应收带合同所属项目，按项目统计的欠费与逾期不漏。
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id,
                         amount_cent, paid_amount_cent, unpaid_amount_cent, currency, due_date, accounting_period,
-                        status, created_at, updated_at, merchant_id)
+                        status, created_at, updated_at, merchant_id, project_id)
                 VALUES (:id, :item_no, 'receivable', :merchant_id, :source_type, :source_id,
-                        :amount, 0, :amount, 'CNY', :due_date, :period, 'pending_collection', :now, :now, :merchant_id)
+                        :amount, 0, :amount, 'CNY', :due_date, :period, 'pending_collection', :now, :now, :merchant_id, :project_id)
                 ON CONFLICT (id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("id", b.arApItemId())
+                .addValue("project_id", b.projectId())
                 .addValue("item_no", b.feeType().toUpperCase() + "-" + b.contractId() + "-" + b.period()
                         + (rebillTag.isEmpty() ? "" : "-R" + rebill))
                 .addValue("merchant_id", b.merchantId())

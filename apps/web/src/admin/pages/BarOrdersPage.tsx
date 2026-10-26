@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { TechDetails } from "../components/TechDetails";
@@ -119,6 +119,13 @@ const VOID_TYPE_LABEL: Record<string, string> = {
   cancel: "出品前撤单",
   return: "出品后退品",
 };
+// 第十六批第 16 条（ENUM「异常状态的统一出口」）：主管二选一处置异常账单。
+const ANOMALY_RESOLUTION_LABEL = { restored: "更正后恢复", voided_reversed: "作废并冲正" } as const;
+const ANOMALY_RESOLUTION_IMPACT = {
+  restored: "账单回到登记争议之前的状态，原因进入审计留痕。",
+  voided_reversed: "账单作废，已登记的收款流水冲正、不再计入营收与对账；作废后不能再收款。原因进入审计留痕。",
+} as const;
+
 /** V351 退酒原因码字典项（后台可增删改；上屏一律用中文名，英文码只作统计标识）。 */
 type VoidReasonCodeRow = { code: string; labelZh: string; sortOrder?: number; status?: string };
 
@@ -185,6 +192,9 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   // 第十批 TK-26-R2（BSM L1025「分别标注已上菜与未上菜」）：按明细勾选本次送达，默认勾选全部未上菜明细；
   // 只记操作人取消勾选的明细（按订单归零），换订单即恢复默认全选。
   const [deliverSkip, setDeliverSkip] = React.useState<{ orderId: string; ids: string[] }>({ orderId: "", ids: [] });
+  // 第十六批第 16 条：客人账单争议登记与主管处置共用一个原因输入。
+  const [anomalyReason, setAnomalyReason] = React.useState("");
+  const selectedBill = firstBill(selectedOrder);
   const orderItems: BarOrderItemRow[] = selectedOrder?.items ?? [];
   const skippedItemIds = deliverSkip.orderId === (selectedOrder?.id ?? "") ? deliverSkip.ids : [];
   const isDeliverChecked = (item: BarOrderItemRow) => isUndelivered(item) && !skippedItemIds.includes(item.id);
@@ -386,6 +396,30 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       if (voucherCode.trim()) { setVoucherDiscountCent(result?.discountAmountCent ?? null); setVoucherCode(""); }
       return result;
     });
+  }
+
+  // ==== 第十六批第 16 条（ENUM「账单状态」异常；操作员裁决补充第 2 条）：客人争议登记置异常，主管「更正后恢复」或「作废并冲正」 ====
+  function validateAnomalyReason() {
+    if (!selectedBill?.id) {
+      setFormError("请先选择已生成账单的订单。");
+      return false;
+    }
+    if (!anomalyReason.trim()) {
+      setFormError("请先填写争议或处置原因，进入审计留痕。");
+      return false;
+    }
+    return true;
+  }
+
+  async function raiseBillAnomaly() {
+    if (!validateAnomalyReason()) return;
+    await runOrderAction("bar_bill_anomaly_raised", () => api.post(`/api/v1/bar/bills/${selectedBill!.id}/anomaly`,
+      { reason: anomalyReason.trim() }));
+  }
+
+  async function resolveBillAnomaly(resolution: keyof typeof ANOMALY_RESOLUTION_LABEL) {
+    await runOrderAction("bar_bill_anomaly_resolved", () => api.post(`/api/v1/bar/bills/${selectedBill!.id}/anomaly/resolve`,
+      { resolution, reason: anomalyReason.trim() }));
   }
 
   // ==== V345（BAR-VOID-A1）退酒申请 / 审批 ====
@@ -597,6 +631,27 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
           </table>
         </div>
         <BarRefundBreakdownPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} billId={firstBillId(selectedOrder)} onChanged={reload} />
+        <div className="admin-section-title">账单争议与异常处置</div>
+        <p className="admin-muted-action" data-testid="bar-bill-anomaly-hint">客人对账单提出争议时，填写争议原因后登记，账单即为「异常」，异常期间不能收款、不能反结；之后由主管选「更正后恢复」（回到登记前的状态）或「作废并冲正」（账单作废、已登记的收款冲正），两种处置都须填写原因并留痕。</p>
+        <div className="admin-form-row" data-testid="bar-bill-anomaly-form">
+          <span data-testid="bar-bill-anomaly-status">选中账单：{selectedBill?.id ? `${selectedBill.id} / ${formatBusinessStatus(selectedBill.status)}` : TEXT.noBill}</span>
+          <label>争议或处置原因<input aria-label="争议或处置原因" data-testid="bar-bill-anomaly-reason" value={anomalyReason} onChange={(e) => setAnomalyReason(e.target.value)} placeholder="例如：客人称未点第二瓶香槟" /></label>
+          {selectedBill?.status === "abnormal" ? (["restored", "voided_reversed"] as const).map((resolution) => (
+            <HighRiskConfirm
+              key={resolution}
+              label={ANOMALY_RESOLUTION_LABEL[resolution]}
+              impact={ANOMALY_RESOLUTION_IMPACT[resolution]}
+              disabled={busyAction !== ""}
+              precheck={validateAnomalyReason}
+              onConfirm={() => void resolveBillAnomaly(resolution)}
+              permissionsState={effectivePermissions}
+              permissions={["bar.bill.anomaly.resolve"]}
+              data-testid={`bar-bill-anomaly-${resolution}`}
+            />
+          )) : (
+            <PermissionButton permissionsState={effectivePermissions} permissions={["bar.bill.adjust"]} data-testid="bar-bill-anomaly-raise" disabled={busyAction !== "" || selectedBill?.status === "void"} onClick={() => void raiseBillAnomaly()}>登记争议（置为异常）</PermissionButton>
+          )}
+        </div>
         {formError ? <div data-testid="bar-orders-error" className="admin-inline-error">{formError}</div> : null}
         </>
         )}

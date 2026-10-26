@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.01
+
 import java.time.LocalDate;
 
 /**
@@ -45,19 +47,20 @@ public final class DividendReserveReleaseMath {
      * @param mode         释放模式（manual / next_period / fixed_delay / annual）
      * @param periodEnd    计算单期间结束日（自然日，闭区间末日）
      * @param delayPeriods fixed_delay 的延后周期数（>=1；其余模式忽略）
-     * @param periodType   方案周期类型（quarterly=每期 3 月 / monthly=每期 1 月）
+     * @param periodType   方案周期类型（monthly / quarterly / semiannual / annual = 每期 1 / 3 / 6 / 12 月）
      * @param asOf         判定基准日（通常=定时作业运行日）
      */
     public static boolean isDue(String mode, LocalDate periodEnd, int delayPeriods, String periodType, LocalDate asOf) {
         if (periodEnd == null || asOf == null || mode == null) {
             return false;
         }
-        int monthsPerPeriod = "quarterly".equals(periodType) ? 3 : 1;
+        int monthsPerPeriod = DividendPeriod.MONTHS_PER_PERIOD.getOrDefault(periodType, 1);
         return switch (mode) {
             case "manual" -> false;                                   // 手动模式永不自动释放
             case "next_period" -> asOf.isAfter(periodEnd);            // 期末进入下一期即到期
-            case "fixed_delay" -> asOf.isAfter(
-                    periodEnd.plusMonths((long) Math.max(delayPeriods, 1) * monthsPerPeriod));
+            // 按期末次日推整期再回退一天，落在对应期末（6-30 延后半年到 12-31，不是 12-30）。
+            case "fixed_delay" -> asOf.isAfter(periodEnd.plusDays(1)
+                    .plusMonths((long) Math.max(delayPeriods, 1) * monthsPerPeriod).minusDays(1));
             case "annual" -> asOf.isAfter(LocalDate.of(periodEnd.getYear(), 12, 31)); // 期间所在自然年末清算
             default -> false;
         };

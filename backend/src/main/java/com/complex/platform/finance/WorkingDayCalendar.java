@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -30,9 +31,14 @@ public class WorkingDayCalendar {
     }
 
     public Day day(LocalDate date) {
-        return jdbc.query("SELECT working_day, bank_working_day FROM ticket_points_calendar_days WHERE calendar_date=?",
-                        (rs, n) -> new Day(date, rs.getBoolean(1), rs.getBoolean(2)), date).stream().findFirst()
+        return find(date)
                 .orElseThrow(() -> ApiException.badRequest("WORKING_CALENDAR_MISSING", "缺少已审批的工作日／银行工作日记录：" + date));
+    }
+
+    /** 该自然日已审批的日历记录，未审批为空（审批通用时限据此计入法定调休上班日与法定假日）。 */
+    public Optional<Day> find(LocalDate date) {
+        return jdbc.query("SELECT working_day, bank_working_day FROM ticket_points_calendar_days WHERE calendar_date=?",
+                (rs, n) -> new Day(date, rs.getBoolean(1), rs.getBoolean(2)), date).stream().findFirst();
     }
 
     /** 异议截止日：可查看之日次日起逐日计工作日，项目整日不可用的自然日不计；届满当日即可付（DEC-R8-56）。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -103,9 +103,10 @@ class FacilityEquipmentServiceTests {
     void maintenanceDone_resetsToNormalAndRecomputesDueFromNow() {
         FacilityEquipmentRecord rec = service.create(req("elevator", 30, LocalDate.parse("2025-01-01")));
         service.changeStatus(rec.id(), new FacilityEquipmentStatusRequest("fault", null, null, "normal", null));
-        FacilityEquipmentRecord done = service.recordMaintenanceDone(rec.id(), "k_done");
+        FacilityEquipmentRecord done = service.recordMaintenanceDone(rec.id(), "scheduled_maintenance", "k_done");
         assertThat(done.status()).isEqualTo("normal");
         assertThat(done.lastMaintenanceAt()).isNotNull();
+        assertThat(done.lastMaintenanceType()).isEqualTo("scheduled_maintenance");
         // 到期由服务按 UTC 计算(Instant.now().atZone(UTC)),断言同用 UTC 才不受服务器时区/时刻影响
         assertThat(done.nextMaintenanceDue()).isEqualTo(LocalDate.now(java.time.ZoneOffset.UTC).plusDays(30));
     }

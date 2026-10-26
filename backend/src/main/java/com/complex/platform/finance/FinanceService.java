@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1767,6 +1767,12 @@ public class FinanceService implements TerminationSettlementPort {
                 businessDayResolver.endInstant(businessDate), scopeType, scopeId)) {
             throw ApiException.conflict("DAY_CLOSE_ANOMALY_PENDING",
                     "该营业日有待主管处置的票务核销异常，处置完毕后才能确认日结锁定");
+        }
+        // 第十六批第 16 条：同一条 ENUM 规则接酒吧账单异常（开单或收款落在该营业日、仍待主管处置）。
+        if (repository.openBarBillAnomalyExists(businessDayResolver.startInstant(businessDate),
+                businessDayResolver.endInstant(businessDate), scopeType, scopeId)) {
+            throw ApiException.conflict("DAY_CLOSE_ANOMALY_PENDING",
+                    "该营业日有待主管处置的酒吧账单异常，处置完毕后才能确认日结锁定");
         }
         Instant now = Instant.now();
         String dailyCloseId = "daily_close_" + slug(actual.idempotencyKey());

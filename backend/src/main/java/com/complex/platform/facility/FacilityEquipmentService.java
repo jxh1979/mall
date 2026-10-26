@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -30,6 +30,9 @@ public class FacilityEquipmentService {
 
     static final Set<String> TYPES = Set.of("elevator", "hvac", "power", "water_fire");
     static final Set<String> STATUSES = Set.of("normal", "alarm", "fault", "maintenance", "disabled", "retired");
+    /** ENUM:267「设备维保类型 定期保养、例行巡检、故障维修、安全检测、部件更换」；BSM:1408「维保分……」（第十六批第 36 条）。 */
+    static final Set<String> MAINTENANCE_TYPES =
+            Set.of("scheduled_maintenance", "routine_inspection", "fault_repair", "safety_test", "part_replacement");
     private static final Set<String> WORK_ORDER_TRIGGER_STATUSES = Set.of("alarm", "fault");
     private static final String PERM = "facility.equipment.manage";
 
@@ -169,13 +172,15 @@ public class FacilityEquipmentService {
         if (r.name() == null || r.name().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "name is required");
         }
+        // 第 8 条（PGM:413「所有基础对象都要带“综合体项目归属”」）：新建设备必须带所属综合体项目——告警按设备项目解析当班接警人（BSM:1417）。
+        String projectId = requireText(r.projectId(), "project_id");
         Instant now = Instant.now();
         String id = r.id() == null || r.id().isBlank() ? "feq_" + UUID.randomUUID() : r.id();
         LocalDate nextDue = computeNextDue(r.installDate(), null, r.maintenanceCycleDays());
         FacilityEquipmentRecord rec = new FacilityEquipmentRecord(id, r.name().trim(), r.equipmentType(),
                 r.spaceId(), r.brand(), r.model(), r.vendor(), r.responsibleUserId(), "normal",
                 r.maintenanceCycleDays(), null, nextDue, r.installDate(), r.warrantyUntil(),
-                null, null, null, r.projectId(), r.merchantId(), now, now);
+                null, null, null, projectId, r.merchantId(), now, now);
         repository.insertEquipment(rec);
         auditEventService.recordSuccess("facility.equipment_created", PERM, "facility_equipment", id,
                 null, r.idempotencyKey(), Map.of("type", r.equipmentType()));
@@ -247,18 +252,23 @@ public class FacilityEquipmentService {
         return rec;
     }
 
-    /** 维保完成回写：last=now、状态回 normal、按周期重算下次到期。 */
+    /** 维保完成回写：须选本次维保类型（五类之一），last=now、记最近维保类型、状态回 normal、按周期重算下次到期。 */
     @Transactional
-    public FacilityEquipmentRecord recordMaintenanceDone(String id, String idempotencyKey) {
+    public FacilityEquipmentRecord recordMaintenanceDone(String id, String maintenanceType, String idempotencyKey) {
         authorizationService.requirePlatformScope();
+        if (maintenanceType == null || !MAINTENANCE_TYPES.contains(maintenanceType)) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "维保完成须选维保类型：定期保养、例行巡检、故障维修、安全检测或部件更换");
+        }
         FacilityEquipmentRecord cur = load(id);
         requireNotRetired(cur);
         Instant now = Instant.now();
         LocalDate nextDue = computeNextDue(cur.installDate(), now, cur.maintenanceCycleDays());
-        FacilityEquipmentRecord rec = withStatus(cur, "normal", null, null, null, now, nextDue);
+        FacilityEquipmentRecord rec = withStatus(cur, "normal", null, null, null, now, nextDue)
+                .withLastMaintenanceType(maintenanceType);
         repository.updateEquipment(rec);
         auditEventService.recordSuccess("facility.equipment_maintained", PERM, "facility_equipment", id,
-                null, idempotencyKey, Map.of());
+                null, idempotencyKey, Map.of("maintenance_type", maintenanceType));
         return rec;
     }
 

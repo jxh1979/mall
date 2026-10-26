@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.54
+文档版本：V0.55
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3869,3 +3869,16 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 5 | **OBS-13-01 等级参数改动是否追溯不在保护期的会员** —— 操作员确认「对」：滚动统计周期等参数改了，不在保护期的会员不因此当天整批降级，仍按各自最近一次定级时的参数算，下次定级变化后才用新参数（BSM L820「只对后续周期生效，不追溯已确认的等级」）。 | `LoyaltyService.evaluateAccount`：滚动统计周期与提前通知天数一律取 `customer_points_accounts.level_period_start`（最近一次定级时点）生效的版本（`TicketRewardConfigService.levelParam`），保护期内外一致；`applyLevelChange` 在升级或降级导致等级变化时（含期末降级、保护期外按滚动成长值降级、冲回重定）把 `level_period_start` 更新为当时，期末保级（`keep`）不更新——下次等级变化后才换用当时生效的新版本。文档 `docs/member-and-tier-product-prd-v1.0.md` §8 实现现状①；OpenAPI 奖励规则配置与 `kind` 说明。测试 `LoyaltyLevelProtectionJdbcIntegrationTests.rollingMonthsChangeDoesNotDowngradeMembersOutOfProtectionUntilTheirNextLevelChange`。 |
 | 6 | **OBS-13-02 存酒库房存货调拨后的处置** —— 操作员答：「调拨到库存后就记录为对应酒吧的库存后续销售使用。按正常对应库存处理。」——从存酒库房调拨出去后即按对应酒吧的正常库存处理（后续销售、报废、赠送、内部使用按普通库存规则）；在存酒库房里直接报废、赠送、内部使用仍按第 4 条由门店主管与财务审批。 | 代码维持现状：`InventoryStockMovementService.createMovement` 只对来源库位为存酒库房（`InventoryRepository.isSavedBottleWarehouse`）且只扣不增的出库走两道审批，调拨（扣来源同时增目标）照常；`createStockAdjustment` 只对存酒库房里的报损族走两道审批；调拨到酒吧普通库房后的销售、报废、赠送、内部使用按普通库存规则。文档 `docs/supply-chain-inventory-product-prd-v0.1.md` §7.4 实现现状；OpenAPI `createStockMovement`、`createTypedStockMovement` 说明。 |
 | 7 | **OBS-13-03 未付定金的自助订台超时作废是否发短信** —— 操作员答「不发」：未付定金、没占过台位的自助订台超时作废不发「超时释放台位通知」（维持现状）。 | 代码维持现状：`BarEntryService.expireOverdue`（超时释放作业 `BarReservationTimeoutJob` 逐笔调用）只在该订台占着台位（`hold_status=held`）时发「超时释放台位通知」，未付定金、从未占台的自助订台超时作废不发。`docs/bar-business-operations-product-prd-v0.1.md` §7.1A 实现现状（第十四批 OBS-13-03）与 `docs/third-party-business-access-product-prd-v0.1.md` §11A.1 实现现状现有说法与此一致，未改。 |
+
+## 2026-10-26 第十六批（待开发清单 A 类小项）操作员裁决（文档同步，HTML 不改）
+
+### 来源与范围
+
+控制席第十六批（batch19，工作树 `feature/business-code-batch19-20261026`，基线 `3db3b0d3`；处理 2026-10-25 待开发清单 A 类小项，操作员点名原话：「先做 A 类里工作量小、见效快的几条：项目隔离四处（第 4、5、7、8 条）、停车工作台列表为空（第 9 条）、客人 App 提示弹不出（第 10 条）、分红周期与存酒提醒节点等小项，做完提交合并。」），操作员就第 35 条（内部协作工单出厂时限策略）与第 16 条（酒吧账单「异常」怎么进入）答复 2 条；原文记录于控制席任务书 `B19-BRIEF.md`「操作员裁决补充（第十六批；所选选项原文逐字）」节（本机 `html-audit-20261017/`，不在仓内）。本节登记这 2 条并注明落地位置。三份业务 HTML 保持冻结、一句不改。本节追加时，原台账除文档版本 V0.54→V0.55 外，其他历史字节保持。
+
+### 裁决原文（逐字）与落地代码位置
+
+| 编号 | 裁决原文（逐字） | 落地代码位置 |
+|---|---|---|
+| 1 | **第 35 条 内部协作工单出厂时限策略** —— 操作员选「照「其他服务请求」种一份」：出厂时限和验收方式照现有「其他」类型的出厂策略种一份，开箱即可用，之后可改。 | 迁移 `V551__facility_internal_collaboration_default_policy.sql`：「其他」类型的出厂策略只有 V166 的 `fwop_other_normal` 一行，逐字段照抄种 `fwop_internal_collaboration_normal`（normal、响应 240 分钟、处理 2880 分钟、不需验收、处理人完成即结；后台已配过同 id 的不覆盖）；建单仍走 `FacilityWorkOrderService.create` → `policy(type, priority)` 按「类型×优先级」取策略，后台策略矩阵可改。回归 `FacilityWorkOrderDualConfirmationJdbcIntegrationTests.internalCollaborationWorkOrderWorksOutOfTheBoxWithOtherFactoryPolicy`（全新库不配策略、不带优先级按前端形状建内部协作工单成功）。`docs/building-operations-prd-v1.0.md` 同步。 |
+| 2 | **第 16 条 酒吧账单「异常」怎么进入** —— 操作员选「系统自动＋员工登记（推荐）」：收款金额与账单不符、支付结果未知时系统自动置异常；客人对账单提出争议时员工登记置异常。之后都走主管「更正后恢复」或「作废并冲正」。 | 员工登记与主管出口：迁移 `V552__bar_bill_abnormal.sql`（`bar_bills.abnormal_prior_status` 留存进入前状态＋约束；新权限 `bar.bill.anomaly.resolve`，授予持反结权限 `bar.bill.reopen` 的角色、权限模板与平台管理员）；`BarController` `POST /api/v1/bar/bills/{bill_id}/anomaly`（沿用账单调整权限 `bar.bill.adjust`）、`POST /api/v1/bar/bills/{bill_id}/anomaly/resolve`（`bar.bill.anomaly.resolve`）→ `BarService.raiseBillAnomaly`／`resolveBillAnomaly`（幂等＋成功／失败审计 `bar.bill_anomaly_raised`／`bar.bill_anomaly_raise_failed`、`bar.bill_anomaly_resolved`／`bar.bill_anomaly_resolve_failed`，登记与处置原因随成功审计留痕）→ `BarBillAnomalyService`：登记置 `abnormal`；「更正后恢复」回到进入前状态并经 `BarBillRefundStatusService.refresh` 按已成功退款额重算；「作废并冲正」账单与结算状态置 `void`、`markBillSettlementsReversed` 冲正收款流水。`BarBillingService` 收款（结账、支付意向）与反结遇异常 409 `BAR_BILL_ABNORMAL`、遇作废 409 `BAR_BILL_VOIDED`；`BarServiceResponsibilityService` 关台不把作废账单算未结清；`FinanceService` 日结锁定遇开单或收款落在该营业日的异常酒吧账单拒 409 `DAY_CLOSE_ANOMALY_PENDING`（ENUM「异常状态的统一出口」「异常单据未处置完毕，所属日结不得确认锁定」，同 TK-14 票务核销异常）；「作废并冲正」与反结共用 `BarBillingService.requireSettleDayUnlocked`，结账营业日已锁定日结的拒 409 `DAY_CLOSE_LOCKED`；OpenAPI 两条接口同步。前端 `BarOrdersPage`「账单争议与异常处置」：显示选中账单状态（异常／已作废中文）、登记入口与主管两个出口（原因必填）。系统自动置异常：现行酒吧账单收款全由员工登记（`BarBillingService.settleBill` 不查渠道；`createBillPayIntent` 只落库 `created`、不发渠道；`CustomerOnlinePaymentSettlementJob` 不含 `bar_bill`；扫码点单在到账后、成单前比对实付与账单金额，不符即整单不成立并原路退回，不产生账单），没有「金额不符」「结果未知」的判定点可挂，未实现。回归 `BarBillAnomalyJdbcIntegrationTests`、`BarJdbcIntegrationTests.serviceCloseAllowsVoidedBill`、`BarOrdersPage.anomaly.test.tsx`。`docs/bar-business-operations-product-prd-v0.1.md` §6 同步。 |

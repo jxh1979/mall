@@ -1,4 +1,5 @@
 package com.complex.platform.integration;
+// 文件版本：V0.01
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -104,7 +105,14 @@ public class IntegrationController {
     @GetMapping("/channel-store-maps")
     public ApiResponse<PageResponse<IntegrationChannelStoreMapRecord>> listChannelStoreMaps() {
         authorizationService.requirePermission(CHANNEL_STORE_MAP_VIEW_PERMISSION);
-        return ApiResponse.ok(service.listChannelStoreMaps());
+        // 第 5 条（PGM:659「所有业务数据默认按项目隔离……数据的项目与商户隔离不提供关闭开关」）：商户账号只见本商户的映射；
+        // 平台管理员与最高权限（不挂项目，同票务台账）不限；不挂商户的员工只见按入口权限码可触及项目内商户的映射。
+        var actor = authorizationService.currentActor();
+        var reach = authorizationService.isMasterAuthority(actor) ? null
+                : authorizationService.projectReach(actor, CHANNEL_STORE_MAP_VIEW_PERMISSION);
+        boolean all = reach == null || reach.platformAdmin();
+        String merchant = all || actor.merchantId() == null || actor.merchantId().isBlank() ? null : actor.merchantId();
+        return ApiResponse.ok(service.listChannelStoreMaps(all, all ? java.util.Set.of() : reach.organizationIds(), merchant));
     }
 
     @PostMapping("/channel-store-maps")

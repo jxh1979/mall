@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -11,6 +11,8 @@ const STATUS_LABELS: Record<string, string> = {
   unpaid: "未支付",
   partial_paid: "部分支付",
   refunded: "已退款",
+  // 第十六批第 16 条（ENUM L101 酒吧账单状态「部分退款」）
+  partial_refunded: "部分退款",
   refunding: "退款中",
   // AUD-077 门票转赠
   transferring: "转赠中",
@@ -349,7 +351,7 @@ const STATUS_LABELS: Record<string, string> = {
   following_up: "跟进中",
   converted_to_intent: "已转意向",
   negotiating: "洽谈中",
-  on_hold: "暂缓",
+  on_hold: "已搁置", // 第 37 条：仅招商线索用（V161），按 ENUM:248「招商线索状态」原文
   renewing: "续签中",
   throttled: "已限流",
   skipped_switch_off: "通道关闭未发",

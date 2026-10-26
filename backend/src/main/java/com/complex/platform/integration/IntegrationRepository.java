@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import java.util.List;
 import java.util.Optional;
 
@@ -40,7 +42,11 @@ public interface IntegrationRepository {
 
     IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRecord record);
 
-    List<IntegrationChannelStoreMapRecord> listChannelStoreMaps();
+    /**
+     * 第 5 条（PGM:659）：渠道门店映射列表按读取人范围取数——merchantId 非空只取该商户的映射；否则 unrestricted（平台管理员）取全部，
+     * 其余只取所属商户项目在 projectIds 内的映射（商户无项目的不给）。
+     */
+    List<IntegrationChannelStoreMapRecord> listChannelStoreMaps(boolean unrestricted, java.util.Set<String> projectIds, String merchantId);
 
     Optional<IntegrationChannelStoreMapRecord> findChannelStoreMapById(String id);
 

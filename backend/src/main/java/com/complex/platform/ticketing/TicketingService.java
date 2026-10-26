@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 
@@ -1010,12 +1010,31 @@ public class TicketingService {
 
     /**
      * 退款单台账（后台“待确认拨付”看板）：业务人员靠它看哪几笔已批准但钱还没打出去。
-     * 权限 ticket.refund.view；商户 scope 只见本商户受理的退款（V220 退款单直挂 merchant_id）。
+     * 权限 ticket.refund.view；商户 scope 只见本商户受理的退款（V220 退款单直挂 merchant_id）；不挂商户的项目员工只见原单
+     * 在按该权限码可触及项目内的退款（第 4 条，PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」；原单取不到项目的不给）；
+     * 平台管理员与最高权限不限（同安全事件台账）。
      */
     public PageResponse<TicketRefundRecord> listTicketRefunds() {
         return operations.readPage(
                 TicketingReadOperation.LIST_TICKET_REFUNDS,
-                () -> filterByMerchantScope(repository.listTicketRefunds(), TicketRefundRecord::merchantId)
+                () -> {
+                    List<TicketRefundRecord> rows = filterByMerchantScope(repository.listTicketRefunds(), TicketRefundRecord::merchantId);
+                    if (authorizationService == null || authorizationService.currentMerchantIdQuietly().isPresent()) {
+                        return rows;
+                    }
+                    var actor = authorizationService.currentActor();
+                    if (authorizationService.isMasterAuthority(actor)) {
+                        return rows;
+                    }
+                    var reach = authorizationService.projectReach(actor, "ticket.refund.view");
+                    if (reach.platformAdmin()) {
+                        return rows;
+                    }
+                    java.util.Map<String, Boolean> visible = new java.util.HashMap<>();
+                    return rows.stream().filter(refund -> visible.computeIfAbsent(refund.targetId(), orderId ->
+                            reach.covers(repository.findTicketOrderById(orderId).map(TicketOrderRecord::projectId).orElse(null))))
+                            .toList();
+                }
         );
     }
 

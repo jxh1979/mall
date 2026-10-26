@@ -1,5 +1,7 @@
 package com.complex.platform.integration;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.integration.IntegrationValidation.*;
 
 import com.complex.platform.common.api.ApiException;
@@ -146,7 +148,8 @@ final class ProviderAdapterService {
         boolean webhookEnabled = booleanConfig(request.webhookConfig(), "enabled");
         boolean pollingEnabled = booleanConfig(request.pollingConfig(), "enabled");
         boolean productionReady = Boolean.TRUE.equals(request.productionReady());
-        String status = "mock".equals(request.mode()) ? "mock_ready" : "draft";
+        // 第十六批第 34 条：新建一律「待接入」（ENUM L211 接入状态七态）。
+        String status = "pending";
         ProviderAdapterRecord adapter = new ProviderAdapterRecord(
                 "adapter_" + UUID.randomUUID(),
                 request.providerCode(),
@@ -202,7 +205,7 @@ final class ProviderAdapterService {
                 existing.webhookConfig(),
                 existing.pollingConfig(),
                 request.credentialSecretRef(),
-                "production_ready".equals(request.status()),
+                "active".equals(request.status()),
                 request.operatorNote(),
                 safeList(request.evidenceAttachmentIds()),
                 existing.createdAt(),
@@ -235,7 +238,7 @@ final class ProviderAdapterService {
                 existing.mode(),
                 existing.capabilities(),
                 existing.environment(),
-                "production_ready",
+                "active",
                 existing.webhookEnabled(),
                 existing.pollingCheckEnabled(),
                 existing.fieldMapping(),
@@ -266,7 +269,7 @@ final class ProviderAdapterService {
         validateTestRequest(request);
         ProviderAdapterRecord adapter = repository.findProviderAdapterById(id)
                 .orElseThrow(() -> ApiException.notFound("PROVIDER_ADAPTER_NOT_FOUND", "渠道适配器不存在或已被删除"));
-        if (!adapter.providerCode().equals(request.providerCode()) || "disabled".equals(adapter.status())) {
+        if (!adapter.providerCode().equals(request.providerCode()) || !adapterInUse(adapter)) {
             throw new ApiException(HttpStatus.FAILED_DEPENDENCY, "PROVIDER_ADAPTER_NOT_TESTABLE", "该渠道适配器不支持连通性测试");
         }
         Map<String, Object> mockPayload = safeMap(request.mockPayload());

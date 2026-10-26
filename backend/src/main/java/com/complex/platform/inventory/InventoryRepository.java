@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.time.Instant;
 import java.util.List;
@@ -219,7 +219,7 @@ public interface InventoryRepository {
         return Optional.empty();
     }
 
-    /** 人工例外消费历史条件（按项目）；未配置返回空 → 人工例外一律拒绝。 */
+    /** 人工例外消费历史条件（按项目；project_id=global 为出厂行）；无行返回空。 */
     default Optional<SavedBottleManualPickupPolicyRecord> findSavedBottleManualPickupPolicy(String projectId) {
         return Optional.empty();
     }
@@ -227,6 +227,16 @@ public interface InventoryRepository {
     /** 配置人工例外消费历史条件（按项目 upsert，留痕 updated_by/updated_at；BSM L1073「调整须最高权限审批并留痕」）。 */
     default void saveSavedBottleManualPickupPolicy(SavedBottleManualPickupPolicyRecord policy, String actorId) {
         throw new UnsupportedOperationException("saved bottle manual pickup policy not supported");
+    }
+
+    /** 存酒到期提醒节点：scope_id（global | project:&lt;id&gt;）→ 到期前第 N 天（降序）；无配置返回空 → 不发到期提醒。 */
+    default java.util.Map<String, List<Integer>> listSavedBottleReminderPolicies() {
+        return java.util.Map.of();
+    }
+
+    /** 配置存酒到期提醒节点（按 scope upsert，留痕 updated_by/updated_at）。 */
+    default SavedBottleReminderPolicyRecord saveSavedBottleReminderPolicy(SavedBottleReminderPolicyRecord policy, String actorId) {
+        throw new UnsupportedOperationException("saved bottle reminder policy not supported");
     }
 
     /** 有效卡座消费订单数（已支付且未全额退款）；since 为空=历史累计。 */

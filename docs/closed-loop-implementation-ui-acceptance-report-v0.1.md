@@ -11,7 +11,7 @@
 - VISUAL_REGRESSION_BASELINES_TRACKED
 - NO_STALE_UI_ACCEPTANCE_COUNTS
 
-更新时间：2026-07-22T07:04:55.757Z
+更新时间：2026-10-26T10:00:52.948Z
 执行位置：192.168.88.160，`/home/james/complex-management`
 
 ## 1. 本轮闭环结论
@@ -23,9 +23,9 @@
 | 需求矩阵完整实现 | 88/97 | `docs/closed-loop-current-state-snapshot-latest.json` |
 | 完整后台 MVP | 9/9 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` |
 | 完整后台非首批 | 22/22 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` |
-| 后端测试 | 2583 | `backend/target/surefire-reports` |
-| Web 单元测试定义 | 741 | `apps/web/src/**/*.test.*` |
-| Playwright 常规 UI | 39 | `playwright-report/index.html` |
+| 后端测试 | 5671 | `backend/target/surefire-reports` |
+| Web 单元测试定义 | 1298 | `apps/web/src/**/*.test.*` |
+| Playwright 常规 UI | 47 | `playwright-report/index.html` |
 | Playwright 真实后端 UI | 3 | `playwright-report-real-backend/index.html` |
 | 视觉回归截图基线 | 4 | `tests/e2e/**/*-snapshots/*.png` |
 | Semgrep | results=0, errors=0, paths_scanned=1984 | `semgrep-20260703-delivery-gates-clean` |
@@ -37,8 +37,8 @@
 
 | 项目 | 当前值 |
 |---|---:|
-| main JS | apps/web/dist/assets/main-DjeFogQ0.js，3532 bytes |
-| largest asset | apps/web/dist/assets/vendor-antd-CBmYl4fp.js，538825 bytes |
+| main JS | apps/web/dist/assets/main-BKx9d_TE.js，4216 bytes |
+| largest asset | apps/web/dist/assets/vendor-antd-CzvkKKQu.js，251112 bytes |
 | main bundle warning | 不预期出现 |
 | dist index | 存在 |
 | route indexes | 3/3 |
@@ -50,8 +50,8 @@
 | 常规 UI | CUS-LIFE-01 封禁→拒动作拒登录→恢复→拉黑永久拒→自助注销后数据保留 | tests/e2e/customer-account-lifecycle-live-evidence.spec.ts |
 | 常规 UI | CUS-LIFE-02 ADM-CUS-001 客人账号管理页在真实后端查询并截图 | tests/e2e/customer-account-lifecycle-live-evidence.spec.ts |
 | 常规 UI | CUST-01 phone login then logout returns to login view | tests/e2e/customer-journey.spec.ts |
-| 常规 UI | CUST-02 buy ticket creates order and aggregate payment intent | tests/e2e/customer-journey.spec.ts |
-| 常规 UI | CUST-03 bar reservation creates reservation and deposit intent | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-02 buy ticket creates order and shows payment unavailable when no gateway is configured | tests/e2e/customer-journey.spec.ts |
+| 常规 UI | CUST-03 bar reservation shows table rules then deposit payment is unavailable | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | CUST-04 points page shows balance/level and check-in accrues streak | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | CUST-05 wallet shows per-card stored value balances | tests/e2e/customer-journey.spec.ts |
 | 常规 UI | CUST-06 my orders reflect a freshly created ticket order | tests/e2e/customer-journey.spec.ts |
@@ -61,11 +61,19 @@
 | 常规 UI | ADM-MVP-03 ticketing policy validates weekday/weekend/holiday base price before publish | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-04 bar table session blocks over-limit check-in and records valid check-in | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-05 finance ledger requires adjustment reason and supports partial payment | tests/e2e/full-admin-mvp.spec.ts |
-| 常规 UI | ADM-MVP-06 integration adapter rejects plaintext secret and supports mock test | tests/e2e/full-admin-mvp.spec.ts |
+| 常规 UI | ADM-MVP-06 integration adapter requires provider code, type and mode and supports mock test | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-07 ops readiness cannot verify blocker without evidence ref | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-08 role permission and mobile layout are enforceable | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-09 failed login surfaces business wording and stays on auth screen | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-10 forbidden backend access surfaces business wording without hiding the audit trail | tests/e2e/full-admin-mvp.spec.ts |
+| 常规 UI | ADM-STF-003 displays the complete tax version and real draft form | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | ADM-AMU-008 submits future business day configuration for approval | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | ADM-INV-003 separates qualified receipt and rejection with actual upload bytes | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | ADM-FAC-002 ADM-FAC-003 review and acceptance send real material version | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | ADM-FIN-009 reviews the whole recovery amount before a finance waiver | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | ADM-TKT-004 ADM-FIN-008 config approval and bill objection remain distinct | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | NAV-GOV-01 主体绑定页展示真实字段与原绑定明细 | tests/e2e/full-admin-remaining.spec.ts |
+| 常规 UI | NAV-GOV-01 准入审计关联真实商户，资料齐全不等于审批通过 | tests/e2e/full-admin-remaining.spec.ts |
 | 常规 UI | ADM-REM-01 exposes all non-first admin pages with route, evidence and readable content | tests/e2e/full-admin-remaining.spec.ts |
 | 常规 UI | ADM-REM-02 governance, contract, ticketing, bar and amusement actions are auditable | tests/e2e/full-admin-remaining.spec.ts |
 | 常规 UI | ADM-REM-03 risk, audit, analytics and integration pages cover empty/error/mobile states | tests/e2e/full-admin-remaining.spec.ts |

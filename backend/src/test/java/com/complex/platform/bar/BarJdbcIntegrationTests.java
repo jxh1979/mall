@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -909,6 +909,20 @@ class BarJdbcIntegrationTests {
         assertThat(repository.findTableSessionById(b.id())).get()
                 .extracting(BarTableSessionRecord::status).isEqualTo("closed");
         assertThat(tableStatus("table_cls3_b")).isEqualTo("pending_clear");
+    }
+
+    /** 第十六批第 16 条（ENUM「异常状态的统一出口」作废并冲正）：主管作废后的账单（void）不算未结清，可以关台。 */
+    @Test
+    void serviceCloseAllowsVoidedBill() {
+        String merchant = closeFixture("clsv");
+        BarTableSessionRecord b = closeSession("sess_clsv_b", merchant, "table_clsv_b", 50000L, "open", null);
+        String bill = familyOrder("clsv_b", merchant, b, 30000L);
+        jdbcTemplate.update("UPDATE bar_bills SET settlement_status='void',payment_status='void' WHERE id=?", bill);
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> responsibilities.close(b.id(), closeRequest("close-clsv", b)))
+                .doesNotThrowAnyException();
+        assertThat(repository.findTableSessionById(b.id())).get()
+                .extracting(BarTableSessionRecord::status).isEqualTo("closed");
     }
 
     @Test

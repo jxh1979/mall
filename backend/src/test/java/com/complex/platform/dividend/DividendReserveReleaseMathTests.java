@@ -1,5 +1,7 @@
 package com.complex.platform.dividend;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -77,6 +79,21 @@ class DividendReserveReleaseMathTests {
                 LocalDate.parse("2026-05-31"))).isFalse();
         assertThat(DividendReserveReleaseMath.isDue("fixed_delay", monthEnd, 2, "monthly",
                 LocalDate.parse("2026-06-01"))).isTrue();
+    }
+
+    /** BSM L1777 分红周期取半年、年：固定延后 N 期按每期 6 / 12 个月换算，到期日落在对应期末。 */
+    @Test
+    void fixedDelayUsesSemiannualAndAnnualPeriodLengths() {
+        LocalDate halfEnd = LocalDate.parse("2026-06-30");
+        assertThat(DividendReserveReleaseMath.isDue("fixed_delay", halfEnd, 1, "semiannual",
+                LocalDate.parse("2026-12-31"))).isFalse();
+        assertThat(DividendReserveReleaseMath.isDue("fixed_delay", halfEnd, 1, "semiannual",
+                LocalDate.parse("2027-01-01"))).isTrue();
+        LocalDate yearEnd = LocalDate.parse("2026-12-31");
+        assertThat(DividendReserveReleaseMath.isDue("fixed_delay", yearEnd, 1, "annual",
+                LocalDate.parse("2027-12-31"))).isFalse();
+        assertThat(DividendReserveReleaseMath.isDue("fixed_delay", yearEnd, 1, "annual",
+                LocalDate.parse("2028-01-01"))).isTrue();
     }
 
     @Test

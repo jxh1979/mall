@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -71,7 +71,14 @@ public class DividendService {
     static final Set<String> REVENUE_DOMAINS = Set.of("bar", "ticket");
     static final Set<String> EXPENSE_TYPES = Set.of(
             "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
-    private static final Set<String> PERIOD_TYPES = Set.of("quarterly", "monthly");
+    /** BSM L1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）」。 */
+    private static final Set<String> PERIOD_TYPES = DividendPeriod.MONTHS_PER_PERIOD.keySet();
+    /** 正式单期间标签与方案周期不符时的跳过说明。 */
+    private static final java.util.Map<String, String> OFFICIAL_LABEL_HINTS = java.util.Map.of(
+            "monthly", "月度方案的正式单需按月份标签（如 2026-07）出单，跳过",
+            "quarterly", "季度方案的正式单需按季度标签（如 2026-Q3）出单，跳过",
+            "semiannual", "半年方案的正式单需按半年标签（如 2026-H1）出单，跳过",
+            "annual", "年度方案的正式单需按年度标签（如 2026）出单，跳过");
     private static final Set<String> PLAN_STATUSES = Set.of("active", "ended");
     private static final Set<String> KINDS = Set.of("official", "preview");
     private static final Set<String> STATEMENT_STATUSES = Set.of(
@@ -96,7 +103,8 @@ public class DividendService {
     // 默认口径（仅新建方案时的默认值，全部可配）。
     private static final int DEFAULT_PLATFORM_SHARE_BPS = 8000;
     private static final int DEFAULT_TAX_RATE_BPS = 2000;
-    private static final String DEFAULT_PERIOD_TYPE = "quarterly";
+    /** BSM L1777「分红按所配周期一期一分配，默认周期为半年」。 */
+    private static final String DEFAULT_PERIOD_TYPE = "semiannual";
     private static final List<String> DEFAULT_REVENUE_DOMAINS = List.of("bar", "ticket");
     private static final List<String> DEFAULT_EXPENSE_TYPES = List.of(
             "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
@@ -344,7 +352,7 @@ public class DividendService {
 
     /**
      * 月度预览定时作业入口（{@link DividendMonthlyPreviewJob} 调用）：无请求上下文、系统操作人，
-     * 对每个生效中方案出上月 preview 单（仅季度方案，月度方案跳过）。刷新式幂等——每次跑作废旧
+     * 对每个生效中方案出上月 preview 单（季度、半年、年度方案出，月度方案跳过）。刷新式幂等——每次跑作废旧
      * 未作废预览单再重出（runCompute 内 RECOMPUTABLE 含 preview）。preview 不可审批，维持 V299 拍板。
      * 无鉴权闸：定时线程无 SecurityContext，本方法只对内部作业开放（无 Controller 绑定）。
      */
@@ -386,19 +394,16 @@ public class DividendService {
         return new DividendComputeResultRecord(period.label(), kind, computed, skipped);
     }
 
-    /** kind=official 时期间标签必须匹配方案周期类型；kind=preview 仅对季度方案出预览。 */
+    /**
+     * kind=official 时期间标签必须匹配方案周期类型（BSM L1777「分红按所配周期一期一分配」）；
+     * kind=preview（每月只读预览单）对周期长于一个月的方案出，月度方案的正式单即当月，不另出预览。
+     */
     private static String periodMismatchReason(String kind, DividendPeriod period, DividendPlanRecord plan) {
         if ("preview".equals(kind)) {
-            return "quarterly".equals(plan.periodType()) ? null : "月度正式方案无需月度预览，跳过";
+            return "monthly".equals(plan.periodType()) ? "月度正式方案无需月度预览，跳过" : null;
         }
-        boolean quarterLabel = DividendPeriod.isQuarterLabel(period.label());
-        if ("quarterly".equals(plan.periodType()) && !quarterLabel) {
-            return "季度方案的正式单需按季度标签（如 2026-Q3）出单，跳过";
-        }
-        if ("monthly".equals(plan.periodType()) && quarterLabel) {
-            return "月度方案的正式单需按月份标签（如 2026-07）出单，跳过";
-        }
-        return null;
+        return plan.periodType().equals(DividendPeriod.periodTypeOf(period.label()))
+                ? null : OFFICIAL_LABEL_HINTS.get(plan.periodType());
     }
 
     private DividendStatementRecord computeStatement(

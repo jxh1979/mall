@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,9 +10,9 @@ const MERCHANTS = [{ id: "m-1", display_name: "商户甲", company_name: "甲公
 const BINDINGS = [{ id: "b-1", merchant_id: "m-1", operation_entity_id: "operation-1", contract_entity_id: "contract-entity-1", settlement_entity_id: "settlement-1", status: "active", effective_from: "2026-01-01", effective_to: "2026-12-31", change_reason: "合同主体确认" }];
 const CONTRACTS = [{ id: "c-1", merchant_id: "m-1", contract_subject_id: "cs-1", operation_subject_id: "os-1", settlement_subject_id: "ss-1", lifecycle_status: "effective", status: "effective" }];
 
-function envelope(items: unknown[]): Response {
+function envelope(items: unknown[], total = items.length): Response {
   return new Response(
-    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total: items.length } }),
+    JSON.stringify({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total } }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
@@ -87,6 +87,48 @@ describe("AdmissionAuditsPage KPI 聚焦视图", () => {
     expect(card?.querySelector("strong")?.textContent).toBe("1");
     expect(card?.textContent).toContain("不代表审批通过");
     expect(summary.textContent).not.toContain("准入闭环");
+  });
+
+  // 第 32 条（PGM:685「导出须单独授权、逐次留痕」；实施台账 NAV-GOV-01「不以旧 mock 通过替代」）：
+  // 统计数取后端分页 total；合同表读后端真有的审批复核单（review_id）；导出登记带当前登录人、不带写死的假附件。
+  it("统计数用后端 total、合同列读审批复核单、导出登记带当前登录人不带假附件", async () => {
+    const api = makeApi();
+    let posted: Record<string, unknown> | null = null;
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET").toUpperCase() === "POST") {
+        posted = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: { accepted: 1 } }),
+          { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      if (url.includes("business-entity-bindings")) return Promise.resolve(envelope(BINDINGS, 620));
+      if (url.includes("merchants")) return Promise.resolve(envelope(MERCHANTS, 610));
+      if (url.includes("contracts")) return Promise.resolve(envelope([{ ...CONTRACTS[0], review_id: "rv-9" }], 630));
+      return Promise.resolve(envelope([]));
+    });
+    render(<AdmissionAuditsPage api={api} user={{ id: "u-7", username: "auditor", accountType: "platform_admin" }} setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("admission-audits-kpi-merchants").textContent).toBe("610"));
+    expect(screen.getByTestId("admission-audits-kpi-bindings").textContent).toBe("620");
+    expect(screen.getByTestId("admission-audits-kpi-contracts").textContent).toBe("630");
+    const contracts = screen.getByTestId("admission-audits-contracts-table").textContent ?? "";
+    expect(contracts).toContain("审批复核单");
+    expect(contracts).toContain("rv-9");
+    expect(contracts).not.toContain("留痕证据");
+    // 复核修：三类资料关联与草稿数按本页已加载的行算（后端只出三类各自总数），卡片与导出摘要标明「本页」，不与总数混看。
+    const summary = screen.getByTestId("admission-audits-summary").textContent ?? "";
+    expect(summary).toMatch(/本页 \d+ 个草稿/);
+    expect(summary).toContain("按本页");
+
+    fireEvent.click(screen.getByTestId("admission-audits-create-open"));
+    fireEvent.click(screen.getByTestId("admission-audits-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("admission-audits-guided-summary").textContent).toContain("610 户"));
+    expect(screen.getByTestId("admission-audits-guided-summary").textContent).toMatch(/本页 \d+ 户/);
+    fireEvent.click(screen.getByTestId("admission-audits-export"));
+    await waitFor(() => expect(posted).not.toBeNull());
+    const body = posted as unknown as { staff_id?: string; evidence_attachment_ids?: unknown; events: Array<{ payload: Record<string, number> }> };
+    expect(body.staff_id).toBe("u-7");
+    expect(body.evidence_attachment_ids).toBeUndefined();
+    expect(body.events[0]?.payload).toMatchObject({ merchant_count: 610, binding_count: 620, contract_count: 630 });
   });
 
   it("点“合同审批”数字 → ?kpi=contracts，只剩合同表+横幅", async () => {

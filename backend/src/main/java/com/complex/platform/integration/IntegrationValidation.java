@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import java.util.List;
@@ -24,7 +24,11 @@ final class IntegrationValidation {
             "parking"
     );
     private static final Set<String> MODES = Set.of("mock", "sandbox", "production");
-    private static final Set<String> STATUSES = Set.of("draft", "mock_ready", "test_ready", "production_ready", "disabled");
+    // 第十六批第 34 条：接入状态按 ENUM L211「接入状态 待接入、联调中、已启用、暂停、异常、已停用、归档」七态（= DB CHECK，V549）：
+    // pending 待接入、testing 联调中、active 已启用（即生产就绪）、paused 暂停、abnormal 异常、disabled 已停用、archived 归档。
+    private static final Set<String> STATUSES = Set.of("pending", "testing", "active", "paused", "abnormal", "disabled", "archived");
+    // 暂停、已停用、归档的适配器不参与回调映射、对账开关与模拟测试（第三方接入 PRD §5：暂停＝临时停止回流或使用）。
+    private static final Set<String> OUT_OF_USE_STATUSES = Set.of("paused", "disabled", "archived");
     private static final Set<String> TEST_SCENARIOS = Set.of("auth", "webhook", "polling", "reconcile", "field_mapping", "failure_retry");
     // 批6：ticket=第三方渠道（美团/抖音…）售出的通票回流（订单回流→本地出票→核销回传→对账）。
     private static final Set<String> BUSINESS_TYPES = Set.of("catering", "retail", "ticket");
@@ -42,6 +46,10 @@ final class IntegrationValidation {
     );
 
     private IntegrationValidation() {
+    }
+
+    static boolean adapterInUse(ProviderAdapterRecord adapter) {
+        return !OUT_OF_USE_STATUSES.contains(adapter.status());
     }
 
     static void validateOpenSignatureRequest(OpenSignatureRequest request) {

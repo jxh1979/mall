@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -34,7 +34,7 @@ function makeApi(onCreate: (body: Record<string, unknown>) => Response): AdminAp
         postBodies.push(body);
         return Promise.resolve(onCreate(body));
       }
-      return Promise.resolve(ok({ items: [{ id: "adapter-1", provider_code: "prov-a", adapter_type: "ticket_channel", mode: "mock", status: "mock_ready", production_ready: false }], page: 1, page_size: 50, total: 1 }));
+      return Promise.resolve(ok({ items: [{ id: "adapter-1", provider_code: "prov-a", adapter_type: "ticket_channel", mode: "mock", status: "pending", production_ready: false }], page: 1, page_size: 50, total: 1 }));
     }),
   );
   return new AdminApi("test-token");
@@ -59,7 +59,7 @@ async function openCreate() {
   fireEvent.click(screen.getByTestId("integration-create-open"));
 }
 
-const created = (body: Record<string, unknown>) => ok({ id: "adapter-new", provider_code: body.provider_code, adapter_type: body.adapter_type, mode: body.mode, status: "draft", production_ready: false });
+const created = (body: Record<string, unknown>) => ok({ id: "adapter-new", provider_code: body.provider_code, adapter_type: body.adapter_type, mode: body.mode, status: "pending", production_ready: false });
 
 // OBS-14-01：新增供应商适配器按后端真实契约提交（类型从闭集选、带中文标签，mode 必填，只发后端接受的字段）；
 // 中文展示依据 PGM L287「全局原则 · 界面全中文（所有终端零英文）」。

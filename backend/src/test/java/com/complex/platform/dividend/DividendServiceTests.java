@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -407,9 +407,10 @@ class DividendServiceTests {
                 authorizationService, operations, payoutPort);
     }
 
+    /** 季度方案（多数用例按 2026-Q3 出单）；默认周期见 {@link #createPlanDefaultsToSemiannualPeriod}。 */
     private DividendPlanRecord createDefaultPlan() {
         return service.createPlan(new DividendPlanRequest("plan-key-1", MERCHANT, "usr_principal", "主理人甲",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+                null, null, "quarterly", null, null, null, null, null, null, null, null, null, null, null));
     }
 
     private DividendStatementRecord computeOfficialQuarter() {
@@ -422,10 +423,9 @@ class DividendServiceTests {
     @Test
     void createPlanFillsDefaultsAndEnforcesSingleActivePerMerchant() {
         DividendPlanRecord plan = createDefaultPlan();
-        // 默认口径：80/20、股息红利 20%、季度、收入域 bar+ticket、扣成本、费用全类别、三扣除全关。
+        // 默认口径：80/20、股息红利 20%、收入域 bar+ticket、扣成本、费用全类别、三扣除全关（周期默认见下一用例）。
         assertThat(plan.platformShareBps()).isEqualTo(8000);
         assertThat(plan.taxRateBps()).isEqualTo(2000);
-        assertThat(plan.periodType()).isEqualTo("quarterly");
         assertThat(plan.revenueDomains()).containsExactly("bar", "ticket");
         assertThat(plan.includeInventoryCost()).isTrue();
         assertThat(plan.expenseTypes()).containsExactly(
@@ -441,6 +441,47 @@ class DividendServiceTests {
                 "usr_other", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_PLAN_EXISTS"));
+    }
+
+    /** BSM L1777「分红按所配周期一期一分配，默认周期为半年」。 */
+    @Test
+    void createPlanDefaultsToSemiannualPeriod() {
+        DividendPlanRecord plan = service.createPlan(new DividendPlanRequest("plan-default-period", "merchant_semi",
+                "usr_p_semi", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
+        assertThat(plan.periodType()).isEqualTo("semiannual");
+    }
+
+    /**
+     * BSM L1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）……分红按所配周期一期一分配……每月另出一张只读的预览单」：
+     * 半年方案按 2026-H1/H2、年度方案按 2026 出正式单，标签与方案周期不符的跳过；两者都出月度预览。
+     */
+    @Test
+    void semiannualAndAnnualPlansComputeByMatchingLabelsAndGetMonthlyPreview() {
+        service.createPlan(new DividendPlanRequest("plan-semi", "merchant_semi", "usr_p_semi", null,
+                null, null, "semiannual", null, null, null, null, null, null, null, null, null, null, null));
+        service.createPlan(new DividendPlanRequest("plan-annual", "merchant_annual", "usr_p_annual", null,
+                null, null, "annual", null, null, null, null, null, null, null, null, null, null, null));
+
+        DividendComputeResultRecord half = service.compute(
+                new DividendComputeRequest("semi-h2", "2026-H2", "official", null));
+        assertThat(half.computed()).singleElement().satisfies(s -> {
+            assertThat(s.merchantId()).isEqualTo("merchant_semi");
+            assertThat(s.periodStart()).isEqualTo(java.time.LocalDate.parse("2026-07-01"));
+            assertThat(s.periodEnd()).isEqualTo(java.time.LocalDate.parse("2026-12-31"));
+        });
+        assertThat(half.skipped()).singleElement().satisfies(s -> assertThat(s.reason()).contains("年度"));
+
+        DividendComputeResultRecord year = service.compute(
+                new DividendComputeRequest("annual-2026", "2026", "official", null));
+        assertThat(year.computed()).singleElement().satisfies(s -> {
+            assertThat(s.merchantId()).isEqualTo("merchant_annual");
+            assertThat(s.periodStart()).isEqualTo(java.time.LocalDate.parse("2026-01-01"));
+            assertThat(s.periodEnd()).isEqualTo(java.time.LocalDate.parse("2026-12-31"));
+        });
+        assertThat(year.skipped()).singleElement().satisfies(s -> assertThat(s.reason()).contains("半年"));
+
+        assertThat(service.compute(new DividendComputeRequest("preview-semi", "2026-07", "preview", null)).computed())
+                .hasSize(2);
     }
 
     @Test
@@ -1222,7 +1263,7 @@ class DividendServiceTests {
     @Test
     void companyPrincipalWithholdsNoTaxAndPaysGross() {
         service.createPlan(new DividendPlanRequest("co-key", MERCHANT, "usr_co", "公司主理人甲",
-                null, null, null, null, null, null, null, null, null,
+                null, null, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, "company", null));
         repository.barRevenue.put(MERCHANT, 1_000_000L);
         DividendStatementRecord s = computeOfficialQuarter();
@@ -1258,7 +1299,7 @@ class DividendServiceTests {
     @Test
     void customDeductionsReducePayoutWithSnapshotAndLines() {
         service.createPlan(new DividendPlanRequest("cd-key", MERCHANT, "usr_principal", "主理人甲",
-                null, null, null, null, null, null, null, null, null,
+                null, null, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(
                         new DividendPlanRequest.CustomDeductionItem("固定管理费", "fixed", 30_000L, null, null, true),
@@ -1290,7 +1331,7 @@ class DividendServiceTests {
     @Test
     void customDeductionRatioRoundsHalfUpAtExactHalfBoundary() {
         service.createPlan(new DividendPlanRequest("cd-halfup", MERCHANT, "usr_principal", null,
-                0, 0, null, null, null, null, null, null, null,
+                0, 0, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "比例扣除", "ratio", null, 1255, "net_profit", true))));
@@ -1309,7 +1350,7 @@ class DividendServiceTests {
     @Test
     void customDeductionRatioOnRevenueBasisAlsoRoundsHalfUp() {
         service.createPlan(new DividendPlanRequest("cd-halfup-rev", MERCHANT, "usr_principal", null,
-                0, 0, null, null, null, null, null, null, null,
+                0, 0, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "营收比例扣除", "ratio", null, 1255, "revenue", true))));
@@ -1331,7 +1372,7 @@ class DividendServiceTests {
     @Test
     void customDeductionRatioUnchangedWhenDivisionIsExact() {
         service.createPlan(new DividendPlanRequest("cd-exact", MERCHANT, "usr_principal", null,
-                0, 0, null, null, null, null, null, null, null,
+                0, 0, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "整除比例", "ratio", null, 1000, "net_profit", true))));
@@ -1354,7 +1395,7 @@ class DividendServiceTests {
     @Test
     void customDeductionHalfUpKeepsFullChainConservation() {
         service.createPlan(new DividendPlanRequest("cd-conserve", MERCHANT, "usr_principal", null,
-                8000, 1255, null, null, null, null, null, null, null,
+                8000, 1255, "quarterly", null, null, null, null, null, null,
                 null, null, true, 1255, 0L, null, null, null,
                 List.of(
                         new DividendPlanRequest.CustomDeductionItem("比例扣除", "ratio", null, 1255, "net_profit", true),
@@ -1382,7 +1423,7 @@ class DividendServiceTests {
     @Test
     void customDeductionsClampToAvailableAndNeverNegativePayout() {
         service.createPlan(new DividendPlanRequest("cd-clamp", MERCHANT, "usr_principal", null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "超额扣除", "fixed", 999_999_999L, null, null, true))));

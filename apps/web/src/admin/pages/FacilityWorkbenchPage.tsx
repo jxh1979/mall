@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -11,14 +11,14 @@ import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
-import type { AdminPageProps } from "../types";
+import type { AdminPageProps, GovernanceProjectRow } from "../types";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { Tabs } from "antd";
 
 type FacilityEquipmentRow = {
   id: string; name: string; equipmentType: string; status: string;
   spaceId?: string | null; brand?: string | null; responsibleUserId?: string | null;
-  maintenanceCycleDays?: number | null; nextMaintenanceDue?: string | null;
+  maintenanceCycleDays?: number | null; nextMaintenanceDue?: string | null; lastMaintenanceType?: string | null;
   alarmSource?: string | null; alarmNote?: string | null;
 };
 type FacilityWorkOrderRow = {
@@ -85,7 +85,13 @@ const EQUIPMENT_STATUSES = [
   ["normal", "正常"], ["alarm", "告警"], ["fault", "故障"], ["maintenance", "维保中"], ["disabled", "停用"], ["retired", "报废"],
 ];
 const WORK_ORDER_TYPES = [
-  ["repair", "报修"], ["cleaning", "保洁"], ["complaint", "投诉"], ["rectification", "整改"], ["inspection", "巡检"], ["other", "其他"],
+  ["repair", "报修"], ["cleaning", "保洁"], ["complaint", "投诉"], ["rectification", "整改"], ["inspection", "巡检"],
+  ["internal_collaboration", "内部协作工单"], ["other", "其他"],
+];
+// 第十六批第 36 条（ENUM「设备维保类型」）：维保完成须选本次维保类型。
+const MAINTENANCE_TYPES = [
+  ["scheduled_maintenance", "定期保养"], ["routine_inspection", "例行巡检"], ["fault_repair", "故障维修"],
+  ["safety_test", "安全检测"], ["part_replacement", "部件更换"],
 ];
 const PRIORITIES = [["urgent", "紧急"], ["high", "高"], ["normal", "普通"]];
 const INSPECTION_TYPES = [["security", "安防"], ["fire", "消防"], ["facility", "设施"], ["environment", "环境"]];
@@ -93,7 +99,7 @@ const INSPECTION_TYPES = [["security", "安防"], ["fire", "消防"], ["facility
 const LABELS: Record<string, string> = {
   ...Object.fromEntries(EQUIPMENT_TYPES), ...Object.fromEntries(EQUIPMENT_STATUSES),
   ...Object.fromEntries(WORK_ORDER_TYPES), ...Object.fromEntries(PRIORITIES),
-  ...Object.fromEntries(INSPECTION_TYPES),
+  ...Object.fromEntries(INSPECTION_TYPES), ...Object.fromEntries(MAINTENANCE_TYPES),
   manual: "手工", iot: "物联网", // 告警来源
   handler: "处理人", supervisor: "主管", reporter: "报告人", // 验收方
   light: "轻度告警", to_work_order: "转工单", // 巡检异常模式
@@ -160,7 +166,21 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [inspectionTasks, setInspectionTasks] = React.useState<InspectionTaskRow[]>([]);
   const [inspectionRecords, setInspectionRecords] = React.useState<InspectionRecordRow[]>([]);
   const [policyRows, setPolicyRows] = React.useState<FacilityWorkOrderPolicyRow[]>(DEFAULT_POLICIES);
-  const [equipmentForm, setEquipmentForm] = React.useState({ name: "", equipmentType: "elevator", brand: "", responsibleUserId: "", maintenanceCycleDays: "90", spaceId: "" });
+  const [equipmentForm, setEquipmentForm] = React.useState({ name: "", equipmentType: "elevator", brand: "", responsibleUserId: "", maintenanceCycleDays: "90", spaceId: "", projectId: user?.organizationId ?? "" });
+  // 第 8 条（PGM:413「所有基础对象都要带“综合体项目归属”」）：新建设备选所属综合体项目，默认本人项目，告警按设备项目找当班接警人。
+  // 项目清单接口要 governance.project.view（PlatformController），没有该权限不请求；拿不到清单时下拉只放本人项目（同停车工作台）。
+  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
+  const canProjectView = hasPermissions(effectivePermissions, ["governance.project.view"]);
+  React.useEffect(() => {
+    void loadSecondaryIfPermitted(canProjectView, () => api.get<GovernanceProjectRow[]>("/api/v1/platform/projects"), [] as GovernanceProjectRow[])
+      .then(({ data }) => {
+        const list = data ?? [];
+        setProjects(list);
+        setEquipmentForm((current) => (list.length === 0 || list.some((p) => p.id === current.projectId) ? current
+          : { ...current, projectId: list[0]!.id }));
+      });
+  }, [api, canProjectView]);
+  const projectOptions: GovernanceProjectRow[] = projects.length ? projects : user?.organizationId ? [{ id: user.organizationId }] : [];
   const [statusForm, setStatusForm] = React.useState({ equipmentId: "", status: "normal", alarmNote: "", priority: "" });
   const [alarmRows, setAlarmRows] = React.useState<FacilityAlarmDetailRow[]>([]);
   const [myAlarms, setMyAlarms] = React.useState<FacilityAlarmRow[]>([]);
@@ -175,6 +195,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [scrapRows, setScrapRows] = React.useState<FacilityScrapRow[]>([]);
   const [scrapNotice, setScrapNotice] = React.useState<string | null>(null);
   const [scrapForm, setScrapForm] = React.useState({ equipmentId: "", reason: "", disposalMethod: "", finalApproverId: "" });
+  const [maintenanceForm, setMaintenanceForm] = React.useState({ equipmentId: "", maintenanceType: "" });
   const [scrapDisposal, setScrapDisposal] = React.useState<{ scrapId: string; note: string; proofs: { id: string; name: string }[] }>({ scrapId: "", note: "", proofs: [] });
   const [scrapFinance, setScrapFinance] = React.useState({ scrapId: "", residual: "", counterparty: "", loss: "" });
   const [workOrderForm, setWorkOrderForm] = React.useState({ workOrderType: "repair", priority: "normal", title: "", equipmentId: "", spaceId: "", reporterId: "", reporterType: "staff", source: "platform" });
@@ -244,6 +265,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         responsibleUserId: equipmentForm.responsibleUserId.trim() || undefined,
         maintenanceCycleDays: positiveInt(equipmentForm.maintenanceCycleDays),
         spaceId: equipmentForm.spaceId.trim() || undefined,
+        projectId: equipmentForm.projectId,
       });
       setActionResult({ action: "facility_equipment_created", name: equipmentForm.name.trim() });
       setEquipmentForm({ ...equipmentForm, name: "", brand: "" });
@@ -442,9 +464,15 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
     await reload();
   }
 
-  async function maintenanceDone(id: string) {
-    await api.post(`/api/v1/facility/equipment/${encodeURIComponent(id)}/maintenance-done?idempotency_key=${idempotencyQuery()}`, {});
+  async function maintenanceDone() {
+    const { equipmentId: id, maintenanceType } = maintenanceForm;
+    if (!maintenanceType) {
+      setGlobalError("请选择本次维保类型");
+      return;
+    }
+    await api.post(`/api/v1/facility/equipment/${encodeURIComponent(id)}/maintenance-done?idempotency_key=${idempotencyQuery()}&maintenance_type=${encodeURIComponent(maintenanceType)}`, {});
     setActionResult({ action: "facility_equipment_maintenance_done", equipmentId: id });
+    setMaintenanceForm({ equipmentId: "", maintenanceType: "" });
     await reload();
   }
 
@@ -641,6 +669,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         { label: "所在空间", value: row.spaceId ?? "-" },
         { label: "维保周期", value: row.maintenanceCycleDays != null ? `${row.maintenanceCycleDays} 天` : "-" },
         { label: "维保到期", value: cnDate(row.nextMaintenanceDue) },
+        { label: "最近维保类型", value: zh(row.lastMaintenanceType) },
         { label: "告警来源", value: zh(row.alarmSource) },
         { label: "告警说明", value: row.alarmNote ?? "-" },
       ],
@@ -792,13 +821,21 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
                 <td>{zh(row.alarmSource)} {row.alarmNote ?? ""}</td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <button type="button" data-testid={`facility-equipment-select-${row.id}`} onClick={() => setStatusForm({ ...statusForm, equipmentId: row.id })}>选中</button>
-                  <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-maintenance-done-${row.id}`} onClick={() => void maintenanceDone(row.id)}>维保完成</PermissionButton>
+                  <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-maintenance-done-${row.id}`} onClick={() => setMaintenanceForm({ equipmentId: row.id, maintenanceType: "" })}>维保完成</PermissionButton>
                   {row.status !== "retired" ? <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid={`facility-equipment-scrap-open-${row.id}`} onClick={() => setScrapForm({ equipmentId: row.id, reason: "", disposalMethod: "", finalApproverId: "" })}>申请报废</PermissionButton> : null}
                 </td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看设备详情" onClick={(event) => { event.stopPropagation(); openEquipmentDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
         </div>
+        {maintenanceForm.equipmentId ? (
+          <div className="admin-inline-form" data-testid="facility-maintenance-done-form">
+            <span>维保完成 {maintenanceForm.equipmentId}</span>
+            <select data-testid="facility-maintenance-type" aria-label="维保类型" value={maintenanceForm.maintenanceType} onChange={(event) => setMaintenanceForm({ ...maintenanceForm, maintenanceType: event.target.value })}><option value="">请选择维保类型</option>{MAINTENANCE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-maintenance-done-submit" onClick={() => void maintenanceDone()}>确认维保完成</PermissionButton>
+            <button type="button" onClick={() => setMaintenanceForm({ equipmentId: "", maintenanceType: "" })}>取消</button>
+          </div>
+        ) : null}
         {scrapForm.equipmentId ? (
           <div className="admin-inline-form" data-testid="facility-scrap-request-form">
             <span>申请报废 {scrapForm.equipmentId}（经所有权主体审批后才置报废）</span>
@@ -825,11 +862,12 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           steps={[
             {
               title: "设备信息",
-              description: "填写设备名称、选择分类，可填品牌。",
-              validate: () => (equipmentForm.name.trim() ? null : "设备名称不能为空。"),
+              description: "填写设备名称、选择所属综合体项目与分类，可填品牌。",
+              validate: () => (!equipmentForm.name.trim() ? "设备名称不能为空。" : equipmentForm.projectId ? null : "请选择所属综合体项目。"),
               content: (
                 <>
                   <label>设备名称<input data-testid="facility-equipment-name" aria-label="设备名称" placeholder="设备名称" value={equipmentForm.name} onChange={(event) => setEquipmentForm({ ...equipmentForm, name: event.target.value })} /></label>
+                  <label>所属综合体项目<select data-testid="facility-equipment-project" aria-label="所属综合体项目" value={equipmentForm.projectId} onChange={(event) => setEquipmentForm({ ...equipmentForm, projectId: event.target.value })}>{projectOptions.length === 0 ? <option value="">暂无可选项目</option> : null}{projectOptions.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
                   <label>设备分类<select data-testid="facility-equipment-type" aria-label="设备分类" value={equipmentForm.equipmentType} onChange={(event) => setEquipmentForm({ ...equipmentForm, equipmentType: event.target.value })}>{EQUIPMENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                   <label>品牌<input data-testid="facility-equipment-brand" aria-label="品牌" placeholder="品牌" value={equipmentForm.brand} onChange={(event) => setEquipmentForm({ ...equipmentForm, brand: event.target.value })} /></label>
                 </>
@@ -849,6 +887,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           ]}
           summary={[
             { label: "设备名称", value: equipmentForm.name.trim() || "未填写" },
+            { label: "所属综合体项目", value: projects.find((p) => p.id === equipmentForm.projectId)?.name ?? (equipmentForm.projectId || "未选择") },
             { label: "设备分类", value: zh(equipmentForm.equipmentType) },
             { label: "品牌", value: equipmentForm.brand.trim() || "未填写" },
             { label: "责任人", value: equipmentForm.responsibleUserId.trim() || "未指定" },

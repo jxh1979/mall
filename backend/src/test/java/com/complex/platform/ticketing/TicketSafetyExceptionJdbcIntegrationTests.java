@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -45,6 +45,7 @@ class TicketSafetyExceptionJdbcIntegrationTests {
 
     @Autowired private JdbcTicketingRepository repository;
     @Autowired private TicketSafetyExceptionService safety;
+    @Autowired private TicketingService ticketing;
     @Autowired private JdbcTemplate jdbc;
 
     private final Instant now = Instant.now();
@@ -282,6 +283,44 @@ class TicketSafetyExceptionJdbcIntegrationTests {
         asProjectStaff(boss);
         assertThatCode(() -> approved.set(safety.approve(event.id(), approve("s2")))).doesNotThrowAnyException();
         assertThat(approved.get().approverBasis()).isEqualTo("superior");
+    }
+
+    /**
+     * 第 4 条（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」）：不挂商户的项目员工看安全事件台账与退款单台账，
+     * 只见本项目订单的行；别的项目已批准的安全事件与其退款单不出现。平台管理员两边都能看到。
+     */
+    @Test
+    void projectStaffLedgersShowOnlyOwnProject() {
+        String ownKey = key;
+        String ownProject = project;
+        key = ownKey + "o";
+        project = "prj_tk05_" + key;
+        jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', '别的综合体', 'active', now(), now())", project);
+        Pass other = pass(1, 1, 10_000L, null);
+        enter(other, 1);
+        TestSecurityActors.asPlatformAdmin(requester);
+        TicketSafetyEventRecord otherEvent = safety.request(request(other, 1));
+        asMaster();
+        String otherRefund = safety.approve(otherEvent.id(), approve("o1")).refundId();
+        key = ownKey;
+        project = ownProject;
+
+        Pass f = pass(1, 1, 10_000L, null);
+        enter(f, 1);
+        TestSecurityActors.asPlatformAdmin(requester);
+        TicketSafetyEventRecord ownEvent = safety.request(request(f, 1));
+        TestSecurityActors.asPlatformAdmin(nightUser);
+        String ownRefund = safety.approve(ownEvent.id(), approve("o2")).refundId();
+
+        asProjectStaff(requester);
+        assertThat(safety.list()).extracting(TicketSafetyEventRecord::id)
+                .contains(ownEvent.id()).doesNotContain(otherEvent.id());
+        assertThat(ticketing.listTicketRefunds().items()).extracting(TicketRefundRecord::id)
+                .contains(ownRefund).doesNotContain(otherRefund);
+
+        TestSecurityActors.asPlatformAdmin(requester);
+        assertThat(safety.list()).extracting(TicketSafetyEventRecord::id).contains(ownEvent.id(), otherEvent.id());
+        assertThat(ticketing.listTicketRefunds().items()).extracting(TicketRefundRecord::id).contains(ownRefund, otherRefund);
     }
 
     // ---------- 造数 ----------

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -183,7 +183,7 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
         assertThat(inventoryRepository.findBarProjectId(barId)).contains(projectId);
     }
 
-    /** BSM L1073 ②：消费历史条件由最高权限本人配置并留痕（updated_by + 审计事件）；配置前人工例外一律拒绝，配置后店长可发起。 */
+    /** BSM L1073 ②：消费历史条件由最高权限本人按项目配置并留痕（updated_by + 审计事件），配置后店长可发起。 */
     @Test
     void manualPickupPolicyConfiguredByMasterAuthorityLeavesTraceAndUnblocksInitiate() {
         String customerId = prefix + "_c4";
@@ -202,9 +202,6 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
                 List.of(Map.of("item_id", prefix + "_item", "quantity", 1, "bottle_name", "Holder Whisky", "unit", "bottle")),
                 Instant.now().plusSeconds(86400), "LBL-MP", "甲", "15500020004", List.of("reg_photo"), null));
 
-        assertThatThrownBy(() -> inventoryService.initiateManualPickup(bottle.id(),
-                new SavedBottleManualPickupRequest(prefix + "_mp0", null, List.of(), "客人手机遗失")))
-                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_POLICY_UNSET");
         assertThatThrownBy(() -> inventoryService.configureManualPickupPolicy(
                 new SavedBottleManualPickupPolicyRequest(prefix + "_cfg0", projectId, 2, 3, 5, 1, 10, "首次配置")))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("MASTER_APPROVAL_REQUIRED");
@@ -230,6 +227,52 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
         assertThat(initiated.status()).isEqualTo("initiated");
         assertThat(initiated.historyCondition()).isEqualTo("orders_within_1m");
         assertThat(initiated.projectId()).isEqualTo(projectId);
+    }
+
+    /**
+     * BSM L1073 ②「出厂默认：近 1 个月内至少 2 笔、近 3 个月内至少 3 笔、或历史累计至少 5 笔有效卡座消费订单……须同时配置上下限」：
+     * 出厂落 global 行（上下限留空，首次改参时与条件值同填，范式同 V497/V543）；未单独配置的项目按出厂条件核对，不再一律拒绝。
+     */
+    @Test
+    void manualPickupUsesFactoryDefaultConditionsWhenProjectUnconfigured() {
+        Map<String, Object> factory = jdbcTemplate.queryForList("""
+                SELECT orders_within_1m, orders_within_3m, orders_total, min_orders, max_orders
+                  FROM saved_bottle_manual_pickup_policy WHERE project_id = 'global'
+                """).stream().findFirst().orElse(Map.of());
+        assertThat(factory).containsEntry("orders_within_1m", 2).containsEntry("orders_within_3m", 3)
+                .containsEntry("orders_total", 5);
+        assertThat(factory.get("min_orders")).isNull();
+        assertThat(factory.get("max_orders")).isNull();
+
+        String barId = prefix + "_bar5";
+        String projectId = prefix + "_project5";
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', 'MP Factory', 'active', now(), now())", projectId);
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, created_at, updated_at) VALUES (?, 'MP Factory Bar', 'bar', ?, 'active', now(), now())", barId, projectId);
+        jdbcTemplate.update("INSERT INTO bar_tables (id, bar_id, table_code, table_name, table_type, status, created_at, updated_at) VALUES (?, ?, 'T5', 'T5', 'card_seat', 'available', now(), now())",
+                prefix + "_table", barId);
+        SavedBottleRecord met = factoryBottle("_c5", "15500020005", barId);
+        insertPaidBill(prefix + "_fb1", barId, prefix + "_c5", null, Instant.now().minusSeconds(3 * 86400), 10000, 0);
+        insertPaidBill(prefix + "_fb2", barId, prefix + "_c5", null, Instant.now().minusSeconds(12 * 86400), 10000, 0);
+        SavedBottleRecord unmet = factoryBottle("_c6", "15500020006", barId);
+        insertPaidBill(prefix + "_fb3", barId, prefix + "_c6", null, Instant.now().minusSeconds(3 * 86400), 10000, 0);
+
+        asPlatformAdminWithCustomerLookupPermission();
+        assertThat(inventoryService.initiateManualPickup(met.id(),
+                new SavedBottleManualPickupRequest(prefix + "_fmp1", null, List.of(), "客人手机遗失")).historyCondition())
+                .isEqualTo("orders_within_1m");
+        assertThatThrownBy(() -> inventoryService.initiateManualPickup(unmet.id(),
+                new SavedBottleManualPickupRequest(prefix + "_fmp2", null, List.of(), "客人手机遗失")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("SAVED_BOTTLE_MANUAL_PICKUP_HISTORY_NOT_MET");
+    }
+
+    private SavedBottleRecord factoryBottle(String customerSuffix, String phone, String barId) {
+        String customerId = prefix + customerSuffix;
+        jdbcTemplate.update("INSERT INTO customers (id, phone, phone_hash, masked_phone, status, created_at, updated_at) VALUES (?, ?, ?, '155****0005', 'active', now(), now())",
+                customerId, piiCipher.encrypt(phone), sha256(phone));
+        return inventoryService.createSavedBottle(new SavedBottleRequest(
+                prefix + customerSuffix + "_create", null, List.of(), customerId, barId,
+                List.of(Map.of("item_id", prefix + "_item", "quantity", 1, "bottle_name", "Holder Whisky", "unit", "bottle")),
+                Instant.now().plusSeconds(86400), "LBL-MP", "甲", phone, List.of("reg_photo"), null));
     }
 
     private void asPlatformAdminWithCustomerLookupPermission() {

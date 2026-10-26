@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -110,7 +110,7 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
                 INSERT INTO integration_provider_adapters (id, provider_code, adapter_type, mode, capabilities,
                     environment, status, webhook_enabled, polling_check_enabled, field_mapping_json,
                     webhook_config_json, polling_config_json, production_ready, created_at, updated_at)
-                VALUES (?, ?, 'ticket_channel', 'mock', '["webhook"]'::jsonb, 'mock', 'mock_ready',
+                VALUES (?, ?, 'ticket_channel', 'mock', '["webhook"]'::jsonb, 'mock', 'pending',
                     TRUE, FALSE, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, FALSE, now(), now())
                 """, "adapter_tp_" + suffix, provider);
         // 渠道票种映射：美团团购商品 → 本地通票（门市价出票）。

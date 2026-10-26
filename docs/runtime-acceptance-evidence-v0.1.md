@@ -16,11 +16,11 @@
 
 | 绑定项 | 当前值 |
 |---|---|
-| 生成时的 Git HEAD | `2ec37f0f770f55579a1acae83f28300784264f11`（feat/misc-config-and-workbench） |
+| 生成时的 Git HEAD | `3db3b0d3d3e5ee52f262aba0084f6ca67badc126`（feature/business-code-batch19-20261026） |
 | 生成时工作树 | 有未提交改动 |
-| 源码指纹 sha256 | `c92b4fa55fde188892fa5ce8cb86206d487e3bf9da35d857e435d2e1775d7cbd` |
-| 指纹覆盖文件数 | 2085 |
-| 生成时间 | 2026-07-28T12:33:06.963Z |
+| 源码指纹 sha256 | `49fef8910ad44172aa3c882704cf30901c0029452af82d3b2f76e7ee667feb2d` |
+| 指纹覆盖文件数 | 2963 |
+| 生成时间 | 2026-10-26T10:00:52.948Z |
 | 最大有效天数 | 30 |
 
 > 校验规则（`--check`）：若当前源码指纹与本文记录不一致（源码已变更），或本证据超过最大有效天数，则立即 FAIL；陈旧证据不再自欺 PASS。
@@ -41,7 +41,7 @@
 |---|---|
 | 闭环运行态总验收 | `npm run test:backend && npm run typecheck --workspace apps/web && npm run build --workspace apps/web && npm run verify:ui && npm run verify:ui:real-backend:seeded` |
 | 后端测试 | `node tools/run-backend-maven.mjs test` |
-| Web 构建 | `npm run build --workspace apps/web` |
+| Web 构建 | `npm run build --workspaces --if-present && npm run verify:customer-shell-separation` |
 | 常规 UI 验收 | `playwright test` |
 | 真实后端 UI 验收 | `node tools/run-real-backend-ui-e2e.mjs` |
 | 本证据校验 | `node tools/generate-runtime-acceptance-evidence.mjs --check` |
@@ -50,23 +50,23 @@
 
 | 指标 | 当前值 |
 |---|---:|
-| Surefire suites | 236 |
-| tests | 2944 |
+| Surefire suites | 410 |
+| tests | 5671 |
 | failures | 0 |
 | errors | 0 |
 | skipped | 0 |
-| latest_mtime | 2026-07-28T12:32:32.936Z |
+| latest_mtime | 2026-10-26T09:51:22.566Z |
 
 ## 4. Web 与 UI 验收证据
 
 | 证据 | 当前值 |
 |---|---|
-| Web dist index | 缺失 |
-| Web main JS | - |
-| 最大静态资源 | - |
+| Web dist index | 存在 |
+| Web main JS | `apps/web/dist/assets/main-BKx9d_TE.js` 4216 bytes |
+| 最大静态资源 | `apps/web/dist/assets/vendor-antd-CzvkKKQu.js` 251112 bytes |
 | 主包过大 warning 预期 | 无 |
-| 前端单元测试源文件 | 185 个文件，746 条测试定义 |
-| Playwright 常规 UI | 报告缺失，39 条测试定义 |
+| 前端单元测试源文件 | 274 个文件，1298 条测试定义 |
+| Playwright 常规 UI | 报告缺失，47 条测试定义 |
 | Playwright 真实后端 UI | 报告缺失，3 条测试定义 |
 | Playwright last-run | not passed / missing |
 

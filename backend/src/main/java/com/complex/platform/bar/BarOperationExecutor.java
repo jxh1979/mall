@@ -1,5 +1,7 @@
 package com.complex.platform.bar;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -39,6 +41,15 @@ public class BarOperationExecutor {
                 this::businessId,
                 Map.of("operation_id", operationId)
         );
+    }
+
+    /** 同上，成功留痕另带业务明细（如第十六批第 16 条账单异常的登记／处置原因）。 */
+    <T> T executeWrite(String operationId, String idempotencyKey, Object request, Class<T> responseType,
+            BarWriteOperation operation, Map<String, Object> detail, Supplier<T> action) {
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>(detail);
+        metadata.put("operation_id", operationId);
+        return operations.executeWrite(operationId, idempotencyKey, request, responseType, operation, action,
+                this::businessId, metadata);
     }
 
     /** 只审计留痕、不套幂等键的写。用于目录删除生命周期(request/approve):

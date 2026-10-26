@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -771,6 +771,41 @@ public class BarService {
                 BarBillOperationRecord.class,
                 BarWriteOperation.REOPEN_BILL,
                 () -> billingService.reopenBill(id, request)
+        );
+    }
+
+    // 第十六批第 16 条（ENUM「异常状态的统一出口」）：字段注入免改构造点（单测未注入＝端点不可用）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarBillAnomalyService anomalyService;
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.adjust")
+    @Transactional
+    public BarBillRecord raiseBillAnomaly(String billId, BarBillAnomalyRequest request) {
+        String id = operations.requireText(billId, "bill_id");
+        return operations.executeWrite(
+                "raiseBarBillAnomaly:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarBillRecord.class,
+                BarWriteOperation.RAISE_BILL_ANOMALY,
+                Map.of("reason", String.valueOf(request == null ? null : request.reason())),
+                () -> anomalyService.raise(id, request)
+        );
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.anomaly.resolve")
+    @Transactional
+    public BarBillRecord resolveBillAnomaly(String billId, BarBillAnomalyResolveRequest request) {
+        String id = operations.requireText(billId, "bill_id");
+        return operations.executeWrite(
+                "resolveBarBillAnomaly:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarBillRecord.class,
+                BarWriteOperation.RESOLVE_BILL_ANOMALY,
+                Map.of("resolution", String.valueOf(request == null ? null : request.resolution()),
+                        "reason", String.valueOf(request == null ? null : request.reason())),
+                () -> anomalyService.resolve(id, request)
         );
     }
 

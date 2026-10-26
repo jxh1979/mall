@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -140,8 +140,9 @@ public class BarServiceResponsibilityService {
             groupTables.stream().map(BarTableSessionRecord::openedAt).min(Comparator.naturalOrder()).ifPresent(since->
                 bars.listOrdersWithoutSession(groupTables.stream().map(BarTableSessionRecord::tableId).distinct().toList(),since)
                     .forEach(o->orderIds.add(o.id())));
+            // 第十六批第 16 条：主管「作废并冲正」后的账单（void）不算未结清。
             var unsettled=bars.listBillsByOrderIds(orderIds).stream()
-                .filter(b->!List.of("settled","merged").contains(b.settlementStatus())).map(BarBillRecord::billNo).toList();
+                .filter(b->!List.of("settled","merged","void").contains(b.settlementStatus())).map(BarBillRecord::billNo).toList();
             if(!unsettled.isEmpty())throw conflict("BAR_TABLE_SESSION_BILL_UNSETTLED","账单未结清，不得关台："+String.join("、",unsettled));
             var ids=family(sessionId);
             Instant now=Instant.now();

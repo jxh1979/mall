@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -191,6 +191,8 @@ class InventoryControllerTests {
             "GET,/api/v1/inventory/saved-bottles/saved_1/renewals,bar.saved_bottle.manage",
             "PUT,/api/v1/inventory/saved-bottles/manual-pickup-policy,bar.saved_bottle.manual_pickup_policy.manage",
             "PUT,/api/v1/inventory/saved-bottles/renewal-policy,bar.saved_bottle.renewal_policy.manage",
+            "PUT,/api/v1/inventory/saved-bottles/reminder-policy,bar.saved_bottle.reminder_policy.manage",
+            "GET,/api/v1/inventory/saved-bottles/reminder-policy,bar.saved_bottle.reminder_policy.manage",
             "POST,/api/v1/inventory/saved-bottles/saved_1/remedy,bar.saved_bottle.manage",
             "GET,/api/v1/inventory/saved-bottles/saved_1/remedies,bar.saved_bottle.manage",
             "POST,/api/v1/inventory/saved-bottles/remedies/sbr_1/approve,inventory.high_value.review",
@@ -321,6 +323,21 @@ class InventoryControllerTests {
         verify(service, never()).createTypedStockMovement(eq("damage"), any());
     }
 
+    // BSM L1072：存酒到期提醒节点配置按前端真实蛇形请求体落到服务层（scope_id / reminder_days）。
+    @Test
+    void configureReminderPolicyUsesSnakeCaseRequest() throws Exception {
+        mockMvc.perform(put("/api/v1/inventory/saved-bottles/reminder-policy")
+                        .with(user("ops").roles("P0_SMOKE"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key":"rmp-snake","scope_id":"project:project_1","reminder_days":[14,7,3,1]}
+                                """))
+                .andExpect(status().isOk());
+
+        verify(service).configureReminderPolicy(argThat(r -> "rmp-snake".equals(r.idempotencyKey())
+                && "project:project_1".equals(r.scopeId()) && List.of(14, 7, 3, 1).equals(r.reminderDays())));
+    }
+
     @Test
     void createInventoryItemUsesSnakeCaseRequestAndResponse() throws Exception {
         mockMvc.perform(post("/api/v1/inventory/items")
@@ -438,6 +455,11 @@ class InventoryControllerTests {
         if (path.endsWith("manual-pickup-policy")) {
             return """
                     {"idempotency_key":"mpp-1","project_id":"project_1","orders_within_1m":2,"orders_within_3m":3,"orders_total":5,"min_orders":1,"max_orders":10,"reason":"首次配置"}
+                    """;
+        }
+        if (path.endsWith("reminder-policy")) {
+            return """
+                    {"idempotency_key":"rmp-1","scope_id":"project:project_1","reminder_days":[14,7,3,1]}
                     """;
         }
         if (path.endsWith("renewal-policy")) {

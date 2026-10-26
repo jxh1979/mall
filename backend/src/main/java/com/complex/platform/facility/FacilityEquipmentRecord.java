@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 import java.time.LocalDate;
 
@@ -32,7 +34,9 @@ public record FacilityEquipmentRecord(
         String deleteStatus,
         String deleteRequestedBy,
         Instant deleteRequestedAt,
-        String deleteReason) {
+        String deleteReason,
+        // 第十六批第 36 条（ENUM:267、BSM:1408「维保分定期保养、例行巡检、故障维修、安全检测、部件更换」）：最近一次维保完成登记的维保类型。
+        String lastMaintenanceType) {
 
     /** 向后兼容构造器（V264 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none。 */
     public FacilityEquipmentRecord(
@@ -60,7 +64,7 @@ public record FacilityEquipmentRecord(
         this(id, name, equipmentType, spaceId, brand, model, vendor, responsibleUserId, status,
                 maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil,
                 alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt,
-                null, null, "none", null, null, null);
+                null, null, "none", null, null, null, null);
     }
 
     // --- V264 存档/删除范式：不可变 record 的字段更新辅助。 ---
@@ -68,7 +72,8 @@ public record FacilityEquipmentRecord(
         return new FacilityEquipmentRecord(id, name, equipmentType, spaceId, brand, model, vendor, responsibleUserId,
                 status, maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil,
                 alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                lastMaintenanceType);
     }
 
     public FacilityEquipmentRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -76,6 +81,15 @@ public record FacilityEquipmentRecord(
         return new FacilityEquipmentRecord(id, name, equipmentType, spaceId, brand, model, vendor, responsibleUserId,
                 status, maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil,
                 alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                lastMaintenanceType);
+    }
+
+    public FacilityEquipmentRecord withLastMaintenanceType(String lastMaintenanceType) {
+        return new FacilityEquipmentRecord(id, name, equipmentType, spaceId, brand, model, vendor, responsibleUserId,
+                status, maintenanceCycleDays, lastMaintenanceAt, nextMaintenanceDue, installDate, warrantyUntil,
+                alarmSource, alarmNote, alarmRaisedAt, projectId, merchantId, createdAt, updatedAt,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason,
+                lastMaintenanceType);
     }
 }

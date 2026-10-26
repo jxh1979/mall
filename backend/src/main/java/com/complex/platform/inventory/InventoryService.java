@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -411,10 +411,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 b.remedyOfSavedBottleId(), b.custodianEntityId(), b.pickupLocation(), b.handedOverAt(), b.handoverId());
     }
 
-    public void processSavedBottleNotifications(Instant now, int expiringNoticeDays) {
+    public void processSavedBottleNotifications(Instant now) {
         Instant actualNow = now == null ? Instant.now() : now;
-        int noticeDays = Math.max(0, expiringNoticeDays);
-        processExpiringSavedBottleNotifications(actualNow, noticeDays);
+        processExpiringSavedBottleNotifications(actualNow);
         processExpiredSavedBottleNotifications(actualNow);
         postExpiredSavedBottlesToStock(actualNow);
     }
@@ -475,22 +474,39 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 null, null, Map.of("warehouse_id", warehouseId, "quantity", quantity));
     }
 
-    private void processExpiringSavedBottleNotifications(Instant now, int noticeDays) {
-        Instant windowEnd = now.plus(Duration.ofDays(noticeDays));
+    /**
+     * BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）；
+     * 提醒节点与存酒有效期同一粒度配置，超出本次存酒实际有效期的节点自动跳过」：节点按存酒所在项目取（缺行回落 global 出厂行），
+     * 距到期天数按北京日历日算；每次只发已到达的最近一个节点，节点大于本次有效期（登记日至当前到期日的天数）的跳过；
+     * 幂等键＝瓶＋到期日＋节点，每个节点只发一次，转存顺延后按新到期日重新起算。
+     */
+    private void processExpiringSavedBottleNotifications(Instant now) {
+        Map<String, List<Integer>> policies;
         List<SavedBottleRecord> bottles;
         try {
-            bottles = repository.listStoredSavedBottlesExpiring(now, windowEnd);
+            policies = repository.listSavedBottleReminderPolicies();
+            int maxDays = policies.values().stream().flatMap(List::stream).max(Integer::compare).orElse(0);
+            bottles = maxDays == 0 ? List.of()
+                    : repository.listStoredSavedBottlesExpiring(now, now.plus(Duration.ofDays(maxDays + 1L)));
         } catch (RuntimeException exception) {
             log.warn("failed to list expiring saved bottles for notification", exception);
             return;
         }
+        LocalDate today = now.atZone(LocalZone.ID).toLocalDate();
         for (SavedBottleRecord bottle : bottles) {
-            notifySavedBottleNow(
-                    bottle,
-                    "expiring",
-                    STORED_WINE_EXPIRING_TEMPLATE,
-                    "swexpiring:" + bottle.id() + ":" + expireDateKey(bottle),
-                    null);
+            LocalDate expireDate = bottle.expireAt().atZone(LocalZone.ID).toLocalDate();
+            long daysLeft = java.time.temporal.ChronoUnit.DAYS.between(today, expireDate);
+            long validityDays = java.time.temporal.ChronoUnit.DAYS.between(
+                    bottle.createdAt().atZone(LocalZone.ID).toLocalDate(), expireDate);
+            String projectId = repository.findBarProjectId(bottle.barProjectId()).orElse(null);
+            List<Integer> nodes = policies.getOrDefault("project:" + projectId, policies.getOrDefault("global", List.of()));
+            nodes.stream().filter(days -> days <= validityDays && daysLeft <= days).min(Integer::compare)
+                    .ifPresent(node -> notifySavedBottleNow(
+                            bottle,
+                            "expiring",
+                            STORED_WINE_EXPIRING_TEMPLATE,
+                            "swexpiring:" + bottle.id() + ":" + expireDateKey(bottle) + ":" + node,
+                            null));
         }
     }
 
@@ -1067,6 +1083,59 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     static final String MANUAL_PICKUP_POLICY_MANAGE = "bar.saved_bottle.manual_pickup_policy.manage";
     static final String RENEWAL_POLICY_MANAGE = "bar.saved_bottle.renewal_policy.manage";
+    static final String REMINDER_POLICY_MANAGE = "bar.saved_bottle.reminder_policy.manage";
+    /** 人工例外消费历史条件的出厂行（V548：BSM L1073 出厂默认 2 / 3 / 5 笔）。 */
+    private static final String MANUAL_PICKUP_POLICY_FACTORY = "global";
+
+    /**
+     * 配置存酒到期提醒节点（BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、
+     * 第 7 天、第 3 天、第 1 天）」）：scope_id=global（出厂行）| project:&lt;id&gt;；节点为到期前第 N 天（N≥1、不重复、至少一个），
+     * 超出单瓶实际有效期的节点由发送作业逐瓶跳过。项目级参数：商户账号不可改，非平台管理员只能改本项目（范围闸在幂等之前）；
+     * 留痕 updated_by/updated_at 与审计事件。
+     */
+    @Transactional
+    public SavedBottleReminderPolicyRecord configureReminderPolicy(
+            com.complex.platform.inventory.dto.SavedBottleReminderPolicyRequest request) {
+        authorizationService.requirePlatformScope();
+        Optional<String> ownProject = authorizationService.currentProjectScopeQuietly();
+        if (ownProject.isPresent() && !("project:" + ownProject.get()).equals(request == null ? null : trimToNull(request.scopeId()))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能配置本项目的存酒到期提醒节点");
+        }
+        return executeWrite("configureSavedBottleReminderPolicy", request == null ? null : request.idempotencyKey(), request,
+                SavedBottleReminderPolicyRecord.class, "bar.saved_bottle.reminder_policy_configured",
+                "bar.saved_bottle.reminder_policy_config_failed", REMINDER_POLICY_MANAGE, "saved_bottle_reminder_policy", () -> {
+                    com.complex.platform.inventory.dto.SavedBottleReminderPolicyRequest actual = requireRequest(request);
+                    String scope = requireText(actual.scopeId(), "scope_id");
+                    if (!"global".equals(scope) && !(scope.startsWith("project:") && scope.length() > "project:".length())) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "scope_id 须为 global 或 project:<项目 id>");
+                    }
+                    List<Integer> days = actual.reminderDays();
+                    if (days == null || days.isEmpty() || days.stream().anyMatch(d -> d == null || d < 1)
+                            || Set.copyOf(days).size() != days.size()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "提醒节点须为到期前第 N 天（N 为不小于 1 的整数、不重复），至少一个");
+                    }
+                    return repository.saveSavedBottleReminderPolicy(new SavedBottleReminderPolicyRecord(scope,
+                            days.stream().sorted(java.util.Comparator.reverseOrder()).toList()), currentActorId());
+                });
+    }
+
+    /**
+     * 读存酒到期提醒节点（BSM L1072「按后台配置的提醒节点」）：出厂行（global）与各项目行。商户账号不可读；
+     * 非平台管理员只看出厂行与本项目，没有项目归属则拒绝（范围闸在读之前，fail-closed）。
+     */
+    public PageResponse<SavedBottleReminderPolicyRecord> listReminderPolicies() {
+        return readPage("bar.saved_bottle.reminder_policy_viewed", "bar.saved_bottle.reminder_policy_view_failed",
+                REMINDER_POLICY_MANAGE, "saved_bottle_reminder_policy", () -> {
+                    authorizationService.requirePlatformScope();
+                    Optional<String> ownProject = authorizationService.currentProjectScopeQuietly();
+                    return repository.listSavedBottleReminderPolicies().entrySet().stream()
+                            .filter(e -> ownProject.isEmpty() || "global".equals(e.getKey())
+                                    || ("project:" + ownProject.get()).equals(e.getKey()))
+                            .map(e -> new SavedBottleReminderPolicyRecord(e.getKey(), e.getValue()))
+                            .sorted(java.util.Comparator.comparing(SavedBottleReminderPolicyRecord::scopeId))
+                            .toList();
+                });
+    }
 
     /**
      * 配置人工例外取酒消费历史条件（BSM L1073「安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限」）：
@@ -1213,6 +1282,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     String projectId = repository.findBarProjectId(bottle.barProjectId())
                             .orElseThrow(() -> ApiException.conflict("SAVED_BOTTLE_PROJECT_UNKNOWN", "存酒所在酒吧未归属项目，无法核对消费历史"));
                     SavedBottleManualPickupPolicyRecord policy = repository.findSavedBottleManualPickupPolicy(projectId)
+                            .or(() -> repository.findSavedBottleManualPickupPolicy(MANUAL_PICKUP_POLICY_FACTORY))
                             .orElseThrow(() -> ApiException.conflict("SAVED_BOTTLE_MANUAL_PICKUP_POLICY_UNSET",
                                     "本项目尚未配置人工例外取酒的消费历史条件"));
                     // 客人查询专门通道：店长本人鉴权后按手机号查客人，留痕。

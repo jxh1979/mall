@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -29,6 +29,10 @@ function props(): AdminPageProps {
     if (url.includes("/parking/policies/") && (init?.method ?? "GET") === "GET") return Promise.resolve(envelope(null, 409));
     if (url.includes("/parking/overview")) return Promise.resolve(envelope({ project_id: "proj-1", occupancy: null, sessions: [] }));
     if (url.includes("/parking/credits")) return Promise.resolve(envelope({ items: CREDITS, page: 1, page_size: 1, total: 1 }));
+    // 第 9 条：三个登记列表按后端 PageResponse 原样回（蛇形键分页信封），不再回空 items。
+    if (url.includes("/parking/monthly-vehicles")) return Promise.resolve(envelope({ items: MONTHLY, page: 1, page_size: 1, total: 1 }));
+    if (url.includes("/parking/staff-vehicles") && (init?.method ?? "GET") === "GET") return Promise.resolve(envelope({ items: STAFF, page: 1, page_size: 1, total: 1 }));
+    if (url.includes("/parking/manual-releases") && (init?.method ?? "GET") === "GET") return Promise.resolve(envelope({ items: RELEASES, page: 1, page_size: 1, total: 1 }));
     if (url.includes("/parking/")) return Promise.resolve(envelope({ items: [], page: 1, page_size: 0, total: 0 }));
     return Promise.resolve(envelope([]));
   }));
@@ -50,6 +54,15 @@ const CREDITS = [{
     { merchant_id: "m-b", bearer_entity_id: "be-b", share_cent: 800, cost_month: "2026-10-01" },
   ],
 }];
+
+// 后端 ParkingService.Vehicle／ParkingReleaseService.Release 的蛇形键形状。
+const MONTHLY = [{ id: "pv-1", project_id: "proj-1", contract_id: "ct-1", user_id: null, owner_merchant_id: "m-1", plate_no: "粤A00001",
+  status: "active", registered_by: "u1", registered_at: "2026-10-20T02:00:00Z", revoked_at: null }];
+const STAFF = [{ id: "pv-2", project_id: "proj-1", contract_id: null, user_id: "staff-9", owner_merchant_id: "m-1", plate_no: "粤B00002",
+  status: "active", registered_by: "m-admin", registered_at: "2026-10-20T03:00:00Z", revoked_at: null }];
+const RELEASES = [{ id: "pr-1", project_id: "proj-1", session_id: null, plate_no: "粤C00003", release_reason: "recognition_failed", reason: "车牌污损",
+  operator_id: "guard-1", operator_shift_id: null, released_at: "2026-10-20T04:00:00Z", waive_type: "none", reduction_cent: null, review_id: null,
+  status: "released", risk_alert_id: "ra-1" }];
 
 const FIELDS: Array<[string, string]> = [
   ["免费时长（分钟）", "30"], ["超出后每小时费率（元）", "5"], ["每日封顶（元）", "30"], ["离场宽限时限（分钟）", "15"],
@@ -118,10 +131,25 @@ describe("ParkingWorkbenchPage", () => {
     expect(detail).toContain("商户B 承担 ¥8.00");
   });
 
+  // 第 9 条（BSM L1437 月租车牌与员工车辆登记、L1448 人工放行留痕）：三个列表按接口分页信封真实形状列出已登记的行。
+  it("月租车牌、员工车辆、人工放行：列表列出后端分页返回的登记行", async () => {
+    render(<ParkingWorkbenchPage {...props()} />);
+    await waitFor(() => expect(screen.queryByRole("tab", { name: "月租与员工车辆" })).not.toBeNull());
+    fireEvent.click(screen.getByRole("tab", { name: "月租与员工车辆" }));
+    await waitFor(() => expect(screen.getByTestId("parking-monthly-vehicles-table").textContent).toContain("粤A00001"));
+    expect(screen.getByTestId("parking-monthly-vehicles-table").textContent).toContain("ct-1");
+    await waitFor(() => expect(screen.getByTestId("parking-staff-vehicles-table").textContent).toContain("粤B00002"));
+    expect(screen.getByTestId("parking-staff-vehicles-table").textContent).toContain("staff-9");
+    fireEvent.click(screen.getByRole("tab", { name: "人工放行" }));
+    await waitFor(() => expect(screen.getByTestId("parking-releases-table").textContent).toContain("粤C00003"));
+    expect(screen.getByTestId("parking-releases-table").textContent).toContain("识别失败");
+    expect(screen.getByTestId("parking-releases-table").textContent).toContain("已放行");
+  });
+
   it("商户专区员工车辆：登记本商户员工车牌，POST 带项目、员工账号与车牌", async () => {
     const p = props();
     render(<MerchantZoneStaffVehiclesPage {...p} user={{ id: "m-admin", username: "m", accountType: "merchant_admin", organizationId: "proj-1", merchantId: "m-1" }} />);
-    await waitFor(() => expect(screen.queryByTestId("parking-staff-vehicle-form")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("parking-staff-vehicles-table").textContent).toContain("粤B00002"));
     fireEvent.change(screen.getByLabelText("员工账号"), { target: { value: "staff-9" } });
     fireEvent.change(screen.getByLabelText("员工车牌"), { target: { value: "粤B99999" } });
     fireEvent.click(screen.getByTestId("parking-staff-vehicle-save"));
