@@ -175,8 +175,11 @@ class TerminalSwitchStrictestAndCanaryMatrixTests {
     }
 
     @Test
-    void noExplicitRowKeepsDefaultOpen() {
-        assertThatCode(() -> guard.check(CAPABILITY)).doesNotThrowAnyException();
+    void noExplicitRowRejects() {
+        // PGM 第 742 行 opt-in：无显式行即关闭。
+        assertThatThrownBy(() -> guard.check(CAPABILITY))
+                .isInstanceOfSatisfying(ApiException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("TERMINAL_DISABLED"));
         assertThat(terminalDeviceRepository
                 .resolveEffectiveSwitch(TERMINAL_TYPE, CAPABILITY, GateRequestContextScopes.of()))
                 .isEmpty();
@@ -210,6 +213,7 @@ class TerminalSwitchStrictestAndCanaryMatrixTests {
     // ── 灰度层专项 ───────────────────────────────────────────────────────────
     @Test
     void canaryAbstainsWhenNoActiveRollout() {
+        insertSwitch("global", "global", true); // opt-in：先有显式开启行，灰度层才有放行可收窄
         seedCanary(false, "dev_not_in_pilot");
         assertThatCode(() -> guard.check(CAPABILITY))
                 .as("灰度未启用 → 灰度层弃权，行为与改动前一致")
@@ -218,6 +222,7 @@ class TerminalSwitchStrictestAndCanaryMatrixTests {
 
     @Test
     void canaryNarrowsToWhitelistWhenActive() {
+        insertSwitch("global", "global", true);
         seedCanary(true, "dev_not_in_pilot");
         assertThatThrownBy(() -> guard.check(CAPABILITY))
                 .as("灰度启用且本设备不在白名单 → 关闭")
@@ -243,6 +248,7 @@ class TerminalSwitchStrictestAndCanaryMatrixTests {
 
     @Test
     void archivedWhitelistEntryNoLongerGrantsCanaryAccess() {
+        insertSwitch("global", "global", true);
         seedCanary(true, DEVICE_ID);
         assertThatCode(() -> guard.check(CAPABILITY)).doesNotThrowAnyException();
 

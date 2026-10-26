@@ -1,6 +1,6 @@
 package com.complex.platform.common;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -46,10 +46,10 @@ public class RevenueRefreshMarks {
         }
     }
 
-    /** 某域某时刻的收入改动：换成该域营业日，早于该域当前营业日才登记（当日由当日刷新覆盖）。 */
-    public void markAt(String domain, Instant at) {
-        LocalDate date = businessDayResolver.businessDate(domain, at);
-        if (date.isBefore(businessDayResolver.businessDate(domain, Instant.now()))) {
+    /** 某对象（综合体或酒吧）某时刻的收入改动：换成其营业日，早于其当前营业日才登记（当日由当日刷新覆盖）。 */
+    public void markAt(String projectId, String barId, Instant at) {
+        LocalDate date = businessDayResolver.businessDate(projectId, barId, at);
+        if (date.isBefore(businessDayResolver.businessDate(projectId, barId, Instant.now()))) {
             mark(List.of(date));
         }
     }

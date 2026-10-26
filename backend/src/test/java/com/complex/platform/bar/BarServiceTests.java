@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -3253,7 +3253,7 @@ class BarServiceTests {
 
     private BarTableSessionRecord openSession(String key, String tableId, String barId, String reservationId) {
         return service.createTableSession(new BarTableSessionRequest(
-                "session-" + key, "open session", List.of(), barId, null, LocalDate.parse("2026-06-20"),
+                "session-" + key, "open session", List.of(), barId, null,
                 tableId, reservationId, null, 2, "staff_sales", "staff_service", "supervisor_1"));
     }
 
@@ -3541,7 +3541,6 @@ class BarServiceTests {
                 List.of("att_session"),
                 barId,
                 merchantId,
-                LocalDate.parse("2026-06-20"),
                 tableId,
                 null,
                 "customer_" + key,

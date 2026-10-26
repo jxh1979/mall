@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,8 +67,8 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void ticketRevenueSummaryEqualsPagedDetailSumAndEtlAggregate() {
-        Instant start = businessDayResolver.startInstant("ticketing", DAY);
-        Instant end = businessDayResolver.endInstant("ticketing", DAY);
+        Instant start = businessDayResolver.start(null, null, DAY);
+        Instant end = businessDayResolver.end(null, null, DAY);
         BigDecimal baseline = repository.ticketRevenueDetail(start, end, 1, 0).summaryValue();
 
         insertTicketOrder("to_mdc_1", 10000, "paid");
@@ -82,6 +82,44 @@ class MetricDetailConsistencyJdbcIntegrationTests {
                 .isEqualByComparingTo(first.summaryValue());
         // 与看板 ETL 聚合同源同口径。
         assertThat(repository.sumTicketRevenueCents(DAY, "ticketing")).isEqualByComparingTo(first.summaryValue());
+    }
+
+    /**
+     * 第十八批第 1 条（ENUM:187「起止时点由后台配置（安全阈值，按每个项目、每家酒吧可配……）」）：看板非酒吧来源按单综合体口径取窗，
+     * 用的是（唯一启用的）真实综合体已批准的营业日——11:00 起算时北京 2094-05-14 10:30 的售票计入 05-13，不计入 05-14。
+     */
+    @Test
+    void dashboardWindowFollowsTheSoleActiveComplexsApprovedVersion() {
+        LocalDate day = LocalDate.parse("2094-05-14");
+        String complex = sid("prj_mdc_bd");
+        jdbcTemplate.update("UPDATE projects SET status='suspended' WHERE status='active'", Map.of());
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(:id,'complex','看板营业日综合体','active',now(),now())",
+                Map.of("id", complex));
+        Instant effective = Instant.parse("2094-01-01T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO amusement_business_day_configs(id,project_id,version,zone_id,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
+                VALUES(:id,:project,'V0.01','Asia/Shanghai',11,0,23,7,0,23,:effective,'approved','测试已批准版本','mdc_requester',:created,'usr_master',:decided)
+                """, new MapSqlParameterSource().addValue("id", sid("abd_mdc_bd")).addValue("project", complex)
+                .addValue("effective", java.sql.Timestamp.from(effective))
+                .addValue("created", java.sql.Timestamp.from(effective.minusSeconds(7200)))
+                .addValue("decided", java.sql.Timestamp.from(effective.minusSeconds(3600))));
+        businessDayResolver.invalidate();
+        BigDecimal before = repository.sumTicketRevenueCents(day.minusDays(1), "ticketing");
+        BigDecimal beforeDay = repository.sumTicketRevenueCents(day, "ticketing");
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES ('tt_mdc', 'MDC Pass', 'weekday_weekend_holiday', FALSE, 'published', now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """, Map.of());
+        java.sql.Timestamp at = java.sql.Timestamp.from(Instant.parse("2094-05-14T02:30:00Z"));
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent,
+                    pay_status, issue_status, status, created_at, updated_at)
+                VALUES (:id, :id, 'tt_mdc', 1, 'online', 7000, 'paid', 'issued', 'created', :at, :at)
+                """, new MapSqlParameterSource().addValue("id", sid("to_mdc_bd")).addValue("at", at));
+        assertThat(repository.sumTicketRevenueCents(day.minusDays(1), "ticketing").subtract(before)).isEqualByComparingTo("7000");
+        assertThat(repository.sumTicketRevenueCents(day, "ticketing").subtract(beforeDay)).isEqualByComparingTo("0");
     }
 
     @Test
@@ -102,8 +140,8 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void electricitySummaryEqualsPagedDetailSumAndEtlAggregate() {
-        Instant start = businessDayResolver.startInstant("energy", DAY);
-        Instant end = businessDayResolver.endInstant("energy", DAY);
+        Instant start = businessDayResolver.start(null, null, DAY);
+        Instant end = businessDayResolver.end(null, null, DAY);
         BigDecimal baseline = repository.electricityReadingDetail(start, end, 1, 0).summaryValue();
 
         insertMeter("em_mdc_e", "electricity");
@@ -160,8 +198,8 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void barRevenueSummaryEqualsPagedDetailSumAndEtlAggregate() {
-        Instant start = businessDayResolver.startInstant("bar", DAY);
-        Instant end = businessDayResolver.endInstant("bar", DAY);
+        Instant start = businessDayResolver.start(null, null, DAY);
+        Instant end = businessDayResolver.end(null, null, DAY);
         BigDecimal baseline = repository.barSettlementRevenueDetail(start, end, 1, 0).summaryValue();
 
         insertBarTable("bt_mdc_r");
@@ -215,7 +253,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void barOpenOrderCountExcludesPaidAndCancelled() {
-        Instant asOfEnd = businessDayResolver.endInstant("bar", DAY);
+        Instant asOfEnd = businessDayResolver.end(null, null, DAY);
         BigDecimal baseline = repository.barOpenOrderDetail(asOfEnd, 1, 0).summaryValue();
 
         insertBarTable("bt_mdc_p");
@@ -246,7 +284,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void savedBottleStoredBalanceCountsOnlyStoredRows() {
-        Instant asOfEnd = businessDayResolver.endInstant("bar", DAY);
+        Instant asOfEnd = businessDayResolver.end(null, null, DAY);
         BigDecimal baseline = repository.savedBottleStoredDetail(asOfEnd, 1, 0).summaryValue();
 
         insertSavedBottle("sb_mdc_s1", 6, 6, "stored");
@@ -262,7 +300,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     @Test
     void savedBottleQuantitySummaryEqualsPagedDetailSumOfRemainingAndPagePredicate() {
         // as-of 取当前经营日窗末：与全表 Σremaining_quantity 交叉时须覆盖库内既有全部行（历史 DAY 会漏掉其后真实数据）。
-        Instant asOfEnd = businessDayResolver.endInstant("bar", businessDayResolver.businessDate("bar", Instant.now()));
+        Instant asOfEnd = businessDayResolver.end(null, null, businessDayResolver.businessDate(null, null, Instant.now()));
         BigDecimal baseline = repository.savedBottleQuantityDetail(asOfEnd, 1, 0).summaryValue();
 
         insertSavedBottle("sb_mdc_q1", 6, 5, "stored");
@@ -312,7 +350,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void ticketPendingIssueBalanceCountsNonIssuedAsOfEnd() {
-        Instant asOfEnd = businessDayResolver.endInstant("ticketing", businessDayResolver.businessDate("ticketing", Instant.now()));
+        Instant asOfEnd = businessDayResolver.end(null, null, businessDayResolver.businessDate(null, null, Instant.now()));
         BigDecimal baseline = repository.ticketPendingIssueDetail(asOfEnd, 1, 0).summaryValue();
         insertTicketOrderIssue("to_pend_1", "paid", "pending");
         insertTicketOrderIssue("to_pend_2", "pending", "pending");
@@ -798,8 +836,8 @@ class MetricDetailConsistencyJdbcIntegrationTests {
     void ticketVerificationSuccessSummaryEqualsPagedDetailCountAndEtlPlatformTotal() {
         // 票务核销依赖 issued_entitlements/terminal_devices 多级外键——不新种子，用共享库存量数据的「同源一致」断言：
         // 明细行数==summaryValue==ETL 平台合计（status='success' 同谓词），证登记项明细与总览 ETL 同口径。
-        Instant start = businessDayResolver.startInstant("ticketing", DAY);
-        Instant end = businessDayResolver.endInstant("ticketing", DAY);
+        Instant start = businessDayResolver.start(null, null, DAY);
+        Instant end = businessDayResolver.end(null, null, DAY);
         MetricDetailRows rows = repository.ticketVerificationSuccessDetail(start, end, 200, 0);
         assertThat(collectAllPages((limit, offset) -> repository.ticketVerificationSuccessDetail(start, end, limit, offset)))
                 .hasSize((int) rows.totalRows());
@@ -810,8 +848,8 @@ class MetricDetailConsistencyJdbcIntegrationTests {
 
     @Test
     void newMemberSummaryEqualsPagedDetailCountAndEtlAggregate() {
-        Instant start = businessDayResolver.startInstant("customer", DAY);
-        Instant end = businessDayResolver.endInstant("customer", DAY);
+        Instant start = businessDayResolver.start(null, null, DAY);
+        Instant end = businessDayResolver.end(null, null, DAY);
         BigDecimal baseline = repository.newMemberDetail(start, end, 1, 0).summaryValue();
         insertMember(sid("cu_active"), "active");
         insertMember(sid("cu_dereg"), "deregistered"); // 注销 → 不进口径

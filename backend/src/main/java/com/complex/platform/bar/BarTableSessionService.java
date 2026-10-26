@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -32,6 +32,9 @@ public class BarTableSessionService {
     // 第十批 TK-27-R3：拆台时人工订单归属留痕（字段注入同上；单测手工置位）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     AuditEventService auditEvents;
+    // 第十八批第 1 条（ENUM:187「以开台或下单时点所属的营业日为准」）：开台营业日按该酒吧营业日由服务端确定。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -142,7 +145,7 @@ public class BarTableSessionService {
                 "session_" + slug(actual.idempotencyKey()),
                 barId,
                 merchantId,
-                requireLocalDate(actual.businessDate(), "business_date"),
+                businessDays.businessDate(null, barId, now),
                 table.id(),
                 reservationId,
                 trimToDefault(actual.customerId(), reservation == null ? null : reservation.customerId()),

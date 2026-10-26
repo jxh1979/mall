@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -82,7 +82,7 @@ class ParkingPaymentJdbcIntegrationTests {
         // 50 分钟前入场：免费 30 分后计费 20 分→1 小时×5 元；计费段跨营业日切点时两段各按 1 小时计。
         Instant entered = now.minus(Duration.ofMinutes(50));
         session = f.session("P1", "粤A12345", entered.toString());
-        due = businessDays.businessDate(entered.plus(Duration.ofMinutes(30))).equals(businessDays.businessDate(now)) ? 500 : 1000;
+        due = businessDays.businessDate(null, null, entered.plus(Duration.ofMinutes(30))).equals(businessDays.businessDate(null, null, now)) ? 500 : 1000;
         when(gateway.initiatePayment(any())).thenAnswer(inv -> new PaymentGatewayResult(PaymentGatewayResult.Status.PENDING, GATEWAY,
                 "ref_" + UUID.randomUUID(), "pending", null, null,
                 new com.complex.platform.finance.gateway.PaymentClientLaunch("miniapp_wechat", Map.of("timeStamp", "1700000000"))));

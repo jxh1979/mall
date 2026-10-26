@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.*;
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
@@ -354,11 +354,12 @@ class PayrollWorkflowJdbcIntegrationTests {
             .isEqualTo("resolved");
         assertThat(payroll.calculate(request("supplemental")).beforeTaxCent()).isZero();
     }
-    /** 本员工为销售归属人的酒吧账单（无收款流水：本用例只看工资侧）。 */
+    /** 本员工为销售归属人的酒吧账单（无收款流水：本用例只看工资侧）；下单时点与提成计提同在工资月 15 日（提成月份按下单时点所属营业日，ENUM:187）。 */
     String barBill(String payment,String settlement) {
         String id="pw_bill_"+key(),table="pw_tbl_"+key(),order="pw_ord_"+key();
         jdbc.update("INSERT INTO bar_tables(id,bar_id,table_code,table_name,table_type,status,created_at,updated_at) VALUES(?,'pw_bar',?,'提成回归卡座','card_seat','active',now(),now())",table,table);
-        jdbc.update("INSERT INTO bar_orders(id,bar_id,table_id,order_source,status,total_amount_cent,created_at,updated_at) VALUES(?,'pw_bar',?,'staff','billed',30000,now(),now())",order,table);
+        jdbc.update("INSERT INTO bar_orders(id,bar_id,table_id,order_source,status,total_amount_cent,created_at,updated_at) VALUES(?,'pw_bar',?,'staff','billed',30000,?::timestamptz,?::timestamptz)",
+            order,table,month+"-15T12:00:00+08:00",month+"-15T12:00:00+08:00");
         jdbc.update("INSERT INTO bar_bills(id,bill_no,order_id,bar_id,merchant_id,table_id,subtotal_amount_cent,payable_amount_cent,paid_amount_cent,payment_status,settlement_status,sales_staff_id,created_at,updated_at) VALUES(?,?,?,'pw_bar','pw_merchant',?,30000,30000,?,?,?,?,now(),now())",
             id,id,order,table,"paid".equals(payment)?30000:0,payment,settlement,user);
         return id;

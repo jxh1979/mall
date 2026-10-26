@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -316,7 +316,7 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
     @Test
     void receivedDetailByRealQueryShapeOnlyShowsReachableProject() throws Exception {
         java.time.LocalDate day = java.time.LocalDate.of(2098, 3, 10);
-        java.time.Instant at = businessDayResolver.startInstant("inventory", day).plusSeconds(3600);
+        java.time.Instant at = businessDayResolver.start(null, null, day).plusSeconds(3600);
         String receiptA = purchaseReceipt("a", projectA, 12, 10, 2, at);
         purchaseReceipt("b", projectB, 3, 3, 0, at);
         RequestPostProcessor plain = staffOfA("plain", plainRole("plain", "analytics.dashboard.view", "inventory.purchase_request.view"));
@@ -337,7 +337,7 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
     @Test
     void manualBackfillDetailByRealQueryShapeOnlyShowsReachableProject() throws Exception {
         java.time.LocalDate day = java.time.LocalDate.of(2098, 3, 10);
-        java.time.Instant at = businessDayResolver.startInstant("governance", day).plusSeconds(3600);
+        java.time.Instant at = businessDayResolver.start(null, null, day).plusSeconds(3600);
         String backfillA = lockedBackfill("a", projectA, at);
         lockedBackfill("b", projectB, at);
         RequestPostProcessor plain = staffOfA("plain", plainRole("plain", "analytics.dashboard.view", "governance.supervisor_review.view"));

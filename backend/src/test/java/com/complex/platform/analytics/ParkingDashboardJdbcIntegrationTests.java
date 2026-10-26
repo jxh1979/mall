@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,8 +41,8 @@ class ParkingDashboardJdbcIntegrationTests {
 
     @BeforeEach
     void seed() {
-        day = businessDays.businessDate(Instant.now()).minusDays(1);
-        start = businessDays.startInstant(day);
+        day = businessDays.businessDate(null, null, Instant.now()).minusDays(1);
+        start = businessDays.start(null, null, day);
         jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','停车看板回归','active',now(),now())",
                 project);
     }

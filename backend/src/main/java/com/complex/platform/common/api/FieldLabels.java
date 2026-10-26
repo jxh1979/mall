@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -310,6 +310,7 @@ public final class FieldLabels {
         p("adjustment_amount_cent", "调整金额");
         p("adjustment_rate", "调整比例");
         p("commission_mode", "分成方式");
+        p("commission_ids", "提成记录编号");
         p("settlement_id", "结算单号");
         p("settlement_mode", "结算方式");
         p("settlement_entity_id", "结算主体");
@@ -356,6 +357,9 @@ public final class FieldLabels {
         p("amusement_project_id", "游乐项目");
         p("complex_id", "所属综合体");
         p("zone_id", "所在地时区");
+        p("close_hour", "闭店时点");
+        p("min_close_hour", "最早闭店时点");
+        p("max_close_hour", "最晚闭店时点");
         p("renewed_until", "续约至");
         p("valid_until", "有效期至");
         p("expires_at", "到期时间");

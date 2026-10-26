@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -399,21 +399,52 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public boolean openBarBillAnomalyExists(Instant from, Instant to, String scopeType, String scopeId) {
+        return openBarBillAnomalyExists(from, to, scopeType, scopeId, Map.of());
+    }
+
+    @Override
+    public boolean openBarBillAnomalyExists(Instant from, Instant to, String scopeType, String scopeId,
+            Map<String, Instant[]> barWindows) {
         boolean merchantScope = isMerchantScope(scopeType);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("merchant_scope", merchantScope)
+                .addValue("merchant_id", merchantScope ? scopeId : null);
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 SELECT EXISTS (
                     SELECT 1
                       FROM bar_bills b
                      WHERE b.payment_status = 'abnormal'
                        AND (:merchant_scope = FALSE OR b.merchant_id = :merchant_id)
-                       AND ((b.created_at >= :from AND b.created_at < :to)
+                       AND (%s
                             OR EXISTS (SELECT 1 FROM bar_bill_settlements s
-                                        WHERE s.bill_id = b.id AND s.settled_at >= :from AND s.settled_at < :to)))
-                """, new MapSqlParameterSource()
-                .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
-                .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
-                .addValue("merchant_scope", merchantScope)
-                .addValue("merchant_id", merchantScope ? scopeId : null), Boolean.class));
+                                        WHERE s.bill_id = b.id AND %s)))
+                """.formatted(barWindowPredicate("b.created_at", "b.bar_id", barWindows, params),
+                barWindowPredicate("s.settled_at", "b.bar_id", barWindows, params)), params, Boolean.class));
+    }
+
+    /**
+     * 第十八批第 1 条（ENUM:187「按每个项目、每家酒吧可配」）：时刻列按所属酒吧各自的营业日窗判定；
+     * windows 之外的酒吧（含没有主数据的历史 bar_id）用 [:from, :to)。
+     */
+    private static String barWindowPredicate(String column, String barIdSql, Map<String, Instant[]> windows,
+            MapSqlParameterSource params) {
+        String fallback = column + " >= :from AND " + column + " < :to";
+        if (windows.isEmpty()) {
+            return "(" + fallback + ")";
+        }
+        StringBuilder sql = new StringBuilder("(CASE ").append(barIdSql);
+        int i = 0;
+        for (Map.Entry<String, Instant[]> window : windows.entrySet()) {
+            String key = "bw" + i++;
+            params.addValue(key, window.getKey())
+                    .addValue(key + "_from", timestampWithTimeZone(window.getValue()[0]))
+                    .addValue(key + "_to", timestampWithTimeZone(window.getValue()[1]));
+            sql.append(" WHEN :").append(key).append(" THEN ").append(column).append(" >= :").append(key)
+                    .append("_from AND ").append(column).append(" < :").append(key).append("_to");
+        }
+        return sql.append(" ELSE ").append(fallback).append(" END)").toString();
     }
 
     @Override
@@ -908,28 +939,7 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public DailyCloseSourceTotals aggregateBar(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {
-        // 酒吧：bar_bill_settlements 已结算（settle_channel 全计），以 settled_at 落在经营日窗口 [from, to) 归集；
-        // 金额=结算分，count=结算笔数。
-        // 退款（待确认#2）：bar_bill_adjustments 中 adjustment_type='refund'（结账后退款减项）按 refunded_at
-        //   落经营日窗口 [from, to) 合计为 refund_cent，冲减当日 net。
-        //   免单 waiver 不计入 refund_cent——免单在结账前已减应付、结算金额本就更低，避免与低结算重复冲减。
-        return aggregateTotals("""
-                SELECT (SELECT COALESCE(SUM(settlement_amount_cent), 0)
-                          FROM bar_bill_settlements
-                         WHERE settled_at >= :from
-                           AND settled_at < :to
-                           AND reversed = FALSE) AS amount_cent,
-                       (SELECT COALESCE(SUM(amount_cent), 0)
-                          FROM bar_bill_adjustments
-                         WHERE adjustment_type = 'refund'
-                           AND refunded_at >= :from
-                           AND refunded_at < :to) AS refund_cent,
-                       (SELECT COUNT(*)
-                          FROM bar_bill_settlements
-                         WHERE settled_at >= :from
-                           AND settled_at < :to
-                           AND reversed = FALSE) AS order_count
-                """, businessDate, fromInclusive, toExclusive);
+        return aggregateBar(businessDate, fromInclusive, toExclusive, null, null, Map.of());
     }
 
     @Override
@@ -1059,32 +1069,51 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public DailyCloseSourceTotals aggregateBar(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
-        if (!isMerchantScope(scopeType)) {
-            return aggregateBar(businessDate, from, to);
-        }
-        // bar_bill_settlements 有 merchant_id:merchant scope 仅归本商户结算;调整(退款)经 bill→settlement 归本商户。
-        // 第十七批⑤：退款按账单是否有本商户结算流水归属（EXISTS），不按流水逐行连接——账单有多笔收款流水（多渠道收款、作废留存已退部分）时退款不重复计。
-        return aggregateTotalsScoped("""
-                SELECT (SELECT COALESCE(SUM(settlement_amount_cent), 0)
-                          FROM bar_bill_settlements
-                         WHERE settled_at >= :from
-                           AND settled_at < :to
-                           AND reversed = FALSE
-                           AND merchant_id = :merchant_id) AS amount_cent,
+        return aggregateBar(businessDate, from, to, scopeType, scopeId, Map.of());
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateBar(LocalDate businessDate, Instant from, Instant to, String scopeType,
+            String scopeId, Map<String, Instant[]> barWindows) {
+        // 酒吧：bar_bill_settlements 已结算（settle_channel 全计），以 settled_at 落在所属酒吧的营业日窗归集；
+        // 金额=结算分，count=结算笔数。退款：bar_bill_adjustments 中 adjustment_type='refund'（结账后退款减项）按 refunded_at
+        //   落所属酒吧营业日窗合计为 refund_cent；免单 waiver 不计入（结账前已减应付，避免重复冲减）。
+        // merchant scope 仅归本商户结算；退款按账单是否有本商户结算流水归属（EXISTS），不按流水逐行连接——
+        //   账单有多笔收款流水（多渠道收款、作废留存已退部分）时退款不重复计（第十七批⑤）。其余 scope 平台全量。
+        String merchantId = isMerchantScope(scopeType) ? scopeId : null;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("from", timestampWithTimeZone(from))
+                .addValue("to", timestampWithTimeZone(to))
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+        String settled = barWindowPredicate("s.settled_at",
+                "(SELECT b.bar_id FROM bar_bills b WHERE b.id = s.bill_id)", barWindows, params);
+        String refunded = barWindowPredicate("adj.refunded_at",
+                "(SELECT b.bar_id FROM bar_bills b WHERE b.id = adj.bill_id)", barWindows, params);
+        return jdbcTemplate.query("""
+                SELECT (SELECT COALESCE(SUM(s.settlement_amount_cent), 0)
+                          FROM bar_bill_settlements s
+                         WHERE %1$s
+                           AND s.reversed = FALSE
+                           AND (CAST(:merchant_id AS VARCHAR) IS NULL OR s.merchant_id = :merchant_id)) AS amount_cent,
                        (SELECT COALESCE(SUM(adj.amount_cent), 0)
                           FROM bar_bill_adjustments adj
                          WHERE adj.adjustment_type = 'refund'
-                           AND adj.refunded_at >= :from
-                           AND adj.refunded_at < :to
-                           AND EXISTS (SELECT 1 FROM bar_bill_settlements bs
-                                        WHERE bs.bill_id = adj.bill_id AND bs.merchant_id = :merchant_id)) AS refund_cent,
+                           AND %2$s
+                           AND (CAST(:merchant_id AS VARCHAR) IS NULL
+                                OR EXISTS (SELECT 1 FROM bar_bill_settlements bs
+                                            WHERE bs.bill_id = adj.bill_id AND bs.merchant_id = :merchant_id))) AS refund_cent,
                        (SELECT COUNT(*)
-                          FROM bar_bill_settlements
-                         WHERE settled_at >= :from
-                           AND settled_at < :to
-                           AND reversed = FALSE
-                           AND merchant_id = :merchant_id) AS order_count
-                """, businessDate, from, to, scopeId);
+                          FROM bar_bill_settlements s
+                         WHERE %1$s
+                           AND s.reversed = FALSE
+                           AND (CAST(:merchant_id AS VARCHAR) IS NULL OR s.merchant_id = :merchant_id)) AS order_count
+                """.formatted(settled, refunded), params, (rs) -> {
+            if (!rs.next()) {
+                return DailyCloseSourceTotals.empty();
+            }
+            return new DailyCloseSourceTotals(rs.getLong("amount_cent"), rs.getLong("refund_cent"), rs.getInt("order_count"));
+        });
     }
 
     @Override

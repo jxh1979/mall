@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
@@ -104,11 +104,13 @@ public class TicketPricingService {
         ));
     }
 
-    TicketDynamicPricingSimulationResponse simulateDynamicPricing(TicketDynamicPricingSimulationRequest request) {
+    /** today：未带到访日时取票种当前营业日（ENUM:187），由下单服务按票种归属算。 */
+    TicketDynamicPricingSimulationResponse simulateDynamicPricing(TicketDynamicPricingSimulationRequest request,
+            java.util.function.Function<TicketTypeRecord, LocalDate> today) {
         TicketDynamicPricingSimulationRequest actual = requireRequest(request);
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(actual.ticketTypeId(), "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
-        LocalDate visitDate = actual.visitDate() == null ? LocalDate.now() : actual.visitDate();
+        LocalDate visitDate = actual.visitDate() == null ? today.apply(ticketType) : actual.visitDate();
         String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
         long basePrice = resolveUnitPrice(ticketType, null, visitDate);
         Map<String, Object> context = actual.context() == null ? Map.of() : actual.context();

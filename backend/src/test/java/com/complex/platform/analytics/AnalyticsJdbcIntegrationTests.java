@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -96,7 +96,7 @@ class AnalyticsJdbcIntegrationTests {
         assertThat(occupancySnapshot("occupancy.total_area", day)).isEqualByComparingTo(total);
         assertThat(occupancySnapshot("occupancy.rentable_area", day)).isEqualByComparingTo(areas.rentableArea());
         java.math.BigDecimal electricity = repository.energyConsumptionByType(
-                businessDayResolver.startInstant("energy", day), businessDayResolver.endInstant("energy", day))
+                businessDayResolver.start(null, null, day), businessDayResolver.end(null, null, day))
                 .get("electricity");
         assertThat(occupancySnapshot("energy.electricity_per_sqm", day))
                 .isEqualByComparingTo(electricity.divide(areas.rentableArea(), 4, java.math.RoundingMode.HALF_UP));
@@ -865,22 +865,6 @@ class AnalyticsJdbcIntegrationTests {
                 VALUES (:id, 'enc:v1:'||:id, '138****0000', :status, :created_at::timestamptz, :created_at::timestamptz)
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                 .addValue("id", id).addValue("status", status).addValue("created_at", createdAt));
-    }
-
-    @Test
-    void v201SeedsDomainCutoffsAndResolverAppliesBarWindow() {
-        // S0(2026-07-02 拍板):经营日按域切分——bar=06:00、merchant=10:00、platform=04:00 基准。
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='bar'", java.util.Map.of(), Integer.class)).isEqualTo(6);
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='merchant'", java.util.Map.of(), Integer.class)).isEqualTo(10);
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT cutoff_hour FROM business_day_cutoff_config WHERE domain='platform'", java.util.Map.of(), Integer.class)).isEqualTo(4);
-        // 北京凌晨 05:00 的流水（=2026-06-17T21:00Z；日切小时按所在地时间读）:酒吧域未到 06:00 日切归前一经营日 06-17,
-        // 平台基准已过 04:00 归当日 06-18。
-        java.time.Instant fiveAm = java.time.Instant.parse("2026-06-17T21:00:00Z");
-        assertThat(businessDayResolver.businessDate("bar", fiveAm)).isEqualTo(java.time.LocalDate.parse("2026-06-17"));
-        assertThat(businessDayResolver.businessDate(fiveAm)).isEqualTo(java.time.LocalDate.parse("2026-06-18"));
     }
 
     @Test

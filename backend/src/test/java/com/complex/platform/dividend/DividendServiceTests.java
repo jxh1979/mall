@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +70,7 @@ class DividendServiceTests {
         final Map<String, DividendStatementRecord> statements = new LinkedHashMap<>();
         final List<DividendStatementLineRecord> lines = new ArrayList<>();
         final Map<String, Long> barRevenue = new HashMap<>();
+        final List<Instant[]> barRevenueWindows = new ArrayList<>();
         final Map<String, Long> barRefund = new HashMap<>();
         final Map<String, List<ExpenseTypeSumRecord>> expenses = new HashMap<>();
         // FS-015：已确认月度分账结算额 / 未确认月份 / 单店门票综合服务费。
@@ -264,6 +265,7 @@ class DividendServiceTests {
 
         @Override
         public long sumBarRevenueCent(String merchantId, Instant from, Instant to) {
+            barRevenueWindows.add(new Instant[] {from, to});
             return barRevenue.getOrDefault(merchantId, 0L);
         }
 
@@ -403,7 +405,7 @@ class DividendServiceTests {
         AuditedOperationExecutor operations = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));
-        service = new DividendService(repository, inventoryRepository, new BusinessDayResolver(4),
+        service = new DividendService(repository, inventoryRepository, new BusinessDayResolver(),
                 authorizationService, operations, payoutPort);
     }
 
@@ -516,6 +518,43 @@ class DividendServiceTests {
                 null, null, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
+    }
+
+    /**
+     * 第十八批第 1 条（ENUM:187「按每个项目、每家酒吧可配」）：方案商户是已批准 12:00 起算的酒吧时，酒吧收入与销货成本按该酒吧营业日窗取数——
+     * 2026-Q3 窗为 [北京 07-01 12:00, 北京 10-01 12:00)，不按出厂 10:00。解析器桩替身该酒吧的已批准版本。
+     */
+    @Test
+    void barMerchantPeriodWindowFollowsTheBarsBusinessDay() {
+        BusinessDayResolver noonBar = new BusinessDayResolver() {
+            @Override
+            public String barOfMerchant(String merchantId) {
+                return MERCHANT.equals(merchantId) ? merchantId : null;
+            }
+
+            @Override
+            public Instant start(String projectId, String barId, java.time.LocalDate date) {
+                return barId == null ? super.start(projectId, null, date)
+                        : date.atTime(12, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+            }
+
+            @Override
+            public Instant end(String projectId, String barId, java.time.LocalDate date) {
+                return barId == null ? super.end(projectId, null, date)
+                        : date.plusDays(1).atTime(12, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+            }
+        };
+        service = new DividendService(repository, inventoryRepository, noonBar, authorizationService,
+                new AuditedOperationExecutor(new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                        mock(AuditEventService.class)), payoutPort);
+        createDefaultPlan();
+        computeOfficialQuarter();
+        Instant from = Instant.parse("2026-07-01T04:00:00Z");
+        Instant to = Instant.parse("2026-10-01T04:00:00Z");
+        assertThat(repository.barRevenueWindows).anySatisfy(window -> assertThat(window).containsExactly(from, to));
+        verify(inventoryRepository).sumOutboundCost(org.mockito.ArgumentMatchers.eq(MERCHANT), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq("2026-07-01"), org.mockito.ArgumentMatchers.eq("2026-09-30"),
+                org.mockito.ArgumentMatchers.eq(from), org.mockito.ArgumentMatchers.eq(to));
     }
 
     @Test
@@ -826,7 +865,7 @@ class DividendServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));
         DividendService guardedService = new DividendService(guarded, inventoryRepository,
-                new BusinessDayResolver(4), authorizationService, operations, payoutPort);
+                new BusinessDayResolver(), authorizationService, operations, payoutPort);
         repository = guarded;
         service = guardedService;
         createDefaultPlan();

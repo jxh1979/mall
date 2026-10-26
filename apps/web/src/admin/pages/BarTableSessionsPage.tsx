@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
@@ -37,10 +37,6 @@ const BAR_RESERVATION_CREATE_PERMISSION = "bar.reservation.create";
 const BAR_SESSION_CREATE_PERMISSION = "bar.table_session.create";
 // 第十批 TK-27-R2（BSM L1058）：清台登记恢复空闲与开台同权限码。
 const BAR_TABLE_OPEN_CLOSE_PERMISSION = "bar.table.open_close";
-
-function todayBusinessDate() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function nextRenewedUntil(minutes: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -91,7 +87,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", tableType: "card_seat", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
   const [newReservation, setNewReservation] = React.useState({ barId: "", tableId: "", guestCount: "2", salespersonUserId: "", customerPhone: "", latestArrivalAt: "" });
   const [qrTableId, setQrTableId] = React.useState("");
-  const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", reservationId: "", businessDate: todayBusinessDate(), guestCount: "2", salesStaffId: "", serviceStaffId: "" });
+  const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", reservationId: "", guestCount: "2", salesStaffId: "", serviceStaffId: "" });
   // 行明细抽屉：三张业务表整行可点 → 完整字段（状态中文·开台/关台/预定时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -367,11 +363,10 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
-  // 开台：为选定卡座新建开台会话（可选带营业日、销售/服务员）。
+  // 开台：为选定卡座新建开台会话（可选带销售/服务员）。营业日由服务端按开台时点所属酒吧营业日确定（ENUM:187）。
   function validateNewSession() {
     if (!newSession.barId.trim()) return fail("开台请填写所属酒吧。");
     if (!newSession.tableId.trim()) return fail("开台请填写卡座 ID。");
-    if (!newSession.businessDate.trim()) return fail("开台请填写营业日。");
     const count = Number(newSession.guestCount);
     if (!Number.isFinite(count) || count <= 0) return fail("开台人数必须大于 0。");
     setBarError("");
@@ -388,7 +383,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         tableId: newSession.tableId.trim(),
         // ROOT-03-R19（ENUM 第 100 行「已预留只能经取消订台、超时释放、到店开台三条路径退出」）：客人到店开台带上该台位的订台号，占台随即退出。
         reservationId: newSession.reservationId.trim() || undefined,
-        businessDate: newSession.businessDate,
         guestCount: Number(newSession.guestCount),
         salesStaffId: newSession.salesStaffId.trim() || undefined,
         serviceStaffId: newSession.serviceStaffId.trim() || undefined,
@@ -538,7 +532,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-session-bar" value={newSession.barId} onChange={(v) => setNewSession((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
         <label>卡座 ID<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座 ID" /></label>
         <label>订台号（有预订必填）<input data-testid="bar-new-session-reservation" value={newSession.reservationId} onChange={(event) => setNewSession((p) => ({ ...p, reservationId: event.target.value }))} placeholder="客人到店开台填该台位的订台号" /></label>
-        <label>营业日<input data-testid="bar-new-session-date" type="date" value={newSession.businessDate} onChange={(event) => setNewSession((p) => ({ ...p, businessDate: event.target.value }))} /></label>
         <label>人数<input data-testid="bar-new-session-guests" type="number" min={1} value={newSession.guestCount} onChange={(event) => setNewSession((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
         <label>销售（选填）<input data-testid="bar-new-session-sales" value={newSession.salesStaffId} onChange={(event) => setNewSession((p) => ({ ...p, salesStaffId: event.target.value }))} placeholder="销售 ID" /></label>
         <label>服务员（选填）<input data-testid="bar-new-session-service" value={newSession.serviceStaffId} onChange={(event) => setNewSession((p) => ({ ...p, serviceStaffId: event.target.value }))} placeholder="服务员 ID" /></label>

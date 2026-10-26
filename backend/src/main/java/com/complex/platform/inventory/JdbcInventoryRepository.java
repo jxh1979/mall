@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1361,6 +1361,12 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT * FROM saved_bottle_manual_pickups WHERE id = :id FOR UPDATE
                 """, Map.of("id", id), rowMapper::mapSavedBottleManualPickup).stream().findFirst();
+    }
+
+    @Override
+    public Optional<String> findWarehouseProjectId(String warehouseId) {
+        return jdbcTemplate.query("SELECT project_id FROM warehouses WHERE id = :id", Map.of("id", warehouseId),
+                (rs, n) -> rs.getString("project_id")).stream().findFirst();
     }
 
     @Override

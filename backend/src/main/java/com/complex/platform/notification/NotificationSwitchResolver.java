@@ -1,6 +1,6 @@
 package com.complex.platform.notification;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.terminal.TerminalCapabilitySwitchRecord;
 import com.complex.platform.terminal.TerminalDeviceRepository;
@@ -49,29 +49,30 @@ public class NotificationSwitchResolver {
         if (MANDATORY_EVENTS.contains(domain + "." + eventKey)) {
             return NotificationSwitchDecision.allow();
         }
-        if (!isSwitchEnabled(MASTER_SWITCH, false)) {
+        if (!isSwitchEnabled(MASTER_SWITCH)) {
             return NotificationSwitchDecision.blocked("switch_off:" + MASTER_SWITCH);
         }
 
         String domainSwitch = SWITCH_PREFIX + domain;
-        if (!isSwitchEnabled(domainSwitch, true)) {
+        if (!isSwitchEnabled(domainSwitch)) {
             return NotificationSwitchDecision.blocked("switch_off:" + domainSwitch);
         }
 
         String eventSwitch = domainSwitch + "." + eventKey;
-        if (!isSwitchEnabled(eventSwitch, true)) {
+        if (!isSwitchEnabled(eventSwitch)) {
             return NotificationSwitchDecision.blocked("switch_off:" + eventSwitch);
         }
 
         return NotificationSwitchDecision.allow();
     }
 
-    private boolean isSwitchEnabled(String capabilityCode, boolean defaultValue) {
+    /** PGM 第 742 行 opt-in：总开关、域开关、事件开关缺行一律按关闭。 */
+    private boolean isSwitchEnabled(String capabilityCode) {
         Map<String, String> scopes = new LinkedHashMap<>();
         scopes.put("global", "global");
         return terminalDeviceRepository
                 .resolveEffectiveSwitch("*", capabilityCode, scopes)
                 .map(TerminalCapabilitySwitchRecord::enabled)
-                .orElse(defaultValue);
+                .orElse(false);
     }
 }

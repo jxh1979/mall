@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -74,11 +74,11 @@ class PurchaseReceivedMetricJdbcIntegrationTests {
 
     @Test
     void receivedShowsPerItemAndUnitWithoutCrossUnitSum() {
-        Instant inDay = businessDayResolver.startInstant("inventory", D).plusSeconds(3600);
+        Instant inDay = businessDayResolver.start(null, null, D).plusSeconds(3600);
         receipt("a_wine", projectA, wine, 12, 10, 2, inDay);
         receipt("a_dev", projectA, device, 5, 5, 0, inDay.plusSeconds(60));
         receipt("b_wine", projectB, wine, 3, 3, 0, inDay.plusSeconds(120));
-        receipt("prev_wine", projectA, wine, 1, 1, 0, businessDayResolver.startInstant("inventory", D).minusSeconds(60)); // 前一营业日
+        receipt("prev_wine", projectA, wine, 1, 1, 0, businessDayResolver.start(null, null, D).minusSeconds(60)); // 前一营业日
 
         AnalyticsRecords.MetricValue received = service.overview(Optional.empty(), D).metrics().get("supply.received");
         assertThat(received.dimension()).isNotNull();

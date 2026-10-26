@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -197,7 +197,7 @@ public class ParkingReleaseService {
                 SELECT id FROM parking_sessions WHERE project_id=? AND plate_no=?
                    AND (status='in_lot' OR (status='exited' AND exited_at>=? AND exited_at<=?))
                  ORDER BY status='in_lot' DESC, COALESCE(exited_at, entered_at) DESC LIMIT 1""",
-                (rs, n) -> rs.getString(1), project, plate, Timestamp.from(businessDays.startInstant(businessDays.businessDate(now))),
+                (rs, n) -> rs.getString(1), project, plate, Timestamp.from(businessDays.start(project, null, businessDays.businessDate(project, null, now))),
                 Timestamp.from(now)).stream().findFirst().orElse(null);
     }
 

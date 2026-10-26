@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -130,23 +130,6 @@ class AnalyticsServiceTests {
                         "analytics.robot.viewed",
                         "analytics.staff_service_score.viewed"
                 );
-    }
-
-    @Test
-    void businessDayCutoffUpsertValidatesDomainAndHourRange() {
-        // S0:域白名单+0-23 校验;合法写入落审计。
-        OperatingParamsService ops = new OperatingParamsService(
-                analyticsRepository, new AuditEventService(auditEventRepository));
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ops.upsertBusinessDayCutoff(
-                new BusinessDayCutoffRequest("k1", null, "nonsense", 6)))
-                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
-                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> ops.upsertBusinessDayCutoff(
-                new BusinessDayCutoffRequest("k2", null, "bar", 24)))
-                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
-                        e -> org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
-        org.assertj.core.api.Assertions.assertThat(ops.upsertBusinessDayCutoff(
-                new BusinessDayCutoffRequest("k3", null, "bar", 6)).cutoffHour()).isEqualTo(6);
     }
 
     @Test
@@ -1661,14 +1644,6 @@ class AnalyticsServiceTests {
                 java.time.Instant start, java.time.Instant end, int limit, int offset,
                 java.util.Collection<String> projectIds) {
             return java.util.List.of();
-        }
-
-        public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
-            return java.util.List.of();
-        }
-
-        public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, java.time.Instant now) {
-            return new AnalyticsRecords.BusinessDayCutoffRecord(domain, cutoffHour, now, updatedBy);
         }
 
         private final Map<String, String> projectEntityMap = new LinkedHashMap<>();

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -437,13 +437,6 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/analytics/finance-receivables/debtors": [
       { merchantId: "merchant-1", merchantName: "欠费示例商户", outstandingCent: 1500000, oldestDueDate: "2026-03-20", overdueDays: 103, bucket: "a90p" },
       { merchantId: "merchant-2", merchantName: "轻微逾期商户", outstandingCent: 300000, oldestDueDate: "2026-06-15", overdueDays: 16, bucket: "a0_30" },
-    ],
-    "/api/v1/analytics/business-day-cutoffs": [
-      { domain: "platform", cutoffHour: 4 }, { domain: "finance", cutoffHour: 4 },
-      { domain: "ticketing", cutoffHour: 4 }, { domain: "amusement", cutoffHour: 4 },
-      { domain: "customer", cutoffHour: 4 }, { domain: "inventory", cutoffHour: 4 },
-      { domain: "governance", cutoffHour: 4 }, { domain: "bar", cutoffHour: 6 },
-      { domain: "merchant", cutoffHour: 10 },
     ],
     "/api/v1/merchant-service/work-orders": state.merchantWorkOrders,
     "/api/v1/merchant-billing/bills": state.merchantBills,

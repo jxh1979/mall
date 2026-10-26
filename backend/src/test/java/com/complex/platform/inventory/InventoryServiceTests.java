@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -94,11 +94,13 @@ class InventoryServiceTests {
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
         terminalDeviceRepository = mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
-        // 默认：无显式开关行 → opt-out 语义放行（机器人段被动留痕允许）。
+        // 默认：桩一条显式开启行放行（PGM 第 742 行 opt-in：缺行即关；机器人段被动留痕允许）。
         when(terminalDeviceRepository.resolveEffectiveSwitch(
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyMap())).thenReturn(Optional.empty());
+                org.mockito.ArgumentMatchers.anyMap())).thenAnswer(invocation -> Optional.of(
+                        new com.complex.platform.terminal.TerminalCapabilitySwitchRecord("tcs_test_on", "*",
+                                invocation.getArgument(1), "global", "global", true, "测试默认开启", Instant.now(), Instant.now())));
         com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard =
                 new com.complex.platform.gate.TerminalSwitchGuard(
                         terminalDeviceRepository, new AuditEventService(auditEventRepository));

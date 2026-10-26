@@ -71,14 +71,14 @@ public class MdmService {
     }
 
     // ── 开关状态 ────────────────────────────────────────────────────────────
-    /** MDM 自有侧是否启用（managed_work_devices 显式开启为开；无行=默认开启，但 V088 已显式插 false）。 */
+    /** MDM 自有侧是否启用（managed_work_devices 显式开启为开；无行=关闭，PGM 第 742 行 opt-in；V088 已显式插 false）。 */
     public boolean isMdmEnabled() {
         Map<String, String> scopes = new LinkedHashMap<>();
         scopes.put("global", "global");
         return terminalDeviceRepository
                 .resolveEffectiveSwitch("*", MDM_CAPABILITY, scopes)
                 .map(TerminalCapabilitySwitchRecord::enabled)
-                .orElse(true);
+                .orElse(false);
     }
 
     // ── app 白名单 CRUD（受 mdm.policy.manage） ───────────────────────────────

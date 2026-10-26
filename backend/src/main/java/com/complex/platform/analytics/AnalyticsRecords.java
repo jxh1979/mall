@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -60,14 +60,6 @@ public final class AnalyticsRecords {
             LocalDate oldestDueDate,
             long overdueDays,
             String bucket
-    ) {
-    }
-
-    public record BusinessDayCutoffRecord(
-            String domain,
-            int cutoffHour,
-            java.time.Instant updatedAt,
-            String updatedBy
     ) {
     }
 

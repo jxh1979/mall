@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.33
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.34
 
 ## 1. 文档定位
 
@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1149 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 408 | 人工权限矩阵正文未覆盖 307 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2298 | 人工事件矩阵正文未覆盖 2253 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1149 | 人工任务映射正文未逐项覆盖 1143 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI operation 数 | 1150 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 410 | 人工权限矩阵正文未覆盖 309 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2300 | 人工事件矩阵正文未覆盖 2255 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1150 | 人工任务映射正文未逐项覆盖 1144 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 690 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -90,10 +90,10 @@
 | `amusement.verification.execute` | staff-token | project-amusement-point | 1 | createAmusementVerification | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 3 | listAmusementVerifications, listAmusementCountReleases, listAmusementCapacitySnapshots | 已在权限矩阵正文出现 |
 | `amusement.waiver.acknowledge` | staff-token | project-amusement | 1 | acknowledgeAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
-| `analytics.dashboard.view` | staff-token | platform, project | 19 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getMetricDetail, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows ... | 已在权限矩阵正文出现 |
+| `analytics.dashboard.view` | staff-token | platform, project | 18 | listBusinessMetricSnapshots, getP0OverviewDashboard, getAnalyticsDomainDashboard, listMerchantHealthScores, listAnalyticsMerchants, listMetricDefinitions, getMetricDetail, getRobotAnalytics, getAnalyticsTrafficHourly, listOperatingParams, getAiThresholds, listNotificationWindows ... | 已在权限矩阵正文出现 |
 | `analytics.group.view` | staff-token | group | 1 | getGroupOverview | OpenAPI 补充，以本附录为准 |
 | `analytics.metric_anomaly.manage` | staff-token | project | 1 | disposeMetricAnomaly | OpenAPI 补充，以本附录为准 |
-| `analytics.operating_params.manage` | staff-token | platform, project | 7 | upsertOperatingParams, updateAiThresholds, upsertRevenueAttributionRule, upsertBusinessDayCutoff, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
+| `analytics.operating_params.manage` | staff-token | platform, project | 6 | upsertOperatingParams, updateAiThresholds, upsertRevenueAttributionRule, updateAnomalyConfig, upsertHolidayPeriod, fetchHolidayCalendar | OpenAPI 补充，以本附录为准 |
 | `analytics.report.export` | staff-token | platform | 1 | exportMonthlyReport | OpenAPI 补充，以本附录为准 |
 | `analytics.review.lock` | staff-token | project | 2 | listReviewLocks, createReviewLock | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
@@ -107,6 +107,8 @@
 | `bar.bill.reopen` | staff-token | project-bar-table | 1 | reopenBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.split_merge` | staff-token | project-bar-table | 3 | listBarBillOperations, mergeBarBill, splitBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.tip` | staff-token | project-bar-table | 1 | addBarBillTip | OpenAPI 补充，以本附录为准 |
+| `bar.business_day.manage` | staff-token | project | 1 | submitBarBusinessDayConfig | OpenAPI 补充，以本附录为准 |
+| `bar.business_day.view` | staff-token | project | 1 | listBarBusinessDayConfigs | OpenAPI 补充，以本附录为准 |
 | `bar.category.manage` | staff-token | project | 1 | saveBarProductCategory | OpenAPI 补充，以本附录为准 |
 | `bar.category.view` | staff-token | project | 1 | listBarProductCategories | OpenAPI 补充，以本附录为准 |
 | `bar.combo.manage` | staff-token | project | 1 | saveBarCombo | OpenAPI 补充，以本附录为准 |
@@ -269,7 +271,7 @@
 | `governance.space.view` | staff-token | platform, project, project-merchant-space | 3 | listSpaces, listVenueBusinessHours, listSpaceTypes | 已在权限矩阵正文出现 |
 | `governance.supervisor_review.approve` | staff-token | project-entity | 1 | approveSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.manage` | staff-token | project-entity | 1 | evaluateSupervisorReview | OpenAPI 补充，以本附录为准 |
-| `governance.supervisor_review.view` | staff-token | project, project-entity, project-merchant | 3 | listSupervisorReviewPolicies, readSupervisorReviewOriginal, readAmusementBusinessDayConfigOriginal | OpenAPI 补充，以本附录为准 |
+| `governance.supervisor_review.view` | staff-token | project, project-entity, project-merchant | 4 | listSupervisorReviewPolicies, readSupervisorReviewOriginal, readAmusementBusinessDayConfigOriginal, readBarBusinessDayConfigOriginal | OpenAPI 补充，以本附录为准 |
 | `integration.channel_store_map.manage` | staff-token | platform | 2 | saveIntegrationChannelTicketTypeMap, archiveIntegrationChannelTicketTypeMap | OpenAPI 补充，以本附录为准 |
 | `integration.channel_store_map.view` | staff-token | platform | 1 | listIntegrationChannelTicketTypeMaps | OpenAPI 补充，以本附录为准 |
 | `integration.compensation.manage` | staff-token | platform | 2 | createCompensationTask, resolveCompensationTask | OpenAPI 补充，以本附录为准 |
@@ -665,10 +667,6 @@
 | `analytics.anomaly_config.viewed` | success | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.ar_debtors.view_failed` | failure | `listArOverdueDebtors` | `GET` | `/api/v1/analytics/finance-receivables/debtors` | ANA-风控分析 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `analytics.ar_debtors.viewed` | success | `listArOverdueDebtors` | `GET` | `/api/v1/analytics/finance-receivables/debtors` | ANA-风控分析 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
-| `analytics.business_day_cutoff.update_failed` | failure | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
-| `analytics.business_day_cutoff.updated` | success | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.operating_params.manage` | 接口级事件，以本附录为准 |
-| `analytics.business_day_cutoff.view_failed` | failure | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
-| `analytics.business_day_cutoff.viewed` | success | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `analytics.customer_intent.viewed` | success | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.customer_intent.viewed_failed` | failure | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | ANA-风控分析 | `analytics.risk_alert.view` | 接口级事件，以本附录为准 |
 | `analytics.dashboard_domain.view_failed` | failure | `getAnalyticsDomainDashboard` | `GET` | `/api/v1/analytics/dashboards/{domain}` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
@@ -779,6 +777,12 @@
 | `bar.bill.settled` | success | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | BAR-酒吧经营 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `bar.bill.split` | success | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.bill.split_failed` | failure | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
+| `bar.business_day.original_view_failed` | failure | `readBarBusinessDayConfigOriginal` | `GET` | `/api/v1/bar-business-day-configs/{id}` | BAR-酒吧经营 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
+| `bar.business_day.original_viewed` | success | `readBarBusinessDayConfigOriginal` | `GET` | `/api/v1/bar-business-day-configs/{id}` | BAR-酒吧经营 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
+| `bar.business_day.submit_completed` | success | `submitBarBusinessDayConfig` | `POST` | `/api/v1/bar-business-day-configs` | BAR-酒吧经营 | `bar.business_day.manage` | 接口级事件，以本附录为准 |
+| `bar.business_day.submit_failed` | failure | `submitBarBusinessDayConfig` | `POST` | `/api/v1/bar-business-day-configs` | BAR-酒吧经营 | `bar.business_day.manage` | 接口级事件，以本附录为准 |
+| `bar.business_day.view_failed` | failure | `listBarBusinessDayConfigs` | `GET` | `/api/v1/bar-business-day-configs` | BAR-酒吧经营 | `bar.business_day.view` | 接口级事件，以本附录为准 |
+| `bar.business_day.viewed` | success | `listBarBusinessDayConfigs` | `GET` | `/api/v1/bar-business-day-configs` | BAR-酒吧经营 | `bar.business_day.view` | 接口级事件，以本附录为准 |
 | `bar.catalog.image_uploaded` | success | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.catalog.image_uploaded_failed` | failure | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.category.saved` | success | `saveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
@@ -2850,7 +2854,6 @@
 | ANA-风控分析 | `listAiQualityTasks` | `GET` | `/api/v1/analytics/ai-quality/tasks` | 查询ai质检任务 | `analytics.risk_alert.view` | `analytics.ai_quality_task.viewed` / `analytics.ai_quality_task.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listAnalyticsMerchants` | `GET` | `/api/v1/analytics/merchants` | 查询经营分析商户 | `analytics.dashboard.view` | `analytics.merchant_summary.viewed` / `analytics.merchant_summary.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listArOverdueDebtors` | `GET` | `/api/v1/analytics/finance-receivables/debtors` | 欠费商户明细排行(账龄钻取) | `finance.ar_ap.view` | `analytics.ar_debtors.viewed` / `analytics.ar_debtors.view_failed` | web | operation 级补充 |
-| ANA-风控分析 | `listBusinessDayCutoffs` | `GET` | `/api/v1/analytics/business-day-cutoffs` | 查询经营日切分配置(按业务域) | `analytics.dashboard.view` | `analytics.business_day_cutoff.viewed` / `analytics.business_day_cutoff.view_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listBusinessMetricSnapshots` | `GET` | `/api/v1/analytics/business-metric-snapshots` | List P2 business metric snapshots for operational analytics | `analytics.dashboard.view` | `analytics_business_metric_snapshot.viewed.success` / `analytics_business_metric_snapshot.viewed.failure` | web | operation 级补充 |
 | ANA-风控分析 | `listCustomerIntents` | `GET` | `/api/v1/analytics/customer-intents` | 查询客户意向 | `analytics.risk_alert.view` | `analytics.customer_intent.viewed` / `analytics.customer_intent.viewed_failed` | web | operation 级补充 |
 | ANA-风控分析 | `listExpiringContracts` | `GET` | `/api/v1/analytics/occupancy/expiring-contracts` | 到期预警合同明细 | `contract.view` | `analytics.expiring_contracts.viewed` / `analytics.expiring_contracts.view_failed` | web | operation 级补充 |
@@ -2871,7 +2874,6 @@
 | ANA-风控分析 | `resolveRiskAlert` | `POST` | `/api/v1/analytics/risk-alerts/{id}/resolve` | 处理风险alert | `analytics.risk_alert.manage` | `analytics.risk_alert.resolved` / `analytics.risk_alert.resolved_failed` | web | operation 级补充 |
 | ANA-风控分析 | `updateAiThresholds` | `POST` | `/api/v1/analytics/ai-thresholds` | 维护 AI/对标阈值 | `analytics.operating_params.manage` | `analytics.ai_thresholds.updated` / `analytics.ai_thresholds.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `updateAnomalyConfig` | `POST` | `/api/v1/analytics/anomaly-config` | 改指标异常检测阈值 | `analytics.operating_params.manage` | `analytics.anomaly_config.updated` / `analytics.anomaly_config.update_failed` | web | operation 级补充 |
-| ANA-风控分析 | `upsertBusinessDayCutoff` | `POST` | `/api/v1/analytics/business-day-cutoffs` | 修改某业务域的经营日切分小时 | `analytics.operating_params.manage` | `analytics.business_day_cutoff.updated` / `analytics.business_day_cutoff.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertHolidayPeriod` | `POST` | `/api/v1/analytics/holiday-calendar` | 手动录入节假日区间 | `analytics.operating_params.manage` | `analytics.holiday_calendar.updated` / `analytics.holiday_calendar.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertNotificationWindow` | `POST` | `/api/v1/analytics/notification-windows` | 维护提醒窗天数 | `platform.notification_window.manage` | `analytics.notification_windows.updated` / `analytics.notification_windows.update_failed` | web | operation 级补充 |
 | ANA-风控分析 | `upsertOperatingParams` | `POST` | `/api/v1/analytics/operating-params` | 新增或更新综合体经营参数（坪效面积） | `analytics.operating_params.manage` | `operating_params.changed` / `operating_params.change_failed` | web | operation 级补充 |
@@ -2954,6 +2956,7 @@
 | BAR-酒吧经营 | `issueBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation` | 签发订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_issued` / `bar.reservation_invitation_issue_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarBillMerchantRewards` | `GET` | `/api/v1/bar/bills/{bill_id}/rewards` | 查询酒水账单产生的商户消费积分与成长值 | `bar.order.view` | `bar.bill_rewards.viewed` / `bar.bill_rewards.view_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | 查询酒水账单拆并操作记录 | `bar.bill.split_merge` | `bar.bill_operation.list` / `bar.bill_operation.list_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `listBarBusinessDayConfigs` | `GET` | `/api/v1/bar-business-day-configs` | 查看授权酒吧的营业日配置目录与版本 | `bar.business_day.view` | `bar.business_day.viewed` / `bar.business_day.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `listBarCombos` | `GET` | `/api/v1/bar/catalog/combos` | 查询酒吧套餐 | `bar.combo.view` | `bar.combo.viewed` / `bar.combo.viewed_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `listBarEntitlementRedemptions` | `GET` | `/api/v1/bar/entitlement-redemptions` | 查询酒吧酒水权益兑换台账 | `bar.entitlement.read` | `bar.entitlement_redemption.viewed` / `bar.entitlement_redemption.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarOrderItemVoids` | `GET` | `/api/v1/bar/order-item-voids` | 退酒审批待审队列 | `bar.order_item.void` | `bar.order_item_void.viewed` / `bar.order_item_void.view_failed` | tablet, web | operation 级补充 |
@@ -2981,6 +2984,7 @@
 | BAR-酒吧经营 | `payBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | 订台定金支付 | `bar.reservation.manage` | `bar.reservation_deposit_paid` / `bar.reservation_deposit_pay_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `placeBarScanOrder` | `POST` | `/api/v1/bar/table-sessions/{session_id}/scan-orders` | 扫码点单（绑桌台会话） | `bar.order.create` | `bar.scan_order_created` / `bar.scan_order_create_failed` | miniapp, tablet | operation 级补充 |
 | BAR-酒吧经营 | `raiseBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly` | 登记账单争议（置异常） | `bar.bill.adjust` | `bar.bill_anomaly_raised` / `bar.bill_anomaly_raise_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `readBarBusinessDayConfigOriginal` | `GET` | `/api/v1/bar-business-day-configs/{id}` | 逐笔查看酒吧营业日配置审批原件 | `governance.supervisor_review.view` | `bar.business_day.original_viewed` / `bar.business_day.original_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `redeemBarDrinkEntitlement` | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | 酒水权益兑换承接 | `bar.entitlement.redeem` | `bar.entitlement_redeemed` / `bar.entitlement_redeem_failed` | staff_work_phone, tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | 续台（延长台位会话） | `bar.table_session.renew` | `bar.table_session.renew` / `bar.table_session.renew_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | tablet, web | operation 级补充 |
@@ -2993,6 +2997,7 @@
 | BAR-酒吧经营 | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张） | `finance.payment.register` | `bar.bill.settled` / `bar.bill.settle_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | 拆分酒水账单 | `bar.bill.split_merge` | `bar.bill.split` / `bar.bill.split_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `splitBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | 拆分酒水台位会话（拆台） | `bar.table_session.split` | `bar.table.split` / `bar.table.split_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `submitBarBusinessDayConfig` | `POST` | `/api/v1/bar-business-day-configs` | 提交酒吧营业日最高权限审批 | `bar.business_day.manage` | `bar.business_day.submit_completed` / `bar.business_day.submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `submitBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/submit` | 提交有原件的已配置审批 | `bar.payroll.manage` | `bar.payroll_rule.submitted` / `bar.payroll_rule.submit_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table_session.transfer` / `bar.table_session.transfer_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | 流转出品工单状态 | `bar.production_ticket.manage` | `bar.production_ticket.transition` / `bar.production_ticket.transition_failed` | tablet, web | operation 级补充 |

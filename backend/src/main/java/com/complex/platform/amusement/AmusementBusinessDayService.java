@@ -1,8 +1,10 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.bar.BarBusinessDayService;
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
@@ -30,6 +32,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.requireText;
 
+/**
+ * 综合体营业日版本（BSM:1682「按综合体分别配置；同一综合体的游乐业务统一一套营业日」）：游乐场次与核销直接用本类窗口
+ * （无已批准版本拒绝）；其余非酒吧钱账经 BusinessDayResolver 读同一张表（无版本按出厂 10:00）。第十八批补闭店时点及上下限。
+ */
 @Service
 public class AmusementBusinessDayService {
     public static final String VIEW = "amusement.business_day.view";
@@ -62,21 +68,24 @@ public class AmusementBusinessDayService {
     private final EvidenceEventRepository evidence;
     private final EvidenceAttachmentValidator attachments;
     private final ObjectMapper json;
+    private final BusinessDayResolver businessDays;
     private Clock clock = Clock.systemUTC();
 
     public AmusementBusinessDayService(JdbcTemplate jdbc, AuthorizationService auth,
             SupervisorReviewService reviews, SupervisorReviewRepository reviewRepository,
             IdempotencyService idempotency, AuditEventService audit, EvidenceEventRepository evidence,
-            EvidenceAttachmentValidator attachments, ObjectMapper json) {
+            EvidenceAttachmentValidator attachments, ObjectMapper json, BusinessDayResolver businessDays) {
         this.jdbc=jdbc; this.auth=auth; this.reviews=reviews; this.reviewRepository=reviewRepository;
         this.idempotency=idempotency; this.audit=audit; this.evidence=evidence; this.attachments=attachments; this.json=json;
+        this.businessDays=businessDays;
     }
 
     public record Request(String idempotencyKey, String projectId, String zoneId, Integer cutoffHour,
-            Integer minCutoffHour, Integer maxCutoffHour, Instant effectiveAt, String reason,
-            String finalApproverId, List<String> attachmentIds) {}
+            Integer minCutoffHour, Integer maxCutoffHour, Integer closeHour, Integer minCloseHour, Integer maxCloseHour,
+            Instant effectiveAt, String reason, String finalApproverId, List<String> attachmentIds) {}
     public record Config(String id, String projectId, String version, String zoneId, int cutoffHour,
-            int minCutoffHour, int maxCutoffHour, Instant effectiveAt, String status, String reviewId,
+            int minCutoffHour, int maxCutoffHour, int closeHour, int minCloseHour, int maxCloseHour,
+            Instant effectiveAt, String status, String reviewId,
             String reason, List<String> attachmentIds, String createdBy, Instant createdAt,
             String decidedBy, Instant decidedAt) {}
     public record ProjectOption(String id, String name) {}
@@ -104,7 +113,7 @@ public class AmusementBusinessDayService {
 
     @Transactional
     public Config submit(Request r) {
-        if(r==null)throw invalid("请填写游乐营业日配置");
+        if(r==null)throw invalid("请填写综合体营业日配置");
         scope(r.projectId(),MANAGE);
         validate(r);
         requireAttachments(r.projectId(),r.attachmentIds());
@@ -119,10 +128,10 @@ public class AmusementBusinessDayService {
             String id="abd_"+UUID.randomUUID().toString().replace("-","");
             jdbc.update("""
                 INSERT INTO amusement_business_day_configs(id,project_id,version,zone_id,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
-                  effective_at,status,reason,attachment_ids,created_by,created_at)
-                VALUES(?,?,?,?,?,?,?,?,'pending_review',?,?::jsonb,?,?)
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,attachment_ids,created_by,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,'pending_review',?,?::jsonb,?,?)
                 """,id,r.projectId(),version,r.zoneId(),r.cutoffHour(),r.minCutoffHour(),r.maxCutoffHour(),
-                    Timestamp.from(r.effectiveAt()),r.reason(),encode(r.attachmentIds()==null?List.of():r.attachmentIds()),
+                    r.closeHour(),r.minCloseHour(),r.maxCloseHour(),Timestamp.from(r.effectiveAt()),r.reason(),encode(r.attachmentIds()==null?List.of():r.attachmentIds()),
                     auth.currentActor().id(),Timestamp.from(now));
             List<Config> previous=jdbc.query("SELECT * FROM amusement_business_day_configs WHERE project_id=? AND status='approved' AND effective_at<=? ORDER BY effective_at DESC LIMIT 1",this::map,r.projectId(),Timestamp.from(r.effectiveAt()));
             String snapshot=r.reason()+"\n"+encode(Map.of("projectId",r.projectId(),"previousVersions",previous,"proposedConfig",r));
@@ -159,6 +168,7 @@ public class AmusementBusinessDayService {
         }
         jdbc.update("UPDATE amusement_business_day_configs SET status=?,decided_by=?,decided_at=? WHERE id=?",
                 status,auth.currentActor().id(),Timestamp.from(now),row.id());
+        if("approved".equals(status))businessDays.invalidate();
         audit.recordSuccess("amusement.business_day.decided","governance.supervisor_review.approve",OBJECT,row.id(),null,null,
                 Map.of("project_id",row.projectId(),"status",status,"review_id",decision.reviewId()));
     }
@@ -211,12 +221,12 @@ public class AmusementBusinessDayService {
         auth.requirePermission(permission);
         requireCompanyContext();
         if(!auth.projectReach(auth.currentActor(),permission).covers(requireText(project,"project_id")))
-            throw ApiException.forbidden("FORBIDDEN","无权访问该综合体游乐营业日配置");
+            throw ApiException.forbidden("FORBIDDEN","无权访问该综合体营业日配置");
         if(jdbc.queryForObject("SELECT count(*) FROM projects WHERE id=? AND status='active'",Integer.class,project)!=1)
             throw invalid("综合体不存在或未生效");
     }
     private void requireCompanyContext() {
-        if(auth.currentActor().merchantId()!=null)throw ApiException.forbidden("FORBIDDEN","商户限定授权不能管理整个综合体的游乐营业日");
+        if(auth.currentActor().merchantId()!=null)throw ApiException.forbidden("FORBIDDEN","商户限定授权不能管理整个综合体的营业日");
     }
     private void lockComplex(String project) {
         if(jdbc.queryForList("SELECT id FROM projects WHERE id=? FOR UPDATE",String.class,project).isEmpty())throw invalid("综合体不存在");
@@ -236,9 +246,10 @@ public class AmusementBusinessDayService {
     private void validate(Request r) {
         requireText(r.projectId(),"project_id");requireText(r.reason(),"reason");
         try { if(!ZoneId.getAvailableZoneIds().contains(requireText(r.zoneId(),"zone_id")))throw new java.time.DateTimeException("unknown zone"); ZoneId.of(r.zoneId()); } catch(java.time.DateTimeException failure) {throw invalid("所在地时区无效，须填写有效时区名称");}
-        if(r.cutoffHour()==null || r.minCutoffHour()==null || r.maxCutoffHour()==null
-                || r.minCutoffHour()<0 || r.maxCutoffHour()>23 || r.cutoffHour()<r.minCutoffHour() || r.cutoffHour()>r.maxCutoffHour())
+        if(!BarBusinessDayService.bounded(r.cutoffHour(),r.minCutoffHour(),r.maxCutoffHour()))
             throw invalid("日切小时及上下限须完整，满足0≤下限≤日切小时≤上限≤23");
+        if(!BarBusinessDayService.bounded(r.closeHour(),r.minCloseHour(),r.maxCloseHour()))
+            throw invalid("闭店小时及上下限须完整，满足0≤下限≤闭店小时≤上限≤23");
     }
     Config find(String id) {
         return jdbc.query("SELECT * FROM amusement_business_day_configs WHERE id=?",this::map,id).stream().findFirst()
@@ -246,7 +257,8 @@ public class AmusementBusinessDayService {
     }
     private Config map(ResultSet rs,int n)throws SQLException {
         try {return new Config(rs.getString("id"),rs.getString("project_id"),rs.getString("version"),rs.getString("zone_id"),rs.getInt("cutoff_hour"),
-                rs.getInt("min_cutoff_hour"),rs.getInt("max_cutoff_hour"),rs.getTimestamp("effective_at").toInstant(),rs.getString("status"),
+                rs.getInt("min_cutoff_hour"),rs.getInt("max_cutoff_hour"),rs.getInt("close_hour"),rs.getInt("min_close_hour"),
+                rs.getInt("max_close_hour"),rs.getTimestamp("effective_at").toInstant(),rs.getString("status"),
                 rs.getString("review_id"),rs.getString("reason"),json.readValue(rs.getString("attachment_ids"),json.getTypeFactory().constructCollectionType(List.class,String.class)),
                 rs.getString("created_by"),rs.getTimestamp("created_at").toInstant(),rs.getString("decided_by"),instant(rs,"decided_at"));}
         catch(java.io.IOException error){throw new IllegalStateException("营业日配置附件记录无法读取",error);}

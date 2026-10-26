@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -120,7 +120,7 @@ class ParkingCreditJdbcIntegrationTests {
     /** 营业日归集（ENUM「运营营业日」）：营业日起点前下单的消费归前一营业日；前一营业日入场的车按入场营业日的抵免试算。 */
     @Test
     void consumptionBeforeCutoffCountsToPreviousBusinessDay() throws Exception {
-        Instant start = businessDays.startInstant(businessDays.businessDate(Instant.now()));
+        Instant start = businessDays.start(null, null, businessDays.businessDate(null, null, Instant.now()));
         Instant entered = start.minus(Duration.ofHours(3));
         f.barBill(a[0], customer, null, 30_000, entered.plus(Duration.ofMinutes(1)));
         credits().andExpect(jsonPath("$.data.status").value("not_reached")).andExpect(jsonPath("$.data.eligible_amount_cent").value(0));
@@ -128,7 +128,26 @@ class ParkingCreditJdbcIntegrationTests {
         lookup("粤A40004").andExpect(status().isOk()).andExpect(jsonPath("$.data.credit_status").value("available"))
                 .andExpect(jsonPath("$.data.credit_minutes").value(120));
         assertThat(jdbc.queryForObject("SELECT business_date::text FROM parking_credits WHERE customer_id=?", String.class, customer))
-                .isEqualTo(businessDays.businessDate(entered).toString());
+                .isEqualTo(businessDays.businessDate(null, null, entered).toString());
+    }
+
+    /**
+     * 第十八批第 1 条（ENUM:187「按每个项目……可配」）：本综合体已批准 11:00 起算，北京 2031-03-14 10:30 的消费计入 03-13 营业日的抵免累计，
+     * 不计入 03-14（出厂 10:00 会落 03-14）。
+     */
+    @Test
+    void creditAccumulatesByTheComplexsApprovedBusinessDay() {
+        Instant effective = Instant.parse("2030-01-01T00:00:00Z");
+        jdbc.update("""
+                INSERT INTO amusement_business_day_configs(id,project_id,version,zone_id,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
+                VALUES(?,?,'V0.01','Asia/Shanghai',11,0,23,7,0,23,?,'approved','测试已批准版本','pcr_requester',?,'usr_master',?)
+                """, "abd_pcr_" + UUID.randomUUID().toString().substring(0, 8), f.project, java.sql.Timestamp.from(effective),
+                java.sql.Timestamp.from(effective.minusSeconds(7200)), java.sql.Timestamp.from(effective.minusSeconds(3600)));
+        businessDays.invalidate();
+        f.barBill(a[0], customer, null, 30_000, Instant.parse("2031-03-14T02:30:00Z"));
+        assertThat(credits.evaluate(customer, f.project, java.time.LocalDate.parse("2031-03-13")).accumulatedCent()).isEqualTo(30_000L);
+        assertThat(credits.evaluate(customer, f.project, java.time.LocalDate.parse("2031-03-14")).accumulatedCent()).isZero();
     }
 
     /** 第十二批裁决补充第 3 条「门票不计入门槛、也不承担」：当日已付款门票单独就够门槛，加少量酒吧账单也不生成抵免，组成里没有门票。 */
@@ -405,7 +424,7 @@ class ParkingCreditJdbcIntegrationTests {
     }
 
     private Instant todayStart() {
-        return businessDays.startInstant(businessDays.businessDate(Instant.now()));
+        return businessDays.start(null, null, businessDays.businessDate(null, null, Instant.now()));
     }
 
     private ResultActions confirm(String paymentId) throws Exception {
@@ -427,7 +446,7 @@ class ParkingCreditJdbcIntegrationTests {
 
     private long offsetHours(Instant entered, int creditMinutes) {
         return ParkingFeeCalculator.quote(entered, Instant.now(), 30, 500, 3_000, creditMinutes,
-                t -> businessDays.endInstant(businessDays.businessDate(t))).offsetHours();
+                t -> businessDays.end(null, null, businessDays.businessDate(null, null, t))).offsetHours();
     }
 
     private Map<String, Long> shares() {

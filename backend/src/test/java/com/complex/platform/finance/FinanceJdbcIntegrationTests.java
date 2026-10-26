@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -436,7 +436,7 @@ class FinanceJdbcIntegrationTests {
     void dailyCloseSummariesCountGroupBuyTicketOnceAndSkipUnmappedReflow() throws Exception {
         // 前端真实请求形状（蛇形键）：日结六源汇总里团购票只进渠道售票源一次，映射缺失回流与团购票回流不进第三方回流源。
         LocalDate date = LocalDate.parse("2097-06-26");
-        Instant inDay = businessDayResolver.startInstant(date).plusSeconds(3600);
+        Instant inDay = businessDayResolver.start(null, null, date).plusSeconds(3600);
         String prefix = "obs1307e_" + java.util.UUID.randomUUID().toString().substring(0, 8);
         seedReflowRows(prefix, inDay);
         seedSelfAndChannelTickets(prefix, prefix + "_mch_a", date, inDay);

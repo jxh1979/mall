@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,8 +59,8 @@ class BarJdbcIntegrationTests {
                 "staff_sales", "sales", now, now));
 
         LocalDate businessDate = LocalDate.parse("2026-06-18");
-        Instant from = businessDayResolver.startInstant(businessDate);
-        Instant to = businessDayResolver.endInstant(businessDate);
+        Instant from = businessDayResolver.start(null, null, businessDate);
+        Instant to = businessDayResolver.end(null, null, businessDate);
 
         // 日切按所在地（北京）时间：经营日 06-18 窗口 = 北京 [06-18 04:00, 06-19 04:00) = [06-17T20:00Z, 06-18T20:00Z)。
         // 窗口内退款（北京 10:00 = 06-18T02:00Z）计入 refund_cent；窗口外退款（北京 03:00 = 06-17T19:00Z，未到日切归前一经营日）

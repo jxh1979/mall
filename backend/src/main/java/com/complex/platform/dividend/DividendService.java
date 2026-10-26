@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -50,7 +50,7 @@ import static com.complex.platform.common.Strings.requireText;
  * → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
  * 平台分成/风险准备金四舍五入、代扣个税整除截断对齐税局——2026-07-28 用户拍板） → 净发放额。
  *
- * <p>时窗：BusinessDayResolver 平台全局经营日切分（与 V296 成本汇总/营业额租金同口径）——三来源同窗才能恒等；
+ * <p>时窗：BusinessDayResolver 方案商户的营业日窗（名下唯一酒吧按该酒吧，否则按其所属综合体；成本汇总同窗）——三来源同窗才能恒等；
  * 费用侧为 V297 的月份桶粒度（台账本身按月归集）。
  *
  * <p>状态机：preview（月预览，只可看不可审批）；official：draft → pending_review → approved（挂应付
@@ -409,9 +409,11 @@ public class DividendService {
     private DividendStatementRecord computeStatement(
             DividendPlanRecord plan, String kind, DividendPeriod period, String operator, Instant now) {
         String merchantId = plan.merchantId();
-        // 三来源同窗：平台全局经营日切分（V296 成本汇总同口径）。
-        Instant from = businessDayResolver.startInstant(period.start());
-        Instant to = businessDayResolver.startInstant(period.end().plusDays(1));
+        // 三来源同窗（第十八批第 1 条，ENUM:187 按每家酒吧可配）：方案商户名下唯一酒吧按该酒吧营业日，否则按其所属综合体。
+        String bar = businessDayResolver.barOfMerchant(merchantId);
+        String dayProject = bar == null ? businessDayResolver.projectOfMerchant(merchantId) : null;
+        Instant from = businessDayResolver.start(dayProject, bar, period.start());
+        Instant to = businessDayResolver.end(dayProject, bar, period.end());
         String window = "[" + period.start() + "," + period.end().plusDays(1) + ") 经营日窗";
 
         String statementId = "divs_" + UUID.randomUUID().toString().replace("-", "");

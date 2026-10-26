@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
@@ -45,7 +45,7 @@ public final class AmusementBusinessDayTestFixture {
             String superior=actor(jdbc,complex,List.of("governance.supervisor_review.approve","governance.supervisor_review.view"));
             jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)",requester,superior);
             authenticate(requester,complex);
-            var pending=service.submit(new AmusementBusinessDayService.Request("abd-fixture-"+key(),complex,zone,hour,0,23,effectiveAt,"测试时钟下的实际配置审批",null,List.of()));
+            var pending=service.submit(new AmusementBusinessDayService.Request("abd-fixture-"+key(),complex,zone,hour,0,23,7,0,23,effectiveAt,"测试时钟下的实际配置审批",null,List.of()));
             authenticate(superior,complex);
             reviews.approve(pending.reviewId(),new SupervisorReviewApprovalRequest("abd-superior-"+key(),"测试上级审批",List.of(),null,"approved","同意上提"));
             master();

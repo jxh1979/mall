@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,14 +50,15 @@ class CameraScanAndNativeClientSwitchTests {
     }
 
     @Test
-    void absentRowDefaultsOpen() {
+    void absentRowDefaultsClosed() {
         TerminalDeviceRepository repo = mock(TerminalDeviceRepository.class);
         when(repo.resolveEffectiveSwitch(any(), any(), any())).thenReturn(Optional.empty());
         TerminalSwitchGuard guard =
                 new TerminalSwitchGuard(repo, new AuditEventService(new InMemoryAuditEventRepository()));
 
-        // 无显式行 = 默认开启（opt-out 语义），不抛异常。
-        assertThatCode(() -> guard.check(CAMERA_SCAN)).doesNotThrowAnyException();
+        // PGM 第 742 行 opt-in：无显式行 = 默认关闭。
+        assertThatThrownBy(() -> guard.check(CAMERA_SCAN))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TERMINAL_DISABLED"));
     }
 
     private static TerminalCapabilitySwitchRecord offRow(String id, String capability) {

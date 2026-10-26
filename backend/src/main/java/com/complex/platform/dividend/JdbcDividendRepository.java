@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -653,9 +653,11 @@ class JdbcDividendRepository implements DividendRepository {
                 throw com.complex.platform.common.api.ApiException.conflict("BAR_REVENUE_PENDING", "酒吧收入来源尚待核实");
             }
         }
-        // 上游窗口由平台期间生成；还原期间日期，再按服务费原经营日归属，不能改用酒吧日切把整月错移一天。
+        // 上游窗口按方案商户的营业日生成；同口径还原期间日期，再按服务费原营业日归属。
+        String bar = businessDays.barOfMerchant(merchantId);
+        String project = bar == null ? businessDays.projectOfMerchant(merchantId) : null;
         for (var row : barRevenueSources.withheldServiceFees(merchantId,
-                businessDays.businessDate(from), businessDays.businessDate(to.minusNanos(1)).plusDays(1))) {
+                businessDays.businessDate(project, bar, from), businessDays.businessDate(project, bar, to.minusNanos(1)).plusDays(1))) {
             if (row.amountCent() == null) {
                 throw com.complex.platform.common.api.ApiException.conflict("BAR_REVENUE_PENDING", "服务费尚未月结或来源已变化，不能确认分红");
             }

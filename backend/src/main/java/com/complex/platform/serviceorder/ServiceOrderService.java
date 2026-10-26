@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -8,6 +8,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +29,6 @@ import static com.complex.platform.common.Strings.trimToNull;
 public class ServiceOrderService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ServiceOrderService.class);
-    /** 营业日域:服务点单发生在酒吧现场,沿用 business_day_cutoff_config.bar(V201)。 */
-    private static final String BUSINESS_DAY_DOMAIN = "bar";
 
     private final JdbcServiceOrderRepository repository;
     private final AuditEventService auditEventService;
@@ -140,7 +139,9 @@ public class ServiceOrderService {
         long feeValue = request.mgmtFeeValue() == null ? 0 : request.mgmtFeeValue();
         validateFee(feeMode, feeValue, item.priceCent());
         Instant now = Instant.now();
-        if (request.effectiveFrom().isBefore(businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now))) {
+        // 第十八批第 1 条：「当日营业日」按操作者当前项目（ENUM:187）。
+        if (request.effectiveFrom().isBefore(businessDayResolver.businessDate(
+                authorizationService.currentProjectScopeQuietly().orElse(null), null, now))) {
             throw ApiException.badRequest("VALIDATION_FAILED", "生效日不得早于当日营业日");
         }
         var actor = authorizationService.currentActor();
@@ -318,9 +319,13 @@ public class ServiceOrderService {
         Instant now = Instant.now();
         // TK-23-R3(BSM L1070「费率变更形成新版本并指定生效日期,只对生效日之后发生的单据有效;每笔提成在下单时锁定当时的费率版本」):
         // 已复核草案到了生效营业日 → 先翻为现行版本(fee_version+1、清空草案)再快照;WHERE 条件保证并发下单只翻一次。
+        // 第十八批第 1 条：生效营业日按本单酒吧（未选酒吧按操作者当前项目）。
+        String orderBar = trimToNull(request.barId());
+        LocalDate orderDay = businessDayResolver.businessDate(
+                orderBar == null ? authorizationService.currentProjectScopeQuietly().orElse(null) : null, orderBar, now);
         if (item.nextApprovedBy() != null && item.nextEffectiveFrom() != null
-                && !item.nextEffectiveFrom().isAfter(businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now))) {
-            repository.promoteApprovedFeeDraft(item.id(), businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now));
+                && !item.nextEffectiveFrom().isAfter(orderDay)) {
+            repository.promoteApprovedFeeDraft(item.id(), orderDay);
             item = repository.findCatalogItem(item.id()).orElse(item);
         }
         // H批(2026-07-02 最终拍板):公司统一账户代收——下单即出示公司收款码,服务员现场确认收款。
@@ -404,7 +409,7 @@ public class ServiceOrderService {
         // ponytail: 价为 0 的单不生成应收行(ar_ap_items.amount_cent>0 CHECK);正价单幂等一单一条。
         if (saved.priceCent() > 0) {
             repository.insertReceivableForOrder(saved.id(), saved.priceCent(),
-                    businessDayResolver.businessDate(BUSINESS_DAY_DOMAIN, now), now);
+                    businessDate(saved, now), now);
         }
         auditEventService.recordSuccess("service.order.paid", "service.order.create",
                 "service_order", saved.id(), null,
@@ -460,7 +465,7 @@ public class ServiceOrderService {
         }
         // 赢得 CAS 后再入提成(部分唯一索引 + ON CONFLICT DO NOTHING,双保险幂等);再落审计。
         // TK-23-R2(ENUM L291 / BSM L1138):归属月按完成时点所在 bar 营业日,不按 UTC 自然月。
-        String month = settlementMonth(businessDayResolver, now);
+        String month = java.time.YearMonth.from(businessDate(current, now)).toString();
         staffRepository.insertCommission("cml_" + UUID.randomUUID(), current.performerUserId(), month,
                 "service_order", current.id(), dancerShare, current.itemName(), now);
         // 第十一批 TK-04-R3（BSM L823「人员服务取既有实际完成履约记录及完成时点」）：已识别会员的服务单完成即生成待确认积分与成长值。
@@ -479,10 +484,11 @@ public class ServiceOrderService {
         return saved;
     }
 
-    /** 服务单份额/管理费归属月(YYYY-MM)= 时点所在 bar 营业日(Asia/Shanghai + business_day_cutoff_config.bar 切日)的年月。
-     * ENUM L291 / BSM L1138「按服务完成时点所在营业日确定」;DEC-R6-10 禁止服务器默认时区/UTC。 */
-    static String settlementMonth(com.complex.platform.common.BusinessDayResolver resolver, Instant instant) {
-        return java.time.YearMonth.from(resolver.businessDate(BUSINESS_DAY_DOMAIN, instant)).toString();
+    /** 服务单时点所属营业日：有酒吧按该酒吧，没有按服务单所属项目（service_orders.project_id）。
+     * 份额/管理费归属月取其年月（ENUM L291 / BSM L1138「按服务完成时点所在营业日确定」;DEC-R6-10 禁止服务器默认时区/UTC）。 */
+    LocalDate businessDate(ServiceOrderRecord order, Instant instant) {
+        String bar = trimToNull(order.barId());
+        return businessDayResolver.businessDate(bar == null ? repository.findOrderProjectId(order.id()) : null, bar, instant);
     }
 
     private ServiceOrderRecord require(String id) {

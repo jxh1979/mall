@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -271,7 +271,7 @@ class TicketVerificationAnomalyJdbcIntegrationTests {
     // R3 RED：原核销落在该营业日、异常待处置 → 日结不得锁定；处置成 restored 后可锁。
     @Test
     void lockDailyCloseRefusedWhileTicketVerificationAnomalyOpen() throws Exception {
-        String original = verification("success", businessDayResolver.startInstant(BUSINESS_DATE).plusSeconds(3600));
+        String original = verification("success", businessDayResolver.start(null, null, BUSINESS_DATE).plusSeconds(3600));
         // 直接落一条待处置异常（提起入口另有用例），只验日结闸。
         String anomalyId = "ver_tk14_anomaly_" + suffix;
         jdbc.update("INSERT INTO ticket_verifications (id, verification_no, entitlement_id, entitlement_code, credential_type,"

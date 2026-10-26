@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -33,6 +33,9 @@ public class StaffPayrollService {
     private final com.complex.platform.access.AuthorizationService auth;
     private final com.complex.platform.common.idempotency.IdempotencyService idem;
     private final com.fasterxml.jackson.databind.ObjectMapper json;
+    // 第十八批第 1 条（ENUM:187「销售提成月份，一律以开台或下单时点所属的营业日为准」）：酒吧提成归属月按营业日。
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    com.complex.platform.common.BusinessDayResolver businessDays=new com.complex.platform.common.BusinessDayResolver();
     public StaffPayrollService(StaffPayrollConfigurationService c,JdbcTemplate jdbc,StaffPayrollWorktimeService worktime,
             BarPayrollAllocationService bar,PayrollTaxService taxes,FinanceService finance,
             com.complex.platform.access.AuthorizationService auth,com.complex.platform.common.idempotency.IdempotencyService idem,
@@ -140,14 +143,16 @@ public class StaffPayrollService {
             addIfUnpaid(lines,external("奖金","bonus",((Number)row.get("amount_cent")).longValue(),"payroll_bonus",(String)row.get("id"),row,work,true));
         for(var row:jdbc.queryForList("SELECT id,source_type,source_id,amount_cent,note FROM staff_commission_ledger WHERE user_id=? AND month=? ORDER BY id",request.userId(),request.month()))
             addIfUnpaid(lines,external("已确认服务提成","commission",((Number)row.get("amount_cent")).longValue(),"staff_commission_ledger",(String)row.get("id"),row,work,true));
-        for(String source:jdbc.queryForList("SELECT c.id FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.sales_staff_id=? AND to_char(c.created_at AT TIME ZONE ?,'YYYY-MM')=? AND c.status NOT IN ('void','cancelled') AND b.settlement_status<>'settled' ORDER BY c.id",
-                String.class,request.userId(),LocalZone.ID.getId(),request.month()))pending.add(new PendingItem("BAR_COMMISSION_PENDING",source,"酒吧账单尚未确认结算，提成保留预计数"));
-        for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,c.commission_base_cent,c.commission_rate_bp,c.commission_amount_cent,c.status FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.sales_staff_id=? AND to_char(c.created_at AT TIME ZONE ?,'YYYY-MM')=? AND c.status NOT IN ('void','cancelled') AND b.settlement_status='settled' ORDER BY c.id",
-                request.userId(),LocalZone.ID.getId(),request.month()))
+        List<String> barCommissions=businessDays.barCommissionIdsInMonth(YearMonth.parse(request.month()),request.userId());
+        String inMonth=barCommissions.isEmpty()?"NULL":String.join(",",Collections.nCopies(barCommissions.size(),"?"));
+        for(String source:jdbc.queryForList("SELECT c.id FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.id IN ("+inMonth+") AND c.status NOT IN ('void','cancelled') AND b.settlement_status<>'settled' ORDER BY c.id",
+                String.class,barCommissions.toArray()))pending.add(new PendingItem("BAR_COMMISSION_PENDING",source,"酒吧账单尚未确认结算，提成保留预计数"));
+        for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,c.commission_base_cent,c.commission_rate_bp,c.commission_amount_cent,c.status FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.id IN ("+inMonth+") AND c.status NOT IN ('void','cancelled') AND b.settlement_status='settled' ORDER BY c.id",
+                barCommissions.toArray()))
             addIfUnpaid(lines,external("已确认酒吧提成","commission",((Number)row.get("commission_amount_cent")).longValue(),"bar_commission",(String)row.get("id"),row,work,true));
         // 第十七批（操作员裁决补充第 1 条）：账单作废并冲正、提成已计入定格工资的，按原期以负额冲回实发提成（同酒吧收入冲正，超出本期可付的转待核实）。
-        for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,l.statement_id,l.amount_cent FROM bar_commission_calculations c JOIN staff_payroll_statement_lines l ON l.source_type='bar_commission' AND l.source_id=c.id WHERE c.sales_staff_id=? AND to_char(c.created_at AT TIME ZONE ?,'YYYY-MM')=? AND c.status='void' ORDER BY c.id",
-                request.userId(),LocalZone.ID.getId(),request.month())) {
+        for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,l.statement_id,l.amount_cent FROM bar_commission_calculations c JOIN staff_payroll_statement_lines l ON l.source_type='bar_commission' AND l.source_id=c.id WHERE c.id IN ("+inMonth+") AND c.status='void' ORDER BY c.id",
+                barCommissions.toArray())) {
             long back=-((Number)row.get("amount_cent")).longValue();
             addIfUnpaid(lines,new Line(null,"commission","commission","酒吧提成冲回（账单作废并冲正）",back,0,0,back,"bar_commission_reversal",(String)row.get("id"),row));
         }

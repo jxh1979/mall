@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -52,7 +52,7 @@ class IntegrationJdbcIntegrationTests {
     void lateSyncedReflowMarksOriginalMerchantBusinessDate() {
         jdbcTemplate.update("DELETE FROM analytics_revenue_refresh_dates");
         Instant twoDaysAgo = Instant.now().minus(2, ChronoUnit.DAYS);
-        LocalDate original = businessDayResolver.businessDate("merchant", twoDaysAgo);
+        LocalDate original = businessDayResolver.businessDate(null, null, twoDaysAgo);
         jdbcTemplate.update("""
                 INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, external_business_id, status,
                         amount_cent, created_at, updated_at)

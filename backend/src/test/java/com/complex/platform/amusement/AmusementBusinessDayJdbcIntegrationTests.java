@@ -1,11 +1,10 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
 import com.complex.platform.governance.review.SupervisorReviewService;
-import com.complex.platform.common.BusinessDayResolver;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -53,7 +52,6 @@ class AmusementBusinessDayJdbcIntegrationTests {
         String a=complex(),b=complex(),rideB=ride(b);
         AmusementBusinessDayTestFixture.approve(jdbc,service,reviews,a,"Asia/Shanghai",10,at.minusSeconds(86400));
         assertThatThrownBy(()->service.requireWindow(rideB,at)).hasMessageContaining("缺少已批准");
-        assertThatThrownBy(()->new BusinessDayResolver(4).businessDate("amusement",at)).hasMessageContaining("综合体");
     }
     @Test void newApprovedVersionOnlyTakesEffectAtFutureBoundaryAndHistoryStaysOld() {
         String a=complex();
@@ -184,8 +182,24 @@ class AmusementBusinessDayJdbcIntegrationTests {
                 "abd_v_"+id,ride,session,java.sql.Timestamp.from(time),window.complexId(),window.versionId(),window.businessDate(),java.sql.Timestamp.from(window.startAt()),java.sql.Timestamp.from(window.endAt()));
     }
 
+    /** 第十八批第 1 条（ENUM:187「出厂默认起点为上午 10:00、闭店为次日 07:00，须同时配置上下限」）：综合体版本带闭店时点及上下限。 */
+    @Test void complexVersionStoresCloseHourAndRequiresItsBounds() {
+        String a=complex();AmusementBusinessDayTestFixture.authenticate(AmusementBusinessDayTestFixture.actor(jdbc,a,List.of(AmusementBusinessDayService.MANAGE)),a);
+        var pending=service.submit(request(a,"Asia/Shanghai",10,8,12,7,5,8));
+        assertThat(jdbc.queryForList("SELECT close_hour,min_close_hour,max_close_hour FROM amusement_business_day_configs WHERE id=?",pending.id()))
+                .containsExactly(java.util.Map.of("close_hour",7,"min_close_hour",5,"max_close_hour",8));
+        assertThat(pending.closeHour()).isEqualTo(7);
+        assertThatThrownBy(()->service.submit(request(a,"Asia/Shanghai",10,8,12,null,5,8))).hasMessageContaining("闭店小时及上下限");
+        assertThatThrownBy(()->service.submit(request(a,"Asia/Shanghai",10,8,12,9,5,8))).hasMessageContaining("闭店小时及上下限");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM amusement_business_day_configs WHERE project_id=?",Integer.class,a)).isEqualTo(1);
+    }
+
     private AmusementBusinessDayService.Request request(String project,String zone,Integer hour,Integer min,Integer max) {
-        return new AmusementBusinessDayService.Request("abd-test-"+UUID.randomUUID(),project,zone,hour,min,max,at,"测试营业计划",null,List.of());
+        return request(project,zone,hour,min,max,7,0,23);
+    }
+    private AmusementBusinessDayService.Request request(String project,String zone,Integer hour,Integer min,Integer max,
+            Integer close,Integer minClose,Integer maxClose) {
+        return new AmusementBusinessDayService.Request("abd-test-"+UUID.randomUUID(),project,zone,hour,min,max,close,minClose,maxClose,at,"测试营业计划",null,List.of());
     }
     private SupervisorReviewApprovalRequest approval(String key){return new SupervisorReviewApprovalRequest(key+UUID.randomUUID(),"复核",List.of(),null,"approved","同意");}
 }

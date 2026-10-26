@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -120,7 +120,7 @@ class ServiceOrderJdbcIntegrationTests {
         assertThat(cancelled.cancelReason()).isEqualTo("客人取消");
 
         // 月度统计:完成 1 单,分账应得=270 元(公司代收,月结进薪资)。TK-23-R2:月份按完成时点所在 bar 营业日。
-        String month = ServiceOrderService.settlementMonth(businessDayResolver, completed.completedAt());
+        String month = java.time.YearMonth.from(businessDayResolver.businessDate(null, null, completed.completedAt())).toString();
         var stats = service.myStats(month);
         assertThat((Long) stats.get("completed_count")).isEqualTo(1L);
         assertThat((Long) stats.get("reference_income_cent")).isEqualTo(27000L);

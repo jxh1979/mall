@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -70,6 +70,23 @@ class TerminalDeviceServiceTests {
         );
         org.springframework.test.util.ReflectionTestUtils.setField(service,"workPhoneAttendance",
                 org.mockito.Mockito.mock(com.complex.platform.access.staff.StaffWorkPhoneAttendanceService.class));
+    }
+
+    /**
+     * PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作」：给前端的已关闭行与后端判定同口径——同一（能力, 层, 范围）上本端有专端行时
+     * 跨端 '*' 行不生效（同层专端行优先），关掉的 '*' 终端总开关不回给有自己总开关行的本端；本端没有专端行的 '*' 关闭行照回。
+     */
+    @Test
+    void wildcardClosedRowShadowedBySameLayerTerminalRowIsNotReturned() {
+        java.time.Instant at = java.time.Instant.parse("2026-10-26T00:00:00Z");
+        deviceRepository.saveCapabilitySwitch(new TerminalCapabilitySwitchRecord("tcs_term_web", "web", "terminal.enabled",
+                "global", "global", true, null, at, at));
+        deviceRepository.saveCapabilitySwitch(new TerminalCapabilitySwitchRecord("tcs_term_wildcard", "*", "terminal.enabled",
+                "global", "global", false, "关跨端总开关", at, at));
+        assertThat(service.listDisabledSwitchesFor("web").items()).extracting(TerminalCapabilitySwitchRecord::id)
+                .contains("tcs_mdm_managed_work_devices_off").doesNotContain("tcs_term_wildcard");
+        assertThat(service.listDisabledSwitchesFor("kiosk").items()).extracting(TerminalCapabilitySwitchRecord::id)
+                .contains("tcs_term_wildcard");
     }
 
     @Test
@@ -588,6 +605,16 @@ class TerminalDeviceServiceTests {
         assertRejectedAccess("unbound_device", "unbound-token");
         assertRejectedAccess("disabled_device", "disabled-token");
         assertRejectedAccess("tablet_device", "tablet-token");
+    }
+
+    @Test
+    void kioskTicketingWithoutSwitchRowIsDisabled() {
+        // PGM 第 742 行「开关缺行不得视为开启」：售票模式、配置里售票开着，但没有该设备的售票开关行 → 不开放售票。
+        saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
+        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
+                "device_ticketing_1", "ticketing", true, "project:p0", Map.of(), java.time.Instant.parse("2026-06-14T00:00:00Z")));
+
+        assertThat(service.getKioskConfig("device_ticketing_1", "valid-token").ticketingEnabled()).isFalse();
     }
 
     @Test

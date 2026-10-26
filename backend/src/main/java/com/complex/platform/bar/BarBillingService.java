@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -15,7 +15,6 @@ import com.complex.platform.finance.RefundAuthorizationService;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -66,6 +65,9 @@ public class BarBillingService {
     // 第十六批第 16 条（ENUM L101）：退款成功后置部分退款／已退款。null＝旧构造/单测未注入，不改状态。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     BarBillRefundStatusService refundStatus;
+    // 第十八批第 1 条（ENUM:187）：结账营业日按该酒吧的营业日判锁。null 不会出现（默认无库出厂口径，Spring 注入实例）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
 
     public BarBillingService(
             BarRepository repository,
@@ -888,9 +890,8 @@ public class BarBillingService {
         BarBillSettlementRecord latestSettlement = repository.listBillSettlements(bill.id()).stream()
                 .reduce((first, second) -> second)
                 .orElse(null);
-        LocalDate settleDay = latestSettlement != null && latestSettlement.settledAt() != null
-                ? latestSettlement.settledAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
+        LocalDate settleDay = businessDays.businessDate(null, bill.barId(),
+                latestSettlement != null && latestSettlement.settledAt() != null ? latestSettlement.settledAt() : Instant.now());
         if (receivableLedgerService.isBusinessDayLocked(settleDay)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "结账营业日 " + settleDay + " 已锁定，请走补录调整流程");

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +46,7 @@ class FinanceHistoricalRentIntegrationTests {
     @Autowired private JdbcFinanceRepository repository;
     @Autowired private SettlementConfigWriteService writeService;
     @Autowired private JdbcSettlementConfigWriteRepository writeRepository;
+    @Autowired private BusinessDayResolver businessDays;
 
     @AfterEach
     void clearActor() {
@@ -233,12 +234,47 @@ class FinanceHistoricalRentIntegrationTests {
                 id, "rent_history_approver", approvedAt)).isEqualTo(1);
     }
 
+    /**
+     * 第十八批第 1 条（ENUM:187「按每个项目……可配」）：营业额租金账期窗按商户所属综合体已批准的营业日——11:00 起算时北京 2026-08-01 10:30
+     * 落库的回流营业额归 7 月账期（出厂 10:00 会归 8 月）。
+     */
+    @Test
+    void turnoverWindowFollowsTheComplexsApprovedBusinessDay() {
+        String project = "rent_bd_prj";
+        String merchant = "rent_bd_merchant";
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','营业额租金营业日综合体','active',now(),now())",
+                project);
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,project_id,status,created_at,updated_at) VALUES(?,'营业额租金营业日商户','catering',?,'active',now(),now())",
+                merchant, project);
+        Instant effective = Instant.parse("2026-01-01T00:00:00Z");
+        jdbc.update("""
+                INSERT INTO amusement_business_day_configs(id,project_id,version,zone_id,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
+                VALUES('abd_rent_bd',?,'V0.01','Asia/Shanghai',11,0,23,7,0,23,?,'approved','测试已批准版本','rent_requester',?,'usr_master',?)
+                """, project, java.sql.Timestamp.from(effective), java.sql.Timestamp.from(effective.minusSeconds(7200)),
+                java.sql.Timestamp.from(effective.minusSeconds(3600)));
+        businessDays.invalidate();
+        jdbc.update("""
+                INSERT INTO turnover_rent_rules
+                    (id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, effective_from, effective_to, status, is_draft)
+                VALUES ('rent_bd_rule', 'rent_bd_contract', ?, '营业日窗回归规则', 1000, 0, DATE '2026-01-01', NULL, 'active', FALSE)
+                """, merchant);
+        java.sql.Timestamp landed = java.sql.Timestamp.from(Instant.parse("2026-08-01T02:30:00Z"));
+        jdbc.update("""
+                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, external_business_id,
+                    status, amount_cent, currency, merchant_id, created_at, updated_at)
+                VALUES ('ios_rent_bd', 'pos_rent_bd', 'catering', 'order', 'ext_rent_bd', 'synced', 100000, 'CNY', ?, ?, ?)
+                """, merchant, landed, landed);
+        assertThat(service.computePeriodTurnoverRent(merchant, "rent_bd_contract", "2026-07")).isEqualTo(10_000L);
+        assertThat(service.computePeriodTurnoverRent(merchant, "rent_bd_contract", "2026-08")).isZero();
+    }
+
     private FinanceService manualService() {
         AuditEventService audit = new AuditEventService(new InMemoryAuditEventRepository());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), audit);
         return new FinanceService(repository, operations, audit, mock(AuthorizationService.class),
-                new BusinessDayResolver(4));
+                new BusinessDayResolver());
     }
 
     private TurnoverRentBillRequest request(String ruleId, String key) {

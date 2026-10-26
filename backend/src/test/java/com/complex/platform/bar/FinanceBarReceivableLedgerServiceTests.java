@@ -57,7 +57,7 @@ class FinanceBarReceivableLedgerServiceTests {
                 operations,
                 auditEventService,
                 authorizationService,
-                new com.complex.platform.common.BusinessDayResolver(4)
+                new com.complex.platform.common.BusinessDayResolver()
         );
         service = new FinanceBarReceivableLedgerService(financeService);
     }

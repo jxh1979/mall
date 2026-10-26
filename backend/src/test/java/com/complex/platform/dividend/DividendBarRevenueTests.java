@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -16,8 +16,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class DividendBarRevenueTests {
     private final LocalDate day=LocalDate.of(2026,9,4);
-    private final BusinessDayResolver days=new BusinessDayResolver(4);
-    private final Instant from=days.startInstant(day),to=days.endInstant(day);
+    private final BusinessDayResolver days=new BusinessDayResolver();
+    private final Instant from=days.start(null, null, day),to=days.end(null, null, day);
     private final BarRevenueSourceService sources=mock(BarRevenueSourceService.class);
     private final JdbcDividendRepository repository=new JdbcDividendRepository(mock(NamedParameterJdbcTemplate.class));
 

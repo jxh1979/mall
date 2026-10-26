@@ -1,5 +1,5 @@
 package com.complex.platform.integration;
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -233,9 +233,13 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                     updated_at = EXCLUDED.updated_at
                 RETURNING created_at
                 """, orderSyncParameters(record), java.time.OffsetDateTime.class);
-        // ROOT-04-R4：第三方回流收入按首次落库时刻落商户营业日；后到入账、改额、补门店映射后重跑改写的是那一营业日，登记待看板重算。
+        // ROOT-04-R4：第三方回流收入按首次落库时刻落营业日（第十八批：回流订单商户所属项目的营业日）；后到入账、改额、
+        // 补门店映射后重跑改写的是那一营业日，登记待看板重算。
         if ("order".equals(record.syncType()) && ("catering".equals(record.businessType()) || "retail".equals(record.businessType()))) {
-            revenueRefreshMarks.markAt("merchant", firstLanded.toInstant());
+            String project = record.merchantId() == null ? null : jdbcTemplate.queryForList(
+                    "SELECT project_id FROM merchants WHERE id = :id AND project_id IS NOT NULL", Map.of("id", record.merchantId()), String.class)
+                    .stream().findFirst().orElse(null);
+            revenueRefreshMarks.markAt(project, null, firstLanded.toInstant());
         }
         return record;
     }

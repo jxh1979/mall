@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -164,7 +164,7 @@ public class FinanceService implements TerminationSettlementPort {
         if(repository.findArApItemById(id).isPresent())return id;
         if(f.amount()<=0 || f.seller()==null || f.receiver()==null || f.project()==null)throw ApiException.conflict("POINTS_BILL_FACTS_INCOMPLETE","积分账单缺少真实金额或双方主体");
         Instant now=Instant.now();
-        LocalDate date=LocalDate.ofInstant(now,com.complex.platform.common.LocalZone.ID);
+        LocalDate date=businessDayResolver.businessDate(f.project(),null,now);
         if(repository.lockedDailyCloseExistsForDate(date,f.merchant()))throw ApiException.conflict("DAY_CLOSE_LOCKED","当前业务日已封账，积分账单保留待入账");
         repository.saveArApItem(new ArApItemRecord(id,"POINTS-"+billId,"receivable",f.seller(),"ticket_points_issuance",billId,f.amount(),0,f.amount(),CURRENCY_CNY,f.due(),f.month().toString().substring(0,7),"pending_collection",now,now,f.merchant(),f.project()));
         repository.saveArApItemSource(new ArApItemSourceRecord("src_"+billId,id,"ticket_points_issuance",billId,f.amount(),now));
@@ -634,7 +634,8 @@ public class FinanceService implements TerminationSettlementPort {
         Instant now = Instant.now();
         // F-OPS-02：内部核算入账须遵守日结锁，禁止向已封账经营日补写收入（与 createArApItem/recordInboundAr 同口径）。
         // F-OPS-09：内部核算=平台口径（merchant_id=null，见上方方法注释），按平台口径判锁（受任一封账约束）。
-        java.time.LocalDate businessDate = java.time.LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        // 第十八批第 1 条：按营业日（ENUM:187）；支付意图推不出综合体，按出厂营业日。
+        java.time.LocalDate businessDate = businessDayResolver.businessDate(null, null, now);
         if (repository.lockedDailyCloseExistsForDate(businessDate, null)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "营业日 " + businessDate + " 已锁定，请走补录调整流程");
@@ -1180,7 +1181,8 @@ public class FinanceService implements TerminationSettlementPort {
         String key = slug(txnId);
         String itemId = "arap_svpay_" + key;
         Instant now = Instant.now();
-        LocalDate businessDate = LocalDate.ofInstant(now, java.time.ZoneOffset.UTC);
+        // 第十八批第 1 条：发卡商户是酒吧按该酒吧营业日，否则按其所属综合体（BSM:1682）。
+        LocalDate businessDate = businessDayResolver.merchantBusinessDate(null, mid, now);
         // 遵守日结锁：已封账经营日禁止新增应付，走补录审批（按该商户 scope 判锁，与内部核算/createItem 同口径）。
         if (repository.lockedDailyCloseExistsForDate(businessDate, mid)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
@@ -1225,7 +1227,7 @@ public class FinanceService implements TerminationSettlementPort {
             return null;
         }
         Instant now = Instant.now();
-        LocalDate businessDate = businessDayResolver.businessDate(now);  // 复核 money m3：钱账按营业日（ENUM L187），不按 UTC
+        LocalDate businessDate = businessDayResolver.merchantBusinessDate(null, mid, now);  // 钱账按营业日（ENUM L187；酒吧按该酒吧）
         if (repository.lockedDailyCloseExistsForDate(businessDate, mid)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "营业日 " + businessDate + " 已锁定，请走补录调整流程");
@@ -1273,7 +1275,7 @@ public class FinanceService implements TerminationSettlementPort {
         String payee = requireText(payeeEntityId, "payee_entity_id");
         String merchantId = trimToNull(payerMerchantId);
         Instant now = Instant.now();
-        LocalDate businessDate = businessDayResolver.businessDate(now);  // 复核 money m3：按营业日，不按服务器时区
+        LocalDate businessDate = businessDayResolver.merchantBusinessDate(trimToNull(projectId), merchantId, now);  // 按营业日（ENUM L187；付方是酒吧按该酒吧）
         if (repository.lockedDailyCloseExistsForDate(businessDate, merchantId)) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "营业日 " + businessDate + " 已锁定，请走补录调整流程");
@@ -1300,7 +1302,7 @@ public class FinanceService implements TerminationSettlementPort {
             return existing.get();
         }
         Instant now = Instant.now();
-        LocalDate businessDate = businessDayResolver.businessDate(now);  // 复核 money m3：按营业日，不按服务器时区
+        LocalDate businessDate = businessDayResolver.merchantBusinessDate(origin.projectId(), origin.merchantId(), now);  // 按营业日（ENUM L187；付方是酒吧按该酒吧）
         if (repository.lockedDailyCloseExistsForDate(businessDate, origin.merchantId())) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "营业日 " + businessDate + " 已锁定，请走补录调整流程");
@@ -1751,6 +1753,11 @@ public class FinanceService implements TerminationSettlementPort {
                 item.id(), "变更押金补退差额", now));
     }
 
+    /** 日结所属综合体：merchant/bar 范围取其所属项目（酒吧即业态为酒吧的商户），其余范围的 scope_id 即项目。 */
+    private String dailyCloseProject(String scopeType, String scopeId) {
+        return "merchant".equals(scopeType) || "bar".equals(scopeType) ? businessDayResolver.projectOfMerchant(scopeId) : scopeId;
+    }
+
     private DailyCloseRecord lockDailyClose(DailyCloseRequest request) {
         DailyCloseRequest actual = requireRequest(request);
         LocalDate businessDate = requireDate(actual.businessDate(), "business_date");
@@ -1762,15 +1769,20 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.conflict("DAILY_CLOSE_EXISTS",
                     "该营业日已完成日结锁定：日期 " + businessDate + "，范围 " + scopeType + "/" + scopeId);
         }
+        // 第十八批第 1 条（ENUM:187 按每个项目、每家酒吧可配）：非酒吧来源用日结所属综合体的窗口，酒吧来源逐家用各自窗口。
+        String dayProject = dailyCloseProject(scopeType, scopeId);
+        Instant dayFrom = businessDayResolver.start(dayProject, null, businessDate);
+        Instant dayTo = businessDayResolver.end(dayProject, null, businessDate);
+        Instant barFrom = businessDayResolver.start(null, null, businessDate);
+        Instant barTo = businessDayResolver.end(null, null, businessDate);
+        Map<String, Instant[]> barWindows = businessDayResolver.barWindows(businessDate);
         // TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：票务核销异常待主管处置时拒锁。
-        if (repository.openTicketVerificationAnomalyExists(businessDayResolver.startInstant(businessDate),
-                businessDayResolver.endInstant(businessDate), scopeType, scopeId)) {
+        if (repository.openTicketVerificationAnomalyExists(dayFrom, dayTo, scopeType, scopeId)) {
             throw ApiException.conflict("DAY_CLOSE_ANOMALY_PENDING",
                     "该营业日有待主管处置的票务核销异常，处置完毕后才能确认日结锁定");
         }
         // 第十六批第 16 条：同一条 ENUM 规则接酒吧账单异常（开单或收款落在该营业日、仍待主管处置）。
-        if (repository.openBarBillAnomalyExists(businessDayResolver.startInstant(businessDate),
-                businessDayResolver.endInstant(businessDate), scopeType, scopeId)) {
+        if (repository.openBarBillAnomalyExists(barFrom, barTo, scopeType, scopeId, barWindows)) {
             throw ApiException.conflict("DAY_CLOSE_ANOMALY_PENDING",
                     "该营业日有待主管处置的酒吧账单异常，处置完毕后才能确认日结锁定");
         }
@@ -1788,7 +1800,7 @@ public class FinanceService implements TerminationSettlementPort {
         ));
 
         // R5 T7：六源汇总写入 finance_daily_close_summaries（口径见 r5-aggregation-metrics-draft §1.2，待财务复核）。
-        summarizeDailyClose(dailyCloseId, businessDate, now, scopeType, scopeId);
+        summarizeDailyClose(dailyCloseId, businessDate, now, scopeType, scopeId, dayFrom, dayTo, barFrom, barTo, barWindows);
 
         // R5 T7：把当日属于本 scope 的 ar_ap_items 打上 locked_day_close_id（merchant 角色仅锁本商户行）。
         Optional<String> merchantScope = authorizationService.currentMerchantScope();
@@ -1802,15 +1814,15 @@ public class FinanceService implements TerminationSettlementPort {
      * 每源一行写入 finance_daily_close_summaries。聚合公式按聚合草案保守取值，口径未定处见草案 §四"待财务复核"。
      */
     private void summarizeDailyClose(String dailyCloseId, LocalDate businessDate, Instant now,
-                                    String scopeType, String scopeId) {
-        // 经营日窗口按可配日切（默认 04:00）派生，时间戳类源表统一用 [from, to) 分桶；official_ticket 以 visit_date 为经营日。
-        Instant from = businessDayResolver.startInstant(businessDate);
-        Instant to = businessDayResolver.endInstant(businessDate);
+                                    String scopeType, String scopeId, Instant from, Instant to,
+                                    Instant barFrom, Instant barTo, Map<String, Instant[]> barWindows) {
+        // 时间戳类源表统一用 [from, to) 分桶（日结所属综合体的营业日窗）；official_ticket 主金额以 visit_date 为营业日；
+        // 酒吧源逐家按各自营业日窗（barWindows 之外的酒吧按出厂窗 [barFrom, barTo)）。
         for (String source : DAILY_CLOSE_SOURCES) {
             FinanceRepository.DailyCloseSourceTotals totals = switch (source) {
                 case "official_ticket" -> repository.aggregateOfficialTicket(businessDate, from, to, scopeType, scopeId);
                 case "channel_ticket" -> repository.aggregateChannelTicket(businessDate, from, to, scopeType, scopeId);
-                case "bar" -> repository.aggregateBar(businessDate, from, to, scopeType, scopeId);
+                case "bar" -> repository.aggregateBar(businessDate, barFrom, barTo, scopeType, scopeId, barWindows);
                 case "amusement" -> repository.aggregateAmusement(businessDate, from, to, scopeType, scopeId);
                 case "supply_cost" -> repository.aggregateSupplyCost(businessDate, from, to, scopeType, scopeId);
                 case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate, from, to, scopeType, scopeId);
@@ -2498,7 +2510,7 @@ public class FinanceService implements TerminationSettlementPort {
             long amountCent, String idempotencyKey) {
         return persistDerivedArApItem("receivable", requireText(counterpartyId, "residual_counterparty_id"),
                 "facility_equipment_scrap", requireText(scrapId, "scrap_id"), amountCent,
-                requireText(idempotencyKey, "idempotency_key"), null, null, LocalDate.now(), projectId);
+                requireText(idempotencyKey, "idempotency_key"), null, null, null, projectId);
     }
 
     /** HP-F03：楼宇设备报废损失＝承担方的内部核算（登记即确认），来源关联原报废单、归原设备项目。 */
@@ -2506,7 +2518,7 @@ public class FinanceService implements TerminationSettlementPort {
             long amountCent, String idempotencyKey) {
         return persistDerivedArApItem("internal_accounting", requireText(bearerId, "bearer_id"),
                 "facility_equipment_scrap_loss", requireText(scrapId, "scrap_id"), amountCent,
-                requireText(idempotencyKey, "idempotency_key"), null, null, LocalDate.now(), projectId);
+                requireText(idempotencyKey, "idempotency_key"), null, null, null, projectId);
     }
 
     /** FS-017（BSM L1072「该娱乐平台公司可经审批先垫付并向原门店追收」）：对原门店挂追收应收，经统一回写点 settleArApItem 收回。 */
@@ -2666,8 +2678,9 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     private long calculateTurnoverRent(TurnoverRentRuleRecord rule, LocalDate periodStart, LocalDate periodEnd) {
-        Instant from = businessDayResolver.startInstant(periodStart);
-        Instant to = businessDayResolver.startInstant(periodEnd.plusDays(1));
+        String project = businessDayResolver.projectOfMerchant(rule.merchantId());
+        Instant from = businessDayResolver.start(project, null, periodStart);
+        Instant to = businessDayResolver.end(project, null, periodEnd);
         long turnover = repository.aggregateMerchantReflowTurnover(rule.merchantId(), from, to);
         List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(rule.id());
         return tiers.isEmpty()
@@ -3009,10 +3022,10 @@ public class FinanceService implements TerminationSettlementPort {
             String merchantId,
             String accountingPeriod) {
         return persistDerivedArApItem(direction, counterpartyId, sourceType, sourceId, amountCent, idempotencyKey, merchantId,
-                accountingPeriod, LocalDate.now());
+                accountingPeriod, null);
     }
 
-    /** dueDate：台账到期日（默认当日经营日落账；HP-C03 押金补退差额＝办理期限）。锁定判定按落账当日。 */
+    /** dueDate：台账到期日（null＝落账当日营业日；HP-C03 押金补退差额＝办理期限）。锁定判定按落账当日营业日。 */
     private ArApItemRecord persistDerivedArApItem(
             String direction,
             String counterpartyId,
@@ -3039,7 +3052,11 @@ public class FinanceService implements TerminationSettlementPort {
             String accountingPeriod,
             LocalDate dueDate,
             String projectId) {
-        LocalDate today = LocalDate.now();
+        // 第十八批第 1 条：落账当日按营业日（ENUM:187）——商户是酒吧按该酒吧，否则取本条项目，未给项目取商户所属项目，都没有按出厂营业日。
+        LocalDate today = businessDayResolver.merchantBusinessDate(projectId, merchantId, Instant.now());
+        if (dueDate == null) {
+            dueDate = today;
+        }
         // F-OPS-09：派生台账按本条目归属 merchantId 判锁（与下方 ArApItemRecord.merchantId 同口径）；
         // merchantId 为空（平台口径派生）则受任一封账约束。
         if (repository.lockedDailyCloseExistsForDate(today, merchantId)) {

@@ -78,9 +78,12 @@ class ActionGateAspectTests {
     }
 
     @Test
-    void enabledOrAbsentSwitchAllowsGuardedMethodToRun() {
+    void enabledSwitchAllowsGuardedMethodToRun() {
         TerminalDeviceRepository repo = mock(TerminalDeviceRepository.class);
-        when(repo.resolveEffectiveSwitch(any(), any(), any())).thenReturn(Optional.empty()); // 无行=默认开启
+        // PGM 第 742 行 opt-in：只有显式开启行才放行（缺行即拒绝见 TerminalSwitchOptInTests）。
+        when(repo.resolveEffectiveSwitch(any(), any(), any())).thenReturn(Optional.of(
+                new com.complex.platform.terminal.TerminalCapabilitySwitchRecord("tcs_on", "*", "finance.daily_close.lock",
+                        "global", "global", true, "test", java.time.Instant.now(), java.time.Instant.now())));
         AuditEventService auditService = new AuditEventService(new InMemoryAuditEventRepository());
         TerminalSwitchGuard switchGuard = new TerminalSwitchGuard(repo, auditService);
         ActionGateAspect aspect = new ActionGateAspect(switchGuard, mock(AdmissionGuard.class), mock(AuthorizationService.class));

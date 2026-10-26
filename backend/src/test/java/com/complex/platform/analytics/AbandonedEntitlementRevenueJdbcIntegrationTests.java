@@ -73,8 +73,8 @@ class AbandonedEntitlementRevenueJdbcIntegrationTests {
     @Test
     void crossTabExactAmountsAndCountsByBucketAndTicketType() {
         seedBase();
-        Instant inWin = businessDayResolver.startInstant(DAY).plusSeconds(3600);        // 落 [D, D+1) 内
-        Instant outWin = businessDayResolver.startInstant(DAY.plusDays(1)).plusSeconds(3600); // 落 D+1（end 不含，须排除）
+        Instant inWin = businessDayResolver.start(null, null, DAY).plusSeconds(3600);        // 落 [D, D+1) 内
+        Instant outWin = businessDayResolver.start(null, null, DAY.plusDays(1)).plusSeconds(3600); // 落 D+1（end 不含，须排除）
 
         // 通票×酒水：两行求和 → 7500 / 2 笔。第一行故意带 exclusive_merchant_id=BAR（结算专属标记）
         //   但 bar_id 仍为 NULL → 票种应判「通票」，证伪「误用 exclusive_merchant_id 判票种」。
@@ -145,7 +145,7 @@ class AbandonedEntitlementRevenueJdbcIntegrationTests {
     @Test
     void startBoundaryInclusive_otherBucketHit_businessAtNullFallback() {
         seedBase();
-        Instant startEdge = businessDayResolver.startInstant(DAY);          // 恰 start(左闭,须含)
+        Instant startEdge = businessDayResolver.start(null, null, DAY);          // 恰 start(左闭,须含)
         Instant inWin = startEdge.plusSeconds(3600);
         // ① start 边界含:通票×酒水 500 落 start 那一刻
         seedTxn("edge", null, "drink", 500, startEdge, null, "unverified_expired", "project");

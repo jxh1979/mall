@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -87,10 +87,10 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public boolean ticketChannelSyncEnabled() {
-        // V071 全局行出厂关闭；任一全局行关闭即关（取最严，与 TerminalSwitchGuard 口径一致），无行按开启。
+        // V071 全局行出厂关闭；任一全局行关闭即关（取最严，与 TerminalSwitchGuard 口径一致），无行即关（PGM 第 742 行 opt-in）。
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
-                SELECT NOT EXISTS (SELECT 1 FROM terminal_capability_switches
-                                    WHERE capability_code = 'integration.ticket_channel.sync' AND scope_type = 'global' AND enabled = FALSE)
+                SELECT COALESCE(bool_and(enabled), FALSE) FROM terminal_capability_switches
+                 WHERE capability_code = 'integration.ticket_channel.sync' AND scope_type = 'global'
                 """, Map.of(), Boolean.class));
     }
 

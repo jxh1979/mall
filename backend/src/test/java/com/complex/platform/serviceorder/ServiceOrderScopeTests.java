@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +34,7 @@ class ServiceOrderScopeTests {
         when(idem.execute(any(), any(), any(), any(), any()))
                 .thenAnswer(i -> ((Supplier<?>) i.getArgument(3)).get());
         return new ServiceOrderService(repo, audit, authz, staffRepo, idem,
-                new com.complex.platform.common.BusinessDayResolver(6),
+                new com.complex.platform.common.BusinessDayResolver(),
                 mock(com.complex.platform.notification.NotificationService.class));
     }
 

@@ -1,13 +1,12 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.Hashing;
-import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
@@ -89,6 +88,9 @@ public class InventoryTransferFlowService {
     private final ObjectMapper mapper;
     private final EvidenceEventRepository evidence;
     private final EvidenceAttachmentValidator files;
+    // 第十八批第 1 条（ENUM:187）：派生应付的到期日记该项目当前营业日。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
 
     public InventoryTransferFlowService(JdbcTemplate jdbc, InventoryRepository repository, FinanceRepository finance,
             SupervisorReviewService reviews, AuthorizationService auth, IdempotencyService idempotency,
@@ -791,7 +793,7 @@ public class InventoryTransferFlowService {
     private String postPayable(InventoryTransferOrderRecord o, String sourceNo, long amount, String projectId, Instant now) {
         String id = "arap_trf_" + sourceNo;
         finance.appendArApItem(new ArApItemRecord(id, "ARAP-TRF-" + sourceNo, "payable", o.fromOwnerId(), "inventory_transfer",
-                sourceNo, amount, 0L, amount, "CNY", LocalDate.now(LocalZone.ID), null, "pending_payment", now, now,
+                sourceNo, amount, 0L, amount, "CNY", businessDays.merchantBusinessDate(projectId, o.toOwnerId(), now), null, "pending_payment", now, now,
                 o.toOwnerId(), projectId));
         finance.saveArApItemSource(new ArApItemSourceRecord("arap_src_" + sourceNo, id, "inventory_transfer", o.id(), amount, now));
         return id;
