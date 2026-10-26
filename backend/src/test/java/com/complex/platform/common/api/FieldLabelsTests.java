@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -32,6 +32,12 @@ class FieldLabelsTests {
     @Test
     void ticketPriceVariantTypeIsAudienceOrChannel() {
         assertThat(FieldLabels.translate("variant_type is invalid")).isEqualTo("人群/渠道格式不正确");
+    }
+
+    /** 第 38 条：method 键招商跟进（电话/拜访/微信）、经销收款、考勤打卡共用，中文名不能只叫「支付方式」（招商跟进会成「支付方式：拜访」）。 */
+    @Test
+    void methodKeyIsNotLabelledAsPaymentOnly() {
+        assertThat(FieldLabels.translate("method is required")).isEqualTo("方式未填写");
     }
 
     @Test

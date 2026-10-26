@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -935,6 +935,30 @@ class SupervisorReviewServiceTests {
         TestSecurityActors.asPlatformAdmin(); // D-032：平台管理员整表看待审（最高权限不整表，XM-D029-002）
         assertThat(service.listPending(10).items()).extracting(item -> item.decision().reviewId())
                 .contains(money.reviewId(), normal.reviewId());
+    }
+
+    // 第十六批第 29 条（PGM L529「出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日」）：工作日按已审批的逐日工作日历判定——
+    // 调休上班的周六计入、已审批的法定假日不计；该日未审批的仍按周一至周五且不在假期表内。
+    @Test
+    void deadlineWorkingDaysFollowApprovedCalendarIncludingMakeUpWorkdays() {
+        java.time.LocalDate makeUpSaturday = java.time.LocalDate.of(2026, 2, 14);
+        java.time.LocalDate approvedHolidayMonday = java.time.LocalDate.of(2026, 2, 16);
+        service.setWorkingDayCalendar(new com.complex.platform.finance.WorkingDayCalendar(null) {
+            @Override
+            public Optional<Day> find(java.time.LocalDate date) {
+                if (date.equals(makeUpSaturday)) {
+                    return Optional.of(new Day(date, true, false));
+                }
+                return date.equals(approvedHolidayMonday) ? Optional.of(new Day(date, false, false)) : Optional.empty();
+            }
+        });
+        java.time.ZonedDateTime friday = java.time.LocalDate.of(2026, 2, 13).atTime(10, 0)
+                .atZone(com.complex.platform.common.LocalZone.ID);
+
+        // 涉钱 1 个工作日：周五发起，次日调休上班的周六即到期（原先跳到周一）。
+        assertThat(service.addWorkingDays(friday.toInstant(), 1)).isEqualTo(friday.plusDays(1).toInstant());
+        // 2 个工作日：周六（调休上班）、周日（未审批，按周末跳过）、周一（已审批法定假日跳过）、周二 → 周二到期。
+        assertThat(service.addWorkingDays(friday.toInstant(), 2)).isEqualTo(friday.plusDays(4).toInstant());
     }
 
     // P1-1 red→green: 新服务实例（模拟重启）能从持久化存储中读取已提交的待审记录

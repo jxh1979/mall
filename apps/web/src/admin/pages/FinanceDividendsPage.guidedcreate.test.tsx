@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -149,11 +149,26 @@ describe("FinanceDividendsPage 持股分红", () => {
     expect(body.principal_user_id).toBe("usr_new_principal");
     expect(body.platform_share_bps).toBe(7000);
     expect(body.tax_rate_bps).toBe(2000);
-    expect(body.period_type).toBe("quarterly");
+    expect(body.period_type).toBe("semiannual");
     expect(body.revenue_domains).toEqual(["bar"]);
     expect(body.expense_types).toEqual(["labor"]);
     await waitFor(() => expect(screen.queryByTestId("dividend-plan-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "dividend_plan_created" }));
+  });
+
+  it("分红周期可选月、季、半年、年，新建默认半年（BSM L1777）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
+    const select = screen.getByTestId("dividend-plan-period-type") as HTMLSelectElement;
+    expect(select.value).toBe("semiannual");
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(["monthly", "quarterly", "semiannual", "annual"]);
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+      "月度（正式单按月）",
+      "季度（正式单按季，月度出预览）",
+      "半年（正式单按半年，月度出预览）",
+      "年度（正式单按年，月度出预览）",
+    ]);
   });
 
   it("期间作业：填期间标签生成计算单；驳回走理由必填弹窗", async () => {

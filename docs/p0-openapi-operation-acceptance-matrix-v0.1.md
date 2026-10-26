@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.31
+# P0 OpenAPI Operation 验收矩阵 V0.32
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1145 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1149 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -386,6 +386,8 @@
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | `refundStoredValueAccount` | 会员储值退卡/退余额（后台） | `StoredValueRefundRequest` | `customer.stored_value.refund` | `staff-token` | `project` | web | 否 | `stored_value.refund` | `stored_value.refund_failed` |
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | `voidBarOrderItem` | 退菜退酒 | `BarOrderItemVoidRequest` | `bar.order_item.void` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.order_item_voided` | `bar.order_item_void_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | `reopenBarBill` | 账单反结 | `BarBillReopenRequest` | `bar.bill.reopen` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill_reopened` | `bar.bill_reopen_failed` |
+| bar | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly` | `raiseBarBillAnomaly` | 登记账单争议（置异常） | `object` | `bar.bill.adjust` | `staff-token` | `project-bar-table` | web | 是 | `bar.bill_anomaly_raised` | `bar.bill_anomaly_raise_failed` |
+| bar | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | `resolveBarBillAnomaly` | 主管处置异常账单 | `object` | `bar.bill.anomaly.resolve` | `staff-token` | `project-bar-table` | web | 是 | `bar.bill_anomaly_resolved` | `bar.bill_anomaly_resolve_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/tip` | `addBarBillTip` | 账单加小费 | `BarBillTipRequest` | `bar.bill.tip` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill_tip_added` | `bar.bill_tip_failed` |
 | bar | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | `markBarProductSoldOut` | 商品沽清/恢复 | `BarProductSoldOutRequest` | `bar.product.sold_out` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.product_sold_out` | `bar.product_sold_out_failed` |
 | amusement | `GET` | `/api/v1/amusement/projects/{id}/entitlements` | `listAmusementProjectEntitlements` | 查询游乐项目可用权益绑定 | `-` | `amusement.project_entitlement.manage` | `staff-token` | `project-amusement` | web | 否 | `amusement.project_entitlement.viewed` | `amusement.project_entitlement.view_failed` |
@@ -1109,6 +1111,8 @@
 | inventory | `POST` | `/api/v1/inventory/stock-movements/waste` | `createWasteStockAdjustment` | 报废（waste）转库存调整 | `StockMovementRequest` | `inventory.stock.move` | `staff-token` | `project` | web | 是 | `inventory.counted` | `inventory.adjustment_failed` |
 | inventory | `PUT` | `/api/v1/inventory/saved-bottles/manual-pickup-policy` | `configureSavedBottleManualPickupPolicy` | 配置人工例外取酒消费历史条件（按项目；最高权限本人办理并留痕；须同时配置上下限） | `SavedBottleManualPickupPolicyRequest` | `bar.saved_bottle.manual_pickup_policy.manage` | `staff-token` | `project` | web | 是 | `bar.saved_bottle.manual_pickup_policy_configured` | `bar.saved_bottle.manual_pickup_policy_config_failed` |
 | inventory | `PUT` | `/api/v1/inventory/saved-bottles/renewal-policy` | `configureSavedBottleRenewalPolicy` | 配置存酒转存次数上限（按项目）与顺延期限（按酒吧）（须同时配置上下限；每次保存 version+1 并留痕） | `SavedBottleRenewalPolicyRequest` | `bar.saved_bottle.renewal_policy.manage` | `staff-token` | `project` | web | 是 | `bar.saved_bottle.renewal_policy_configured` | `bar.saved_bottle.renewal_policy_config_failed` |
+| inventory | `GET` | `/api/v1/inventory/saved-bottles/reminder-policy` | `listSavedBottleReminderPolicies` | 读存酒到期提醒节点（出厂行与各项目行；出厂默认到期前第 14、7、3、1 天） | `-` | `bar.saved_bottle.reminder_policy.manage` | `staff-token` | `project` | web | 否 | `bar.saved_bottle.reminder_policy_viewed` | `bar.saved_bottle.reminder_policy_view_failed` |
+| inventory | `PUT` | `/api/v1/inventory/saved-bottles/reminder-policy` | `configureSavedBottleReminderPolicy` | 配置存酒到期提醒节点（按项目；出厂默认到期前第 14、7、3、1 天） | `SavedBottleReminderPolicyRequest` | `bar.saved_bottle.reminder_policy.manage` | `staff-token` | `project` | web | 是 | `bar.saved_bottle.reminder_policy_configured` | `bar.saved_bottle.reminder_policy_config_failed` |
 | parking | `GET` | `/api/v1/parking/policies/{project_id}` | `getParkingPolicy` | 查看本项目停车业务参数 | `-` | `parking.ops.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | parking | `PUT` | `/api/v1/parking/policies/{project_id}` | `saveParkingPolicy` | 配置本项目停车业务参数（值与上下限同配） | `object` | `parking.config.manage` | `staff-token` | `project` | web | 是 | `parking.policy_saved` | `parking.policy_save_failed` |
 | parking | `GET` | `/api/v1/parking/overview` | `getParkingOverview` | 在场与出场记录及车位占用 | `-` | `parking.ops.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |

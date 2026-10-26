@@ -373,6 +373,7 @@ saved_bottle_manual_pickup_policy,direct,project_id,project_id column on saved_b
 saved_bottle_manual_pickups,direct,project_id,project_id column on saved_bottle_manual_pickups,ready for project/merchant scoped query enforcement,V0.07,covered
 saved_bottle_pickup_codes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 saved_bottle_remedies,direct,project_id,project_id column on saved_bottle_remedies,ready for project/merchant scoped query enforcement,V0.07,covered
+saved_bottle_reminder_policy,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 saved_bottle_renewal_policy,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 saved_bottle_renewals,direct,project_id,project_id column on saved_bottle_renewals,ready for project/merchant scoped query enforcement,V0.07,covered
 saved_bottle_transfers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.integration;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -269,7 +269,7 @@ class IntegrationControllerTests {
                   "provider_code": "mock-provider",
                   "capabilities": ["webhook", "polling"],
                   "environment": "production",
-                  "status": "test_ready",
+                  "status": "testing",
                   "webhook_enabled": true,
                   "polling_check_enabled": true,
                   "field_mapping_placeholder": {"provider_status": "status"},
@@ -477,7 +477,7 @@ class IntegrationControllerTests {
                 "mock",
                 List.of("webhook", "polling"),
                 "mock",
-                "mock_ready",
+                "pending",
                 true,
                 true,
                 Map.of("provider_status", "status"),

@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -340,7 +340,8 @@ public final class FieldLabels {
         p("reason_type", "退货原因");
         p("result", "结果");
         p("return_freight_bearer", "退回运费承担方");
-        p("method", "支付方式");
+        // method 键招商跟进（电话/拜访/微信）、经销收款、考勤打卡共用，取中性名；取值由结果区按键取值表各自翻译。
+        p("method", "方式");
         p("usage", "用途");
         p("parent_contract_id", "主合同");
         p("contract_entity_id", "合同主体");

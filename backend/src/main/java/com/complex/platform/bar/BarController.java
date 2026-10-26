@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -285,6 +285,28 @@ public class BarController {
         authorizationService.requirePermission("bar.bill.reopen");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reopenBill(billId, request));
+    }
+
+    /** 第十六批第 16 条：客人对账单提出争议时，有权员工登记争议原因，账单置异常（沿用账单调整权限）。 */
+    @PostMapping("/bills/{bill_id}/anomaly")
+    public ApiResponse<BarBillRecord> raiseBillAnomaly(
+            @PathVariable("bill_id") String billId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillAnomalyRequest request
+    ) {
+        authorizationService.requirePermission("bar.bill.adjust");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.raiseBillAnomaly(billId, request));
+    }
+
+    /** 第十六批第 16 条（ENUM「异常状态的统一出口」）：主管选「更正后恢复」或「作废并冲正」处置异常账单，原因必填。 */
+    @PostMapping("/bills/{bill_id}/anomaly/resolve")
+    public ApiResponse<BarBillRecord> resolveBillAnomaly(
+            @PathVariable("bill_id") String billId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarBillAnomalyResolveRequest request
+    ) {
+        authorizationService.requirePermission("bar.bill.anomaly.resolve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.resolveBillAnomaly(billId, request));
     }
 
     @PostMapping("/bills/{bill_id}/tip")

@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 
@@ -237,7 +237,7 @@ public class IntegrationService {
     private WebhookMapping mapPayload(String provider, OpenEndpointConfigRecord endpoint, Map<String, Object> payload) {
         Optional<ProviderAdapterRecord> adapterOpt = repository.listProviderAdapters().stream()
                 .filter(adapter -> provider.equals(adapter.providerCode()))
-                .filter(adapter -> !"disabled".equals(adapter.status()))
+                .filter(IntegrationValidation::adapterInUse)
                 .findFirst();
         if (adapterOpt.isEmpty()) {
             return WebhookMapping.accepted();
@@ -413,8 +413,9 @@ public class IntegrationService {
         return orderSyncService.listUnattributedOrderSyncs();
     }
 
-    public PageResponse<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
-        return orderSyncService.listChannelStoreMaps();
+    public PageResponse<IntegrationChannelStoreMapRecord> listChannelStoreMaps(boolean unrestricted, java.util.Set<String> projectIds,
+            String merchantId) {
+        return orderSyncService.listChannelStoreMaps(unrestricted, projectIds, merchantId);
     }
 
     public IntegrationChannelStoreMapRecord saveChannelStoreMap(IntegrationChannelStoreMapRequest request) {

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -40,6 +40,9 @@ enum BarWriteOperation implements AuditedOperation {
     VOID_ORDER_ITEM("bar.order_item_voided", "bar.order_item_void_failed", "bar.order_item.void", "bar_order_item"),
     DECIDE_ORDER_ITEM_VOID("bar.order_item_void_decided", "bar.order_item_void_decide_failed", "bar.order_item.void", "bar_order_item_void"),
     REOPEN_BILL("bar.bill_reopened", "bar.bill_reopen_failed", "bar.bill.reopen", "bar_bill"),
+    // 第十六批第 16 条：客人争议员工登记置异常（沿用账单调整权限）／主管二选一处置（ENUM「异常状态的统一出口」）。
+    RAISE_BILL_ANOMALY("bar.bill_anomaly_raised", "bar.bill_anomaly_raise_failed", "bar.bill.adjust", "bar_bill"),
+    RESOLVE_BILL_ANOMALY("bar.bill_anomaly_resolved", "bar.bill_anomaly_resolve_failed", "bar.bill.anomaly.resolve", "bar_bill"),
     MARK_PRODUCT_SOLD_OUT("bar.product_sold_out", "bar.product_sold_out_failed", "bar.product.sold_out", "bar_product"),
     ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill"),
     OPEN_SHIFT("bar.shift_opened", "bar.shift_open_failed", "bar.shift.manage", "bar_shift"),

@@ -2,7 +2,7 @@
   "name": "apps-customer-app",
   "private": true,
   "version": "0.1.0",
-  "documentVersion": "V0.01",
+  "documentVersion": "V0.02",
   "description": "官方客人 App（Android/iPhone）的客人专用构建入口：只含客人代码，本地打包页面资源。",
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",
+    "@ant-design/v5-patch-for-react-19": "1.0.3",
     "@aparajita/capacitor-secure-storage": "8.0.1",
     "@capacitor/action-sheet": "8.1.1",
     "@capacitor/android": "8.5.3",

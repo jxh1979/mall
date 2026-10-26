@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -390,6 +390,25 @@ class JdbcFinanceRepository implements FinanceRepository {
                        AND o.created_at >= :from
                        AND o.created_at < :to
                        AND (:merchant_scope = FALSE OR o.merchant_id = :merchant_id))
+                """, new MapSqlParameterSource()
+                .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("merchant_scope", merchantScope)
+                .addValue("merchant_id", merchantScope ? scopeId : null), Boolean.class));
+    }
+
+    @Override
+    public boolean openBarBillAnomalyExists(Instant from, Instant to, String scopeType, String scopeId) {
+        boolean merchantScope = isMerchantScope(scopeType);
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM bar_bills b
+                     WHERE b.payment_status = 'abnormal'
+                       AND (:merchant_scope = FALSE OR b.merchant_id = :merchant_id)
+                       AND ((b.created_at >= :from AND b.created_at < :to)
+                            OR EXISTS (SELECT 1 FROM bar_bill_settlements s
+                                        WHERE s.bill_id = b.id AND s.settled_at >= :from AND s.settled_at < :to)))
                 """, new MapSqlParameterSource()
                 .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
                 .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))

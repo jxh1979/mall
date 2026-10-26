@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -83,6 +83,21 @@ class ContractParkingMonthlyJdbcIntegrationTests {
             assertThat(r.get("source_type")).isEqualTo("contract_parking_monthly");
             assertThat(r.get("direction")).isEqualTo("receivable");
         });
+    }
+
+    /**
+     * 第 7 条（PGM:413「所有基础对象都要带“综合体项目归属”」；PGM:659「所有业务数据默认按项目隔离」）：合同租金、物业费与车位月租
+     * 写入应收台账（ar_ap_items）时带合同所属项目，按项目统计的欠费与逾期不漏这些应收。
+     */
+    @Test
+    void periodBillReceivablesCarryContractProject() throws Exception {
+        String id = contract("prj", "effective", "{\"baseRentCent\":100000,\"propertyFeeCent\":20000,\"parkingMonthlyCent\":30000}");
+        periodBills(id, "2026-11").andExpect(status().isOk());
+        List<Map<String, Object>> items = jdbc.queryForList("""
+                SELECT b.fee_type, a.project_id FROM contract_rent_bills b JOIN ar_ap_items a ON a.id=b.ar_ap_item_id
+                 WHERE b.contract_id=?""", id);
+        assertThat(items).isNotEmpty().allSatisfy(r -> assertThat(r.get("project_id")).isEqualTo(project));
+        assertThat(items).extracting(r -> r.get("fee_type")).containsExactlyInAnyOrder("rent", "property_fee", "parking_monthly");
     }
 
     @Test

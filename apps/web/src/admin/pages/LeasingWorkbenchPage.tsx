@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -75,9 +75,10 @@ const TEXT = {
 
 // 招商域内枚举中文（全局状态表未含，页内映射；表单下拉 option 已是中文，此处补表格展示列）。
 const SOURCE_LABELS: Record<string, string> = { outbound: "外拓", online_inquiry: "线上咨询", referral: "转介绍", exhibition: "展会" };
-// 线索 7 态（后端 LEAD_STATUSES，全局状态表未含，页内映射；表格+抽屉状态列共用）。
-const LEAD_STATUS_LABELS: Record<string, string> = { pending_follow_up: "待跟进", following_up: "跟进中", converted_to_intent: "已转意向", negotiating: "谈判中", signed: "已签约", lost: "流失", on_hold: "暂缓" };
-const STAGE_LABELS: Record<string, string> = { requirement_confirmed: "需求确认", proposal_quoted: "方案报价", negotiation: "商务谈判", pending_signing: "待签约" };
+// 线索 7 态（后端 LEAD_STATUSES，全局状态表未含，页内映射；表格+抽屉状态列共用）；中文按 ENUM:248「招商线索状态」原文。
+const LEAD_STATUS_LABELS: Record<string, string> = { pending_follow_up: "待跟进", following_up: "跟进中", converted_to_intent: "已转意向", negotiating: "洽谈中", signed: "已签约", lost: "已流失", on_hold: "已搁置" };
+// 意向 5 阶段按 ENUM:249「招商意向阶段」原文；线索转意向起始即 initial_contact（后端 LeasingService 转意向）。
+const STAGE_LABELS: Record<string, string> = { initial_contact: "初步接触", requirement_confirmed: "需求确认", proposal_quoted: "方案报价", negotiation: "商务谈判", pending_signing: "待签约" };
 const BRAND_TYPE_LABELS: Record<string, string> = { intentional: "意向品牌", prospective: "潜在品牌", partner: "合作品牌", blacklist: "黑名单" };
 // V348 业态五值（真源 HTML §商户管理）：线索意向业态签约时直接带入商户业态，故与商户业态同一词表。
 // V348+V384 六值：与 merchants.merchant_type 同词表（签约自动建档要落进那张表的 CHECK）。
@@ -112,8 +113,10 @@ function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
 }
 
+// 第 37 条（ENUM:248「招商线索状态」）：线索类结果的 status 先按页内中文映射再交给结果区——lost 与终端设备「已丢失」共用码，不能改全局表。
 function makeResult(action: string, request: Record<string, unknown>, result: unknown) {
-  return { action, idempotencyKey: request.idempotencyKey, result };
+  const lead = action.startsWith("leasing_lead_") && result && typeof result === "object" ? (result as LeasingLeadRow) : null;
+  return { action, idempotencyKey: request.idempotencyKey, result: lead ? { ...lead, status: label(LEAD_STATUS_LABELS, lead.status) } : result };
 }
 
 export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, navigateTo, effectivePermissions, refreshEffectivePermissions }: AdminPageProps) {
@@ -601,7 +604,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             {/* 线索动作 */}
             <div className="admin-form-grid" data-testid="leasing-lead-action-form">
               <label>负责人<select data-testid="leasing-lead-owner" value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)}><option value="">请选择负责人（可空）</option>{salesUsers.map((x) => <option key={x.id} value={x.id}>{(x.username ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
-              <label>线索状态<select data-testid="leasing-lead-status" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}><option value="following_up">跟进中</option><option value="converted_to_intent">已转意向</option><option value="negotiating">谈判中</option><option value="lost">流失</option><option value="on_hold">暂缓</option></select></label>
+              <label>线索状态<select data-testid="leasing-lead-status" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}><option value="following_up">跟进中</option><option value="converted_to_intent">已转意向</option><option value="negotiating">洽谈中</option><option value="lost">已流失</option><option value="on_hold">已搁置</option></select></label>
               <label>跟进方式<select data-testid="leasing-follow-method" value={followMethod} onChange={(e) => setFollowMethod(e.target.value)}><option value="phone">电话</option><option value="visit">拜访</option><option value="wechat">微信</option></select></label>
               <label>跟进内容<input data-testid="leasing-follow-content" value={followContent} onChange={(e) => setFollowContent(e.target.value)} /></label>
             </div>

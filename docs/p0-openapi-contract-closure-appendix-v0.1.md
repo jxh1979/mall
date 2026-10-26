@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.31
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.32
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1145 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 406 | 人工权限矩阵正文未覆盖 305 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2290 | 人工事件矩阵正文未覆盖 2245 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1145 | 人工任务映射正文未逐项覆盖 1139 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 687 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1149 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 408 | 人工权限矩阵正文未覆盖 307 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2298 | 人工事件矩阵正文未覆盖 2253 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1149 | 人工任务映射正文未逐项覆盖 1143 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 690 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -101,7 +101,8 @@
 | `audit.operation_log.export` | staff-token | platform | 1 | exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `audit.operation_log.view` | staff-token | platform | 1 | queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `authenticated` | staff-token | current-session, self | 3 | logout, refreshToken, getEffectivePermissions | 已在权限矩阵正文出现 |
-| `bar.bill.adjust` | staff-token | project-bar-table | 1 | adjustBarBill | OpenAPI 补充，以本附录为准 |
+| `bar.bill.adjust` | staff-token | project-bar-table | 2 | raiseBarBillAnomaly, adjustBarBill | OpenAPI 补充，以本附录为准 |
+| `bar.bill.anomaly.resolve` | staff-token | project-bar-table | 1 | resolveBarBillAnomaly | OpenAPI 补充，以本附录为准 |
 | `bar.bill.refund` | staff-token | project-merchant | 1 | getBarBillRefundContext | OpenAPI 补充，以本附录为准 |
 | `bar.bill.reopen` | staff-token | project-bar-table | 1 | reopenBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.split_merge` | staff-token | project-bar-table | 3 | listBarBillOperations, mergeBarBill, splitBarBill | OpenAPI 补充，以本附录为准 |
@@ -133,6 +134,7 @@
 | `bar.saved_bottle.manual_pickup.confirm_marketing` | staff-token | project-bar-customer | 1 | confirmSavedBottleManualPickupMarketing | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.manual_pickup.initiate` | staff-token | project-bar-customer | 1 | initiateSavedBottleManualPickup | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.manual_pickup.review` | staff-token | project-bar-customer | 1 | reviewSavedBottleManualPickup | OpenAPI 补充，以本附录为准 |
+| `bar.saved_bottle.reminder_policy.manage` | staff-token | project | 2 | listSavedBottleReminderPolicies, configureSavedBottleReminderPolicy | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.renewal_policy.manage` | staff-token | project | 1 | configureSavedBottleRenewalPolicy | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.renewal.review` | staff-token | project-bar-customer | 1 | reviewSavedBottleRenewal | OpenAPI 补充，以本附录为准 |
 | `bar.shift.close` | staff-token | project-bar-table | 1 | closeBarShift | OpenAPI 补充，以本附录为准 |
@@ -755,6 +757,10 @@
 | `auth.token.refreshed` | success | `refreshToken` | `POST` | `/api/v1/auth/refresh` | AUTH-登录会话 | `authenticated` | 接口级事件，以本附录为准 |
 | `bar.arrival_reminder_policy_update_failed` | failure | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `bar.arrival_reminder_policy_updated` | success | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
+| `bar.bill_anomaly_raise_failed` | failure | `raiseBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly` | BAR-酒吧经营 | `bar.bill.adjust` | 接口级事件，以本附录为准 |
+| `bar.bill_anomaly_raised` | success | `raiseBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly` | BAR-酒吧经营 | `bar.bill.adjust` | 接口级事件，以本附录为准 |
+| `bar.bill_anomaly_resolve_failed` | failure | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | BAR-酒吧经营 | `bar.bill.anomaly.resolve` | 接口级事件，以本附录为准 |
+| `bar.bill_anomaly_resolved` | success | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | BAR-酒吧经营 | `bar.bill.anomaly.resolve` | 接口级事件，以本附录为准 |
 | `bar.bill_operation.list` | success | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.bill_operation.list_failed` | failure | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | BAR-酒吧经营 | `bar.bill.split_merge` | 接口级事件，以本附录为准 |
 | `bar.bill_reopen_failed` | failure | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | BAR-酒吧经营 | `bar.bill.reopen` | 接口级事件，以本附录为准 |
@@ -892,6 +898,10 @@
 | `bar.saved_bottle.remedy_staff_liability_assigned` | success | `assignSavedBottleRemedyStaffLiability` | `POST` | `/api/v1/inventory/saved-bottles/remedies/{id}/staff-liability` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.remedy_view_failed` | failure | `listSavedBottleRemedies` | `GET` | `/api/v1/inventory/saved-bottles/{id}/remedies` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.remedy_viewed` | success | `listSavedBottleRemedies` | `GET` | `/api/v1/inventory/saved-bottles/{id}/remedies` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
+| `bar.saved_bottle.reminder_policy_config_failed` | failure | `configureSavedBottleReminderPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/reminder-policy` | INV-库存存酒 | `bar.saved_bottle.reminder_policy.manage` | 接口级事件，以本附录为准 |
+| `bar.saved_bottle.reminder_policy_configured` | success | `configureSavedBottleReminderPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/reminder-policy` | INV-库存存酒 | `bar.saved_bottle.reminder_policy.manage` | 接口级事件，以本附录为准 |
+| `bar.saved_bottle.reminder_policy_view_failed` | failure | `listSavedBottleReminderPolicies` | `GET` | `/api/v1/inventory/saved-bottles/reminder-policy` | INV-库存存酒 | `bar.saved_bottle.reminder_policy.manage` | 接口级事件，以本附录为准 |
+| `bar.saved_bottle.reminder_policy_viewed` | success | `listSavedBottleReminderPolicies` | `GET` | `/api/v1/inventory/saved-bottles/reminder-policy` | INV-库存存酒 | `bar.saved_bottle.reminder_policy.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.renew_failed` | failure | `renewCustomerSavedBottle` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renew` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.renewal_policy_config_failed` | failure | `configureSavedBottleRenewalPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/renewal-policy` | INV-库存存酒 | `bar.saved_bottle.renewal_policy.manage` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle.renewal_policy_configured` | success | `configureSavedBottleRenewalPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/renewal-policy` | INV-库存存酒 | `bar.saved_bottle.renewal_policy.manage` | 接口级事件，以本附录为准 |
@@ -2970,9 +2980,11 @@
 | BAR-酒吧经营 | `openBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/open` | 开台 | `bar.table.open_close` | `bar.table.opened` / `bar.table.open_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `payBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | 订台定金支付 | `bar.reservation.manage` | `bar.reservation_deposit_paid` / `bar.reservation_deposit_pay_failed` | web, kiosk, tablet, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `placeBarScanOrder` | `POST` | `/api/v1/bar/table-sessions/{session_id}/scan-orders` | 扫码点单（绑桌台会话） | `bar.order.create` | `bar.scan_order_created` / `bar.scan_order_create_failed` | miniapp, tablet | operation 级补充 |
+| BAR-酒吧经营 | `raiseBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly` | 登记账单争议（置异常） | `bar.bill.adjust` | `bar.bill_anomaly_raised` / `bar.bill_anomaly_raise_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `redeemBarDrinkEntitlement` | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | 酒水权益兑换承接 | `bar.entitlement.redeem` | `bar.entitlement_redeemed` / `bar.entitlement_redeem_failed` | staff_work_phone, tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | 续台（延长台位会话） | `bar.table_session.renew` | `bar.table_session.renew` / `bar.table_session.renew_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | 主管处置异常账单 | `bar.bill.anomaly.resolve` | `bar.bill_anomaly_resolved` / `bar.bill_anomaly_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `revokeBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | 吊销订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_revoked` / `bar.reservation_invitation_revoke_failed` | web, tablet | operation 级补充 |
 | BAR-酒吧经营 | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | 配置最晚到店时间前提醒提前分钟数及上下限（按项目） | `bar.reservation.manage` | `bar.arrival_reminder_policy_updated` / `bar.arrival_reminder_policy_update_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarCombo` | `POST` | `/api/v1/bar/catalog/combos` | 新增或修改酒吧套餐 | `bar.combo.manage` | `bar.combo.saved` / `bar.combo.saved_failed` | web | operation 级补充 |
@@ -3265,6 +3277,7 @@
 | INV-库存存酒 | `completeQuarantineDisposition` | `POST` | `/api/v1/inventory/quarantine/dispositions/{id}/complete` | 登记批准的实际隔离处置 | `inventory.stock.adjust` | `inventory.quarantine.disposition_completed` / `inventory.quarantine.disposition_complete_failed` | web | operation 级补充 |
 | INV-库存存酒 | `completeTransferDisposal` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/disposal-completed` | 借出方登记实物处置完成 | `inventory.transfer_order.manage` | `inventory.transfer_disposal_completed` / `inventory.transfer_disposal_complete_failed` | web | operation 级补充 |
 | INV-库存存酒 | `configureSavedBottleManualPickupPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/manual-pickup-policy` | 配置人工例外取酒消费历史条件（按项目；最高权限本人办理并留痕；须同时配置上下限） | `bar.saved_bottle.manual_pickup_policy.manage` | `bar.saved_bottle.manual_pickup_policy_configured` / `bar.saved_bottle.manual_pickup_policy_config_failed` | web | operation 级补充 |
+| INV-库存存酒 | `configureSavedBottleReminderPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/reminder-policy` | 配置存酒到期提醒节点（按项目；出厂默认到期前第 14、7、3、1 天） | `bar.saved_bottle.reminder_policy.manage` | `bar.saved_bottle.reminder_policy_configured` / `bar.saved_bottle.reminder_policy_config_failed` | web | operation 级补充 |
 | INV-库存存酒 | `configureSavedBottleRenewalPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/renewal-policy` | 配置存酒转存次数上限（按项目）与顺延期限（按酒吧）（须同时配置上下限；每次保存 version+1 并留痕） | `bar.saved_bottle.renewal_policy.manage` | `bar.saved_bottle.renewal_policy_configured` / `bar.saved_bottle.renewal_policy_config_failed` | web | operation 级补充 |
 | INV-库存存酒 | `confirmPurchaseConsignmentSale` | `POST` | `/api/v1/inventory/purchase-consignment-sales/{id}/confirm` | 由不同人员独立核实寄售售出事实 | `inventory.purchase.approve` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `confirmSavedBottleManualPickupMarketing` | `POST` | `/api/v1/inventory/saved-bottles/manual-pickups/{id}/confirm-marketing` | 人工例外取酒③营销确认（归属营销本人；离职/无归属由营销主管） | `bar.saved_bottle.manual_pickup.confirm_marketing` | `bar.saved_bottle.manual_pickup_marketing_confirmed` / `bar.saved_bottle.manual_pickup_marketing_confirm_failed` | web, tablet, staff_work_phone | operation 级补充 |
@@ -3317,6 +3330,7 @@
 | INV-库存存酒 | `listQuarantineWarehouses` | `GET` | `/api/v1/inventory/quarantine/warehouses` | 选择可查看的隔离库存仓库 | `inventory.stock.view` | `inventory.quarantine.warehouses_viewed` / `inventory.quarantine.warehouses_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSavedBottleHandovers` | `GET` | `/api/v1/inventory/saved-bottles/handovers` | 存酒交接单列表（商户 scope 只看本店） | `bar.saved_bottle.manage` | `bar.saved_bottle.handover_viewed` / `bar.saved_bottle.handover_view_failed` | tablet, web | operation 级补充 |
 | INV-库存存酒 | `listSavedBottleRemedies` | `GET` | `/api/v1/inventory/saved-bottles/{id}/remedies` | 该存酒的补存/赔付记录（对客交付状态与内部追收状态分别记录） | `bar.saved_bottle.manage` | `bar.saved_bottle.remedy_viewed` / `bar.saved_bottle.remedy_view_failed` | tablet, web | operation 级补充 |
+| INV-库存存酒 | `listSavedBottleReminderPolicies` | `GET` | `/api/v1/inventory/saved-bottles/reminder-policy` | 读存酒到期提醒节点（出厂行与各项目行；出厂默认到期前第 14、7、3、1 天） | `bar.saved_bottle.reminder_policy.manage` | `bar.saved_bottle.reminder_policy_viewed` / `bar.saved_bottle.reminder_policy_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSavedBottleRenewals` | `GET` | `/api/v1/inventory/saved-bottles/{id}/renewals` | 存酒转存记录（含待复核；固化配置版本、顺延天数、新到期日、累计转存次数、经办人与客人确认方式） | `bar.saved_bottle.manage` | `bar.saved_bottle.renewal_viewed` / `bar.saved_bottle.renewal_view_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `listSavedBottles` | `GET` | `/api/v1/inventory/saved-bottles` | 查询存酒 | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `listStockBalances` | `GET` | `/api/v1/inventory/stock-balances` | 查询库存余额 | `inventory.stock.view` | `inventory.stock_balance.viewed` / `inventory.stock_balance.viewed_failed` | web | operation 级补充 |

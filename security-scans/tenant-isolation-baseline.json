@@ -5,10 +5,6 @@
     {
       "key": "F1:UNSCOPED_DIRECT_READ:revenue_stream_attribution",
       "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 revenue_stream_attribution 存在无项目范围的读。尚未收紧。证据：generated_at_source。"
-    },
-    {
-      "key": "F1:UNSCOPED_DIRECT_READ:integration_channel_store_map",
-      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 integration_channel_store_map 存在无商户范围的读。尚未收紧。证据：generated_at_source。"
     }
   ]
 }

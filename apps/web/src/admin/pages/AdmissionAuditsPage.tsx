@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -61,8 +61,10 @@ function contractAttachments(row: ContractRow) {
   return row.attachmentIds?.length ? row.attachmentIds.join(" / ") : row.evidenceAttachmentIds?.join(" / ") ?? "-";
 }
 
-export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function AdmissionAuditsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
+  // 第 32 条：三类统计数取后端分页 total（列表只拿到一页，按条数算会少）。
+  const [totals, setTotals] = React.useState({ merchants: 0, bindings: 0, contracts: 0 });
   const [bindings, setBindings] = React.useState<SubjectBindingRow[]>([]);
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
   const [exportReason, setExportReason] = React.useState("完整后台准入流水导出");
@@ -103,13 +105,14 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       // 缺该权限角色命中 403 会 reject 整个 Promise.all 致整页白屏；缺权限则不请求、合同交叉引用降级为空。
       const canContractDraft = hasPermissions(effectivePermissions, ["contract.draft.manage"]);
       const [nextMerchants, nextBindings, nextContracts] = await Promise.all([
-        api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants"),
-        api.get<SubjectBindingRow[]>("/api/v1/platform/business-entity-bindings"),
-        canContractDraft ? api.get<{ items?: ContractRow[] } | ContractRow[]>("/api/v1/contracts").then((data) => (Array.isArray(data) ? data : data?.items ?? [])) : Promise.resolve([] as ContractRow[]),
+        api.getPaged<MerchantAdmissionRow>("/api/v1/platform/merchants"),
+        api.getPaged<SubjectBindingRow>("/api/v1/platform/business-entity-bindings"),
+        canContractDraft ? api.getPaged<ContractRow>("/api/v1/contracts") : Promise.resolve({ items: [] as ContractRow[], total: 0 }),
       ]);
-      setMerchants(nextMerchants);
-      setBindings(nextBindings);
-      setContracts(nextContracts);
+      setMerchants(nextMerchants.items);
+      setBindings(nextBindings.items);
+      setContracts(nextContracts.items);
+      setTotals({ merchants: nextMerchants.total, bindings: nextBindings.total, contracts: nextContracts.total });
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -117,6 +120,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
   const merchantIds = new Set(merchants.map((row) => row.id).filter(Boolean));
   const bindingMerchantIds = new Set(bindings.map((row) => row.merchantId).filter(Boolean));
   const contractMerchantIds = new Set(contracts.map((row) => row.merchantId).filter(Boolean));
+  // 第 32 条：三类资料关联与草稿数只能按本页已加载的行算（后端只出三类各自总数），页面上标明「本页」。
   const linkedMaterialsCount = [...merchantIds].filter((id) => bindingMerchantIds.has(id) && contractMerchantIds.has(id)).length;
   const draftCount = contracts.filter((row) => ["draft", "pending", "returned"].includes(row.lifecycleStatus ?? row.status ?? "")).length;
 
@@ -127,11 +131,10 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
     }
     setFormError("");
     setGlobalError(null);
-    const evidenceAttachmentIds = ["att-admission-audit-export"];
     const eventPayload = {
-      merchantCount: merchants.length,
-      bindingCount: bindings.length,
-      contractCount: contracts.length,
+      merchantCount: totals.merchants,
+      bindingCount: totals.bindings,
+      contractCount: totals.contracts,
       linkedMaterialsCount,
     };
     // M725-F02：导出发生时间在这次登记第一次提交时取一次，登记成功之前同样的导出内容都沿用（切页回来、中间登记过别的也一样）——
@@ -140,9 +143,9 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
     const payload = {
       idempotencyKey: `admission-audit-export-${Date.now()}`,
       operatorNote: exportReason,
-      evidenceAttachmentIds,
+      // 第 32 条：本次导出没有上传文件，不带附件；登记人取当前登录账号（与审计事件页导出同口径）。
       deviceCode: "web-admin",
-      staffId: "admin-ui",
+      staffId: user.id,
       events: [{
         eventType: "merchant.admission.audit_exported",
         eventCategory: "governance",
@@ -160,7 +163,6 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       setActionResult({
         action: "admission_audit_exported",
         audit: "merchant_admission_trace_ready",
-        evidenceAttachmentIds,
         request: payload,
         result,
       });
@@ -220,7 +222,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         { label: "到期日", value: cnDate(row.expiryDate) },
         { label: "附件", value: contractAttachments(row) },
         { label: "状态", value: formatBusinessStatus(row.lifecycleStatus ?? row.status) },
-        { label: "留痕证据", value: display(row.auditEvidenceRef) },
+        { label: "审批复核单", value: display(row.reviewId) },
       ],
     });
   }
@@ -258,16 +260,16 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
       <div className="admin-section-title">合同草稿/审批</div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="admission-audits-contracts-table">
-          <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>留痕证据</th><th>详情</th></tr></thead>
+          <thead><tr><th>商户</th><th>合同主体</th><th>运营主体</th><th>结算主体</th><th>生效日</th><th>到期日</th><th>附件</th><th>状态</th><th>审批复核单</th><th>详情</th></tr></thead>
           <tbody>{contracts.map((row) => (
-            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-contract-row-${row.id}`} onClick={() => openContractDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{cnDate(row.effectiveDate)}</td><td>{cnDate(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{formatBusinessStatus(row.lifecycleStatus ?? row.status)}</td><td>{display(row.auditEvidenceRef)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同草稿/审批详情" onClick={(event) => { event.stopPropagation(); openContractDetail(row); }}>查看详情</button></td></tr>
+            <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`admission-audits-contract-row-${row.id}`} onClick={() => openContractDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openContractDetail(row); } }}><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{display(row.merchantId)}</TraceLink></td><td>{display(row.contractSubjectId)}</td><td>{display(row.operationSubjectId)}</td><td>{display(row.settlementSubjectId)}</td><td>{cnDate(row.effectiveDate)}</td><td>{cnDate(row.expiryDate)}</td><td>{contractAttachments(row)}</td><td>{formatBusinessStatus(row.lifecycleStatus ?? row.status)}</td><td>{display(row.reviewId)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看合同草稿/审批详情" onClick={(event) => { event.stopPropagation(); openContractDetail(row); }}>查看详情</button></td></tr>
           ))}</tbody>
         </table>
       </div>
     </>
   );
 
-  const focusCount = kpiFocus ? (kpiFocus.table === "bindings" ? bindings.length : kpiFocus.table === "contracts" ? contracts.length : merchants.length) : 0;
+  const focusCount = kpiFocus ? (kpiFocus.table === "bindings" ? totals.bindings : kpiFocus.table === "contracts" ? totals.contracts : totals.merchants) : 0;
 
   return (
     <section data-testid="admission-audits-page">
@@ -289,10 +291,10 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="admission-audits-summary">
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户档案</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{merchants.length}</button><small>档案证据</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>主体绑定</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-bindings" onClick={() => enterKpiFocus("bindings")}>{bindings.length}</button><small>四类主体</small></div>
-              <div className="admin-kpi-card admin-kpi-card--clickable"><span>合同审批</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-contracts" onClick={() => enterKpiFocus("contracts")}>{contracts.length}</button><small>{draftCount} 个草稿</small></div>
-              <div className="admin-kpi-card"><span>三类资料关联</span><strong>{linkedMaterialsCount}</strong><small>档案+绑定+合同，不代表审批通过</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>商户档案</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-merchants" onClick={() => enterKpiFocus("merchants")}>{totals.merchants}</button><small>档案证据</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>主体绑定</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-bindings" onClick={() => enterKpiFocus("bindings")}>{totals.bindings}</button><small>四类主体</small></div>
+              <div className="admin-kpi-card admin-kpi-card--clickable"><span>合同审批</span><button type="button" className="admin-kpi-value" data-testid="admission-audits-kpi-contracts" onClick={() => enterKpiFocus("contracts")}>{totals.contracts}</button><small>本页 {draftCount} 个草稿</small></div>
+              <div className="admin-kpi-card"><span>三类资料关联</span><strong>{linkedMaterialsCount}</strong><small>按本页已加载的档案+绑定+合同计，不代表审批通过</small></div>
             </div>
 
             <div className="admin-form-row">
@@ -324,7 +326,7 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         steps={[
           {
             title: "导出原因",
-            description: `将当前商户档案（${merchants.length}）、主体绑定（${bindings.length}）、合同审批（${contracts.length}）与三类资料关联（${linkedMaterialsCount}）打包登记为一条证据事件。请填写导出原因，作为审计留痕。`,
+            description: `将当前商户档案（${totals.merchants}）、主体绑定（${totals.bindings}）、合同审批（${totals.contracts}）与三类资料关联（本页 ${linkedMaterialsCount}）打包登记为一条证据事件。请填写导出原因，作为审计留痕。`,
             validate: () => (exportReason.trim() ? null : TEXT.exportReasonRequired),
             content: (
               <label>导出原因<input data-testid="admission-audits-export-reason" value={exportReason} onChange={(event) => setExportReason(event.target.value)} /></label>
@@ -333,10 +335,10 @@ export function AdmissionAuditsPage({ api, setActionResult, setGlobalError, effe
         ]}
         summary={[
           { label: "导出原因", value: exportReason.trim() || "未填写" },
-          { label: "商户档案", value: `${merchants.length} 户` },
-          { label: "主体绑定", value: `${bindings.length} 条` },
-          { label: "合同审批", value: `${contracts.length} 份` },
-          { label: "三类资料关联", value: `${linkedMaterialsCount} 户` },
+          { label: "商户档案", value: `${totals.merchants} 户` },
+          { label: "主体绑定", value: `${totals.bindings} 条` },
+          { label: "合同审批", value: `${totals.contracts} 份` },
+          { label: "三类资料关联", value: `本页 ${linkedMaterialsCount} 户` },
         ]}
       />
     </section>

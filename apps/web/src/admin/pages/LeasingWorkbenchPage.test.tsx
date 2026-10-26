@@ -1,8 +1,9 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LeasingWorkbenchPage } from "./LeasingWorkbenchPage";
+import { formatActionResult } from "../components/ActionResultView";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
@@ -158,6 +159,61 @@ describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("leasing-brands-table").textContent).toContain("意向品牌"); // brandType chain
     expect(screen.getByTestId("leasing-follow-ups-table").textContent).toContain("电话"); // method phone
     expect(screen.getByTestId("leasing-follow-ups-table").textContent).toContain("线索"); // refType lead
+  });
+
+  // 第 37 条（ENUM:248「招商线索状态 待跟进、跟进中、已转意向、洽谈中、已签约、已流失、已搁置」；
+  // ENUM:249「招商意向阶段 初步接触、需求确认、方案报价、商务谈判、待签约」）：线索刚转意向即「初步接触」，不得出英文码。
+  it("线索状态与意向阶段按 ENUM 原文：洽谈中、已流失、已搁置、初步接触", async () => {
+    const api = makeApi();
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/leasing/leads/follow-up-due")) return Promise.resolve(envelope([]));
+      if (url.includes("/leasing/leads")) return Promise.resolve(envelope([
+        { ...LEADS[0], id: "l-n", status: "negotiating" }, { ...LEADS[0], id: "l-l", status: "lost" }, { ...LEADS[0], id: "l-h", status: "on_hold" },
+      ]));
+      if (url.includes("/leasing/intents")) return Promise.resolve(envelope([{ ...INTENTS[0], id: "in-0", stage: "initial_contact" }]));
+      return Promise.resolve(envelope([]));
+    });
+    render(<LeasingWorkbenchPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }} setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("leasing-intents-table").textContent).toContain("初步接触"));
+    expect(screen.getByTestId("leasing-intents-table").textContent).not.toContain("initial_contact");
+    const leads = screen.getByTestId("leasing-leads-table").textContent ?? "";
+    for (const text of ["洽谈中", "已流失", "已搁置"]) expect(leads).toContain(text);
+    for (const text of ["谈判中", "暂缓"]) expect(leads).not.toContain(text);
+    const options = Array.from(screen.getByTestId("leasing-lead-status").querySelectorAll("option")).map((o) => o.textContent);
+    expect(options).toEqual(["跟进中", "已转意向", "洽谈中", "已流失", "已搁置"]);
+  });
+
+  // 复核修（ENUM:248「招商线索状态 ……已流失、已搁置」）：改线索状态后操作结果区同样按原文，
+  // 不落到全局表的「暂缓」或终端设备丢失用的「已丢失」。
+  it("改线索状态为已搁置、已流失后结果区按 ENUM 原文显示", async () => {
+    const setActionResult = vi.fn();
+    const api = makeApi();
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    let nextStatus = "on_hold";
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/leasing/leads/l-1/status")) {
+        return Promise.resolve(new Response(
+          JSON.stringify({ success: true, code: "OK", message: "success", data: { ...LEADS[0], status: nextStatus } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ));
+      }
+      return base(input, init);
+    });
+    render(<LeasingWorkbenchPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }} setActionResult={setActionResult} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-select-l-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-select-l-1"));
+    for (const [code, text, wrong] of [["on_hold", "已搁置", "暂缓"], ["lost", "已流失", "已丢失"]] as const) {
+      nextStatus = code;
+      setActionResult.mockClear();
+      await waitFor(() => expect((screen.getByTestId("leasing-lead-status-update") as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.change(screen.getByTestId("leasing-lead-status"), { target: { value: code } });
+      fireEvent.click(screen.getByTestId("leasing-lead-status-update"));
+      await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "leasing_lead_status_changed" })));
+      const shown = formatActionResult(setActionResult.mock.calls.find((call) => call[0]?.action === "leasing_lead_status_changed")![0]);
+      expect(shown).toContain(text);
+      expect(shown).not.toContain(wrong);
+    }
   });
 });
 

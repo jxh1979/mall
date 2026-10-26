@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -20,7 +22,8 @@ class JdbcFacilityRepository implements FacilityRepository {
             id, name, equipment_type, space_id, brand, model, vendor, responsible_user_id, status,
             maintenance_cycle_days, last_maintenance_at, next_maintenance_due, install_date, warranty_until,
             alarm_source, alarm_note, alarm_raised_at, project_id, merchant_id, created_at, updated_at,
-            archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+            archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+            last_maintenance_type
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -80,6 +83,7 @@ class JdbcFacilityRepository implements FacilityRepository {
                 """, params(r));
     }
 
+    /** 最近维保类型只由维保完成写入；其余改动（编辑、状态变更、工单关闭回写）带空值，保留库内原值。 */
     @Override
     public void updateEquipment(FacilityEquipmentRecord r) {
         jdbcTemplate.update("""
@@ -91,7 +95,8 @@ class JdbcFacilityRepository implements FacilityRepository {
                     project_id=:project_id, merchant_id=:merchant_id, updated_at=now(),
                     archived_at=:archived_at, archived_by=:archived_by, delete_status=:delete_status,
                     delete_requested_by=:delete_requested_by, delete_requested_at=:delete_requested_at,
-                    delete_reason=:delete_reason
+                    delete_reason=:delete_reason,
+                    last_maintenance_type=COALESCE(:last_maintenance_type, last_maintenance_type)
                  WHERE id=:id
                 """, params(r));
     }
@@ -136,7 +141,8 @@ class JdbcFacilityRepository implements FacilityRepository {
                 .addValue("delete_requested_by", r.deleteRequestedBy())
                 .addValue("delete_requested_at",
                         r.deleteRequestedAt() == null ? null : timestampWithTimeZone(r.deleteRequestedAt()))
-                .addValue("delete_reason", r.deleteReason());
+                .addValue("delete_reason", r.deleteReason())
+                .addValue("last_maintenance_type", r.lastMaintenanceType());
     }
 
     private FacilityEquipmentRecord mapEquipment(ResultSet rs, int n) throws SQLException {
@@ -152,7 +158,7 @@ class JdbcFacilityRepository implements FacilityRepository {
                 nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"),
                 nullableInstant(rs, "archived_at"), rs.getString("archived_by"), rs.getString("delete_status"),
                 rs.getString("delete_requested_by"), nullableInstant(rs, "delete_requested_at"),
-                rs.getString("delete_reason"));
+                rs.getString("delete_reason"), rs.getString("last_maintenance_type"));
     }
 
     @Override

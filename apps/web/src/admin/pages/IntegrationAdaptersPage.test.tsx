@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +47,19 @@ describe("IntegrationAdaptersPage 行明细抽屉与零英文", () => {
     expect(table).toContain("已就绪");
     expect(table).toContain("未就绪");
     expect(table).not.toContain("not_ready");
+  });
+
+  // 第十六批第 34 条（ENUM L211「接入状态 待接入、联调中、已启用、暂停、异常、已停用、归档」）：表格与明细按七态显示中文。
+  it("接入状态按 ENUM 七态显示中文", async () => {
+    const labels: Record<string, string> = { pending: "待接入", testing: "联调中", active: "已启用", paused: "暂停", abnormal: "异常", disabled: "已停用", archived: "归档" };
+    const rows: ProviderAdapterRow[] = Object.keys(labels).map((status) => ({ id: `s-${status}`, providerCode: `prov-${status}`, adapterType: "payment", status }));
+    renderPage({ api: makeApi(rows) });
+    await waitFor(() => expect(screen.getByTestId("integration-adapter-row-s-archived").textContent).toContain("归档"));
+    for (const [status, label] of Object.entries(labels)) {
+      expect(screen.getByTestId(`integration-adapter-row-s-${status}`).textContent).toContain(label);
+    }
+    fireEvent.click(screen.getByTestId("integration-adapter-row-s-paused"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("接入状态暂停");
   });
 
   it("点适配器行 → 抽屉含该行值（生产就绪中文·凭证引用），Esc 关闭", async () => {

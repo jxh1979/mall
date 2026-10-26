@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -35,7 +35,9 @@ import static com.complex.platform.common.Strings.requireText;
 @Service
 public class FacilityWorkOrderService {
 
-    static final Set<String> TYPES = Set.of("repair", "cleaning", "complaint", "rectification", "inspection", "other");
+    /** ENUM:260、BSM:1377「报修、保洁、投诉、整改、巡检、内部协作工单（内部部门间发起与流转）、其他服务请求」（第十六批第 35 条补 internal_collaboration）。 */
+    static final Set<String> TYPES = Set.of("repair", "cleaning", "complaint", "rectification", "inspection",
+            "internal_collaboration", "other");
     static final Set<String> PRIORITIES = Set.of("urgent", "high", "normal");
     /** ROOT-03 clients-R8（BSM 第 1379 行）：customer＝消费客人通过客人端投诉，客人即提单方（只经 {@link #createCustomerComplaint} 建单）。 */
     static final Set<String> SOURCES = Set.of("merchant_self", "platform", "equipment_alarm", "inspection", "customer");

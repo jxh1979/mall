@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1463,8 +1463,32 @@ class JdbcInventoryRepository implements InventoryRepository {
                 SELECT * FROM saved_bottle_manual_pickup_policy WHERE project_id = :project_id
                 """, Map.of("project_id", projectId), (rs, n) -> new SavedBottleManualPickupPolicyRecord(
                         rs.getString("project_id"), rs.getInt("orders_within_1m"), rs.getInt("orders_within_3m"),
-                        rs.getInt("orders_total"), rs.getInt("min_orders"), rs.getInt("max_orders")))
+                        rs.getInt("orders_total"), rs.getObject("min_orders", Integer.class),
+                        rs.getObject("max_orders", Integer.class)))
                 .stream().findFirst();
+    }
+
+    @Override
+    public Map<String, List<Integer>> listSavedBottleReminderPolicies() {
+        return jdbcTemplate.query("SELECT scope_id, reminder_days FROM saved_bottle_reminder_policy", Map.of(),
+                        (rs, n) -> Map.entry(rs.getString("scope_id"), java.util.Arrays.stream(rs.getString("reminder_days").split(","))
+                                .map(Integer::valueOf).toList()))
+                .stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
+    public SavedBottleReminderPolicyRecord saveSavedBottleReminderPolicy(SavedBottleReminderPolicyRecord policy, String actorId) {
+        jdbcTemplate.update("""
+                INSERT INTO saved_bottle_reminder_policy (scope_id, reminder_days, updated_by, updated_at)
+                VALUES (:scope_id, :reminder_days, :actor, now())
+                ON CONFLICT (scope_id) DO UPDATE SET reminder_days = EXCLUDED.reminder_days,
+                    updated_by = EXCLUDED.updated_by, updated_at = now()
+                """, new MapSqlParameterSource()
+                .addValue("scope_id", policy.scopeId())
+                .addValue("reminder_days", policy.reminderDays().stream().map(String::valueOf)
+                        .collect(java.util.stream.Collectors.joining(",")))
+                .addValue("actor", actorId));
+        return policy;
     }
 
     @Override
@@ -1490,8 +1514,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     /**
-     * 有效卡座消费订单（ledger §26：已支付且未全额退款）：bar_bills.payment_status='paid'，退款减项
-     * （bar_bill_adjustments.adjustment_type='refund'）合计小于实付；按客户归属订单、酒吧所属项目计数。
+     * 有效卡座消费订单（ledger §26：已支付且未全额退款）：bar_bills.payment_status 为已支付或部分退款（第十六批第 16 条起退款成功后
+     * 改记 partial_refunded/refunded），退款减项（bar_bill_adjustments.adjustment_type='refund'）合计小于实付；按客户归属订单、酒吧所属项目计数。
      */
     @Override
     public int countValidTableOrders(String customerId, String projectId, Instant since) {
@@ -1502,7 +1526,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                   JOIN merchants br ON br.id = b.bar_id
                  WHERE o.customer_id = :customer_id
                    AND br.project_id = :project_id
-                   AND b.payment_status = 'paid'
+                   AND b.payment_status IN ('paid', 'partial_refunded')
                    AND (CAST(:since AS TIMESTAMPTZ) IS NULL OR COALESCE(b.paid_at, b.updated_at) >= CAST(:since AS TIMESTAMPTZ))
                    AND COALESCE((SELECT SUM(a.amount_cent) FROM bar_bill_adjustments a
                                   WHERE a.bill_id = b.id AND a.adjustment_type = 'refund'), 0) < b.paid_amount_cent
@@ -1523,7 +1547,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                   JOIN merchants br ON br.id = b.bar_id
                  WHERE o.customer_id = :customer_id
                    AND br.project_id = :project_id
-                   AND b.payment_status = 'paid'
+                   AND b.payment_status IN ('paid', 'partial_refunded', 'refunded')
                    AND b.sales_staff_id IS NOT NULL
                  ORDER BY COALESCE(b.paid_at, b.updated_at) DESC
                  LIMIT 1

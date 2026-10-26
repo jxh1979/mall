@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -115,7 +115,7 @@ final class ParkingFixture {
         jdbc.update("""
                 INSERT INTO integration_provider_adapters (id, provider_code, adapter_type, mode, environment, status, webhook_enabled,
                     field_mapping_json, created_at, updated_at)
-                VALUES (?,?,'parking','mock','mock','mock_ready',TRUE,?::jsonb,now(),now())""", "ipa_" + endpoint, provider, MAPPING);
+                VALUES (?,?,'parking','mock','mock','pending',TRUE,?::jsonb,now(),now())""", "ipa_" + endpoint, provider, MAPPING);
         jdbc.update("""
                 INSERT INTO open_app_credentials (id, app_key, secret_ref, status, allowed_endpoint_keys, created_at, updated_at)
                 VALUES (?,?,?,'active',?::jsonb,now(),now())""", "oac_" + endpoint, appKey, secretRef, "[\"" + endpoint + "\"]");

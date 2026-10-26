@@ -1,5 +1,5 @@
 package com.complex.platform.integration;
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -304,14 +304,26 @@ class JdbcIntegrationRepository implements IntegrationRepository {
     }
 
     @Override
-    public List<IntegrationChannelStoreMapRecord> listChannelStoreMaps() {
-        return jdbcTemplate.query("""
-                SELECT id, provider_code, channel, external_store_id, merchant_id,
-                       status, created_at, updated_at
-                  FROM integration_channel_store_map
-                 ORDER BY updated_at DESC, id
-                 LIMIT 200
-                """, rowMapper::mapChannelStoreMap);
+    public List<IntegrationChannelStoreMapRecord> listChannelStoreMaps(boolean unrestricted, java.util.Set<String> projectIds,
+            String merchantId) {
+        if (merchantId == null && !unrestricted && projectIds.isEmpty()) {
+            return List.of();
+        }
+        String sql = """
+                SELECT m.id, m.provider_code, m.channel, m.external_store_id, m.merchant_id,
+                       m.status, m.created_at, m.updated_at
+                  FROM integration_channel_store_map m
+                  JOIN merchants mc ON mc.id = m.merchant_id
+                 WHERE TRUE
+                """;
+        if (merchantId != null) {
+            sql += " AND m.merchant_id = :merchant_id";
+        } else if (!unrestricted) {
+            sql += " AND mc.project_id IN (:project_ids)";
+        }
+        sql += " ORDER BY m.updated_at DESC, m.id LIMIT 200";
+        return jdbcTemplate.query(sql, new MapSqlParameterSource().addValue("merchant_id", merchantId)
+                .addValue("project_ids", projectIds), rowMapper::mapChannelStoreMap);
     }
 
     @Override

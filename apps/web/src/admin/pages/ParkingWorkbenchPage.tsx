@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { Tabs } from "antd";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -42,7 +42,6 @@ type Overview = { occupancy?: { totalSpaces: number; occupiedTotal: number; occu
 type Vehicle = { id: string; contractId?: string | null; userId?: string | null; plateNo: string; status: string; registeredAt: string };
 type Release = { id: string; plateNo: string; releaseReason: string; reason: string; operatorId: string; releasedAt: string;
   waiveType: string; reductionCent?: number | null; status: string };
-type Page<T> = { items: T[] };
 type Credit = { id: string; customerId: string; businessDate: string; thresholdCent: number; creditMinutes: number; eligibleAmountCent: number;
   status: string; offsetHours?: number | null; costCent?: number | null;
   components: Array<{ sourceType: string; sourceId: string; merchantId: string; merchantName?: string | null; amountCent: number }>;
@@ -159,8 +158,8 @@ export function ParkingStaffVehiclesPanel({ props, project }: { props: AdminPage
   const [userId, setUserId] = React.useState("");
   const [plate, setPlate] = React.useState("");
   const load = React.useCallback(() => {
-    props.api.get<Page<Vehicle>>(`/api/v1/parking/staff-vehicles?project_id=${encodeURIComponent(project)}`)
-      .then((p) => setRows(p?.items ?? [])).catch(() => setRows([]));
+    props.api.get<Vehicle[]>(`/api/v1/parking/staff-vehicles?project_id=${encodeURIComponent(project)}`)
+      .then((p) => setRows(Array.isArray(p) ? p : [])).catch(() => setRows([]));
   }, [props.api, project]);
   React.useEffect(load, [load]);
   const write = useWrite(props, load);
@@ -204,8 +203,8 @@ function MonthlyVehiclesPanel({ props, project }: { props: AdminPageProps; proje
   const [contractId, setContractId] = React.useState("");
   const [plate, setPlate] = React.useState("");
   const load = React.useCallback(() => {
-    props.api.get<Page<Vehicle>>(`/api/v1/parking/monthly-vehicles?project_id=${encodeURIComponent(project)}`)
-      .then((p) => setRows(p?.items ?? [])).catch(() => setRows([]));
+    props.api.get<Vehicle[]>(`/api/v1/parking/monthly-vehicles?project_id=${encodeURIComponent(project)}`)
+      .then((p) => setRows(Array.isArray(p) ? p : [])).catch(() => setRows([]));
   }, [props.api, project]);
   React.useEffect(load, [load]);
   const write = useWrite(props, load);
@@ -283,8 +282,8 @@ function ReleasePanel({ props, project }: { props: AdminPageProps; project: stri
   const [rows, setRows] = React.useState<Release[]>([]);
   const [form, setForm] = React.useState(empty);
   const load = React.useCallback(() => {
-    props.api.get<Page<Release>>(`/api/v1/parking/manual-releases?project_id=${encodeURIComponent(project)}`)
-      .then((p) => setRows(p?.items ?? [])).catch(() => setRows([]));
+    props.api.get<Release[]>(`/api/v1/parking/manual-releases?project_id=${encodeURIComponent(project)}`)
+      .then((p) => setRows(Array.isArray(p) ? p : [])).catch(() => setRows([]));
   }, [props.api, project]);
   React.useEffect(load, [load]);
   const write = useWrite(props, load);

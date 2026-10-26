@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -1062,7 +1062,9 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("admission-audits-export").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("准入审计已导出");
     await expect(page.getByTestId("admin-action-result")).toContainText("审计记录：商户准入追溯已就绪");
-    await expect(page.getByTestId("admin-action-result")).toContainText("att-admission-audit-export");
+    // 第 32 条：导出登记带当前登录账号（mock 登录人 user-1），不再带写死的假附件。
+    await expect(page.getByTestId("admin-action-result")).toContainText("user-1");
+    await expect(page.getByTestId("admin-action-result")).not.toContainText("att-admission-audit-export");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-006")!);
     await expect(page.getByTestId("supervisor-review-approve")).toBeDisabled();

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.31
+  version: V0.32
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -3766,7 +3766,7 @@ paths:
         - finance
       operationId: createDailyClose
       summary: 日结锁定
-      description: 日结锁定。TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。
+      description: 日结锁定。TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。
       x-permission: finance.daily_close.lock
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -6273,7 +6273,7 @@ paths:
         - "bar"
       operationId: "configureSavedBottleManualPickupPolicy"
       summary: "配置人工例外取酒消费历史条件（按项目；最高权限本人办理并留痕；须同时配置上下限）"
-      description: "BSM L1073 ②「申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）」：orders_within_1m / orders_within_3m / orders_total 与 min_orders / max_orders 须同时填写，下限 ≥ 1、各条件值在上下限内，否则 400 VALIDATION_FAILED；非最高权限本人 403 MASTER_APPROVAL_REQUIRED（范式同设施设备删除审批）；落 saved_bottle_manual_pickup_policy 并留痕 updated_by/updated_at。未配置的项目人工例外发起一律 409 SAVED_BOTTLE_MANUAL_PICKUP_POLICY_UNSET。"
+      description: "BSM L1073 ②「申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）」：orders_within_1m / orders_within_3m / orders_total 与 min_orders / max_orders 须同时填写，下限 ≥ 1、各条件值在上下限内，否则 400 VALIDATION_FAILED；非最高权限本人 403 MASTER_APPROVAL_REQUIRED（范式同设施设备删除审批）；落 saved_bottle_manual_pickup_policy 并留痕 updated_by/updated_at。未单独配置的项目按 project_id=global 出厂行核对（出厂默认近 1 个月 2 笔、近 3 个月 3 笔、历史累计 5 笔，上下限留空，首次改参时与条件值同填；V548）。"
       x-permission: "bar.saved_bottle.manual_pickup_policy.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -6320,6 +6320,57 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/reminder-policy:
+    put:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "configureSavedBottleReminderPolicy"
+      summary: "配置存酒到期提醒节点（按项目；出厂默认到期前第 14、7、3、1 天）"
+      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）；提醒节点与存酒有效期同一粒度配置，超出本次存酒实际有效期的节点自动跳过」：scope_id=global（出厂行）|project:<id>（缺行回落 global）；reminder_days 为到期前第 N 天（N≥1、不重复、至少一个），否则 400 VALIDATION_FAILED；商户账号 403 PLATFORM_SCOPE_REQUIRED，非平台管理员只能配置本项目（403 CROSS_PROJECT_FORBIDDEN）；落 saved_bottle_reminder_policy 并留痕 updated_by/updated_at。到期提醒作业按距到期日（北京日历日）每次只发已到达的最近一个节点，节点大于本次有效期（登记日至当前到期日天数）的跳过，幂等键＝瓶＋到期日＋节点。"
+      x-permission: "bar.saved_bottle.reminder_policy.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.reminder_policy_configured"
+      x-audit-event-failure: "bar.saved_bottle.reminder_policy_config_failed"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleReminderPolicyRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+    get:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "listSavedBottleReminderPolicies"
+      summary: "读存酒到期提醒节点（出厂行与各项目行；出厂默认到期前第 14、7、3、1 天）"
+      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）」：列出 saved_bottle_reminder_policy 的 scope_id（global 出厂行 | project:<id>）与 reminder_days（到期前第 N 天，降序）；没单独配置的项目沿用出厂行。商户账号 403 PLATFORM_SCOPE_REQUIRED；非平台管理员只返回出厂行与本项目行，没有项目归属 403 PROJECT_SCOPE_REQUIRED（范围闸在读之前）。"
+      x-permission: "bar.saved_bottle.reminder_policy.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.reminder_policy_viewed"
+      x-audit-event-failure: "bar.saved_bottle.reminder_policy_view_failed"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -13770,6 +13821,113 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/bar/bills/{bill_id}/anomaly:
+    post:
+      tags:
+        - bar
+      operationId: raiseBarBillAnomaly
+      summary: 登记账单争议（置异常）
+      description: 第十六批第 16 条（ENUM「账单状态」异常；操作员裁决补充第 2 条「客人对账单提出争议时员工登记置异常」）：有权员工登记客人对账单的争议原因，账单 payment_status 置 abnormal，进入异常前的状态留存，主管「更正后恢复」时回到它；异常期间收款（settle、pay-intents）与反结（reopen）返回 409 BAR_BILL_ABNORMAL。已在异常 409 BAR_BILL_ALREADY_ABNORMAL；已作废 409 BAR_BILL_VOIDED；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；reason 必填，随成功审计留痕。
+      x-permission: bar.bill.adjust
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.bill_anomaly_raised
+      x-audit-event-failure: bar.bill_anomaly_raise_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/BillId"
+          description: 账单 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 幂等键；同一登记重试必须复用。
+                  maxLength: 128
+                reason:
+                  type: string
+                  description: 客人争议原因；必填，随成功审计留痕。
+                  maxLength: 1000
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/bills/{bill_id}/anomaly/resolve:
+    post:
+      tags:
+        - bar
+      operationId: resolveBarBillAnomaly
+      summary: 主管处置异常账单
+      description: 第十六批第 16 条（ENUM「异常状态的统一出口」：主管在系统内选择「更正后恢复」或「作废并冲正」两种方式之一处置，填写原因并留痕；恢复后回到进入异常之前的那个状态）：restored——payment_status 回到进入异常前的状态，已结账单再按已成功退款额重算部分退款／已退款；voided_reversed——账单 payment_status 与 settlement_status 置 void（已作废），已登记的收款流水按反结同一做法冲正（reversed，不再计入营收与对账），作废后收款返回 409 BAR_BILL_VOIDED，关台不再把它算作未结清。voided_reversed 与反结同一做法：结账营业日已锁定日结的 409 DAY_CLOSE_LOCKED（走补录调整流程），账单仍在异常；账单不在异常 409 BAR_BILL_NOT_ABNORMAL；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填，随成功审计留痕。
+      x-permission: bar.bill.anomaly.resolve
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.bill_anomaly_resolved
+      x-audit-event-failure: bar.bill_anomaly_resolve_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/BillId"
+          description: 异常账单 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - resolution
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 幂等键；同一处置重试必须复用。
+                  maxLength: 128
+                resolution:
+                  type: string
+                  description: 处置方式：restored（更正后恢复）/ voided_reversed（作废并冲正）。
+                  enum:
+                    - restored
+                    - voided_reversed
+                reason:
+                  type: string
+                  description: 处置原因；必填，随成功审计留痕。
+                  maxLength: 1000
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/bar/bills/{bill_id}/tip:
     post:
       tags:
@@ -21129,7 +21287,7 @@ paths:
         - analytics
       operationId: listNotificationWindows
       summary: 提醒窗天数配置
-      description: V219:列各提醒窗提前天数(contract.renewal/inventory.saved_bottle/leasing.lead_follow_up),经营参数页维护读。
+      description: V219:列各提醒窗提前天数(contract.renewal/leasing.lead_follow_up;存酒到期提醒改按项目提醒节点配置,V548),经营参数页维护读。
       x-permission: analytics.dashboard.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -22783,7 +22941,7 @@ paths:
         - facility
       operationId: recordFacilityEquipmentMaintenanceDone
       summary: 记录设备维保完成
-      description: 维保完成回写：状态回正常并重算下次到期；已报废设备 409 FACILITY_EQUIPMENT_RETIRED。
+      description: 维保完成回写：须带本次维保类型，台账记最近维保类型（last_maintenance_type），状态回正常并重算下次到期；已报废设备 409 FACILITY_EQUIPMENT_RETIRED。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22807,6 +22965,18 @@ paths:
           schema:
             type: string
             maxLength: 128
+        - name: maintenance_type
+          in: query
+          required: true
+          description: 本次维保类型（ENUM「设备维保类型」）：scheduled_maintenance 定期保养、routine_inspection 例行巡检、fault_repair 故障维修、safety_test 安全检测、part_replacement 部件更换；缺失或不在五类内 400 VALIDATION_FAILED。
+          schema:
+            type: string
+            enum:
+              - scheduled_maintenance
+              - routine_inspection
+              - fault_repair
+              - safety_test
+              - part_replacement
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -35662,7 +35832,7 @@ paths:
           schema:
             type: string
             maxLength: 16
-          description: 期间标签筛选（季度 2026-Q3 / 月份 2026-07）。
+          description: 期间标签筛选（月份 2026-07 / 季度 2026-Q3 / 半年 2026-H1 / 年度 2026）。
         - name: status
           in: query
           required: false
@@ -51734,6 +51904,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/SavedBottleRenewalPolicyRequest"
+    SavedBottleReminderPolicyRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleReminderPolicyRequest"
     SavedBottleRemedyRequest:
       required: true
       content:
@@ -53634,12 +53810,14 @@ components:
         status:
           type: string
           enum:
-            - draft
-            - mock_ready
-            - test_ready
-            - production_ready
+            - pending
+            - testing
+            - active
+            - paused
+            - abnormal
             - disabled
-          description: 供应商接入状态；未完成真实签名、回调和对账前不得标记为生产就绪。
+            - archived
+          description: 供应商接入状态（ENUM 接入状态七态：pending 待接入、testing 联调中、active 已启用、paused 暂停、abnormal 异常、disabled 已停用、archived 归档）；改为 active 即标记生产就绪，须满足生产条件，未完成真实签名、回调和对账前不得启用；暂停、已停用、归档的适配器不参与回调映射、对账与模拟测试。
           maxLength: 64
         webhook_enabled:
           type: boolean
@@ -56343,6 +56521,30 @@ components:
           type: "string"
           description: "调整原因，进入审计留痕。"
           maxLength: 500
+    SavedBottleReminderPolicyRequest:
+      type: "object"
+      description: "存酒到期提醒节点配置（BSM L1072，业务参数，按项目可配）：scope_id=global|project:<id>；reminder_days 为到期前第 N 天。"
+      additionalProperties: false
+      required:
+        - "scope_id"
+        - "reminder_days"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果。"
+          maxLength: 128
+        scope_id:
+          type: "string"
+          description: "global（出厂行），或 project:<项目 id>。"
+          maxLength: 128
+        reminder_days:
+          type: "array"
+          description: "提醒节点：到期前第 N 天（N≥1、不重复），出厂默认 [14, 7, 3, 1]。"
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: "integer"
+            minimum: 1
     SavedBottleRenewalPolicyRequest:
       type: "object"
       description: "存酒转存业务参数配置（ENUM L120）：policy_key=max_renewals（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）；value 与上下限须同时填写。"
@@ -61562,7 +61764,7 @@ components:
           minimum: 0
     FacilityEquipmentRequest:
       type: object
-      description: 设备台账新建/更新请求。创建时 name 必填；更新可沿用原名称。
+      description: 设备台账新建/更新请求。创建时 name 与 project_id（设备所属综合体项目，告警按它解析当班接警人）必填；更新可沿用原名称。
       additionalProperties: false
       required:
         - equipment_type
@@ -61758,6 +61960,7 @@ components:
             - complaint
             - rectification
             - inspection
+            - internal_collaboration
             - other
         priority:
           type: string
@@ -61899,6 +62102,7 @@ components:
             - complaint
             - rectification
             - inspection
+            - internal_collaboration
             - other
         priority:
           type: string
@@ -63045,9 +63249,11 @@ components:
         period_type:
           type: string
           enum:
-            - quarterly
             - monthly
-          description: 分红周期：quarterly 季度正式+月度预览（默认）/ monthly 月度正式。
+            - quarterly
+            - semiannual
+            - annual
+          description: 分红周期（BSM L1777 月、季、半年、年，默认半年）：monthly 月度正式 / quarterly 季度正式+月度预览 / semiannual 半年正式+月度预览（默认）/ annual 年度正式+月度预览；正式单期间标签依次为 2026-07 / 2026-Q3 / 2026-H1 / 2026。
         revenue_domains:
           type: array
           items:
@@ -63131,7 +63337,7 @@ components:
           maxLength: 128
         period_label:
           type: string
-          description: 期间标签：季度 2026-Q3 / 月份 2026-07。
+          description: 期间标签：月份 2026-07 / 季度 2026-Q3 / 半年 2026-H1 / 年度 2026（正式单须与方案周期一致；preview 只收月份）。
           maxLength: 16
         kind:
           type: string

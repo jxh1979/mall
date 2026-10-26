@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -38,6 +38,19 @@ const MODE_LABELS: Record<string, string> = {
   sandbox: "沙箱联调",
   production: "生产",
 };
+
+// 接入状态：ENUM L211「接入状态 待接入、联调中、已启用、暂停、异常、已停用、归档」= 后端 IntegrationValidation.STATUSES 闭集（DB CHECK，V549）→ 中文，接口仍用原码。
+const STATUS_LABELS: Record<string, string> = {
+  pending: "待接入",
+  testing: "联调中",
+  active: "已启用",
+  paused: "暂停",
+  abnormal: "异常",
+  disabled: "已停用",
+  archived: "归档",
+};
+
+const statusLabel = (code?: string) => (code ? STATUS_LABELS[code] ?? code : "—");
 
 function adapterTypeLabel(code?: string) {
   if (!code) return "—";
@@ -115,6 +128,7 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
       fields: [
         { label: "供应商", value: row.providerCode ?? "—" },
         { label: "适配器类型", value: adapterTypeLabel(row.adapterType) },
+        { label: "接入状态", value: statusLabel(row.status) },
         { label: "生产就绪", value: readyLabel(row.productionReady) },
         { label: "凭证引用", value: row.credentialSecretRef ?? row.credentialRef ?? "—" },
         { label: "适配器编号", value: row.id },
@@ -174,13 +188,14 @@ export function IntegrationAdaptersPage({ api, setActionResult, setGlobalError, 
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="integration-adapters-table">
-            <thead><tr><th>供应商</th><th>适配器类型</th><th>生产就绪</th><th>详情</th></tr></thead>
+            <thead><tr><th>供应商</th><th>适配器类型</th><th>接入状态</th><th>生产就绪</th><th>详情</th></tr></thead>
             <tbody>{rows.map((row) => (
               <tr key={row.id} className={`admin-row-clickable${focusObjectId === row.providerCode ? " admin-row-selected" : ""}`} tabIndex={0} data-testid={`integration-adapter-row-${row.id}`}
                 onClick={() => openAdapterDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAdapterDetail(row); } }}>
                 <td>{row.providerCode}</td>
                 <td>{adapterTypeLabel(row.adapterType)}</td>
+                <td>{statusLabel(row.status)}</td>
                 <td>{readyLabel(row.productionReady)}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看适配器详情" onClick={(event) => { event.stopPropagation(); openAdapterDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -21,7 +21,7 @@ import type {
   MerchantAdmissionRow,
 } from "../types";
 
-// 持股分红（V299）：方案配置（凡涉数据皆可配，80/20 与 20% 税率仅默认值）+ 期间作业（季度正式/月度预览）
+// 持股分红（V299）：方案配置（凡涉数据皆可配，80/20 与 20% 税率仅默认值）+ 期间作业（按方案周期出正式单/月度预览）
 // + 计算单审阅审批（draft→pending_review→approved 挂应付→paid；预览只读）。
 const VIEW_PERMS = ["finance.dividend.view"];
 const MANAGE_PERMS = ["finance.dividend.manage"];
@@ -42,9 +42,12 @@ export const DIVIDEND_STATUS_LABELS: Record<string, string> = {
   voided: "已作废",
 };
 
+// BSM L1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）……默认周期为半年」。
 const PERIOD_TYPE_LABELS: Record<string, string> = {
-  quarterly: "季度（正式单按季，月度出预览）",
   monthly: "月度（正式单按月）",
+  quarterly: "季度（正式单按季，月度出预览）",
+  semiannual: "半年（正式单按半年，月度出预览）",
+  annual: "年度（正式单按年，月度出预览）",
 };
 
 // V304 发放保护线留存·释放时点。
@@ -106,7 +109,7 @@ const TEXT = {
   taxInvalid: "代扣税率须在 0~100 之间。",
   domainRequired: "至少勾选一个计入收入域。",
   expenseRequired: "至少勾选一种计入费用类别。",
-  periodLabelRequired: "请填写期间标签（季度如 2026-Q3，月份如 2026-07）。",
+  periodLabelRequired: "请填写期间标签（月份如 2026-07，季度如 2026-Q3，半年如 2026-H1，年度如 2026）。",
   reasonRequired: "驳回理由必填（进入审计留痕）。",
   floorPercentInvalid: "留存比例须在 0~100 之间。",
   floorFixedInvalid: "留存固定额须为不小于 0 的金额（元）。",
@@ -165,7 +168,7 @@ const DEFAULT_PLAN_FORM: PlanForm = {
   principalName: "",
   platformSharePercent: "80",
   taxRatePercent: "20",
-  periodType: "quarterly",
+  periodType: "semiannual",
   revenueDomains: ["bar", "ticket"],
   includeInventoryCost: true,
   expenseTypes: Object.keys(EXPENSE_TYPE_LABELS),
@@ -294,7 +297,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       principalName: plan.principalName ?? "",
       platformSharePercent: plan.platformShareBps === undefined ? "80" : String(plan.platformShareBps / 100),
       taxRatePercent: plan.taxRateBps === undefined ? "20" : String(plan.taxRateBps / 100),
-      periodType: plan.periodType ?? "quarterly",
+      periodType: plan.periodType ?? "semiannual",
       revenueDomains: plan.revenueDomains ?? ["bar", "ticket"],
       includeInventoryCost: plan.includeInventoryCost !== false,
       expenseTypes: plan.expenseTypes ?? Object.keys(EXPENSE_TYPE_LABELS),
@@ -528,7 +531,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       {/* ── 期间作业 ─────────────────────────────────────────── */}
       <h3>期间作业</h3>
       <div className="admin-form-row" data-testid="dividend-compute-row">
-        <label>期间标签<input data-testid="dividend-compute-label" type="text" placeholder="季度 2026-Q3 / 月份 2026-07" value={computeLabel} onChange={(event) => setComputeLabel(event.target.value)} /></label>
+        <label>期间标签<input data-testid="dividend-compute-label" type="text" placeholder="月份 2026-07 / 季度 2026-Q3 / 半年 2026-H1 / 年度 2026" value={computeLabel} onChange={(event) => setComputeLabel(event.target.value)} /></label>
         <label>类别<select data-testid="dividend-compute-kind" value={computeKind} onChange={(event) => setComputeKind(event.target.value)}>
           <option value="official">正式单（进入审批发放）</option>
           <option value="preview">月度预览（只看不发）</option>
@@ -566,7 +569,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
           <option value="">全部状态</option>
           {Object.entries(DIVIDEND_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
-        <label>期间<input data-testid="dividend-filter-period" type="text" placeholder="2026-Q3 / 2026-07" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value)} /></label>
+        <label>期间<input data-testid="dividend-filter-period" type="text" placeholder="2026-07 / 2026-Q3 / 2026-H1 / 2026" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value)} /></label>
       </div>
 
       <AdminDataState loading={rows.loading || merchantsResource.loading || plansResource.loading} error={rows.error ?? merchantsResource.error ?? plansResource.error} empty={empty} onRetry={rows.reload}>

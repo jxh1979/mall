@@ -1,8 +1,10 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import java.time.Instant;
@@ -187,7 +189,7 @@ class IntegrationJdbcIntegrationTests {
                 "mock",
                 List.of("webhook"),
                 "mock",
-                "mock_ready",
+                "pending",
                 true,
                 false,
                 Map.of("provider_status", "status"),
@@ -209,7 +211,7 @@ class IntegrationJdbcIntegrationTests {
                 adapter.mode(),
                 List.of("webhook", "polling"),
                 "production",
-                "test_ready",
+                "testing",
                 true,
                 true,
                 adapter.fieldMapping(),
@@ -231,7 +233,24 @@ class IntegrationJdbcIntegrationTests {
                         ProviderAdapterRecord::status,
                         ProviderAdapterRecord::credentialSecretRef
                 )
-                .contains(tuple("adapter-jdbc", "jdbc-provider", "production", "test_ready", "manual-ledger:jdbc-provider"));
+                .contains(tuple("adapter-jdbc", "jdbc-provider", "production", "testing", "manual-ledger:jdbc-provider"));
+    }
+
+    // 第十六批第 34 条（ENUM L211「接入状态 待接入、联调中、已启用、暂停、异常、已停用、归档」）：V549 把存量状态按语义映射到七态
+    // （V015 种子 mock_ready → pending 待接入），库约束只收七态。
+    @Test
+    void providerAdapterStatusConstraintIsEnumSevenStates() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM integration_provider_adapters WHERE id = 'adapter_p0_mock_provider'", String.class))
+                .isEqualTo("pending");
+        for (String status : List.of("pending", "testing", "active", "paused", "abnormal", "disabled", "archived")) {
+            assertThatCode(() -> jdbcTemplate.update(
+                    "UPDATE integration_provider_adapters SET status = ? WHERE id = 'adapter_p0_mock_provider'", status))
+                    .doesNotThrowAnyException();
+        }
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE integration_provider_adapters SET status = 'mock_ready' WHERE id = 'adapter_p0_mock_provider'"))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     @Test

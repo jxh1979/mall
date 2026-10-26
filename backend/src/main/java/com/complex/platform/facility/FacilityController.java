@@ -1,5 +1,7 @@
 package com.complex.platform.facility;
 
+// 文件版本：V0.01
+
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AccessActor;
@@ -98,9 +100,10 @@ public class FacilityController {
     @PostMapping("/{equipment_id}/maintenance-done")
     public ApiResponse<FacilityEquipmentRecord> maintenanceDone(
             @PathVariable("equipment_id") String equipmentId,
-            @RequestParam(value = "idempotency_key", required = false) String idempotencyKey) {
+            @RequestParam(value = "idempotency_key", required = false) String idempotencyKey,
+            @RequestParam(value = "maintenance_type", required = false) String maintenanceType) {
         authorizationService.requirePermission(PERM);
-        return ApiResponse.ok(service.recordMaintenanceDone(equipmentId, idempotencyKey));
+        return ApiResponse.ok(service.recordMaintenanceDone(equipmentId, maintenanceType, idempotencyKey));
     }
 
     private void requireReadPermission() {

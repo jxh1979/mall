@@ -1,11 +1,12 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.customer.CustomerStoredValueAccountRecord;
+import com.complex.platform.finance.RefundPayableSettled;
 import com.complex.platform.support.TestSecurityActors;
 import java.time.Instant;
 import java.util.List;
@@ -38,6 +39,7 @@ class BarBillStoredValueRefundJdbcIntegrationTests {
     @Autowired private CustomerRepository customerRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private com.complex.platform.access.AccessRepository accessRepository;
+    @Autowired private org.springframework.context.ApplicationEventPublisher events;
 
     private String suffix;
     private String merchantId;
@@ -157,7 +159,70 @@ class BarBillStoredValueRefundJdbcIntegrationTests {
         assertThat(cardBalance()).isEqualTo(8_000L);
     }
 
+    /**
+     * 第十六批第 16 条（ENUM L101「账单状态 待结、部分支付、已结、部分退款、已退款、异常」；BSM L1062「只有实际退款成功才记为已退」）：
+     * 储值收款的退款回卡即成功——部分退为部分退款，退满实收为已退款；结算状态仍为已结。
+     */
+    @Test
+    void storedValueRefundMarksBillPartialThenFullyRefunded() {
+        String billId = seedUnpaidBill(5_000L);
+        settle(billId, "sv-st-" + suffix, 5_000L, "stored_value");
+
+        billingService.applyBillAdjustment(billId, new BarBillAdjustmentRequest(
+                "refund-st1-" + suffix, null, List.of(), "refund", 2_000L, "客人退款", null));
+        assertThat(billStatus(billId)).containsEntry("payment_status", "partial_refunded")
+                .containsEntry("settlement_status", "settled");
+
+        billingService.applyBillAdjustment(billId, new BarBillAdjustmentRequest(
+                "refund-st2-" + suffix, null, List.of(), "refund", 3_000L, "客人退款", null));
+        assertThat(billStatus(billId)).containsEntry("payment_status", "refunded")
+                .containsEntry("settlement_status", "settled");
+    }
+
+    /** 第十六批第 16 条：现金等渠道的退款挂出应付，财务实付结清（RefundPayableSettled）前账单不算已退，结清后按金额置已退款。 */
+    @Test
+    void cashRefundCountsOnlyAfterRefundPayableSettled() {
+        String billId = seedUnpaidBill(5_000L);
+        billingService.settleBill(billId, new BarBillSettleRequest(
+                "cash-st-" + suffix, null, List.of(), "pay_cash_st_" + suffix, 5_000L, "cash"));
+        BarBillAdjustmentRecord adjustment = billingService.applyBillAdjustment(billId, new BarBillAdjustmentRequest(
+                "refund-cash-" + suffix, null, List.of(), "refund", 5_000L, "整单退款", null));
+        assertThat(adjustment.arApItemId()).isNotNull();
+        assertThat(billStatus(billId)).containsEntry("payment_status", "paid");
+
+        jdbcTemplate.update("UPDATE ar_ap_items SET status = 'settled', paid_amount_cent = amount_cent, unpaid_amount_cent = 0 WHERE id = ?",
+                adjustment.arApItemId());
+        events.publishEvent(new RefundPayableSettled(adjustment.arApItemId(), adjustment.id()));
+
+        assertThat(billStatus(billId)).containsEntry("payment_status", "refunded");
+    }
+
+    /** 第十六批第 16 条：已结账单退品的退款在退品待审核期间不算成功，审批通过后才置部分退款。 */
+    @Test
+    void returnedItemRefundCountsAfterVoidApproved() {
+        Instant now = Instant.now();
+        String billId = seedUnpaidBill(5_000L);
+        String orderId = "order_tk20r2_" + suffix;
+        barRepository.saveProduct(new BarProductRecord("product_tk20r2_" + suffix, "bar_tk20r2_" + suffix, merchantId, "退品酒", "spirit",
+                2_000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null));
+        String itemId = "item_tk20r2_" + suffix;
+        barRepository.saveOrderItem(new BarOrderItemRecord(itemId, orderId, "product_tk20r2_" + suffix, "退品酒", 1, 2_000L, 2_000L,
+                "pending", now, now, null, 0L, false, null, null, null, false, false, null));
+        settle(billId, "sv-vst-" + suffix, 5_000L, "stored_value");
+        BarOrderItemVoidRecord voided = orderService.voidOrderItem(orderId, new BarOrderItemVoidRequest(
+                "void-st-" + suffix, null, List.of(), itemId, "客人退品", false, billId, null));
+        assertThat(billStatus(billId)).containsEntry("payment_status", "paid");
+
+        orderService.decideOrderItemVoid(voided.id(), new BarOrderItemVoidDecisionRequest("void-st-decide-" + suffix, "approved", "同意退品"));
+
+        assertThat(billStatus(billId)).containsEntry("payment_status", "partial_refunded");
+    }
+
     // ---------- 造数 ----------
+
+    private Map<String, Object> billStatus(String billId) {
+        return jdbcTemplate.queryForMap("SELECT payment_status, settlement_status FROM bar_bills WHERE id = ?", billId);
+    }
 
     private void settle(String billId, String key, long amountCent, String channel) {
         billingService.settleBill(billId, new BarBillSettleRequest(

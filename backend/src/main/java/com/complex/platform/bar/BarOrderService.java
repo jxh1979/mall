@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -39,6 +39,9 @@ public class BarOrderService {
     // 第十一批 TK-04-R3：全部送达时为已结清账单生成商户消费待确认积分与成长值（字段注入免改构造点；单测未注入即不生成）。
     @Autowired(required = false)
     com.complex.platform.customer.MerchantConsumptionRewardService merchantRewards;
+    // 第十六批第 16 条：已结账单退品退款成功后置部分退款／已退款（单测未注入即不改状态）。
+    @Autowired(required = false)
+    BarBillRefundStatusService refundStatus;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -1366,6 +1369,8 @@ public class BarOrderService {
         BarOrderItemVoidRecord saved = repository.saveOrderItemVoid(resolved);
         // 第十一批 TK-04-b（BSM L823）：已结账单的退品审批结束（通过即退款生效、驳回即确定不退），对本单商户消费奖励对账。
         if (saved.billId() != null && merchantRewards != null) merchantRewards.reconcileBarBill(saved.billId());
+        // 第十六批第 16 条（ENUM L101）：退品审批结束后按已成功退款额回写账单部分退款／已退款。
+        if (saved.billId() != null && refundStatus != null) refundStatus.refresh(saved.billId());
 
         auditEventService.recordSuccess(
                 "bar.order_item_void_decided",

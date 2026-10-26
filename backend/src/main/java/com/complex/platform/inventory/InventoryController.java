@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -276,6 +276,23 @@ public class InventoryController {
         authorizationService.requirePermission(InventoryService.RENEWAL_POLICY_MANAGE);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.configureRenewalPolicy(request));
+    }
+
+    /** BSM L1072：读存酒到期提醒节点（出厂行与各项目行；非平台管理员只看出厂行与本项目）。 */
+    @GetMapping("/saved-bottles/reminder-policy")
+    public ApiResponse<PageResponse<SavedBottleReminderPolicyRecord>> listReminderPolicies() {
+        authorizationService.requirePermission(InventoryService.REMINDER_POLICY_MANAGE);
+        return ApiResponse.ok(service.listReminderPolicies());
+    }
+
+    /** BSM L1072：配置存酒到期提醒节点（业务参数，按项目可配，出厂默认到期前第 14、7、3、1 天）。 */
+    @PutMapping("/saved-bottles/reminder-policy")
+    public ApiResponse<SavedBottleReminderPolicyRecord> configureReminderPolicy(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleReminderPolicyRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.REMINDER_POLICY_MANAGE);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configureReminderPolicy(request));
     }
 
     @PostMapping("/saved-bottles/{id}/claim")

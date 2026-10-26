@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -63,6 +63,9 @@ public class BarBillingService {
     // 第十一批 TK-04-a：结账识别会员、结清后（已全部送达时）生成商户消费待确认积分与成长值。null＝旧构造/单测未注入，不生成。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.customer.MerchantConsumptionRewardService merchantRewards;
+    // 第十六批第 16 条（ENUM L101）：退款成功后置部分退款／已退款。null＝旧构造/单测未注入，不改状态。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarBillRefundStatusService refundStatus;
 
     public BarBillingService(
             BarRepository repository,
@@ -163,6 +166,7 @@ public class BarBillingService {
         BarBillRecord bill = repository.findBillById(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
+        requireNotAbnormalOrVoid(bill);
         String businessOrderType = requireText(actual.businessOrderType(), "business_order_type");
         String businessOrderId = requireText(actual.businessOrderId(), "business_order_id");
         if (!"bar_bill".equals(businessOrderType) || !bill.id().equals(businessOrderId)) {
@@ -205,6 +209,7 @@ public class BarBillingService {
         BarBillRecord bill = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
+        requireNotAbnormalOrVoid(bill);
         if ("settled".equals(bill.settlementStatus())) {
             throw ApiException.conflict("BAR_BILL_ALREADY_SETTLED", "账单已结账，请勿重复操作");
         }
@@ -554,6 +559,7 @@ public class BarBillingService {
         if ("refund".equals(type) && payrollRefunds != null) payrollRefunds.record(savedAdjustment, refundLines);
         if (retained > 0) saveMinSpendRetained(bill, retained, afterPayable, reason, requestedBy, actual.idempotencyKey(), now);
         if ("refund".equals(type)) reconcileRewards(bill.id());
+        if ("refund".equals(type) && refundStatus != null) refundStatus.refresh(bill.id());
         // 第十批 TK-24-R3（BSM L1064「结账补足的差额按普通消费计入」）：补足后重判台组进度，达标即退定金。
         if ("min_spend_top_up".equals(type) && depositSettlements != null) depositSettlements.evaluateForOrder(bill.orderId());
         return savedAdjustment;
@@ -811,20 +817,11 @@ public class BarBillingService {
         BarBillRecord bill = repository.findBillById(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
+        requireNotAbnormalOrVoid(bill);
         if (!"settled".equals(bill.settlementStatus())) {
             throw ApiException.conflict("BAR_BILL_NOT_REOPENABLE", "只有已结账的账单才能重新打开");
         }
-        // 与 T7 日结锁定协同：若账单结算经营日已纳入锁定日结，反结改影响金额须走补录审批 → 硬拦截 DAY_CLOSE_LOCKED。
-        BarBillSettlementRecord latestSettlement = repository.listBillSettlements(bill.id()).stream()
-                .reduce((first, second) -> second)
-                .orElse(null);
-        LocalDate settleDay = latestSettlement != null && latestSettlement.settledAt() != null
-                ? latestSettlement.settledAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
-        if (receivableLedgerService.isBusinessDayLocked(settleDay)) {
-            throw ApiException.conflict("DAY_CLOSE_LOCKED",
-                    "结账营业日 " + settleDay + " 已锁定，请走补录调整流程");
-        }
+        requireSettleDayUnlocked(bill);
         String reason = requireText(actual.reason(), "reason");
         String requestedBy = authorizationService.currentActor().id();
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
@@ -851,6 +848,23 @@ public class BarBillingService {
                 safeList(actual.evidenceAttachmentIds()),
                 billOperationSnapshot(bill, reopened, bill),
                 now));
+    }
+
+    /**
+     * 与 T7 日结锁定协同：若账单结算经营日已纳入锁定日结，冲正收款须走补录审批 → 硬拦截 DAY_CLOSE_LOCKED。
+     * 反结与第十六批第 16 条异常账单「作废并冲正」（{@link BarBillAnomalyService}）共用。
+     */
+    void requireSettleDayUnlocked(BarBillRecord bill) {
+        BarBillSettlementRecord latestSettlement = repository.listBillSettlements(bill.id()).stream()
+                .reduce((first, second) -> second)
+                .orElse(null);
+        LocalDate settleDay = latestSettlement != null && latestSettlement.settledAt() != null
+                ? latestSettlement.settledAt().atZone(ZoneOffset.UTC).toLocalDate()
+                : LocalDate.now();
+        if (receivableLedgerService.isBusinessDayLocked(settleDay)) {
+            throw ApiException.conflict("DAY_CLOSE_LOCKED",
+                    "结账营业日 " + settleDay + " 已锁定，请走补录调整流程");
+        }
     }
 
     // ========================================================================
@@ -938,6 +952,19 @@ public class BarBillingService {
             }
         }
         return out;
+    }
+
+    /**
+     * 第十六批第 16 条（ENUM「异常状态的统一出口」）：异常账单只能经主管「更正后恢复」或「作废并冲正」离开，期间不收款、不反结；
+     * 作废的账单不再收款（见 {@link BarBillAnomalyService}）。
+     */
+    private static void requireNotAbnormalOrVoid(BarBillRecord bill) {
+        if ("abnormal".equals(bill.paymentStatus())) {
+            throw ApiException.conflict("BAR_BILL_ABNORMAL", "账单处于异常，须先由主管处置（更正后恢复或作废并冲正）");
+        }
+        if ("void".equals(bill.paymentStatus())) {
+            throw ApiException.conflict("BAR_BILL_VOIDED", "账单已作废");
+        }
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {

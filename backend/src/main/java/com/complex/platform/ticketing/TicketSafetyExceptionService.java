@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -164,14 +164,23 @@ public class TicketSafetyExceptionService {
         return find(event.id());
     }
 
-    /** 安全事件台账（待批准在前）；商户用户只见本商户受理订单的事件。 */
+    /**
+     * 安全事件台账（待批准在前）；商户用户只见本商户受理订单的事件；不挂商户的项目员工只见按入口权限码 ticket.refund.view 可触及项目的事件
+     * （第 4 条，PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」）；平台管理员与最高权限不限（同 {@link #requireOrderInScope}）。
+     */
     List<TicketSafetyEventRecord> list() {
+        AccessActor actor = authorizationService.currentActor();
         String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
-        return jdbc.query("""
+        List<TicketSafetyEventRecord> rows = jdbc.query("""
                 SELECT e.* FROM ticket_safety_events e JOIN ticket_orders o ON o.id = e.order_id
                  WHERE (CAST(:merchant AS text) IS NULL OR o.merchant_id = :merchant)
                  ORDER BY CASE e.status WHEN 'pending' THEN 0 ELSE 1 END, e.requested_at DESC, e.id
                 """, new MapSqlParameterSource("merchant", merchant), this::map);
+        if (merchant != null || authorizationService.isMasterAuthority(actor)) {
+            return rows;
+        }
+        AuthorizationService.ProjectReach reach = authorizationService.projectReach(actor, "ticket.refund.view");
+        return rows.stream().filter(event -> reach.covers(event.projectId())).toList();
     }
 
     /**

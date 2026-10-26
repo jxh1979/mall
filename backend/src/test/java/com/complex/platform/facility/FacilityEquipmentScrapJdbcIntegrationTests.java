@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -139,10 +139,43 @@ class FacilityEquipmentScrapJdbcIntegrationTests {
 
         send(manager, EQUIPMENT_BASE + equipment + "/status", "{\"status\":\"normal\",\"idempotency_key\":\"st2_" + suffix + "\"}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("FACILITY_EQUIPMENT_RETIRED"));
-        mockMvc.perform(post(EQUIPMENT_BASE + equipment + "/maintenance-done?idempotency_key=md_" + suffix).with(manager)
+        mockMvc.perform(post(EQUIPMENT_BASE + equipment + "/maintenance-done?idempotency_key=md_" + suffix
+                        + "&maintenance_type=fault_repair").with(manager)
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("FACILITY_EQUIPMENT_RETIRED"));
         assertThat(equipmentStatus()).isEqualTo("retired");
+    }
+
+    /**
+     * 第十六批第 36 条（ENUM L267「设备维保类型 定期保养、例行巡检、故障维修、安全检测、部件更换」；BSM L1408「维保分……」）：
+     * 维保完成按前端形状带 maintenance_type，不带或不在五类内拒绝；成功后台账记最近维保类型、审计载荷留痕，之后的状态变更不抹掉。
+     */
+    @Test
+    void maintenanceDoneRequiresOneOfFiveTypesAndRecordsIt() throws Exception {
+        String path = EQUIPMENT_BASE + equipment + "/maintenance-done?idempotency_key=";
+        mockMvc.perform(post(path + "mt0_" + suffix).with(manager).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        mockMvc.perform(post(path + "mt1_" + suffix + "&maintenance_type=overhaul").with(manager)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT last_maintenance_at FROM facility_equipment WHERE id=?", Object.class, equipment)).isNull();
+
+        mockMvc.perform(post(path + "mt2_" + suffix + "&maintenance_type=part_replacement").with(manager)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("normal"))
+                .andExpect(jsonPath("$.data.last_maintenance_type").value("part_replacement"));
+        assertThat(jdbc.queryForObject("SELECT last_maintenance_type FROM facility_equipment WHERE id=?", String.class, equipment))
+                .isEqualTo("part_replacement");
+        assertThat(jdbc.queryForObject("""
+                SELECT metadata->>'maintenance_type' FROM audit_events
+                 WHERE event_name='facility.equipment_maintained' AND business_id=?""", String.class, equipment))
+                .isEqualTo("part_replacement");
+
+        send(manager, EQUIPMENT_BASE + equipment + "/status", "{\"status\":\"disabled\",\"idempotency_key\":\"mt3_" + suffix + "\"}")
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT last_maintenance_type FROM facility_equipment WHERE id=?", String.class, equipment))
+                .isEqualTo("part_replacement");
     }
 
     /** R2：实物处置须批准后、附已上传且绑定本报废单的凭证单独登记；登记后款项仍待财务，不算全部收尾。 */

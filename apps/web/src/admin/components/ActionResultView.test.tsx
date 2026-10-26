@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ActionResultView, formatActionResult } from "./ActionResultView";
@@ -48,6 +48,12 @@ describe("后台结果区中文展示", () => {
       "操作：合同结算争议已裁决", "接警值守角色：主接", "来源：外拓", "出入库类型：出库", "桌台类型：卡座", "币种：人民币",
       "人群/渠道：新人票", "资金归属：商户预收", "状态：已送达",
     ].join("\n")));
+  });
+
+  // 第 38 条：method 键多处共用（招商跟进电话/拜访/微信、经销收款、考勤打卡），招商跟进结果不得显示成「支付方式：拜访」。
+  it("招商跟进结果的 method 显示为「方式：拜访」，不叫支付方式", async () => {
+    render(<ActionResultView value={{ refType: "lead", method: "visit", content: "上门洽谈" }} />);
+    await waitFor(() => expect(screen.getByTestId("admin-action-result").textContent).toBe(["关联单据类型：线索", "方式：拜访", "内容：上门洽谈"].join("\n")));
   });
 
   it("页面已给中文键名的原样用；字符串结果照旧；字典外的英文字段名不上屏，编号类键原样", () => {

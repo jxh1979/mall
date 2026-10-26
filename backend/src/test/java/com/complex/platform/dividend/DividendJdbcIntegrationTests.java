@@ -1,8 +1,9 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -81,6 +82,11 @@ class DividendJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    // 前端真实请求体（蛇形键）按生产 Jackson 口径（SNAKE_CASE）反序列化，范式同 FacilityAlarmJdbcIntegrationTests。
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper()
+            .findAndRegisterModules()
+            .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE);
 
     @Autowired
     private DataSource dataSource;
@@ -192,6 +198,31 @@ class DividendJdbcIntegrationTests {
             }
             DataSourceUtils.releaseConnection(connection, dataSource);
         }
+    }
+
+    /**
+     * BSM L1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）……默认周期为半年」：前端真实请求形状（蛇形键）
+     * 建年度方案过库 CHECK；建方案不带周期时库默认半年。
+     */
+    @Test
+    void planPeriodTypeAcceptsAnnualAndDefaultsToSemiannualInDb() throws Exception {
+        DividendService service = serviceWithPlatformActor("usr_div_jdbc");
+        com.complex.platform.dividend.dto.DividendPlanRequest annual = objectMapper.readValue("""
+                {"idempotency_key":"annual-jdbc","merchant_id":"merchant_div_annual","principal_user_id":"usr_principal_jdbc",
+                 "principal_name":"主理人乙","period_type":"annual"}
+                """, com.complex.platform.dividend.dto.DividendPlanRequest.class);
+        assertThatCode(() -> service.createPlan(annual)).doesNotThrowAnyException();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT period_type FROM dividend_plans WHERE merchant_id = 'merchant_div_annual' AND status = 'active'",
+                String.class)).containsExactly("annual");
+
+        jdbcTemplate.update("""
+                INSERT INTO dividend_plans (id, merchant_id, principal_user_id)
+                VALUES ('divp_jdbc_default_period', 'merchant_div_default', 'usr_p')
+                """);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT period_type FROM dividend_plans WHERE id = 'divp_jdbc_default_period'", String.class))
+                .isEqualTo("semiannual");
     }
 
     @Test

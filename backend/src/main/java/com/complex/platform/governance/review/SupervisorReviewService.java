@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -10,6 +10,7 @@ import com.complex.platform.common.idempotency.IdempotencyRepository;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.finance.WorkingDayCalendar;
 import com.complex.platform.governance.chain.ApprovalChainNode;
 import com.complex.platform.governance.chain.ApprovalChainService;
 import java.time.Instant;
@@ -172,6 +173,14 @@ public class SupervisorReviewService {
     @Autowired(required = false)
     public void setIdempotencyRepository(IdempotencyRepository idempotencyRepository) {
         this.idempotencyRepository = idempotencyRepository;
+    }
+
+    // 第十六批第 29 条：审批通用时限的工作日按已审批的逐日工作日历判定（与积分月结、普通内部结算共用）；单测 new 构造不传则只按周末＋假期表。
+    private WorkingDayCalendar workingDayCalendar;
+
+    @Autowired(required = false)
+    public void setWorkingDayCalendar(WorkingDayCalendar workingDayCalendar) {
+        this.workingDayCalendar = workingDayCalendar;
     }
 
     // M724-F16：准入闸切面过闸期间绑在本线程上的「本次受闸调用的请求内容摘要」
@@ -869,7 +878,8 @@ public class SupervisorReviewService {
 
     /**
      * M007-A-02（PGM-1.7.1「全平台审批通用时限」）：按策略参数 deadlineWorkingDays（工作日，含上下限）计算到期；
-     * 未配置时涉钱 1 个工作日、其余 3 个工作日。工作日 = 周一至周五且不在 holiday_calendar 内。
+     * 未配置时涉钱 1 个工作日、其余 3 个工作日。工作日按已审批的逐日工作日历判定（计入法定调休上班日、不计法定假日），
+     * 该日未审批的按周一至周五且不在 holiday_calendar 内。
      */
     private void scheduleDeadline(String reviewId, String beneficiaryId, String actionType, String policyCode) {
         int days = supervisorReviewRepository.findDeadlineWorkingDays(policyCode)
@@ -890,7 +900,8 @@ public class SupervisorReviewService {
                 "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
     }
 
-    // ponytail: 调休上班的周末未建模（holiday_calendar 只记假期），需要时在日历表加 workday 类型即可。
+    // 第十六批第 29 条（PGM L529「出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日」）：逐日先看已审批的工作日历
+    // （finance.WorkingDayCalendar，ticket_points_calendar_days.working_day，含调休上班的周末）；该日未审批的仍按周末＋假期表。
     Instant addWorkingDays(Instant from, int workingDays) {
         java.time.ZonedDateTime at = from.atZone(com.complex.platform.common.LocalZone.ID);
         java.time.LocalDate day = at.toLocalDate();
@@ -899,8 +910,12 @@ public class SupervisorReviewService {
         int remaining = workingDays;
         while (remaining > 0) {
             day = day.plusDays(1);
-            boolean weekend = day.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || day.getDayOfWeek() == java.time.DayOfWeek.SUNDAY;
-            if (!weekend && !holidays.contains(day)) {
+            java.time.LocalDate d = day;
+            Optional<WorkingDayCalendar.Day> approved = workingDayCalendar == null ? Optional.empty() : workingDayCalendar.find(d);
+            boolean working = approved.map(WorkingDayCalendar.Day::workingDay)
+                    .orElseGet(() -> d.getDayOfWeek() != java.time.DayOfWeek.SATURDAY
+                            && d.getDayOfWeek() != java.time.DayOfWeek.SUNDAY && !holidays.contains(d));
+            if (working) {
                 remaining--;
             }
         }

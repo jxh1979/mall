@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -136,6 +136,33 @@ class FacilityAlarmJdbcIntegrationTests {
         jdbc.update("UPDATE facility_equipment SET status = 'normal' WHERE id = ?", equipmentId);
         assertThatThrownBy(() -> raiseAlarm("normal"))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("POLICY_NOT_FOUND"));
+    }
+
+    /**
+     * 第 8 条（PGM:413「所有基础对象都要带“综合体项目归属”」；BSM:1417「楼宇设备告警由……正在当班且承担接警任务的人员统一首接」）：
+     * 后台新建设备必须带所属综合体项目（不带拒绝、不落库）；带了的设备告警按该项目解析出当班主接并联系。请求按前端蛇形键。
+     */
+    @Test
+    void createdEquipmentRequiresProjectAndItsAlarmReachesOnDutyPrimary() throws Exception {
+        TestSecurityActors.asPlatformAdmin();
+        assertThatThrownBy(() -> equipment.create(json.readValue("""
+                {"name":"2号客梯","equipment_type":"elevator","space_id":"sp_lobby","idempotency_key":"eq_np_%s"}
+                """.formatted(key), com.complex.platform.facility.dto.FacilityEquipmentRequest.class)))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM facility_equipment WHERE name = '2号客梯' AND project_id IS NULL",
+                Integer.class)).isZero();
+
+        FacilityEquipmentRecord created = equipment.create(json.readValue("""
+                {"name":"3号客梯","equipment_type":"elevator","space_id":"sp_lobby","responsible_user_id":"%s","project_id":"%s","idempotency_key":"eq_p_%s"}
+                """.formatted(owner, project, key), com.complex.platform.facility.dto.FacilityEquipmentRequest.class));
+        assertThat(created.projectId()).isEqualTo(project);
+        duty(shift(primary, now.minusSeconds(3600), now.plusSeconds(3600)), "primary");
+        equipmentId = created.id();
+
+        String alarmId = raiseAlarm("urgent");
+
+        assertThat(alarm(alarmId).get("project_id")).isEqualTo(project);
+        assertThat(channels(alarmId, primary)).containsExactlyInAnyOrder("system_message", "sms", "voice");
     }
 
     /** R2：值守安排挂已发布班次；主接班被顶班 → 解析出顶班人；班次未开始的人（休息）不返回；同班同角色二次安排 409。 */

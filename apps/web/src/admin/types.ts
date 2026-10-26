@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 export type AdminUser = {
   id: string;
   username: string;
@@ -497,7 +497,7 @@ export type ContractRow = {
   evidenceAttachmentIds?: string[];
   lifecycleStatus?: string;
   status?: string;
-  auditEvidenceRef?: string;
+  reviewId?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };

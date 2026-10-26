@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.jayway.jsonpath.JsonPath;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -133,6 +134,66 @@ class FacilityWorkOrderDualConfirmationJdbcIntegrationTests {
         call(owner, toRework, "rework", "{\"note\":\"提单确认不通过：仍漏水\",\"idempotency_key\":\"mw_" + suffix + "\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("processing"));
         mine(owner).andExpect(jsonPath("$.data.items", empty()));
+    }
+
+    /**
+     * 第十六批第 35 条（ENUM L260、BSM L1377「报修、保洁、投诉、整改、巡检、内部协作工单（内部部门间发起与流转）、其他服务请求」）：
+     * 按前端蛇形形状给内部协作工单配「类型×优先级」时限与验收方式，员工后台新建内部协作工单按所配时限落库、提单员工为当前登录人；
+     * 商户自助不能提这类单（BSM L1385「商户侧可自助提报修、保洁、投诉和其他服务请求」）。
+     */
+    @Test
+    void internalCollaborationWorkOrderFollowsConfiguredPolicyAndIsNotMerchantSelfService() throws Exception {
+        mockMvc.perform(post(BASE + "/policies").with(admin).contentType(MediaType.APPLICATION_JSON).content("""
+                {"work_order_type":"internal_collaboration","priority":"normal","response_minutes":30,"handle_minutes":600,
+                 "requires_acceptance":false,"acceptance_by":"handler","active":true,"idempotency_key":"ic1_%s"}
+                """.formatted(suffix))).andExpect(status().isOk());
+        String id = JsonPath.read(mockMvc.perform(post(BASE).with(admin).contentType(MediaType.APPLICATION_JSON).content("""
+                {"work_order_type":"internal_collaboration","priority":"normal","title":"安保部请工程部协助更换监控电源",
+                 "source":"platform","reporter_type":"staff","project_id":"%s","idempotency_key":"ic2_%s"}
+                """.formatted(project, suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.work_order_type").value("internal_collaboration"))
+                .andExpect(jsonPath("$.data.status").value("pending_assign"))
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        Map<String, Object> saved = jdbc.queryForMap("""
+                SELECT work_order_type, reporter_id, (response_due_at - created_at) = interval '30 minutes' AS response_ok,
+                       (handle_due_at - created_at) = interval '600 minutes' AS handle_ok
+                  FROM facility_work_orders WHERE id=?""", id);
+        assertThat(saved.get("work_order_type")).isEqualTo("internal_collaboration");
+        assertThat(saved.get("reporter_id")).isEqualTo(user("admin"));
+        assertThat(saved.get("response_ok")).isEqualTo(true);
+        assertThat(saved.get("handle_ok")).isEqualTo(true);
+
+        mockMvc.perform(post(BASE).with(admin).contentType(MediaType.APPLICATION_JSON).content("""
+                {"work_order_type":"internal_collaboration","priority":"normal","title":"商户自助提内部协作单",
+                 "source":"merchant_self","reporter_type":"merchant","project_id":"%s","idempotency_key":"ic3_%s"}
+                """.formatted(project, suffix)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    /**
+     * 第十六批操作员裁决补充第 1 条「照「其他服务请求」种一份」：「出厂时限和验收方式照现有「其他」类型的出厂策略种一份，开箱即可用，之后可改。」
+     * 全新库不在后台配任何策略，按前端蛇形形状不带优先级（默认 normal）新建内部协作工单即成功，时限照「其他」出厂行（V166
+     * fwop_other_normal：响应 240 分钟、处理 2880 分钟、不需验收、处理人完成即结）。
+     */
+    @Test
+    void internalCollaborationWorkOrderWorksOutOfTheBoxWithOtherFactoryPolicy() throws Exception {
+        String id = JsonPath.read(mockMvc.perform(post(BASE).with(admin).contentType(MediaType.APPLICATION_JSON).content("""
+                {"work_order_type":"internal_collaboration","title":"工程部请保洁部协助清理机房","source":"platform",
+                 "reporter_type":"staff","project_id":"%s","idempotency_key":"icd_%s"}
+                """.formatted(project, suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.work_order_type").value("internal_collaboration"))
+                .andExpect(jsonPath("$.data.priority").value("normal"))
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        assertThat(jdbc.queryForObject("""
+                SELECT (response_due_at - created_at) = interval '240 minutes' AND (handle_due_at - created_at) = interval '2880 minutes'
+                  FROM facility_work_orders WHERE id=?""", Boolean.class, id)).isTrue();
+        assertThat(jdbc.queryForMap("""
+                SELECT response_minutes, handle_minutes, requires_acceptance, acceptance_by, active FROM facility_work_order_policy
+                 WHERE work_order_type='internal_collaboration' AND priority='normal'"""))
+                .isEqualTo(Map.of("response_minutes", 240, "handle_minutes", 2880, "requires_acceptance", false,
+                        "acceptance_by", "handler", "active", true));
     }
 
     private ResultActions mine(RequestPostProcessor who) throws Exception {
