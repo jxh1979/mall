@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -16,9 +16,12 @@ const SMS_CATALOG: Record<string, { label: string; level: string; mandatory?: bo
   "sms.notify.stored_wine.claim": { label: "取酒成功", level: "事件" },
   "sms.notify.stored_wine.expiring": { label: "存酒即将到期", level: "事件", mandatory: true },
   "sms.notify.stored_wine.expired": { label: "存酒已过期", level: "事件" },
+  "sms.notify.stored_wine.exit_notice": { label: "酒吧退出存酒告知", level: "事件" },
+  "sms.notify.stored_wine.handover": { label: "存酒移交平台保管告知", level: "事件" },
   "sms.notify.stored_value": { label: "储值（域开关）", level: "域" },
   "sms.notify.stored_value.topup": { label: "充值到账", level: "事件", mandatory: true },
   "sms.notify.stored_value.consume": { label: "消费扣款", level: "事件", mandatory: true },
+  "sms.notify.stored_value.pending_refund": { label: "储值待退款提醒", level: "事件" },
   "sms.notify.merchant_fee": { label: "商户费用（域开关）", level: "域" },
   "sms.notify.merchant_fee.rent": { label: "房租账单", level: "事件", mandatory: true },
   "sms.notify.merchant_fee.utilities": { label: "水电费账单", level: "事件", mandatory: true },
@@ -35,6 +38,17 @@ const SMS_CATALOG: Record<string, { label: string; level: string; mandatory?: bo
   "sms.notify.bar_reservation.cancelled": { label: "订台取消确认", level: "事件" },
   "sms.notify.bar_reservation.deposit_forfeited": { label: "定金没收", level: "事件", mandatory: true },
   "sms.notify.bar_reservation.deposit_refunded": { label: "定金原路退回", level: "事件", mandatory: true },
+  // 第十八批第 6 条（PGM 第 742 行缺行即关）：已接触发点、V554 补了显式开启行的域与事件。
+  "sms.notify.service": { label: "服务单（域开关）", level: "域" },
+  "sms.notify.service.catalog_fee_changed": { label: "服务项目管理费变更", level: "事件" },
+  "sms.notify.facility": { label: "设施（域开关）", level: "域" },
+  "sms.notify.facility.alarm_takeover": { label: "设施告警接管", level: "事件" },
+  "sms.notify.ticketing": { label: "票务（域开关）", level: "域" },
+  "sms.notify.ticketing.ticket_transfer_created": { label: "门票转赠领取", level: "事件" },
+  "sms.notify.voucher": { label: "券（域开关）", level: "域" },
+  "sms.notify.voucher.voucher_transfer_created": { label: "券转赠领取", level: "事件" },
+  "sms.notify.bar": { label: "酒吧（域开关）", level: "域" },
+  "sms.notify.bar.pending_clear_overdue": { label: "待清台超时提醒", level: "事件" },
 };
 const MANAGE = ["terminal.switch.manage"];
 
@@ -65,7 +79,7 @@ export function SmsNotificationSwitchesPage({ api, setActionResult, setGlobalErr
     <section data-testid="sms-notification-switches-page">
       <AdminPageHeader
         title="短信通知开关"
-        description="两级可配：总开关 + 各域（存酒/储值/商户费用/订台）+ 各事件，管理员可决定哪些提醒经第三方短信平台发短信。总开关默认关；触发点已接，开关控制是否实际发送。涉及商户应收应付金额变化、涉及客人金额变化的通知与存酒到期提醒不可关闭，不受总开关与域开关影响。储值不含积分。"
+        description="两级可配：总开关 + 各域（存酒/储值/商户费用/订台/服务单/设施/票务/券/酒吧）+ 各事件，管理员可决定哪些提醒经第三方短信平台发短信。总开关默认关；触发点已接，开关控制是否实际发送。涉及商户应收应付金额变化、涉及客人金额变化的通知与存酒到期提醒不可关闭，不受总开关与域开关影响。储值不含积分。"
       />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -241,6 +241,7 @@ export const FIELD_LABELS: Record<string, string> = {
   adjustment_amount_cent: "调整金额",
   adjustment_rate: "调整比例",
   commission_mode: "分成方式",
+  commission_ids: "提成记录编号",
   settlement_id: "结算单号",
   settlement_mode: "结算方式",
   settlement_entity_id: "结算主体",
@@ -994,6 +995,7 @@ export const FIELD_LABELS: Record<string, string> = {
   customer_ref: "客户",
   customer_token: "客人凭证",
   cutoff_hour: "营业日切换时点",
+  close_hour: "闭店时点",
   cycle_days: "周期（天）",
   cycle_end: "周期结束",
   cycle_standard_minutes: "周期标准时长（分钟）",
@@ -1476,6 +1478,7 @@ export const FIELD_LABELS: Record<string, string> = {
   max_amount_cent: "最高金额",
   max_bps: "最高比例（万分比）",
   max_cutoff_hour: "最晚切换时点",
+  max_close_hour: "最晚闭店时点",
   max_days: "最长天数",
   max_hours: "最长小时数",
   max_main_levels: "主等级上限",
@@ -1526,6 +1529,7 @@ export const FIELD_LABELS: Record<string, string> = {
   min_consumption_cent: "最低消费",
   min_consumption_snapshot_cent: "最低消费（快照）",
   min_cutoff_hour: "最早切换时点",
+  min_close_hour: "最早闭店时点",
   min_days: "最短天数",
   min_hours: "最短小时数",
   min_main_levels: "主等级下限",
@@ -2786,7 +2790,6 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_zone_work_order_submitted: "商户专区工单已提交",
   notification_window_saved: "通知时段已保存",
   operating_params_saved: "经营参数已保存",
-  business_day_cutoff_saved: "营业日切换时点已保存",
   anomaly_config_saved: "异常规则已保存",
   holiday_saved: "节假日已保存",
   holiday_fetched: "节假日已获取",

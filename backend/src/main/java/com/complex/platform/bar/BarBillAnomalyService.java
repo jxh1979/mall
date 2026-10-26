@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarValidation.requireRequest;
 import static com.complex.platform.bar.BarValidation.requireText;
@@ -51,6 +51,10 @@ public class BarBillAnomalyService {
     private final BarBillRefundStatusService refundStatus;
     private final BarBillingService billing;
     private final FinanceRepository finance;
+
+    // 第十八批第 1 条（ENUM:187）：已锁原行的冲正行记该酒吧当前营业日。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
 
     public BarBillAnomalyService(JdbcTemplate jdbc, BarRepository repository, AuthorizationService authorizationService,
             BarBillRefundStatusService refundStatus, BarBillingService billing, FinanceRepository finance) {
@@ -127,7 +131,8 @@ public class BarBillAnomalyService {
     /**
      * BSM L1142/L1143（营销、派驻人员促成订单的提成「由该酒吧按月拨付给…所属主体」）：本单提成作废前已随提成月结
      * （StaffService 提成月结，bar_commission_settlements）拨付所属主体的，按作废提成额向所属主体追加一笔应收冲回
-     * （同酒吧报酬月结负额单列应收，不轧差、不改原月结）；月结之后才计提的不在原月结内，不冲。
+     * （同酒吧报酬月结负额单列应收，不轧差、不改原月结）；月结之后才计提的不在原月结内，不冲。提成所属月结按本单开台或下单时点所属
+     * 营业日的月份（ENUM:187，同工资单与提成月结）。
      */
     private void reverseDispatchedCommissionTransfers(String billId) {
         String zone = LocalZone.ID.getId();
@@ -139,10 +144,11 @@ public class BarBillAnomalyService {
                   JOIN staff_dispatch_records d ON d.user_id = c.sales_staff_id AND d.merchant_id = COALESCE(b.merchant_id, b.bar_id)
                    AND d.start_date <= (c.created_at AT TIME ZONE ?)::date
                    AND (d.end_date IS NULL OR d.end_date >= (c.created_at AT TIME ZONE ?)::date)
-                  JOIN bar_commission_settlements s ON s.month = to_char(c.created_at AT TIME ZONE ?, 'YYYY-MM')
+                  JOIN bar_commission_settlements s ON s.month = ?
                    AND s.merchant_id = COALESCE(b.merchant_id, b.bar_id) AND s.company_id = d.company_id AND s.created_at >= c.created_at
                  WHERE c.bill_id = ? AND c.status NOT IN ('void', 'cancelled') AND c.commission_amount_cent > 0
-                   AND b.settlement_status = 'settled'""", zone, zone, zone, billId)) {
+                   AND b.settlement_status = 'settled'""", zone, zone,
+                java.time.YearMonth.from(businessDays.barBillBusinessDate(billId)).toString(), billId)) {
             String commission = (String) row.get("id");
             long amount = ((Number) row.get("commission_amount_cent")).longValue();
             String key = UUID.nameUUIDFromBytes(commission.getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
@@ -173,7 +179,8 @@ public class BarBillAnomalyService {
                   FROM ar_ap_items a
                  WHERE a.direction = 'receivable' AND a.source_type = 'bar_bill' AND a.source_id = ? AND a.origin_item_id IS NULL
                    AND a.unpaid_amount_cent > 0 AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = a.id)
-                ON CONFLICT (id) DO NOTHING""", java.sql.Date.valueOf(LocalDate.now(LocalZone.ID)), billId);
+                ON CONFLICT (id) DO NOTHING""", java.sql.Date.valueOf(businessDays.businessDate(null,
+                jdbc.queryForObject("SELECT bar_id FROM bar_bills WHERE id = ?", String.class, billId), Instant.now())), billId);
     }
 
     /**

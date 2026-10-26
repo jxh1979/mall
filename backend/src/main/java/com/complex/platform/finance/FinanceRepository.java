@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -317,6 +317,12 @@ public interface FinanceRepository {
         return false;
     }
 
+    /** 第十八批第 1 条：酒吧账单逐家按各自营业日窗（barWindows 里的酒吧）判定，其余酒吧用 [from, to)。default 无库替身忽略逐家窗。 */
+    default boolean openBarBillAnomalyExists(Instant from, Instant to, String scopeType, String scopeId,
+            java.util.Map<String, Instant[]> barWindows) {
+        return openBarBillAnomalyExists(from, to, scopeType, scopeId);
+    }
+
     PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent);
 
     /** 按 id 查支付意图（储值充值/会员开通绑支付意图：入账前校验支付意图存在且已成功）。 */
@@ -438,7 +444,7 @@ public interface FinanceRepository {
 
     /**
      * 六源汇总聚合：按经营日窗口 [fromInclusive, toExclusive) 聚合源表，得到 amount/refund/count。
-     * 窗口由 {@link com.complex.platform.common.BusinessDayResolver} 按可配日切（默认 04:00）派生；
+     * 窗口由 {@link com.complex.platform.common.BusinessDayResolver} 按营业日（出厂 10:00，按综合体／酒吧可配）派生；
      * official_ticket 以 visit_date（DATE 列）为经营日，故同时透传 businessDate。
      */
     DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
@@ -470,6 +476,12 @@ public interface FinanceRepository {
     default DailyCloseSourceTotals aggregateBar(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
         return aggregateBar(businessDate, from, to);
+    }
+
+    /** 第十八批第 1 条：酒吧来源逐家按各自营业日窗（barWindows 里的酒吧）取数，其余酒吧用 [from, to)。default 无库替身忽略逐家窗。 */
+    default DailyCloseSourceTotals aggregateBar(LocalDate businessDate, Instant from, Instant to, String scopeType,
+            String scopeId, java.util.Map<String, Instant[]> barWindows) {
+        return aggregateBar(businessDate, from, to, scopeType, scopeId);
     }
 
     default DailyCloseSourceTotals aggregateAmusement(

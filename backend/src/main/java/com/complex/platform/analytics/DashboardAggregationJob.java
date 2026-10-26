@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.04
+// 文件版本：V0.05
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
@@ -136,11 +136,11 @@ public class DashboardAggregationJob {
 
     // 测试便捷构造（默认 cutoff 经营日口径）。
     public DashboardAggregationJob(AnalyticsRepository repository) {
-        this(repository, Clock.systemUTC(), new BusinessDayResolver(4), true);
+        this(repository, Clock.systemUTC(), new BusinessDayResolver(), true);
     }
 
     DashboardAggregationJob(AnalyticsRepository repository, Clock clock) {
-        this(repository, clock, new BusinessDayResolver(4), true);
+        this(repository, clock, new BusinessDayResolver(), true);
     }
 
     DashboardAggregationJob(AnalyticsRepository repository, Clock clock, BusinessDayResolver businessDayResolver) {
@@ -196,11 +196,12 @@ public class DashboardAggregationJob {
         }
         LocalDate today = today();
         refreshSnapshots(today);
-        // ROOT-04-R4 昨日尾段：全局 04:00 换日后，酒吧（06:00 起算）、商户（10:00 起算）等收入窗的昨日仍在收尾，收尾期间每轮重算昨日收入。
+        // ROOT-04-R4 昨日尾段：综合体换日后，起点更晚的酒吧收入窗的昨日仍在收尾，收尾期间每轮重算昨日收入（第十八批：取综合体与各酒吧昨日窗末的最晚者；
+        // 综合体＝唯一启用综合体，营业日窗不按合成标识 DEFAULT_PROJECT_ID 取）。
         LocalDate yesterday = today.minusDays(1);
-        Instant tailEnd = REVENUE_WINDOW_DOMAINS.stream()
-                .map(domain -> businessDayResolver.endInstant(domain, yesterday))
-                .max(Instant::compareTo).orElseThrow();
+        Instant tailEnd = businessDayResolver.barWindows(yesterday).values().stream()
+                .map(window -> window[1])
+                .reduce(businessDayResolver.end(businessDayResolver.soleProject(), null, yesterday), (a, b) -> a.isAfter(b) ? a : b);
         if (Instant.now(clock).isBefore(tailEnd.plus(java.time.Duration.ofMinutes(10)))) {
             refreshRevenueMetrics(yesterday);
         }
@@ -216,10 +217,6 @@ public class DashboardAggregationJob {
             revenueRefreshMarks.clear(mark.businessDate(), mark.requestedAt());
         }
     }
-
-    /** 收入段各指标落窗所用的营业日域（昨日尾段取其中最晚收尾的一个）。 */
-    private static final java.util.List<String> REVENUE_WINDOW_DOMAINS =
-            java.util.List.of("ticketing", "bar", "platform", "finance", "merchant");
 
     /** 直接可调用的聚合入口：聚合 businessDate 当日七类指标并 upsert 快照。 */
     // 2d-4：整批 upsert 包一个事务，避免并发/中途失败造成快照集撕裂（平台/商户/project 行跨运行不一致）。
@@ -282,8 +279,8 @@ public class DashboardAggregationJob {
         upsertByMerchant(AR_BALANCE, "finance", businessDate, agingTotal, now, platformTotals);
 
         LocalDate monthStart = businessDate.withDayOfMonth(1);
-        Instant mtdStart = businessDayResolver.startInstant(monthStart);
-        Instant mtdEnd = businessDayResolver.endInstant(businessDate);
+        Instant mtdStart = businessDayResolver.start(businessDayResolver.soleProject(), null, monthStart);
+        Instant mtdEnd = businessDayResolver.end(businessDayResolver.soleProject(), null, businessDate);
         BigDecimal collected = nonNull(repository.arCollectedCentsBetween(mtdStart, mtdEnd));
         BigDecimal receivableMtd = nonNull(repository.arReceivableDueCentsBetween(monthStart, businessDate.plusDays(1)));
         upsertPlatform(AR_COLLECTED_MTD, "finance", businessDate, collected, now, platformTotals);
@@ -313,8 +310,8 @@ public class DashboardAggregationJob {
 
         // S4 工单时效:P50 落窗;超时率分母=处理时限落窗的单(分母0不产出);积压=时点存量。
         AnalyticsRecords.WorkOrderSla workOrderSla = repository.workOrderSla(
-                businessDayResolver.startInstant("facility", businessDate),
-                businessDayResolver.endInstant("facility", businessDate), now);
+                businessDayResolver.start(businessDayResolver.soleProject(), null, businessDate),
+                businessDayResolver.end(businessDayResolver.soleProject(), null, businessDate), now);
         if (workOrderSla.responseP50Hours() != null) {
             upsertPlatform(WO_RESPONSE_HOURS_P50, "facility", businessDate, workOrderSla.responseP50Hours(), now, platformTotals);
         }
@@ -331,8 +328,8 @@ public class DashboardAggregationJob {
 
         // 清单#13:商户服务工单同窗并入(完成=关单;超时以 V120 sla_breached 为准+实时兜底;分母0不产出)。
         AnalyticsRecords.WorkOrderSla merchantWoSla = repository.merchantWorkOrderSla(
-                businessDayResolver.startInstant("facility", businessDate),
-                businessDayResolver.endInstant("facility", businessDate), now);
+                businessDayResolver.start(businessDayResolver.soleProject(), null, businessDate),
+                businessDayResolver.end(businessDayResolver.soleProject(), null, businessDate), now);
         if (merchantWoSla.handleP50Hours() != null) {
             upsertPlatform(MWO_HANDLE_HOURS_P50, "facility", businessDate, merchantWoSla.handleP50Hours(), now, platformTotals);
         }
@@ -345,8 +342,8 @@ public class DashboardAggregationJob {
         upsertPlatform(MWO_BACKLOG, "facility", businessDate, BigDecimal.valueOf(merchantWoSla.backlog()), now, platformTotals);
 
         // 能耗按表计类型分列；电耗/㎡仍用可租面积（不含不可租，0不产出）。
-        java.time.Instant energyStart = businessDayResolver.startInstant("energy", businessDate);
-        java.time.Instant energyEnd = businessDayResolver.endInstant("energy", businessDate);
+        java.time.Instant energyStart = businessDayResolver.start(businessDayResolver.soleProject(), null, businessDate);
+        java.time.Instant energyEnd = businessDayResolver.end(businessDayResolver.soleProject(), null, businessDate);
         Map<String, BigDecimal> energyByType = repository.energyConsumptionByType(energyStart, energyEnd);
         for (Map.Entry<String, BigDecimal> entry : energyByType.entrySet()) {
             upsertPlatform(ENERGY_TOTAL_PREFIX + entry.getKey(), "energy", businessDate, entry.getValue(), now, platformTotals);
@@ -770,6 +767,6 @@ public class DashboardAggregationJob {
 
     private LocalDate today() {
         // 2d-4：经营日统一走 BusinessDayResolver（cutoff 切日），替换裸 UTC 自然日，避免跨日边界落错经营日。
-        return businessDayResolver.businessDate(Instant.now(clock));
+        return businessDayResolver.businessDate(businessDayResolver.soleProject(), null, Instant.now(clock));
     }
 }

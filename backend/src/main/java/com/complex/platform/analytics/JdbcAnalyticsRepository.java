@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -577,14 +577,31 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 new MapSqlParameterSource(), String.class);
     }
 
+    /**
+     * 第十八批第 1 条（ENUM:187「按每个项目、每家酒吧可配」）：看板 ETL 是单综合体口径，非酒吧来源用唯一启用综合体
+     * （{@link com.complex.platform.common.BusinessDayResolver#soleProject()}）的营业日窗；酒吧来源逐商户用其酒吧的营业日窗（不是酒吧用综合体窗）。
+     */
+    private Instant dayStart(LocalDate businessDate) {
+        return businessDayResolver.start(businessDayResolver.soleProject(), null, businessDate);
+    }
+
+    private Instant dayEnd(LocalDate businessDate) {
+        return businessDayResolver.end(businessDayResolver.soleProject(), null, businessDate);
+    }
+
+    private Instant[] merchantBarWindow(String merchantId, LocalDate from, LocalDate to) {
+        String bar = businessDayResolver.barOfMerchant(merchantId);
+        String project = bar == null ? businessDayResolver.soleProject() : null;
+        return new Instant[] {businessDayResolver.start(project, bar, from), businessDayResolver.end(project, bar, to)};
+    }
+
     @Override
     public Map<String, BigDecimal> sumBarRevenueCentsByMerchant(LocalDate businessDate, String windowDomain) {
-        Instant from = businessDayResolver.startInstant(windowDomain, businessDate);
-        Instant to = businessDayResolver.endInstant(windowDomain, businessDate);
         Map<String, BigDecimal> totals = new LinkedHashMap<>();
         for (String merchant : barRevenueMerchants()) {
             long amount = 0L;
-            var collections = barRevenueSources.completedCollections(merchant, from, to);
+            Instant[] window = merchantBarWindow(merchant, businessDate, businessDate);
+            var collections = barRevenueSources.completedCollections(merchant, window[0], window[1]);
             var withheld = barRevenueSources.withheldServiceFees(merchant, businessDate, businessDate.plusDays(1));
             if (collections.isEmpty() && withheld.isEmpty()) continue;
             for (var row : collections) {
@@ -600,12 +617,11 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, BigDecimal> sumBarRefundCentsByMerchant(LocalDate businessDate, String windowDomain) {
-        Instant from = businessDayResolver.startInstant(windowDomain, businessDate);
-        Instant to = businessDayResolver.endInstant(windowDomain, businessDate);
         Map<String, BigDecimal> totals = new LinkedHashMap<>();
         for (String merchant : barRevenueMerchants()) {
             long amount = 0L;
-            var refunds = barRevenueSources.completedGoodsRefunds(merchant, from, to);
+            Instant[] window = merchantBarWindow(merchant, businessDate, businessDate);
+            var refunds = barRevenueSources.completedGoodsRefunds(merchant, window[0], window[1]);
             if (refunds.isEmpty()) continue;
             for (var row : refunds) {
                 if (row.amountCent() != null) amount = Math.addExact(amount, row.amountCent());
@@ -1400,8 +1416,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         //   商户级净额 GREATEST(…,0) 钳 0（负营业额无业务意义，同抽成口径）。
         // NULL merchant_id 的回流营业额=未归属：不进任何商户/业态，只汇入平台级分母（口径③⑧，诚实标注，绝不塞给某商户）。
         java.time.YearMonth ym = java.time.YearMonth.parse(period);
-        java.time.Instant windowStart = businessDayResolver.startInstant(ym.atDay(1));
-        java.time.Instant windowEnd = businessDayResolver.startInstant(ym.plusMonths(1).atDay(1));
+        java.time.Instant windowStart = dayStart(ym.atDay(1));
+        java.time.Instant windowEnd = dayStart(ym.plusMonths(1).atDay(1));
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("period", period)
                 .addValue("window_start", timestampWithTimeZone(windowStart))
@@ -1463,8 +1479,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         //   权益类型桶：沿用 analytics 现有口径（酒水 drink/gift_drink/bar_、入场 entry、游乐 amusement*、演出 show、其余 other）。
         //   窗口 [start(含), end(不含))：与 rentToSales 同法用 BusinessDayResolver 派生经营日窗，按 business_at（=到期业务时刻，
         //     存量行回退 created_at）归窗。
-        java.time.Instant windowStart = businessDayResolver.startInstant(start);
-        java.time.Instant windowEnd = businessDayResolver.startInstant(end);
+        java.time.Instant windowStart = dayStart(start);
+        java.time.Instant windowEnd = dayStart(end);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("window_start", timestampWithTimeZone(windowStart))
                 .addValue("window_end", timestampWithTimeZone(windowEnd));
@@ -1831,39 +1847,14 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 rs.getString("bucket")));
     }
 
-    @Override
-    public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
-        return jdbcTemplate.query("""
-                SELECT domain, cutoff_hour, updated_at, updated_by
-                  FROM business_day_cutoff_config ORDER BY domain
-                """, Map.of(), (rs, n) -> new AnalyticsRecords.BusinessDayCutoffRecord(
-                rs.getString("domain"), rs.getInt("cutoff_hour"),
-                rs.getTimestamp("updated_at").toInstant(), rs.getString("updated_by")));
-    }
-
-    @Override
-    public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, Instant now) {
-        jdbcTemplate.update("""
-                INSERT INTO business_day_cutoff_config (domain, cutoff_hour, updated_at, updated_by)
-                VALUES (:domain, :cutoff_hour, :now, :updated_by)
-                ON CONFLICT (domain) DO UPDATE SET
-                    cutoff_hour = EXCLUDED.cutoff_hour, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
-                """, new MapSqlParameterSource()
-                .addValue("domain", domain)
-                .addValue("cutoff_hour", cutoffHour)
-                .addValue("now", timestampWithTimeZone(now))
-                .addValue("updated_by", updatedBy, java.sql.Types.VARCHAR));
-        return new AnalyticsRecords.BusinessDayCutoffRecord(domain, cutoffHour, now, updatedBy);
-    }
-
     private MapSqlParameterSource dayRange(LocalDate businessDate) {
         return dayRange(null, businessDate);
     }
 
     private MapSqlParameterSource dayRange(String windowDomain, LocalDate businessDate) {
-        // 经营日窗口按窗口域可配日切派生（V201；domain 为空=全局 04:00 基准）：[经营日 00:00+cutoff, 次日 00:00+cutoff)。
-        Instant start = businessDayResolver.startInstant(windowDomain, businessDate);
-        Instant end = businessDayResolver.endInstant(windowDomain, businessDate);
+        // 非酒吧来源的营业日窗：综合体窗（第十八批第 1 条，不再按业务域切分；windowDomain 只区分酒吧与非酒吧，酒吧来源逐商户另取）。
+        Instant start = dayStart(businessDate);
+        Instant end = dayEnd(businessDate);
         return new MapSqlParameterSource()
                 .addValue("start", timestampWithTimeZone(start))
                 .addValue("end", timestampWithTimeZone(end));
@@ -2362,10 +2353,12 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     @Override
     public AnalyticsRecords.MetricDetailRows barSettlementRevenueDetail(Instant start, Instant end, int limit, int offset) {
         List<Map<String, Object>> rows = new java.util.ArrayList<>();
-        LocalDate fromDate = businessDayResolver.businessDate("bar", start);
-        LocalDate toDate = businessDayResolver.businessDate("bar", end.minusNanos(1)).plusDays(1);
+        // 上游按综合体窗给出区间；还原成营业日期间后逐商户按其酒吧窗取数（与看板 ETL 同口径）。
+        LocalDate fromDate = businessDayResolver.businessDate(businessDayResolver.soleProject(), null, start);
+        LocalDate toDate = businessDayResolver.businessDate(businessDayResolver.soleProject(), null, end.minusNanos(1)).plusDays(1);
         for (String merchant : barRevenueMerchants()) {
-            for (var source : barRevenueSources.completedCollections(merchant, start, end)) {
+            Instant[] window = merchantBarWindow(merchant, fromDate, toDate.minusDays(1));
+            for (var source : barRevenueSources.completedCollections(merchant, window[0], window[1])) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", source.billId());
                 row.put("billId", source.billId());

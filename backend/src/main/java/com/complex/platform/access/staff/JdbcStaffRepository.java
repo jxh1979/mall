@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -25,6 +25,10 @@ public class JdbcStaffRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     private final com.complex.platform.common.crypto.PiiCipher piiCipher;
+
+    // 第十八批第 1 条（ENUM:187）：销售提成归属月按开台或下单时点所属营业日（BusinessDayResolver#barCommissionIdsInMonth）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
 
     JdbcStaffRepository(NamedParameterJdbcTemplate jdbcTemplate,
             com.complex.platform.common.crypto.PiiCipher piiCipher) {
@@ -357,10 +361,14 @@ public class JdbcStaffRepository {
 
     /**
      * 该月派驻人员在各酒吧促成订单的提成，按（酒吧商户 → 人员所属主体）汇总：
-     * 只计派驻记录覆盖计提日的员工（派驻起止按计提日判定），作废/取消的计提不计。
+     * 提成归属月按开台或下单时点所属营业日（ENUM:187）；只计派驻记录覆盖计提日的员工（派驻起止按计提日判定），作废/取消的计提不计。
      * 行：merchant_id, company_id, project_id, amount_cent, calculation_count, staff_count。
      */
     public List<Map<String, Object>> aggregateDispatchedCommissions(String month) {
+        List<String> commissions = businessDays.barCommissionIdsInMonth(java.time.YearMonth.parse(month), null);
+        if (commissions.isEmpty()) {
+            return List.of();
+        }
         return jdbcTemplate.queryForList("""
                 SELECT COALESCE(b.merchant_id, b.bar_id) AS merchant_id, d.company_id,
                        MAX(d.project_id) AS project_id,
@@ -374,13 +382,13 @@ public class JdbcStaffRepository {
                    AND d.merchant_id = COALESCE(b.merchant_id, b.bar_id)
                    AND d.start_date <= (c.created_at AT TIME ZONE :local_zone)::date
                    AND (d.end_date IS NULL OR d.end_date >= (c.created_at AT TIME ZONE :local_zone)::date)
-                 WHERE to_char(c.created_at AT TIME ZONE :local_zone, 'YYYY-MM') = :month
+                 WHERE c.id IN (:commission_ids)
                    AND c.sales_staff_id IS NOT NULL
                    AND c.status NOT IN ('void', 'cancelled')
                    AND b.settlement_status = 'settled'
                  GROUP BY COALESCE(b.merchant_id, b.bar_id), d.company_id
                  ORDER BY 1, 2
-                """, Map.of("month", month, "local_zone", com.complex.platform.common.LocalZone.ID.getId()));
+                """, Map.of("commission_ids", commissions, "local_zone", com.complex.platform.common.LocalZone.ID.getId()));
     }
 
     private static final String SETTLEMENT_SELECT = """
@@ -1529,6 +1537,8 @@ public class JdbcStaffRepository {
     }
 
     public java.util.List<StaffCommissionLineRecord> listCommissionLines(String userId, String month) {
+        // 酒吧提成按开台或下单时点所属营业日定月（ENUM:187，同工资单）；没有时用不会命中的空串占位（IN () 不合法）。
+        List<String> commissions = businessDays.barCommissionIdsInMonth(java.time.YearMonth.parse(month), userId);
         return jdbcTemplate.query("""
                 SELECT source_type, source_id, amount_cent, note, created_at
                   FROM staff_commission_ledger
@@ -1537,12 +1547,12 @@ public class JdbcStaffRepository {
                 SELECT 'bar_table' AS source_type, bill_id AS source_id,
                        commission_amount_cent AS amount_cent, CAST(NULL AS VARCHAR) AS note, created_at
                   FROM bar_commission_calculations
-                 WHERE sales_staff_id = :user_id
-                   AND to_char(created_at, 'YYYY-MM') = :month
+                 WHERE id IN (:commission_ids)
                    AND status NOT IN ('void', 'cancelled')
                  ORDER BY created_at DESC
                 """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("user_id", userId).addValue("month", month),
+                .addValue("user_id", userId).addValue("month", month)
+                .addValue("commission_ids", commissions.isEmpty() ? List.of("") : commissions),
                 (rs, n) -> new StaffCommissionLineRecord(
                         rs.getString("source_type"), rs.getString("source_id"),
                         rs.getLong("amount_cent"), rs.getString("note"),

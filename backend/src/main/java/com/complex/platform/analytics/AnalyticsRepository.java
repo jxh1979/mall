@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -342,12 +342,6 @@ public interface AnalyticsRepository {
     /** S2 钻取:欠费商户明细排行(实时,按未清金额降序;bucket 可空=全部)。projectIds 非 null 按 ar_ap_items.project_id 过滤。 */
     java.util.List<AnalyticsRecords.ArDebtorRow> listOverdueDebtors(LocalDate asOf, String bucket, int limit, int offset,
             java.util.Collection<String> projectIds);
-
-    /** S0:经营日切分配置(V201)——九域清单读取(经营参数页数据源)。 */
-    java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs();
-
-    /** S0:改某业务域的日切小时(0-23);后台经营参数页写入,Resolver 60s 缓存内生效。 */
-    AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, java.time.Instant now);
 
     BigDecimal sumTicketRevenueCents(LocalDate businessDate, String windowDomain);
 

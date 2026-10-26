@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -595,6 +595,11 @@ export default function AdminApp() {
   function routePermissions(target: AdminRoute) {
     if (target.pageId === "ADM-STF-003") return hasPermissions(effectivePermissions, ["staff.payroll.manage"]) ? ["staff.payroll.manage"] : ["staff.tax_bracket.manage"];
     if (target.pageId === "ADM-INV-003" && hasPermissions(effectivePermissions, ["inventory.supply_contract.manage"])) return ["inventory.supply_contract.manage"];
+    // 营业日配置页综合体与酒吧两套共用（ENUM:187 按每个项目、每家酒吧可配）：持有其中一个查看码即可进入，都没有照旧拒绝。
+    if (target.pageId === "ADM-AMU-008") {
+      const held = target.requiredPermissions.find((code) => hasPermissions(effectivePermissions, [code]));
+      return held ? [held] : target.requiredPermissions;
+    }
     if (target.pageId !== "ADM-ACC-003") return target.requiredPermissions;
     if (isMasterSession) return [];
     // M736-F08（治理地图第 653 行「能配置角色的人都可以设置这一项。」）：有 access.role.manage 的人没有分配角色权限也能进本页配角色；页内各动作照旧各自判权限。

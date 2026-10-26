@@ -63,15 +63,17 @@ class DeviceKeystoreAndTabletSwitchTests {
     }
 
     @Test
-    void absentRowDefaultsOpenForBothCapabilities() {
+    void absentRowDefaultsClosedForBothCapabilities() {
         TerminalDeviceRepository repo = mock(TerminalDeviceRepository.class);
         when(repo.resolveEffectiveSwitch(any(), any(), any())).thenReturn(Optional.empty());
         TerminalSwitchGuard guard =
                 new TerminalSwitchGuard(repo, new AuditEventService(new InMemoryAuditEventRepository()));
 
-        // 无显式行 = 默认开启（opt-out 语义），不抛异常。
-        assertThatCode(() -> guard.check(DEVICE_KEYSTORE)).doesNotThrowAnyException();
-        assertThatCode(() -> guard.check(TABLET)).doesNotThrowAnyException();
+        // PGM 第 742 行 opt-in：无显式行 = 默认关闭。
+        assertThatThrownBy(() -> guard.check(DEVICE_KEYSTORE))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TERMINAL_DISABLED"));
+        assertThatThrownBy(() -> guard.check(TABLET))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TERMINAL_DISABLED"));
     }
 
     private static TerminalCapabilitySwitchRecord offRow(String id, String capability) {

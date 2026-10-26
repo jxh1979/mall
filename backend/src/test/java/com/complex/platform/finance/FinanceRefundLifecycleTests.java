@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,7 +43,7 @@ class FinanceRefundLifecycleTests {
         service = new FinanceService(repository,
                 new AuditedOperationExecutor(new IdempotencyService(
                         new InMemoryIdempotencyRepository(), new ObjectMapper()), audit),
-                audit, authorization, new BusinessDayResolver(4), gateway);
+                audit, authorization, new BusinessDayResolver(), gateway);
         service.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
         service.refundAuthorizationService = mock(RefundAuthorizationService.class);
         service.refundEvidenceValidator = mock(EvidenceAttachmentValidator.class);

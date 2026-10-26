@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.bar.BarPayrollRequests.*;
@@ -35,6 +35,9 @@ public class BarPayrollAllocationService {
     private final BarPayrollRefundService refunds;
     private final FinanceRepository finance;
     private final com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks;
+    // 第十八批第 1 条（ENUM:187）：「本月尚未结束」按营业日判断，月末最后一个营业日到次日起点前仍属本月。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
     public BarPayrollAllocationService(BarPayrollSupport p,BarPayrollRuleService rules,
             BarServiceResponsibilityService responsibilities,IdempotencyService idem,AuditEventService audit,BarPayrollRefundService refunds,FinanceRepository finance,
             com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks) {
@@ -76,6 +79,10 @@ public class BarPayrollAllocationService {
         if(profile.merchantId()!=null)result.addAll(legacySources(profile.merchantId(),range));
         return List.copyOf(result);
     }
+    /** 该商户当前营业日：商户是酒吧（V267 酒吧即商户）按该酒吧营业日，否则按本综合体营业日。 */
+    private LocalDate currentBusinessDate(String project,String merchant) {
+        return businessDays.businessDate(project,businessDays.barOfMerchant(merchant),Instant.now());
+    }
     public List<MonthRun> overview(String project,String merchant,String month) {
         p.requireScope(project,merchant,VIEW);var period=month(month);
         List<MonthRun> rows=new ArrayList<>(p.jdbc.query("SELECT * FROM bar_payroll_runs WHERE project_id=? AND merchant_id=? AND month=? ORDER BY created_at,id",
@@ -93,7 +100,7 @@ public class BarPayrollAllocationService {
         if(r==null)throw invalid("须填写月结范围");
         p.requireScope(requireText(r.projectId(),"project_id"),requireText(r.merchantId(),"merchant_id"),MANAGE);
         var period=month(r.month());
-        if(!period.isBefore(YearMonth.now()))throw invalid("本月尚未结束，暂不能确认月结");
+        if(!period.isBefore(YearMonth.from(currentBusinessDate(r.projectId(),r.merchantId()))))throw invalid("本月尚未结束，暂不能确认月结");
         return Arrays.asList(idem.execute("barPayrollMonthClose",requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
             p.lock("month:"+r.projectId()+":"+r.merchantId()+":"+r.month());
             // BSM L1142/L1143：跨主体拨付是普通内部结算应收应付，按三个付账日结清；到期取月末后第一个付账日，付账日未配置则整次月结不写。

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -169,6 +169,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     // V296 期间成本汇总的经营日切分（与财务日结/跨域汇总同口径）。旧构造器（单测）下为 null，
     // getCostSummary 使用时要求非空（S-2：不做硬编码兜底，防口径漂移）。
     private final com.complex.platform.common.BusinessDayResolver businessDayResolver;
+    private static final com.complex.platform.common.BusinessDayResolver FACTORY_DAYS = new com.complex.platform.common.BusinessDayResolver();
+
+    /** 盘点、调拨落账日按营业日；未经 Spring 装配（旧构造器/单测）按出厂起点。成本汇总仍要求注入，见 getCostSummary。 */
+    private com.complex.platform.common.BusinessDayResolver days() {
+        return businessDayResolver != null ? businessDayResolver : FACTORY_DAYS;
+    }
 
     // 本域风险级 → 统一表 RISK_LEVELS({normal,suspicious,high,critical}) 映射。
     // inventory 用的 medium 在统一表无对应枚举，必须映射为 suspicious，否则 report 抛 VALIDATION_FAILED。
@@ -2250,9 +2256,10 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     com.complex.platform.inventory.dto.CreateStocktakeRequest actual = requireRequest(request);
                     String warehouseId = requireText(actual.warehouseId(), "warehouse_id");
                     String merchantId = authorizationService.currentMerchantScope().orElse(null);
-                    // 盘点单经营日缺省取「今天」——按所在地(北京)日历日(仓管报的就是北京当天)。
+                    // 盘点单经营日缺省取仓库所属项目的当前营业日（ENUM:187）。
                     LocalDate businessDate = actual.businessDate() == null
-                            ? LocalDate.now(LocalZone.ID) : actual.businessDate();
+                            ? days().businessDate(repository.findWarehouseProjectId(warehouseId).orElse(null), null, Instant.now())
+                            : actual.businessDate();
                     Instant now = Instant.now();
                     String slug = slug(actual.idempotencyKey());
                     return repository.saveStocktake(new StocktakeRecord(
@@ -2799,9 +2806,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 throw new IllegalStateException(
                         "BusinessDayResolver not injected; cost summary requires the configured business-day cutoff");
             }
+            // 第十八批第 1 条：与分红收入侧同窗——商户名下唯一酒吧按该酒吧营业日，否则按所属综合体。
+            String bar = businessDayResolver.barOfMerchant(merchantId);
+            String dayProject = bar != null ? null : merchantId != null ? businessDayResolver.projectOfMerchant(merchantId) : projectId;
             InventoryCostSummaryRecord summary = repository.sumOutboundCost(
                     merchantId, projectId, start.toString(), end.toString(),
-                    businessDayResolver.startInstant(start), businessDayResolver.startInstant(end.plusDays(1)));
+                    businessDayResolver.start(dayProject, bar, start), businessDayResolver.end(dayProject, bar, end));
             auditEventService.recordSuccess(
                     "inventory.cost_summary.viewed", "inventory.stock.view", "inventory_stock_movement",
                     "all", null, null,
@@ -3235,7 +3245,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 itemId, "ARAP-TRF-" + o.id(), "payable",
                 o.fromOwnerId(), "inventory_transfer", o.id(),
                 amountCent, 0L, amountCent, "CNY",
-                LocalDate.now(LocalZone.ID), null, "pending_payment",
+                days().merchantBusinessDate(null, o.toOwnerId(), now), null, "pending_payment",
                 now, now, o.toOwnerId()));
         financeRepository.saveArApItemSource(new com.complex.platform.finance.ArApItemSourceRecord(
                 "arap_src_trf_" + o.id(), itemId, "inventory_transfer", o.id(), amountCent, now));

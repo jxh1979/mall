@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
@@ -36,6 +36,14 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
         this.storedValueService = storedValueService;
     }
 
+    // 第十八批第 1 条：挂账应收、退款与赠饮应付的落账日按该酒吧的营业日（ENUM:187），不按服务器时区自然日。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+
+    private LocalDate today(String barId) {
+        return businessDays.businessDate(null, barId, java.time.Instant.now());
+    }
+
     @Override
     public boolean isBusinessDayLocked(LocalDate businessDate) {
         return financeService.isBusinessDayLocked(businessDate);
@@ -49,7 +57,7 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
             String operatorNote,
             List<String> evidenceAttachmentIds
     ) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = today(bill.barId());
         ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
                 "bar-on-account-" + bill.id(),
                 "bar bill on account receivable: " + bill.id(),
@@ -75,7 +83,7 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
             String reason,
             List<String> evidenceAttachmentIds
     ) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = today(bill.barId());
         // TK-20-R2（ENUM「退款资金流向」/ BSM「退款资金流向」：「混合支付的退款按收款相反顺序逐笔原路退回（后收的先退，单笔退足再退上一笔）；
         // 储值部分回冲仍按先赠送金后本金的既有顺序」；CG-06a 第 12 条「酒吧消费获准退款均回原卡」）：
         // 按该账单结算流水倒序分配本次退款额，已退额（之前 applied 的 refund 减 refund_reversal）先从末笔起占满；
@@ -175,7 +183,7 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
             String reason,
             List<String> evidenceAttachmentIds
     ) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = today(bill.barId());
         // 延期项④：驳回冲销过账为 direction='receivable'、source_type='refund' 的对冲应收项。
         // source_id 取驳回冲销调整记录 id（与原退款应付项 source_id 不同），direction 亦不同，
         // 与 V008 唯一索引 (direction, source_type, source_id) 对齐，冲销项与原退款项净额相抵。
@@ -196,7 +204,7 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
 
     @Override
     public String createDepositRefundPayable(BarReservationRecord reservation) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = today(reservation.barId());
         // 第十批 TK-24-R3（BSM L1062「达标时，各笔定金分别原路退回」「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」）：
         // 定金达标退回过账为 direction='payable'、source_type='bar_deposit_refund'、source_id=订台 id 的应付退款项
         // （V008 唯一索引天然幂等）；原付款渠道与意向随说明留痕供「原路」实付，实付由既有 finance 收付款登记完成。
@@ -224,7 +232,7 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
 
     @Override
     public String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = today(businessDays.barOfMerchant(merchantId));
         // 通票免费酒水：核销发放 → 平台按内部结算价向酒吧(merchant)挂应付。源/幂等键 = verificationId（一次核销至多一笔）。
         ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
                 "bar-gift-settle-" + verificationId,
@@ -249,7 +257,7 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
         if (!financeService.arApItemExistsBySource("payable", "pass_drink_settlement", verificationId)) {
             return null;
         }
-        LocalDate today = LocalDate.now();
+        LocalDate today = today(businessDays.barOfMerchant(merchantId));
         // 赠饮冲正 → 对冲应收（同 source_id=verificationId、direction 不同 → 与原应付 V008 唯一索引不冲突且净额归零）。
         ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
                 "bar-gift-settle-reverse-" + verificationId,

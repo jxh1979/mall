@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -27,7 +27,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-AMU-005", label: "游乐核销记录", route: "/admin/amusement/verification-records" },
   { pageId: "ADM-AMU-006", label: "全园故障状态", route: "/admin/amusement/park-wide-faults" },
   { pageId: "ADM-AMU-007", label: "全园故障补偿", route: "/admin/amusement/fault-compensation" },
-  { pageId: "ADM-AMU-008", label: "游乐营业日", route: "/admin/amusement/business-day-configs" },
+  { pageId: "ADM-AMU-008", label: "营业日配置", route: "/admin/amusement/business-day-configs" },
   { pageId: "ADM-INV-003", label: "采购与退供", route: "/admin/inventory/purchases" },
   { pageId: "ADM-FIN-004", label: "物业费管理", route: "/admin/finance/property-fee" },
   { pageId: "ADM-FIN-006", label: "商户费用台账", route: "/admin/finance/merchant-expenses" },
@@ -368,8 +368,6 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("anomaly-surge-input")).toHaveValue("50");
     await expect(page.getByTestId("holiday-calendar-table")).toContainText("春节");
     await expect(page.getByTestId("holiday-fetch-editor")).toBeVisible();
-    await expect(page.getByTestId("business-day-cutoffs-table")).toBeVisible();
-    await expect(page.getByTestId("cutoff-hour-bar")).toContainText("6:00");
   }
 }
 
@@ -404,13 +402,14 @@ test.describe("batch05 procurement and business day browser acceptance", () => {
     await page.getByLabel("综合体", { exact: true }).selectOption("complex-b05");
     for (const [label, value] of [
       ["所在地时区（如 Asia/Shanghai）", "Asia/Shanghai"], ["日切小时", "10"],
-      ["日切下限", "6"], ["日切上限", "12"], ["生效时间（当前设备时区）", "2099-01-01T10:00"],
+      ["日切下限", "6"], ["日切上限", "12"], ["闭店小时", "7"], ["闭店下限", "5"], ["闭店上限", "8"],
+      ["生效时间（当前设备时区）", "2099-01-01T10:00"],
       ["变更原因", "统一本综合体营业日"], ["组织链最终审批人账号（可选）", "manager-b05"],
     ] as const) await page.getByLabel(label, { exact: true }).fill(value);
     await page.getByRole("button", { name: "提交最高权限审批", exact: true }).click();
     await expect.poll(() => writes.length).toBe(1);
     expect(writes[0]).toMatchObject({ project_id: "complex-b05", zone_id: "Asia/Shanghai", cutoff_hour: 10,
-      min_cutoff_hour: 6, max_cutoff_hour: 12, final_approver_id: "manager-b05" });
+      min_cutoff_hour: 6, max_cutoff_hour: 12, close_hour: 7, min_close_hour: 5, max_close_hour: 8, final_approver_id: "manager-b05" });
     expect(writes[0]).not.toHaveProperty("status");
     await expect(page.getByRole("button", { name: "查看审批原件", exact: true })).toBeVisible();
     await expect(page.getByTestId("amusement-business-day-page")).toContainText("待复核");

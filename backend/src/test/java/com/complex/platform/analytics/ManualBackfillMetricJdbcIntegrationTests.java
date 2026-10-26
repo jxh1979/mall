@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -97,7 +97,7 @@ class ManualBackfillMetricJdbcIntegrationTests {
 
     @Test
     void backfillCountsEverySubmissionOnceWithStatusesListedSeparately() {
-        LocalDate d = businessDayResolver.businessDate("governance", Instant.now());
+        LocalDate d = businessDayResolver.businessDate(null, null, Instant.now());
         act(requester);
         ArApAdjustmentRequest first = request(lockedReceivable());
         var approved = finance.requestAdjustment(first);
@@ -107,7 +107,7 @@ class ManualBackfillMetricJdbcIntegrationTests {
         var earlier = finance.requestAdjustment(request(lockedReceivable()));
         // 前一营业日提交的那笔：提交时刻移到本营业日窗之前
         jdbc.update("UPDATE ar_ap_adjustments SET created_at=? WHERE id=?",
-                Timestamp.from(businessDayResolver.startInstant("governance", d).minusSeconds(60)), earlier.id());
+                Timestamp.from(businessDayResolver.start(null, null, d).minusSeconds(60)), earlier.id());
         act(approver);
         finance.approveAdjustment(approved.id(), decision("approve"));
         finance.approveAdjustment(rejected.id(), decision("reject"));

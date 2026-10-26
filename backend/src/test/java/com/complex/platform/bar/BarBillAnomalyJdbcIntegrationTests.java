@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -179,7 +179,7 @@ class BarBillAnomalyJdbcIntegrationTests {
     @Test
     void lockDailyCloseRefusedWhileBarBillAbnormal() throws Exception {
         LocalDate day = LocalDate.parse("2014-06-12");
-        Instant at = businessDays.startInstant(day).plusSeconds(3600);
+        Instant at = businessDays.start(null, null, day).plusSeconds(3600);
         String bill = settledBillAt(at);
         call(cashier, bill + "/anomaly", "{\"reason\":\"客人称多收一瓶\",\"idempotency_key\":\"rd_%s\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("abnormal"));
@@ -240,8 +240,9 @@ class BarBillAnomalyJdbcIntegrationTests {
         jdbc.update("INSERT INTO staff_dispatch_records(id,user_id,company_id,merchant_id,project_id,start_date,status)"
                 + " VALUES(?,'bba_sales',?,?,?,(now() AT TIME ZONE ?)::date,'active')", "bba_dsp_" + suffix, company, merchant, project, zone);
         jdbc.update("INSERT INTO bar_commission_settlements(id,month,merchant_id,company_id,project_id,amount_cent,calculation_count,staff_count,"
-                + "due_date,created_at) VALUES(?,to_char(now() AT TIME ZONE ?,'YYYY-MM'),?,?,?,4500,1,1,(now() AT TIME ZONE ?)::date + 10,now())",
-                "bcs_bba_" + suffix, zone, merchant, company, project, zone);
+                + "due_date,created_at) VALUES(?,?,?,?,?,4500,1,1,(now() AT TIME ZONE ?)::date + 10,now())",
+                "bcs_bba_" + suffix, java.time.YearMonth.from(businessDays.businessDate(null, merchant, Instant.now())).toString(),
+                merchant, company, project, zone);
         // 结账后先办一笔现金退款 10000（接口退款要过主管复核准入闸，这里直接走退款服务）：后收的现金先退，挂退款应付、财务尚未结清，奖励按规则继续待确认。
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(new AccessActor(
                 "bba_cashier_" + suffix, "bba_cashier_" + suffix, "merchant_staff", project, merchant, "active"), "token", List.of()));
@@ -425,12 +426,12 @@ class BarBillAnomalyJdbcIntegrationTests {
         assertThat(net(refundDay)).isEqualTo(-10_000L);
         assertThat(net(settleDay) + net(refundDay)).isZero();
         // 分红与经营分析（同一收入来源）：收款营业日的商品收入与退款营业日的商品退款相抵。
-        assertThat(revenue.completedCollections(merchant, businessDays.startInstant(settleDay), businessDays.endInstant(settleDay)))
+        assertThat(revenue.completedCollections(merchant, businessDays.start(null, null, settleDay), businessDays.end(null, null, settleDay)))
                 .filteredOn(c -> bill.equals(c.billId())).singleElement().satisfies(c -> {
                     assertThat(c.status()).isEqualTo("confirmed");
                     assertThat(c.goodsRevenueCent()).isEqualTo(10_000L);
                 });
-        assertThat(revenue.completedGoodsRefunds(merchant, businessDays.startInstant(refundDay), businessDays.endInstant(refundDay)))
+        assertThat(revenue.completedGoodsRefunds(merchant, businessDays.start(null, null, refundDay), businessDays.end(null, null, refundDay)))
                 .filteredOn(r -> bill.equals(r.billId())).singleElement().satisfies(r -> assertThat(r.amountCent()).isEqualTo(10_000L));
     }
 
@@ -504,8 +505,8 @@ class BarBillAnomalyJdbcIntegrationTests {
 
     /** 商户口径日结酒吧源：收款减退款。 */
     private long net(LocalDate day) {
-        FinanceRepository.DailyCloseSourceTotals totals = financeRepository.aggregateBar(day, businessDays.startInstant(day),
-                businessDays.endInstant(day), "merchant", merchant);
+        FinanceRepository.DailyCloseSourceTotals totals = financeRepository.aggregateBar(day, businessDays.start(null, null, day),
+                businessDays.end(null, null, day), "merchant", merchant);
         return totals.amountCent() - totals.refundCent();
     }
 

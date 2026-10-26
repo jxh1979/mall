@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  * <p><b>求值口径（R-10，2026-07-22 用户裁决 · 业务 HTML「终端开关」节）＝取最严</b>：
  * 层级 全局 &gt; 综合体(project) &gt; 商户(merchant) &gt; 业务系统 &gt; 模块 &gt; 版本/设备 &gt; <b>灰度</b>，
  * <b>高层级关闭压倒低层级打开</b>——任一层关闭即最终关闭，低层"打开"不再把高层"关闭"翻回来。
- * 无任何显式行=默认开启（opt-out 语义）；读取异常=fail-closed 拒绝。
+ * 无任何显式行=默认关闭（opt-in，PGM 第 742 行「开关缺行不得视为开启」，拒绝留痕 reason=not_configured）；读取异常=fail-closed 拒绝。
  * 灰度（V342）是最细的一档，只能收窄不能放宽：无 active 试点则弃权，有 active 试点时白名单外一律关闭。
  * 关闭/失败均写 audit_events terminal.access_rejected 留痕（修正现状只在 kiosk 凭证失败触发）。
  */
@@ -122,8 +122,13 @@ public class TerminalSwitchGuard {
             return; // unreachable，reject 必抛
         }
 
+        // PGM 第 742 行 opt-in：没有任何显式开关行 → 拒绝（与上面读取异常的兜底关闭是两件事）。
+        if (effective.isEmpty()) {
+            reject(terminalType, capabilityCode, "not_configured", null, null);
+        }
+
         // 任一层显式关闭 → 拒绝（effective 已是"最高层关闭行"）。
-        if (effective.isPresent() && !effective.get().enabled()) {
+        if (!effective.get().enabled()) {
             reject(terminalType, capabilityCode, "disabled",
                     effective.get().scopeType(), effective.get().scopeId());
         }

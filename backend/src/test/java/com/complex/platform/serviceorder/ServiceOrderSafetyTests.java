@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -244,7 +244,7 @@ class ServiceOrderSafetyTests {
         String month = jdbcTemplate.queryForObject(
                 "SELECT month FROM staff_commission_ledger WHERE source_type='service_order' AND source_id=?",
                 String.class, order.id());
-        assertThat(month).isEqualTo(ServiceOrderService.settlementMonth(businessDayResolver, completedAt));
+        assertThat(month).isEqualTo(java.time.YearMonth.from(businessDayResolver.businessDate(null, null, completedAt)).toString());
         cleanupOrder(order.id());
     }
 
@@ -256,7 +256,7 @@ class ServiceOrderSafetyTests {
                 "SELECT paid_at FROM service_orders WHERE id=?", java.sql.Timestamp.class, order.id()).toInstant();
         var row = jdbcTemplate.queryForMap(
                 "SELECT accounting_period, due_date FROM ar_ap_items WHERE id=?", "arap_svo_" + order.id());
-        java.time.LocalDate businessDate = businessDayResolver.businessDate("bar", paidAt);
+        java.time.LocalDate businessDate = businessDayResolver.businessDate(null, null, paidAt);
         assertThat(row.get("accounting_period")).isEqualTo(java.time.YearMonth.from(businessDate).toString());
         assertThat(((java.sql.Date) row.get("due_date")).toLocalDate()).isEqualTo(businessDate);
         cleanupOrder(order.id());
@@ -287,7 +287,7 @@ class ServiceOrderSafetyTests {
         String itemId = "svc_feedraft_" + key();
         service.upsertCatalogItem(new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(
                 key(), itemId, "草案舞", 30000L, 10, true, "percent", 1000L));
-        java.time.LocalDate today = businessDayResolver.businessDate("bar", Instant.now());
+        java.time.LocalDate today = businessDayResolver.businessDate(null, null, Instant.now());
         String drafter = userGranted("service.catalog.manage", "service.catalog.approve");
         authenticateAs(drafter);
         ServiceCatalogItemRecord drafted = service.draftFeeChange(itemId,
@@ -313,7 +313,7 @@ class ServiceOrderSafetyTests {
         String itemId = "svc_feeidem_" + key();
         service.upsertCatalogItem(new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(
                 key(), itemId, "幂等草案舞", 30000L, 10, true, "percent", 1000L));
-        java.time.LocalDate today = businessDayResolver.businessDate("bar", Instant.now());
+        java.time.LocalDate today = businessDayResolver.businessDate(null, null, Instant.now());
         var draft = new com.complex.platform.serviceorder.dto.ServiceCatalogFeeDraftRequest(key(), "percent", 2000L, today.plusDays(1));
         service.draftFeeChange(itemId, draft);
         String reviewer = userGranted("service.catalog.approve");
@@ -361,7 +361,7 @@ class ServiceOrderSafetyTests {
         // 历史履约人(无 service.order.perform 权限)在该酒吧做过该服务:旧口径会通告,新口径不通告。
         service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
                 key(), itemId, "svp_hi_" + tag, bar, null, null));
-        java.time.LocalDate today = businessDayResolver.businessDate("bar", Instant.now());
+        java.time.LocalDate today = businessDayResolver.businessDate(null, null, Instant.now());
         service.draftFeeChange(itemId, new com.complex.platform.serviceorder.dto.ServiceCatalogFeeDraftRequest(
                 key(), "percent", 2000L, today.plusDays(1)));
         authenticateAs(userGranted("service.catalog.approve"));
@@ -404,7 +404,7 @@ class ServiceOrderSafetyTests {
         String itemId = "svc_feever_" + key();
         service.upsertCatalogItem(new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(
                 key(), itemId, "版本舞", 30000L, 10, true, "percent", 1000L));
-        java.time.LocalDate today = businessDayResolver.businessDate("bar", Instant.now());
+        java.time.LocalDate today = businessDayResolver.businessDate(null, null, Instant.now());
         service.draftFeeChange(itemId, new com.complex.platform.serviceorder.dto.ServiceCatalogFeeDraftRequest(
                 key(), "percent", 2000L, today.plusDays(1)));
         authenticateAs(userGranted("service.catalog.approve"));

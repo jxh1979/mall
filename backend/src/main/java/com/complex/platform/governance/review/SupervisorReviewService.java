@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -77,6 +77,8 @@ public class SupervisorReviewService {
             new SupervisorReviewPolicyRecord("bar_payroll_rule", "bar.payroll_rule.adjust", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "bar.payroll.approve"),
             new SupervisorReviewPolicyRecord("amusement_business_day", "amusement.business_day.configure", 0, 3, true,
+                    List.of("reason", "before_after"), "active", "top_authority"),
+            new SupervisorReviewPolicyRecord("bar_business_day", "bar.business_day.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("inventory_purchase_request", "inventory.purchase_request", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "inventory.purchase.approve"),

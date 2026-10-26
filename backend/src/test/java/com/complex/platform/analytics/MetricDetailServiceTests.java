@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -47,12 +47,12 @@ import org.mockito.ArgumentCaptor;
  */
 class MetricDetailServiceTests {
 
-    // 日切小时按所在地（北京）时间读：2026-07-18T02:00Z = 北京 07-18 10:00，已过 04:00 日切 → 当前经营日 = 2026-07-18。
+    // 营业日按所在地（北京）时间读：2026-07-18T02:00Z = 北京 07-18 10:00，恰到出厂 10:00 起点 → 当前营业日 = 2026-07-18（第十八批第 1 条）。
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-07-18T02:00:00Z"), ZoneOffset.UTC);
     private static final LocalDate CURRENT_BUSINESS_DAY = LocalDate.parse("2026-07-18");
-    // 经营日 D 的窗口 = 北京 D 04:00（含）~ D+1 04:00（不含）；D=07-18 → [07-17T20:00Z, 07-18T20:00Z)。
-    private static final Instant CURRENT_WINDOW_START = Instant.parse("2026-07-17T20:00:00Z");
-    private static final Instant CURRENT_WINDOW_END = Instant.parse("2026-07-18T20:00:00Z");
+    // 营业日 D 的窗口 = 北京 D 10:00（含）~ D+1 10:00（不含）；D=07-18 → [07-18T02:00Z, 07-19T02:00Z)。
+    private static final Instant CURRENT_WINDOW_START = Instant.parse("2026-07-18T02:00:00Z");
+    private static final Instant CURRENT_WINDOW_END = Instant.parse("2026-07-19T02:00:00Z");
 
     private AnalyticsRepository repository;
     private InMemoryAuditEventRepository auditEvents;
@@ -92,7 +92,7 @@ class MetricDetailServiceTests {
         assertThat(response.traceLinkColumnKey()).isEqualTo("id");
         assertThat(response.columns()).extracting(MetricRegistry.MetricColumn::key).contains("orderNo", "amountCent");
 
-        // 经营日窗（ticketing 缺省 04:00）：北京 [07-18 04:00, 07-19 04:00) = [07-17T20:00Z, 07-18T20:00Z)。
+        // 营业日窗（出厂 10:00）：北京 [07-18 10:00, 07-19 10:00) = [07-18T02:00Z, 07-19T02:00Z)。
         ArgumentCaptor<Instant> start = ArgumentCaptor.forClass(Instant.class);
         ArgumentCaptor<Instant> end = ArgumentCaptor.forClass(Instant.class);
         verify(repository).ticketRevenueDetail(start.capture(), end.capture(), eq(20), eq(0));
@@ -219,7 +219,7 @@ class MetricDetailServiceTests {
         assertThat(response.summaryNote()).contains("待收、待月结及待核退款未计入", "不作为最终结算依据");
         assertThat(response.traceLinkPageId()).isEqualTo("ADM-BAR-002");
         assertThat(response.traceLinkColumnKey()).isEqualTo("billId");
-        // 酒吧经营日窗（单测无域配置回落全局 04:00）：北京 [07-18 04:00, 07-19 04:00) = [07-17T20:00Z, 07-18T20:00Z)。
+        // 营业日窗（单测无版本＝出厂 10:00）：北京 [07-18 10:00, 07-19 10:00) = [07-18T02:00Z, 07-19T02:00Z)。
         ArgumentCaptor<Instant> start = ArgumentCaptor.forClass(Instant.class);
         ArgumentCaptor<Instant> end = ArgumentCaptor.forClass(Instant.class);
         verify(repository).barSettlementRevenueDetail(start.capture(), end.capture(), eq(20), eq(0));
@@ -257,8 +257,8 @@ class MetricDetailServiceTests {
         MetricDetailResponse response = service.metricDetail(
                 "bar.open_order_count", null, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-10"), 1, 20);
 
-        // 余额类=区间末值：as-of=to 的酒吧经营日窗末（单测回落全局 04:00 → 北京 07-11 04:00 = 07-10T20:00Z），from 不参与。
-        verify(repository).barOpenOrderDetail(eq(Instant.parse("2026-07-10T20:00:00Z")), eq(20), eq(0));
+        // 余额类=区间末值：as-of=to 的营业日窗末（出厂 10:00 → 北京 07-11 10:00 = 07-11T02:00Z），from 不参与。
+        verify(repository).barOpenOrderDetail(eq(Instant.parse("2026-07-11T02:00:00Z")), eq(20), eq(0));
         assertThat(response.from()).isNull();
         assertThat(response.to()).isEqualTo(LocalDate.parse("2026-07-10"));
         assertThat(response.summaryNote()).contains("区间末值");
@@ -279,7 +279,7 @@ class MetricDetailServiceTests {
         assertThat(count.summaryValue()).isEqualByComparingTo("4");
         verify(repository).savedBottleDetail(eq(null), eq(null), eq(20), eq(0));
 
-        // 余额类缺省 as-of=当前经营日（07-18）→ 窗末 = 北京 07-19 04:00 = 07-18T20:00Z（单测回落全局日切）。
+        // 余额类缺省 as-of=当前营业日（07-18）→ 窗末 = 北京 07-19 10:00 = 07-19T02:00Z（出厂起点）。
         MetricDetailResponse stored = service.metricDetail("bar.saved_bottle_stored", null, null, null, 1, 20);
         assertThat(stored.summaryValue()).isEqualByComparingTo("2");
         assertThat(stored.to()).isEqualTo(CURRENT_BUSINESS_DAY);
@@ -318,8 +318,8 @@ class MetricDetailServiceTests {
         MetricDetailResponse response = service.metricDetail(
                 "ticket.pending_issue_count", null, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-10"), 1, 20);
 
-        // 余额类=区间末值：as-of=to 的票务经营日窗末（单测回落全局 04:00 → 北京 07-11 04:00 = 07-10T20:00Z），from 不参与。
-        verify(repository).ticketPendingIssueDetail(eq(Instant.parse("2026-07-10T20:00:00Z")), eq(20), eq(0));
+        // 余额类=区间末值：as-of=to 的营业日窗末（出厂 10:00 → 北京 07-11 10:00 = 07-11T02:00Z），from 不参与。
+        verify(repository).ticketPendingIssueDetail(eq(Instant.parse("2026-07-11T02:00:00Z")), eq(20), eq(0));
         assertThat(response.from()).isNull();
         assertThat(response.to()).isEqualTo(LocalDate.parse("2026-07-10"));
         assertThat(response.valueType()).isEqualTo("balance");

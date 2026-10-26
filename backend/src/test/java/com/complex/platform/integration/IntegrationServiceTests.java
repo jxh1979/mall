@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -60,11 +60,13 @@ class IntegrationServiceTests {
         secrets.put("integration.retail_pos.webhook", INTEGRATION_WEBHOOK_TEST_SECRET);
         secrets.put("integration.robot.webhook", INTEGRATION_WEBHOOK_TEST_SECRET);
         terminalDeviceRepository = org.mockito.Mockito.mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
-        // 默认无显式开关行 → T2 语义"默认开启"，放行（第三方默认关闭由迁移种子在真实库表达）。
+        // 默认桩一条显式开启行放行（PGM 第 742 行 opt-in：缺行即关；第三方默认关闭由迁移种子在真实库表达）。
         org.mockito.Mockito.when(terminalDeviceRepository.resolveEffectiveSwitch(
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyMap())).thenReturn(Optional.empty());
+                org.mockito.ArgumentMatchers.anyMap())).thenAnswer(invocation -> Optional.of(
+                        new com.complex.platform.terminal.TerminalCapabilitySwitchRecord("tcs_test_on", "*",
+                                invocation.getArgument(1), "global", "global", true, "测试默认开启", NOW, NOW)));
         com.complex.platform.gate.TerminalSwitchGuard terminalSwitchGuard =
                 new com.complex.platform.gate.TerminalSwitchGuard(
                         terminalDeviceRepository, new AuditEventService(auditEventRepository));

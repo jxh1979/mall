@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -672,12 +672,19 @@ public class TerminalDeviceService {
     /**
      * 3.19 二期：某终端的已关闭开关行（前端菜单 gating 用，只回 enabled=false 的行）。
      * terminalType 空/未知按 "web" 兜底；配置表全量 ≤ 数百行，内存过滤足够。
+     * 与后端判定同口径（JdbcTerminalDeviceRepository 同层专端行优先于 '*' 行）：本端在同一（能力, 层, 范围）上有专端行时，
+     * '*' 关闭行不生效、不回给本端（PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作」，前后端一致）。
      */
     public PageResponse<TerminalCapabilitySwitchRecord> listDisabledSwitchesFor(String terminalType) {
         String type = terminalType == null || terminalType.isBlank() ? "web" : terminalType.trim();
-        List<TerminalCapabilitySwitchRecord> disabled = repository.listCapabilitySwitches().stream()
-                .filter(record -> !record.enabled())
+        List<TerminalCapabilitySwitchRecord> rows = repository.listCapabilitySwitches().stream()
                 .filter(record -> type.equals(record.terminalType()) || "*".equals(record.terminalType()))
+                .toList();
+        List<TerminalCapabilitySwitchRecord> disabled = rows.stream()
+                .filter(record -> !record.enabled())
+                .filter(record -> !"*".equals(record.terminalType()) || rows.stream().noneMatch(own -> type.equals(own.terminalType())
+                        && own.capabilityCode().equals(record.capabilityCode()) && own.scopeType().equals(record.scopeType())
+                        && java.util.Objects.equals(own.scopeId(), record.scopeId())))
                 .toList();
         return new PageResponse<>(disabled, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, disabled.size());
     }
@@ -754,7 +761,7 @@ public class TerminalDeviceService {
                     && config.ticketingEnabled()
                     && repository.findCapabilitySwitch("kiosk", "ticketing", id)
                     .map(TerminalCapabilitySwitchRecord::enabled)
-                    .orElse(true);
+                    .orElse(false); // PGM 第 742 行 opt-in：该设备没有售票开关行即不开放售票
             KioskConfigResponse response = new KioskConfigResponse(
                     config.deviceId(),
                     config.kioskMode(),

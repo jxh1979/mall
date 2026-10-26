@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -44,7 +44,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-AMU-005", label: "游乐核销记录", module: "游乐", group: "amusement", route: "/admin/amusement/verification-records", requiredPermissions: ["amusement.verification.view"] },
   { pageId: "ADM-AMU-006", label: "全园故障状态", module: "游乐", group: "amusement", route: "/admin/amusement/park-wide-faults", requiredPermissions: ["amusement.park_fault.view"] },
   { pageId: "ADM-AMU-007", label: "全园故障补偿", module: "游乐", group: "amusement", route: "/admin/amusement/fault-compensation", requiredPermissions: ["amusement.park_fault.view"] },
-  { pageId: "ADM-AMU-008", label: "游乐营业日", module: "游乐", group: "amusement", route: "/admin/amusement/business-day-configs", requiredPermissions: ["amusement.business_day.view"] },
+  { pageId: "ADM-AMU-008", label: "营业日配置", module: "游乐", group: "amusement", route: "/admin/amusement/business-day-configs", requiredPermissions: ["amusement.business_day.view", "bar.business_day.view"] },
   { pageId: "ADM-INV-001", label: "库存台账", module: "库存", group: "inventory", route: "/admin/inventory/ledger", requiredPermissions: ["inventory.stock.view"] },
   { pageId: "ADM-INV-002", label: "跨主体调拨与借调", module: "库存", group: "inventory", route: "/admin/inventory/transfers", requiredPermissions: ["inventory.transfer_order.view"] },
   { pageId: "ADM-INV-003", label: "采购与退供", module: "库存", group: "inventory", route: "/admin/inventory/purchases", requiredPermissions: ["inventory.purchase_request.view"] },

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.33
+# P0 OpenAPI Operation 验收矩阵 V0.34
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1149 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1150 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -713,8 +713,6 @@
 | merchant-portal | `GET` | `/api/v1/merchant-portal/settlements` | `listMerchantPortalSettlements` | 商户专区·我的对账(结算单只读) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `merchant_portal.settlement.viewed` | `merchant_portal.settlement.view_failed` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | `submitMerchantPortalSettlementDispute` | 商户专区·结算单异议留言 | `object` | `merchant.portal.settlement.dispute` | `staff-token` | `merchant` | web, merchant_portal | 是 | `merchant_portal.settlement.disputed` | `merchant_portal.settlement.dispute_failed` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/reject-resolution` | `rejectMerchantPortalSettlementResolution` | 商户专区·不接受主管裁决 | `object` | `merchant.portal.settlement.dispute` | `staff-token` | `merchant` | web, merchant_portal | 是 | `merchant_portal.settlement.resolution_rejected` | `merchant_portal.settlement.resolution_reject_failed` |
-| analytics | `GET` | `/api/v1/analytics/business-day-cutoffs` | `listBusinessDayCutoffs` | 查询经营日切分配置(按业务域) | `-` | `analytics.dashboard.view` | `staff-token` | `platform` | web | 否 | `analytics.business_day_cutoff.viewed` | `analytics.business_day_cutoff.view_failed` |
-| analytics | `POST` | `/api/v1/analytics/business-day-cutoffs` | `upsertBusinessDayCutoff` | 修改某业务域的经营日切分小时 | `object` | `analytics.operating_params.manage` | `staff-token` | `platform` | web | 是 | `analytics.business_day_cutoff.updated` | `analytics.business_day_cutoff.update_failed` |
 | analytics | `GET` | `/api/v1/analytics/finance-receivables/debtors` | `listArOverdueDebtors` | 欠费商户明细排行(账龄钻取) | `-` | `finance.ar_ap.view` | `staff-token` | `platform` | web | 否 | `analytics.ar_debtors.viewed` | `analytics.ar_debtors.view_failed` |
 | analytics | `GET` | `/api/v1/analytics/occupancy/vacant-spaces` | `listVacantSpaces` | 空置铺位明细(出租率钻取) | `-` | `contract.view` | `staff-token` | `platform` | web | 否 | `analytics.vacant_spaces.viewed` | `analytics.vacant_spaces.view_failed` |
 | analytics | `GET` | `/api/v1/analytics/occupancy/expiring-contracts` | `listExpiringContracts` | 到期预警合同明细 | `-` | `contract.view` | `staff-token` | `platform` | web | 否 | `analytics.expiring_contracts.viewed` | `analytics.expiring_contracts.view_failed` |
@@ -1052,6 +1050,9 @@
 | amusement | `GET` | `/api/v1/amusement/business-day-configs` | `listAmusementBusinessDayConfigs` | 查看授权综合体的游乐营业日配置目录与版本 | `-` | `amusement.business_day.view` | `staff-token` | `project` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 否 | `amusement.business_day.viewed` | `amusement.business_day.view_failed` |
 | amusement | `POST` | `/api/v1/amusement/business-day-configs` | `submitAmusementBusinessDayConfig` | 提交综合体游乐营业日最高权限审批 | `AmusementBusinessDayConfigRequest` | `amusement.business_day.manage` | `staff-token` | `project` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 是 | `amusement.business_day.submit_completed` | `amusement.business_day.submit_failed` |
 | amusement | `GET` | `/api/v1/amusement/business-day-configs/{id}` | `readAmusementBusinessDayConfigOriginal` | 逐笔查看游乐营业日配置审批原件 | `-` | `governance.supervisor_review.view` | `staff-token` | `project` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 否 | `amusement.business_day.original_viewed` | `amusement.business_day.original_view_failed` |
+| bar | `GET` | `/api/v1/bar-business-day-configs` | `listBarBusinessDayConfigs` | 查看授权酒吧的营业日配置目录与版本 | `-` | `bar.business_day.view` | `staff-token` | `project` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 否 | `bar.business_day.viewed` | `bar.business_day.view_failed` |
+| bar | `POST` | `/api/v1/bar-business-day-configs` | `submitBarBusinessDayConfig` | 提交酒吧营业日最高权限审批 | `BarBusinessDayConfigRequest` | `bar.business_day.manage` | `staff-token` | `project` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 是 | `bar.business_day.submit_completed` | `bar.business_day.submit_failed` |
+| bar | `GET` | `/api/v1/bar-business-day-configs/{id}` | `readBarBusinessDayConfigOriginal` | 逐笔查看酒吧营业日配置审批原件 | `-` | `governance.supervisor_review.view` | `staff-token` | `project` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 否 | `bar.business_day.original_viewed` | `bar.business_day.original_view_failed` |
 | amusement | `POST` | `/api/v1/amusement/sessions/{id}/end` | `endAmusementSession` | 确认实际清场后提前结束场次 | `AmusementSessionEndRequest` | `amusement.session.end` | `staff-token` | `project-amusement` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 是 | `amusement.session.end_completed` | `amusement.session.end_failed` |
 | amusement | `GET` | `/api/v1/amusement/sessions/{id}/endings` | `listAmusementSessionEndings` | 查看场次结束原件 | `-` | `amusement.session.view` | `staff-token` | `project-amusement` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 否 | `amusement.session.viewed` | `amusement.session.view_failed` |
 | amusement | `GET` | `/api/v1/amusement/sessions/{id}/followups` | `listAmusementSessionFollowups` | 查看场次结束后的未履约事项 | `-` | `amusement.session.view` | `staff-token` | `project-amusement` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | 否 | `amusement.session.viewed` | `amusement.session.view_failed` |

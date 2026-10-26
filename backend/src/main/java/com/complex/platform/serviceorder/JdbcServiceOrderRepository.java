@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -225,6 +225,12 @@ class JdbcServiceOrderRepository {
                 new MapSqlParameterSource().addValue("id", id), this::mapOrder).stream().findFirst();
     }
 
+    /** 服务单所属项目（下单时按履约人档案落的 project_id），查不到为 null。 */
+    public String findOrderProjectId(String id) {
+        return jdbcTemplate.queryForList("SELECT project_id FROM service_orders WHERE id = :id AND project_id IS NOT NULL",
+                new MapSqlParameterSource().addValue("id", id), String.class).stream().findFirst().orElse(null);
+    }
+
     public int markCompletedIfPaid(String id, long mgmtFeeCent, long dancerShareCent, Instant completedAt, Instant now) {
         // P1 并发守卫:paid->completed 原子转移。WHERE status='paid' 使受影响行数=1 成为唯一进入凭据。
         return jdbcTemplate.update("""
@@ -238,7 +244,7 @@ class JdbcServiceOrderRepository {
                 .addValue("now", java.sql.Timestamp.from(now)));
     }
 
-    /** TK-23-R2:应收行 due_date/accounting_period 按收款时点所在 bar 营业日(调用方用 BusinessDayResolver 算),不按 UTC。 */
+    /** TK-23-R2:应收行 due_date/accounting_period 按收款时点所属营业日(调用方用 BusinessDayResolver 按酒吧或项目算),不按 UTC。 */
     public boolean insertReceivableForOrder(String orderId, long amountCent, LocalDate businessDate, Instant now) {
         // P1 收款对账:复用 ar_ap_items 应收台账。source 唯一索引保证一单一条(幂等)。
         // V344(P0-B 红冲):该部分唯一索引的谓词加了 origin_item_id IS NULL(排除补录派生的冲正/重述行),

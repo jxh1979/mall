@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -92,6 +92,21 @@ public class TicketOrderService {
         savepoint.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_NESTED);
     }
 
+    // 第十八批第 1 条（ENUM:187「票价的日期类型……以开台或下单时点所属的营业日为准」）：未带到访日时按票种当前营业日。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+
+    /** 票种当前营业日：酒吧票（ticket_types.bar_id 为酒吧商户）按该酒吧，其余按票种唯一所属综合体（不唯一按出厂起点）。 */
+    public LocalDate saleBusinessDate(TicketTypeRecord ticketType) {
+        List<String> projects = repository.listTicketTypeProjectIds(ticketType.id());
+        return saleBusinessDate(ticketType, projects.size() == 1 ? projects.getFirst() : null);
+    }
+
+    private LocalDate saleBusinessDate(TicketTypeRecord ticketType, String projectId) {
+        String bar = businessDays.barOfMerchant(trimToNull(ticketType.barId()));
+        return businessDays.businessDate(bar == null ? projectId : null, bar, Instant.now());
+    }
+
     @org.springframework.beans.factory.annotation.Autowired
     public TicketOrderService(TicketingRepository repository, TicketPricingService pricingService,
                               AuthorizationService authorizationService,
@@ -158,7 +173,7 @@ public class TicketOrderService {
         if (!repository.atomicDeductTicketStock(ticketType.id(), quantity)) {
             throw ApiException.conflict("TICKET_SOLD_OUT", "票种库存不足");
         }
-        LocalDate visitDate = actual.visitDate() == null ? LocalDate.now() : actual.visitDate();
+        LocalDate visitDate = actual.visitDate() == null ? saleBusinessDate(ticketType, projectId) : actual.visitDate();
         String salesChannel = requireEnum(actual.salesChannel(), SALES_CHANNELS, "sales_channel");
         TicketPriceRuleRecord priceRule = null;
         TicketPricingService.CustomerPrice customerPrice = eligibleVariants == null ? null

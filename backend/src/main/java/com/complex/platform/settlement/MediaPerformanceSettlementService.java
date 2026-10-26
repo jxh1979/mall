@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -58,7 +58,6 @@ public class MediaPerformanceSettlementService {
     static final String FEE_TICKET_SHARE = "ticket_share";
     static final String FEE_FIXED = "fixed_fee";
     static final String FEE_DRINK = "drink_commission";
-    private static final String BAR_DOMAIN = "bar";
 
     private final JdbcMediaPerformanceRepository repository;
     private final RevenueStreamAttributionRepository attributionRepository;
@@ -236,7 +235,7 @@ public class MediaPerformanceSettlementService {
     private SettlementRecord compute(ShowRecord show, FulfillmentRecord fact, String feeKind, String payee) {
         return switch (feeKind) {
             case FEE_TICKET_SHARE -> {
-                Instant[] day = businessDay(show.showDate());
+                Instant[] day = businessDay(show);
                 long count = repository.countVerifiedTickets(show.ticketTypeId(), day[0], day[1]);
                 long base = count * show.ticketSurchargePerTicketCent();
                 long amount = "ratio".equals(show.ticketShareMode())
@@ -261,7 +260,7 @@ public class MediaPerformanceSettlementService {
                     from = fact.actualStartAt();
                     to = fact.actualEndAt();
                 } else {
-                    Instant[] day = businessDay(show.showDate());
+                    Instant[] day = businessDay(show);
                     from = day[0];
                     to = day[1];
                 }
@@ -294,9 +293,11 @@ public class MediaPerformanceSettlementService {
         return entity;
     }
 
-    /** 演出日所在酒吧营业日窗 [切日时刻, 次日切日时刻)（bar 域，business_day_cutoff_config）。 */
-    private Instant[] businessDay(LocalDate showDate) {
-        return new Instant[] {businessDayResolver.startInstant(BAR_DOMAIN, showDate),
-                businessDayResolver.endInstant(BAR_DOMAIN, showDate)};
+    /** 演出日所在酒吧的营业日窗 [起点, 次日起点)：演出酒吧商户名下唯一酒吧按该酒吧，查不到按场次所属项目（ENUM:187）。 */
+    private Instant[] businessDay(ShowRecord show) {
+        String bar = businessDayResolver.barOfMerchant(show.barMerchantId());
+        String project = bar == null ? show.projectId() : null;
+        return new Instant[] {businessDayResolver.start(project, bar, show.showDate()),
+                businessDayResolver.end(project, bar, show.showDate())};
     }
 }

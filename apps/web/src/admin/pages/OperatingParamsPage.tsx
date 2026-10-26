@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -6,28 +6,10 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { hasPermissions } from "../security/PermissionGate";
 import { TraceLink } from "../components/TraceLink";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-
-// 综合体经营参数行（后端 OperatingParamsRecord，客户端 unwrap 已 camel 化）。
-type BusinessDayCutoffRow = {
-  domain: string;
-  cutoffHour: number;
-  updatedAt?: string;
-};
-
-const DOMAIN_LABELS: Record<string, string> = {
-  platform: "平台汇总基准",
-  finance: "财务日结",
-  ticketing: "票务",
-  amusement: "游乐",
-  customer: "会员",
-  inventory: "供应链",
-  governance: "治理/风险",
-  bar: "酒吧",
-  merchant: "零售/餐饮商户",
-};
 
 type OperatingParamsRow = {
   projectId: string;
@@ -36,6 +18,8 @@ type OperatingParamsRow = {
 };
 
 const MANAGE = ["analytics.operating_params.manage"];
+// 营业日配置页的两个查看码，持有其中一个即可打开（同 AdminApp 路由门禁）。
+const BUSINESS_DAY_VIEW = ["amusement.business_day.view", "bar.business_day.view"];
 
 /**
  * 综合体经营参数配置页（ADM-ANA-003，T4.2 坪效）：平台管理员维护可经营面积——
@@ -44,7 +28,6 @@ const MANAGE = ["analytics.operating_params.manage"];
  */
 export function OperatingParamsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<OperatingParamsRow[]>([]);
-  const [cutoffs, setCutoffs] = React.useState<BusinessDayCutoffRow[]>([]);
   const [anomalyConfig, setAnomalyConfig] = React.useState<{ surgePct?: number | string; highPct?: number | string; enabled?: boolean } | null>(null);
   const [surgeEdit, setSurgeEdit] = React.useState("");
   const [holidays, setHolidays] = React.useState<Array<{ holidayName: string; holidayYear: number; startDate?: string; endDate?: string; source?: string }>>([]);
@@ -54,23 +37,21 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
   const [holidayEnd, setHolidayEnd] = React.useState("");
   const [fetchUrl, setFetchUrl] = React.useState("");
   const [highEdit, setHighEdit] = React.useState("");
-  const [cutoffEdits, setCutoffEdits] = React.useState<Record<string, string>>({});
   const [form, setForm] = React.useState({ projectId: "", areaSqm: "" });
-  // 引导式流程 phase-6：运营参数录入收起为主按钮 + 分步引导弹窗（日切/异常/节假日等其余表单不动）。
+  // 引导式流程 phase-6：运营参数录入收起为主按钮 + 分步引导弹窗（异常/节假日等其余表单不动）。
   const [paramsOpen, setParamsOpen] = React.useState(false);
   const [paramsError, setParamsError] = React.useState("");
   const [paramsSubmitting, setParamsSubmitting] = React.useState(false);
+  const heldBusinessDayCode = BUSINESS_DAY_VIEW.find((code) => hasPermissions(effectivePermissions, [code]));
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [items, cutoffRows, anomalyCfg, holidayRows] = await Promise.all([
+      const [items, anomalyCfg, holidayRows] = await Promise.all([
         api.get<OperatingParamsRow[]>("/api/v1/analytics/operating-params"),
-        api.get<BusinessDayCutoffRow[]>("/api/v1/analytics/business-day-cutoffs"),
         api.get<{ surgePct?: number | string; highPct?: number | string; enabled?: boolean }>("/api/v1/analytics/anomaly-config"),
         api.get<Array<{ holidayName: string; holidayYear: number; startDate?: string; endDate?: string; source?: string }>>("/api/v1/analytics/holiday-calendar"),
       ]);
       setRows(items ?? []);
-      setCutoffs(cutoffRows ?? []);
       setAnomalyConfig(anomalyCfg ?? null);
       setHolidays(holidayRows ?? []);
       setSurgeEdit(anomalyCfg?.surgePct === undefined ? "" : String(Number(anomalyCfg.surgePct) * 100));
@@ -110,19 +91,6 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
     } finally {
       setParamsSubmitting(false);
     }
-  }
-
-  async function saveCutoff(domain: string) {
-    const raw = cutoffEdits[domain];
-    const hour = Number(raw);
-    if (raw === undefined || !Number.isInteger(hour) || hour < 0 || hour > 23) {
-      setGlobalError("日切小时必须是 0-23 的整数");
-      return;
-    }
-    await api.post("/api/v1/analytics/business-day-cutoffs", { domain, cutoffHour: hour });
-    setActionResult({ action: "business_day_cutoff_saved", domain, cutoffHour: hour });
-    setCutoffEdits((edits) => ({ ...edits, [domain]: "" }));
-    reload();
   }
 
   async function saveAnomalyConfig() {
@@ -167,7 +135,7 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
         title="经营参数"
         description="维护综合体可经营面积（㎡）。坪效 = 净收入 / 可经营面积 据此派生；面积未配置时坪效卡显示「未配置」。仅平台管理员可改（决定坪效口径分母）。"
       />
-      <p>游乐营业日按综合体独立配置，经最高权限审批后未来生效。<PermissionButton permissionsState={effectivePermissions} permissions={["amusement.business_day.view"]} onClick={() => navigateTo?.("ADM-AMU-008")}>打开游乐营业日配置</PermissionButton></p>
+      <p>营业日按综合体与每家酒吧分别配置，经最高权限审批后未来生效。<PermissionButton permissionsState={effectivePermissions} permissions={heldBusinessDayCode ? [heldBusinessDayCode] : BUSINESS_DAY_VIEW} onClick={() => navigateTo?.("ADM-AMU-008")}>打开营业日配置</PermissionButton></p>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="operating-params-table">
@@ -228,25 +196,6 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
             { label: "可经营面积（㎡）", value: form.areaSqm.trim() || "未填写" },
           ]}
         />
-        <h3>经营日切分(各业务的「一天」从几点切)</h3>
-        <div className="admin-muted-action">酒吧=6 点(晚 6 点到次日早 6 点算一天)、零售/餐饮商户=10 点、其余=4 点;「平台汇总基准」行影响全场对账口径,改动一分钟内生效。</div>
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="business-day-cutoffs-table">
-            <thead>
-              <tr><th>业务域</th><th>当前切分(点)</th><th>改为</th><th>操作</th></tr>
-            </thead>
-            <tbody>
-              {cutoffs.map((row) => (
-                <tr key={row.domain} data-testid={`cutoff-row-${row.domain}`}>
-                  <td>{DOMAIN_LABELS[row.domain] ?? row.domain}</td>
-                  <td data-testid={`cutoff-hour-${row.domain}`}>{row.cutoffHour}:00</td>
-                  <td><input aria-label={`${row.domain} 日切小时`} type="number" min="0" max="23" style={{ width: 72 }} value={cutoffEdits[row.domain] ?? ""} onChange={(event) => setCutoffEdits((edits) => ({ ...edits, [row.domain]: event.target.value }))} placeholder={String(row.cutoffHour)} /></td>
-                  <td><PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid={`cutoff-save-${row.domain}`} onClick={() => void saveCutoff(row.domain)}>保存</PermissionButton></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
         <h3>指标异常检测阈值(环比突变,后台可调)</h3>
         <div className="admin-form-grid" data-testid="anomaly-config-editor">
           <label>可疑线(%)<input data-testid="anomaly-surge-input" value={surgeEdit} onChange={(event) => setSurgeEdit(event.target.value)} /></label>

@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -200,9 +200,9 @@ public class AnalyticsService {
 
     private final AnalyticsRepository repository;
 
-    // S4/S5 明细窗:与 ETL 同源的经营日窗(未配置域回落 4 点基准)。setter 注入保持既有构造器族不变(单测用默认)。
+    // S4/S5 明细窗:与 ETL 同源的营业日窗（单综合体口径，未配置按出厂 10:00）。setter 注入保持既有构造器族不变(单测用默认)。
     private com.complex.platform.common.BusinessDayResolver businessDayResolver =
-            new com.complex.platform.common.BusinessDayResolver(4);
+            new com.complex.platform.common.BusinessDayResolver();
     private final AuditedOperationExecutor operations;
     private final Clock clock;
     private final LocalLlmClient localLlmClient;
@@ -234,6 +234,20 @@ public class AnalyticsService {
     @Autowired(required = false)
     void setBusinessDayResolver(com.complex.platform.common.BusinessDayResolver businessDayResolver) {
         this.businessDayResolver = businessDayResolver;
+    }
+
+    // 第十八批第 1 条：看板与明细是单综合体口径，按唯一启用综合体（BusinessDayResolver#soleProject）的营业日窗；
+    // 酒吧收入明细在仓储层逐商户按其酒吧窗取数（与 ETL 同口径）。
+    private LocalDate etlBusinessDate(Instant at) {
+        return businessDayResolver.businessDate(businessDayResolver.soleProject(), null, at);
+    }
+
+    private Instant dayStart(LocalDate businessDate) {
+        return businessDayResolver.start(businessDayResolver.soleProject(), null, businessDate);
+    }
+
+    private Instant dayEnd(LocalDate businessDate) {
+        return businessDayResolver.end(businessDayResolver.soleProject(), null, businessDate);
     }
 
     @Autowired
@@ -726,9 +740,9 @@ public class AnalyticsService {
                 "facility_work_orders",
                 () -> {
                     Instant now = Instant.now(clock);
-                    LocalDate businessDate = businessDayResolver.businessDate("facility", now);
-                    java.time.Instant windowStart = businessDayResolver.startInstant("facility", businessDate);
-                    java.time.Instant windowEnd = businessDayResolver.endInstant("facility", businessDate);
+                    LocalDate businessDate = etlBusinessDate(now);
+                    java.time.Instant windowStart = dayStart(businessDate);
+                    java.time.Instant windowEnd = dayEnd(businessDate);
                     return merchant
                             ? repository.listOverdueMerchantWorkOrders(windowStart, windowEnd, now, limit, offset, projectIds)
                             : repository.listOverdueWorkOrders(windowStart, windowEnd, now, limit, offset, projectIds);
@@ -751,10 +765,9 @@ public class AnalyticsService {
                 "energy_meter_readings",
                 () -> {
                     Instant now = Instant.now(clock);
-                    LocalDate businessDate = businessDayResolver.businessDate("energy", now);
+                    LocalDate businessDate = etlBusinessDate(now);
                     return repository.listAbnormalReadings(
-                            businessDayResolver.startInstant("energy", businessDate),
-                            businessDayResolver.endInstant("energy", businessDate), limit, offset, projectIds);
+                            dayStart(businessDate), dayEnd(businessDate), limit, offset, projectIds);
                 }
         );
     }
@@ -791,7 +804,7 @@ public class AnalyticsService {
         LocalDate businessDate = requestedDate != null ? requestedDate
                 : repository.latestEtlBusinessDate(scopeValue)
                 .or(() -> repository.latestEtlBusinessDate(null))
-                .orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
+                .orElse(etlBusinessDate(now));
         Map<Integer, Long> counts = repository.hourlyTrafficCounts(businessDate, scope);
         List<HourlyTrafficBucket> buckets = new java.util.ArrayList<>(24);
         for (int hour = 0; hour < 24; hour++) {
@@ -816,7 +829,7 @@ public class AnalyticsService {
         LocalDate businessDate = requestedDate != null ? requestedDate
                 : repository.latestEtlBusinessDate(scopeValue)
                 .or(() -> repository.latestEtlBusinessDate(null))
-                .orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
+                .orElse(etlBusinessDate(now));
         Map<String, BigDecimal> snapshots = repository.readMetricSnapshots(businessDate, scopeValue);
 
         Map<String, MetricValue> metrics = new LinkedHashMap<>();
@@ -831,8 +844,7 @@ public class AnalyticsService {
             if ("supply.received".equals(entry.metricCode())) {
                 // ROOT-04-R2：按商品及单位分列（裁决 M01），不出标量、不写快照；实时取，与明细同谓词。
                 List<Map<String, Object>> groups = repository.purchaseReceivedGroups(
-                        businessDayResolver.startInstant(entry.domain(), businessDate),
-                        businessDayResolver.endInstant(entry.domain(), businessDate), null, scopeValue);
+                        dayStart(businessDate), dayEnd(businessDate), null, scopeValue);
                 metrics.put(entry.metricCode(), new MetricValue(null, entry.unit(),
                         groups.isEmpty() ? "当日无采购到货" : null, Map.of("groups", groups)));
                 continue;
@@ -840,8 +852,7 @@ public class AnalyticsService {
             if (DashboardAggregationJob.RISK_MANUAL_BACKFILL.equals(entry.metricCode())) {
                 // ROOT-04-R3：提交即计数、状态另列（裁决 M02）；实时取，卡片与明细同谓词（快照只供月度对比与异常提醒）。
                 Map<String, Long> statusCounts = repository.manualBackfillStatusCounts(
-                        businessDayResolver.startInstant(entry.domain(), businessDate),
-                        businessDayResolver.endInstant(entry.domain(), businessDate), scopeValue);
+                        dayStart(businessDate), dayEnd(businessDate), scopeValue);
                 BigDecimal total = BigDecimal.valueOf(statusCounts.values().stream().mapToLong(Long::longValue).sum());
                 metrics.put(entry.metricCode(), new MetricValue(total, entry.unit(), null, Map.of("statusCounts", statusCounts)));
                 continue;
@@ -895,7 +906,7 @@ public class AnalyticsService {
             String groupBy, com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         Instant now = Instant.now(clock);
         Optional<LocalDate> etlDate = repository.latestEtlBusinessDate(null);
-        LocalDate businessDate = etlDate.orElse(LocalDate.ofInstant(now, java.time.ZoneOffset.UTC));
+        LocalDate businessDate = etlDate.orElse(etlBusinessDate(now));
         boolean byEntity = "entity".equals(groupBy);
         boolean whole = reach.platformAdmin() || reach.allProjects();
 
@@ -1841,7 +1852,7 @@ public class AnalyticsService {
             return assembleMetricDetail(definition,null,from,to,now,detail.summaryValue(),null,null,
                     appendProjectScopeNote(note,scope),definition.columns(),detail,safePage,safeSize,true);
         }
-        LocalDate currentBusinessDay = businessDayResolver.businessDate(definition.windowDomain(), now);
+        LocalDate currentBusinessDay = etlBusinessDate(now);
 
         if (MetricRegistry.TYPE_BALANCE.equals(definition.valueType())) {
             // 余额类=区间末值：as-of=to（缺省=当前经营日），from 不参与。
@@ -1854,16 +1865,16 @@ public class AnalyticsService {
                 case "finance.ar_balance_aging90p" -> repository.arOverdueAging90pDetail(asOf, safeSize, offset, scope);
                 // 第二批（酒吧域）余额类：状态/剩余数量按台账当前值，截至日仅限制下单/存入时间早于该经营日窗末。
                 case "bar.open_order_count" -> repository.barOpenOrderDetail(
-                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                        dayEnd(asOf), safeSize, offset);
                 case "bar.saved_bottle_stored" -> repository.savedBottleStoredDetail(
-                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                        dayEnd(asOf), safeSize, offset);
                 case "bar.saved_bottle_quantity" -> repository.savedBottleQuantityDetail(
-                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                        dayEnd(asOf), safeSize, offset);
                 // 第三批（票务域）余额类：状态按台账当前值，截至日仅限制下单/创建时间早于该经营日窗末。
                 case "ticket.pending_issue_count" -> repository.ticketPendingIssueDetail(
-                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                        dayEnd(asOf), safeSize, offset);
                 case "amusement.inspection_pending_rectification" -> repository.amusementInspectionPendingRectificationDetail(
-                        businessDayResolver.endInstant(definition.windowDomain(), asOf), safeSize, offset);
+                        dayEnd(asOf), safeSize, offset);
                 // 第五批（人事域）余额类：待审请假/在职员工数按台账当前值，截至日仅限制提交/建号时间早于该自然日窗末。
                 case "staff.pending_leave_count" -> repository.staffPendingLeaveDetail(asOf, safeSize, offset, scope);
                 case "staff.active_headcount" -> repository.staffActiveHeadcountDetail(asOf, safeSize, offset, scope);
@@ -1881,8 +1892,8 @@ public class AnalyticsService {
         // 可加/比率分子的时间窗：经营日窗 [start(from), end(to))；缺省=当前经营日（登记 rangeFilterOptional=true 则缺省全历史）。
         LocalDate effectiveFrom = from != null ? from : (to != null ? to : (definition.rangeFilterOptional() ? null : currentBusinessDay));
         LocalDate effectiveTo = to != null ? to : (from != null ? from : (definition.rangeFilterOptional() ? null : currentBusinessDay));
-        Instant windowStart = effectiveFrom == null ? null : businessDayResolver.startInstant(definition.windowDomain(), effectiveFrom);
-        Instant windowEnd = effectiveTo == null ? null : businessDayResolver.endInstant(definition.windowDomain(), effectiveTo);
+        Instant windowStart = effectiveFrom == null ? null : dayStart(effectiveFrom);
+        Instant windowEnd = effectiveTo == null ? null : dayEnd(effectiveTo);
 
         if (isRatio) {
             // 首批唯一比率指标：energy.electricity_per_sqm。分子=区间用电量；分母=可租面积（区间末时点）。

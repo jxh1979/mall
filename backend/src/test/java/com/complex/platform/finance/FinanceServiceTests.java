@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -74,7 +74,7 @@ class FinanceServiceTests {
                 operations,
                 auditEventService,
                 authorizationService,
-                new com.complex.platform.common.BusinessDayResolver(4),
+                new com.complex.platform.common.BusinessDayResolver(),
                 com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(),
                 null,
                 settlementProgress::add
@@ -890,7 +890,7 @@ class FinanceServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), auditEventService);
         FinanceService svc = new FinanceService(
                 financeRepository, ops, auditEventService, authorizationService,
-                new com.complex.platform.common.BusinessDayResolver(4),
+                new com.complex.platform.common.BusinessDayResolver(),
                 com.complex.platform.finance.gateway.PaymentGatewayRouter.alwaysDisabled(),
                 mdmService);
         svc.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
@@ -2022,7 +2022,7 @@ class FinanceServiceTests {
         AuditedOperationExecutor ops = new AuditedOperationExecutor(
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()), auditEventService);
         FinanceService svc = new FinanceService(financeRepository, ops, auditEventService, authorizationService,
-                new com.complex.platform.common.BusinessDayResolver(4),
+                new com.complex.platform.common.BusinessDayResolver(),
                 new com.complex.platform.finance.gateway.PaymentGatewayRouter(terminalRepo));
         svc.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
         svc.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());

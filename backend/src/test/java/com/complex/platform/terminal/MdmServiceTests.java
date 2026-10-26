@@ -315,6 +315,14 @@ class MdmServiceTests {
     }
 
     // ── fakes ─────────────────────────────────────────────────────────────────
+    @Test
+    void missingMdmSwitchRowMeansDisabled() {
+        // PGM 第 742 行「开关缺行不得视为开启」。
+        terminalRepository.removeMdmRow();
+
+        assertThat(service.isMdmEnabled()).isFalse();
+    }
+
     private static final class InMemoryMdmRepository implements MdmRepository {
         private final Map<String, MdmAppWhitelistRecord> apps = new LinkedHashMap<>();
         private final Map<String, MdmSiteWhitelistRecord> sites = new LinkedHashMap<>();
@@ -425,14 +433,22 @@ class MdmServiceTests {
     /** 仅实现 resolveEffectiveSwitch（MdmService.isMdmEnabled 唯一依赖的方法）。 */
     private static final class SwitchOnlyTerminalRepository implements TerminalDeviceRepository {
         private boolean mdmEnabled;
+        private boolean noRow;
 
         void setMdmEnabled(boolean enabled) {
             this.mdmEnabled = enabled;
         }
 
+        void removeMdmRow() {
+            this.noRow = true;
+        }
+
         @Override
         public Optional<TerminalCapabilitySwitchRecord> resolveEffectiveSwitch(
                 String terminalType, String capabilityCode, Map<String, String> orderedScopes) {
+            if (noRow) {
+                return Optional.empty();
+            }
             return Optional.of(new TerminalCapabilitySwitchRecord(
                     "tcs_mdm", "*", capabilityCode, "global", "global", mdmEnabled, null, Instant.now(), Instant.now()));
         }

@@ -12,7 +12,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -126,7 +126,7 @@ function taxFact(value: unknown): React.ReactNode {
 function ReviewOriginal({ decision }: { decision: PendingRow["decision"] }) {
   const reason = decision.reason ?? "";
   let content: React.ReactNode = <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{reason || "本单未记录原始说明"}</p>;
-  if (["payroll_tax_version", "payroll_tax_assessment", "amusement_business_day_config", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution"].includes(decision.objectType ?? "")) {
+  if (["payroll_tax_version", "payroll_tax_assessment", "amusement_business_day_config", "bar_business_day_config", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution"].includes(decision.objectType ?? "")) {
     const start = reason.indexOf("{");
     if (start >= 0) {
       try { content = <><p>{reason.slice(0, start)}</p>{taxFact(JSON.parse(reason.slice(start)))}</>; }

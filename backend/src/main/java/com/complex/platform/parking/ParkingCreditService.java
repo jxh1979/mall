@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.LocalZone;
@@ -118,8 +118,8 @@ public class ParkingCreditService {
         if (existing != null && "used".equals(existing.status())) {
             return new Evaluation(existing, existing.eligibleAmountCent(), existing.thresholdCent(), existing.creditMinutes());
         }
-        Timestamp from = Timestamp.from(businessDays.startInstant(day));
-        Timestamp to = Timestamp.from(businessDays.endInstant(day));
+        Timestamp from = Timestamp.from(businessDays.start(projectId, null, day));
+        Timestamp to = Timestamp.from(businessDays.end(projectId, null, day));
         List<Component> components = jdbc.query(COMPONENTS, (rs, n) -> new Component(rs.getString("source_type"), rs.getString("source_id"),
                 rs.getString("merchant_id"), rs.getString("bearer_entity_id"), rs.getLong("amount_cent"), rs.getTimestamp("consumed_at")),
                 customerId, projectId, from, to, customerId, projectId, from, to);
@@ -159,7 +159,7 @@ public class ParkingCreditService {
     /** 缴费试算可用的抵免：按入场营业日评估；未使用的，或已用在本次停车上的（续缴时继续抵同一段时长）。 */
     @Transactional
     public Credit applicable(String customerId, String projectId, Instant enteredAt, String sessionId) {
-        Credit credit = evaluate(customerId, projectId, businessDays.businessDate(enteredAt)).credit();
+        Credit credit = evaluate(customerId, projectId, businessDays.businessDate(projectId, null, enteredAt)).credit();
         if (credit == null) {
             return null;
         }
@@ -384,7 +384,7 @@ public class ParkingCreditService {
     /** 客人端：本项目当前营业日的抵免状态（可用／已用／已撤销／未达标）、已累计、门槛与抵免时长。 */
     @Transactional
     public Map<String, Object> customerView(String customerId, String projectId) {
-        LocalDate day = businessDays.businessDate(Instant.now());
+        LocalDate day = businessDays.businessDate(projectId, null, Instant.now());
         Evaluation ev = evaluate(customerId, projectId, day);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("project_id", projectId);

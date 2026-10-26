@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.api.ApiException;
 
@@ -301,7 +301,7 @@ public class TicketingService {
                 request,
                 TicketDynamicPricingSimulationResponse.class,
                 TicketingWriteOperation.SIMULATE_DYNAMIC_PRICING,
-                () -> pricingService.simulateDynamicPricing(request)
+                () -> pricingService.simulateDynamicPricing(request, orderService::saleBusinessDate)
         );
     }
 
@@ -521,12 +521,13 @@ public class TicketingService {
         );
     }
 
-    /** ROOT-03-R27：客人此刻买某票种的价格（基础价、命中资格价、最终价），供票种列表展示「我的价格」。 */
+    /** ROOT-03-R27：客人此刻买某票种的价格（基础价、命中资格价、最终价），供票种列表展示「我的价格」。visitDate 为空＝票种当前营业日。 */
     public TicketPricingService.CustomerPrice quoteCustomerPrice(String ticketTypeId, java.time.LocalDate visitDate,
             String salesChannel, java.util.Set<String> eligibleVariants) {
         TicketTypeRecord ticketType = repository.findTicketTypeById(operations.requireText(ticketTypeId, "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
-        return pricingService.resolveCustomerPrice(ticketType, visitDate, salesChannel, eligibleVariants);
+        return pricingService.resolveCustomerPrice(ticketType,
+                visitDate == null ? orderService.saleBusinessDate(ticketType) : visitDate, salesChannel, eligibleVariants);
     }
 
     /** ROOT-03-R4：客人本人订单发起在线付款（金额＝待付金额，服务端定）。 */

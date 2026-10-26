@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,6 +52,7 @@ class DispatchCommissionSettlementJdbcIntegrationTests {
     @Autowired private com.fasterxml.jackson.databind.ObjectMapper json;
     @Autowired private JdbcStaffRepository staffRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
 
     private String suffix;
     private String projectId;
@@ -190,6 +191,35 @@ class DispatchCommissionSettlementJdbcIntegrationTests {
         assertThat(own.get("payer_company_id")).isEqualTo(barCompanyId);
     }
 
+    /**
+     * 第十八批第 1 条（ENUM:187「日结批次……销售提成月份，一律以开台或下单时点所属的营业日为准」；BSM:1070「提成归属的月份仍以开台或下单
+     * 时点所属的营业日为准」）：酒吧已批准 12:00 起算，北京 10-01 11:00 下单（无开台会话）并结账计提的派驻提成属 9-30 营业日，
+     * 随 9 月提成月结拨付（计提时刻的自然月是 10 月）。
+     */
+    @Test
+    void commissionMonthFollowsTheOrdersBusinessDayOfTheBar() {
+        barVersion(12);
+        commission("a4", "tbl_cg07_" + suffix, dispatchedUserId, 700L, "calculated", "2026-10-01T03:00:00Z");
+        staffService.createDispatch(new StaffDispatchCreateRequest("cg07-dsp-bd-" + suffix, dispatchedUserId, barMerchantId,
+                "2026-09-01", "派驻到酒吧"));
+        assertThat(staffService.closeCommissionSettlement(
+                new StaffCommissionSettlementCloseRequest("cg07-close-bd-" + suffix, MONTH)).get("settlements")).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForMap("SELECT amount_cent, calculation_count FROM bar_commission_settlements WHERE month = ? AND merchant_id = ?",
+                MONTH, barMerchantId)).containsEntry("amount_cent", 5_700L).containsEntry("calculation_count", 3);
+    }
+
+    /** 同条：开台营业日为 9-30 的订单（会话跨过次日起点，北京 10-01 14:00 才下单结账）的提成列入 9 月工资单。 */
+    @Test
+    void payrollCommissionMonthFollowsTheOpeningBusinessDay() {
+        String table = "tbl_cg07_" + suffix;
+        commission("b2", table, ownStaffUserId, 800L, "calculated", "2026-10-01T06:00:00Z");
+        openedOn("b2", table, "2026-09-30");
+        PayrollApprovedCloseFixture.prepare(jdbcTemplate, json, ownStaffUserId, MONTH, 0);
+        PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate, json, payroll, ownStaffUserId, MONTH, "monthly");
+        assertThat(jdbcTemplate.queryForObject("SELECT commission_cent FROM staff_payroll_statements WHERE user_id = ? AND month = ?",
+                Long.class, ownStaffUserId, MONTH)).isEqualTo(2_300L);
+    }
+
     /** 派驻记录登记 / 重复登记拒绝 / 结束 / 列表。 */
     @Test
     void dispatchRecordLifecycle() {
@@ -245,6 +275,27 @@ class DispatchCommissionSettlementJdbcIntegrationTests {
         jdbcTemplate.update("INSERT INTO bar_commission_calculations (id, bill_id, sales_staff_id, sales_role_type, commission_base_cent,"
                 + " commission_rate_bp, commission_amount_cent, status, created_at) VALUES (?, ?, ?, 'staff_sales', 100000, ?, ?, ?, ?)",
                 "cm_cg07_" + key + "_" + suffix, billId, staffUserId, (int) (amountCent / 10), amountCent, status, at);
+    }
+
+    /** 本酒吧已批准、已生效的营业日版本（起点 cutoffHour 点）。 */
+    private void barVersion(int cutoffHour) {
+        Instant effective = Instant.parse("2026-01-01T00:00:00Z");
+        jdbcTemplate.update("""
+                INSERT INTO bar_business_day_configs(id,bar_id,project_id,version,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
+                VALUES(?,?,?,'V0.01',?,0,23,7,0,23,?,'approved','测试已批准版本','cg07_requester',?,'usr_master',?)
+                """, "bbd_cg07_" + suffix, barMerchantId, projectId, cutoffHour, Timestamp.from(effective),
+                Timestamp.from(effective.minusSeconds(7200)), Timestamp.from(effective.minusSeconds(3600)));
+        businessDays.invalidate();
+    }
+
+    /** 该订单落单时锁定的开台会话（bar_order_service_sources），会话营业日 businessDate。 */
+    private void openedOn(String key, String tableId, String businessDate) {
+        String session = "ses_cg07_" + key + "_" + suffix;
+        jdbcTemplate.update("INSERT INTO bar_table_sessions (id, bar_id, merchant_id, business_date, table_id, status, opened_at, created_at, updated_at)"
+                + " VALUES (?, ?, ?, ?::date, ?, 'closed', now(), now(), now())", session, barMerchantId, barMerchantId, businessDate, tableId);
+        jdbcTemplate.update("INSERT INTO bar_order_service_sources (order_id, session_id, table_id, project_id, merchant_id, business_date)"
+                + " VALUES (?, ?, ?, ?, ?, ?::date)", "ord_cg07_" + key + "_" + suffix, session, tableId, projectId, barMerchantId, businessDate);
     }
 
     private void authenticateWithStaffPermissions() {

@@ -1,4 +1,4 @@
-# 文件版本：V0.01
+# 文件版本：V0.02
 server:
   port: ${COMPLEX_API_PORT:8080}
   address: ${COMPLEX_API_HOST:127.0.0.1}
@@ -59,11 +59,6 @@ complex:
       # 由 U 盘安装期 provision 写入 env COMPLEX_MASTER_AUTHORITY_PUBKEY 后启用。私钥永不落服务器，只在 U 盘。
       public-key: ${COMPLEX_MASTER_AUTHORITY_PUBKEY:}
       challenge-ttl: ${COMPLEX_MASTER_CHALLENGE_TTL:PT2M}
-
-finance:
-  # 经营日切时点（小时, 0-23），凌晨该点切自然日。财务确认默认 04:00。
-  # 此前的流水归前一经营日；T7 日结六源汇总与 T12 看板 ETL 统一按此分桶。
-  business-day-cutoff-hour: ${COMPLEX_BUSINESS_DAY_CUTOFF_HOUR:4}
 
 ticket:
   credential:

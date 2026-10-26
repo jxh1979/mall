@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -211,12 +211,13 @@ public class ParkingCustomerService {
                        COALESCE((SELECT sum(p.amount_cent) FROM parking_payments p WHERE p.session_id=s.id AND p.status='paid'), 0) AS paid_cent,
                        (SELECT max(p.grace_until) FROM parking_payments p WHERE p.session_id=s.id AND p.status='paid') AS grace_until
                   FROM parking_sessions s WHERE s.id=?""", sessionId);
-        ParkingService.Policy policy = parking.requirePolicy((String) s.get("project_id"));
+        String project = (String) s.get("project_id");
+        ParkingService.Policy policy = parking.requirePolicy(project);
         Instant entered = ((Timestamp) s.get("entered_at")).toInstant();
         ParkingCreditService.Credit credit = withCredit && customerId != null
                 ? credits.applicable(customerId, (String) s.get("project_id"), entered, sessionId) : null;
         ParkingFeeCalculator.Quote q = ParkingFeeCalculator.quote(entered, now, (int) policy.freeMinutes(), policy.hourlyRateCent(),
-                policy.dailyCapCent(), credit == null ? 0 : (int) credit.creditMinutes(), t -> businessDays.endInstant(businessDays.businessDate(t)));
+                policy.dailyCapCent(), credit == null ? 0 : (int) credit.creditMinutes(), t -> businessDays.end(project, null, businessDays.businessDate(project, null, t)));
         long gross = q.grossFeeCent();
         long fee = q.netFeeCent();
         // 停车系统按下发的员工车牌认定为员工车辆的，按本项目员工优惠（万分比减免，10000＝免费）。

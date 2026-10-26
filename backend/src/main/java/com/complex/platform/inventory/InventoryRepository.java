@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.time.Instant;
 import java.util.List;
@@ -212,6 +212,11 @@ public interface InventoryRepository {
 
     default Optional<SavedBottleManualPickupRecord> findSavedBottleManualPickupByIdForUpdate(String id) {
         throw new UnsupportedOperationException("saved bottle manual pickups not supported");
+    }
+
+    /** 仓库所属项目（warehouses.project_id）；无库替身返回空。 */
+    default Optional<String> findWarehouseProjectId(String warehouseId) {
+        return Optional.empty();
     }
 
     /** 存酒所在酒吧的项目 id（酒吧＝商户，merchants.project_id，V267）；无归属返回空。 */

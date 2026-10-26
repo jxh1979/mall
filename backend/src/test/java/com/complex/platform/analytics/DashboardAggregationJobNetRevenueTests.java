@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -641,15 +641,6 @@ class DashboardAggregationJobNetRevenueTests {
                 java.util.Collection<String> projectIds) {
             return java.util.List.of();
         }
-
-        public java.util.List<AnalyticsRecords.BusinessDayCutoffRecord> listBusinessDayCutoffs() {
-            return java.util.List.of();
-        }
-
-        public AnalyticsRecords.BusinessDayCutoffRecord upsertBusinessDayCutoff(String domain, int cutoffHour, String updatedBy, java.time.Instant now) {
-            return new AnalyticsRecords.BusinessDayCutoffRecord(domain, cutoffHour, now, updatedBy);
-        }
-
 
         Map<String, Map<String, BigDecimal>> barRevenueByWindow;
         Map<String, Map<String, BigDecimal>> barRefundByWindow;

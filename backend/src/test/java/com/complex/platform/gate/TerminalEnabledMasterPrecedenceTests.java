@@ -69,9 +69,11 @@ class TerminalEnabledMasterPrecedenceTests {
     }
 
     @Test
-    void allRowsEnabledOrAbsentPasses() {
+    void allRowsEnabledPasses() {
+        // PGM 第 742 行 opt-in：缺行即拒绝（见 TerminalSwitchOptInTests），只有显式开启行才放行。
         TerminalDeviceRepository repo = mock(TerminalDeviceRepository.class);
-        when(repo.resolveEffectiveSwitch(any(), eq(MASTER), any())).thenReturn(Optional.empty());
+        when(repo.resolveEffectiveSwitch(any(), eq(MASTER), any()))
+                .thenReturn(Optional.of(row("tcs_term_merchant_portal", "global", "global", true)));
         TerminalSwitchGuard guard = new TerminalSwitchGuard(repo,
                 new AuditEventService(new InMemoryAuditEventRepository()));
 

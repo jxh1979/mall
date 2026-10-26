@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -204,7 +204,7 @@ class FinanceRefundLifecycleJdbcIntegrationTests {
                     IdempotencyService idempotency = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
                     idempotency.setTransactionManager(transactionManager);
                     FinanceService service = new FinanceService(competing, new AuditedOperationExecutor(idempotency, audit),
-                            audit, auth, new BusinessDayResolver(4), gateway);
+                            audit, auth, new BusinessDayResolver(), gateway);
                     service.setRefundTransactionManager(transactionManager);
                     service.refundAuthorizationService = mock(RefundAuthorizationService.class);
                     try {
@@ -258,7 +258,7 @@ class FinanceRefundLifecycleJdbcIntegrationTests {
             IdempotencyService idempotency = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
             idempotency.setTransactionManager(transactionManager);
             FinanceService service = new FinanceService(repository, new AuditedOperationExecutor(idempotency, audit),
-                    audit, auth, new BusinessDayResolver(4), gateway);
+                    audit, auth, new BusinessDayResolver(), gateway);
             service.setRefundTransactionManager(transactionManager);
             service.refundAuthorizationService = mock(RefundAuthorizationService.class);
             RefundRequest request = new RefundRequest(key, "批准退款", List.of(), paymentId, 3000L, "核实原路退款", null, null);

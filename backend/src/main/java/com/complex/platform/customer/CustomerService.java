@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -406,7 +406,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         java.util.Set<String> eligible = viewer == null ? null : ticketPriceEligibility(viewer);
         String terminal = viewer == null ? null : repository.findSessionByToken(trimToNull(customerToken))
                 .map(CustomerSessionRecord::scene).orElse(null);
-        LocalDate today = LocalDate.now(clock.withZone(com.complex.platform.common.LocalZone.ID));
+        // 第十八批第 1 条：「我的价格」按各票种当前营业日的日期类型（ENUM:187），由票务服务按票种归属算。
         return readPage(
                 "customer.ticket_products_viewed",
                 "customer.ticket_products_view_failed",
@@ -417,7 +417,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                         .filter(ticketType -> "published".equals(ticketType.status()))
                         .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
                         .map(ticketType -> toTicketProduct(ticketType, eligible == null ? null
-                                : ticketingService.quoteCustomerPrice(ticketType.id(), today, terminal, eligible)))
+                                : ticketingService.quoteCustomerPrice(ticketType.id(), null, terminal, eligible)))
                         .toList()
         );
     }
