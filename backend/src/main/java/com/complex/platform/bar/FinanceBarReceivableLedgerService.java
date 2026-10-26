@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
@@ -116,10 +116,9 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
                 otherChannelsCent += part;
             }
         }
-        // 旧构造（单测 / 内存双子，无结算流水与储值依赖）：退款全部挂应付（既有行为）。
-        if (barRepository == null || storedValueService == null) {
-            otherChannelsCent = refundAmountCent;
-        }
+        // 结算流水之外收进的款（第十七批：挂账应收由财务登记收回的，作废时原路待退）没有可回的卡，同其余渠道挂应付由财务按原收款方式结清；
+        // 旧构造（单测 / 内存双子，无结算流水与储值依赖）因此退款全部挂应付（既有行为）。
+        otherChannelsCent += left;
         if (otherChannelsCent <= 0) {
             return null;
         }

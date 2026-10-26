@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.LocalZone;
@@ -332,11 +332,16 @@ public class ParkingCreditService {
 
     // ============ 退款重核 ============
 
-    /** 酒吧账单退款应付实付结清＝退款成功：未使用的按剩余有效消费重核或撤销；已使用的不改动，只留对照审计。 */
+    /**
+     * 酒吧账单退款应付实付结清＝退款成功：未使用的按剩余有效消费重核或撤销；已使用的不改动，只留对照审计。
+     * 第十七批：账单「作废并冲正」的原路退款应付以账单 ID 为来源（BarBillingService#refundCollectedOnVoid），同样纳入。
+     */
     @EventListener
     @Transactional
     public void refundPayableSettled(RefundPayableSettled event) {
-        for (String bill : jdbc.queryForList("SELECT bill_id FROM bar_bill_adjustments WHERE id=?", String.class, event.sourceId())) {
+        for (String bill : jdbc.queryForList("""
+                SELECT bill_id FROM bar_bill_adjustments WHERE id=?
+                UNION SELECT id FROM bar_bills WHERE id=? AND payment_status='void'""", String.class, event.sourceId(), event.sourceId())) {
             List<Map<String, Object>> hits = jdbc.queryForList("""
                     SELECT c.id, c.project_id, c.customer_id, c.business_date, c.status FROM parking_credit_components x
                       JOIN parking_credits c ON c.id = x.credit_id WHERE x.source_type='bar_bill' AND x.source_id=?""", bill);

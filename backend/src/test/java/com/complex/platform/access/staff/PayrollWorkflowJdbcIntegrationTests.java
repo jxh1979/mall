@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.*;
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
@@ -36,6 +36,7 @@ class PayrollWorkflowJdbcIntegrationTests {
     @Autowired EvidenceEventService evidence;
     @Autowired SupervisorReviewService reviews;
     @Autowired StaffService staff;
+    @Autowired com.complex.platform.bar.BarService bars;
     String project,user,actor,hr,finance,tax,legal;List<String> leaders;
     PayrollApprovedFactsFixture.Source source;
     final String month="2025-07";
@@ -313,6 +314,60 @@ class PayrollWorkflowJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT project_id FROM staff_payroll_statements WHERE id=?",String.class,detail.statement().id())).isEqualTo(project);
         assertThat(detail.pendingItems()).anyMatch(p->"BAR_ALLOCATION_PAYER_PENDING".equals(p.code())&&unmatched.equals(p.sourceId())&&p.message().contains(other));
         assertThat(jdbc.queryForObject("SELECT amount_cent FROM ar_ap_items WHERE id=?",Long.class,detail.arApItemId())).isEqualTo(502000);
+    }
+
+    /**
+     * 第十七批（操作员裁决补充第 1 条「作废时系统自动……冲回已发积分、成长值和提成（工资单不再挂待定）」）：酒吧账单作废并冲正后，
+     * 该单提成不再以「酒吧账单尚未确认结算」挂待定，原工资单记下的这条待定作废当时即结清（原单不再显示、下月不再按历史待定展开）；
+     * 已计入定格工资的提成在原期补发中以负额冲回，只冲一次；本期没有其他可付金额时冲回转「收入冲正超出本期可付」待核，下次可付时随冲回行结清。
+     */
+    @Test void voidedBarBillCommissionStopsPendingAndPaidCommissionReversedInSupplement() {
+        prepare(500000,0);
+        String settled=barBill("paid","settled"),open=barBill("unpaid","unsettled");
+        String paid=barCommission(settled,4500),pending=barCommission(open,1200);
+        var r=request("monthly");var calc=payroll.calculate(r);var original=settle(r,calc,tax(calc,0));
+        assertThat(original.lines()).anyMatch(l->"bar_commission".equals(l.sourceType())&&paid.equals(l.sourceId())&&l.amountCent()==4500);
+        assertThat(original.pendingItems()).anyMatch(p->"BAR_COMMISSION_PENDING".equals(p.code())&&pending.equals(p.sourceId()));
+
+        // 主管在本综合体内处置：作废把已收 30000 原路待退挂退款应付，按操作者所在综合体落账。
+        StaffTestActors.actor("pw_bar_supervisor","merchant_staff",project,"pw_merchant");
+        for(String bill:List.of(settled,open)) {
+            bars.raiseBillAnomaly(bill,new com.complex.platform.bar.BarBillAnomalyRequest(key(),"客人对整单有争议"));
+            bars.resolveBillAnomaly(bill,new com.complex.platform.bar.BarBillAnomalyResolveRequest(key(),"voided_reversed","核实整单录错，作废并冲正"));
+        }
+        act(actor);
+        assertThat(payroll.detail(original.statement().id(),false).pendingItems()).noneMatch(p->"BAR_COMMISSION_PENDING".equals(p.code()));
+        var only=request("supplemental");var onlyCalc=payroll.calculate(only);
+        var onlySnap=json.convertValue(onlyCalc.calculationSnapshot(),StaffPayrollService.Snapshot.class);
+        assertThat(onlyCalc.beforeTaxCent()).isZero();
+        assertThat(onlySnap.lines()).noneMatch(l->"bar_commission_reversal".equals(l.sourceType()));
+        assertThat(onlySnap.pending()).anyMatch(p->"BAR_INCOME_REVERSAL_PENDING".equals(p.code())&&paid.equals(p.sourceId()));
+        settle(only,onlyCalc,tax(onlyCalc,0));
+        jdbc.update("INSERT INTO staff_payroll_adjustments(id,user_id,month,adj_type,amount_cent,reason,created_by,project_id) VALUES(?,?,?,'bonus',10000,'后到已批奖金',?,?)",key(),user,month,actor,project);
+        var extra=request("supplemental");var extraCalc=payroll.calculate(extra);
+        var snap=json.convertValue(extraCalc.calculationSnapshot(),StaffPayrollService.Snapshot.class);
+        assertThat(snap.pending()).noneMatch(p->"BAR_COMMISSION_PENDING".equals(p.code()));
+        assertThat(snap.lines()).anyMatch(l->"bar_commission_reversal".equals(l.sourceType())&&paid.equals(l.sourceId())&&l.amountCent()==-4500);
+        assertThat(extraCalc.beforeTaxCent()).isEqualTo(5500);
+        settle(extra,extraCalc,tax(extraCalc,0));
+        assertThat(jdbc.queryForObject("SELECT status FROM staff_payroll_pending_sources WHERE user_id=? AND source_type='BAR_INCOME_REVERSAL_PENDING' AND source_id=?",String.class,user,paid))
+            .isEqualTo("resolved");
+        assertThat(payroll.calculate(request("supplemental")).beforeTaxCent()).isZero();
+    }
+    /** 本员工为销售归属人的酒吧账单（无收款流水：本用例只看工资侧）。 */
+    String barBill(String payment,String settlement) {
+        String id="pw_bill_"+key(),table="pw_tbl_"+key(),order="pw_ord_"+key();
+        jdbc.update("INSERT INTO bar_tables(id,bar_id,table_code,table_name,table_type,status,created_at,updated_at) VALUES(?,'pw_bar',?,'提成回归卡座','card_seat','active',now(),now())",table,table);
+        jdbc.update("INSERT INTO bar_orders(id,bar_id,table_id,order_source,status,total_amount_cent,created_at,updated_at) VALUES(?,'pw_bar',?,'staff','billed',30000,now(),now())",order,table);
+        jdbc.update("INSERT INTO bar_bills(id,bill_no,order_id,bar_id,merchant_id,table_id,subtotal_amount_cent,payable_amount_cent,paid_amount_cent,payment_status,settlement_status,sales_staff_id,created_at,updated_at) VALUES(?,?,?,'pw_bar','pw_merchant',?,30000,30000,?,?,?,?,now(),now())",
+            id,id,order,table,"paid".equals(payment)?30000:0,payment,settlement,user);
+        return id;
+    }
+    String barCommission(String bill,long amount) {
+        String id="pw_cm_"+key();
+        jdbc.update("INSERT INTO bar_commission_calculations(id,bill_id,sales_staff_id,sales_role_type,commission_base_cent,commission_rate_bp,commission_amount_cent,status,created_at) VALUES(?,?,?,'sales',30000,1500,?,'calculated',?::timestamptz)",
+            id,bill,user,amount,month+"-15T12:00:00+08:00");
+        return id;
     }
 
     @Test void completePayrollTaxEvidenceStaysWithOriginalSubjectAfterEmployeeTransfer() {

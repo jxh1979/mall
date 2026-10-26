@@ -1,5 +1,5 @@
 package com.complex.platform.bar;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.sql.Timestamp;
 import java.time.*;
@@ -21,11 +21,15 @@ public class BarRevenueSourceService {
 
     public List<CollectionRevenue> completedCollections(String merchantId,Instant from,Instant to) {
         Objects.requireNonNull(merchantId,"merchantId");
+        // 第十七批⑤：作废（void）账单只留存作废前已退的那部分收款（BarBillAnomalyService），其中代收分项取已退的服务费、小费，
+        // 商品收入与退款营业日的已退商品款相抵；不按待付款挂起。
         return jdbc.query("""
             SELECT b.*,s.amount receipt_cent,s.completed_at,COALESCE(origin.project_id,space.project_id) project_id,
               COALESCE((SELECT sum(amount_cent) FROM bar_bill_adjustments a WHERE a.bill_id=b.id AND a.adjustment_type='refund'),0) refund_cent,
-              COALESCE((SELECT sum(amount_cent) FROM bar_payroll_bill_components c WHERE c.collection_bill_id=b.id AND c.component_type='service_fee'),0) service_cent,
-              COALESCE((SELECT sum(amount_cent) FROM bar_payroll_bill_components c WHERE c.collection_bill_id=b.id AND c.component_type='tip'),0) tip_cent,
+              CASE WHEN b.settlement_status='void' THEN COALESCE((SELECT sum(amount_cent) FROM bar_payroll_refund_lines r WHERE r.collection_bill_id=b.id AND r.component_type='service_fee'),0)
+                ELSE COALESCE((SELECT sum(amount_cent) FROM bar_payroll_bill_components c WHERE c.collection_bill_id=b.id AND c.component_type='service_fee'),0) END service_cent,
+              CASE WHEN b.settlement_status='void' THEN COALESCE((SELECT sum(amount_cent) FROM bar_payroll_refund_lines r WHERE r.collection_bill_id=b.id AND r.component_type='tip'),0)
+                ELSE COALESCE((SELECT sum(amount_cent) FROM bar_payroll_bill_components c WHERE c.collection_bill_id=b.id AND c.component_type='tip'),0) END tip_cent,
               EXISTS(SELECT 1 FROM bar_bill_adjustments a WHERE a.bill_id=b.id AND a.adjustment_type='service_fee'
                   AND NOT EXISTS(SELECT 1 FROM bar_payroll_bill_components c WHERE c.source_bill_id=b.id AND c.component_type='service_fee')) missing_fee
             FROM bar_bills b JOIN LATERAL (SELECT sum(settlement_amount_cent) amount,max(settled_at) completed_at
@@ -37,9 +41,10 @@ public class BarRevenueSourceService {
                 long paid=rs.getLong("receipt_cent"),fee=rs.getLong("service_cent"),tip=rs.getLong("tip_cent");
                 long originalDue=Math.addExact(Math.addExact(rs.getLong("payable_amount_cent"),rs.getLong("tip_amount_cent")),rs.getLong("refund_cent"));
                 List<String> unresolved=new ArrayList<>();
-                boolean paymentPending=!"settled".equals(rs.getString("settlement_status")) || paid<originalDue || rs.getLong("paid_amount_cent")<originalDue;
+                boolean voided="void".equals(rs.getString("settlement_status"));
+                boolean paymentPending=!voided && (!"settled".equals(rs.getString("settlement_status")) || paid<originalDue || rs.getLong("paid_amount_cent")<originalDue);
                 if(paymentPending)unresolved.add("订单尚未全渠道足额完成付款");
-                if(rs.getBoolean("missing_fee") || tip<rs.getLong("tip_amount_cent"))unresolved.add("服务费或小费缺少真实来源分项");
+                if(rs.getBoolean("missing_fee") || !voided && tip<rs.getLong("tip_amount_cent"))unresolved.add("服务费或小费缺少真实来源分项");
                 if(rs.getString("project_id")==null)unresolved.add("收款账单缺少实际综合体");
                 long goods=paid-fee-tip;
                 if(goods<0)unresolved.add("原收款及代收分项金额不一致");
@@ -86,15 +91,21 @@ public class BarRevenueSourceService {
 
     public List<GoodsRefund> completedGoodsRefunds(String merchantId,Instant from,Instant to) {
         Objects.requireNonNull(merchantId,"merchantId");
+        // 已退成同 BarPayrollRefundService#refunded（第十六批 TK-04-b「退回储值卡的部分即时成功」）：未挂应付的（全额回卡）按退款时点；
+        // 挂了应付的（金额只是非储值部分）按付款合计达到应付本身金额、取最后一笔付款时点，部分回卡的混合退款取两者较晚的。
         return jdbc.query("""
-            SELECT a.id,a.bill_id,a.amount_cent,p.completed_at,
+            SELECT * FROM (SELECT a.id,a.bill_id,a.amount_cent,
+                CASE WHEN a.ar_ap_item_id IS NULL THEN a.refunded_at
+                  WHEN p.amount>=i.amount_cent THEN CASE WHEN i.amount_cent<a.amount_cent THEN GREATEST(a.refunded_at,p.completed_at) ELSE p.completed_at END
+                END completed_at,
                 COALESCE((SELECT sum(amount_cent) FROM bar_payroll_refund_lines r WHERE r.adjustment_id=a.id),0) line_cent,
                 COALESCE((SELECT sum(amount_cent) FROM bar_payroll_refund_lines r WHERE r.adjustment_id=a.id AND r.component_type='goods'),0) goods_cent
-            FROM bar_bill_adjustments a JOIN bar_bills b ON b.id=a.bill_id
-            JOIN LATERAL (SELECT sum(amount_cent) amount,max(payment_time) completed_at FROM ar_ap_payments
-                WHERE ar_ap_item_id=a.ar_ap_item_id) p ON p.amount>=a.amount_cent
-            WHERE a.adjustment_type='refund' AND b.merchant_id=? AND p.completed_at>=? AND p.completed_at<?
-            ORDER BY p.completed_at,a.id
+              FROM bar_bill_adjustments a JOIN bar_bills b ON b.id=a.bill_id LEFT JOIN ar_ap_items i ON i.id=a.ar_ap_item_id
+              LEFT JOIN LATERAL (SELECT sum(amount_cent) amount,max(payment_time) completed_at FROM ar_ap_payments
+                WHERE ar_ap_item_id=a.ar_ap_item_id) p ON true
+              WHERE a.adjustment_type='refund' AND b.merchant_id=?) x
+            WHERE completed_at>=? AND completed_at<?
+            ORDER BY completed_at,id
             """,(rs,n)->new GoodsRefund(rs.getString("id"),rs.getString("bill_id"),merchantId,rs.getTimestamp("completed_at").toInstant(),
                 rs.getLong("line_cent")==rs.getLong("amount_cent")?rs.getLong("goods_cent"):null,
                 rs.getLong("line_cent")==rs.getLong("amount_cent")?"confirmed":"pending"),merchantId,Timestamp.from(from),Timestamp.from(to));

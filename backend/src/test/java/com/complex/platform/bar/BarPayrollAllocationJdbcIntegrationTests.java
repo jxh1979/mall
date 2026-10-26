@@ -1,8 +1,11 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import com.complex.platform.access.*;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
@@ -12,12 +15,17 @@ import java.util.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @Transactional
 class BarPayrollAllocationJdbcIntegrationTests {
     @Autowired JdbcTemplate jdbc;
@@ -31,6 +39,7 @@ class BarPayrollAllocationJdbcIntegrationTests {
     @Autowired BarServiceResponsibilityService responsibilities;
     @Autowired BarTableSessionService sessions;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
+    @Autowired MockMvc mvc;
     String project,merchant,company,table,session,bill,first,second,actor;
     final Instant start=Instant.parse("2026-09-01T12:00:00Z");
     final Instant end=start.plusSeconds(8*3600);
@@ -217,6 +226,52 @@ class BarPayrollAllocationJdbcIntegrationTests {
             assertThat(number(i,"amount_cent")).isEqualTo(5000);assertThat(number(i,"unpaid_amount_cent")).isEqualTo(5000);assertThat(i.get("status")).isEqualTo("pending_payment");
         });
         assertThat(items).hasSize(2);
+    }
+
+    /**
+     * 第十七批（操作员裁决补充第 1 条「全部自动冲回（推荐）：作废时系统自动把已收款项登记为原路待退（走现有退款链）……」）：收款账单经主管
+     * 「作废并冲正」后，本单小费、服务费分项按全额退款处理（等同退款链对分项的冲减），不再以「原收款账单尚未完成真实收款」挂待结；作废前已办过的
+     * 分项退款不重复冲减；月结出负额分配冲回已确认分配，跨主体的负额单列应收、不轧差（BSM L1143）。请求体按前端蛇形键。
+     */
+    @Test void voidedCollectionBillReversesServiceIncomeAllocationsAsFullRefund() throws Exception {
+        String payerB=crossEntityPayerForFirst();
+        close();
+        String adjustment=id(),ap=id();
+        jdbc.update("INSERT INTO ar_ap_items(id,item_no,direction,counterparty_id,source_type,source_id,amount_cent,unpaid_amount_cent,due_date,status,created_at,updated_at) VALUES(?,?,'payable',?,'refund',?,5000,5000,'2026-09-02','open',now(),now())",
+            ap,ap,merchant,adjustment);
+        var row=bars.saveBillAdjustment(new BarBillAdjustmentRecord(adjustment,bill,"refund",5000,100000,97000,"真实商品30元小费20元",actor,true,"applied",id(),List.of(),ap,"{}",end,end));
+        refunds.record(row,refunds.validate(bars.findBillById(bill).orElseThrow(),List.of(
+            new BarBillAdjustmentRequest.RefundLine(bill,"goods",3000),
+            new BarBillAdjustmentRequest.RefundLine(bill,"tip",2000)),5000));
+        jdbc.update("UPDATE bar_bills SET payable_amount_cent=97000,tip_amount_cent=18000 WHERE id=?",bill);
+        jdbc.update("INSERT INTO ar_ap_payments(id,ar_ap_item_id,amount_cent,payment_method,payment_time,created_at) VALUES(?,?,5000,'bank_transfer',?,now())",id(),ap,Timestamp.from(end.plusSeconds(2)));
+        close();
+
+        String role=jdbc.queryForObject("SELECT role_id FROM user_roles WHERE user_id=? LIMIT 1",String.class,actor);
+        for(String permission:List.of("bar.bill.adjust","bar.bill.anomaly.resolve"))
+            jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,?)",role,permission);
+        mvc.perform(post("/api/v1/bar/bills/"+bill+"/anomaly").with(web()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"reason\":\"客人称整单不是本桌消费\",\"idempotency_key\":\"ra_"+id()+"\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/v1/bar/bills/"+bill+"/anomaly/resolve").with(web()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"resolution\":\"voided_reversed\",\"reason\":\"核实整单记错，作废并冲正\",\"idempotency_key\":\"rv_"+id()+"\"}"))
+            .andExpect(status().isOk());
+        as(actor,merchant);
+
+        assertThat(close()).singleElement().satisfies(r->{
+            assertThat(r.status()).isEqualTo("confirmed");assertThat(r.payableTipCent()).isZero();
+            assertThat(r.allocations()).extracting(BarPayrollAllocation::amountCent).containsExactlyInAnyOrder(-4500L,-13500L);
+        });
+        for(String user:List.of(first,second))
+            assertThat(allocations.confirmedAllocations(user,"2026-09").stream().mapToLong(BarPayrollAllocation::amountCent).sum()).isZero();
+        assertThat(allocations.unresolvedAllocationSources(first,"2026-09")).isEmpty();
+        assertThat(transferItems()).filteredOn(i->"receivable".equals(i.get("direction")))
+            .allSatisfy(i->assertThat(i.get("counterparty_id")).isEqualTo(payerB))
+            .extracting(i->number(i,"amount_cent")).containsExactlyInAnyOrder(500L,4500L);
+    }
+    /** 本用例经办人（同前端后台登录，终端 web）。 */
+    RequestPostProcessor web() {
+        AccessActor a=new AccessActor(actor,actor,"staff",project,merchant,"active");
+        return request->{request.addHeader("X-Terminal-Type","web");return authentication(new UsernamePasswordAuthenticationToken(a,"test",List.of())).postProcessRequest(request);};
     }
 
     @Test void splitAndMergeCollectionsDeductOriginalTipOnlyOnce() {

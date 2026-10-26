@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import com.complex.platform.bar.BarBillAdjustmentRequest.RefundLine;
@@ -101,11 +101,13 @@ public class BarPayrollRefundService {
             if(paid<payable)throw conflict("BAR_PAYROLL_REFUND_PENDING","退款尚未实际全部付成，不以退款申请时间认定成功");
         }
     }
+    /** 已实际付成的分项退款；第十七批：收款账单已作废的不计（作废已按全额退款冲减分项，见 BarPayrollAllocationService）。 */
     long refunded(String source,String type) {
         return p.jdbc.queryForObject("""
             SELECT COALESCE(sum(r.amount_cent),0) FROM bar_payroll_refund_lines r
             JOIN bar_bill_adjustments a ON a.id=r.adjustment_id
             WHERE r.source_bill_id=? AND r.component_type=?
+              AND NOT EXISTS(SELECT 1 FROM bar_bills v WHERE v.id=r.collection_bill_id AND v.settlement_status='void')
               AND (r.ar_ap_item_id IS NULL OR (SELECT COALESCE(sum(p.amount_cent),0) FROM ar_ap_payments p WHERE p.ar_ap_item_id=r.ar_ap_item_id)
                    >=(SELECT COALESCE(sum(i.amount_cent),0) FROM ar_ap_items i WHERE i.id=r.ar_ap_item_id))
             """,Long.class,source,type);

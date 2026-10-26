@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -145,6 +145,12 @@ public class StaffPayrollService {
         for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,c.commission_base_cent,c.commission_rate_bp,c.commission_amount_cent,c.status FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.sales_staff_id=? AND to_char(c.created_at AT TIME ZONE ?,'YYYY-MM')=? AND c.status NOT IN ('void','cancelled') AND b.settlement_status='settled' ORDER BY c.id",
                 request.userId(),LocalZone.ID.getId(),request.month()))
             addIfUnpaid(lines,external("已确认酒吧提成","commission",((Number)row.get("commission_amount_cent")).longValue(),"bar_commission",(String)row.get("id"),row,work,true));
+        // 第十七批（操作员裁决补充第 1 条）：账单作废并冲正、提成已计入定格工资的，按原期以负额冲回实发提成（同酒吧收入冲正，超出本期可付的转待核实）。
+        for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,l.statement_id,l.amount_cent FROM bar_commission_calculations c JOIN staff_payroll_statement_lines l ON l.source_type='bar_commission' AND l.source_id=c.id WHERE c.sales_staff_id=? AND to_char(c.created_at AT TIME ZONE ?,'YYYY-MM')=? AND c.status='void' ORDER BY c.id",
+                request.userId(),LocalZone.ID.getId(),request.month())) {
+            long back=-((Number)row.get("amount_cent")).longValue();
+            addIfUnpaid(lines,new Line(null,"commission","commission","酒吧提成冲回（账单作废并冲正）",back,0,0,back,"bar_commission_reversal",(String)row.get("id"),row));
+        }
         for(var allocation:bar.confirmedAllocations(request.userId(),request.month())) {
             if(!"confirmed".equals(allocation.status())||!Objects.equals(request.userId(),allocation.userId()))
                 throw conflict("PAYROLL_SOURCE_SCOPE_MISMATCH","分配原件不是该员工已确认的收入");
@@ -178,7 +184,7 @@ public class StaffPayrollService {
         appendHistoricalPending(pending,request,facts);
         long sum=0;for(var line:lines)sum=Math.addExact(sum,line.amountCent());
         if(sum<0) {
-            var negative=lines.stream().filter(l->"bar_payroll_allocation".equals(l.sourceType())&&l.amountCent()<0).toList();
+            var negative=lines.stream().filter(l->Set.of("bar_payroll_allocation","bar_commission_reversal").contains(l.sourceType())&&l.amountCent()<0).toList();
             for(var line:negative){pending.add(new PendingItem("BAR_INCOME_REVERSAL_PENDING",line.sourceId(),"收入冲正超出本期可付金额，须专业核实另行处理"));sum=Math.subtractExact(sum,line.amountCent());}
             lines.removeAll(negative);
         }
@@ -289,7 +295,7 @@ public class StaffPayrollService {
                 case "ATTENDANCE_TIME_PENDING","ATTENDANCE_INTERVAL_PENDING" -> (sameMonth||sameCycle)&&workComplete&&snapshot.worktime().intervals().stream().anyMatch(i->i.shiftId().equals(source));
                 case "PERFORMANCE_BASIS_PENDING" -> sameMonth&&snapshot.grade()!=null&&snapshot.earnings().lines().stream().anyMatch(l->salaryKey(snapshot.scheme().userId(),snapshot.facts().month(),l.componentCode()).equals(source));
                 case "BAR_COMMISSION_PENDING" -> snapshot.lines().stream().anyMatch(l->"bar_commission".equals(l.sourceType())&&source.equals(l.sourceId()));
-                case "BAR_INCOME_REVERSAL_PENDING" -> snapshot.lines().stream().anyMatch(l->"bar_payroll_allocation".equals(l.sourceType())&&source.equals(l.sourceId()));
+                case "BAR_INCOME_REVERSAL_PENDING" -> snapshot.lines().stream().anyMatch(l->Set.of("bar_payroll_allocation","bar_commission_reversal").contains(l.sourceType())&&source.equals(l.sourceId()));
                 case "BAR_ALLOCATION_PAYER_PENDING" -> jdbc.queryForObject("SELECT count(*) FROM staff_payroll_statement_lines WHERE source_type='bar_payroll_allocation' AND source_id=?",Integer.class,source)>0;
                 case "BAR_ALLOCATION_PENDING" -> snapshot.lines().stream().anyMatch(l->"bar_payroll_allocation".equals(l.sourceType())&&sourceBill(l,source));
                 case "CORRECTION_BASIS_PENDING","CORRECTION_SCOPE_PENDING" -> snapshot.lines().stream().anyMatch(l->"payroll_correction".equals(l.sourceType())&&source.equals(l.sourceId()));
