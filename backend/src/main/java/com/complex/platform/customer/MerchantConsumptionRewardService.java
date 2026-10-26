@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -226,18 +226,24 @@ public class MerchantConsumptionRewardService {
                 rs.getLong("reversed_points"), rs.getLong("reversed_growth")), id).getFirst();
     }
 
-    /** 退品待审核，或退款已生效但应付尚未实际退出（含失败仍需办理）；驳回的退品不算。 */
+    /**
+     * 退品待审核，或退款已生效但应付尚未实际退出（含失败仍需办理）；驳回的退品不算。
+     * 第十七批（操作员裁决补充第 1 条「作废时……冲回已发积分、成长值」）：异常账单作废并冲正的不等退款退出，作废即全额冲回（有效消费按 0）。
+     */
     private boolean barRefundPending(String billId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
-            SELECT EXISTS (SELECT 1 FROM bar_order_item_voids v WHERE v.bill_id = ? AND v.status = 'pending')
+            SELECT b.payment_status <> 'void' AND (
+                EXISTS (SELECT 1 FROM bar_order_item_voids v WHERE v.bill_id = b.id AND v.status = 'pending')
                 OR EXISTS (SELECT 1 FROM bar_bill_adjustments a JOIN ar_ap_items x ON x.id = a.ar_ap_item_id
-                            WHERE a.bill_id = ? AND a.adjustment_type = 'refund' AND a.status = 'applied' AND x.status <> 'settled'
-                              AND NOT EXISTS (SELECT 1 FROM bar_order_item_voids v WHERE v.bill_adjustment_id = a.id AND v.status = 'rejected'))
-            """, Boolean.class, billId, billId));
+                            WHERE a.bill_id = b.id AND a.adjustment_type = 'refund' AND a.status = 'applied' AND x.status <> 'settled'
+                              AND NOT EXISTS (SELECT 1 FROM bar_order_item_voids v WHERE v.bill_adjustment_id = a.id AND v.status = 'rejected')))
+            FROM bar_bills b WHERE b.id = ?
+            """, Boolean.class, billId));
     }
 
     private Reward reconcile(Reward r, Instant at) {
-        long current = jdbc.queryForObject("SELECT " + BAR_EFFECTIVE + " FROM bar_bills b WHERE b.id = ?", Long.class, r.sourceId());
+        long current = jdbc.queryForObject("SELECT CASE WHEN b.payment_status = 'void' THEN 0 ELSE " + BAR_EFFECTIVE + " END"
+                + " FROM bar_bills b WHERE b.id = ?", Long.class, r.sourceId());
         long refunded = Math.max(0, r.effective() - current);
         if (refunded <= r.refunded()) return r;
         long remaining = r.effective() - refunded;

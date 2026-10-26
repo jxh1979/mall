@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1063,6 +1063,7 @@ class JdbcFinanceRepository implements FinanceRepository {
             return aggregateBar(businessDate, from, to);
         }
         // bar_bill_settlements 有 merchant_id:merchant scope 仅归本商户结算;调整(退款)经 bill→settlement 归本商户。
+        // 第十七批⑤：退款按账单是否有本商户结算流水归属（EXISTS），不按流水逐行连接——账单有多笔收款流水（多渠道收款、作废留存已退部分）时退款不重复计。
         return aggregateTotalsScoped("""
                 SELECT (SELECT COALESCE(SUM(settlement_amount_cent), 0)
                           FROM bar_bill_settlements
@@ -1072,11 +1073,11 @@ class JdbcFinanceRepository implements FinanceRepository {
                            AND merchant_id = :merchant_id) AS amount_cent,
                        (SELECT COALESCE(SUM(adj.amount_cent), 0)
                           FROM bar_bill_adjustments adj
-                          JOIN bar_bill_settlements bs ON bs.bill_id = adj.bill_id
                          WHERE adj.adjustment_type = 'refund'
                            AND adj.refunded_at >= :from
                            AND adj.refunded_at < :to
-                           AND bs.merchant_id = :merchant_id) AS refund_cent,
+                           AND EXISTS (SELECT 1 FROM bar_bill_settlements bs
+                                        WHERE bs.bill_id = adj.bill_id AND bs.merchant_id = :merchant_id)) AS refund_cent,
                        (SELECT COUNT(*)
                           FROM bar_bill_settlements
                          WHERE settled_at >= :from

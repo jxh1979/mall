@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.Optional;
@@ -41,10 +41,13 @@ final class BarMinSpend {
         return items + adjustmentsCent(repository, orderIds, true);
     }
 
-    /** 留款未抵用余额 = Σ min_spend_retained − Σ min_spend_retained_applied（链内全部账单）。 */
+    /**
+     * 留款未抵用余额 = Σ min_spend_retained − Σ min_spend_retained_applied（链内全部账单），不小于 0。
+     * ponytail: 留款已被别的账单抵用后原单又作废（或退品驳回）时差额为负，这里只按 0 计、不向新账单加收；这一多条件子情形维持现行处理（第十七批控制席定：不改）。
+     */
     static long retainedBalanceCent(BarRepository repository, String sessionId) {
-        return adjustmentsCent(repository,
-                repository.listOrderIdsBySessionIds(repository.familySessionIds(rootSessionId(repository, sessionId), true)), false);
+        return Math.max(0L, adjustmentsCent(repository,
+                repository.listOrderIdsBySessionIds(repository.familySessionIds(rootSessionId(repository, sessionId), true)), false));
     }
 
     /** 当前有效并台链根：被并（merged）/ 整体转台前旧链（merged_transferred）会话沿 source_session_id 上溯到链根。 */

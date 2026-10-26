@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -392,9 +392,34 @@ public class BarBillingService {
     /**
      * 第十一批 TK-04-b（BSM L823「退款成功时取消对应尚待确认积分」「已可用积分后来发生特殊退款的，仍按原追回及待追回积分规则处理」）：
      * 退款调整生效后对本单商户消费奖励对账；应付尚未实际退出时奖励不动，待财务结清时再对账。
+     * 第十七批：异常账单作废并冲正也走这里（作废即全额冲回，见 MerchantConsumptionRewardService#reconcileBarBill）。
      */
-    private void reconcileRewards(String billId) {
+    void reconcileRewards(String billId) {
         if (merchantRewards != null) merchantRewards.reconcileBarBill(billId);
+    }
+
+    /**
+     * 第十七批（操作员裁决补充第 1 条「作废时系统自动把已收款项登记为原路待退（走现有退款链）」）：异常账单作废并冲正时，
+     * 实收减已退的部分整笔交给退款原路分配（{@link BarReceivableLedgerService#createRefundPayable}，TK-20-R2）——按收款倒序逐笔，
+     * 储值部分当场回原卡，其余渠道合并挂一笔退款应付（source_id＝账单 ID）由财务实付结清。不另记账单退款调整：收款流水已按反结冲正、
+     * 不计营收，再记一笔退款会在日结、分红与经营分析的退款口径里重复冲减。返回作废前已登记的退款净额（作废只冲正未退部分的收款，
+     * 见 BarBillAnomalyService）。挂账应收已由财务登记收回的部分（onAccountCollectedCent，不回写账单实收）一并原路待退：
+     * 不在结算流水里、没有可回的卡，并入同一笔退款应付。
+     */
+    long refundCollectedOnVoid(BarBillRecord bill, String reason, long onAccountCollectedCent) {
+        long refunded = repository.listBillAdjustments(bill.id()).stream()
+                .filter(a -> "applied".equals(a.status()))
+                .mapToLong(a -> "refund".equals(a.adjustmentType()) ? a.amountCent()
+                        : "refund_reversal".equals(a.adjustmentType()) ? -a.amountCent() : 0L)
+                .sum();
+        long collected = bill.paidAmountCent() - refunded + onAccountCollectedCent;
+        if (collected <= 0) {
+            return refunded;
+        }
+        BarOrderRecord order = repository.findOrderById(bill.orderId())
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
+        receivableLedgerService.createRefundPayable(bill, order, bill.id(), collected, bill.id(), reason, List.of());
+        return refunded;
     }
 
     /** 第十一批 TK-04-R5（ENUM L77「从消费单据可以反查该单产生的积分与成长值记录」）：账单端查看本单商户消费奖励，限本商户。 */
@@ -698,6 +723,11 @@ public class BarBillingService {
         BarBillRecord bill = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
+        // 第十七批（操作员裁决补充第 1 条「作废时……冲回已发积分、成长值和提成（工资单不再挂待定）」）：作废并冲正的账单不再计提成
+        // （作废时已有的提成同一事务置 void，见 BarBillAnomalyService）。
+        if ("void".equals(bill.paymentStatus())) {
+            throw ApiException.conflict("BAR_BILL_VOIDED", "账单已作废");
+        }
         // 2c-2 提成防重：同一账单已计提则返回已有（幂等），不重复建提成台账与 finance 应付，杜绝多幂等键刷提成。
         java.util.Optional<BarCommissionCalculationRecord> existingCommission = repository.findCommissionByBillId(bill.id());
         if (existingCommission.isPresent()) {

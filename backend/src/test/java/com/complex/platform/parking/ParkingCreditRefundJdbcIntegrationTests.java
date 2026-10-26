@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -113,6 +113,21 @@ class ParkingCreditRefundJdbcIntegrationTests {
         String adjustment = refunded(10_000);
         events.publishEvent(new RefundPayableSettled("arap_" + adjustment, adjustment));
         assertThat(credit().get("status")).isEqualTo("revoked");
+        assertThat(audits("parking.credit.revoked")).isEqualTo(1);
+    }
+
+    /**
+     * 第十七批④（第十二批 HP-P01「对应消费退款成功后，未使用的抵免重核或撤销」）：账单经「作废并冲正」后，其原路退款应付
+     * （source_id＝账单 ID）实付结清同样触发重核——作废账单不再计有效消费，未使用的抵免撤销。
+     */
+    @Test
+    void unusedCreditRevokedWhenVoidRefundPayableSettled() {
+        jdbc.update("UPDATE bar_bills SET payment_status='void', settlement_status='void' WHERE id=?", bill);
+        jdbc.update("UPDATE bar_bill_settlements SET reversed=TRUE WHERE bill_id=?", bill);
+        events.publishEvent(new RefundPayableSettled("arap_void_" + bill, bill));
+        Map<String, Object> credit = credit();
+        assertThat(credit.get("status")).isEqualTo("revoked");
+        assertThat(((Number) credit.get("eligible_amount_cent")).longValue()).isZero();
         assertThat(audits("parking.credit.revoked")).isEqualTo(1);
     }
 

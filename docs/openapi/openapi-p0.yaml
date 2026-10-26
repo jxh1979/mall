@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.32
+  version: V0.33
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2081,6 +2081,7 @@ paths:
         - finance
       operationId: calculateBarTableCommission
       summary: 卡座销售提成计算
+      description: 第十七批（操作员裁决补充第 1 条「作废时……冲回已发积分、成长值和提成（工资单不再挂待定）」）：账单已作废（payment_status=void，含异常处置「作废并冲正」）的不再计提成，返回 409 BAR_BILL_VOIDED；同一账单已计提的返回已有提成、不重复计提。
       x-permission: bar.table_commission.calculate
       x-data-scope: project-bar
       x-terminal-allowed:
@@ -13877,7 +13878,7 @@ paths:
         - bar
       operationId: resolveBarBillAnomaly
       summary: 主管处置异常账单
-      description: 第十六批第 16 条（ENUM「异常状态的统一出口」：主管在系统内选择「更正后恢复」或「作废并冲正」两种方式之一处置，填写原因并留痕；恢复后回到进入异常之前的那个状态）：restored——payment_status 回到进入异常前的状态，已结账单再按已成功退款额重算部分退款／已退款；voided_reversed——账单 payment_status 与 settlement_status 置 void（已作废），已登记的收款流水按反结同一做法冲正（reversed，不再计入营收与对账），作废后收款返回 409 BAR_BILL_VOIDED，关台不再把它算作未结清。voided_reversed 与反结同一做法：结账营业日已锁定日结的 409 DAY_CLOSE_LOCKED（走补录调整流程），账单仍在异常；账单不在异常 409 BAR_BILL_NOT_ABNORMAL；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填，随成功审计留痕。
+      description: 第十六批第 16 条（ENUM「异常状态的统一出口」：主管在系统内选择「更正后恢复」或「作废并冲正」两种方式之一处置，填写原因并留痕；恢复后回到进入异常之前的那个状态）：restored——payment_status 回到进入异常前的状态，已结账单再按已成功退款额重算部分退款／已退款；voided_reversed——账单 payment_status 与 settlement_status 置 void（已作废），已登记的收款流水按反结同一做法冲正（reversed，不再计入营收与对账），作废后收款返回 409 BAR_BILL_VOIDED，关台不再把它算作未结清。第十七批（操作员裁决补充第 1 条「全部自动冲回」）voided_reversed 同一事务内：实收减已成功登记退款的部分按收款倒序逐笔原路待退——储值部分当场回原卡，其余渠道合并挂一笔退款应付（direction=payable、source_type=refund、source_id=账单 ID）由财务实付结清，不另记账单退款调整；本单商户消费积分与成长值按有效消费为 0 全额冲回（待确认积分取消，已可用的扣回、不足挂待追回，成长值冲回后按当前滚动成长值重新定级）；本单销售提成置 void，工资单不再挂「酒吧账单尚未确认结算」（此前工资单记下的该项待定当即结清），已计入定格工资的在原期补发中以负额冲回；派驻／营销人员的该单提成已随提成月结拨付所属主体的，向所属主体追加一笔应收（direction=receivable、source_type=dispatch_commission_transfer、source_id=提成 ID）冲回，原月结不改；作废后计提成返回 409 BAR_BILL_VOIDED。本单低消留款（min_spend_retained）与留款抵用（min_spend_retained_applied）置 reversed：留款含在实收里随作废退回、不再作台组抵用额，本单占用的台组留款回到台组余额。同一幂等键重放返回第一次结果、不重复退款。作废前已办过退款的只冲正未退部分的收款：收款流水整体置 reversed 后，被已退额（按退款原路同序、后收的先退）占用的部分按原收款时点、渠道另记一笔不冲正的留存流水，已退款仍在退款营业日冲减，作废账单在日结、分红与经营分析各期合计为 0；挂账账单（on_account）冲销挂账挂出的应收（追加一行 origin_item_id 回指原行、未收金额取反、status=reversed），原行之后登记收款 409 AR_AP_ITEM_REVERSED，原行已由财务收回的部分并入退款应付原路待退；本单收进的小费、服务费分项按全额退款处理，酒吧报酬月结出负额分配冲回；未退部分的退款应付实付结清后停车消费抵免同样重核。voided_reversed 与反结同一做法：结账营业日已锁定日结的 409 DAY_CLOSE_LOCKED（走补录调整流程），账单仍在异常；账单不在异常 409 BAR_BILL_NOT_ABNORMAL；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填，随成功审计留痕。
       x-permission: bar.bill.anomaly.resolve
       x-data-scope: project-bar-table
       x-terminal-allowed:

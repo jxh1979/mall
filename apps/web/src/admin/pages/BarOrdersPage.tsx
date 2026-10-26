@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { TechDetails } from "../components/TechDetails";
@@ -123,7 +123,7 @@ const VOID_TYPE_LABEL: Record<string, string> = {
 const ANOMALY_RESOLUTION_LABEL = { restored: "更正后恢复", voided_reversed: "作废并冲正" } as const;
 const ANOMALY_RESOLUTION_IMPACT = {
   restored: "账单回到登记争议之前的状态，原因进入审计留痕。",
-  voided_reversed: "账单作废，已登记的收款流水冲正、不再计入营收与对账；作废后不能再收款。原因进入审计留痕。",
+  voided_reversed: "账单作废，已登记的收款流水冲正、不再计入营收与对账；已收款项按原渠道登记原路待退（储值部分当场退回原卡，其余挂退款由财务结清），本单已发的积分、成长值和销售提成一并冲回；作废后不能再收款。原因进入审计留痕。",
 } as const;
 
 /** V351 退酒原因码字典项（后台可增删改；上屏一律用中文名，英文码只作统计标识）。 */
