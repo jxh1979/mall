@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -49,6 +49,9 @@ const SMS_CATALOG: Record<string, { label: string; level: string; mandatory?: bo
   "sms.notify.voucher.voucher_transfer_created": { label: "券转赠领取", level: "事件" },
   "sms.notify.bar": { label: "酒吧（域开关）", level: "域" },
   "sms.notify.bar.pending_clear_overdue": { label: "待清台超时提醒", level: "事件" },
+  // 第十八批第 2 条（ENUM 第 52 行档位表与第一段名单变更须提前向受影响的酒吧商户发出通告）：V556 补了显式开启行。
+  "sms.notify.settlement": { label: "结算（域开关）", level: "域" },
+  "sms.notify.settlement.distribution_scheme_notice": { label: "通票分账方案变更通告", level: "事件" },
 };
 const MANAGE = ["terminal.switch.manage"];
 
@@ -79,7 +82,7 @@ export function SmsNotificationSwitchesPage({ api, setActionResult, setGlobalErr
     <section data-testid="sms-notification-switches-page">
       <AdminPageHeader
         title="短信通知开关"
-        description="两级可配：总开关 + 各域（存酒/储值/商户费用/订台/服务单/设施/票务/券/酒吧）+ 各事件，管理员可决定哪些提醒经第三方短信平台发短信。总开关默认关；触发点已接，开关控制是否实际发送。涉及商户应收应付金额变化、涉及客人金额变化的通知与存酒到期提醒不可关闭，不受总开关与域开关影响。储值不含积分。"
+        description="两级可配：总开关 + 各域（存酒/储值/商户费用/订台/服务单/设施/票务/券/酒吧/结算）+ 各事件，管理员可决定哪些提醒经第三方短信平台发短信。总开关默认关；触发点已接，开关控制是否实际发送。涉及商户应收应付金额变化、涉及客人金额变化的通知与存酒到期提醒不可关闭，不受总开关与域开关影响。储值不含积分。"
       />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">

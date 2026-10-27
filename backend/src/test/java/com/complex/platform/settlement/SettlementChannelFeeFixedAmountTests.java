@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -39,6 +41,7 @@ class SettlementChannelFeeFixedAmountTests {
     @Autowired private TicketDistributionSettlementService settlementService;
     @Autowired private JdbcSettlementBillRepository billRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private RouteFeeShares routeFeeShares;
 
     private final List<String> projectIds = new ArrayList<>();
     private final List<String> merchantIds = new ArrayList<>();
@@ -61,6 +64,7 @@ class SettlementChannelFeeFixedAmountTests {
             jdbcTemplate.update("DELETE FROM channel_fee_configs WHERE project_id = ?", pid);
         }
         for (String oid : orderIds) {
+            jdbcTemplate.update("DELETE FROM ticket_order_channel_fees WHERE order_id = ?", oid);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", oid);
         }
         for (String tid : ticketTypeIds) {
@@ -68,6 +72,9 @@ class SettlementChannelFeeFixedAmountTests {
         }
         for (String mid : merchantIds) {
             jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", mid);
+        }
+        for (String pid : projectIds) {
+            jdbcTemplate.update("DELETE FROM projects WHERE id = ?", pid);
         }
         projectIds.clear();
         merchantIds.clear();
@@ -124,8 +131,8 @@ class SettlementChannelFeeFixedAmountTests {
         seedMerchant("m_cff_bar", "bar");
         seedMerchant("m_cff_amu", "amusement");
         String tt = seedTicketType();
-        String o1 = seedOrder(tt, "meituan");
-        String o2 = seedOrder(tt, "meituan");
+        String o1 = seedOrder(pid, tt, "meituan");
+        String o2 = seedOrder(pid, tt, "meituan");
         // T1:首笔核销(锚点)在酒吧,第二笔在游乐——只按锚点计 1 张。
         seedSettled(pid, "m_cff_bar", 60000L, o1, "tkt_cff_1", "vf_cff_1", 9);
         seedSettled(pid, "m_cff_amu", 30000L, o1, "tkt_cff_1", "vf_cff_2", 10);
@@ -144,8 +151,9 @@ class SettlementChannelFeeFixedAmountTests {
         assertThat(((Number) b.get("rounding_residual_cent")).longValue())
                 .as("本例各家舍入后恰好分尽 → 渠道分摊尾差 0(池分账亦无尾差)").isZero();
         assertThat(b.get("rounding_residual_entity_id")).as("尾差为 0 → 无责任主体").isNull();
-        assertThat(b.get("available_pool_cent")).isEqualTo(99231L);
-        assertThat(itemAmounts(pid).values()).containsExactly(99231L);
+        // 直插核销没有池快照(同不含酒吧入场、未建池快照的票):酒吧净份额按 ENUM L52 末句整笔单列未分配池余额。
+        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(99231L);
+        assertThat(b.get("pool_undistributed_cent")).isEqualTo(99231L);
     }
 
     /**
@@ -160,8 +168,8 @@ class SettlementChannelFeeFixedAmountTests {
         seedMerchant("m_cfr_bar", "bar");
         seedMerchant("m_cfr_amu", "amusement");
         String tt = seedTicketType();
-        String o1 = seedOrder(tt, "meituan");
-        String o2 = seedOrder(tt, "meituan");
+        String o1 = seedOrder(pid, tt, "meituan");
+        String o2 = seedOrder(pid, tt, "meituan");
         // T1:锚点核销后整个被冲正 → 计数 +1−1=0。
         seedSettled(pid, "m_cfr_bar", 50000L, o1, "tkt_cfr_1", "vf_cfr_1", 5);
         seedReversed(pid, "m_cfr_bar", 50000L, o1, "tkt_cfr_1", "vf_cfr_1", 20);
@@ -177,7 +185,7 @@ class SettlementChannelFeeFixedAmountTests {
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(30000L);
         assertThat(b.get("channel_fee_cent")).as("净 1 张 × 500 分").isEqualTo(500L);
         assertThat(shares.get("bar").get("channel_fee_cent")).isEqualTo(500L);
-        assertThat(b.get("available_pool_cent")).isEqualTo(29500L);
+        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(29500L);
     }
 
     /** 固定金额配 0 → 渠道费 0,与比例 0(官方直销)逐分同值=保值。 */
@@ -188,13 +196,13 @@ class SettlementChannelFeeFixedAmountTests {
         setChannelFeeFixed(pid, null, 0L);
         seedMerchant("m_cfz_bar", "bar");
         String tt = seedTicketType();
-        String o1 = seedOrder(tt, "meituan");
+        String o1 = seedOrder(pid, tt, "meituan");
         seedSettled(pid, "m_cfz_bar", 50000L, o1, "tkt_cfz_1", "vf_cfz_1", 9);
 
         settlementService.settleMonth(pid, MONTH);
         Map<String, Object> b = bill(pid);
         assertThat(b.get("channel_fee_cent")).isEqualTo(0L);
-        assertThat(b.get("available_pool_cent")).isEqualTo(50000L);
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) b.get("id"))).isEqualTo(50000L);
     }
 
     // ---------------------------------------------------------------- 夹具
@@ -245,14 +253,19 @@ class SettlementChannelFeeFixedAmountTests {
         return id;
     }
 
-    private String seedOrder(String ticketTypeId, String salesChannel) {
+    /** 已付清的第三方渠道订单；付款成功时按订单项目与销售渠道固化销售渠道费所用配置（第十八批第 3 条，同真实付款链）。 */
+    private String seedOrder(String projectId, String ticketTypeId, String salesChannel) {
         String id = "ord_cff_" + java.util.UUID.randomUUID().toString().substring(0, 8);
         orderIds.add(id);
         jdbcTemplate.update("""
+                INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)
+                VALUES (?, 'complex', ?, 'active', now(), now()) ON CONFLICT (id) DO NOTHING""", projectId, projectId);
+        jdbcTemplate.update("""
                 INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel,
-                                           amount_cent, currency, pay_status, issue_status, status, created_at, updated_at)
-                VALUES (?, ?, ?, 1, ?, 0, 'CNY', 'paid', 'issued', 'created', now(), now())
-                """, id, "ORD-" + id, ticketTypeId, salesChannel);
+                                           amount_cent, currency, pay_status, issue_status, status, created_at, updated_at, project_id)
+                VALUES (?, ?, ?, 1, ?, 0, 'CNY', 'paid', 'issued', 'created', now(), now(), ?)
+                """, id, "ORD-" + id, ticketTypeId, salesChannel, projectId);
+        routeFeeShares.fixSalesChannelFee(id);
         return id;
     }
 
@@ -288,18 +301,6 @@ class SettlementChannelFeeFixedAmountTests {
 
     private Map<String, Object> bill(String projectId) {
         return jdbcTemplate.queryForMap("SELECT * FROM settlement_bills WHERE project_id = ?", projectId);
-    }
-
-    private Map<String, Long> itemAmounts(String projectId) {
-        Map<String, Long> out = new LinkedHashMap<>();
-        jdbcTemplate.query("""
-                SELECT si.merchant_id, si.final_amount_cent
-                  FROM settlement_items si JOIN settlement_bills sb ON sb.id = si.bill_id
-                 WHERE sb.project_id = ? ORDER BY si.merchant_id
-                """, rs -> {
-            out.put(rs.getString("merchant_id"), rs.getLong("final_amount_cent"));
-        }, projectId);
-        return out;
     }
 
     private Map<String, Map<String, Object>> formatShares(String billId) {

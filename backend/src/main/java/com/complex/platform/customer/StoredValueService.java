@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -95,6 +95,9 @@ public class StoredValueService {
     private org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate recipientJdbc;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
+    // 第十八批第 3 条：票务订单储值笔固化通路费（ENUM L86 充值时已产生，取本次消费的批次分摊额）；单测未注入则不写。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.settlement.RouteFeeShares routeFeeShares;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
@@ -411,6 +414,9 @@ public class StoredValueService {
         ticketingRepository.saveTicketPaymentIntent(new com.complex.platform.ticketing.TicketPaymentIntentRecord(
                 debit.id(), "ticket_order", order.id(), amount, order.currency(),
                 "stored_value", "succeeded", paidAt, paidAt));
+        if (routeFeeShares != null) {
+            routeFeeShares.fix(debit.id(), order.id(), order.projectId(), "stored_value", amount);
+        }
         if (paidBefore + amount < order.amountCent()) {
             return order; // R20：未足额，订单保持待付，等其余渠道补足。
         }

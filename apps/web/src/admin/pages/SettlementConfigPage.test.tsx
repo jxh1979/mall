@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -70,17 +70,21 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     expect(screen.getByTestId("settlement-config-drafts-empty")).toBeTruthy();
   });
 
-  it("通票分账栏目渲染 7 个配置块(留存卡片已并入综合服务费)", async () => {
+  it("通票分账栏目渲染 6 个配置块 + 通票分账方案(留存卡片已并入综合服务费)", async () => {
     renderPage(makeApi());
     await screen.findByTestId("settlement-config-ticket-distribution");
     for (const key of [
-      "distribution_method", "rank_tiers", "merchant_rate",
-      "comprehensive_service_fee", "combo_discount", "channel_fee", "revenue_stream_attribution",
+      "distribution_method", "comprehensive_service_fee", "pass_gift_cost", "combo_discount", "channel_fee",
+      "revenue_stream_attribution",
     ]) {
       expect(screen.getByTestId(`settlement-config-block-${key}`)).toBeTruthy();
     }
     // S4:原「项目公司留存比例」卡片不复存在——与门票综合服务费为同一项、只扣一次。
     expect(screen.queryByTestId("settlement-config-block-retention")).toBeNull();
+    // 第十八批第 2 条:旧「排名档位梯子」「商户每客单价 / 固定额」两块合并为通票分账方案(参与家数档位表＋第一段名单)。
+    expect(screen.queryByTestId("settlement-config-block-rank_tiers")).toBeNull();
+    expect(screen.queryByTestId("settlement-config-block-merchant_rate")).toBeNull();
+    expect(screen.getByTestId("distribution-scheme-panel")).toBeTruthy();
   });
 
   it("「改」套票折扣归属 → GuidedFlowModal 填写 → POST 落草案端点带 idempotency_key", async () => {
@@ -148,6 +152,50 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     expect(screen.getByTestId("settlement-config-default-points_amount_cent_per_point").textContent).toContain("100");
   });
 
+  // 第十八批第 3 条（BSM 第 749 行「渠道费用分两层、性质不同不可混用……官方渠道售出的票不扣销售渠道费，但仍扣通路费」）。
+  it("「改」渠道费用：通路费按支付通路只配比例，销售渠道费才有每张票固定金额；POST 带费用层与渠道码", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-edit-channel_fee")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("settlement-config-edit-channel_fee"));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-field-feeLayer")).not.toBeNull());
+
+    fireEvent.change(screen.getByTestId("settlement-config-field-feeLayer"), { target: { value: "sales" } });
+    expect(screen.getByTestId("settlement-config-field-fixedAmountCent")).toBeTruthy();
+    fireEvent.change(screen.getByTestId("settlement-config-field-feeLayer"), { target: { value: "route" } });
+    expect(screen.queryByTestId("settlement-config-field-fixedAmountCent")).toBeNull();
+
+    fireEvent.change(screen.getByTestId("settlement-config-field-channel"), { target: { value: "wechat" } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-feeBps"), { target: { value: "60" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/channel-fee",
+      expect.objectContaining({ feeLayer: "route", channel: "wechat", feeBps: 60, fixedAmountCent: null, idempotencyKey: expect.any(String) }),
+    ));
+  });
+
+  // 18B 复核后裁决第 11 条「对，下线两个选项（推荐）」（ENUM 第 52 行「预扣数与日后实付数的差额也留在娱乐平台公司」）。
+  it("「改」赠送权益预估成本：差额固定显示「差额留娱乐平台公司」，无结转下期／回补当期池选项，POST 不带差额规则", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-edit-pass_gift_cost")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("settlement-config-edit-pass_gift_cost"));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-variance-fixed")?.textContent ?? "").toContain("差额留娱乐平台公司"));
+    expect(screen.queryByTestId("settlement-config-field-varianceHandling")).toBeNull();
+    expect(document.body.textContent).not.toContain("结转下期");
+    expect(document.body.textContent).not.toContain("回补当期");
+
+    fireEvent.change(screen.getByTestId("settlement-config-field-ticketGiftAmountYuan"), { target: { value: "59" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/pass-gift-cost",
+      expect.objectContaining({ predeductMode: "by_ticket_amount", ticketGiftAmountCent: 5900, idempotencyKey: expect.any(String) }),
+    ));
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("varianceHandling");
+  });
+
   it("「改」卡座提成费率 → 按项目×商户×角色档 POST 落草案端点", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
@@ -207,6 +255,106 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     const { setGlobalError } = renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_WITH_DRAFTS), post));
     fireEvent.click(await screen.findByTestId("settlement-config-activate-tdmr_d_1"));
     await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith(expect.stringContaining("另一位")));
+  });
+});
+
+// 第十八批第 2 条（ENUM 第 52 行「按本张票的第二段参与家数查「参与家数档位表」……每一行的百分比合计必须等于 100%，合计不等于 100% 的配置
+// 不得生效……档位表变更须提前向受影响的酒吧商户发出通告……通告期为业务参数，后台可配，出厂默认一个月，须同时配置上下限」；第一段名单与金额
+// 同一套通告—生效—版本机制）：通票分账方案编辑器、版本列表与复核转正、通告期、「补配该家数档位行」待办。
+const SCHEME = {
+  noticePeriod: { periodValue: 1, periodUnit: "month", minValue: null, maxValue: null },
+  versions: [
+    {
+      id: "tdsv_cur", projectId: null, status: "notified", state: "effective", draftedBy: "u3", approvedBy: "u4",
+      notifiedAt: "2026-09-01T02:00:00Z", effectiveAt: "2026-10-01T00:00:00Z",
+      tiers: [
+        { participantCount: 1, rankNo: 1, shareBps: 10000, minBps: 9000, maxBps: 10000 },
+        { participantCount: 3, rankNo: 1, shareBps: 4000, minBps: 3000, maxBps: 5000 },
+        { participantCount: 3, rankNo: 2, shareBps: 3000, minBps: 2000, maxBps: 4000 },
+        { participantCount: 3, rankNo: 3, shareBps: 3000, minBps: 2000, maxBps: 4000 },
+      ],
+      firstSegment: [],
+    },
+    {
+      id: "tdsv_d1", projectId: null, status: "draft", state: "draft", draftedBy: "u2", approvedBy: null,
+      notifiedAt: null, effectiveAt: null,
+      tiers: [{ participantCount: 1, rankNo: 1, shareBps: 10000, minBps: 9000, maxBps: 10000 }],
+      firstSegment: [{ merchantId: "m_bar_1", ruleType: "fixed", perGuestCent: null, fixedAmountCent: 1000 }],
+    },
+  ],
+  missingRows: [{ projectId: null, participantCount: 11, units: 1, amountCent: 9000 }],
+};
+
+describe("SettlementConfigPage 通票分账方案（参与家数档位表＋第一段名单）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("按家数分行显示行合计，改一格使合计≠100% 后禁止保存；缺行暂挂待办可见", async () => {
+    const get = vi.fn().mockImplementation(async (url: string) => (url.endsWith("/distribution-scheme") ? SCHEME : OVERVIEW_NO_DRAFT));
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.queryByTestId("distribution-scheme-total-3")?.textContent ?? "").toContain("100%"));
+    expect((screen.getByTestId("distribution-scheme-save") as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.change(screen.getByTestId("distribution-scheme-share-3-3"), { target: { value: "29" } });
+
+    expect(screen.getByTestId("distribution-scheme-total-3").textContent).toContain("99%");
+    expect((screen.getByTestId("distribution-scheme-save") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("distribution-scheme-missing-rows").textContent).toContain("11 家");
+    expect(screen.getByTestId("distribution-scheme-version-tdsv_d1").textContent).toContain("草案");
+  });
+
+  it("保存草案、复核转正与通告期请求体为蛇形键（tiers/first_segment/period_value…）", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+    const snake = {
+      notice_period: { period_value: 1, period_unit: "month", min_value: null, max_value: null },
+      versions: SCHEME.versions.map((v) => ({
+        id: v.id, project_id: v.projectId, status: v.status, state: v.state, drafted_by: v.draftedBy, approved_by: v.approvedBy,
+        notified_at: v.notifiedAt, effective_at: v.effectiveAt,
+        tiers: v.tiers.map((t) => ({ participant_count: t.participantCount, rank_no: t.rankNo, share_bps: t.shareBps,
+          min_bps: t.minBps, max_bps: t.maxBps })),
+        first_segment: v.firstSegment.map((f) => ({ merchant_id: f.merchantId, rule_type: f.ruleType,
+          per_guest_cent: f.perGuestCent, fixed_amount_cent: f.fixedAmountCent })),
+      })),
+      missing_rows: [],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST") return Promise.resolve(ok("tdsv_new"));
+      if (url.endsWith("/distribution-scheme")) return Promise.resolve(ok(snake));
+      if (url.includes("/overview")) return Promise.resolve(ok({ platform_defaults: [], pending_draft_count: 0, pending_drafts: [] }));
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("distribution-scheme-total-1")?.textContent ?? "").toContain("100%"));
+    fireEvent.click(screen.getByTestId("distribution-scheme-add-first"));
+    fireEvent.change(screen.getByTestId("distribution-scheme-first-merchant-0"), { target: { value: "m_bar_9" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-first-amount-0"), { target: { value: "12.5" } });
+    fireEvent.click(screen.getByTestId("distribution-scheme-save"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/settlement/config/distribution-scheme"))).toBe(true));
+    const draft = calls.find((c) => c.method === "POST" && c.url.endsWith("/settlement/config/distribution-scheme"))!.body!;
+    expect(draft.tiers).toContainEqual({ participant_count: 3, rank_no: 1, share_bps: 4000, min_bps: 3000, max_bps: 5000 });
+    expect(draft.first_segment).toEqual([{ merchant_id: "m_bar_9", fixed_amount_cent: 1250 }]);
+    expect(typeof draft.idempotency_key).toBe("string");
+
+    fireEvent.click(screen.getByTestId("distribution-scheme-activate-tdsv_d1"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/distribution-scheme/tdsv_d1/activate"))).toBe(true));
+
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-value"), { target: { value: "10" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-unit"), { target: { value: "day" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-min"), { target: { value: "7" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-notice-max"), { target: { value: "30" } });
+    fireEvent.click(screen.getByTestId("distribution-scheme-notice-save"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/distribution-scheme/notice-period"))).toBe(true));
+    expect(calls.find((c) => c.url.endsWith("/distribution-scheme/notice-period"))!.body)
+      .toMatchObject({ period_value: 10, period_unit: "day", min_value: 7, max_value: 30 });
   });
 });
 

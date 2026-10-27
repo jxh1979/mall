@@ -1,6 +1,6 @@
-# 商户侧与商户专区产品口径 PRD V0.16
+# 商户侧与商户专区产品口径 PRD V0.17
 
-> 版本：V0.15 ｜ 最后更新：2026-10-19 ｜ 状态：现行 PRD
+> 版本：V0.17 ｜ 最后更新：2026-10-27 ｜ 状态：现行 PRD
 > 业务最终解释权：三份业务 HTML。本文同时记录当前实现；当前页面、接口或终端不足时，标为实现差距，不能据此缩小 HTML 的商户侧能力。
 
 ## 1. 定位与终端
@@ -52,7 +52,7 @@ HTML 明列两类商户终端：
 | 我的工单 | 商户可自己发起报修、保洁、投诉和其他服务请求；商户专区自助条款另含商户服务整改，查看进度且超时自动升级催办 | ADM-MER-004 / V022 当前承载商户服务 `repair/complaint/rectification/service`；物业保洁属于 V166 设施/物业工单，当前尚无从商户专区向 V166 自助提单的入口 |
 | 我的对账 | 查看结算和分成明细，可对结算金额提异议；退租结算主管裁决后可「不接受裁决」 | ADM-MER-005 |
 | 我的合同 | 查看关键条款、租期、空间、状态和到期情况 | ADM-MER-006 当前只读最小披露，关键条款与到期情况须完整展示 |
-| 费用通知 | 默认发给商户主要联系人，商户可在后台改为指定接收人并维护手机号。房租/水电/物业账单与催缴、合同即将到期的续约提醒均须支持短信；此外，结算出账与调整、对账差异、押金抵扣与退还、违约金计提、分红出单与发放等商户应收应付金额变化一律短信通知，通知写明金额、原因与异议截止日期，且不得按类或按条关闭。续约提醒不属于金额变化强制通知，不强制携带金额与异议截止日期，可按后台提醒短信配置决定是否发送 | ADM-MER-007；当前后端只配置 `rent/utilities/property/renewal` 四类事件，其余金额变化事件与短信正文要素尚未完整承载。`NotificationSwitchResolver` 的第一道 `sms_notification` 总闸缺行时默认关闭，V177 也将其出厂设为关闭；其后 `sms.notify.merchant_fee` 域开关及 `rent/utilities/property` 分项开关仍可关闭金额变化通知，均会使通知落为 `skipped_switch_off`，与 HTML 不得关闭的要求冲突；`renewal` 分项开关可继续按普通提醒配置 |
+| 费用通知 | 默认发给商户主要联系人，商户可在后台改为指定接收人并维护手机号。房租/水电/物业账单与催缴、合同即将到期的续约提醒均须支持短信；此外，结算出账与调整、对账差异、押金抵扣与退还、违约金计提、分红出单与发放等商户应收应付金额变化一律短信通知，通知写明金额、原因与异议截止日期，且不得按类或按条关闭。续约提醒不属于金额变化强制通知，不强制携带金额与异议截止日期，可按后台提醒短信配置决定是否发送 | ADM-MER-007；房租/水电费/物业费账单出单、积分发行费月结出账、停车抵免费用出账，以及第十八批第 13 条接上的商户应收应付金额变化九类事件（通知日志域 `merchant_amount`：结算金额出账 `settlement_statement`、结算金额调整 `adjustment`、对账差异认定结果 `reconciliation_difference`、押金抵扣 `deposit_deduct`、押金退还 `deposit_refund`、押金补缴 `deposit_supplement`、违约金计提 `penalty`、分红出单 `dividend_issued`、分红发放 `dividend_paid`；模板码 `sms.merchant_amount.<事件>`）均不看总开关、域开关、事件开关，后台不能关闭；报文含金额、原因与异议截止日期（对账差异认定结果不在异议期适用清单，不写截止日）；通票赠饮应付不逐笔发，只在本期一条门票分销出账短信中写明本期净额（追收不带，第十八批裁决第 2 条）。短信供应商未接入前每条如实记发送失败。催缴与 `renewal` 分项开关可继续按普通提醒配置 |
 | 我的分红 | 查看每期基数、比例、扣税、实发、状态和逐行算式，只看不改 | ADM-MER-008；主理人还应能查看本商户全部经营数据，包括人工成本明细、本店员工姓名和具体工资，当前专区未完整承载 |
 | 我的证照 | 查看本商户全部证照、资质、保险到期情况、预警和宽限状态 | 尚无商户侧只读端点和页面 |
 | 员工车辆 | 为本商户员工登记车牌，停车场按项目配置免费或折扣（BSM「商户与员工车位：商户月租车位按合同约定」） | ADM-MER-009（HP-P01 第一组）：只能登记、撤销本商户员工车辆；员工离职或停用后不再下发 |
@@ -117,7 +117,7 @@ HTML 明列两类商户终端：
 |---|---|---|---|
 | ADM-MER-003 | `/admin/merchant-zone/bills` | `merchant.billing.view` | 我的账单只读 |
 | ADM-MER-004 | `/admin/merchant-zone/work-orders` | `merchant.service_work_order.view` | 我的工单读与发起（发起另需 `merchant.service_work_order.create`） |
-| ADM-MER-005 | `/admin/merchant-zone/settlements` | `merchant.portal.settlement.view` | 我的对账、异议与不接受裁决（另需 `merchant.portal.settlement.dispute`） |
+| ADM-MER-005 | `/admin/merchant-zone/settlements` | `merchant.portal.settlement.view` | 我的对账、异议与不接受裁决（另需 `merchant.portal.settlement.dispute`）；「通告」块显示系统挂进本商户专区的通告（18B 复核后裁决第 10 条「商户专区显示通告」：通票分账方案复核转正当日逐家挂出＝送达，写明变更内容与生效日，只含本店可见的信息；短信只是提醒），`GET /api/v1/merchant-portal/notices`，无商户归属 403 `MERCHANT_SCOPE_REQUIRED` |
 | ADM-MER-006 | `/admin/merchant-zone/contracts` | `contract.view` | 我的合同只读 |
 | ADM-MER-007 | `/admin/merchant-zone/fee-recipients` | `merchant.portal.fee_recipient.manage` | 费用接收人维护 |
 | ADM-MER-008 | `/admin/merchant-zone/dividends` | `finance.dividend.view` | 我的分红只读 |

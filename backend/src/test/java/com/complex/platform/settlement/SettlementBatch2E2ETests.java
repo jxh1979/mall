@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -80,6 +80,7 @@ class SettlementBatch2E2ETests {
                     "DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)",
                     pid);
             jdbcTemplate.update("DELETE FROM settlement_bills WHERE project_id = ?", pid);
+            com.complex.platform.support.PassPoolFixtures.deleteByProject(jdbcTemplate, pid);
             // ar_ap_items 不可变(DB 触发器禁 DELETE)，source_id 明细 id 唯一不与后续用例冲突，不清。
         }
     }
@@ -94,12 +95,16 @@ class SettlementBatch2E2ETests {
     void fullChainFourBarsDistributionAndReconciliation() {
         String pid = newProject();
 
-        // ① 核销双写落月：4 家酒吧 entry 核销(不同核销数 → 排名) + gift_drink 10 杯。
-        seedVerified(pid, "bar1", "entry", 20, 8, 60000L); // rank1
-        seedVerified(pid, "bar2", "entry", 15, 6, 40000L); // rank2
-        seedVerified(pid, "bar3", "entry", 10, 4, 30000L); // rank3
-        seedVerified(pid, "bar4", "entry", 5, 2, 20000L);  // rank4
-        seedVerified(pid, "bar1", "gift_drink", 10, 0, 0L); // 赠酒 10 杯，收入 0
+        // ① 第十八批第 2 条:一张池快照票覆盖 4 家酒吧(售票时固化:酒吧份额 150000、综合服务费 30000、池 120000);
+        //   核销双写落月：4 家 entry 核销(不同入场人数 → 排名) + gift_drink 10 杯。
+        String ticket = "tk_b2e2e_" + pid;
+        com.complex.platform.support.PassPoolFixtures.snapshotWithServiceFee(jdbcTemplate, ticket, pid, 150000L, 30000L,
+                "bar1", "bar2", "bar3", "bar4");
+        seedVerified(pid, "bar1", "entry", 20, 8, 60000L, ticket); // rank1
+        seedVerified(pid, "bar2", "entry", 15, 6, 40000L, ticket); // rank2
+        seedVerified(pid, "bar3", "entry", 10, 4, 30000L, ticket); // rank3
+        seedVerified(pid, "bar4", "entry", 5, 2, 20000L, ticket);  // rank4
+        seedVerified(pid, "bar1", "gift_drink", 10, 0, 0L, ticket); // 赠酒 10 杯，收入 0
 
         // ② 引擎：settleMonth。
         String billId = settlementService.settleMonth(pid, MONTH);
@@ -118,12 +123,11 @@ class SettlementBatch2E2ETests {
         assertThat(num(bill, "available_pool_cent")).isEqualTo(availablePool);
         assertThat(bill.get("distribution_method")).isEqualTo("by_rank_tier");
 
-        // ---- 断言 settlement_items:S8 第二段归一化分尽——默认档位命中 1600/1200/1200/1200(Σ=5200),
-        //      各家 = round_half_up(P2 × w / Σw),池 120000 一次分光、尾差单列。 ----
-        long a1 = 36923L; // round(120000×1600/5200) = round(36923.08)
-        long a2 = 27692L; // round(120000×1200/5200) = round(27692.31)
-        long a3 = 27692L;
-        long a4 = 27692L;
+        // ---- 断言 settlement_items:第二段按本票参与家数(4 家)取出厂行 31/23/23/23,按当期入场人数排名,不归一化。 ----
+        long a1 = 37200L; // 120000×31%
+        long a2 = 27600L; // 120000×23%
+        long a3 = 27600L;
+        long a4 = 27600L;
         assertThat(itemAmount(pid, "bar1")).isEqualTo(a1);
         assertThat(itemAmount(pid, "bar2")).isEqualTo(a2);
         assertThat(itemAmount(pid, "bar3")).isEqualTo(a3);
@@ -133,7 +137,7 @@ class SettlementBatch2E2ETests {
         assertThat(itemRank(pid, "bar3")).isEqualTo(3);
         assertThat(itemRank(pid, "bar4")).isEqualTo(4);
 
-        long distributed = a1 + a2 + a3 + a4; // 119999(池 120000 − 尾差 1)
+        long distributed = a1 + a2 + a3 + a4; // 120000(行合计 100%,无尾差)
         assertThat(num(bill, "distributed_cent")).isEqualTo(distributed);
         assertThat(distributed).isLessThanOrEqualTo(availablePool);  // Σitems.final ≤ 可分配池
         assertThat(bill.get("status")).isEqualTo("confirmed");  // 未越池 → confirmed，可过账
@@ -171,9 +175,9 @@ class SettlementBatch2E2ETests {
         // ---- ④ 全链对账断言(整数分无漂移) ----
         // 收入 − 渠道费 − 池链综合服务费 = 可分配池(D5:赠酒不入此式;S4:池内不再二次扣任何留存)
         assertThat(ticketRevenue - 0L - pooledServiceFee).isEqualTo(availablePool);
-        // S8 K18:Σ各酒吧分账 + 尾差 = 可分配池(第二段归一化分尽,不再有「档位未铺满」的隐式沉淀)。
+        // 逐份守恒:Σ各酒吧分账 + 尾差 = 可分配池(四家都核销,无减除、无未分配)。
         long residual = ((Number) bill(pid).get("rounding_residual_cent")).longValue();
-        assertThat(residual).isEqualTo(1L); // 119999 + 1 = 120000
+        assertThat(residual).isZero();
         assertThat(distributed + residual).isEqualTo(availablePool);
         assertThat(((Number) bill(pid).get("pool_undistributed_cent")).longValue()).isZero();
         long sumItemsFinal = jdbcTemplate.queryForObject(
@@ -214,17 +218,19 @@ class SettlementBatch2E2ETests {
     @Test
     void fullChainSingleBarVerificationToPostedPayable() {
         String pid = newProject();
-        seedVerified(pid, "b", "entry", 8, 5, 50000L); // 单家：收入 50000
+        String ticket = "tk_b2e2e_" + pid;
+        com.complex.platform.support.PassPoolFixtures.snapshotWithServiceFee(jdbcTemplate, ticket, pid, 50000L, 10000L, "b");
+        seedVerified(pid, "b", "entry", 8, 5, 50000L, ticket); // 单家：酒吧份额 50000
 
         String billId = settlementService.settleMonth(pid, MONTH);
 
-        // 引擎(S4)：收入 50000,池链综合服务费 = 每笔 20% = 10000 → 可分配池 40000;
-        // S8 归一化分尽:单家在场,rank1 档位 1600 只是相对权重 → 独享整池 40000。
+        // 引擎:池快照酒吧份额 50000,综合服务费 10000 → 可分配池 40000;
+        //   第二段只此一家 → 取「参与 1 家」行＝第 1 名 100%,独享整池 40000。
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(50000L);
         assertThat(num(bill, "comp_service_fee_pooled_cent")).isEqualTo(10000L);
         assertThat(num(bill, "available_pool_cent")).isEqualTo(40000L);
-        long expected = 40000L; // prorate(40000, 1600, 1600) = 整池
+        long expected = 40000L; // 40000 × 100%
         assertThat(itemAmount(pid, "b")).isEqualTo(expected);
         assertThat(itemRank(pid, "b")).isEqualTo(1);
         assertThat(bill.get("status")).isEqualTo("confirmed");
@@ -263,7 +269,7 @@ class SettlementBatch2E2ETests {
     /** 直插一条 verification_settled(created_at 落 MONTH 月中=月窗驱动，归商户；confirmed_at 留 NULL 同批1双写)。
      *  S4:每笔带 20% 池链综合服务费(= V370 等价保值费率下消费者会计提的值),月结只做线性求和。 */
     private void seedVerified(String projectId, String merchantId, String entType,
-                             int verifiedCount, int numPeople, long verifiedCent) {
+                             int verifiedCount, int numPeople, long verifiedCent, String parentTicket) {
         Instant createdAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(createdAt);
         String id = "st_b2e2e_" + System.nanoTime();
@@ -272,13 +278,13 @@ class SettlementBatch2E2ETests {
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
                     verification_id, settlement_status, entitlement_valid_to, created_at, updated_at,
-                    comp_service_fee_cent)
+                    comp_service_fee_cent, parent_ticket_id)
                 VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
-                    'draft', ?, ?, ?, ?)
+                    'draft', ?, ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, "vf_" + id, ts, ts, ts, verifiedCent / 5);
+                merchantId, projectId, "vf_" + id, ts, ts, ts, verifiedCent / 5, parentTicket);
     }
 
     private Map<String, Object> bill(String projectId) {

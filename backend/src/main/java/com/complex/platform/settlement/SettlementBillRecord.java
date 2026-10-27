@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import java.time.LocalDate;
 
 /** 结算重构批2-3：月度结算单头（settlement_bills 一行）。金额均整数分,<b>带符号</b>(冲正月可为负=当月净追回)。 */
@@ -9,7 +11,10 @@ public record SettlementBillRecord(
         LocalDate periodStart,
         LocalDate periodEnd,
         long ticketRevenueCent,
+        // 第十八批第 3 条（BSM L749 渠道费用分两层）：channelFeeCent＝销售渠道费（仅经第三方渠道售出的票，整单按渠道配置算）；
+        //   routeFeeCent＝通路费（所有付款按支付通路固化、随核销逐笔分摊的月合计）。两者都在拆份额前整单扣、各业态按份额共担。
         long channelFeeCent,
+        long routeFeeCent,
         // S4:可分配池(唯一的池)= 酒吧业态净份额 − 池链综合服务费。仅用于各酒吧分配,
         //   池内不再二次扣任何留存(业务 HTML「不再从可分配池中二次扣娱乐平台公司留存」)。
         long availablePoolCent,
@@ -47,6 +52,13 @@ public record SettlementBillRecord(
         //   （带符号，冲正月可为负=由平台承接追回）；正常两段分尽时恒 0。与舍入尾差分列，成因不同。
         long poolUndistributedCent,
         // pool_undistributed_cent 的归属主体快照（all_pass_ticket 流解析，V375 种子=be_ent_platform）；余额为 0 时 null。
-        String poolUndistributedEntityId
+        String poolUndistributedEntityId,
+        // 第十八批第 2 条（V556；ENUM L52「按上述减除的未核销份额，按票种经营域归属……酒吧域即归娱乐平台公司；该笔在该张票的分账结果中
+        //   单独立项留痕，不并入未分配池余额、也不并入金额尾差」）：通票未核销减除额与其归属主体（酒吧域＝all_pass_ticket 流主体）；
+        //   缺该家数档位行而暂挂的第二段余额（ENUM L52「暂挂、不出结果」）；第一段合计超过该份池的超出额（越池判定沿用现逻辑）。
+        long unverifiedDeductionCent,
+        String unverifiedDeductionEntityId,
+        long poolSuspendedCent,
+        long poolOverflowCent
 ) {
 }

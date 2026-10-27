@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -215,6 +215,12 @@ public final class FieldLabels {
         p("payment_intent_id", "支付意向单");
         p("payment_method", "支付方式");
         p("sales_channel", "销售渠道");
+        p("fee_layer", "费用层");
+        p("route_fee_cent", "通路费");
+        p("participant_count", "第二段参与家数");
+        p("rank_no", "名次");
+        p("period_value", "通告期");
+        p("period_unit", "通告期单位");
         p("refund_id", "退款单号");
         p("refund_domain", "退款业务域");
         p("refund_amount_cent", "退款金额");

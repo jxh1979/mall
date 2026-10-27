@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
@@ -172,7 +174,9 @@ class SettlementFeePerTicketS3Tests {
         }
         assertThat(a).as("比例模式:结算单每一列与改前逐分一致").isEqualTo(b);
         assertThat(itemAmounts(after)).as("各商户分账明细逐条逐分一致").isEqualTo(itemAmounts(before));
-        assertThat(itemAmounts(after)).isNotEmpty();
+        // 两组直插/消费者核销都没有池快照:酒吧净份额整笔单列未分配池余额(ENUM L52 末句),两组同样。
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) bill(after).get("id"))).isPositive()
+                .isEqualTo(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) bill(before).get("id")));
     }
 
     // ─────────────────────────── ③ 冲正取反 + 锚点复位 ───────────────────────────

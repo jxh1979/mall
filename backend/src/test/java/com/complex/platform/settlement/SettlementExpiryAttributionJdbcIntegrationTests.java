@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -55,6 +55,7 @@ class SettlementExpiryAttributionJdbcIntegrationTests {
     @Autowired private SettlementExpiryJob expiryJob;
     @Autowired private TicketingService ticketingService;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private RouteFeeShares routeFeeShares;
 
     private final String k = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
 
@@ -247,17 +248,36 @@ class SettlementExpiryAttributionJdbcIntegrationTests {
         assertThat(num(row, "unverified_amount_cent") - num(row, "channel_fee_cent")).as("归属净额").isEqualTo(9000L);
     }
 
+    /** 第十八批第 3 条（BSM L749「官方渠道售出的票不扣销售渠道费」）：官方渠道不命中任何销售渠道费配置（含通用行）。 */
     @Test
-    void officialChannelUsesGenericRateOnly() {
+    void officialChannelChargesNoSalesFee() {
         String p = project("off");
         channelFee(p, "meituan", 1000, null);
+        channelFee(p, null, 500, null);
         Tk t = ticket("t", p, "web", 1, T);
         String e = ent(t, "e", 1, "entry", 1, 0, 10000, merchant("bar", "bar"));
 
         expiryJob.expireUnverified(AFTER);
 
+        assertThat(num(one(e), "channel_fee_cent")).as("通用销售渠道费行也不落到官方渠道").isZero();
+        assertThat(one(e).get("channel_fee_config_id")).as("官方渠道不用任何销售渠道费配置").isNull();
+    }
+
+    /**
+     * 第十八批第 3 条（ENUM L48「仅扣实际发生的通路费，经第三方渠道售出的再扣实际发生的销售渠道费……各项均只扣一次」；BSM L749「官方渠道
+     * 同样产生」通路费）：官方渠道票未核销 30%，按本单付款时固化的通路费 60 分分摊 round(60×30%)=18，销售渠道费 0。
+     */
+    @Test
+    void expiryDeductsRouteFeeShareOfUnverifiedAmountForOfficialChannel() {
+        String p = project("rte");
+        Tk t = ticket("t", p, "web", 1, T);
+        routeFee(t, 10000, 60);
+        String e = ent(t, "e", 1, "entry", 1, 0, 3000, merchant("bar", "bar"));
+
+        expiryJob.expireUnverified(AFTER);
+
+        assertThat(num(one(e), "route_fee_cent")).as("通路费按未核销额占本单实付比例分摊").isEqualTo(18L);
         assertThat(num(one(e), "channel_fee_cent")).isZero();
-        assertThat(one(e).get("channel_fee_config_id")).isEqualTo("cfc_default");
     }
 
     @Test
@@ -389,6 +409,18 @@ class SettlementExpiryAttributionJdbcIntegrationTests {
         return id;
     }
 
+    /** 本单一笔已固化通路费的付款（付款成功时按支付通路固化，见 RouteFeeShares）。 */
+    private void routeFee(Tk t, long amountCent, long feeCent) {
+        String pay = "pi23_" + t.tag();
+        jdbc.update("""
+                INSERT INTO ticket_payment_intents (id, business_order_type, business_order_id, amount_cent, currency, channel, status,
+                    created_at, updated_at) VALUES (?, 'ticket_order', ?, ?, 'CNY', 'wechat', 'succeeded', now(), now())""",
+                pay, t.order(), amountCent);
+        jdbc.update("""
+                INSERT INTO ticket_payment_route_fees (payment_intent_id, order_id, payment_channel, amount_cent, fee_bps, fee_cent)
+                VALUES (?, ?, 'wechat', ?, 60, ?)""", pay, t.order(), amountCent, feeCent);
+    }
+
     private Tk ticket(String tag, String project, String channel, int people, Instant validTo) {
         String key = tag + "_" + k;
         Tk t = new Tk(key, "o23_" + key, "ti23_" + key, "tt23_" + key, "et23_" + key, validTo);
@@ -403,6 +435,8 @@ class SettlementExpiryAttributionJdbcIntegrationTests {
                     issue_status, status, created_at, updated_at, project_id)
                 VALUES (?, ?, ?, 1, ?, 0, 'CNY', 'paid', 'issued', 'created', ?, ?, ?)""",
                 t.order(), t.order(), t.type(), channel, at, at, project);
+        // 第十八批第 3 条：付款成功时按订单项目与销售渠道固化销售渠道费所用配置（同真实付款链）。
+        routeFeeShares.fixSalesChannelFee(t.order());
         jdbc.update("""
                 INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times, status,
                     created_at, updated_at)

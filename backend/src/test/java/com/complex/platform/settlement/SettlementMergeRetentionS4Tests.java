@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
@@ -73,9 +75,9 @@ class SettlementMergeRetentionS4Tests {
      * <p>改造前手算(池内留存口径):池 = 150000;留存 = round(150000×20%) = 30000;各酒吧总池 = 120000。
      * K9 的证明对象是这两列(费 = 原留存额、池 = 原各酒吧总池)逐分不变。
      *
-     * <p>分账列自 S8 起按「第二段归一化分尽」口径:档位 1600/1200×3(Σ=5200)对 120000 一次分光
-     * → 36923/27692×3 + 尾差 1。断言方式 = 结算单整行 {@code SELECT *} 转 Map <b>全列比对</b> +
-     * 每条分账明细整行 <b>全列比对</b>,不挑列(挑几列看,恰好没挑的那列错了就漏过去)。
+     * <p>分账列自第十八批第 2 条起按单张票的池快照逐份分账;本例直插的核销没有池快照(本批前售出),
+     * 池 120000 整笔单列未分配、归娱乐平台公司,不出分账明细。断言方式 = 结算单整行 {@code SELECT *} 转 Map <b>全列比对</b>,
+     * 不挑列(挑几列看,恰好没挑的那列错了就漏过去)。
      */
     @Test
     void k9_feeAt2000bps_everyBillColumnAndEveryItemRowMatchesPreRebuildFigures() {
@@ -95,12 +97,10 @@ class SettlementMergeRetentionS4Tests {
         expected.put("period_end", java.sql.Date.valueOf(MONTH.atEndOfMonth()));
         expected.put("ticket_revenue_cent", 150000L);
         expected.put("channel_fee_cent", 0L);
+        expected.put("route_fee_cent", 0L);           // 第十八批第 3 条 V555 通路费列（无付款固化行 → 0）
         expected.put("comp_service_fee_pooled_cent", 30000L);   // = 改造前 retention_cent(K9 的核心列,逐分不变)
-        expected.put("available_pool_cent", 120000L);           // = 改造前 spv_pool_cent(K9 的核心列,逐分不变)
-        // S8 第二段归一化分尽:档位命中 1600/1200/1200/1200(Σ=5200) → 各家 round(120000×w/5200)
-        //   = 36923/27692×3,Σ=119999,尾差 +1 单列。(费/池两列仍是 K9 等价保值的逐分证明;
-        //   分账列基线自 S8 起为「分尽」口径,不再留 57600 隐式沉淀。)
-        expected.put("distributed_cent", 119999L);
+        expected.put("available_pool_cent", 120000L);   // 无池快照:酒吧净份额 120000(= 改造前 spv_pool_cent)按 ENUM L52 末句整笔单列未分配池余额
+        expected.put("distributed_cent", 0L);
         expected.put("comp_service_fee_exclusive_cent", 0L);
         expected.put("fee_beneficiary_entity_id", "be_ent_platform"); // 收款方正名:归娱乐平台公司(V370 归属种子)
         expected.put("gift_cost_cent", 0L); // S6:未配非零 G 规则(种子 by_ticket_amount+0)恒 0=逐分不变
@@ -113,10 +113,14 @@ class SettlementMergeRetentionS4Tests {
         expected.put("settled_at", null);
         expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
-        expected.put("rounding_residual_cent", 1L);
-        expected.put("rounding_residual_entity_id", "be_ent_platform"); // V383 尾差责任主体
-        expected.put("pool_undistributed_cent", 0L);
-        expected.put("pool_undistributed_entity_id", null);
+        expected.put("rounding_residual_cent", 0L);
+        expected.put("rounding_residual_entity_id", null);
+        expected.put("pool_undistributed_cent", 120000L);   // 只放无第二段参与者的余额(18B 复核后裁决第 11 条)
+        expected.put("pool_undistributed_entity_id", "be_ent_platform");
+        expected.put("unverified_deduction_cent", 0L);      // V556 三栏分列与暂挂、超池列
+        expected.put("unverified_deduction_entity_id", null);
+        expected.put("pool_suspended_cent", 0L);
+        expected.put("pool_overflow_cent", 0L);
 
         Map<String, Object> actual = new HashMap<>(bill(pid));
         actual.remove("created_at");
@@ -125,24 +129,16 @@ class SettlementMergeRetentionS4Tests {
                 .as("K9:费配 2000bps 时结算单每一列与改造前(池内 20% 留存)逐分一致")
                 .isEqualTo(expected);
 
-        // ---- 分账明细每行全列比对(S8 归一化分尽口径) ----
-        Map<String, Map<String, Object>> items = itemRows(pid);
-        assertThat(items).containsOnlyKeys("bar1", "bar2", "bar3", "bar4");
-        assertItemRow(items.get("bar1"), billId, "bar1", 20, 8, 1, 36923L); // round(120000×1600/5200)
-        assertItemRow(items.get("bar2"), billId, "bar2", 15, 6, 2, 27692L); // round(120000×1200/5200)
-        assertItemRow(items.get("bar3"), billId, "bar3", 10, 4, 3, 27692L);
-        assertItemRow(items.get("bar4"), billId, "bar4", 5, 2, 4, 27692L);
-
-        // 守恒:收入 = 费 + 池(渠道费 0);Σ分账 + 尾差 = 池(K18,分尽后严格相等)。
-        assertThat(30000L + 120000L).isEqualTo(150000L);
-        assertThat(36923L + 27692L * 3 + 1L).isEqualTo(120000L);
+        // ---- 无池快照不出分账明细;守恒:收入 = 费 + 酒吧净份额(渠道费 0) ----
+        assertThat(itemRows(pid)).isEmpty();
+        assertThat(30000L + com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, billId)).isEqualTo(150000L);
     }
 
     // ─────────────────────────── ② 负收入月(R-3 带符号,不崩不丢账) ───────────────────────────
 
     /**
      * 净红冲月:上月已过账的核销在本月被冲正(冲正额 > 本月新核销)→ 收入/费/池/分账全部为负。
-     * 负数 = 向对方追回:池 −64000 → 该酒吧分账 −64000(档位 100%)。月结必须正常落库,不许崩、不许钳零。
+     * 负数 = 向对方追回:酒吧净份额 −64000(无池快照 → 整笔单列未分配池余额)。月结必须正常落库,不许崩、不许钳零。
      */
     @Test
     void negativeMonthSettlesWithSignedAmountsInsteadOfCrashingOrClampingToZero() {
@@ -155,10 +151,8 @@ class SettlementMergeRetentionS4Tests {
         Map<String, Object> b = bill(pid);
         assertThat(num(b, "ticket_revenue_cent")).isEqualTo(-80000L);
         assertThat(num(b, "comp_service_fee_pooled_cent")).as("费带符号追回,不钳零").isEqualTo(-16000L);
-        assertThat(num(b, "available_pool_cent")).isEqualTo(-64000L);
-        assertThat(num(b, "distributed_cent")).as("负池月分账为负 = 向酒吧追回").isEqualTo(-64000L);
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) b.get("id"))).as("酒吧净份额带符号,不钳零").isEqualTo(-64000L);
         assertThat(num(b, "rounding_residual_cent")).isZero();
-        assertThat(itemRows(pid).get("bar_neg").get("final_amount_cent")).isEqualTo(-64000L);
     }
 
     /** 线性取反:同月「核销 + 对应冲正」→ 结算单各金额列全部净零(钱一分不留也一分不丢)。 */
@@ -283,27 +277,6 @@ class SettlementMergeRetentionS4Tests {
             out.put((String) row.get("merchant_id"), row);
         }
         return out;
-    }
-
-    /** 分账明细整行全列断言(id/bill/商户/核销数/客数/排名/方式/金额×2/状态/未过账)。 */
-    private void assertItemRow(Map<String, Object> row, String billId, String merchantId,
-                               int verifiedCount, int guestCount, int rankNo, long amountCent) {
-        Map<String, Object> expected = new LinkedHashMap<>();
-        expected.put("id", "si_" + billId + "_" + merchantId);
-        expected.put("bill_id", billId);
-        expected.put("merchant_id", merchantId);
-        expected.put("verified_count", verifiedCount);
-        expected.put("guest_count", guestCount);
-        expected.put("rank_no", rankNo);
-        expected.put("distribution_method", "by_rank_tier");
-        expected.put("calculated_amount_cent", amountCent);
-        expected.put("final_amount_cent", amountCent);
-        expected.put("ar_ap_item_id", null);
-        expected.put("status", "draft");
-        Map<String, Object> actual = new HashMap<>(row);
-        actual.remove("created_at");
-        actual.remove("updated_at");
-        assertThat(actual).as("K9:%s 的分账明细整行逐列一致", merchantId).isEqualTo(expected);
     }
 
     private static long num(Map<String, Object> row, String col) {

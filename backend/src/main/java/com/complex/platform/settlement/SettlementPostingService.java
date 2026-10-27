@@ -1,7 +1,8 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
+import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApItemRequest;
@@ -36,11 +37,11 @@ import org.springframework.transaction.annotation.Transactional;
  *       PK=arap_&lt;明细 id&gt; 双保险，重复过账不产生第二条应付。</li>
  * </ul>
  *
- * <p><b>D7 超额 C 口径（甲标签法）</b>：仅当 bill <b>超池</b>（池分账合计 poolDistributed &gt; availablePool）时，
- * 对<b>池明细</b>（method≠exclusive_full）两段拆——池内额 {@code pool_i = a_i*availablePool/poolDistributed}
- * 过 {@code ticket_distribution}（项目公司承担）、超额 {@code excess_i = a_i-pool_i} 过
- * {@code platform_incentive_subsidy}（L3 娱乐平台公司承担，独立幂等前缀 {@code settle-pis-} 防与 td 行撞）。
- * 专属直付 item（exclusive_full）永不拆、全额 ticket_distribution；未超池 bill 完全现状（单条）。
+ * <p><b>D7 超额 C 口径（甲标签法）</b>：仅当 bill <b>超池</b>（超池额 pool_overflow_cent &gt; 0）时，
+ * 对<b>第一段明细</b>（固定金额／固定单价）两段拆——超额 {@code excess_i} 按本单第一段明细金额占比累计额差分分摊超池额（Σexcess＝超池额），
+ * 过 {@code platform_incentive_subsidy}（L3 娱乐平台公司承担，独立幂等前缀 {@code settle-pis-} 防与 td 行撞）、
+ * 池内额 {@code pool_i = a_i-excess_i} 过 {@code ticket_distribution}（项目公司承担）。
+ * 第二段、专属直付 item（exclusive_full）永不拆、全额 ticket_distribution；未超池 bill 完全现状（单条）。
  *
  * <p>状态流转：结算单 draft →（引擎校验通过 or 超池特批）confirmed →（本服务过账）settled；
  * 明细 draft →（本服务过账）posted。
@@ -58,10 +59,9 @@ public class SettlementPostingService {
     private static final String SOURCE_PLATFORM_INCENTIVE_SUBSIDY = "platform_incentive_subsidy";
     /** FS-021-R1：负额明细（向商户追回）过账为该商户的单独追收应收。 */
     static final String SOURCE_TICKET_DISTRIBUTION_RECOVERY = "ticket_distribution_recovery";
-    /** 池分账三种方式（越池两段拆只对它们；专属直付与 R2 追收明细不拆）。 */
-    private static final java.util.Set<String> POOL_METHODS = java.util.Set.of(
-            TicketDistributionSettlementService.METHOD_BY_RANK_TIER, TicketDistributionSettlementService.METHOD_BY_VENUE_PER_GUEST,
-            TicketDistributionSettlementService.METHOD_BY_FIXED_AMOUNT);
+    /** 第一段两种方式（超池只由第一段合计高于份池产生，越池两段拆只对它们；第二段、专属直付与 R2 追收明细不拆）。 */
+    private static final java.util.Set<String> FIRST_SEGMENT_METHODS = java.util.Set.of(
+            TicketDistributionSettlementService.METHOD_BY_VENUE_PER_GUEST, TicketDistributionSettlementService.METHOD_BY_FIXED_AMOUNT);
 
     private final JdbcSettlementBillRepository repository;
     private final FinanceService financeService;
@@ -168,9 +168,15 @@ public class SettlementPostingService {
         }
 
         boolean overPool = ctx.overPool();
-        long availablePool = ctx.availablePoolCent();
-        // 除法安全:两段拆只对「final>0 的池明细」执行,该明细存在 ⇒ poolDistributed ≥ 该明细 final > 0。
-        long poolDistributed = ctx.pooledDistributedCent();
+        // 第十八批第 2 条(ENUM L52「娱乐平台公司确需让第一段合计高于池金额的……超出部分由娱乐平台公司承担」):超池额只由某几份第一段
+        //   合计高于该份池产生;补贴合计恰为超池额,按本单第一段明细金额占比累计额差分拆到各家(可分配池里的未核销减除、未分配、暂挂、
+        //   尾差与第二段分账都不在拆分基数里)。第一段明细全未核销时补贴无可拆。
+        java.util.List<JdbcSettlementBillRepository.PostableItem> items = repository.findPostableItems(billId);
+        long firstSegmentTotal = items.stream()
+                .filter(i -> i.finalAmountCent() > 0 && FIRST_SEGMENT_METHODS.contains(i.distributionMethod()))
+                .mapToLong(JdbcSettlementBillRepository.PostableItem::finalAmountCent).sum();
+        long subsidyTotal = Math.min(ctx.pooledDistributedCent() - ctx.availablePoolCent(), firstSegmentTotal);
+        long firstSegmentSoFar = 0L;
 
         // FS-021-R4（BSM L1673/L1683；DEC-R8-56/57/58）：每条钱路按财务指定付账日、异议期与银行工作日推算到期日并固化；
         //   规则或日历缺失即拒绝过账（账单保持 confirmed），不再填「今天+30 天」。同一账单同一钱路只推算一次。
@@ -179,7 +185,6 @@ public class SettlementPostingService {
         java.util.function.BiFunction<String, String, InternalPayDayService.Schedule> schedule = (route, project) ->
                 schedules.computeIfAbsent(route + "|" + project, k -> payDays.schedule(route, project, ctx.periodStart(), now));
 
-        List<JdbcSettlementBillRepository.PostableItem> items = repository.findPostableItems(billId);
         int posted = 0;
         for (var item : items) {
             String primaryArApId;
@@ -188,14 +193,14 @@ public class SettlementPostingService {
                 // FS-021-R1（BSM L755「一律按总额收付、收支两条线，不得轧差」）：负额＝向该商户追回，单独挂追收应收，不从任何应付里扣。
                 primaryArApId = post("receivable", item.itemId(), item.merchantId(), -a,
                         SOURCE_TICKET_DISTRIBUTION_RECOVERY, "settle-tdr-", ctx.projectId(), item.payeeProjectId(), schedule);
-            } else if (overPool && POOL_METHODS.contains(item.distributionMethod())) {
-                // 超额 C 口径两段拆：pool_i(项目公司承担) + excess_i(L3 平台承担)，pool_i+excess_i=a_i 精确。
-                // 溢出护栏(对抗复核 risk1):a×availablePool 可超 Long.MAX,用 BigInteger 中间乘;结果 ≤ a 恒在 long 内。
-                long poolI = java.math.BigInteger.valueOf(a)
-                        .multiply(java.math.BigInteger.valueOf(availablePool))
-                        .divide(java.math.BigInteger.valueOf(poolDistributed))
-                        .longValueExact();
-                long excessI = a - poolI;
+            } else if (overPool && FIRST_SEGMENT_METHODS.contains(item.distributionMethod())) {
+                // 超额 C 口径两段拆：pool_i(项目公司承担) + excess_i(L3 平台承担)，pool_i+excess_i=a_i 精确；Σexcess_i＝补贴合计。
+                //   MoneyRounding 全程 BigDecimal，a×补贴合计不在 long 上溢出(对抗复核 risk1)。
+                long before = firstSegmentSoFar;
+                firstSegmentSoFar += a;
+                long excessI = MoneyRounding.prorate(subsidyTotal, firstSegmentSoFar, firstSegmentTotal)
+                        - MoneyRounding.prorate(subsidyTotal, before, firstSegmentTotal);
+                long poolI = a - excessI;
                 String tdId = poolI > 0
                         ? createPayable(item.itemId(), item.merchantId(), poolI, SOURCE_TICKET_DISTRIBUTION, "settle-td-",
                                 ctx.projectId(), item.payeeProjectId(), schedule)

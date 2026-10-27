@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -74,30 +74,27 @@ class SettlementMonthlyJobPostingTests {
         //   跑在无主体上下文,过账走 FinanceService.createArApItem(@GuardedAction)靠 currentActor() 必抛 UNAUTHENTICATED。
         //   旧测试在此 setUp 注入 asPlatformAdmin() 掩盖了该生产缺陷(测试绿、生产必挂)。现去掉注入=让测试真实复现调度线程无主体,
         //   由作业【自身装配系统主体 SCHEDULER_ACTOR】(照 FacilityInspectionScheduleJob 范式)使过账在生产真能落账。
-        // S8:不再需要临时切全局方式——固定额已是商户级第一段规则(V374),全局方式保持 by_rank_tier,
-        //   setGlobalMerchantFixed 配的固定规则即可造「未越池/超池」两态(第二段无参与者,余额显式归平台)。
+        // 第十八批第 2 条:第一段名单与金额随票固化在池快照里——pooledFirstSegment 造一张只覆盖该商户、第一段固定额的池快照票,
+        //   即可造「未越池/超池」两态(第二段无参与者,余额显式归平台)。
     }
 
     @AfterEach
     void cleanup() {
-        jdbcTemplate.update("DELETE FROM ticket_distribution_merchant_rates WHERE merchant_id IN (?, ?)",
-                mcMerchant, mdMerchant);
-        // 窗口内 null 口径结算单 id 恒为 sb_default_2009-XX(仅本用例产出),先清明细再清单。
+        // 窗口内 null 口径结算单 id 恒为 sb_default_2009-XX(仅本用例产出),先清明细再清单(逐份结果随单删除)。
         jdbcTemplate.update("DELETE FROM settlement_items WHERE bill_id LIKE 'sb_default_2009-%'");
         jdbcTemplate.update("DELETE FROM settlement_bills WHERE id LIKE 'sb_default_2009-%'");
         com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", seedProject);
+        com.complex.platform.support.PassPoolFixtures.deleteByProject(jdbcTemplate, seedProject);
         // ar_ap_items 为不可变台账(DB 触发器禁 DELETE),source_id=唯一明细 id 不与后续用例冲突,不清。
         TestSecurityActors.clear();
     }
 
     @Test
     void scheduledSettleAutoPostsConfirmedBillAndSkipsDraftOverPool() {
-        // 未越池月:收入 100000 → 池 100000、留存 20% → 总池 80000;固定额 5000 ≤ 80000 → confirmed。
-        seedVerified(mcMerchant, 8, 4, 100000L, CONFIRMED_MONTH);
-        setGlobalMerchantFixed(mcMerchant, 5000L);
-        // 超池月:收入 1000 → 总池 800;固定额 500000 >> 800 → draft(待特批)。
-        seedVerified(mdMerchant, 3, 2, 1000L, DRAFT_MONTH);
-        setGlobalMerchantFixed(mdMerchant, 500000L);
+        // 未越池月:池 80000;第一段固定额 5000 ≤ 80000 → confirmed。
+        seedVerified(mcMerchant, 8, 4, 100000L, CONFIRMED_MONTH, pooledFirstSegment(mcMerchant, 80000L, 5000L));
+        // 超池月:池 800;第一段固定额 500000 >> 800 → draft(待特批)。
+        seedVerified(mdMerchant, 3, 2, 1000L, DRAFT_MONTH, pooledFirstSegment(mdMerchant, 800L, 500000L));
 
         // 固定 Clock:now=2009-09 → lastMonth=2009-08=CONFIRMED_MONTH;默认回看 6 月覆盖 DRAFT_MONTH。
         SettlementMonthlyJob job = new SettlementMonthlyJob(settlementService, repository, postingService,
@@ -153,9 +150,8 @@ class SettlementMonthlyJobPostingTests {
 
     @Test
     void scheduledSettleWithPostingDisabledDoesNotPostConfirmedBill() {
-        // 未越池月 → confirmed(总池 80000、固定额 5000 ≤ 80000)。
-        seedVerified(mcMerchant, 8, 4, 100000L, CONFIRMED_MONTH);
-        setGlobalMerchantFixed(mcMerchant, 5000L);
+        // 未越池月 → confirmed(池 80000、第一段固定额 5000 ≤ 80000)。
+        seedVerified(mcMerchant, 8, 4, 100000L, CONFIRMED_MONTH, pooledFirstSegment(mcMerchant, 80000L, 5000L));
 
         // 作业开(scheduledEnabled=true)、过账关(postingEnabled=false)。
         SettlementMonthlyJob job = new SettlementMonthlyJob(settlementService, repository, postingService,
@@ -175,17 +171,18 @@ class SettlementMonthlyJobPostingTests {
 
     // ---- helpers ----
 
-    /** S8:全局(project_id NULL)商户第一段固定额规则(rule_type=fixed),settleMonth(null,月) 据此给该商户直分。 */
-    private void setGlobalMerchantFixed(String merchantId, long fixedCent) {
-        jdbcTemplate.update("""
-                INSERT INTO ticket_distribution_merchant_rates (id, project_id, merchant_id,
-                    rule_type, per_guest_cent, fixed_amount_cent, status, is_draft)
-                VALUES (?, NULL, ?, 'fixed', NULL, ?, 'active', FALSE)
-                """, "tdmr_g_" + merchantId, merchantId, fixedCent);
+    /** 一张只覆盖该商户的池快照票(池 poolCent),快照第一段名单里该商户按固定额;settleMonth(null,月) 据此给该商户直分。返回父票。 */
+    private String pooledFirstSegment(String merchantId, long poolCent, long fixedCent) {
+        String ticket = "tk_job_" + merchantId;
+        com.complex.platform.support.PassPoolFixtures.snapshot(jdbcTemplate, ticket, seedProject, poolCent,
+                com.complex.platform.support.PassPoolFixtures.FACTORY_SCHEME, java.util.List.of(merchantId),
+                Map.of(merchantId, fixedCent));
+        return ticket;
     }
 
     /** 直插一条 verification_settled(created_at 落 month 月中=月窗驱动,归商户;confirmed_at 留 NULL 同批1双写)。 */
-    private void seedVerified(String merchantId, int verifiedCount, int numPeople, long verifiedCent, YearMonth month) {
+    private void seedVerified(String merchantId, int verifiedCount, int numPeople, long verifiedCent, YearMonth month,
+                              String parentTicket) {
         Instant createdAt = month.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(createdAt);
         String id = "st_jobtst_" + System.nanoTime();
@@ -193,13 +190,13 @@ class SettlementMonthlyJobPostingTests {
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at)
+                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at, parent_ticket_id)
                 VALUES (?, ?, 'verification_settled', ?, 'entry', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
-                    'draft', ?, ?, ?)
+                    'draft', ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, seedProject, "vf_" + id, ts, ts, ts);
+                merchantId, seedProject, "vf_" + id, ts, ts, ts, parentTicket);
     }
 
     private String billStatus(String billId) {

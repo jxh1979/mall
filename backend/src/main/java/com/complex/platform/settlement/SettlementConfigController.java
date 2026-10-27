@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
@@ -9,7 +11,9 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.ComboDiscou
 import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionSchemeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.NoticePeriodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccrualRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersActivateRequest;
@@ -37,13 +41,19 @@ public class SettlementConfigController {
     private final AuthorizationService authorizationService;
     private final SettlementConfigService settlementConfigService;
     private final SettlementConfigWriteService writeService;
+    private final DistributionSchemeService schemeService;
+    private final com.complex.platform.evidence.AuditEventService audit;
 
     public SettlementConfigController(AuthorizationService authorizationService,
                                       SettlementConfigService settlementConfigService,
-                                      SettlementConfigWriteService writeService) {
+                                      SettlementConfigWriteService writeService,
+                                      DistributionSchemeService schemeService,
+                                      com.complex.platform.evidence.AuditEventService audit) {
         this.authorizationService = authorizationService;
         this.settlementConfigService = settlementConfigService;
         this.writeService = writeService;
+        this.schemeService = schemeService;
+        this.audit = audit;
     }
 
     /** 「看全局」总览:平台默认生效配置 + 待复核草案队列(须 settlement.config.view + 平台域)。 */
@@ -152,6 +162,49 @@ public class SettlementConfigController {
     public ApiResponse<Void> saveRankTiers(@RequestBody RankTiersRequest request) {
         writeService.saveRankTiers(request, requireManageActor());
         return ApiResponse.ok(null);
+    }
+
+    /**
+     * 第十八批第 2 条（ENUM L52「档位表变更须提前向受影响的酒吧商户发出通告……经过通告期后方可生效」）：通票分账方案各版本
+     * （状态、通告日、生效日、参与家数档位表与第一段名单）、通告期，以及「补配该家数档位行」待办。
+     */
+    @GetMapping("/distribution-scheme")
+    public ApiResponse<DistributionSchemeService.SchemeOverview> distributionScheme() {
+        authorizationService.requirePermission("settlement.config.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(schemeService.overview());
+    }
+
+    /** 通票分账方案整套落草案（参与家数档位表＋第一段名单）；每个家数行合计须 100%、每格须同时配置上下限。返回草案 id。 */
+    @PostMapping("/distribution-scheme")
+    public ApiResponse<String> saveDistributionScheme(@RequestBody DistributionSchemeRequest request) {
+        return ApiResponse.ok(auditFailure("settlement.config.distribution_scheme.update_failed", null,
+                request == null ? null : request.idempotencyKey(), () -> schemeService.saveDraft(request, requireManageActor())));
+    }
+
+    /** 差人复核转正：当日逐家向受影响酒吧发通告即视为送达，生效日＝转正日＋通告期（操作员裁决第十八批第 1 条）。 */
+    @PostMapping("/distribution-scheme/{id}/activate")
+    public ApiResponse<DistributionSchemeService.SchemeVersion> activateDistributionScheme(@PathVariable("id") String id) {
+        return ApiResponse.ok(auditFailure("settlement.config.draft.activate_failed", id, null,
+                () -> schemeService.activate(id, requireManageActor())));
+    }
+
+    /** 档位表与第一段变更共用的通告期：数值、单位与上下限同时必填。 */
+    @PostMapping("/distribution-scheme/notice-period")
+    public ApiResponse<DistributionSchemeService.NoticePeriod> saveDistributionNoticePeriod(@RequestBody NoticePeriodRequest request) {
+        return ApiResponse.ok(auditFailure("settlement.config.distribution_notice_period.update_failed", "default",
+                request == null ? null : request.idempotencyKey(), () -> schemeService.saveNoticePeriod(request, requireManageActor())));
+    }
+
+    /** 分账方案三个写口按 OpenAPI 声明的失败事件留痕（权限、范围与校验失败一律记，再原样抛出）。 */
+    private <T> T auditFailure(String failureEvent, String businessId, String idempotencyKey, java.util.function.Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (RuntimeException exception) {
+            audit.recordFailure(failureEvent, "settlement.config.manage", "ticket_distribution_scheme_versions", businessId, null,
+                    idempotencyKey, exception instanceof com.complex.platform.common.api.ApiException api ? api.code() : "INTERNAL_ERROR");
+            throw exception;
+        }
     }
 
     @PostMapping("/revenue-stream-attribution")

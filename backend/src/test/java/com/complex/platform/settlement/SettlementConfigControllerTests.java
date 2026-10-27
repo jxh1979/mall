@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.settlement;
 
 import static org.mockito.Mockito.doThrow;
@@ -112,6 +112,16 @@ class SettlementConfigControllerTests {
         @Bean
         SettlementConfigWriteService settlementConfigWriteService() {
             return Mockito.mock(SettlementConfigWriteService.class);
+        }
+
+        @Bean
+        DistributionSchemeService distributionSchemeService() {
+            return Mockito.mock(DistributionSchemeService.class);
+        }
+
+        @Bean
+        com.complex.platform.evidence.AuditEventService auditEventService() {
+            return Mockito.mock(com.complex.platform.evidence.AuditEventService.class);
         }
 
         @Bean

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -210,6 +210,31 @@ public class FinanceService implements TerminationSettlementPort {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.evidence.EvidenceAttachmentValidator refundEvidenceValidator;
+
+    // 第十八批第 13 条（BSM 第 1597、1598 行）：商户应收应付金额变化短信（业务提交后发）。@Lazy 防初始化环；可为 null（单测手工构造）＝不发。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.merchantbilling.MerchantAmountChangeNotifier merchantAmountNotifier;
+
+    private static final Map<String, String> DIFFERENCE_TYPE_LABELS = Map.of(
+            "amount", "金额差异", "count", "数量差异", "status", "状态差异", "missing", "缺失差异");
+
+    /** 往来来源类型中文名（未知值原样）。 */
+    public static String sourceTypeLabel(String sourceType) {
+        return arApLabel(AR_AP_SOURCE_TYPE_LABELS, sourceType);
+    }
+
+    /** 往来对方是商户才发（通知器内判定）；visibleOn 为空＝不写异议截止日。 */
+    private void notifyMerchantAmount(String counterpartyId, String event, long amountCent, String reason, LocalDate visibleOn,
+                                      String projectId, String refKey) {
+        if (merchantAmountNotifier != null) {
+            merchantAmountNotifier.notifyAfterCommit(counterpartyId, event, amountCent, reason, null, visibleOn, projectId, refKey);
+        }
+    }
+
+    private static LocalDate today() {
+        return LocalDate.now(com.complex.platform.common.LocalZone.ID);
+    }
 
     // ROOT-04-R4：锁账补录改写过去到期日的合同应收（看板按 due_date 并入收入，同 JdbcAnalyticsRepository.sumContractRentReceivableByMerchant）。
     // 可为 null（单测手工构造）＝不登记。
@@ -845,7 +870,15 @@ public class FinanceService implements TerminationSettlementPort {
             return difference;
         }
         String closedBy = authorizationService.currentActor().id();
-        return repository.closeReconciliationDifference(difference.id(), closeReason, closedBy, Instant.now());
+        ReconciliationDifferenceRecord closed =
+                repository.closeReconciliationDifference(difference.id(), closeReason, closedBy, Instant.now());
+        if (difference.businessRef() != null) {
+            repository.findArApPaymentById(difference.businessRef()).flatMap(payment -> repository.findArApItemById(payment.arApItemId()))
+                    .ifPresent(item -> notifyMerchantAmount(item.counterpartyId(), "reconciliation_difference", difference.amountCent(),
+                            DIFFERENCE_TYPE_LABELS.getOrDefault(difference.differenceType(), difference.differenceType())
+                                    + "；认定结果：" + closeReason, null, item.projectId(), difference.id()));
+        }
+        return closed;
     }
 
     // ── P1#13 库存差异 → AR/AP（R6-D08）─────────────────────────────────────────
@@ -1457,6 +1490,8 @@ public class FinanceService implements TerminationSettlementPort {
                     && CONTRACT_REVENUE_SOURCE_TYPES.contains(item.sourceType()) && item.dueDate() != null) {
                 revenueRefreshMarks.mark(List.of(item.dueDate()));
             }
+            notifyMerchantAmount(item.counterpartyId(), "adjustment", adjustment.adjustmentAmountCent(),
+                    sourceTypeLabel(item.sourceType()) + "调整：" + adjustment.reason(), today(), item.projectId(), adjustment.id());
         }
         // reject：不改账，只标状态。
         return repository.updateArApAdjustment(new ArApAdjustmentRecord(
@@ -2817,6 +2852,8 @@ public class FinanceService implements TerminationSettlementPort {
         repository.saveDepositLedger(new DepositLedgerRecord(
                 "deposit_refund_" + slug(settlementId), merchantId, "refund", effectiveRefund,
                 lockedBalance - effectiveRefund, item.id(), "退租应退押金结算", Instant.now()));
+        notifyMerchantAmount(merchantId, "deposit_refund", effectiveRefund, "退租应退押金（结算单 " + settlementId + "）", today(), null,
+                settlementId);
         return effectiveRefund;
     }
 
@@ -2825,6 +2862,8 @@ public class FinanceService implements TerminationSettlementPort {
     public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId) {
         ArApItemRecord item = persistDerivedArApItem(
                 "receivable", merchantId, "termination_penalty", settlementId, penaltyCent, settlementId, merchantId);
+        notifyMerchantAmount(merchantId, "penalty", penaltyCent, "提前退租违约金（结算单 " + settlementId + "）", today(), null,
+                settlementId);
         return item.id();
     }
 
@@ -2835,8 +2874,11 @@ public class FinanceService implements TerminationSettlementPort {
     @Override
     public ArApItemRecord registerDepositAdjustment(String merchantId, String childContractId, String changeId,
             long deltaCent, LocalDate deadline) {
-        return persistDerivedArApItem(deltaCent > 0 ? "receivable" : "payable", merchantId, "deposit_adjustment",
+        ArApItemRecord item = persistDerivedArApItem(deltaCent > 0 ? "receivable" : "payable", merchantId, "deposit_adjustment",
                 childContractId, Math.abs(deltaCent), changeId, merchantId, null, deadline);
+        notifyMerchantAmount(merchantId, deltaCent > 0 ? "deposit_supplement" : "deposit_refund", Math.abs(deltaCent),
+                deltaCent > 0 ? "面积/位置变更押金补缴" : "面积/位置变更押金应退", today(), null, changeId);
+        return item;
     }
 
     /**
@@ -2866,6 +2908,8 @@ public class FinanceService implements TerminationSettlementPort {
         if (total > 0) {
             repository.saveDepositLedger(new DepositLedgerRecord("deposit_offset_" + slug(settlementId), merchantId, "deduct", total,
                     balance - total, null, "退租结算押金抵扣（结算单 " + settlementId + "）", now));
+            notifyMerchantAmount(merchantId, "deposit_deduct", total, "退租结算押金抵扣（结算单 " + settlementId + "）", today(), null,
+                    "deposit_offset_" + slug(settlementId));
         }
         return offsets;
     }
@@ -2971,7 +3015,7 @@ public class FinanceService implements TerminationSettlementPort {
         }
 
         Instant now = Instant.now();
-        return repository.saveDepositLedger(new DepositLedgerRecord(
+        DepositLedgerRecord saved = repository.saveDepositLedger(new DepositLedgerRecord(
                 "deposit_" + slug(merchantId + "_" + actual.idempotencyKey()),
                 merchantId,
                 action,
@@ -2980,6 +3024,16 @@ public class FinanceService implements TerminationSettlementPort {
                 arApItemId,
                 trimToNull(actual.reason()),
                 now));
+        if (!"collect".equals(action)) {
+            String label = switch (action) {
+                case "deduct" -> "押金扣除";
+                case "forfeit" -> "押金没收";
+                default -> "押金退还";
+            };
+            notifyMerchantAmount(merchantId, "refund".equals(action) ? "deposit_refund" : "deposit_deduct", amountCent,
+                    trimToNull(actual.reason()) == null ? label : label + "：" + actual.reason().trim(), today(), null, saved.id());
+        }
+        return saved;
     }
 
     /**

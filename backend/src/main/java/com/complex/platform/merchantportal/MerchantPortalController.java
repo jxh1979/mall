@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiRequests;
 import com.complex.platform.common.api.ApiResponse;
@@ -24,9 +24,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class MerchantPortalController {
 
     private final MerchantPortalService service;
+    private final MerchantZoneNoticeService notices;
 
-    public MerchantPortalController(MerchantPortalService service) {
+    public MerchantPortalController(MerchantPortalService service, MerchantZoneNoticeService notices) {
         this.service = service;
+        this.notices = notices;
+    }
+
+    /** 18B 复核后操作员裁决第 10 条「商户专区显示通告」：本商户的通告，专区可查看即送达。 */
+    @GetMapping("/notices")
+    public ApiResponse<java.util.List<MerchantZoneNoticeService.Notice>> listMyNotices() {
+        return ApiResponse.ok(notices.listMine());
     }
 
     @GetMapping("/contracts")

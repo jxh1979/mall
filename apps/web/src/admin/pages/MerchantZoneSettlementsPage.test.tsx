@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -430,5 +430,33 @@ describe("MerchantZoneSettlementsPage 门票分账", () => {
     expect(body.new_account_ref).toBe("新账户 6222****0001");
     expect(body.reason).toBe("原账户被冻结");
     expect(typeof body.idempotency_key).toBe("string");
+  });
+});
+
+// 18B 复核后操作员裁决第 10 条「商户专区显示通告」：系统挂进本商户专区的通告，专区可查看即送达。
+describe("MerchantZoneSettlementsPage 商户专区通告", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("显示本商户的通告：通告日、标题、生效日与内容", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/v1/merchant-portal/notices")) {
+        return Promise.resolve(single([{
+          id: "mzn_1", title: "通票分账方案变更通告", effective_date: "2026-11-27", created_at: "2026-10-27T03:00:00Z",
+          content: "变更后的方案自 2026年11月27日 起生效。\n参与 2 家：第 1 名 57%、第 2 名 43%\n本店第一段：固定金额，每份票 10.00 元",
+        }]));
+      }
+      return Promise.resolve(envelope([]));
+    }));
+    render(<MerchantZoneSettlementsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "merchant", accountType: "merchant_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={VIEW_ONLY_PERMS} navigateTo={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByTestId("merchant-zone-notice-mzn_1")).not.toBeNull());
+    const row = screen.getByTestId("merchant-zone-notice-mzn_1").textContent ?? "";
+    expect(row).toContain("通票分账方案变更通告");
+    expect(row).toContain("2026年11月27日");
+    // 通告日按北京时间显示：created_at 03:00Z ＝ 北京 11:00。
+    expect(row).toContain("2026年10月27日 11:00");
+    expect(row).toContain("本店第一段：固定金额，每份票 10.00 元");
   });
 });

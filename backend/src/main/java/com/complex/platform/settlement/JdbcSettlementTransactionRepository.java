@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -76,7 +76,8 @@ public class JdbcSettlementTransactionRepository {
                 .addValue("channel_fee_cent", extras == null ? 0L : extras.channelFeeCent())
                 .addValue("channel_fee_config_id", extras == null ? null : extras.channelFeeConfigId())
                 .addValue("channel_fee_residual_cent", extras == null ? 0L : extras.channelFeeResidualCent())
-                .addValue("channel_fee_residual_entity_id", extras == null ? null : extras.channelFeeResidualEntityId());
+                .addValue("channel_fee_residual_entity_id", extras == null ? null : extras.channelFeeResidualEntityId())
+                .addValue("route_fee_cent", record.routeFeeCent());
 
         jdbcTemplate.update("""
                 INSERT INTO settlement_transactions (
@@ -88,7 +89,7 @@ public class JdbcSettlementTransactionRepository {
                     comp_service_fee_cent, comp_service_fee_config_id, beneficiary_entity_id,
                     parent_ticket_id, gift_cost_cent, gift_cost_config_id,
                     unverified_category, channel_fee_cent, channel_fee_config_id,
-                    channel_fee_residual_cent, channel_fee_residual_entity_id
+                    channel_fee_residual_cent, channel_fee_residual_entity_id, route_fee_cent
                 )
                 VALUES (
                     :id, :transaction_no, :transaction_type, :entitlement_id, :order_id, :ticket_type_id,
@@ -99,7 +100,7 @@ public class JdbcSettlementTransactionRepository {
                     :comp_service_fee_cent, :comp_service_fee_config_id, :beneficiary_entity_id,
                     :parent_ticket_id, :gift_cost_cent, :gift_cost_config_id,
                     :unverified_category, :channel_fee_cent, :channel_fee_config_id,
-                    :channel_fee_residual_cent, :channel_fee_residual_entity_id
+                    :channel_fee_residual_cent, :channel_fee_residual_entity_id, :route_fee_cent
                 )
                 ON CONFLICT (transaction_no) DO NOTHING
                 """, params);
@@ -122,7 +123,7 @@ public class JdbcSettlementTransactionRepository {
                        verified_amount_cent, discount_amount_cent, comp_service_fee_cent, comp_service_fee_config_id,
                        beneficiary_type, beneficiary_entity_id, merchant_id, project_id, exclusive_merchant_id,
                        entitlement_valid_to, COALESCE(business_at, created_at) AS business_at, parent_ticket_id,
-                       gift_cost_cent, gift_cost_config_id
+                       gift_cost_cent, gift_cost_config_id, route_fee_cent
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                    AND transaction_no = :tno
@@ -142,6 +143,7 @@ public class JdbcSettlementTransactionRepository {
                        NULL::varchar AS comp_service_fee_config_id,
                        0::bigint AS gift_cost_cent,         -- S6 遗留累计行无 G 快照 → 0（无正向可冲）
                        NULL::varchar AS gift_cost_config_id,
+                       0::bigint AS route_fee_cent,         -- 第十八批第 3 条：遗留累计行无通路费分摊 → 0
                        leg.beneficiary_type, leg.beneficiary_entity_id, leg.merchant_id, leg.project_id,
                        leg.exclusive_merchant_id,
                        leg.entitlement_valid_to, COALESCE(leg.business_at, leg.created_at) AS business_at,
@@ -192,7 +194,7 @@ public class JdbcSettlementTransactionRepository {
                 rs.getLong("discount_amount_cent"),
                 rs.getLong("comp_service_fee_cent"), rs.getString("comp_service_fee_config_id"),
                 rs.getString("beneficiary_entity_id"), rs.getString("parent_ticket_id"),
-                rs.getLong("gift_cost_cent"), rs.getString("gift_cost_config_id")) : null;
+                rs.getLong("gift_cost_cent"), rs.getString("gift_cost_config_id"), rs.getLong("route_fee_cent")) : null;
     }
 
     /** AUD-013 冲正取反读投影：原核销结算行的金额与归属维度。D6：加 discountAmountCent，冲正时取原行反。 */
@@ -208,7 +210,9 @@ public class JdbcSettlementTransactionRepository {
             //   冲掉首笔核销之后这张票就再也收不到那一道综合服务费。
             String parentTicketId,
             // S6:原行的赠送权益预估成本 G 与规则 id,冲正行取反/沿用 —— 该票 G 净额抵回 0 后锚点复位可再计提。
-            long giftCostCent, String giftCostConfigId) {
+            long giftCostCent, String giftCostConfigId,
+            // 第十八批第 3 条：原行分摊的通路费，冲正行取反。
+            long routeFeeCent) {
     }
 
     // ---- 结算重构批1 第3步:双写观察期对账(观察用途,不改现有 net 聚合口径) ----
@@ -289,6 +293,8 @@ public class JdbcSettlementTransactionRepository {
     //   只取 active 会让恰恰从未使用的票永不落归属事实）；另取多人票首场次已开启、本人份从未检票的权益（未到期），
     //   由作业按首场次实际闭店时刻判定是否已可处理（ENUM L48「于该场次结束时按本条处理，不等票面有效期届满」）。
     //   人份汇总（是否检票、入场次数）按同父票同 slot 全部权益取；入场类权益口径同 TicketRewardService（ticket/entry/admission/amusement*）。
+    //   第十八批第 2 条：另取该人份仍有效的入场类核销时刻（作业按营业日计已开启次数，与逐份分账同口径）；
+    //   第十八批第 3 条：销售渠道费取订单付款时固化的配置（ticket_order_channel_fees）。
     public java.util.List<ExpiredUnverifiedRow> findExpiredUnverifiedEntitlements(Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
         return jdbcTemplate.query("""
@@ -296,7 +302,8 @@ public class JdbcSettlementTransactionRepository {
                        vs.session_date,
                        EXTRACT(EPOCH FROM h.open_time)::int  AS open_s,
                        EXTRACT(EPOCH FROM h.close_time)::int AS close_s,
-                       sl.checked_in, sl.visits, sl.opened,
+                       sl.checked_in, sl.visits, sl.opened, ea.entry_ats,
+                       f.sales_fee_config_id, COALESCE(f.sales_fee_bps, 0) AS sales_fee_bps, f.sales_fixed_amount_cent,
                        (EXISTS (SELECT 1 FROM settlement_transactions a
                                  WHERE a.parent_ticket_id = c.parent_ticket_id
                                    AND a.transaction_type = 'verification_settled'
@@ -315,7 +322,10 @@ public class JdbcSettlementTransactionRepository {
                              m.merchant_type AS business_format,
                              m.supervising_company_id,
                              o.project_id, o.sales_channel,
-                             COALESCE(ti.num_people, 1) AS parent_num_people, ti.first_session_key
+                             COALESCE(ti.num_people, 1) AS parent_num_people, ti.first_session_key,
+                             (COALESCE(m.merchant_type, 'bar') = 'bar' AND e.exclusive_merchant_id IS NULL
+                              AND EXISTS (SELECT 1 FROM pass_pool_snapshots pps WHERE pps.ticket_instance_id = e.parent_ticket_id))
+                                 AS pooled_at_sale
                         FROM issued_entitlements e
                         LEFT JOIN merchants m ON m.id = e.merchant_id
                         LEFT JOIN ticket_orders o ON o.id = e.order_id
@@ -347,6 +357,17 @@ public class JdbcSettlementTransactionRepository {
                        WHERE s.id = c.id
                           OR (s.parent_ticket_id = c.parent_ticket_id AND s.slot_index = c.slot_index)
                   ) sl
+                  CROSS JOIN LATERAL (
+                      SELECT COALESCE(ARRAY_AGG(COALESCE(st.business_at, st.created_at)), ARRAY[]::timestamptz[]) AS entry_ats
+                        FROM settlement_transactions st
+                        JOIN issued_entitlements s ON s.id = st.entitlement_id
+                       WHERE (s.id = c.id OR (s.parent_ticket_id = c.parent_ticket_id AND s.slot_index = c.slot_index))
+                         AND st.transaction_type = 'verification_settled' AND st.verification_id IS NOT NULL
+                         AND (st.entitlement_type IN ('ticket', 'entry', 'admission') OR st.entitlement_type LIKE 'amusement%')
+                         AND NOT EXISTS (SELECT 1 FROM settlement_transactions r
+                                          WHERE r.transaction_type = 'verification_reversed' AND r.verification_id = st.verification_id)
+                  ) ea
+                  LEFT JOIN ticket_order_channel_fees f ON f.order_id = c.order_id
                  ORDER BY c.parent_ticket_id NULLS LAST, c.id
                 """, params, (rs, i) -> new ExpiredUnverifiedRow(
                         rs.getString("id"),
@@ -371,7 +392,13 @@ public class JdbcSettlementTransactionRepository {
                         rs.getBoolean("checked_in"),
                         rs.getInt("visits"),
                         rs.getInt("opened"),
-                        rs.getBoolean("anchored")));
+                        rs.getBoolean("anchored"),
+                        rs.getBoolean("pooled_at_sale"),
+                        rs.getInt("slot_index"),
+                        java.util.Arrays.stream((Timestamp[]) rs.getArray("entry_ats").getArray()).map(Timestamp::toInstant).toList(),
+                        rs.getString("sales_fee_config_id") == null ? JdbcSettlementBillRepository.NO_SALES_FEE
+                                : new JdbcSettlementBillRepository.ChannelFeeConfig(rs.getString("sales_fee_config_id"),
+                                        rs.getInt("sales_fee_bps"), (Long) rs.getObject("sales_fixed_amount_cent"))));
     }
 
     /** FS-023-R1：该项目唯一有效的城市项目公司（ENUM L49「餐饮域与零售域 → 城市项目公司」）；0 或多家返回全部供调用方阻断。 */
@@ -382,6 +409,12 @@ public class JdbcSettlementTransactionRepository {
                  WHERE p.project_id = :project_id AND e.entity_role = 'project_company' AND e.status = 'active'
                  ORDER BY e.id
                 """, new MapSqlParameterSource().addValue("project_id", projectId), String.class);
+    }
+
+    /** 订单所挂酒吧（单一酒吧门票）；通票或无订单为 null。核销结算事实据此把单店票按专属直付记到该酒吧（ENUM L32）。 */
+    public String findOrderBarId(String orderId) {
+        return jdbcTemplate.query("SELECT bar_id FROM ticket_orders WHERE id = :id",
+                new MapSqlParameterSource("id", orderId), rs -> rs.next() ? rs.getString(1) : null);
     }
 
     /**
@@ -536,7 +569,14 @@ public class JdbcSettlementTransactionRepository {
             int slotVisits,
             int slotOpened,
             // FS-023-R3:父票的固定金额渠道费是否已扣过(进池核销锚点已由月结按首笔核销计过,或同票到期事实已扣)。
-            boolean parentAnchored
+            boolean parentAnchored,
+            // 第十八批第 2 条:酒吧业态非专属权益且父票有池快照——已检票部分已在池内按通票未核销减除额处理。
+            boolean pooledAtSale,
+            // 第十八批第 2 条:人份序号与该人份仍有效的入场类核销时刻(按营业日计已开启次数)。
+            int slotIndex,
+            java.util.List<Instant> slotEntryAts,
+            // 第十八批第 3 条:订单付款时固化的销售渠道费配置(官方渠道/存量订单=不扣)。
+            JdbcSettlementBillRepository.ChannelFeeConfig salesFee
     ) {
     }
 

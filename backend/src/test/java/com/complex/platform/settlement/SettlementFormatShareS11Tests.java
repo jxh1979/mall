@@ -1,5 +1,5 @@
 package com.complex.platform.settlement;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,6 +34,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li><b>折扣补回口径扩到所有业态</b>：平台承担折扣时每个业态都按满额算，不是只补酒吧那一路。</li>
  * </ol>
  *
+ * <p>第十八批第 2 条起酒吧通票可分配池按单张票的池快照逐份分账（ENUM L52）；本类直插的核销没有池快照（相当于本批之前售出的票），
+ * 其酒吧净份额不再按旧月度梯子分，整笔单列未分配池余额、归娱乐平台公司——业态拆份额各列不变，原「分池明细」期望随之改写为未分配。
+ *
  * <p>非 @Transactional（settleMonth 内部真提交）；@AfterEach 按项目清理；每例独立 projectId。
  */
 @SpringBootTest(properties = {
@@ -50,9 +53,12 @@ class SettlementFormatShareS11Tests {
     @Autowired private TicketDistributionSettlementService settlementService;
     @Autowired private JdbcSettlementBillRepository billRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private RouteFeeShares routeFeeShares;
 
     private final List<String> projectIds = new ArrayList<>();
     private final List<String> merchantIds = new ArrayList<>();
+    // 第十八批第 3 条：销售渠道费按订单付款时固化的配置——渠道费用例的核销挂在一张已付清的第三方渠道订单上（空＝无订单）。
+    private String orderId;
 
     @AfterEach
     void cleanup() {
@@ -71,6 +77,10 @@ class SettlementFormatShareS11Tests {
             jdbcTemplate.update("DELETE FROM channel_fee_configs WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM ticket_combo_discount_configs WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM revenue_stream_attribution WHERE project_id = ?", pid);
+            jdbcTemplate.update("DELETE FROM ticket_order_channel_fees WHERE project_id = ?", pid);
+            jdbcTemplate.update("DELETE FROM ticket_orders WHERE project_id = ?", pid);
+            jdbcTemplate.update("DELETE FROM ticket_types WHERE id = ?", "tt_s11_" + pid);
+            jdbcTemplate.update("DELETE FROM projects WHERE id = ?", pid);
         }
         for (String mid : merchantIds) {
             jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", mid);
@@ -82,7 +92,8 @@ class SettlementFormatShareS11Tests {
     // ---------------------------------------------------------------- ① K9 逐分不变
 
     /**
-     * K9：一张只有酒吧权益的通票 —— 酒吧业态占比 100%，结算单<b>每一列</b>与拆份额之前逐分一致。
+     * K9：一张只有酒吧权益的通票 —— 酒吧业态占比 100%，结算单拆份额各列与拆份额之前逐分一致；
+     * 分账列按 ENUM L52 末句（直插核销无池快照，同不含酒吧入场、未建池快照的票 → 酒吧净份额整笔单列未分配池余额）。
      *
      * <p>这是本刀「不动老账」的正面证明：综合体今天卖的绝大多数还是纯酒吧通票，
      * 财务这个月拿到的结算单不能因为系统多了一层业态拆分就变个数字。
@@ -91,7 +102,7 @@ class SettlementFormatShareS11Tests {
      * (S4 起综合服务费两支/收款主体快照列并入本全列比对;每笔费按 20% 等价保值口径逐笔计提。)
      */
     @Test
-    void barOnlyPassKeepsEveryBillColumnPennyIdentical() {
+    void barOnlyPassKeepsEveryFormatSplitColumnPennyIdentical() {
         String pid = newProject();
         setRankTier(pid, 1, 9, 3333);
         seedMerchant("m_bar_a", "bar");
@@ -104,9 +115,8 @@ class SettlementFormatShareS11Tests {
 
         String billId = settlementService.settleMonth(pid, MONTH);
 
-        // 手算：收入 99999 → 渠道费 0 → 池链综合服务费 Σ=19999 → 可分配池 80000；
-        //   S8 第二段归一化分尽:三家权重各 3333(Σ=9999) → 各 round(80000×3333/9999)=26667,
-        //   Σ=80001;应分总额=池 80000 → 尾差 −1 单列(平台承担的追回),无未分余额。
+        // 手算：收入 99999 → 渠道费 0 → 池链综合服务费 Σ=19999 → 酒吧净份额 80000；
+        //   无池快照 → 进可分配池并整笔单列未分配池余额(归娱乐平台公司),无分账明细、无尾差。
         Map<String, Object> expected = new LinkedHashMap<>();
         expected.put("id", billId);
         expected.put("project_id", pid);
@@ -114,8 +124,9 @@ class SettlementFormatShareS11Tests {
         expected.put("period_end", java.sql.Date.valueOf(PERIOD_END));
         expected.put("ticket_revenue_cent", 99999L);
         expected.put("channel_fee_cent", 0L);
+        expected.put("route_fee_cent", 0L);           // 第十八批第 3 条 V555 通路费列（无付款固化行 → 0）
         expected.put("available_pool_cent", 80000L);
-        expected.put("distributed_cent", 80001L);
+        expected.put("distributed_cent", 0L);
         expected.put("comp_service_fee_pooled_cent", 19999L);
         expected.put("comp_service_fee_exclusive_cent", 0L);
         expected.put("fee_beneficiary_entity_id", "be_ent_platform"); // V370 全局归属种子:归娱乐平台公司
@@ -129,19 +140,23 @@ class SettlementFormatShareS11Tests {
         expected.put("settled_at", null);
         expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
-        expected.put("rounding_residual_cent", -1L);
-        expected.put("rounding_residual_entity_id", "be_ent_platform"); // V383 尾差责任主体=通票分账责任主体
-        expected.put("pool_undistributed_cent", 0L);        // S8:第二段有参与者 → 恒 0
-        expected.put("pool_undistributed_entity_id", null);
+        expected.put("rounding_residual_cent", 0L);
+        expected.put("rounding_residual_entity_id", null); // V383 尾差为 0 → 没有责任人
+        expected.put("pool_undistributed_cent", 80000L);    // 只放无第二段参与者的余额(18B 复核后裁决第 11 条)
+        expected.put("pool_undistributed_entity_id", "be_ent_platform");
+        expected.put("unverified_deduction_cent", 0L);      // V556 三栏分列与暂挂、超池列
+        expected.put("unverified_deduction_entity_id", null);
+        expected.put("pool_suspended_cent", 0L);
+        expected.put("pool_overflow_cent", 0L);
 
         Map<String, Object> actual = new HashMap<>(bill(pid));
         actual.remove("created_at");   // 落库时刻，非业务口径
         actual.remove("updated_at");
         assertThat(actual)
-                .as("单业态票（只有酒吧）→ 酒吧占比 100% → 结算单每一列逐分不变")
+                .as("单业态票（只有酒吧）→ 酒吧占比 100% → 结算单拆份额各列逐分不变")
                 .isEqualTo(expected);
 
-        // 业态份额只有酒吧一行，净份额(毛额−渠道费−综合服务费)恰是可分配池。
+        // 业态份额只有酒吧一行，净份额(毛额−渠道费−综合服务费)＝80000。
         Map<String, Map<String, Object>> shares = formatShares(billId);
         assertThat(shares.keySet()).containsExactly("bar");
         assertThat(shares.get("bar").get("gross_revenue_cent")).isEqualTo(99999L);
@@ -154,13 +169,11 @@ class SettlementFormatShareS11Tests {
     // ---------------------------------------------------------------- ② K20 拆份额
 
     /**
-     * K20：联合通票按业态拆份额 —— 只有酒吧那份进池；游乐/餐饮的份额既不进池，也不占酒吧的分池名次。
-     *
-     * <p>这条最要紧的是<b>排名</b>：从前一家餐厅核销几张餐券，就能在「按核销数排名分池」里占掉一个名次，
-     * 把本该属于某家酒吧的档位挤掉——钱分错了人，而且分完的账面看着完全正常。
+     * K20：联合通票按业态拆份额 —— 只有酒吧那份进池；游乐/餐饮的份额不进池。
+     * （名次只在本票第二段参与酒吧内部、按当期入场人数编列，见 SettlementPassPerTicketEngineTests。）
      */
     @Test
-    void onlyBarShareEntersPoolAndOnlyBarsAreRanked() {
+    void onlyBarShareEntersPool() {
         String pid = newProject();
         setRankTier(pid, 1, 9, 5000);
         seedMerchant("m_fmt_bar1", "bar");
@@ -181,12 +194,12 @@ class SettlementFormatShareS11Tests {
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(140000L);
         assertThat(b.get("comp_service_fee_pooled_cent"))
                 .as("池链服务费 = 只有酒吧业态计提(游乐/餐饮不收这道费)").isEqualTo(20000L);
-        assertThat(b.get("available_pool_cent")).as("池 = 酒吧份额 − 酒吧侧服务费,不含游乐/餐饮").isEqualTo(80000L);
+        assertThat(formatShares(billId).get("bar").get("net_revenue_cent"))
+                .as("酒吧净份额 = 酒吧份额 − 酒吧侧服务费,不含游乐/餐饮").isEqualTo(80000L);
 
-        // 分池明细里只有两家酒吧，各 50%。
-        Map<String, Long> items = itemAmounts(pid);
-        assertThat(items).containsOnlyKeys("m_fmt_bar1", "m_fmt_bar2");
-        assertThat(items.values()).containsExactly(40000L, 40000L);
+        // 无池快照 → 酒吧净份额整笔单列未分配池余额,游乐/餐饮不进,不出分池明细。
+        assertThat(itemAmounts(pid)).isEmpty();
+        assertThat(b.get("pool_undistributed_cent")).isEqualTo(80000L);
 
         // 业态份额三行，归属各就各位；K20：Σ净份额 + 渠道费 + 综合服务费 = 通票收入。
         Map<String, Map<String, Object>> shares = formatShares(billId);
@@ -224,6 +237,7 @@ class SettlementFormatShareS11Tests {
         String pid = newProject();
         setRankTier(pid, 1, 9, 5000);
         setChannelFeeBps(pid, null, 1000);
+        thirdPartyOrder(pid);
         seedMerchant("m_ch_bar1", "bar");
         seedMerchant("m_ch_bar2", "bar");
         seedMerchant("m_ch_amu", "amusement");
@@ -243,9 +257,9 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.get("catering").get("channel_fee_cent")).isEqualTo(1000L);
         assertThat(shares.get("bar").get("channel_fee_cent")).as("酒吧只担自己那一份渠道费").isEqualTo(10000L);
         assertThat(sumOf(shares, "channel_fee_cent")).isEqualTo(14000L);
-        // 池 = 酒吧毛额 100000 − 酒吧渠道费 10000 − 酒吧侧综合服务费 20000 = 70000。
-        assertThat(b.get("available_pool_cent")).isEqualTo(70000L);
-        assertThat(itemAmounts(pid).values()).containsExactly(35000L, 35000L);
+        // 酒吧净份额 = 酒吧毛额 100000 − 酒吧渠道费 10000 − 酒吧侧综合服务费 20000 = 70000(无池快照 → 整笔单列未分配池余额)。
+        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(70000L);
+        assertThat(b.get("pool_undistributed_cent")).isEqualTo(70000L);
     }
 
     /** 渠道费率按【订单销售渠道】解析：某渠道配了专属率就用专属率，没配的落回通用率（默认 0＝官方直销不抽）。 */
@@ -275,6 +289,7 @@ class SettlementFormatShareS11Tests {
         String pid = newProject();
         setRankTier(pid, 1, 9, 10000);
         setChannelFeeBps(pid, null, 333); // 3.33%
+        thirdPartyOrder(pid);
         seedMerchant("m_cr_bar", "bar");
         seedMerchant("m_cr_amu", "amusement");
         seedMerchant("m_cr_cat", "catering");
@@ -297,9 +312,9 @@ class SettlementFormatShareS11Tests {
                 .as("渠道费分摊尾差 1 分单列留痕").isEqualTo(1L);
         assertThat(b.get("rounding_residual_entity_id"))
                 .as("V383：尾差挂到实际承担结算责任的主体（通票分账=娱乐平台公司）").isEqualTo("be_ent_platform");
-        // 池 = 酒吧毛额 100 − 酒吧渠道费 3 = 97（不再被那 1 分尾差挪走）。
-        assertThat(b.get("available_pool_cent")).isEqualTo(97L);
-        assertThat(itemAmounts(pid).values()).containsExactly(97L);
+        // 酒吧净份额 = 酒吧毛额 100 − 酒吧渠道费 3 = 97（不再被那 1 分尾差挪走;无池快照 → 整笔单列未分配池余额）。
+        assertThat(shares.get("bar").get("net_revenue_cent")).isEqualTo(97L);
+        assertThat(b.get("pool_undistributed_cent")).isEqualTo(97L);
     }
 
     // ---------------------------------------------------------------- ④ 折扣补回扩到所有业态
@@ -328,7 +343,7 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.get("amusement").get("gross_revenue_cent")).isEqualTo(35000L);
         assertThat(b.get("combo_discount_cent")).isEqualTo(25000L);
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(135000L);
-        assertThat(b.get("available_pool_cent")).as("池只拿酒吧那份的满额").isEqualTo(100000L);
+        assertThat(shares.get("bar").get("net_revenue_cent")).as("酒吧净份额只拿酒吧那份的满额").isEqualTo(100000L);
 
         // 改成商户自担：两个业态一样都按折后净额，仍然是同一套口径。
         setDiscountBearer(pid, "merchant_absorb");
@@ -390,8 +405,8 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.get("media").get("beneficiary_entity_id"))
                 .as("V384 全局种子:performance_ticket 流 → 传媒公司").isEqualTo("be_media");
         assertThat(b.get("ticket_revenue_cent")).isEqualTo(70000L);
-        assertThat(b.get("available_pool_cent")).as("传媒份额不进酒吧池").isEqualTo(50000L);
-        assertThat(itemAmounts(pid)).as("分池明细只有酒吧").containsOnlyKeys("m_fmt_bar_md");
+        assertThat(shares.get("bar").get("net_revenue_cent")).as("传媒份额不进酒吧份额").isEqualTo(50000L);
+        assertThat(itemAmounts(pid)).as("传媒不出分池明细").isEmpty();
     }
 
     // ---------------------------------------------------------------- 夹具
@@ -425,6 +440,24 @@ class SettlementFormatShareS11Tests {
                 """, "cfc_" + projectId + "_" + (channel == null ? "all" : channel), projectId, channel, bps);
     }
 
+    /** 一张已付清的美团渠道订单：付款成功时按本项目渠道费配置固化销售渠道费（同真实付款链），此后的核销挂在这张订单上。 */
+    private void thirdPartyOrder(String projectId) {
+        String type = "tt_s11_" + projectId;
+        jdbcTemplate.update("""
+                INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)
+                VALUES (?, 'complex', ?, 'active', now(), now()) ON CONFLICT (id) DO NOTHING""", projectId, projectId);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES (?, '业态份额测试票种', 'fixed_price', FALSE, 'active', now(), now())""", type);
+        orderId = "ord_s11_" + projectId;
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent, currency, pay_status,
+                    issue_status, status, created_at, updated_at, project_id)
+                VALUES (?, ?, ?, 1, 'meituan', 0, 'CNY', 'paid', 'issued', 'created', now(), now(), ?)""",
+                orderId, orderId, type, projectId);
+        routeFeeShares.fixSalesChannelFee(orderId);
+    }
+
     private void setDiscountBearer(String projectId, String bearer) {
         jdbcTemplate.update("""
                 INSERT INTO ticket_combo_discount_configs (id, project_id, discount_bearer, split_platform_bps, status, is_draft)
@@ -456,12 +489,12 @@ class SettlementFormatShareS11Tests {
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
                     verification_id, settlement_status, entitlement_valid_to, business_at,
-                    discount_amount_cent, created_at, updated_at, comp_service_fee_cent)
+                    discount_amount_cent, created_at, updated_at, comp_service_fee_cent, order_id)
                 VALUES (?, ?, 'verification_settled', ?, 'pass', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
-                    'draft', ?, ?, ?, ?, ?, ?)
+                    'draft', ?, ?, ?, ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, verifiedCount, Math.max(verifiedCount, 1), numPeople,
-                cent, cent, merchantId, projectId, "vf_" + id, ts, ts, discountCent, ts, ts, compServiceFeeCent);
+                cent, cent, merchantId, projectId, "vf_" + id, ts, ts, discountCent, ts, ts, compServiceFeeCent, orderId);
     }
 
     private Map<String, Object> bill(String projectId) {

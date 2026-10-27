@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -10,6 +10,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { ApiError } from "../../shared/apiError";
 import type { AdminPageProps, BusinessEntityRow } from "../types";
 import { InternalPayDaysPanel } from "./InternalPayDaysPanel";
+import { DistributionSchemePanel } from "./DistributionSchemePanel";
 
 // 结算配置中心（新立项）总控页 —— PRD settlement-rebuild §9（ADM-STL-001）。
 // 批0：①「看全局」当前生效配置一览；②草案待复核队列 + 复核转正。
@@ -23,11 +24,10 @@ type ConfigItem = { group: string; key: string; label: string; value: string };
 type DraftItem = { id: string; configGroup: string; summary: string };
 type Overview = { platformDefaults: ConfigItem[]; pendingDraftCount: number; pendingDrafts: DraftItem[] };
 
-// 8 类通票分账配置 + V340 提成/积分 2 类（configGroup 即转正泛化 configType，rank_tiers 例外走 /rank-tiers/activate）。
+// 通票分账配置块 + V340 提成/积分 2 类（configGroup 即转正泛化 configType，rank_tiers 例外走 /rank-tiers/activate）。
+// 第十八批第 2 条：原「排名档位分账梯子」「商户每客单价 / 固定额」两块已合并为通票分账方案（DistributionSchemePanel），引擎不再读旧表。
 type EditKey =
   | "distribution_method"
-  | "rank_tiers"
-  | "merchant_rate"
   | "comprehensive_service_fee"
   | "pass_gift_cost"
   | "combo_discount"
@@ -40,13 +40,11 @@ type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: strin
 
 // 各块：标题 + 当前生效值取自 overview.platformDefaults 的哪个 key（无则块内提示按域/按商户维护）。
 const BLOCKS: BlockDef[] = [
-  { key: "distribution_method", title: "各酒吧分配方式（第二段）", defaultKey: "distribution_method", endpoint: "distribution-method", note: "两段分配：配了「商户每客单价 / 固定额」固定规则的酒吧先按绝对金额拿第一段（拿了第一段不再参与第二段）；此处只配第二段——其余酒吧按排名档位把余额分尽。" },
-  { key: "rank_tiers", title: "排名档位分账梯子", endpoint: "rank-tiers", note: "第二段：未配固定规则的酒吧按销售排名分档、按档位比例把第二段余额分尽；当前生效梯子按项目维护，改动落草案、复核转正后生效。" },
-  { key: "merchant_rate", title: "商户每客单价 / 固定额（第一段固定规则）", endpoint: "merchant-rate", note: "按「项目 × 商户」配置，二选一：配了的酒吧走第一段按绝对金额先拿（每客单价 × 当月客数，或固定额），不再参与第二段排名档位；未配置的酒吧走第二段。改动落草案；可对草案「下线」。" },
+  { key: "distribution_method", title: "各酒吧分配方式（第二段）", defaultKey: "distribution_method", endpoint: "distribution-method", note: "两段分配：第一段名单内的酒吧每份票按固定金额或固定单价先拿（不再参与第二段）；其余覆盖酒吧按下方通票分账方案的参与家数档位表分第二段。此处配分配方式与超池特批有效期。" },
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
   { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后生效。" },
   { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态价格×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
-  { key: "channel_fee", title: "渠道抽成费率", endpoint: "channel-fee", note: "按项目配置通用渠道抽成：比例（万分比）或每张票固定金额（分）二选一，改动落草案。" },
+  { key: "channel_fee", title: "渠道费用（通路费／销售渠道费）", endpoint: "channel-fee", note: "两层分别配、不可混用：通路费按支付通路（微信、支付宝、聚合支付、银联及第三方回款通路，填通路码）配比例，所有付款都扣、官方渠道同样扣；销售渠道费按第三方销售渠道（美团、抖音等，填渠道码，留空＝第三方通用）配比例或每张票固定金额，只有第三方渠道售出的票才扣、官方渠道不扣。两层都在拆分各业态之前从整单扣、由各业态按份额共担。改动落草案。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
 ];
 
@@ -90,11 +88,12 @@ const PREDEDUCT_MODE_OPTIONS: [string, string][] = [
   ["by_ticket_amount", "按票计（该票种赠送部分的售价整额）"],
   ["by_item", "按件计（票面各权益数量 × 内部结算价之和）"],
 ];
-// S6：预扣与核销实付的差额处理规则（差额消费在后续批次，这里先定规则快照）。
-const VARIANCE_OPTIONS: [string, string][] = [
-  ["platform_absorb", "差额留娱乐平台公司（默认）"],
-  ["carry_forward", "结转下期"],
-  ["true_up_pool", "回补当期可分配池"],
+// 18B 复核后裁决第 11 条「对，下线两个选项（推荐）」：预扣与实付的差额一律留娱乐平台公司（ENUM 第 52 行），不再可选。
+const VARIANCE_FIXED_LABEL = "差额留娱乐平台公司";
+// 第十八批第 3 条（BSM 第 749 行「渠道费用分两层、性质不同不可混用」）。
+const FEE_LAYER_OPTIONS: [string, string][] = [
+  ["route", "通路费（按支付通路）"],
+  ["sales", "销售渠道费（按第三方销售渠道）"],
 ];
 const BEARER_OPTIONS: [string, string][] = [
   ["platform_absorb", "平台承担"],
@@ -138,7 +137,7 @@ const GROUP_LABELS: Record<string, string> = {
   comprehensive_service_fee: "综合服务费",
   pass_gift_cost: "赠送权益预估成本",
   combo_discount: "套票折扣归属",
-  channel_fee: "渠道抽成",
+  channel_fee: "渠道费用",
   revenue_stream_attribution: "收入流归因",
   attribution_rule: "收入归因规则",
   commission_rate: "卡座提成费率",
@@ -167,7 +166,6 @@ const ARCHIVABLE = new Set([
   "internal_price_item",
 ]);
 
-type TierRow = { rankFrom: string; rankTo: string; shareBps: string };
 // S2：票种下拉项（/api/v1/ticketing/ticket-types 分页信封的 items 元素，本页只用 id + 票名）。
 type TicketTypeOption = { id: string; ticketName?: string; status?: string };
 type Form = {
@@ -180,6 +178,9 @@ type Form = {
   fixedAmountCent: string;
   monthlyCapAmountCent: string;
   ticketTypeId: string;
+  // 渠道费用：费用层（route 通路费 / sales 销售渠道费）+ 渠道码（支付通路码或第三方销售渠道码）。
+  feeLayer: string;
+  channel: string;
   feeBps: string;
   discountBearer: string;
   splitPlatformBps: string;
@@ -191,19 +192,18 @@ type Form = {
   roleType: string;
   rateBp: string;
   amountCentPerPoint: string;
-  // S6 赠送权益预估成本：预扣模式 + 按票计整额（元，提交时换算成分）+ 差额处理规则。
+  // S6 赠送权益预估成本：预扣模式 + 按票计整额（元，提交时换算成分）。
   predeductMode: string;
   ticketGiftAmountYuan: string;
-  varianceHandling: string;
 };
 const EMPTY_FORM: Form = {
   projectId: "", methodType: "by_rank_tier",
   specialApprovalTermValue: "3", specialApprovalTermUnit: "month", merchantId: "",
-  perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeBps: "",
+  perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeLayer: "route", channel: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
-  predeductMode: "by_ticket_amount", ticketGiftAmountYuan: "", varianceHandling: "platform_absorb",
+  predeductMode: "by_ticket_amount", ticketGiftAmountYuan: "",
 };
 
 function nextKey(prefix: string) {
@@ -219,28 +219,6 @@ function isIntInRange(value: string, min: number, max: number): boolean {
   if (!/^-?\d+$/.test(t)) return false;
   const n = Number(t);
   return n >= min && n <= max;
-}
-
-// 排名档位区间覆盖客户端校验（镜像后端 validateRankTierCoverage：连续、首档 from=1、Σ((to-from+1)×share)=10000）。
-function rankTierHint(tiers: TierRow[]): { ok: boolean; msg: string } {
-  const parsed = tiers.map((t) => ({ from: Number(t.rankFrom), to: Number(t.rankTo), share: Number(t.shareBps) }));
-  for (const t of parsed) {
-    if (!Number.isInteger(t.from) || !Number.isInteger(t.to) || !Number.isInteger(t.share)) {
-      return { ok: false, msg: "每档的起始名次、结束名次、分账万分比都必须是整数。" };
-    }
-    if (t.from < 1 || t.to < t.from) return { ok: false, msg: "每档需满足 1 ≤ 起始名次 ≤ 结束名次。" };
-    if (t.share < 0 || t.share > 10000) return { ok: false, msg: "分账万分比需在 0~10000 之间。" };
-  }
-  const sorted = [...parsed].sort((a, b) => a.from - b.from);
-  let expected = 1;
-  let sum = 0;
-  for (const t of sorted) {
-    if (t.from !== expected) return { ok: false, msg: `名次区间需连续无缺口/重叠：期望下一档从第 ${expected} 名开始。` };
-    sum += (t.to - t.from + 1) * t.share;
-    expected = t.to + 1;
-  }
-  if (sum !== 10000) return { ok: false, msg: `全部名次的分账万分比合计需正好 10000，当前为 ${sum}。` };
-  return { ok: true, msg: "区间连续、合计 10000，校验通过。" };
 }
 
 // 草案 summary 里解析 project（rank_tiers 转正按 project 换梯，overview 未单列 projectId，只能从 summary 取）。
@@ -259,7 +237,6 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
 
   const [editing, setEditing] = React.useState<EditKey | null>(null);
   const [form, setForm] = React.useState<Form>(EMPTY_FORM);
-  const [tiers, setTiers] = React.useState<TierRow[]>([{ rankFrom: "1", rankTo: "", shareBps: "" }]);
   const [formError, setFormError] = React.useState<string>("");
 
   // 归因主体下拉数据源。该端点要 entity.binding.view（与本页 settlement.config.manage 是两个权限），
@@ -297,7 +274,6 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
 
   function openEdit(key: EditKey) {
     setForm(EMPTY_FORM);
-    setTiers([{ rankFrom: "1", rankTo: "", shareBps: "" }]);
     setFormError("");
     setEditing(key);
   }
@@ -319,7 +295,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
     const idempotencyKey = nextKey(editing);
     let body: Record<string, unknown>;
     try {
-      body = buildBody(editing, form, tiers, idempotencyKey);
+      body = buildBody(editing, form, idempotencyKey);
     } catch (validationError) {
       setFormError((validationError as Error).message);
       return;
@@ -476,9 +452,10 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
   const ticketDistributionTab = (
     <div data-testid="settlement-config-ticket-distribution">
       <p className="admin-muted-action">
-        通票分账 8 类配置：改动一律先落草案，经另一位有权限的同事「复核转正」后才生效（草案不即时生效）。
+        通票分账配置：改动一律先落草案，经另一位有权限的同事「复核转正」后才生效（草案不即时生效）。
       </p>
       {renderBlocks(BLOCKS)}
+      <DistributionSchemePanel api={api} effectivePermissions={effectivePermissions} />
     </div>
   );
 
@@ -528,8 +505,8 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           error={formError || undefined}
           onClose={() => setEditing(null)}
           onSubmit={() => void submitEdit()}
-          steps={editSteps(editing, form, setField, tiers, setTiers, entities, canEntityView, ticketTypes, canTicketTypeView)}
-          summary={editSummary(editing, form, tiers, ticketTypes)}
+          steps={editSteps(editing, form, setField, entities, canEntityView, ticketTypes, canTicketTypeView)}
+          summary={editSummary(editing, form, ticketTypes)}
         />
       ) : null}
     </section>
@@ -541,8 +518,6 @@ function editSteps(
   key: EditKey,
   form: Form,
   setField: (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void,
-  tiers: TierRow[],
-  setTiers: React.Dispatch<React.SetStateAction<TierRow[]>>,
   entities: BusinessEntityRow[],
   canEntityView: boolean,
   ticketTypes: TicketTypeOption[],
@@ -572,12 +547,6 @@ function editSteps(
             {TERM_UNIT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label></>);
-      break;
-    case "merchant_rate":
-      content = (<>{projectField}
-        <label>商户 id<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
-        <label>每客单价（分，与固定额二选一）<input data-testid="settlement-config-field-perGuestCent" type="number" min={0} value={form.perGuestCent} onChange={setField("perGuestCent")} /></label>
-        <label>固定额（分，与每客单价二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label></>);
       break;
     case "comprehensive_service_fee":
       content = (<>{projectField}
@@ -633,11 +602,7 @@ function editSteps(
         <label>每月封顶（分，可留空 = 不封顶）
           <input data-testid="settlement-config-field-monthlyCapAmountCent" type="number" min={0} value={form.monthlyCapAmountCent} onChange={setField("monthlyCapAmountCent")} />
         </label>
-        <label>预扣与实付差额处理规则
-          <select data-testid="settlement-config-field-varianceHandling" value={form.varianceHandling} onChange={setField("varianceHandling")}>
-            {VARIANCE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </label></>);
+        <div style={{ fontSize: 12 }} data-testid="settlement-config-variance-fixed">预扣与实付差额：{VARIANCE_FIXED_LABEL}</div></>);
       break;
     case "combo_discount":
       content = (<>{projectField}
@@ -655,8 +620,20 @@ function editSteps(
       break;
     case "channel_fee":
       content = (<>{projectField}
-        <label>通用渠道抽成万分比（0~10000，配固定金额时须 0）<input data-testid="settlement-config-field-feeBps" type="number" min={0} max={10000} value={form.feeBps} onChange={setField("feeBps")} /></label>
-        <label>每张票固定金额（分，可留空；与比例二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label></>);
+        <label>费用层
+          <select data-testid="settlement-config-field-feeLayer" value={form.feeLayer} onChange={setField("feeLayer")}>
+            {FEE_LAYER_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+        <label>{form.feeLayer === "route"
+          ? "支付通路码（必填，如 wechat、alipay、aggregate_pay、unionpay；第三方回款通路填其渠道码）"
+          : "第三方销售渠道码（如 meituan、douyin；留空 = 第三方通用）"}
+          <input data-testid="settlement-config-field-channel" value={form.channel} onChange={setField("channel")} />
+        </label>
+        <label>{form.feeLayer === "route" ? "通路费率万分比（0~10000）" : "销售渠道费率万分比（0~10000，配固定金额时须 0）"}<input data-testid="settlement-config-field-feeBps" type="number" min={0} max={10000} value={form.feeBps} onChange={setField("feeBps")} /></label>
+        {form.feeLayer === "sales" ? (
+          <label>每张票固定金额（分，可留空；与比例二选一）<input data-testid="settlement-config-field-fixedAmountCent" type="number" min={0} value={form.fixedAmountCent} onChange={setField("fixedAmountCent")} /></label>
+        ) : null}</>);
       break;
     case "revenue_stream_attribution":
       content = (<>{projectField}
@@ -707,34 +684,11 @@ function editSteps(
         <label>商户 id（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
         <label>每积 1 分所需消费金额（分，须大于 0；100 = 每 1 元积 1 分）<input data-testid="settlement-config-field-amountCentPerPoint" type="number" min={1} value={form.amountCentPerPoint} onChange={setField("amountCentPerPoint")} /></label></>);
       break;
-    case "rank_tiers": {
-      const hint = rankTierHint(tiers);
-      content = (<>{projectField}
-        <div className="admin-table-scroll">
-          <table className="admin-table" data-testid="settlement-config-rank-tier-table">
-            <thead><tr><th>起始名次</th><th>结束名次</th><th>分账万分比</th><th>操作</th></tr></thead>
-            <tbody>
-              {tiers.map((t, i) => (
-                <tr key={i}>
-                  <td><input aria-label={`档${i + 1}起始名次`} type="number" min={1} value={t.rankFrom} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, rankFrom: e.target.value } : x)))} /></td>
-                  <td><input aria-label={`档${i + 1}结束名次`} type="number" min={1} value={t.rankTo} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, rankTo: e.target.value } : x)))} /></td>
-                  <td><input aria-label={`档${i + 1}分账万分比`} type="number" min={0} max={10000} value={t.shareBps} onChange={(e) => setTiers(tiers.map((x, j) => (j === i ? { ...x, shareBps: e.target.value } : x)))} /></td>
-                  <td><button type="button" onClick={() => setTiers(tiers.filter((_, j) => j !== i))} disabled={tiers.length <= 1}>删</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <button type="button" data-testid="settlement-config-rank-tier-add" onClick={() => setTiers([...tiers, { rankFrom: "", rankTo: "", shareBps: "" }])}>＋ 加一档</button>
-        <div data-testid="settlement-config-rank-tier-hint" style={{ color: hint.ok ? "var(--adm-ok, #1a7f37)" : "var(--adm-danger, #b3261e)" }}>{hint.msg}</div>
-      </>);
-      break;
-    }
   }
-  return [{ title: "配置内容", validate: () => validate(key, form, tiers), content }];
+  return [{ title: "配置内容", validate: () => validate(key, form), content }];
 }
 
-function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: TicketTypeOption[]): GuidedSummaryItem[] {
+function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]): GuidedSummaryItem[] {
   const scope: GuidedSummaryItem = { label: "项目", value: form.projectId.trim() || "全平台默认" };
   // 确认页给票名而不是 id —— 复核的人要看得出这条费率影响的是哪个票。
   const ticketTypeLabel = (id: string) => {
@@ -744,36 +698,31 @@ function editSummary(key: EditKey, form: Form, tiers: TierRow[], ticketTypes: Ti
   };
   switch (key) {
     case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期", value: `${form.specialApprovalTermValue || "3"} ${form.specialApprovalTermUnit === "day" ? "天" : "个月"}` }];
-    case "merchant_rate": return [scope, { label: "商户", value: form.merchantId || "—" }, { label: "每客单价（分）", value: form.perGuestCent || "—" }, { label: "固定额（分）", value: form.fixedAmountCent || "—" }];
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
     case "pass_gift_cost": return [scope, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) },
       { label: "预扣模式", value: PREDEDUCT_MODE_OPTIONS.find(([v]) => v === form.predeductMode)?.[1] ?? form.predeductMode },
       { label: "按票计整额", value: form.predeductMode === "by_ticket_amount" ? `${form.ticketGiftAmountYuan || "0"} 元` : "由票面推导" },
       { label: "每月封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" },
-      { label: "差额处理", value: VARIANCE_OPTIONS.find(([v]) => v === form.varianceHandling)?.[1] ?? form.varianceHandling }];
+      { label: "差额处理", value: VARIANCE_FIXED_LABEL }];
     case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }, { label: "通票凑整允许误差", value: `${form.roundingToleranceYuan || "0"} 元` }];
-    case "channel_fee": return [scope, { label: "通用渠道抽成万分比", value: form.feeBps || "—" }, { label: "每张票固定金额（分）", value: form.fixedAmountCent.trim() || "—" }];
+    case "channel_fee": return [scope, { label: "费用层", value: FEE_LAYER_OPTIONS.find(([v]) => v === form.feeLayer)?.[1] ?? form.feeLayer },
+      { label: form.feeLayer === "route" ? "支付通路" : "销售渠道", value: form.channel.trim() || (form.feeLayer === "route" ? "—" : "第三方通用") },
+      { label: "费率万分比", value: form.feeBps || "—" },
+      ...(form.feeLayer === "sales" ? [{ label: "每张票固定金额（分）", value: form.fixedAmountCent.trim() || "—" }] : [])];
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
-    case "rank_tiers": return [scope, { label: "档位数", value: String(tiers.length) }, { label: "区间校验", value: rankTierHint(tiers).msg }];
     case "commission_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "该项目通用" }, { label: "角色档", value: ROLE_TYPE_OPTIONS.find(([v]) => v === form.roleType)?.[1] ?? form.roleType }, { label: "提成率万分比", value: form.rateBp || "—" }];
     case "points_accrual_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "每积1分所需消费（分）", value: form.amountCentPerPoint || "—" }];
   }
 }
 
 // 单屏校验（返回中文错误则阻止提交，null 放行）。
-function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
+function validate(key: EditKey, form: Form): string | null {
   switch (key) {
     case "distribution_method":
       // S9/V368：超池特批有效期 = 数值 + 单位（天/月）。业务口径「期限可配，默认不超过 3 个月」，
       //   留空按 3 个月落库；配 3 天这种短期激励是合法的，下限只到 1（个单位），没有上限。
       return isIntInRange(form.specialApprovalTermValue || "3", 1, Number.MAX_SAFE_INTEGER)
         ? null : "超池特批有效期需为不小于 1 的整数（按所选单位计，天或月）。";
-    case "merchant_rate":
-      if (orUndef(form.merchantId) === undefined) return "商户 id 必填。";
-      if ((orUndef(form.perGuestCent) === undefined) === (orUndef(form.fixedAmountCent) === undefined)) return "每客单价与固定额必须二选一：该酒吧按哪种固定规则拿第一段，只能配一种。";
-      if (orUndef(form.perGuestCent) !== undefined && !isIntInRange(form.perGuestCent, 0, Number.MAX_SAFE_INTEGER)) return "每客单价需为不小于 0 的整数（分）。";
-      if (orUndef(form.fixedAmountCent) !== undefined && !isIntInRange(form.fixedAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "固定额需为不小于 0 的整数（分）。";
-      return null;
     case "comprehensive_service_fee": {
       const feeStr = form.feeBps.trim() === "" ? "0" : form.feeBps;
       if (!isIntInRange(feeStr, 0, 10000)) return "费率万分比需为 0~10000 的整数。";
@@ -798,18 +747,20 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
       return Number(form.roundingToleranceYuan) >= 0 && Number.isFinite(Number(form.roundingToleranceYuan))
         ? null : "通票凑整允许误差需为不小于 0 的金额（元）。";
     case "channel_fee": {
+      if (form.feeLayer === "route") {
+        if (orUndef(form.channel) === undefined) return "通路费须填写支付通路码。";
+        return isIntInRange(form.feeBps, 0, 10000) ? null : "通路费率万分比需为 0~10000 的整数。";
+      }
       const chFixed = orUndef(form.fixedAmountCent) !== undefined;
       if (chFixed && !isIntInRange(form.fixedAmountCent, 0, Number.MAX_SAFE_INTEGER)) return "每张票固定金额需为不小于 0 的整数（分）。";
       const chFee = chFixed && form.feeBps.trim() === "" ? "0" : form.feeBps;
-      if (!isIntInRange(chFee, 0, 10000)) return "渠道抽成万分比需为 0~10000 的整数。";
-      if (chFixed && Number(chFee) !== 0) return "比例与每张票固定金额二选一：配了固定金额，抽成万分比须为 0。";
+      if (!isIntInRange(chFee, 0, 10000)) return "销售渠道费率万分比需为 0~10000 的整数。";
+      if (chFixed && Number(chFee) !== 0) return "比例与每张票固定金额二选一：配了固定金额，费率万分比须为 0。";
       return null;
     }
     case "revenue_stream_attribution":
       if (form.beneficiaryKind === "per_merchant") return null;  // 归各商户自己，无单一主体
       return orUndef(form.managementEntityId) === undefined ? "收款主体必选。" : null;
-    case "rank_tiers":
-      return rankTierHint(tiers).ok ? null : rankTierHint(tiers).msg;
     case "commission_rate":
       return isIntInRange(form.rateBp, 0, 10000) ? null : "提成率万分比需为 0~10000 的整数（1500 = 15%）。";
     case "points_accrual_rate":
@@ -820,8 +771,8 @@ function validate(key: EditKey, form: Form, tiers: TierRow[]): string | null {
 
 // 构造落草案请求体（camelCase；adminClient 会归一为 snake_case 并注入 idempotency_key，此处仍显式带上）。
 // 抛错=校验未过（提交前 GuidedFlowModal 已跑 validate，这里是二次防线）。
-function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: string): Record<string, unknown> {
-  const invalid = validate(key, form, tiers);
+function buildBody(key: EditKey, form: Form, idempotencyKey: string): Record<string, unknown> {
+  const invalid = validate(key, form);
   if (invalid) throw new Error(invalid);
   const project = orUndef(form.projectId);
   switch (key) {
@@ -830,12 +781,6 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
         idempotencyKey, projectId: project, methodType: form.methodType,
         specialApprovalTermValue: Number(form.specialApprovalTermValue || "3"),
         specialApprovalTermUnit: form.specialApprovalTermUnit || "month",
-      };
-    case "merchant_rate":
-      return {
-        idempotencyKey, projectId: project, merchantId: form.merchantId.trim(),
-        perGuestCent: orUndef(form.perGuestCent) === undefined ? null : Number(form.perGuestCent),
-        fixedAmountCent: orUndef(form.fixedAmountCent) === undefined ? null : Number(form.fixedAmountCent),
       };
     case "comprehensive_service_fee":
       return {
@@ -852,16 +797,15 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
         ticketGiftAmountCent: form.predeductMode === "by_ticket_amount"
           ? Math.round(Number(form.ticketGiftAmountYuan || "0") * 100) : null,
         monthlyCapAmountCent: orUndef(form.monthlyCapAmountCent) === undefined ? null : Number(form.monthlyCapAmountCent),
-        varianceHandling: form.varianceHandling,
       };
     case "combo_discount":
       return { idempotencyKey, projectId: project, discountBearer: form.discountBearer, splitPlatformBps: Number(form.splitPlatformBps || "0"),
         roundingToleranceCent: Math.round(Number(form.roundingToleranceYuan || "0") * 100) };
     case "channel_fee":
       return {
-        idempotencyKey, projectId: project, channel: null,
+        idempotencyKey, projectId: project, feeLayer: form.feeLayer, channel: orUndef(form.channel) ?? null,
         feeBps: form.feeBps.trim() === "" ? 0 : Number(form.feeBps),
-        fixedAmountCent: orUndef(form.fixedAmountCent) === undefined ? null : Number(form.fixedAmountCent),
+        fixedAmountCent: form.feeLayer === "route" || orUndef(form.fixedAmountCent) === undefined ? null : Number(form.fixedAmountCent),
       };
     case "revenue_stream_attribution":
       return {
@@ -870,8 +814,6 @@ function buildBody(key: EditKey, form: Form, tiers: TierRow[], idempotencyKey: s
         // 归各商户自己时不得带主体 id（后端 CHECK 强制主体列为空）。
         managementEntityId: form.beneficiaryKind === "per_merchant" ? undefined : form.managementEntityId.trim(),
       };
-    case "rank_tiers":
-      return { idempotencyKey, projectId: project, tiers: tiers.map((t) => ({ rankFrom: Number(t.rankFrom), rankTo: Number(t.rankTo), shareBps: Number(t.shareBps) })) };
     case "commission_rate":
       return { idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), roleType: form.roleType, rateBp: Number(form.rateBp) };
     case "points_accrual_rate":

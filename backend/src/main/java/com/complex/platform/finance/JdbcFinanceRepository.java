@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -890,7 +890,9 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     // OBS-13-07（BSM L1681 官方 App/小程序与第三方渠道分开汇总）：自营售票渠道，即 TicketOrderService.SALES_CHANNELS 去掉 channel
     // 与各第三方渠道码；第三方渠道回流出的票 sales_channel 记具体渠道码（meituan、douyin 等），一律归渠道售票源。
-    private static final String SELF_SALES_CHANNELS = "('admin', 'kiosk', 'miniapp', 'app', 'web')";
+    // 第十八批第 3 条：与结算「官方渠道不扣销售渠道费」共用 TicketOrderService.OFFICIAL_SALES_CHANNELS 一处定义。
+    private static final String SELF_SALES_CHANNELS = "('" + String.join("', '",
+            new java.util.TreeSet<>(com.complex.platform.ticketing.TicketOrderService.OFFICIAL_SALES_CHANNELS)) + "')";
 
     @Override
     public DailyCloseSourceTotals aggregateOfficialTicket(LocalDate businessDate, Instant fromInclusive, Instant toExclusive) {

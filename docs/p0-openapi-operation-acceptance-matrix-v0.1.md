@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.34
+# P0 OpenAPI Operation 验收矩阵 V0.35
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1150 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1155 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -709,6 +709,7 @@
 | partner | `GET` | `/api/v1/partner/subordinates/completion` | `listSubordinateCompletion` | 机构管理员查看本机构下属工作完成情况 | `-` | `partner.subordinate.view` | `staff-token` | `self` | web | 否 | `partner_subordinate_completion.viewed` | `partner_subordinate_completion.view_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/ticket-settlements` | `listMerchantPortalTicketSettlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `not_applicable` | `not_applicable` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | `approveMerchantPortalPayeeAccountChange` | 收款方财务负责人审批更换收款账户 | `object` | `merchant.portal.payee_account.approve` | `staff-token` | `merchant` | web, merchant_portal | 是 | `merchant_portal.payee_account.approved` | `merchant_portal.payee_account.approve_failed` |
+| merchant-portal | `GET` | `/api/v1/merchant-portal/notices` | `listMerchantPortalNotices` | 商户专区·通告(本商户) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `not_applicable` | `not_applicable` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/contracts` | `listMerchantPortalContracts` | 商户专区·我的合同(只读关键信息) | `-` | `contract.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `merchant_portal.contract.viewed` | `merchant_portal.contract.view_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/settlements` | `listMerchantPortalSettlements` | 商户专区·我的对账(结算单只读) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `merchant_portal.settlement.viewed` | `merchant_portal.settlement.view_failed` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | `submitMerchantPortalSettlementDispute` | 商户专区·结算单异议留言 | `object` | `merchant.portal.settlement.dispute` | `staff-token` | `merchant` | web, merchant_portal | 是 | `merchant_portal.settlement.disputed` | `merchant_portal.settlement.dispute_failed` |
@@ -913,12 +914,16 @@
 | settlement | `POST` | `/api/v1/settlement/config/merchant-rate` | `settlementConfigUpsertMerchantRate` | 维护每客单价/固定额(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_merchant_rates.updated` | `settlement.config.ticket_distribution_merchant_rates.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | `settlementConfigUpsertComprehensiveServiceFee` | 维护门票综合服务费(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.comprehensive_service_fee_configs.updated` | `settlement.config.comprehensive_service_fee_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/combo-discount` | `settlementConfigUpsertComboDiscount` | 维护套票折扣归属(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_combo_discount_configs.updated` | `settlement.config.ticket_combo_discount_configs.update_failed` |
-| settlement | `POST` | `/api/v1/settlement/config/channel-fee` | `settlementConfigUpsertChannelFee` | 维护第三方渠道抽成率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.channel_fee_configs.updated` | `settlement.config.channel_fee_configs.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/channel-fee` | `settlementConfigUpsertChannelFee` | 维护渠道费用(通路费/销售渠道费,草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.channel_fee_configs.updated` | `settlement.config.channel_fee_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/commission-rate` | `settlementConfigUpsertCommissionRate` | 维护卡座销售提成费率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.bar_commission_rate_configs.updated` | `settlement.config.bar_commission_rate_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/points-accrual-rate` | `settlementConfigUpsertPointsAccrualRate` | 维护积分累计率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.points_accrual_rate_configs.updated` | `settlement.config.points_accrual_rate_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/rank-tiers` | `settlementConfigUpsertRankTiers` | 维护排名档位梯子(草案·整套替换) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_rank_tiers.updated` | `settlement.config.ticket_distribution_rank_tiers.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | `settlementConfigUpsertRevenueStreamAttribution` | 维护业态收入归属(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.revenue_stream_attribution.updated` | `settlement.config.revenue_stream_attribution.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | `settlementConfigActivateRankTiers` | 复核转正:排名档位梯子整体换梯 | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
+| settlement | `GET` | `/api/v1/settlement/config/distribution-scheme` | `settlementConfigDistributionScheme` | 通票分账方案:版本、通告期与缺档位行待办 | `-` | `settlement.config.view` | `staff-token` | `platform` | web | 否 | `settlement.config.distribution_scheme.viewed` | `settlement.config.distribution_scheme.view_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/distribution-scheme` | `settlementConfigSaveDistributionScheme` | 通票分账方案整套落草案(参与家数档位表+第一段名单) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.distribution_scheme.updated` | `settlement.config.distribution_scheme.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/activate` | `settlementConfigActivateDistributionScheme` | 复核转正:通票分账方案草案通告 | `-` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/distribution-scheme/notice-period` | `settlementConfigSaveDistributionNoticePeriod` | 维护通票分账方案通告期 | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.distribution_notice_period.updated` | `settlement.config.distribution_notice_period.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/{configType}/{id}/activate` | `settlementConfigActivateDraft` | 复核转正:单行/归属/归因规则草案转正 | `-` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | `settlementConfigArchive` | 软删结算配置(status→inactive) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.archived` | `settlement.config.archive_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | `settlementConfigActivateAttributionRuleAlias` | 复核转正:归因规则草案(弃用薄别名) | `-` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |

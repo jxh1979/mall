@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,6 +46,7 @@ class StoredValueBatchAllocationJdbcIntegrationTests {
     @Autowired private CustomerRepository customerRepository;
     @Autowired private com.complex.platform.finance.FinanceRepository financeRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private com.complex.platform.settlement.RouteFeeShares routeFeeShares;
 
     private String suffix;
     private String customerId;
@@ -253,10 +254,42 @@ class StoredValueBatchAllocationJdbcIntegrationTests {
                 Integer.class, later)).isZero();
     }
 
+    /**
+     * 第十八批第 3 条（ENUM L86「储值卡充值时即产生通路费……在商户处消费……扣除该笔消费所对应的通路费」）：票务订单的储值笔
+     * 不再按费率另算通路费，取本次消费在各充值批次分摊的通路费之和固化（150@1% 的批次扣 4000 本金 → 40 分）。
+     */
+    @Test
+    void ticketStoredValuePaymentFixesRouteFeeFromBatchAllocations() {
+        seedBatch(30_000L, 100, "wechat");
+        var consume = storedValueService.consumeInternal(customerId, projectId, null, 4_000L, "票务订单储值支付", "tk19-ticket-" + suffix);
+        String order = "ord_tk19_" + suffix;
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now())",
+                projectId, projectId);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES (?, '储值通路费票种', 'fixed_price', FALSE, 'active', now(), now())""", "tt_" + order);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent, currency,
+                    pay_status, issue_status, status, created_at, updated_at, project_id)
+                VALUES (?, ?, ?, 1, 'app', 4000, 'CNY', 'paid', 'unissued', 'created', now(), now(), ?)""",
+                order, "ORD-" + order, "tt_" + order, projectId);
+        jdbcTemplate.update("""
+                INSERT INTO ticket_payment_intents (id, business_order_type, business_order_id, amount_cent, currency, channel,
+                    status, created_at, updated_at) VALUES (?, 'ticket_order', ?, 4000, 'CNY', 'stored_value', 'succeeded', now(), now())""",
+                consume.id(), order);
+
+        routeFeeShares.fix(consume.id(), order, projectId, "stored_value", 4_000L);
+
+        Map<String, Object> row = jdbcTemplate.queryForMap("SELECT * FROM ticket_payment_route_fees WHERE payment_intent_id = ?", consume.id());
+        assertThat(((Number) row.get("fee_cent")).longValue()).as("＝本次消费批次分摊通路费之和").isEqualTo(40L);
+        assertThat(row.get("fee_bps")).as("储值笔费率各批不一，明细见批次分摊").isNull();
+        assertThat(routeFeeShares.shareOf(order, 1_000L)).as("核销 1000 分摊 40×1000/4000").isEqualTo(10L);
+    }
+
     // ---------- helpers ----------
 
     private void seedChannelFee(String channel, int feeBps) {
-        jdbcTemplate.update("INSERT INTO channel_fee_configs (id, project_id, channel, fee_bps, status, is_draft) VALUES (?, ?, ?, ?, 'active', FALSE)",
+        jdbcTemplate.update("INSERT INTO channel_fee_configs (id, project_id, fee_layer, channel, fee_bps, status, is_draft) VALUES (?, ?, 'route', ?, ?, 'active', FALSE)",
                 "cfc_tk19_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12), projectId, channel, feeBps);
     }
 

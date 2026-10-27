@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import java.time.Instant;
 
 /**
@@ -50,6 +52,9 @@ public record SettlementTransactionRecord(
         //   冲正行取原行之反(<=0);settleMonth 线性求和,绝不月末重算。两模式见 pass_gift_cost_configs。
         long giftCostCent,
         // S6 本笔 G 解析到的 pass_gift_cost_configs 规则 id;供增量封顶按「项目×规则」查月内累计 + 冲正沿用。无 G=null。
-        String giftCostConfigId
+        String giftCostConfigId,
+        // 第十八批第 3 条（BSM L749「通路费……所有支付都会产生、官方渠道同样产生」）：本行分摊到的通路费（分）。
+        //   进池核销行=本单付款时固化的通路费按本次核销额占本单实付比例分摊（>=0）；冲正行取原行之反；到期行按未核销额分摊。
+        long routeFeeCent
 ) {
 }
