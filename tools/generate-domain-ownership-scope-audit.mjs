@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -171,6 +171,17 @@ const ANALYTICS_SCOPE_OVERRIDES = new Map([
 ]);
 
 function classify(table, definition) {
+  // 第十八批第 2 条：通票池逐份分账的引擎内部表，merchant_id 是受益酒吧而非租户归属，按父表的项目归属读写。
+  if (table === "pass_pool_unit_results") return {
+    scope_type: "inherited", scope_source: "bill_id",
+    scope_path: "bill_id -> settlement_bills -> project_id; merchant_id is the beneficiary bar of each settlement unit, not the row owner",
+    multi_complex_note: "must join through scope path before multi-complex rollout",
+  };
+  if (table === "pass_pool_snapshot_first_segment") return {
+    scope_type: "inherited", scope_source: "ticket_instance_id",
+    scope_path: "ticket_instance_id -> pass_pool_snapshots -> project_id; merchant_id is the first-segment bar frozen at sale, not the row owner",
+    multi_complex_note: "must join through scope path before multi-complex rollout",
+  };
   if (table === "entitlement_business_day_activations") return {
     scope_type: "direct", scope_source: "complex_id/entitlement_id",
     scope_path: "actual locked complex_id; entitlement_id -> original issued entitlement and order ownership; first admission and ticket verification must match",

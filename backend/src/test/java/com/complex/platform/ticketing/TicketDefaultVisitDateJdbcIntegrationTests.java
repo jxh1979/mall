@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -56,7 +56,8 @@ class TicketDefaultVisitDateJdbcIntegrationTests {
                 + " VALUES (?, 'complex', '营业日票务综合体', 'active', now(), now())", projectId);
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
                 + " VALUES (?, '营业日酒吧', 'bar', 'active', now(), now(), ?)", bar, projectId);
-        Instant effective = Instant.now().minusSeconds(3600);
+        // 生效时点放在前一天：放在今天且晚于出厂起点 10:00 时会顺延到今天新起点、此刻仍按出厂起点算，结果随运行时刻变。
+        Instant effective = Instant.now().minusSeconds(86_400);
         jdbc.update("""
                 INSERT INTO bar_business_day_configs(id,bar_id,project_id,version,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
                   close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)

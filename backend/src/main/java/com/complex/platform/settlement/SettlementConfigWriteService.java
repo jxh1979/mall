@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.analytics.OperatingParamsService;
 import com.complex.platform.common.Hashing;
@@ -183,8 +183,17 @@ public class SettlementConfigWriteService {
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
         rejectSentinel(req.projectId(), "project_id");
         rejectSentinel(req.channel(), "channel");
+        // 第十八批第 3 条(BSM L749「渠道费用分两层、性质不同不可混用」):通路费按支付通路、只按比例(ENUM L52/L86 均以费率计);
+        //   销售渠道费按第三方销售渠道,比例或每张票固定金额。
+        String feeLayer = requireOneOf(req.feeLayer(), "fee_layer", "route", "sales");
         int feeBps = requireBps(req.feeBps(), "fee_bps");
         Long fixed = req.fixedAmountCent();
+        if ("route".equals(feeLayer)) {
+            requireText(req.channel(), "channel");
+            if (fixed != null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "通路费只按比例(fee_bps)配置,不配每张票固定金额(fixed_amount_cent)");
+            }
+        }
         // V381 二选一(对齐 chk_cfc_fee_mode):配每张票固定金额则 fee_bps 必 0;固定金额 ≥0。
         if (fixed != null) {
             requireNonNegative(fixed, "fixed_amount_cent");
@@ -193,11 +202,11 @@ public class SettlementConfigWriteService {
                         "比例与每张票固定金额二选一:配了固定金额(fixed_amount_cent),抽成万分比(fee_bps)必须为 0");
             }
         }
-        String scopeKey = defaultScope(req.projectId()) + "|" + channelScope(req.channel());
+        String scopeKey = defaultScope(req.projectId()) + "|" + feeLayer + "|" + channelScope(req.channel());
         String landedId = writeRepository.upsertChannelFeeDraft(draftId("cfc_d_", scopeKey, idem),
-                req.projectId(), req.channel(), feeBps, fixed, actorId);
+                req.projectId(), feeLayer, req.channel(), feeBps, fixed, actorId);
         audit("settlement.config.channel_fee_configs.updated", "channel_fee_configs", landedId, idem,
-                Map.of("project_scope", defaultScope(req.projectId()),
+                Map.of("project_scope", defaultScope(req.projectId()), "fee_layer", feeLayer,
                         "channel", channelScope(req.channel()), "fee_bps", String.valueOf(feeBps),
                         "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed)));
     }
@@ -276,10 +285,10 @@ public class SettlementConfigWriteService {
         if (cap != null) {
             requireNonNegative(cap, "monthly_cap_amount_cent");
         }
+        // 18B 复核后裁决第 11 条「对，下线两个选项（推荐）」:差额一律留娱乐平台公司(ENUM L52),结转下期/回补当期池已下线。
         String variance = req.varianceHandling() == null || req.varianceHandling().isBlank()
                 ? "platform_absorb"
-                : requireOneOf(req.varianceHandling(), "variance_handling",
-                        "platform_absorb", "carry_forward", "true_up_pool");
+                : requireOneOf(req.varianceHandling(), "variance_handling", "platform_absorb");
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(ticketTypeId);
         String landedId = writeRepository.upsertPassGiftCostDraft(draftId("pgc_d_", scopeKey, idem),
                 req.projectId(), ticketTypeId, mode, amount, cap, variance, actorId);

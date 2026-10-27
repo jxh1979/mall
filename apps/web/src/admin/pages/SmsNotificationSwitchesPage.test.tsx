@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -67,6 +67,17 @@ describe("短信通知开关页", () => {
       expect(screen.getByTestId(`sms-switch-${code}`).textContent).toContain(label);
       expect(screen.getByTestId(`sms-switch-toggle-${code}`)).toBeTruthy();
     }
+  });
+
+  it("通票分账方案变更通告的结算域与事件开关行显示中文名且可切（第十八批第 2 条，ENUM 第 52 行档位表变更须提前向受影响的酒吧商户发出通告）", async () => {
+    render(<SmsNotificationSwitchesPage {...props([
+      row("sms.notify.settlement"),
+      row("sms.notify.settlement.distribution_scheme_notice"),
+    ])} />);
+    await waitFor(() => expect(screen.queryByTestId("sms-switch-sms.notify.settlement.distribution_scheme_notice")?.textContent ?? "")
+      .toContain("通票分账方案变更通告"));
+    expect(screen.getByTestId("sms-switch-sms.notify.settlement").textContent).toContain("结算（域开关）");
+    expect(screen.getByTestId("sms-switch-toggle-sms.notify.settlement.distribution_scheme_notice")).toBeTruthy();
   });
 
   it("总开关行可见可切；不可关闭的短信显示「开启（不可关闭）」且不给开关（OBS-13-04，BSM 第 1598 行）", async () => {

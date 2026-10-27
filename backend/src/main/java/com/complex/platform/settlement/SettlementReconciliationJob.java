@@ -1,4 +1,7 @@
 package com.complex.platform.settlement;
+
+// 文件版本：V0.01
+
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.common.LocalZone;
@@ -111,13 +114,15 @@ public class SettlementReconciliationJob {
                     null,
                     "draft",
                     f.validTo(),
-                    f.exclusiveMerchantId(),
+                    // 与在线消费者同：单一酒吧门票按专属直付记到订单酒吧（ENUM L32）。
+                    f.exclusiveMerchantId() != null ? f.exclusiveMerchantId() : repository.findOrderBarId(f.orderId()),
                     f.verifiedAt(),
                     discountIncrement,  // D6：重建行还原折扣（与在线一致）
                     0L, null,    // P6:重建行暂不还原综合服务费(fee=0/config=null;fee 特性未启用,重建为罕见修复路径)
                     null,        // V355 beneficiary_entity_id:重建行归商户,无主体受益方
                     null,        // S3 父票锚点:重建行 fee 恒 0(见上),不参与「一张票一道」判定,置 null
-                    0L, null));  // S6:重建行暂不还原赠送权益预估成本(同 P6 fee 口径,重建为罕见修复路径)
+                    0L, null,    // S6:重建行暂不还原赠送权益预估成本(同 P6 fee 口径,重建为罕见修复路径)
+                    0L));        // 第十八批第 3 条:重建行同样不还原通路费分摊(同上)
             rebuilt++;
         }
         return rebuilt;

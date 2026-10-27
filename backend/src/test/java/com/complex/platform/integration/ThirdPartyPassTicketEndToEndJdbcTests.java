@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,6 +49,9 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
 
     @Autowired
     private JdbcSettlementBillRepository settlementBillRepository;
+
+    @Autowired
+    private com.complex.platform.settlement.SettlementExpiryJob expiryJob;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -128,7 +131,7 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
         // 各例以唯一 provider/项目/票种隔离，只清可变待发队列和费率配置，不禁用账本触发器。
         jdbcTemplate.update("DELETE FROM integration_retry_tasks WHERE provider_code = ?", provider);
         jdbcTemplate.update("UPDATE integration_provider_adapters SET webhook_enabled=FALSE, polling_check_enabled=FALSE WHERE provider_code=?", provider);
-        jdbcTemplate.update("DELETE FROM channel_fee_configs WHERE id = ?", "cfc_tp_" + suffix);
+        jdbcTemplate.update("DELETE FROM channel_fee_configs WHERE id IN (?, ?)", "cfc_tp_" + suffix, "cfc_tp2_" + suffix);
     }
 
     private IntegrationOrderSyncRequest reflowRequest(String idempotencyKey, String externalBusinessId) {
@@ -209,6 +212,29 @@ class ThirdPartyPassTicketEndToEndJdbcTests {
         assertThat(reconciliation.expectedCount()).isEqualTo(1);
         assertThat(reconciliation.actualCount()).isEqualTo(1);
         assertThat(reconciliation.differenceCount()).isZero();
+    }
+
+    /**
+     * 第十八批第 3 条（BSM L749「两者一律在拆分给各域之前从整单扣除且只扣一次……每笔分摊须记录所用合同版本」）：销售渠道费在付款成功时
+     * 按当时生效的渠道合同固化（美团 10%）；之后该项目改配 20%，这张票到期未核销时仍按售出时的 10% 扣、记售出时那一版。
+     */
+    @Test
+    void salesChannelFeeUsesTheContractInForceAtPayment() {
+        IntegrationOrderSyncRecord sync = integrationService.createOrderSync(reflowRequest("tp-fx-1-" + suffix, "ext-tp-fx-" + suffix));
+        String localOrderId = sync.providerPayload().get("local_ticket_order_id").toString();
+        jdbcTemplate.update("""
+                INSERT INTO channel_fee_configs (id, project_id, channel, fee_bps, is_draft)
+                VALUES (?, ?, 'meituan', 2000, FALSE)
+                """, "cfc_tp2_" + suffix, projectId);
+        String entitlement = ticketingRepository.listIssuedEntitlementsByOrderId(localOrderId).get(0).id();
+        jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = now() - interval '1 day' WHERE id = ?", entitlement);
+
+        expiryJob.expireUnverified(Instant.now());
+
+        Map<String, Object> fact = jdbcTemplate.queryForMap(
+                "SELECT * FROM settlement_transactions WHERE entitlement_id = ? AND transaction_type = 'unverified_expired'", entitlement);
+        assertThat(((Number) fact.get("channel_fee_cent")).longValue()).as("按付款时固化的美团 10%：8800 × 10%").isEqualTo(880L);
+        assertThat(fact.get("channel_fee_config_id")).as("记售出时所用那一版").isEqualTo("cfc_tp_" + suffix);
     }
 
     @Test

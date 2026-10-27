@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,9 +29,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * ③ 超额 C 口径——超池 bill 过账时对池明细两段拆（池内→ticket_distribution、超额→platform_incentive_subsidy），
  *    专属直付不拆，未超池零行为变更，两前缀各自幂等。
  *
- * <p>造超池（S8 两段化）：项目级方式=by_rank_tier(唯一合法值,仅指第二段) + 商户级<b>第一段固定额规则</b>
- * (V374 rule_type=fixed,更隔离,不碰全局默认)。可分配池=800、两家第一段 Q=600+400=1000&gt;800 → overPool
- * (Q&gt;P 不削、第二段为 0,走既有特批路径)。S4:每笔核销带 20% 池链综合服务费(等价保值口径),池 = 收入 − 费。
+ * <p>造超池（第十八批第 2 条起按单张票的池快照逐份分账）：项目级方式=by_rank_tier(唯一合法值,仅指第二段) + 一张池快照票
+ * (池 800,快照第一段名单 m1 固定 600、m2 固定 400,Q=1000&gt;800) → overPool(Q&gt;P 不削、第二段为 0,超出额记
+ * pool_overflow_cent,走既有特批路径;应分总额＝可分配池＋超池额)。原「商户级月度固定规则」随第一段固化进快照而停读。
  *
  * <p><b>S9 短期激励期限（V357）</b>四件套：④ 期限后台可配（项目配 2 月 → 到期日 = 特批日 + 2 月）；
  * ⑤ 到期回收·过账闸——过期特批的超池单过账 409 {@code SPECIAL_APPROVAL_EXPIRED} 且零应付落地；
@@ -73,8 +73,8 @@ class SettlementOverPoolSpecialApprovalTests {
                     pid);
             jdbcTemplate.update("DELETE FROM settlement_bills WHERE project_id = ?", pid);
             com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE project_id = ?", pid);
+            com.complex.platform.support.PassPoolFixtures.deleteByProject(jdbcTemplate, pid);
             jdbcTemplate.update("DELETE FROM ticket_distribution_configs WHERE project_id = ?", pid);
-            jdbcTemplate.update("DELETE FROM ticket_distribution_merchant_rates WHERE project_id = ?", pid);
         }
         TestSecurityActors.clear();
     }
@@ -223,6 +223,27 @@ class SettlementOverPoolSpecialApprovalTests {
 
         // 全过 → 单 settled。
         assertThat(billStatus(bill)).isEqualTo("settled");
+    }
+
+    /**
+     * 补贴合计恰为超池额（ENUM L52「娱乐平台公司确需让第一段合计高于池金额的……超出部分由娱乐平台公司承担」）：同单另有一张未覆盖第二段酒吧的池快照票
+     * （池 80 单列未分配）使可分配池为 880，超池额仍是 200——补贴按第一段金额 600／400 拆为 120／80，合计 200，不随可分配池里的未分配额变动。
+     */
+    @Test
+    void overPoolSubsidyEqualsOverflowWhenPoolAlsoHoldsUndistributed() {
+        String pid = overPoolProject();
+        seedNoSecondSegmentTicket(pid, "m3", 80L); // 未覆盖第二段酒吧的池快照票：池 80 单列未分配
+        String bill = settlementService.settleMonth(pid, MONTH);
+        assertThat(num(bill(pid), "available_pool_cent")).isEqualTo(880L);
+        assertThat(num(bill(pid), "pool_overflow_cent")).isEqualTo(200L);
+        postingService.specialApprove(bill, "SA-UNDIST");
+
+        postingService.postBill(bill);
+
+        assertPayable(poolItem(pid, "m1"), "platform_incentive_subsidy", "m1", 120L);
+        assertPayable(poolItem(pid, "m2"), "platform_incentive_subsidy", "m2", 80L);
+        assertPayable(poolItem(pid, "m1"), "ticket_distribution", "m1", 480L);
+        assertPayable(poolItem(pid, "m2"), "ticket_distribution", "m2", 320L);
     }
 
     @Test
@@ -396,7 +417,7 @@ class SettlementOverPoolSpecialApprovalTests {
         expireApproval(bill);
 
         // 特批有效期内重跑会被冻结（见 specialApprovedBillFrozenAgainstNewTransactions）；过期后照常重算。
-        seedPooled(pid, "m1", 1, 1, 100L); // 收入 1100 → 池 1100 − 池链服务费 220 = 880 < 固定额分配 1000（仍超池）
+        seedNoSecondSegmentTicket(pid, "m1", 80L); // 另一张未覆盖第二段酒吧的池快照票:池 80 → 可分配池 880,原票第一段 1000 仍超池
         String again = settlementService.settleMonth(pid, MONTH);
 
         assertThat(again).isEqualTo(bill);
@@ -440,15 +461,9 @@ class SettlementOverPoolSpecialApprovalTests {
 
     // ─── 造数据 ───────────────────────────────────────────────────────────────
 
-    /** 溢出用超池项目：固定额 5e9×2、营收 5e9×2=1e10、池链服务费 2e9 → 可分配池=8e9、poolDistributed=1e10（a×池 越 long 上限）。 */
+    /** 溢出用超池项目：池快照 8e9、第一段固定额 5e9×2 → 可分配池=8e9、poolDistributed=1e10（a×池 越 long 上限）。 */
     private String hugeOverPoolProject() {
-        String pid = newProject();
-        setProjectFixedMethod(pid);
-        setMerchantFixed(pid, "m1", 5_000_000_000L);
-        setMerchantFixed(pid, "m2", 5_000_000_000L);
-        seedPooled(pid, "m1", 6, 3, 5_000_000_000L);
-        seedPooled(pid, "m2", 4, 2, 5_000_000_000L);
-        return pid;
+        return pooledProject(8_000_000_000L, 5_000_000_000L, 5_000_000_000L);
     }
 
     private long itemFinalSum(String billId) {
@@ -457,25 +472,26 @@ class SettlementOverPoolSpecialApprovalTests {
         return s == null ? 0L : s;
     }
 
-    /** 越池项目：第一段固定规则 m1 固定 600 / m2 固定 400，核销收入 1000、池链服务费 200 → 可分配池=800 < Q=1000。 */
+    /** 越池项目：池快照 800，第一段名单 m1 固定 600 / m2 固定 400 → Q=1000 > 可分配池 800。 */
     private String overPoolProject() {
-        String pid = newProject();
-        setProjectFixedMethod(pid);
-        setMerchantFixed(pid, "m1", 600L);
-        setMerchantFixed(pid, "m2", 400L);
-        seedPooled(pid, "m1", 6, 3, 600L);
-        seedPooled(pid, "m2", 4, 2, 400L);
-        return pid;
+        return pooledProject(800L, 600L, 400L);
     }
 
-    /** 未越池项目：第一段固定规则 m1 固定 300 / m2 固定 200 → Q=500 ≤ 可分配池=800(余额 300 显式归平台留痕)。 */
+    /** 未越池项目：池快照 800，第一段名单 m1 固定 300 / m2 固定 200 → Q=500 ≤ 800(余额 300 显式归平台留痕)。 */
     private String nonOverPoolProject() {
+        return pooledProject(800L, 300L, 200L);
+    }
+
+    /** 一张池快照票(池 poolCent),第一段名单 m1/m2 各按固定金额,两家都核销入场。 */
+    private String pooledProject(long poolCent, long m1Fixed, long m2Fixed) {
         String pid = newProject();
         setProjectFixedMethod(pid);
-        setMerchantFixed(pid, "m1", 300L);
-        setMerchantFixed(pid, "m2", 200L);
-        seedPooled(pid, "m1", 6, 3, 600L);
-        seedPooled(pid, "m2", 4, 2, 400L);
+        String ticket = "tk_d7_" + pid;
+        com.complex.platform.support.PassPoolFixtures.snapshot(jdbcTemplate, ticket, pid, poolCent,
+                com.complex.platform.support.PassPoolFixtures.FACTORY_SCHEME, List.of("m1", "m2"),
+                Map.of("m1", m1Fixed, "m2", m2Fixed));
+        insert(pid, "m1", "entry", 1, 3, 0L, null, 0L, ticket);
+        insert(pid, "m2", "entry", 1, 2, 0L, null, 0L, ticket);
         return pid;
     }
 
@@ -493,29 +509,27 @@ class SettlementOverPoolSpecialApprovalTests {
                 """, "tdc_d7_" + projectId, projectId);
     }
 
-    /** S8/V374:商户级第一段固定额规则(rule_type=fixed)。 */
-    private void setMerchantFixed(String projectId, String merchantId, long fixedCent) {
-        jdbcTemplate.update("""
-                INSERT INTO ticket_distribution_merchant_rates (id, project_id, merchant_id,
-                    rule_type, per_guest_cent, fixed_amount_cent, status, is_draft)
-                VALUES (?, ?, ?, 'fixed', NULL, ?, 'active', FALSE)
-                """, "tdmr_d7_" + projectId + "_" + merchantId, projectId, merchantId, fixedCent);
+    /** 非专属（进池）核销行(无池快照)。S4:每笔带 20% 池链综合服务费(等价保值口径)。 */
+    private void seedPooled(String projectId, String merchantId, int verifiedCount, int numPeople, long verifiedCent) {
+        insert(projectId, merchantId, "entry", verifiedCount, numPeople, verifiedCent, null, verifiedCent / 5, null);
     }
 
-    /** 非专属（进池）核销行。S4:每笔带 20% 池链综合服务费(等价保值口径)。 */
-    private void seedPooled(String projectId, String merchantId, int verifiedCount, int numPeople, long verifiedCent) {
-        insert(projectId, merchantId, "entry", verifiedCount, numPeople, verifiedCent, null, verifiedCent / 5);
+    /** 一张未覆盖任何第二段酒吧的池快照票（池 poolCent），在 merchantId 入场一次：该份余额单列未分配池余额（ENUM L52）。 */
+    private void seedNoSecondSegmentTicket(String projectId, String merchantId, long poolCent) {
+        String ticket = "tk_d7u_" + System.nanoTime();
+        com.complex.platform.support.PassPoolFixtures.snapshot(jdbcTemplate, ticket, projectId, poolCent);
+        insert(projectId, merchantId, "entry", 1, 1, 0L, null, 0L, ticket);
     }
 
     /** 专属核销行（exclusive_merchant_id=该商户;该商户专属费率 0 → 费恒 0）。 */
     private void seedExclusive(String projectId, String exclusiveMerchantId, int verifiedCount, int numPeople,
                                long verifiedCent) {
         insert(projectId, exclusiveMerchantId, "bar_drink", verifiedCount, numPeople, verifiedCent,
-                exclusiveMerchantId, 0L);
+                exclusiveMerchantId, 0L, null);
     }
 
     private void insert(String projectId, String merchantId, String entType, int verifiedCount, int numPeople,
-                        long verifiedCent, String exclusiveMerchantId, long compServiceFeeCent) {
+                        long verifiedCent, String exclusiveMerchantId, long compServiceFeeCent, String parentTicket) {
         Instant businessAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(businessAt);
         String id = "st_d7_" + System.nanoTime();
@@ -524,12 +538,12 @@ class SettlementOverPoolSpecialApprovalTests {
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
                     exclusive_merchant_id, verification_id, settlement_status, entitlement_valid_to, created_at, updated_at,
-                    business_at, discount_amount_cent, comp_service_fee_cent)
-                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, 0, ?)
+                    business_at, discount_amount_cent, comp_service_fee_cent, parent_ticket_id)
+                VALUES (?, ?, 'verification_settled', ?, ?, ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?, ?, 'draft', ?, ?, ?, ?, 0, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, entType, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, exclusiveMerchantId, "vf_" + id, ts, ts, ts, ts, compServiceFeeCent);
+                merchantId, projectId, exclusiveMerchantId, "vf_" + id, ts, ts, ts, ts, compServiceFeeCent, parentTicket);
     }
 
     // ─── 断言/读取 helpers ─────────────────────────────────────────────────────

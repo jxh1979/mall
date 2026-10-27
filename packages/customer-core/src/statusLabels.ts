@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -418,6 +418,9 @@ const STATUS_LABELS: Record<string, string> = {
   taken_over: "已明确接手",
   in_lot: "在场",
   exited: "已出场",
+  // 第十八批第 2 条：通票分账方案版本（已通告）与逐份分账结果（暂挂后补配续算）。
+  notified: "已通告",
+  resumed: "已续算",
 };
 
 export function formatBusinessStatus(code: string | null | undefined): string {

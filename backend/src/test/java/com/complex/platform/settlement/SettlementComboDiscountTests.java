@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
@@ -126,7 +128,7 @@ class SettlementComboDiscountTests {
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(120000L);
         assertThat(num(bill, "combo_discount_cent")).isEqualTo(20000L);
         assertThat(num(bill, "comp_service_fee_pooled_cent")).isEqualTo(24000L); // 120000 × 20%
-        assertThat(num(bill, "available_pool_cent")).isEqualTo(96000L);          // 120000 − 24000
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) bill.get("id"))).isEqualTo(96000L); // 酒吧净份额 120000 − 24000
     }
 
     @Test
@@ -143,7 +145,7 @@ class SettlementComboDiscountTests {
         // 商户自担折扣 → 池基数=净额 100000（现状），折扣不入账。
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(bill, "combo_discount_cent")).isZero();
-        assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) bill.get("id"))).isEqualTo(80000L);
     }
 
     @Test
@@ -160,7 +162,7 @@ class SettlementComboDiscountTests {
         // 平台承担折扣 20000×50%=10000 加进基数 → 110000；折扣入账 10000。
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(110000L);
         assertThat(num(bill, "combo_discount_cent")).isEqualTo(10000L);
-        assertThat(num(bill, "available_pool_cent")).isEqualTo(88000L);    // 110000 − 22000
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) bill.get("id"))).isEqualTo(88000L); // 酒吧净份额 110000 − 22000
     }
 
     // ─── ② bearer 归属应用（专属直付线）────────────────────────────────────────
@@ -253,7 +255,7 @@ class SettlementComboDiscountTests {
     void noDiscountRowsBehaveExactlyAsBefore() {
         String pid = newProject();
         // 无折扣（discount=0），默认 platform_absorb。池须与改造前逐分一致(K9 口径);
-        // 各家金额按 S8 第二段归一化分尽口径(折扣域本身零行为变更)。
+        // 直插核销没有池快照(同不含酒吧入场、未建池快照的票):酒吧净份额按 ENUM L52 末句整笔单列未分配池余额(折扣域本身零行为变更)。
         seedPooled(pid, "top", "entry", 10, 0, 50000L, 0L, 10000L);
         seedPooled(pid, "mid", "entry", 6, 0, 30000L, 0L, 6000L);
         seedPooled(pid, "low", "entry", 2, 0, 20000L, 0L, 4000L);
@@ -263,12 +265,8 @@ class SettlementComboDiscountTests {
         Map<String, Object> bill = bill(pid);
         assertThat(num(bill, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(bill, "combo_discount_cent")).isZero();
-        assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
-        // S8 归一化分尽:默认档位 16/12/9/6 只作相对权重,3 家命中 1600/1200/1200(Σ=4000)
-        //   → 80000×1600/4000=32000、80000×1200/4000=24000×2,池分光(无折扣口径不受两段化影响)。
-        assertThat(itemAmount(pid, "top")).isEqualTo(32000L);
-        assertThat(itemAmount(pid, "mid")).isEqualTo(24000L);
-        assertThat(itemAmount(pid, "low")).isEqualTo(24000L);
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) bill.get("id"))).isEqualTo(80000L);
+        assertThat(num(bill, "pool_undistributed_cent")).isEqualTo(80000L);
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────────
@@ -370,15 +368,6 @@ class SettlementComboDiscountTests {
 
     private Map<String, Object> bill(String projectId) {
         return jdbcTemplate.queryForMap("SELECT * FROM settlement_bills WHERE project_id = ?", projectId);
-    }
-
-    /** 池分账明细金额（distribution_method != exclusive_full）。 */
-    private long itemAmount(String projectId, String merchantId) {
-        return jdbcTemplate.queryForObject("""
-                SELECT si.calculated_amount_cent FROM settlement_items si
-                  JOIN settlement_bills sb ON sb.id = si.bill_id
-                 WHERE sb.project_id = ? AND si.merchant_id = ? AND si.distribution_method <> 'exclusive_full'
-                """, Long.class, projectId, merchantId);
     }
 
     /** 专属直付明细金额。 */

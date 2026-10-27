@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V554**，发现 **249** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V557**，发现 **257** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -213,6 +213,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_projects` | `merchant_id` + `project_id` | direct | V441 | `V441__m736_role_viewable_projects_and_merchant_projects.sql` |
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |
+| `merchant_zone_notices` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `merchants` | `project_id` | direct | V432 | `V432__m009_project_profiles_and_associations.sql` |
 | `parking_credit_components` | `merchant_id` | direct | V534 | `V534__parking_consumption_credits.sql` |
 | `parking_credit_cost_allocations` | `merchant_id` + `project_id` | direct | V534 | `V534__parking_consumption_credits.sql` |
@@ -228,6 +229,9 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `parking_vendor_payments` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
 | `pass_gift_cost_configs` | `project_id` | direct | V373 | `V373__pass_gift_cost_configs.sql` |
 | `pass_gift_cost_variance_ledger` | `project_id` | direct | V377 | `V377__pass_gift_variance_ledger.sql` |
+| `pass_pool_snapshot_first_segment` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
+| `pass_pool_snapshots` | `project_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
+| `pass_pool_unit_results` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `payroll_tax_assessments` | `merchant_id` + `project_id` | direct | V477 | `V477__payroll_tax_approved_versions.sql` |
 | `platform_retention_rules` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `points_accrual_rate_configs` | `merchant_id` + `project_id` | direct | V340 | `V340__commission_and_points_rate_configs.sql` |
@@ -288,11 +292,15 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `terminal_devices` | `merchant_id` + `venue_id` | direct | V007 | `V007__p0_terminal_evidence.sql` |
 | `ticket_combo_discount_configs` | `project_id` | direct | V268 | `V268__settlement_comprehensive_service_fee_and_combo_discount.sql` |
 | `ticket_distribution_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `ticket_distribution_first_segment_rows` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `ticket_distribution_merchant_rates` | `merchant_id` + `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `ticket_distribution_rank_tiers` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
+| `ticket_distribution_scheme_versions` | `project_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `ticket_expiry_reminder_policies` | `project_id` | direct | V541 | `V541__customer_voucher_codes_notices_and_home_content.sql` |
+| `ticket_order_channel_fees` | `project_id` | direct | V555 | `V555__ticket_channel_fee_route_and_sales_layers.sql` |
 | `ticket_order_sales_contracts` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_orders` | `merchant_id` + `project_id` | direct | V135, V463 | `V135__ticket_orders_merchant_id.sql`<br>`V463__ticket_order_project_snapshot.sql` |
+| `ticket_payment_route_fees` | `project_id` | direct | V555 | `V555__ticket_channel_fee_route_and_sales_layers.sql` |
 | `ticket_points_issuance_fees` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_refunds` | `merchant_id` | direct | V220 | `V220__ticket_refunds_merchant_id.sql` |
 | `ticket_reward_config_versions` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |

@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -227,6 +227,40 @@ function TicketSettlementsSection({ api, effectivePermissions, setActionResult }
   );
 }
 
+// 18B 复核后操作员裁决第 10 条「商户专区显示通告」：系统挂进本商户专区的通告（如通票分账方案变更），专区可查看即送达，短信只是提醒。
+type ZoneNotice = { id: string; title: string; content: string; effectiveDate?: string; createdAt?: string };
+
+function NoticesSection({ api }: Pick<AdminPageProps, "api">) {
+  const [rows, setRows] = React.useState<ZoneNotice[]>([]);
+  const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    api.get<ZoneNotice[]>("/api/v1/merchant-portal/notices")
+      .then((data) => setRows(Array.isArray(data) ? data : []))
+      .catch((e) => setError(e instanceof Error ? e.message : "通告读取失败"));
+  }, [api]);
+  return (
+    <div data-testid="merchant-zone-notices">
+      <h3>通告</h3>
+      {error ? <div className="admin-form-error">{error}</div> : rows.length === 0 ? <p className="admin-muted-action">暂无通告。</p> : (
+        <div className="admin-table-scroll">
+          <table className="admin-table">
+            <thead><tr><th>通告日</th><th>标题</th><th>生效日</th><th>内容</th></tr></thead>
+            <tbody>{rows.map((row) => (
+              <tr key={row.id} data-testid={`merchant-zone-notice-${row.id}`}>
+                {/* 通告日按北京时间（后端 createdAt 是 UTC 时刻）。 */}
+                <td>{row.createdAt ? new Date(row.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "—"}</td>
+                <td>{row.title}</td>
+                <td>{cnDate(row.effectiveDate)}</td>
+                <td style={{ whiteSpace: "pre-line" }}>{row.content}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneSettlementRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
@@ -384,6 +418,7 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
     <section data-testid="merchant-zone-settlements-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="merchant_portal.settlement.viewed / merchant_portal.settlement.disputed / merchant_portal.settlement.resolution_rejected" />
+      <NoticesSection api={api} />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

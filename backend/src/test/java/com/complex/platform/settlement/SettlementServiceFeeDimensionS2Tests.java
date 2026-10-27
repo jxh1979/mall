@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -179,8 +179,8 @@ class SettlementServiceFeeDimensionS2Tests {
                 .as("S4:进池计提进主链,落池链支").isEqualTo(10000L);
         assertThat(num(b, "comp_service_fee_exclusive_cent"))
                 .as("专属计提落专属支").isEqualTo(5000L);
-        assertThat(num(b, "available_pool_cent"))
-                .as("可分配池 = 进池收入 − 池链服务费").isEqualTo(90000L);
+        assertThat(com.complex.platform.support.PassPoolFixtures.barNetCent(jdbcTemplate, (String) b.get("id")))
+                .as("酒吧净份额 = 进池收入 − 池链服务费(无池快照,不进可分配池)").isEqualTo(90000L);
     }
 
     // ─────────────────────────── ③ 换维:按票种,不是按权益类型 ───────────────────────────

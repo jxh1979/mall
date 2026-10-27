@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -43,6 +43,11 @@ public class TicketOrderService {
      */
     static final Set<String> MEMBER_LINKABLE_CHANNELS = Set.of("kiosk", "channel",
             "meituan", "dianping", "douyin", "koubei", "eleme", "alipay", "wechat");
+    /**
+     * 官方（自营）销售渠道：SALES_CHANNELS 去掉 channel 与各第三方渠道码。BSM L749「官方渠道售出的票不扣销售渠道费，但仍扣通路费」——
+     * 结算月结与到期作业据此跳过销售渠道费；财务日结据此区分官方售票源与渠道售票源（OBS-13-07）。
+     */
+    public static final Set<String> OFFICIAL_SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web");
 
     // ROOT-03-R29 一体机辅助购票的客人手机号短信核验（实现在客人域，@Lazy 断开客人域→票务域的构造环）。未注入即不能一体机售票（fail-closed）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -95,6 +100,10 @@ public class TicketOrderService {
     // 第十八批第 1 条（ENUM:187「票价的日期类型……以开台或下单时点所属的营业日为准」）：未带到访日时按票种当前营业日。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+
+    // 第十八批第 3 条（BSM L749「通路费……所有支付都会产生、官方渠道同样产生」）：每笔受理的付款按实际支付通路固化通路费。单测未注入为 null。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.settlement.RouteFeeShares routeFeeShares;
 
     /** 票种当前营业日：酒吧票（ticket_types.bar_id 为酒吧商户）按该酒吧，其余按票种唯一所属综合体（不唯一按出厂起点）。 */
     public LocalDate saleBusinessDate(TicketTypeRecord ticketType) {
@@ -334,6 +343,9 @@ public class TicketOrderService {
             if (repository.atomicCancelUnpaidOrder(order.id(), now) > 0) {
                 repository.releaseTicketStock(order.ticketTypeId(), order.quantity());
             }
+        } else if (!replay && routeFeeShares != null) {
+            // 受理的这一笔（拒收转原路待退的不算）按支付通路固化通路费；第三方回流单的支付通路即渠道码。
+            routeFeeShares.fix(intent.id(), order.id(), order.projectId(), intent.channel(), intent.amountCent());
         }
         // 同意向的退款按原来源幂等；只有首笔收款回写订单，之后不覆盖原付款时点。
         if ("paid".equals(order.payStatus())) {

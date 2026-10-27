@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import org.springframework.beans.factory.annotation.Value;
 
@@ -57,10 +57,11 @@ public class SettlementExpiryJob {
     /** FS-023-R2(ENUM L49「两类各自单独立项留痕、不合并」):从未完成检票环节 / 已检票场次终结未核销。 */
     static final String CATEGORY_NEVER_CHECKED_IN = "never_checked_in";
     static final String CATEGORY_SESSION_ENDED = "session_ended";
-
     private final JdbcSettlementTransactionRepository repository;
     private final RevenueStreamAttributionRepository attributionRepository;
-    private final JdbcSettlementBillRepository billRepository;
+    private final RouteFeeShares routeFeeShares;
+    private final JdbcPassPoolRepository passPools;
+    private final com.complex.platform.common.BusinessDayResolver businessDays;
     private final Clock clock;
     private final boolean scheduledEnabled;
 
@@ -68,11 +69,15 @@ public class SettlementExpiryJob {
     public SettlementExpiryJob(
             JdbcSettlementTransactionRepository repository,
             RevenueStreamAttributionRepository attributionRepository,
-            JdbcSettlementBillRepository billRepository,
+            RouteFeeShares routeFeeShares,
+            JdbcPassPoolRepository passPools,
+            com.complex.platform.common.BusinessDayResolver businessDays,
             @Value("${settlement.expiry.scheduled.enabled:false}") boolean scheduledEnabled) {
         this.repository = repository;
         this.attributionRepository = attributionRepository;
-        this.billRepository = billRepository;
+        this.routeFeeShares = routeFeeShares;
+        this.passPools = passPools;
+        this.businessDays = businessDays;
         this.clock = Clock.systemUTC();
         this.scheduledEnabled = scheduledEnabled;
     }
@@ -94,7 +99,6 @@ public class SettlementExpiryJob {
     @Transactional
     public int expireUnverified(Instant now) {
         java.util.Map<String, String> entityCache = new java.util.HashMap<>();
-        java.util.Map<String, JdbcSettlementBillRepository.ChannelFeeConfig> feeCache = new java.util.HashMap<>();
         java.util.Map<String, String> skipped = new java.util.LinkedHashMap<>(); // FS-024:本次已单行记错的商户 → 原因
         java.util.List<Fact> facts = new java.util.ArrayList<>();
         for (var row : repository.findExpiredUnverifiedEntitlements(now)) {
@@ -110,30 +114,39 @@ public class SettlementExpiryJob {
             unverified = Math.max(0L, Math.min(allocated, unverified));
             // FS-023-R2:人份从未检票 → 全部未核销额属「从未完成检票环节」;已检票人份中,多次票尚未开启的剩余入场次数
             //   (DEC-R8-22「每次＝一份完整全新的票权益……未消耗的剩余入场次数跨场次保留」)同属该类,其余为场次终结未核销。
+            //   第十八批第 2 条:已开启次数按该人份有入场的营业日数计(多次票各次可去不同酒吧,与逐份分账同口径),不少于单项权益的使用次数。
             long neverPart = unverified;
+            int opened = 0;
             if (row.slotCheckedIn()) {
                 int visits = row.slotVisits();
-                int opened = Math.min(row.slotOpened(), visits);
+                opened = Math.min(Math.max(row.slotOpened(), openedBusinessDays(row)), visits);
                 neverPart = visits > opened
                         ? Math.min(unverified, MoneyRounding.prorate(allocated, visits - opened, visits)) : 0L;
             }
             long sessionPart = unverified - neverPart;
+            // 第十八批第 2 条（BSM L807「已完成检票环节（刷码核销成功）、但权益未在该场次内核销的，按场次终结制作为未核销份额进入分账减除」）：
+            //   售票时已固化进池的酒吧权益，已检票那几份已在池内按「通票未核销减除额」逐份处理，场次终结部分不再另记一遍（防双计）；
+            //   从未检票的人份与未开启的入场次数仍按本条处理。
+            if (row.pooledAtSale()) {
+                sessionPart = 0L;
+                unverified = neverPart;
+            }
             String beneficiaryEntityId = resolveBeneficiaryEntityOrSkip(entityCache, skipped, row);
             if (beneficiaryEntityId == null) {
                 continue; // FS-024:该商户定不出收款方,已单行记错,本行不落账;其余商户照常
             }
-            String channel = row.salesChannel() == null || row.salesChannel().isBlank() ? null : row.salesChannel();
-            var fee = feeCache.computeIfAbsent(row.projectId() + "|" + channel,
-                    key -> billRepository.findChannelFee(row.projectId(), channel));
+            // 第十八批第 3 条(BSM L749「每笔分摊须记录所用合同版本」):销售渠道费按订单付款时固化的配置,官方渠道与存量订单不扣。
+            var fee = row.salesFee();
             if (!row.slotCheckedIn() || neverPart > 0) {
                 facts.add(new Fact(row, CATEGORY_NEVER_CHECKED_IN, neverPart, allocated - unverified,
-                        beneficiaryEntityId, businessAt, fee));
+                        beneficiaryEntityId, businessAt, fee, opened));
             }
             if (row.slotCheckedIn() && (sessionPart > 0 || neverPart == 0)) {
                 facts.add(new Fact(row, CATEGORY_SESSION_ENDED, sessionPart, allocated - unverified,
-                        beneficiaryEntityId, businessAt, fee));
+                        beneficiaryEntityId, businessAt, fee, opened));
             }
         }
+        applyPooledShares(facts);
         applyChannelFees(facts, entityCache);
         for (Fact f : facts) {
             var row = f.row;
@@ -164,8 +177,11 @@ public class SettlementExpiryJob {
                     0L, null,   // P6:到期归主体非专属核销，无综合服务费(fee=0/config=null)
                     f.beneficiaryEntityId,
                     null,       // S3 父票锚点:到期归主体不是核销、fee 恒 0,不参与「一张票一道」判定,置 null
-                    0L, null),  // S6:到期归主体不是核销,无赠送权益预估成本;未使用票积分发行成本为零(ENUM L48)
-                    new JdbcSettlementTransactionRepository.UnverifiedExtras(f.category, f.channelFee, f.fee.id(),
+                    0L, null,   // S6:到期归主体不是核销,无赠送权益预估成本;未使用票积分发行成本为零(ENUM L48)
+                    // 第十八批第 3 条(ENUM L48「仅扣实际发生的通路费」):本类未核销额分摊本单付款时固化的通路费,官方渠道同样扣;
+                    //   已固化进池的酒吧权益取快照里未开启各份的通路费(见 applyPooledShares)。
+                    f.pooled ? f.routeFee : routeFeeShares.shareOf(row.orderId(), f.amount)),
+                    new JdbcSettlementTransactionRepository.UnverifiedExtras(f.category, f.channelFee, f.feeConfigId,
                             f.residual, f.residualEntityId));
         }
         return facts.size();
@@ -173,14 +189,18 @@ public class SettlementExpiryJob {
 
     /**
      * FS-023-R3(ENUM L48「仅扣实际发生的通路费，经第三方渠道售出的再扣实际发生的销售渠道费……各项均只扣一次」):
-     * 复用月结同一张渠道费配置(项目特例 &gt; 全局,渠道专属 &gt; 通用;官方渠道只命中通用配置)。
+     * 销售渠道费按订单付款时固化的配置(第十八批第 3 条:与月结同一版;官方渠道不扣,通路费另按付款固化额分摊)。
      * 比例模式:月结只对已核销额扣过,此处只对未核销额扣,合计即整单扣一次;
      * 固定金额模式:每张票一道——已有进池核销锚点的票月结已按首笔核销收过,不再扣;从无锚点的票在此扣一次,
      * 按各行未核销额占比分摊,尾差单列(PGM L302):单一经营域由该域公司承担,跨域组合通票由娱乐平台公司承担。
+     * 已固化进池的酒吧权益行由 {@link #applyPooledShares} 按快照扣过,这里跳过;其所在票的固定额相应扣除快照里酒吧那部分。
      */
     private void applyChannelFees(java.util.List<Fact> facts, java.util.Map<String, String> entityCache) {
         java.util.Map<String, java.util.List<Fact>> fixedByTicket = new java.util.LinkedHashMap<>();
         for (Fact f : facts) {
+            if (f.pooled) {
+                continue;
+            }
             if (f.fee.fixedAmountCent() == null) {
                 f.channelFee = MoneyRounding.bpsOf(f.amount, f.fee.feeBps());
             } else if (!f.row.parentAnchored()) {
@@ -188,8 +208,11 @@ public class SettlementExpiryJob {
                 fixedByTicket.computeIfAbsent(ticket, k -> new java.util.ArrayList<>()).add(f);
             }
         }
-        for (java.util.List<Fact> group : fixedByTicket.values()) {
-            long fixed = group.getFirst().fee.fixedAmountCent();
+        var snapshots = passPools.findSnapshots(fixedByTicket.keySet());
+        for (var entry : fixedByTicket.entrySet()) {
+            java.util.List<Fact> group = entry.getValue();
+            var snapshot = snapshots.get(entry.getKey());
+            long fixed = group.getFirst().fee.fixedAmountCent() - (snapshot == null ? 0L : snapshot.salesChannelFeeCent());
             long weight = group.stream().mapToLong(f -> f.amount).sum();
             long assigned = 0L;
             for (Fact f : group) {
@@ -206,6 +229,68 @@ public class SettlementExpiryJob {
                                 TicketDistributionSettlementService.REVENUE_STREAM_ALL_PASS_TICKET);
             }
         }
+    }
+
+    /**
+     * 第十八批第 2、3 条(ENUM L52「池金额在售票时随订单固化」;ENUM L48「仅扣实际发生的通路费，经第三方渠道售出的再扣实际发生的
+     * 销售渠道费……各项均只扣一次」):售票时已固化进池的酒吧权益,其通路费与销售渠道费已按酒吧份额固化在快照里、按份均分——
+     * 已开启的份在逐份分账里扣过,这里只扣该人份未开启那几份的份额(同一最大余数均分;比例与固定金额模式一样,不看锚点),
+     * 按本人份各行未核销额占比分到各行(累计额差分,合计恰为这几份之和),记快照所用的销售渠道费配置。
+     */
+    private void applyPooledShares(java.util.List<Fact> facts) {
+        java.util.Map<String, java.util.List<Fact>> bySlot = new java.util.LinkedHashMap<>();
+        for (Fact f : facts) {
+            if (f.row.pooledAtSale()) {
+                bySlot.computeIfAbsent(f.row.parentTicketId() + "|" + f.row.slotIndex(), k -> new java.util.ArrayList<>()).add(f);
+            }
+        }
+        if (bySlot.isEmpty()) {
+            return;
+        }
+        var snapshots = passPools.findSnapshots(bySlot.values().stream().map(g -> g.getFirst().row.parentTicketId()).distinct().toList());
+        for (java.util.List<Fact> group : bySlot.values()) {
+            var row = group.getFirst().row;
+            var s = snapshots.get(row.parentTicketId());
+            int units = s.slots() * s.visits();
+            long route = 0L;
+            long sales = 0L;
+            for (int k = Math.min(group.getFirst().opened, s.visits()) + 1; k <= s.visits(); k++) {
+                int index = TicketDistributionSettlementService.unitIndex(units, s.visits(), row.slotIndex(), k);
+                route += TicketDistributionSettlementService.share(s.routeFeeCent(), units, index);
+                sales += TicketDistributionSettlementService.share(s.salesChannelFeeCent(), units, index);
+            }
+            long[] routes = split(route, group);
+            long[] saleses = split(sales, group);
+            for (int i = 0; i < group.size(); i++) {
+                Fact f = group.get(i);
+                f.pooled = true;
+                f.routeFee = routes[i];
+                f.channelFee = saleses[i];
+                f.feeConfigId = s.salesChannelFeeConfigId();
+            }
+        }
+    }
+
+    /** 把 total 按各行金额占比分到各行:累计额差分,合计恰为 total;各行金额全为 0 时整笔落第一行。 */
+    private static long[] split(long total, java.util.List<Fact> group) {
+        long weight = group.stream().mapToLong(f -> f.amount).sum();
+        long[] out = new long[group.size()];
+        if (weight == 0L) {
+            out[0] = total;
+            return out;
+        }
+        long cumulative = 0L;
+        for (int i = 0; i < out.length; i++) {
+            long before = cumulative;
+            cumulative += group.get(i).amount;
+            out[i] = MoneyRounding.prorate(total, cumulative, weight) - MoneyRounding.prorate(total, before, weight);
+        }
+        return out;
+    }
+
+    /** 该人份有入场类核销的营业日数(按售票项目的营业日,ENUM L187)。 */
+    private int openedBusinessDays(JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row) {
+        return (int) row.slotEntryAts().stream().map(at -> businessDays.businessDate(row.projectId(), null, at)).distinct().count();
     }
 
     /**
@@ -326,12 +411,16 @@ public class SettlementExpiryJob {
         final String beneficiaryEntityId;
         final Instant businessAt;
         final JdbcSettlementBillRepository.ChannelFeeConfig fee;
+        final int opened; // 该人份已开启的入场次数(从未检票为 0)
         long channelFee;
+        String feeConfigId;
+        boolean pooled; // 已按池快照未开启各份扣过通路费与销售渠道费
+        long routeFee;
         long residual;
         String residualEntityId;
 
         Fact(JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row, String category, long amount, long verified,
-             String beneficiaryEntityId, Instant businessAt, JdbcSettlementBillRepository.ChannelFeeConfig fee) {
+             String beneficiaryEntityId, Instant businessAt, JdbcSettlementBillRepository.ChannelFeeConfig fee, int opened) {
             this.row = row;
             this.category = category;
             this.amount = amount;
@@ -339,6 +428,8 @@ public class SettlementExpiryJob {
             this.beneficiaryEntityId = beneficiaryEntityId;
             this.businessAt = businessAt;
             this.fee = fee;
+            this.feeConfigId = fee.id();
+            this.opened = opened;
         }
     }
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1448,10 +1448,10 @@ class JdbcCustomerRepository implements CustomerRepository {
 
     @Override
     public int findStoredValueChannelFeeBps(String projectId, String channel) {
-        // 与 JdbcSettlementBillRepository.findChannelFee 同口径（生效、非草稿、项目特例 > 全局默认），只认该支付通路的专属配置；未配置 = 0。
+        // 与 JdbcSettlementBillRepository.findRouteFee 同口径（通路费层、生效、非草稿、项目特例 > 全局默认），只认该支付通路的专属配置；未配置 = 0。
         Integer bps = jdbcTemplate.query("""
                 SELECT fee_bps FROM channel_fee_configs
-                 WHERE status = 'active' AND is_draft = FALSE AND channel = :channel
+                 WHERE status = 'active' AND is_draft = FALSE AND fee_layer = 'route' AND channel = :channel
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
                  LIMIT 1

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -126,6 +126,51 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(5000);
     }
 
+    /**
+     * 第十八批第 3 条（BSM L749「渠道费用分两层、性质不同不可混用」）：按前端真实请求形状（蛇形键）提交，同项目同渠道码 wechat 的
+     * 通路费与销售渠道费各落一行草案、互不覆盖；转正后两层各自生效。通路费只按比例、必须指明支付通路。
+     */
+    @Test
+    void routeAndSalesLayersOfSameChannelAreKeptApart() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper()
+                .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
+                .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        writeService.saveChannelFee(json.readValue("""
+                {"idempotency_key":"lr1","project_id":"%s","fee_layer":"route","channel":"wechat","fee_bps":60}
+                """.formatted(PROJECT), ChannelFeeRequest.class), DRAFTER);
+        writeService.saveChannelFee(json.readValue("""
+                {"idempotency_key":"ls1","project_id":"%s","fee_layer":"sales","channel":"wechat","fee_bps":500}
+                """.formatted(PROJECT), ChannelFeeRequest.class), DRAFTER);
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM channel_fee_configs
+                 WHERE project_id = ? AND channel = 'wechat' AND is_draft = TRUE AND status = 'active'""",
+                Integer.class, PROJECT)).as("同渠道码两层各一行草案、互不覆盖").isEqualTo(2);
+        for (String id : jdbcTemplate.queryForList(
+                "SELECT id FROM channel_fee_configs WHERE project_id = ? AND is_draft = TRUE AND status = 'active'",
+                String.class, PROJECT)) {
+            writeService.activateDraft("channel_fee", id, APPROVER);
+        }
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT fee_bps FROM channel_fee_configs
+                 WHERE project_id = ? AND channel = 'wechat' AND fee_layer = 'route' AND is_draft = FALSE AND status = 'active'""",
+                Integer.class, PROJECT)).isEqualTo(60);
+        assertThat(billRepository.findChannelFee(PROJECT, "wechat").feeBps()).as("销售渠道费读口只读销售层").isEqualTo(500);
+
+        assertThatThrownBy(() -> writeService.saveChannelFee(json.readValue("""
+                {"idempotency_key":"lr2","project_id":"%s","fee_layer":"route","channel":"alipay","fee_bps":0,"fixed_amount_cent":100}
+                """.formatted(PROJECT), ChannelFeeRequest.class), DRAFTER))
+                .as("通路费不配每张票固定金额").isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> writeService.saveChannelFee(json.readValue("""
+                {"idempotency_key":"lr3","project_id":"%s","fee_layer":"route","fee_bps":60}
+                """.formatted(PROJECT), ChannelFeeRequest.class), DRAFTER))
+                .as("通路费必须指明支付通路").isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> writeService.saveChannelFee(json.readValue("""
+                {"idempotency_key":"lx1","project_id":"%s","channel":"meituan","fee_bps":60}
+                """.formatted(PROJECT), ChannelFeeRequest.class), DRAFTER))
+                .as("费用层必填").isInstanceOf(ApiException.class);
+    }
+
     /** 分配方式/渠道费/综合服务费/套票折扣:草案期读侧不变,转正后切换(逐类型证伪 Path 2)。 */
     @Test
     void otherSingleRowTypesDraftThenActivate() {
@@ -141,13 +186,13 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_rank_tier");
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("6 天");
 
-        writeService.saveChannelFee(new ChannelFeeRequest("c1", PROJECT, null, 500), DRAFTER);
+        writeService.saveChannelFee(new ChannelFeeRequest("c1", PROJECT, "sales", null, 500, null), DRAFTER);
         assertThat(billRepository.findChannelFee(PROJECT).feeBps()).isZero();
         writeService.activateDraft("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
         assertThat(billRepository.findChannelFee(PROJECT).feeBps()).isEqualTo(500);
 
         // V381:渠道专属「每张票固定金额」草案期不生效(该渠道仍落回刚转正的通用 500bps),转正后切固定额。
-        writeService.saveChannelFee(new ChannelFeeRequest("c2", PROJECT, "meituan", 0, 700L), DRAFTER);
+        writeService.saveChannelFee(new ChannelFeeRequest("c2", PROJECT, "sales", "meituan", 0, 700L), DRAFTER);
         assertThat(billRepository.findChannelFee(PROJECT, "meituan").feeBps()).isEqualTo(500);
         assertThat(billRepository.findChannelFee(PROJECT, "meituan").fixedAmountCent()).isNull();
         writeService.activateDraft("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
@@ -211,7 +256,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void channelFeeRejectsBothRateAndFixedAmount() {
         assertThatThrownBy(() -> writeService.saveChannelFee(
-                new ChannelFeeRequest("cboth", PROJECT, null, 100, 100L), DRAFTER))
+                new ChannelFeeRequest("cboth", PROJECT, "sales", null, 100, 100L), DRAFTER))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("二选一");
     }
@@ -226,17 +271,26 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 .hasMessageContaining("票种不存在");
     }
 
-    /** merchant-rate:草案期不入第一段名单(项目未生效);转正后带 rule_type 进名单(S8/V374)。 */
+    /**
+     * merchant-rate:草案期无生效行;转正后生效行带 rule_type(S8/V374)。第十八批第 2 条起第一段名单随分账方案版本固化进池快照,
+     * 本表引擎已停读(见 SettlementDistributionSchemeJdbcIntegrationTests),这里只核写入口本身。
+     */
     @Test
     void merchantRateDraftThenActivate() {
         writeService.saveMerchantRate(new MerchantRateRequest("m1", PROJECT, MERCHANT, 500L, null), DRAFTER);
-        assertThat(billRepository.findActiveMerchantRateRules(PROJECT).get(MERCHANT)).isNull();
+        assertThat(activeMerchantRates()).isEmpty();
         writeService.activateDraft("merchant_rate", draftRowId("ticket_distribution_merchant_rates"), APPROVER);
-        var rule = billRepository.findActiveMerchantRateRules(PROJECT).get(MERCHANT);
-        assertThat(rule.perGuestCent()).isEqualTo(500L);
-        // 写入口按「填了哪列」推导 rule_type(每客单价)——第一段固定规则显式二选一,配置页/引擎同一解释。
-        assertThat(rule.ruleType()).isEqualTo(JdbcSettlementBillRepository.RULE_PER_GUEST);
-        assertThat(rule.fixedAmountCent()).isNull();
+        var rule = activeMerchantRates().getFirst();
+        assertThat(((Number) rule.get("per_guest_cent")).longValue()).isEqualTo(500L);
+        // 写入口按「填了哪列」推导 rule_type(每客单价)——第一段固定规则显式二选一。
+        assertThat(rule.get("rule_type")).isEqualTo(JdbcSettlementBillRepository.RULE_PER_GUEST);
+        assertThat(rule.get("fixed_amount_cent")).isNull();
+    }
+
+    private List<java.util.Map<String, Object>> activeMerchantRates() {
+        return jdbcTemplate.queryForList("""
+                SELECT rule_type, per_guest_cent, fixed_amount_cent FROM ticket_distribution_merchant_rates
+                 WHERE project_id = ? AND merchant_id = ? AND status = 'active' AND is_draft = FALSE""", PROJECT, MERCHANT);
     }
 
     /**
@@ -306,7 +360,9 @@ class SettlementConfigWriteJdbcIntegrationTests {
         writeService.saveRankTiers(new RankTiersRequest("r5", PROJECT,
                 List.of(new RankTierInput(1, 1, 6000), new RankTierInput(2, 3, 2000))), DRAFTER);
         writeService.activateRankTiers(PROJECT, APPROVER);
-        assertThat(billRepository.findRankTiers(PROJECT)).hasSize(2);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM ticket_distribution_rank_tiers WHERE project_id = ? AND status = 'active' AND is_draft = FALSE""",
+                Integer.class, PROJECT)).isEqualTo(2);
     }
 
     /** 4 个收敛 finder(S4 起留存 finder 已删):有种子→值不变(保值);删光该表→抛 SETTLEMENT_CONFIG_MISSING(fail-loud)。 */
@@ -462,8 +518,32 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 .hasMessageContaining("全局默认配置不可下线");
         // 按件计合法落草案(票种维度用真实票种,整额留空)。
         writeService.savePassGiftCost(
-                new PassGiftCostRequest("g6", PROJECT, TICKET_TYPE, "by_item", null, null, "carry_forward"), DRAFTER);
+                new PassGiftCostRequest("g6", PROJECT, TICKET_TYPE, "by_item", null, null, null), DRAFTER);
         assertThat(draftRowId("pass_gift_cost_configs")).isNotNull();
+    }
+
+    /**
+     * 18B 复核后裁决第 11 条「对，下线两个选项（推荐）」（ENUM L52「预扣数与日后实付数的差额也留在娱乐平台公司」）：
+     * 按前端真实请求形状（蛇形键）提交，差额处理规则只收 platform_absorb（留空同义），结转下期 / 回补当期可分配池一律 400。
+     */
+    @Test
+    void passGiftCostVarianceHandlingOnlyPlatformAbsorb() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper()
+                .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
+                .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        for (String offline : List.of("carry_forward", "true_up_pool")) {
+            PassGiftCostRequest req = json.readValue("""
+                    {"idempotency_key":"gv_%s","project_id":"%s","prededuct_mode":"by_ticket_amount",
+                     "ticket_gift_amount_cent":5900,"variance_handling":"%s"}
+                    """.formatted(offline, PROJECT, offline), PassGiftCostRequest.class);
+            assertValidationFailed(() -> writeService.savePassGiftCost(req, DRAFTER));
+        }
+        writeService.savePassGiftCost(json.readValue("""
+                {"idempotency_key":"gv_ok","project_id":"%s","prededuct_mode":"by_ticket_amount",
+                 "ticket_gift_amount_cent":5900,"variance_handling":"platform_absorb"}
+                """.formatted(PROJECT), PassGiftCostRequest.class), DRAFTER);
+        assertThat(jdbcTemplate.queryForObject("SELECT variance_handling FROM pass_gift_cost_configs WHERE id = ?",
+                String.class, draftRowId("pass_gift_cost_configs"))).isEqualTo("platform_absorb");
     }
 
     /** §8:写面拒绝哨兵字面量 projectId → 400。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
 import java.time.YearMonth;
@@ -43,15 +43,23 @@ public class SettlementSettledConsumer {
     private final com.complex.platform.ticketing.InternalSettlementPriceResolver priceResolver;
     // FS-013：单一酒吧门票售出时已逐票锁定综合服务费、按计费月另挂应收，核销时不再另抽。
     private final SingleBarServiceFeeService singleBarServiceFees;
+    // 第十八批第 3 条：本单付款时固化的通路费按本次核销额分摊。
+    private final RouteFeeShares routeFeeShares;
+    // 第十八批第 2 条：酒吧通票可分配池售票时逐张固化，已固化的扣项核销时不再计提。
+    private final PassPoolSnapshotService passPoolSnapshots;
 
     public SettlementSettledConsumer(JdbcSettlementTransactionRepository repository,
                                      JdbcSettlementBillRepository billRepository,
                                      com.complex.platform.ticketing.InternalSettlementPriceResolver priceResolver,
-                                     SingleBarServiceFeeService singleBarServiceFees) {
+                                     SingleBarServiceFeeService singleBarServiceFees,
+                                     RouteFeeShares routeFeeShares,
+                                     PassPoolSnapshotService passPoolSnapshots) {
         this.repository = repository;
         this.billRepository = billRepository;
         this.priceResolver = priceResolver;
         this.singleBarServiceFees = singleBarServiceFees;
+        this.routeFeeShares = routeFeeShares;
+        this.passPoolSnapshots = passPoolSnapshots;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -85,6 +93,10 @@ public class SettlementSettledConsumer {
             long discountTotal = Math.max(0L, event.fullPriceCent() - allocated);
             discountIncrement = SettlementAmounts.incrementalVerified(discountTotal, total, used, false, null);
         }
+        // ENUM L32「单一酒吧门票……确认已核销部分的收入，票款由娱乐平台公司统一收款后结付给该酒吧商户」：单一酒吧门票（订单挂酒吧）
+        //   不建池快照，其核销按专属直付记到订单酒吧（后台通用权益模板不填专属商户）。金额口径（exclusiveByPrice）仍按权益本身，不因此改按内部价。
+        String exclusiveMerchantId = event.exclusiveMerchantId() != null
+                ? event.exclusiveMerchantId() : repository.findOrderBarId(event.orderId());
 
         // 【并发闸】2026-08-03:S3 综合服务费与 S6 赠送权益预估成本两处都是「读该票已收合计 → 算 → 写」,
         //   锁前同一张票的两笔核销并发提交会各自读到「还没收过」→ 一张票收两道。
@@ -93,6 +105,12 @@ public class SettlementSettledConsumer {
         if (event.parentTicketId() != null) {
             billRepository.lockAccrualKey("st_ticket:" + event.parentTicketId());
         }
+        // 第十八批第 2 条（ENUM L52「第三步仅对酒吧份额继续扣减——先扣赠送权益预估成本……再扣门票综合服务费……池金额在售票时随订单固化」）：
+        //   有池快照的票，酒吧份额的综合服务费、赠送权益预估成本与通路费已在售票时按酒吧份额逐张固化进池（PassPoolSnapshotService），
+        //   核销时不再逐笔计提（防双扣）；同票非酒吧业态的核销照常分摊通路费。
+        boolean pooledAtSale = passPoolSnapshots.pooledAtSale(event.parentTicketId());
+        boolean barFormat = TicketDistributionSettlementService.FORMAT_BAR.equals(
+                billRepository.merchantBusinessFormat(event.merchantId()));
 
         // 综合服务费实收(每笔·增量封顶)。毛额=净收入+项目承担折扣(与 settleMonth 同口径),
         //   固定额/比例算本笔费,再按「商户×规则」当月增量封顶(月内 Σfee≤cap),落库作不可变实收事实供冲正精确取反。
@@ -128,12 +146,10 @@ public class SettlementSettledConsumer {
         String compServiceFeeConfigId = null;
         // FS-013(BSM L755「单店门票综合服务费按前述计费月汇总后的应收总额另行收取」;裁决 2026-10-19 第 3 条「售出月」):
         //   售出时已锁定的单一酒吧门票不在核销行上再抽,票款按毛额结付、服务费单独挂应收(不轧差)。
-        if (verified > 0L && event.parentTicketId() != null
-                && !singleBarServiceFees.accruedAtSale(event.parentTicketId())
-                && TicketDistributionSettlementService.FORMAT_BAR.equals(
-                        billRepository.merchantBusinessFormat(event.merchantId()))) {
+        if (verified > 0L && event.parentTicketId() != null && barFormat && !pooledAtSale
+                && !singleBarServiceFees.accruedAtSale(event.parentTicketId())) {
             var svcFee = billRepository.findComprehensiveServiceFee(
-                    event.projectId(), event.exclusiveMerchantId(), event.ticketTypeId());
+                    event.projectId(), exclusiveMerchantId, event.ticketTypeId());
             long platformBorne = ComprehensiveServiceFee.platformBorneCent(
                     billRepository.findComboDiscountConfig(event.projectId()), discountIncrement);
             long perTicket = ComprehensiveServiceFee.perTicketCent(svcFee, verified + platformBorne, 1);
@@ -142,7 +158,7 @@ public class SettlementSettledConsumer {
                 perTicket = 0L; // 这张票已经收过这一道固定额了
             }
             if (perTicket > 0L) {
-                if (svcFee.monthlyCapAmountCent() != null && event.exclusiveMerchantId() != null) {
+                if (svcFee.monthlyCapAmountCent() != null && exclusiveMerchantId != null) {
                     // 增量封顶:查月内同「商户×规则」已落 fee 累计(含冲正负→已释放额度),本笔 fee=min(perTicket, 剩余额度)。
                     //   只有专属(单一酒吧门票)走到这里,各商户各自一桶逐分不变
                     //   (用户 2026-07-21 拍板 A「按费率规则各自封、全局规则各商户各自封顶」不变);
@@ -152,7 +168,7 @@ public class SettlementSettledConsumer {
                     billRepository.lockAccrualKey("st_fee_cap:" + svcFee.id());
                     YearMonth m = YearMonth.from(event.verifiedAt().atZone(ZoneOffset.UTC));
                     long mtd = billRepository.sumMonthToDateServiceFee(
-                            event.exclusiveMerchantId(), svcFee.id(),
+                            exclusiveMerchantId, svcFee.id(),
                             m.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC),
                             m.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC));
                     perTicket = Math.min(perTicket, Math.max(0L, svcFee.monthlyCapAmountCent() - mtd));
@@ -177,7 +193,7 @@ public class SettlementSettledConsumer {
         //     绝不月末 clamp(会破坏 f(−x)=−f(x))。种子 by_ticket_amount+0 → G 恒 0 → 上线逐分不变。
         long giftCostCent = 0L;
         String giftCostConfigId = null;
-        if (event.parentTicketId() != null && event.exclusiveMerchantId() == null) {
+        if (event.parentTicketId() != null && exclusiveMerchantId == null && !pooledAtSale) {
             var giftCfg = billRepository.findPassGiftCostConfig(event.projectId(), event.ticketTypeId());
             long perTicket = "by_item".equals(giftCfg.predeductMode())
                     ? priceResolver.byItemGiftCostCent(event.ticketTypeId())
@@ -201,6 +217,11 @@ public class SettlementSettledConsumer {
             }
         }
 
+        // 第十八批第 3 条（BSM L749「通路费……官方渠道同样产生……在拆分给各域之前从整单扣除且只扣一次，由各域按分配份额自然共担」）：
+        //   进池核销按本次核销额占本单实付的比例分摊本单付款时固化的通路费，月结按业态线性求和；专属直付不进池分账，不在此扣。
+        long routeFeeCent = exclusiveMerchantId == null && !(pooledAtSale && barFormat)
+                ? routeFeeShares.shareOf(event.orderId(), verified) : 0L;
+
         repository.insertImmutableFact(new SettlementTransactionRecord(
                 "st_vs_" + event.verificationId(),
                 "ST-VS-" + event.verificationId(),
@@ -221,7 +242,7 @@ public class SettlementSettledConsumer {
                 event.projectId(), // S2：项目 scope 传真值（与上面解析费率用的是同一个值；平台级操作者=null=平台默认口径）
                 STATUS_DRAFT,
                 event.validTo(),
-                event.exclusiveMerchantId(),
+                exclusiveMerchantId,
                 event.verifiedAt(),      // business_at：核销业务时刻（account 月窗聚合基准）
                 discountIncrement,       // D6 折扣额增量（>=0；下传账本供结算按归属应用）
                 compServiceFeeCent,      // P6 本笔实收综合服务费（>=0；增量封顶后）
@@ -229,7 +250,8 @@ public class SettlementSettledConsumer {
                 null,                    // V355 beneficiary_entity_id：核销归商户，无主体受益方
                 event.parentTicketId(),  // S3 父票锚点：「一张票只收一道综合服务费/一道 G」的判定键
                 giftCostCent,            // S6 本笔计提的赠送权益预估成本 G（>=0；首笔进池核销一次性,封顶后）
-                giftCostConfigId         // S6 解析到的 pass_gift_cost_configs 规则 id（供封顶月累计 + 冲正沿用）
+                giftCostConfigId,        // S6 解析到的 pass_gift_cost_configs 规则 id（供封顶月累计 + 冲正沿用）
+                routeFeeCent             // 第十八批第 3 条 本笔分摊的通路费（>=0）
         ));
     }
 }

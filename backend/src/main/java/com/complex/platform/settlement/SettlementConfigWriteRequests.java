@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 
@@ -63,16 +63,12 @@ public final class SettlementConfigWriteRequests {
     }
 
     /**
-     * channel_fee_configs:渠道抽成。比例(feeBps∈[0,10000])或每张票固定金额(fixedAmountCent,分,≥0)二选一
-     * (V381 chk_cfc_fee_mode:配固定金额则 feeBps 必 0);批1 UI 只填 channel=null 通用配置。
+     * channel_fee_configs:渠道费用。第十八批第 3 条(V555,BSM L749 渠道费用分两层)起必填 feeLayer:
+     * route=通路费(channel 必填支付通路码,只按比例);sales=销售渠道费(channel=第三方销售渠道码,留空=第三方通用),
+     * 比例(feeBps∈[0,10000])或每张票固定金额(fixedAmountCent,分,≥0)二选一(V381 chk_cfc_fee_mode:配固定金额则 feeBps 必 0)。
      */
-    public record ChannelFeeRequest(String idempotencyKey, String projectId, String channel, Integer feeBps,
+    public record ChannelFeeRequest(String idempotencyKey, String projectId, String feeLayer, String channel, Integer feeBps,
                                     Long fixedAmountCent) {
-
-        /** V381 前的 4 参签名(无 fixedAmountCent)→ null=比例模式。 */
-        public ChannelFeeRequest(String idempotencyKey, String projectId, String channel, Integer feeBps) {
-            this(idempotencyKey, projectId, channel, feeBps, null);
-        }
     }
 
     /** ticket_distribution_rank_tiers:by_rank_tier 排名档位梯子(整套替换草案)。 */
@@ -121,7 +117,8 @@ public final class SettlementConfigWriteRequests {
      * S6(V373)pass_gift_cost_configs:赠送权益预估成本预扣规则。范围=项目 × 票种(留空=该层通用)。
      * predeductMode 二选一:by_item 按件计(票面各权益数量 × 内部结算价之和,ticketGiftAmountCent 必须留空)/
      * by_ticket_amount 按票计(该票种赠送部分售价整额,ticketGiftAmountCent 必填 ≥0,0=预扣关闭态)。
-     * monthlyCapAmountCent 留空=不封顶;varianceHandling 留空=platform_absorb(差额留娱乐平台公司,S7 消费)。
+     * monthlyCapAmountCent 留空=不封顶;varianceHandling 只收 platform_absorb(留空同义:差额留娱乐平台公司;
+     * 18B 复核后裁决第 11 条下线结转下期与回补当期可分配池)。
      */
     public record PassGiftCostRequest(String idempotencyKey, String projectId, String ticketTypeId,
                                       String predeductMode, Long ticketGiftAmountCent,
@@ -130,6 +127,26 @@ public final class SettlementConfigWriteRequests {
 
     /** 梯子整体转正 body(§3):projectId 可空=全局默认梯子。 */
     public record RankTiersActivateRequest(String projectId) {
+    }
+
+    /**
+     * 第十八批第 2 条(V556,ENUM L52):通票分账方案整套草案——参与家数档位表(按第二段参与家数逐行,每格比例与上下限,万分比)
+     * + 第一段名单(酒吧 × 固定金额或固定单价二选一,按每份票计)。projectId 留空=全平台。
+     */
+    public record DistributionSchemeRequest(String idempotencyKey, String projectId, List<ParticipantTierInput> tiers,
+                                            List<FirstSegmentInput> firstSegment) {
+    }
+
+    public record ParticipantTierInput(Integer participantCount, Integer rankNo, Integer shareBps, Integer minBps,
+                                       Integer maxBps) {
+    }
+
+    public record FirstSegmentInput(String merchantId, Long perGuestCent, Long fixedAmountCent) {
+    }
+
+    /** 第十八批第 2 条:档位表与第一段变更共用的通告期(periodUnit ∈ {day, month}),数值与上下限同时必填。 */
+    public record NoticePeriodRequest(String idempotencyKey, Integer periodValue, String periodUnit, Integer minValue,
+                                      Integer maxValue) {
     }
 
     /**

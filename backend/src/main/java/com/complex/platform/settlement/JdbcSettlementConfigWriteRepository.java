@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.LocalZone;
@@ -36,7 +36,8 @@ public class JdbcSettlementConfigWriteRepository {
         COMPREHENSIVE_SERVICE_FEE("comprehensive_service_fee_configs", "comprehensive_service_fee",
                 List.of("project_id", "merchant_id", "ticket_type_id")),
         COMBO_DISCOUNT("ticket_combo_discount_configs", "combo_discount", List.of("project_id")),
-        CHANNEL_FEE("channel_fee_configs", "channel_fee", List.of("project_id", "channel")),
+        // 第十八批第 3 条(V555):渠道费用分通路费/销售渠道费两层,同项目同渠道码两层各一行。
+        CHANNEL_FEE("channel_fee_configs", "channel_fee", List.of("project_id", "fee_layer", "channel")),
         // V340（P0-D/CFG-01）：提成费率按 项目 × 商户 × 角色档；积分累计率按 项目 × 商户。同 Path 2 草案/转正范式。
         COMMISSION_RATE("bar_commission_rate_configs", "commission_rate",
                 List.of("project_id", "merchant_id", "role_type")),
@@ -189,21 +190,22 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("updated_by", updatedBy), String.class);
     }
 
-    /** V381:同一草案槽再带「每张票固定金额」(分,与 fee_bps 二选一,写入面与 chk_cfc_fee_mode 双闸)。 */
-    public String upsertChannelFeeDraft(String id, String projectId, String channel, int feeBps,
+    /** V381:同一草案槽再带「每张票固定金额」(分,与 fee_bps 二选一,写入面与 chk_cfc_fee_mode 双闸);V555 草案槽按费用层分开。 */
+    public String upsertChannelFeeDraft(String id, String projectId, String feeLayer, String channel, int feeBps,
                                         Long fixedAmountCent, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO channel_fee_configs
-                    (id, project_id, channel, fee_bps, fixed_amount_cent, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :channel, :fee_bps, :fixed_amount_cent, 'active', TRUE, :updated_by, now())
-                ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(channel, '__ALL__'), is_draft) WHERE status = 'active' DO UPDATE SET
+                    (id, project_id, fee_layer, channel, fee_bps, fixed_amount_cent, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :fee_layer, :channel, :fee_bps, :fixed_amount_cent, 'active', TRUE, :updated_by, now())
+                ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), fee_layer, COALESCE(channel, '__ALL__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     fee_bps = EXCLUDED.fee_bps,
                     fixed_amount_cent = EXCLUDED.fixed_amount_cent,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
-                .addValue("id", id).addValue("project_id", projectId).addValue("channel", channel)
+                .addValue("id", id).addValue("project_id", projectId).addValue("fee_layer", feeLayer)
+                .addValue("channel", channel)
                 .addValue("fee_bps", feeBps).addValue("fixed_amount_cent", fixedAmountCent)
                 .addValue("updated_by", updatedBy), String.class);
     }
@@ -599,7 +601,7 @@ public class JdbcSettlementConfigWriteRepository {
         return jdbcTemplate.query("""
                 SELECT updated_by FROM ticket_distribution_rank_tiers
                  WHERE is_draft = TRUE AND status = 'active'
-                   AND COALESCE(project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__')
+                   AND (project_id = :project_id OR (project_id IS NULL AND CAST(:project_id AS text) IS NULL))
                  LIMIT 1
                 """, new MapSqlParameterSource().addValue("project_id", projectId),
                 rs -> rs.next() ? rs.getString(1) : null);
@@ -626,7 +628,7 @@ public class JdbcSettlementConfigWriteRepository {
         return jdbcTemplate.query("""
                 SELECT id, rank_from, rank_to, share_bps FROM ticket_distribution_rank_tiers
                  WHERE is_draft = TRUE AND status = 'active'
-                   AND COALESCE(project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__')
+                   AND (project_id = :project_id OR (project_id IS NULL AND CAST(:project_id AS text) IS NULL))
                  ORDER BY rank_from
                 """, new MapSqlParameterSource().addValue("project_id", projectId),
                 (rs, i) -> new TierRow(rs.getString("id"), rs.getInt("rank_from"),
@@ -711,10 +713,12 @@ public class JdbcSettlementConfigWriteRepository {
                       FROM ticket_combo_discount_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
                     SELECT id, 'channel_fee',
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 渠道=' || COALESCE(channel, '__ALL__')
+                           'project=' || COALESCE(project_id, '__DEFAULT__')
+                               || CASE fee_layer WHEN 'route' THEN ' 通路费 支付通路=' ELSE ' 销售渠道费 渠道=' END
+                               || COALESCE(channel, '第三方通用')
                                || CASE WHEN fixed_amount_cent IS NOT NULL
                                        THEN ' 每张票固定 ' || fixed_amount_cent || '分'
-                                       ELSE ' 抽成 ' || fee_bps || 'bps' END,
+                                       ELSE ' 费率 ' || fee_bps || 'bps' END,
                            updated_at
                       FROM channel_fee_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

@@ -1,5 +1,7 @@
 package com.complex.platform.settlement;
 
+// 文件版本：V0.01
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
@@ -131,10 +133,10 @@ class SettlementGiftCostS6Tests {
         expected.put("period_end", java.sql.Date.valueOf(MONTH.atEndOfMonth()));
         expected.put("ticket_revenue_cent", 150000L);
         expected.put("channel_fee_cent", 0L);
+        expected.put("route_fee_cent", 0L);           // 第十八批第 3 条 V555 通路费列（无付款固化行 → 0）
         expected.put("comp_service_fee_pooled_cent", 30000L);
-        expected.put("available_pool_cent", 120000L);
-        // S8 第二段归一化分尽:档位 1600/1200×3(Σ=5200)对 120000 一次分光 → Σ=119999+尾差1。
-        expected.put("distributed_cent", 119999L);
+        expected.put("available_pool_cent", 120000L);   // 无池快照:酒吧净份额 120000 按 ENUM L52 末句整笔单列未分配池余额
+        expected.put("distributed_cent", 0L);
         expected.put("comp_service_fee_exclusive_cent", 0L);
         expected.put("fee_beneficiary_entity_id", "be_ent_platform");
         // S6 新列:G 恒 0(逐分不变的全部含义——老列一分不动,新列只记 0 与收款方快照)。
@@ -148,10 +150,14 @@ class SettlementGiftCostS6Tests {
         expected.put("settled_at", null);
         expected.put("attributed_entity_id", "be_ent_platform"); // V375 all_pass_ticket 全局种子
         expected.put("combo_discount_cent", 0L);
-        expected.put("rounding_residual_cent", 1L);
-        expected.put("rounding_residual_entity_id", "be_ent_platform"); // V383 尾差责任主体
-        expected.put("pool_undistributed_cent", 0L);        // S8:第二段有参与者 → 恒 0
-        expected.put("pool_undistributed_entity_id", null);
+        expected.put("rounding_residual_cent", 0L);
+        expected.put("rounding_residual_entity_id", null); // V383 尾差为 0 → 没有责任人
+        expected.put("pool_undistributed_cent", 120000L);
+        expected.put("pool_undistributed_entity_id", "be_ent_platform");
+        expected.put("unverified_deduction_cent", 0L);      // V556 三栏分列与暂挂、超池列
+        expected.put("unverified_deduction_entity_id", null);
+        expected.put("pool_suspended_cent", 0L);
+        expected.put("pool_overflow_cent", 0L);
 
         Map<String, Object> actual = new HashMap<>(bill(pid));
         actual.remove("created_at");
@@ -272,7 +278,7 @@ class SettlementGiftCostS6Tests {
 
     /**
      * 直接落账本形态(消费者产物):收入 100000、费 20000、G 5900 → 池 = 100000 − 0 − 5900 − 20000 = 74100;
-     * 单档 100% 分尽;结算单 G 列 5900、归属快照娱乐平台公司;酒吧业态份额行 G=5900、净份额=74100。
+     * 无池快照 → 整笔单列未分配;结算单 G 列 5900、归属快照娱乐平台公司;酒吧业态份额行 G=5900、净份额=74100。
      */
     @Test
     void waterfall_availablePoolEqualsRevenueMinusChannelMinusGiftMinusFee() {
@@ -286,8 +292,7 @@ class SettlementGiftCostS6Tests {
         assertThat(num(b, "ticket_revenue_cent")).isEqualTo(100000L);
         assertThat(num(b, "gift_cost_cent")).as("G 进结算单留痕").isEqualTo(5900L);
         assertThat(num(b, "comp_service_fee_pooled_cent")).isEqualTo(20000L);
-        assertThat(num(b, "available_pool_cent")).as("P = R − C − G − F_pool").isEqualTo(74100L);
-        assertThat(num(b, "distributed_cent")).isEqualTo(74100L);
+        assertThat(num(b, "pool_undistributed_cent")).as("无池快照:P = R − C − G − F_pool 整笔单列未分配池余额").isEqualTo(74100L);
         assertThat(b.get("gift_beneficiary_entity_id")).as("G 归娱乐平台公司(V372 种子)")
                 .isEqualTo("be_ent_platform");
 

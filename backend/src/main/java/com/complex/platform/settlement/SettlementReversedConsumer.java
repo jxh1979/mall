@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.ticketing.VerificationReversedEvent;
 import java.time.Instant;
@@ -101,7 +101,8 @@ public class SettlementReversedConsumer {
                 // S6:赠送权益预估成本取原 ST-VS 行之反(<=0),config_id 沿用原行 → 本冲正行进「项目×规则」
                 //   月累计=天然释放封顶额度;该票 G 净额抵回 0 → 锚点复位,下一次核销可重新计提。
                 -original.giftCostCent(),
-                original.giftCostConfigId()));
+                original.giftCostConfigId(),
+                -original.routeFeeCent()));   // 第十八批第 3 条：通路费取原行之反
     }
 
     /**
@@ -135,7 +136,8 @@ public class SettlementReversedConsumer {
                     original.entitlementValidTo(), original.exclusiveMerchantId(),
                     reversalBusinessAt(original.projectId(), original.businessAt()),
                     -original.discountAmountCent(), -original.compServiceFeeCent(), original.compServiceFeeConfigId(),
-                    original.beneficiaryEntityId(), original.parentTicketId(), -original.giftCostCent(), original.giftCostConfigId()));
+                    original.beneficiaryEntityId(), original.parentTicketId(), -original.giftCostCent(), original.giftCostConfigId(),
+                    -original.routeFeeCent()));
         }
     }
 

@@ -1,5 +1,5 @@
 package com.complex.platform.settlement;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -68,6 +68,7 @@ class SettlementEntityAttributionS1Tests {
                     "DELETE FROM settlement_items WHERE bill_id IN (SELECT id FROM settlement_bills WHERE project_id = ?)",
                     pid);
             jdbcTemplate.update("DELETE FROM settlement_bills WHERE project_id = ?", pid);
+            com.complex.platform.support.PassPoolFixtures.deleteByProject(jdbcTemplate, pid);
             jdbcTemplate.update("DELETE FROM ticket_distribution_rank_tiers WHERE project_id = ?", pid);
             jdbcTemplate.update("DELETE FROM revenue_stream_attribution WHERE project_id = ?", pid);
         }
@@ -83,10 +84,12 @@ class SettlementEntityAttributionS1Tests {
     @Test
     void billAmountsAreIdenticalWhetherAttributionIsConfiguredOrNot() {
         String pid = newProject();
-        setRankTier(pid, 1, 9, 3333);
-        seedVerified(pid, "bar_k1", 3, 2, 40001L);
-        seedVerified(pid, "bar_k2", 2, 1, 30007L);
-        seedVerified(pid, "bar_k3", 1, 1, 29991L);
+        // 第十八批第 2 条:分账按单张票的池快照逐份执行——给父票补一行池快照(三家都在第二段)。
+        String ticket = "tk_s1_" + pid;
+        com.complex.platform.support.PassPoolFixtures.snapshot(jdbcTemplate, ticket, pid, 99999L, "bar_k1", "bar_k2", "bar_k3");
+        seedVerified(pid, "bar_k1", 3, 3, 40001L, ticket);
+        seedVerified(pid, "bar_k2", 2, 2, 30007L, ticket);
+        seedVerified(pid, "bar_k3", 1, 1, 29991L, ticket);
 
         // (1) 项目未配置 —— S8/V375 起回落全局种子(HTML 明文:通票收入 → 娱乐平台公司),不再是 null
         assertThat(attributionRepository.resolveManagementEntity(pid, "all_pass_ticket"))
@@ -299,6 +302,11 @@ class SettlementEntityAttributionS1Tests {
 
     private void seedVerified(String projectId, String merchantId, int verifiedCount, int numPeople,
                               long verifiedCent) {
+        seedVerified(projectId, merchantId, verifiedCount, numPeople, verifiedCent, null);
+    }
+
+    private void seedVerified(String projectId, String merchantId, int verifiedCount, int numPeople,
+                              long verifiedCent, String parentTicket) {
         Instant createdAt = MONTH.atDay(15).atTime(12, 0).toInstant(ZoneOffset.UTC);
         java.sql.Timestamp ts = java.sql.Timestamp.from(createdAt);
         String id = "st_s1v_" + System.nanoTime();
@@ -306,13 +314,13 @@ class SettlementEntityAttributionS1Tests {
                 INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id,
                     entitlement_type, verified_count, total_times, num_people, allocated_revenue_cent,
                     verified_amount_cent, unverified_amount_cent, beneficiary_type, merchant_id, project_id,
-                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at)
+                    verification_id, settlement_status, entitlement_valid_to, created_at, updated_at, parent_ticket_id)
                 VALUES (?, ?, 'verification_settled', ?, 'entry', ?, ?, ?, ?, ?, 0, 'merchant', ?, ?, ?,
-                    'draft', ?, ?, ?)
+                    'draft', ?, ?, ?, ?)
                 """,
                 id, "TN-" + id, "ent_" + id, verifiedCount,
                 Math.max(verifiedCount, 1), numPeople, verifiedCent, verifiedCent,
-                merchantId, projectId, "vf_" + id, ts, ts, ts);
+                merchantId, projectId, "vf_" + id, ts, ts, ts, parentTicket);
     }
 
     private void insertLedger(String projectId, String id, String beneficiaryType, String merchantId,
@@ -340,14 +348,6 @@ class SettlementEntityAttributionS1Tests {
                 """,
                 id, verificationId == null ? "TN-" + id : "ST-VS-" + verificationId, "ent_" + id, beneficiaryType, merchantId, entityId, projectId,
                 verificationId == null ? "vf_" + id : verificationId, ts, ts, ts, ts);
-    }
-
-    private void setRankTier(String projectId, int rankFrom, int rankTo, int shareBps) {
-        jdbcTemplate.update("""
-                INSERT INTO ticket_distribution_rank_tiers (id, project_id, rank_from, rank_to, share_bps,
-                    status, is_draft)
-                VALUES (?, ?, ?, ?, ?, 'active', FALSE)
-                """, "trt_s1_" + projectId + "_" + rankFrom, projectId, rankFrom, rankTo, shareBps);
     }
 
     private Map<String, Object> bill(String projectId) {

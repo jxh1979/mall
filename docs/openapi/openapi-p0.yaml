@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.34
+  version: V0.35
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -27225,6 +27225,29 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/notices:
+    get:
+      tags:
+        - merchant-portal
+      operationId: listMerchantPortalNotices
+      summary: 商户专区·通告(本商户)
+      description: 18B 复核后操作员裁决第 10 条「商户专区显示通告」：系统挂进本商户专区的通告(如通票分账方案变更,写明变更内容与生效日,只含本店可见的信息,不含其他酒吧的第一段金额),专区可查看即送达,短信只是提醒;新的在前。无商户归属 403 MERCHANT_SCOPE_REQUIRED。
+      x-permission: merchant.portal.settlement.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-portal/contracts:
     get:
       tags:
@@ -37628,9 +37651,8 @@ paths:
       tags:
         - settlement
       operationId: settlementConfigUpsertChannelFee
-      summary: 维护第三方渠道抽成率(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。V381:比例(fee_bps)或每张票固定金额(fixed_amount_cent,分)二选一,配固定金额则
-        fee_bps 必须为 0。
+      summary: 维护渠道费用(通路费/销售渠道费,草案)
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。第十八批第 3 条(V555):fee_layer 必填——route=通路费(channel 必填支付通路码,只按比例 fee_bps,所有付款都扣、官方渠道同样扣);sales=销售渠道费(channel=第三方销售渠道码,留空=第三方通用,仅第三方渠道售出的票扣)。销售渠道费可按比例(fee_bps)或每张票固定金额(fixed_amount_cent,分)二选一,配固定金额则 fee_bps 必须为 0。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -37649,6 +37671,11 @@ paths:
                   type: string
                 project_id:
                   type: string
+                fee_layer:
+                  type: string
+                  enum:
+                    - route
+                    - sales
                 channel:
                   type: string
                 fee_bps:
@@ -37658,6 +37685,7 @@ paths:
                   format: int64
               required:
                 - idempotency_key
+                - fee_layer
                 - fee_bps
       responses:
         "200":
@@ -37892,6 +37920,186 @@ paths:
               properties:
                 project_id:
                   type: string
+  /api/v1/settlement/config/distribution-scheme:
+    get:
+      tags:
+        - settlement
+      operationId: settlementConfigDistributionScheme
+      summary: 通票分账方案:版本、通告期与缺档位行待办
+      description: 第十八批第 2 条(ENUM:52):通票分账方案各版本(状态 draft/pending/effective/superseded、通告日、生效日、参与家数档位表 tiers、第一段名单 first_segment)、通告期 notice_period,以及按(项目,第二段参与家数)聚合的缺档位行暂挂待办 missing_rows(份数 units、暂挂金额 amount_cent)。
+      x-auth-context: staff-token
+      x-permission: settlement.config.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-audit-event-success: settlement.config.distribution_scheme.viewed
+      x-audit-event-failure: settlement.config.distribution_scheme.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigSaveDistributionScheme
+      summary: 通票分账方案整套落草案(参与家数档位表+第一段名单)
+      description: 第十八批第 2 条(ENUM:52):按第二段参与家数分行,每行第 1 至第 N 名各一格、比例(万分比)合计必须等于 10000,每格须同时配置上下限且下限≤比例≤上限,可新增任意家数行;第一段名单每家一行,固定金额(fixed_amount_cent)与每客单价(per_guest_cent)二选一,均按每份票计。落草案,经差人复核转正后通告生效。返回草案 id。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.distribution_scheme.updated
+      x-audit-event-failure: settlement.config.distribution_scheme.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                project_id:
+                  type: string
+                tiers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      participant_count:
+                        type: integer
+                      rank_no:
+                        type: integer
+                      share_bps:
+                        type: integer
+                      min_bps:
+                        type: integer
+                      max_bps:
+                        type: integer
+                    required:
+                      - participant_count
+                      - rank_no
+                      - share_bps
+                      - min_bps
+                      - max_bps
+                first_segment:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      merchant_id:
+                        type: string
+                      per_guest_cent:
+                        type: integer
+                        format: int64
+                      fixed_amount_cent:
+                        type: integer
+                        format: int64
+                    required:
+                      - merchant_id
+              required:
+                - idempotency_key
+                - tiers
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/distribution-scheme/{id}/activate:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigActivateDistributionScheme
+      summary: 复核转正:通票分账方案草案通告
+      description: 差人复核(执行人≠起草人否则 403 SELF_ACTIVATION_FORBIDDEN)+转正前复校每行合计 10000。操作员裁决第十八批第 1 条:复核转正当日系统在受影响酒吧的商户专区逐家挂出通告即视为送达(18B 复核后裁决第 10 条;短信只是提醒,发不发、成不成功都不影响送达与生效),生效日=转正日+通告期;已售出的票按售出时生效的方案结算。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.config.draft.activated
+      x-audit-event-failure: settlement.config.draft.activate_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/settlement/config/distribution-scheme/notice-period:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigSaveDistributionNoticePeriod
+      summary: 维护通票分账方案通告期
+      description: 第十八批第 2 条(ENUM:52):档位表与第一段名单变更共用的通告期,出厂一个月;period_value、period_unit(day/month)与上下限 min_value/max_value 须同时填写,1≤下限≤通告期≤上限。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.distribution_notice_period.updated
+      x-audit-event-failure: settlement.config.distribution_notice_period.update_failed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                period_value:
+                  type: integer
+                period_unit:
+                  type: string
+                  enum:
+                    - day
+                    - month
+                min_value:
+                  type: integer
+                max_value:
+                  type: integer
+              required:
+                - idempotency_key
+                - period_value
+                - period_unit
+                - min_value
+                - max_value
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/settlement/config/{configType}/{id}/activate:
     post:
       tags:
@@ -38188,7 +38396,7 @@ paths:
       summary: 维护赠送权益预估成本预扣规则(草案)
       description: 结算配置中心 S6(V373)：按 项目公司 × 票种 配置通票分账池前预扣的「赠送权益预估成本」(归娱乐平台公司)。两模式二选一：by_item 按件计＝票面各权益数量 ×
         提供方内部结算价之和(金额由票面推导,不接受手填整额)；by_ticket_amount
-        按票计＝该票种赠送部分的售价整额(必填,0=预扣关闭)。可选每月封顶与差额处理规则。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+        按票计＝该票种赠送部分的售价整额(必填,0=预扣关闭)。可选每月封顶；差额处理规则只收 platform_absorb(差额留娱乐平台公司)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -38222,8 +38430,6 @@ paths:
                   type: string
                   enum:
                     - platform_absorb
-                    - carry_forward
-                    - true_up_pool
               required:
                 - idempotency_key
                 - prededuct_mode

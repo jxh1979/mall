@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -115,6 +115,22 @@ public class DividendService {
     private final AuthorizationService authorizationService;
     private final AuditedOperationExecutor operations;
     private final FinanceService payoutPort;
+
+    // 第十八批第 13 条（BSM 第 1597 行「分红出单与发放」，第 1598 行不可关闭）：业务提交后通知商户。@Lazy 防初始化环；为 null（单测手工构造）＝不发。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.merchantbilling.MerchantAmountChangeNotifier merchantAmountNotifier;
+
+    private void notifyMerchantAmount(String merchantId, String event, long amountCent, String reason, Instant visibleAt, String refKey) {
+        if (merchantAmountNotifier != null) {
+            merchantAmountNotifier.notifyAfterCommit(merchantId, event, amountCent, reason, null,
+                    visibleAt.atZone(com.complex.platform.common.LocalZone.ID).toLocalDate(), null, refKey);
+        }
+    }
+
+    private static String yuan(long cent) {
+        return java.math.BigDecimal.valueOf(cent, 2).toPlainString() + " 元";
+    }
 
     public DividendService(
             DividendRepository repository,
@@ -735,6 +751,11 @@ public class DividendService {
                                 statement.reserveWithheldCent(), statement.id());
                     }
                     requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
+                    // 审批通过这一步才挂应付、抵欠款（草稿与月度预览会重算作废，不发）。
+                    notifyMerchantAmount(statement.merchantId(), "dividend_issued", statement.payoutCent(),
+                            statement.periodLabel() + " 分红出单：税后应得 " + yuan(statement.principalNetCent()) + "，欠款抵扣 "
+                                    + yuan(statement.arrearsOffsetCent()) + "，留存 " + yuan(statement.reserveWithheldCent()),
+                            now, statement.id());
                 });
     }
 
@@ -758,6 +779,9 @@ public class DividendService {
                 (statement, operator, now) -> {
                     requireStatus(statement, "approved", "只有审批通过的单可以标记发放");
                     requireTransition(repository.markPaid(statement.id(), operator, now), "标记发放");
+                    // 与出单同一张分红单的异议期（自审批通过之日次日起算）。
+                    notifyMerchantAmount(statement.merchantId(), "dividend_paid", statement.payoutCent(),
+                            statement.periodLabel() + " 分红发放", statement.approvedAt(), statement.id());
                 });
     }
 
@@ -984,6 +1008,9 @@ public class DividendService {
             throw ApiException.conflict("DIVIDEND_RESERVE_ALREADY_RELEASED",
                     "该计算单的留存已释放，不可重复释放");
         }
+        // 留存部分没有单独的标记发放动作，释放即其发放点。
+        notifyMerchantAmount(stmt.merchantId(), "dividend_paid", releasedCent, stmt.periodLabel() + " 分红留存释放发放", now,
+                statementId + ":reserve");
         return release;
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.notification;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.complex.platform.terminal.TerminalCapabilitySwitchRecord;
 import com.complex.platform.terminal.TerminalDeviceRepository;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -54,9 +55,26 @@ class NotificationSwitchResolverTests {
         assertThat(resolver.resolve("stored_value", "topup").allowed()).isTrue();
     }
 
+    /** 第十八批第 13 条（BSM 第 1597、1598 行）：商户应收应付金额变化的通知不可关闭，总开关关着也照发，后台也不能按条关闭。 */
+    @Test
+    void merchantAmountEventsAllowedEvenWhenMasterSwitchOff() {
+        when(repo.resolveEffectiveSwitch(eq("*"), anyString(), any())).thenReturn(Optional.empty());
+        set("sms_notification", false);
+
+        for (String event : List.of("settlement_statement", "adjustment", "reconciliation_difference", "deposit_deduct",
+                "deposit_refund", "deposit_supplement", "penalty", "dividend_issued", "dividend_paid")) {
+            assertThat(resolver.resolve("merchant_amount", event).allowed()).as(event).isTrue();
+            assertThat(NotificationSwitchResolver.isMandatorySwitch("sms.notify.merchant_amount." + event)).as(event).isTrue();
+        }
+    }
+
     private void on(String capabilityCode) {
+        set(capabilityCode, true);
+    }
+
+    private void set(String capabilityCode, boolean enabled) {
         when(repo.resolveEffectiveSwitch(eq("*"), eq(capabilityCode), any())).thenReturn(Optional.of(
                 new TerminalCapabilitySwitchRecord("tcs_" + capabilityCode, "*", capabilityCode, "global", "global",
-                        true, "test", Instant.now(), Instant.now())));
+                        enabled, "test", Instant.now(), Instant.now())));
     }
 }

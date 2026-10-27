@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.34
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.35
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1150 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1155 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 410 | 人工权限矩阵正文未覆盖 309 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2300 | 人工事件矩阵正文未覆盖 2255 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1150 | 人工任务映射正文未逐项覆盖 1144 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 690 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2310 | 人工事件矩阵正文未覆盖 2265 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1155 | 人工任务映射正文未逐项覆盖 1149 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 693 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -338,7 +338,7 @@
 | `merchant.portal.card_exit_notice.publish` | staff-token | merchant | 2 | listMyMerchantCardExitNotices, publishMerchantCardExitNotice | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.payee_account.approve` | staff-token | merchant | 1 | approveMerchantPortalPayeeAccountChange | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.dispute` | staff-token | merchant | 2 | submitMerchantPortalSettlementDispute, rejectMerchantPortalSettlementResolution | OpenAPI 补充，以本附录为准 |
-| `merchant.portal.settlement.view` | staff-token | merchant | 2 | listMerchantPortalTicketSettlements, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
+| `merchant.portal.settlement.view` | staff-token | merchant | 3 | listMerchantPortalTicketSettlements, listMerchantPortalNotices, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.manage` | staff-token | project, project-merchant | 3 | createMerchant, updateMerchant, configureMerchantPendingClearAlert | 已在权限矩阵正文出现 |
 | `merchant.profile.view` | staff-token | project-merchant | 2 | listMerchants, getMerchantPendingClearAlert | 已在权限矩阵正文出现 |
 | `merchant.service_work_order.assign` | staff-token | project-merchant | 1 | assignMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
@@ -375,8 +375,8 @@
 | `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.special_approve` | staff-token | platform | 1 | settlementSpecialApproveBill | OpenAPI 补充，以本附录为准 |
-| `settlement.config.manage` | staff-token | platform, project | 20 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigActivateDraft ... | OpenAPI 补充，以本附录为准 |
-| `settlement.config.view` | staff-token | platform, project | 4 | settlementConfigOverview, listInternalPayDayRules, getSettlementObjectionPeriod, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
+| `settlement.config.manage` | staff-token | platform, project | 23 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigSaveDistributionScheme ... | OpenAPI 补充，以本附录为准 |
+| `settlement.config.view` | staff-token | platform, project | 5 | settlementConfigOverview, settlementConfigDistributionScheme, listInternalPayDayRules, getSettlementObjectionPeriod, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.view` | staff-token | platform | 2 | listSettlementInvoiceItems, settlementInvoiceSummary | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.punch` | staff-token | platform, self | 4 | punchStaffAttendance, issueStaffPhoneTimeAnchor, recordStaffPhoneReceipt, getCurrentStaffWorkPhoneContext | OpenAPI 补充，以本附录为准 |
@@ -2089,6 +2089,8 @@
 | `not_applicable` | failure | `listFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMyMerchantCardExitNotices` | `GET` | `/api/v1/merchant-portal/card-exit-notices` | P0-待归类 | `merchant.portal.card_exit_notice.publish` | 接口级事件，以本附录为准 |
@@ -2259,10 +2261,18 @@
 | `settlement.config.channel_fee_configs.updated` | success | `settlementConfigUpsertChannelFee` | `POST` | `/api/v1/settlement/config/channel-fee` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.comprehensive_service_fee_configs.update_failed` | failure | `settlementConfigUpsertComprehensiveServiceFee` | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.comprehensive_service_fee_configs.updated` | success | `settlementConfigUpsertComprehensiveServiceFee` | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.distribution_notice_period.update_failed` | failure | `settlementConfigSaveDistributionNoticePeriod` | `POST` | `/api/v1/settlement/config/distribution-scheme/notice-period` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.distribution_notice_period.updated` | success | `settlementConfigSaveDistributionNoticePeriod` | `POST` | `/api/v1/settlement/config/distribution-scheme/notice-period` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.distribution_scheme.update_failed` | failure | `settlementConfigSaveDistributionScheme` | `POST` | `/api/v1/settlement/config/distribution-scheme` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.distribution_scheme.updated` | success | `settlementConfigSaveDistributionScheme` | `POST` | `/api/v1/settlement/config/distribution-scheme` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.distribution_scheme.view_failed` | failure | `settlementConfigDistributionScheme` | `GET` | `/api/v1/settlement/config/distribution-scheme` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
+| `settlement.config.distribution_scheme.viewed` | success | `settlementConfigDistributionScheme` | `GET` | `/api/v1/settlement/config/distribution-scheme` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activate_failed` | failure | `settlementConfigActivateAttributionRuleAlias` | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.draft.activate_failed` | failure | `settlementConfigActivateDistributionScheme` | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activate_failed` | failure | `settlementConfigActivateDraft` | `POST` | `/api/v1/settlement/config/{configType}/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activate_failed` | failure | `settlementConfigActivateRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activated` | success | `settlementConfigActivateAttributionRuleAlias` | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.config.draft.activated` | success | `settlementConfigActivateDistributionScheme` | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activated` | success | `settlementConfigActivateDraft` | `POST` | `/api/v1/settlement/config/{configType}/{id}/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.draft.activated` | success | `settlementConfigActivateRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.high_value_thresholds.update_failed` | failure | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -3575,6 +3585,7 @@
 | P0-待归类 | `listMediaPerformanceShows` | `GET` | `/api/v1/settlement/media-shows` | 逐场演出合同记录列表 | `media.performance.view` | `media_show.listed` / `media_show.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listMerchantBills` | `GET` | `/api/v1/merchant-billing/bills` | List merchant bills | `merchant.billing.view` | `merchant_billing.bill.viewed` / `merchant_billing.bill.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | 商户专区·我的合同(只读关键信息) | `contract.view` | `merchant_portal.contract.viewed` / `merchant_portal.contract.view_failed` | web, merchant_portal | operation 级补充 |
+| P0-待归类 | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | 商户专区·通告(本商户) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalSettlements` | `GET` | `/api/v1/merchant-portal/settlements` | 商户专区·我的对账(结算单只读) | `merchant.portal.settlement.view` | `merchant_portal.settlement.viewed` / `merchant_portal.settlement.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
@@ -3682,12 +3693,16 @@
 | P0-待归类 | `settleEnergyFeeShortcut` | `POST` | `/api/v1/energy/settle-energy-fee` | 按账期结算能源费(兼容路径) | `energy.reading.manage` | `energy.fee_settled` / `energy.fee_settle_failed` | web | operation 级补充 |
 | P0-待归类 | `settleMediaPerformanceShow` | `POST` | `/api/v1/settlement/media-shows/{id}/settle` | 按锁定合同结算三项费用 | `media.performance.settle` | `media_settlement.settled` / `media_settlement.settle_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigActivateAttributionRuleAlias` | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | 复核转正:归因规则草案(弃用薄别名) | `settlement.config.manage` | `settlement.config.draft.activated` / `settlement.config.draft.activate_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigActivateDistributionScheme` | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/activate` | 复核转正:通票分账方案草案通告 | `settlement.config.manage` | `settlement.config.draft.activated` / `settlement.config.draft.activate_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigActivateDraft` | `POST` | `/api/v1/settlement/config/{configType}/{id}/activate` | 复核转正:单行/归属/归因规则草案转正 | `settlement.config.manage` | `settlement.config.draft.activated` / `settlement.config.draft.activate_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigActivateRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers/activate` | 复核转正:排名档位梯子整体换梯 | `settlement.config.manage` | `settlement.config.draft.activated` / `settlement.config.draft.activate_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigArchive` | `POST` | `/api/v1/settlement/config/{configType}/{id}/archive` | 软删结算配置(status→inactive) | `settlement.config.manage` | `settlement.config.archived` / `settlement.config.archive_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigDistributionScheme` | `GET` | `/api/v1/settlement/config/distribution-scheme` | 通票分账方案:版本、通告期与缺档位行待办 | `settlement.config.view` | `settlement.config.distribution_scheme.viewed` / `settlement.config.distribution_scheme.view_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigListInternalPriceItems` | `GET` | `/api/v1/settlement/config/internal-price-items` | 内部结算SKU目录三维筛选列表 | `settlement.config.view` | `settlement.config.internal_price_catalog.viewed` / `settlement.config.internal_price_catalog.view_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | 结算配置中心总览 | `settlement.config.view` | `settlement.config.overview.viewed` / `settlement.config.overview.view_failed` | web | operation 级补充 |
-| P0-待归类 | `settlementConfigUpsertChannelFee` | `POST` | `/api/v1/settlement/config/channel-fee` | 维护第三方渠道抽成率(草案) | `settlement.config.manage` | `settlement.config.channel_fee_configs.updated` / `settlement.config.channel_fee_configs.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigSaveDistributionNoticePeriod` | `POST` | `/api/v1/settlement/config/distribution-scheme/notice-period` | 维护通票分账方案通告期 | `settlement.config.manage` | `settlement.config.distribution_notice_period.updated` / `settlement.config.distribution_notice_period.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigSaveDistributionScheme` | `POST` | `/api/v1/settlement/config/distribution-scheme` | 通票分账方案整套落草案(参与家数档位表+第一段名单) | `settlement.config.manage` | `settlement.config.distribution_scheme.updated` / `settlement.config.distribution_scheme.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigUpsertChannelFee` | `POST` | `/api/v1/settlement/config/channel-fee` | 维护渠道费用(通路费/销售渠道费,草案) | `settlement.config.manage` | `settlement.config.channel_fee_configs.updated` / `settlement.config.channel_fee_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertComboDiscount` | `POST` | `/api/v1/settlement/config/combo-discount` | 维护套票折扣归属(草案) | `settlement.config.manage` | `settlement.config.ticket_combo_discount_configs.updated` / `settlement.config.ticket_combo_discount_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertCommissionRate` | `POST` | `/api/v1/settlement/config/commission-rate` | 维护卡座销售提成费率(草案) | `settlement.config.manage` | `settlement.config.bar_commission_rate_configs.updated` / `settlement.config.bar_commission_rate_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertComprehensiveServiceFee` | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | 维护门票综合服务费(草案) | `settlement.config.manage` | `settlement.config.comprehensive_service_fee_configs.updated` / `settlement.config.comprehensive_service_fee_configs.update_failed` | web | operation 级补充 |
