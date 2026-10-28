@@ -28,7 +28,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>设备端（安卓/一体机）用 {@code Authorization: Bearer} 头认证，不带后台 Cookie → 不触发本校验。
  *       Bearer 天然免疫 CSRF：跨站页面无法设置自定义 Authorization 头。此处再显式短路一次。</li>
  *   <li>客人端用 {@code X-Customer-Token}/{@code Bearer} 头，不带后台 Cookie → 不触发。</li>
- *   <li>登录本身尚无 Cookie → 不触发（登录成功才下发 Cookie）；GET/HEAD 等安全方法 → 不触发。</li>
+ *   <li>登录接口一律不触发：登录前尚无有效会话，可能残留的旧令牌 Cookie（HttpOnly，JS 清不掉）不能把登录拦成 403（#549）；GET/HEAD 等安全方法 → 不触发。</li>
  * </ul>
  * 之所以自实现而非 Spring 内置 CSRF：本系统鉴权是自建 Bearer/Cookie 令牌（非 Spring Session），
  * 双提交仅需 ~一屏代码、无状态、可精确按「是否 Cookie 会话」划界，避开 Spring 6 CSRF 延迟加载与会话假设的坑。
@@ -38,6 +38,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class DoubleSubmitCsrfFilter extends OncePerRequestFilter {
 
     private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS", "TRACE");
+    private static final String LOGIN_PATH = "/api/v1/auth/login";
 
     // 与 SecurityConfig 的 401 入口点一致：SNAKE_CASE + ISO 时间，保证 403 信封字段名与业务响应一致。
     private static final ObjectMapper ENVELOPE_MAPPER = new ObjectMapper()
@@ -60,7 +61,7 @@ public class DoubleSubmitCsrfFilter extends OncePerRequestFilter {
     }
 
     private boolean requiresCsrf(HttpServletRequest request) {
-        if (SAFE_METHODS.contains(request.getMethod())) {
+        if (SAFE_METHODS.contains(request.getMethod()) || LOGIN_PATH.equals(request.getRequestURI())) {
             return false;
         }
         String authorization = request.getHeader("Authorization");
