@@ -66,13 +66,13 @@ class HighValueUnificationJdbcIntegrationTests {
 
     @Test
     void factorySeedIsFiveThousandYuan() {
-        assertThat(thresholdRepository.findHighValueThresholdCent(null, null)).isEqualTo(500_000L);
+        assertThat(thresholdRepository.findHighValueThresholdCent()).isEqualTo(500_000L);
     }
 
     @Test
     void thresholdMissingReturnsNullSoDecisionFallsBackToHighValue() {
         jdbcTemplate.update("DELETE FROM high_value_thresholds");
-        assertThat(thresholdRepository.findHighValueThresholdCent(null, null)).isNull();
+        assertThat(thresholdRepository.findHighValueThresholdCent()).isNull();
         // 判定侧收到 null ⇒ 一律高价值拦下（业务HTML：阈值未配置不得静默放行）。
         HighValueDecisionService.HighValueDecision decision =
                 highValueDecisionService.decide("item_does_not_exist", null);

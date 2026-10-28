@@ -1,11 +1,17 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
+import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.OperatingParamsService;
 import com.complex.platform.common.Hashing;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest;
+import com.complex.platform.governance.review.SupervisorReviewRepository;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.settlement.JdbcSettlementConfigWriteRepository.SingleRowConfig;
 import com.complex.platform.settlement.JdbcSettlementConfigWriteRepository.TierRow;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ArchiveRequest;
@@ -22,11 +28,14 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.PointsAccru
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTierInput;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import static com.complex.platform.common.Strings.trimToNull;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +47,7 @@ import static com.complex.platform.common.Strings.requireText;
  * <p>资金级:所有碰数据的参数从配置表来(零硬编码);编辑权限与转正权限均 {@code settlement.config.manage}(高敏),
  * 权限/平台 scope 由 {@link SettlementConfigController} 前置校验,本服务只收 actorId(照 batch0 写法)。
  * <p>治理:转正/软删走<b>差人复核</b>(执行人 ≠ 起草人 updated_by,否则 403)=HTML「审批通过后才生效」落地。
+ * <p>第十八批第 24 条:高价值判定阈值例外——ENUM:164「调整须最高权限审批并留痕」,提交即进统一审批的最高权限策略,批准才转正。
  */
 @Service
 public class SettlementConfigWriteService {
@@ -47,21 +57,39 @@ public class SettlementConfigWriteService {
     private static final Set<String> SCOPE_SENTINELS = Set.of("__DEFAULT__", "__ANY__", "__ALL__");
     /** V340 全局默认种子行 id(禁止软删;见 {@link #rejectDefaultSeedArchive})。V373:pgc_default(G 预扣全局默认)。 */
     private static final Set<String> DEFAULT_SEED_IDS =
-            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "hvt_default", "pgc_default");
+            Set.of("bcrc_default_sales", "bcrc_default_non_sales", "parc_default", "pgc_default");
+    /** 第十八批第 24 条:高价值判定阈值调整的统一审批策略(SupervisorReviewService 同名策略,最高权限)。 */
+    public static final String HIGH_VALUE_THRESHOLD_ACTION = "settlement.high_value_threshold.configure";
+    public static final String HIGH_VALUE_THRESHOLD_OBJECT = "high_value_threshold";
 
     private final JdbcSettlementConfigWriteRepository writeRepository;
     private final RevenueStreamAttributionRepository attributionRepository;
     private final OperatingParamsService operatingParamsService;
     private final AuditEventService auditEventService;
+    private final IdempotencyService idempotency;
+    private final SupervisorReviewService reviews;
+    private final SupervisorReviewRepository reviewRepository;
+    private final AuthorizationService auth;
+    private final ObjectMapper json;
 
     public SettlementConfigWriteService(JdbcSettlementConfigWriteRepository writeRepository,
                                         RevenueStreamAttributionRepository attributionRepository,
                                         OperatingParamsService operatingParamsService,
-                                        AuditEventService auditEventService) {
+                                        AuditEventService auditEventService,
+                                        IdempotencyService idempotency,
+                                        SupervisorReviewService reviews,
+                                        SupervisorReviewRepository reviewRepository,
+                                        AuthorizationService auth,
+                                        ObjectMapper json) {
         this.writeRepository = writeRepository;
         this.attributionRepository = attributionRepository;
         this.operatingParamsService = operatingParamsService;
         this.auditEventService = auditEventService;
+        this.idempotency = idempotency;
+        this.reviews = reviews;
+        this.reviewRepository = reviewRepository;
+        this.auth = auth;
+        this.json = json;
     }
 
     // ================= §2 落草案(audit business_id 用仓储 RETURNING 的真实落地 id)=================
@@ -304,26 +332,83 @@ public class SettlementConfigWriteService {
     }
 
     /**
-     * V350 全平台高价值判定阈值落草案：项目 × 商户，单位分（物品进货价高于本值即高价值）。
-     * 出厂种子 500000（5000 元）；此处只写草案，复核转正后酒吧退酒判定才读到。
-     * 阈值 0 = 所有已出品退酒都算高价值（全部先审后行），业务上合法故放行；负数拒绝。
+     * 第十八批第 24 条 全平台高价值判定阈值（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，
+     * 出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」）：只落全平台一行草案（项目、商户为空），阈值与下限、上限同时必填
+     * （0 ≤ 下限 ≤ 阈值 ≤ 上限）、理由必填；照酒吧营业日（BarBusinessDayService.submit）进最高权限审批，批准才生效
+     * （{@link #highValueThresholdDecided}），不走差人复核转正。已有一条在审草案时再提交 409。
      */
+    @Transactional
     public void saveHighValueThreshold(HighValueThresholdRequest request, String actorId) {
         HighValueThresholdRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
-        rejectSentinel(req.projectId(), "project_id");
-        rejectSentinel(req.merchantId(), "merchant_id");
         Long threshold = req.highValueThresholdCent();
-        if (threshold == null || threshold < 0) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "高额阈值（high_value_threshold_cent）必须大于等于 0");
+        Long min = req.highValueThresholdMinCent();
+        Long max = req.highValueThresholdMaxCent();
+        if (threshold == null || min == null || max == null || min < 0 || threshold < min || threshold > max) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "高价值判定阈值须同时填写阈值（high_value_threshold_cent）、"
+                    + "下限（high_value_threshold_min_cent）与上限（high_value_threshold_max_cent），满足 0 ≤ 下限 ≤ 阈值 ≤ 上限");
         }
-        String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId());
-        String landedId = writeRepository.upsertHighValueThresholdDraft(draftId("hvt_d_", scopeKey, idem),
-                req.projectId(), req.merchantId(), threshold, actorId);
-        audit("settlement.config.high_value_thresholds.updated",
-                "high_value_thresholds", landedId, idem,
-                Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", anyScope(req.merchantId()),
-                        "high_value_threshold_cent", String.valueOf(threshold)));
+        String reason = requireText(req.reason(), "reason");
+        idempotency.execute("settlementHighValueThreshold", idem, req, () -> {
+            String landedId = writeRepository.insertHighValueThresholdDraft(
+                    draftId("hvt_d_", "__DEFAULT__|__ANY__", idem), threshold, min, max, actorId);
+            if (landedId == null) {
+                throw ApiException.conflict("HIGH_VALUE_THRESHOLD_REVIEW_PENDING",
+                        "已有一条高价值判定阈值调整在最高权限审批中，审批结束后再提交");
+            }
+            String snapshot = reason + "\n" + encode(Map.of(
+                    "previous_versions", writeRepository.listActiveHighValueThresholds(),
+                    "proposed_config", Map.of("high_value_threshold_cent", threshold, "high_value_threshold_min_cent", min,
+                            "high_value_threshold_max_cent", max, "reason", reason)));
+            var decision = reviews.evaluate(new SupervisorReviewEvaluateRequest(idem + ":review", snapshot, List.of(),
+                    HIGH_VALUE_THRESHOLD_ACTION, HIGH_VALUE_THRESHOLD_OBJECT, landedId, 0L, snapshot, null, List.of()));
+            if (!"pending_review".equals(decision.reviewStatus()) || !"top_authority".equals(decision.approvalLevel())) {
+                throw ApiException.conflict("HIGH_VALUE_THRESHOLD_APPROVAL_REQUIRED", "高价值判定阈值调整必须进入最高权限审批");
+            }
+            writeRepository.setHighValueThresholdReviewId(landedId, decision.reviewId());
+            audit("settlement.config.high_value_thresholds.updated", "high_value_thresholds", landedId, idem,
+                    Map.of("high_value_threshold_cent", String.valueOf(threshold),
+                            "high_value_threshold_min_cent", String.valueOf(min),
+                            "high_value_threshold_max_cent", String.valueOf(max),
+                            "reason", reason, "review_id", decision.reviewId()));
+            return landedId;
+        }, String.class);
+    }
+
+    /**
+     * 第十八批第 24 条 最高权限审批结果回写（照 BarBusinessDayService.decided，核对象、动作、持久化状态与草案上的审批单号）：
+     * 批准即转正（旧生效行含出厂 hvt_default 软替换为 inactive）；驳回即草案下线、判定仍读原阈值。
+     */
+    @EventListener
+    @Transactional
+    public void highValueThresholdDecided(SupervisorReviewDecisionRecord decision) {
+        if (!HIGH_VALUE_THRESHOLD_OBJECT.equals(decision.objectType()) || !HIGH_VALUE_THRESHOLD_ACTION.equals(decision.actionType())
+                || !List.of("approved", "rejected").contains(decision.reviewStatus())) {
+            return;
+        }
+        var persisted = reviewRepository.findSupervisorReviewById(decision.reviewId()).orElse(null);
+        if (persisted == null || !Objects.equals(persisted.objectId(), decision.objectId())
+                || !Objects.equals(persisted.reviewStatus(), decision.reviewStatus())
+                || !Objects.equals(writeRepository.lockHighValueThresholdDraftReviewId(decision.objectId()), decision.reviewId())) {
+            return;
+        }
+        String actor = auth.currentActor().id();
+        Instant now = Instant.now();
+        if ("approved".equals(decision.reviewStatus())) {
+            requireActivated(writeRepository.activateSingleRowDraft(SingleRowConfig.HIGH_VALUE_THRESHOLD, decision.objectId(), actor, now));
+            auditActivated("high_value_thresholds", decision.objectId());
+        } else {
+            writeRepository.softDeleteSingleRow(SingleRowConfig.HIGH_VALUE_THRESHOLD, decision.objectId(),
+                    "最高权限审批驳回（" + decision.reviewId() + "）", actor, now);
+        }
+    }
+
+    private String encode(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException error) {
+            throw new IllegalStateException(error);
+        }
     }
 
     public void saveRankTiers(RankTiersRequest request, String actorId) {
@@ -480,6 +565,9 @@ public class SettlementConfigWriteService {
             }
             // 批10/E:目录条目转正走专案分支(转正 + 快照传播同一事务,见方法注释)。
             case "internal_price_item" -> activateInternalPriceItem(draftId, actorId);
+            // 第十八批第 24 条(ENUM:164「调整须最高权限审批并留痕」):高价值判定阈值只经最高权限审批生效,不在此差人转正。
+            case "high_value_threshold" -> throw ApiException.forbidden("HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED",
+                    "高价值判定阈值调整须经最高权限审批，批准后自动生效，不能在此复核转正");
             default -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 requireDifferentActor(writeRepository.singleRowDraftUpdatedBy(cfg, draftId), actorId);
@@ -538,12 +626,12 @@ public class SettlementConfigWriteService {
                 rows = attributionRepository.softDelete(targetId, reason, actorId, now);
             }
             // V340:提成费率 / 积分累计率的商户级特例条目可下线(回落项目/全局默认);全局默认种子受守卫保护。
-            // V350:高价值判定阈值的商户级特例条目同理可下线(回落项目/全局默认);全局默认种子受守卫保护。
+            // 第十八批第 24 条:高价值判定阈值全平台只一行、只经最高权限审批调整,不再可软删。
             // V346(P0-E):营业额抽成规则可下线(合同终止/换规则),下线后该合同回落"无抽成规则"=不产生抽成应收。
             // S6(V373):赠送权益预扣规则的项目/票种特例条目可下线(回落上层默认);全局默认种子 pgc_default 受守卫保护
             //   (种子被删 → findPassGiftCostConfig 对全部核销结算 fail-loud)。
             // 批10/E:目录条目下线归档(软删留库):历史引用照旧可追溯;后续核销/结算解析不到生效价 → fail-closed。
-            case "commission_rate", "points_accrual_rate", "high_value_threshold", "turnover_rent_rule",
+            case "commission_rate", "points_accrual_rate", "turnover_rent_rule",
                     "pass_gift_cost", "internal_price_item" -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 table = cfg.table();

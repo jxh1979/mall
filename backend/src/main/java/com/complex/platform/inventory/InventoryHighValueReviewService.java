@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -107,8 +107,12 @@ public class InventoryHighValueReviewService {
                 () -> {
                     // 读路径按商户范围（同 reviewInternal 的 C3 口径）：有商户范围只列本商户的复核单；平台、项目账号空范围照旧全列。
                     Optional<String> scope = authorizationService.currentMerchantScope();
+                    // 第十八批第 24 条 24-R2：只持财务应收应付管理码、不持主管复核码的账号只列存酒库房存货处置单（财务那一道）。
+                    boolean financeOnly = !authorizationService.currentActorHasPermission(REVIEW_PERMISSION)
+                            && authorizationService.currentActorHasPermission(InventoryService.REMEDY_FINANCE_APPROVE);
                     return repository.listHighValueReviews().stream()
                             .filter(review -> scope.isEmpty() || scope.get().equals(review.merchantId()))
+                            .filter(review -> !financeOnly || SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL.equals(review.subjectType()))
                             .toList();
                 });
     }
@@ -235,6 +239,10 @@ public class InventoryHighValueReviewService {
                     }
                     // 审批角色只用于存酒库房存货处置：其余复核对象仍只认主管复核码（Controller 按 role 选码，这里堵住持财务码裁决普通复核）。
                     authorizationService.requirePermission(REVIEW_PERMISSION);
+                    // 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」）：同存酒库房处置分支。
+                    if (authorizationService.currentActor().id().equals(current.createdBy())) {
+                        throw ApiException.conflict("HIGH_VALUE_REVIEW_SELF_APPROVAL", "审批人不得是发起人");
+                    }
                     if ("approved".equals(decision)) {
                         requireEvidence(current.photoAttachmentIds(), current.videoAttachmentIds());
                     }
@@ -302,7 +310,8 @@ public class InventoryHighValueReviewService {
         return resolved;
     }
 
-    private void requireEvidence(List<String> photos, List<String> videos) {
+    /** 照片＋视频双证据：两栏非空、附件真实存在且类型对得上（第十八批第 24 条 24-R4 起盘点差异复用）。 */
+    void requireEvidence(List<String> photos, List<String> videos) {
         if (evidenceAttachmentValidator == null) {
             throw ApiException.conflict("EVIDENCE_STORAGE_UNAVAILABLE", "无法核实高价值业务证据文件");
         }

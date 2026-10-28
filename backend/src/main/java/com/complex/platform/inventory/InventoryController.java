@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -10,7 +10,9 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.inventory.dto.CreateStocktakeRequest;
+import com.complex.platform.inventory.dto.InventoryItemHighValueMarkRequest;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
+import com.complex.platform.inventory.dto.InventoryItemSafetyStockRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
 import com.complex.platform.inventory.dto.RecordVarianceRequest;
 import com.complex.platform.inventory.dto.ReviewVarianceRequest;
@@ -91,6 +93,29 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.stock.move");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createInventoryItem(request));
+    }
+
+    /**
+     * 第十八批第 24 条 24-R5（ENUM:164「或由库房主管以上岗位手工标记为高价值，标记与取消标记都必须填写理由并留痕，一线库管无此权限」）：
+     * 物料手工标记或取消标记高价值，持库房主管复核码。
+     */
+    @PostMapping("/items/{id}/high-value-mark")
+    public ApiResponse<InventoryItemRecord> markInventoryItemHighValue(
+            @PathVariable String id,
+            @RequestBody InventoryItemHighValueMarkRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.REMEDY_SUPERVISOR_APPROVE);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markInventoryItemHighValue(id, request));
+    }
+
+    /** 第十八批第 33 条 33-R4：修改已有物料安全库存（权限与新建物料同码 inventory.stock.move；权限、范围、校验与成功/失败审计在服务层）。 */
+    @PostMapping("/items/{id}/safety-stock")
+    public ApiResponse<InventoryItemRecord> updateInventoryItemSafetyStock(
+            @PathVariable String id,
+            @RequestBody InventoryItemSafetyStockRequest request
+    ) {
+        return ApiResponse.ok(service.updateInventoryItemSafetyStock(id, request));
     }
 
     @GetMapping("/purchase-requests")
@@ -423,7 +448,11 @@ public class InventoryController {
     // ── R5 T6：库存域内高价值复核（saved_bottle_void/damage_report/stock_variance）──
     @GetMapping("/high-value-reviews")
     public ApiResponse<PageResponse<InventoryHighValueReviewRecord>> listHighValueReviews() {
-        authorizationService.requirePermission("inventory.high_value.review");
+        // 第十八批第 24 条 24-R2：后台高价值复核页门店主管与财务共用——持主管复核码或财务应收应付管理码任一可列
+        // （只持财务码者服务层只列存酒库房存货处置单，财务那一道）。
+        if (!authorizationService.currentActorHasPermission(InventoryService.REMEDY_FINANCE_APPROVE)) {
+            authorizationService.requirePermission(InventoryService.REMEDY_SUPERVISOR_APPROVE);
+        }
         return ApiResponse.ok(service.listHighValueReviews());
     }
 

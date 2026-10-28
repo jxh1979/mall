@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -191,6 +191,51 @@ describe("DealerOrderFulfillmentPage 经销订单与履约（ADM-DLR-002）", ()
     expect(screen.getByText(/交付差异款项进度：交付差异款项已结清/)).toBeTruthy();
     expect(screen.queryByText(/货款已结清/)).toBeNull();
     expect(screen.getByText(/交付差异原路退款待结/)).toBeTruthy();
+  });
+
+  it("第十八批第 31 条：停用经销商的订单出现经办人确认留证区，签收须选对方确认，到账只给对公转账", async () => {
+    const api = makeApi(); const original = api.get;
+    const shipped = { ...orderRow, status: "shipping", paidAmountCent: 3300 };
+    api.get = vi.fn(async (url: string) => {
+      if (url === "/api/v1/dealers") return [{ id: "dlr_1", dealerName: "华北经销", status: "deactivated", contactName: "已核验联系人" }];
+      if (url.endsWith("/orders")) return [shipped];
+      if (url === "/api/v1/dealers/orders/dord_1") return shipped;
+      if (url.endsWith("/counterparty-confirmations")) return [
+        { id: "dcc_receipt", matterType: "delivery_receipt", contactName: "已核验联系人", content: "盖章签收函确认实收 2 箱", confirmedAt: "2026-10-27T02:00:00Z", usedAt: null },
+        { id: "dcc_return", matterType: "return_request", contactName: "已核验联系人", content: "确认退回 1 箱", confirmedAt: "2026-10-27T02:00:00Z", usedAt: null },
+      ];
+      if (url.endsWith("/delivery")) return { netReceivableCent: 11000, receivedCent: 3300, pendingRefundCent: 0, moneyStatus: "unpaid", batches: [{ id: "dord_1", shippedAt: "2026-10-01T00:00:00Z", lines: [{ orderLineId: "line_1", quantity: 10, recordedQuantity: 0, acceptedQuantity: 0 }] }], receipts: [], discrepancies: [] };
+      if (url.endsWith("/lines")) return [{ id: "line_1", itemId: "item_a", spec: "箱" }];
+      return original(url);
+    }) as AdminApiClient["get"];
+    api.postForm = vi.fn().mockResolvedValue({ id: "att_receipt" });
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("dealer-orders-select-dlr_1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("dealer-orders-select-dlr_1"));
+    fireEvent.click(await screen.findByTestId("order-select-dord_1"));
+    await waitFor(() => expect(screen.queryByTestId("counterparty-confirmation-panel")?.textContent ?? "").toContain("已核验联系人"));
+    expect(screen.getByTestId("counterparty-confirmation-panel").textContent).toContain("经办人不得代替对方确认");
+    const methods = Array.from((screen.getByTestId("pay-method") as HTMLSelectElement).querySelectorAll("option")).map((o) => o.textContent);
+    expect(methods).toEqual(["对公转账"]);
+    // 裁决补充 15：财务核验通过的到账记录即收款凭证，经办人交付对方后登记一条结果交付（关联到账记录）。
+    expect(screen.getByTestId("pay-deactivated-hint").textContent).toContain("到账记录即收款凭证");
+    fireEvent.change(screen.getByLabelText("确认事项"), { target: { value: "result_delivery" } });
+    expect(screen.queryByLabelText("退款单、发票号或到账记录号")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("确认事项"), { target: { value: "delivery_receipt" } });
+    fireEvent.change(await screen.findByLabelText("item_a（箱） 合格接收"), { target: { value: "2" } });
+    expect(screen.queryByLabelText("已核验收货确认人")).toBeNull();
+    fireEvent.change(screen.getByLabelText("实际交接凭证"), { target: { files: [new File(["image"], "对方签收函.png", { type: "image/png" })] } });
+    await screen.findByText("对方签收函.png（已上传）");
+    fireEvent.click(screen.getByRole("button", { name: "保存本次收货事实" }));
+    await screen.findByText("经销商已停用，请先选择指定经办人登记的对方确认留证");
+    expect(api.post).not.toHaveBeenCalledWith("/api/v1/dealers/orders/dord_1/sign", expect.anything());
+    const pick = await screen.findByLabelText("对方确认留证（签收）");
+    await waitFor(() => expect(Array.from((pick as HTMLSelectElement).querySelectorAll("option")).map(o => o.value)).toEqual(["", "dcc_receipt"]));
+    fireEvent.change(pick, { target: { value: "dcc_receipt" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存本次收货事实" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/orders/dord_1/sign", expect.objectContaining({
+      counterpartyConfirmationId: "dcc_receipt", buyerContact: undefined, evidenceAttachmentIds: ["att_receipt"],
+    })));
   });
 
 });

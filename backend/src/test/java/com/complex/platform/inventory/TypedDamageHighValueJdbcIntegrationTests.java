@@ -1,9 +1,10 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -143,6 +144,73 @@ class TypedDamageHighValueJdbcIntegrationTests {
         assertThat(jdbc.queryForList("SELECT movement_type,business_type,quantity FROM inventory_stock_movements WHERE item_id=? AND movement_type='damage'", item))
                 .singleElement().satisfies(m -> assertThat(m)
                         .containsEntry("business_type", "inventory_stock_adjustment").containsEntry("quantity", 3));
+    }
+
+    // 第十八批第 24 条 24-R2（ENUM:164「报损/盘点差异/存酒作废须照片+视频双证据+主管复核」；BSM:1658 主管复核强制项）：
+    // 后台高价值复核页的列表带复核对象摘要（物品名、数量），由另一名门店主管按前端蛇形键批准后才扣库存。
+    @Test
+    void reviewListCarriesSubjectSummaryAndAnotherSupervisorApprovesToDeduct() throws Exception {
+        arrival(600_000L);
+        String photo = upload("evidence.jpg", "image/jpeg", "photo");
+        String video = upload("evidence.mp4", "video/mp4", "video");
+        report("damage", body("碰落破损", List.of(photo), List.of(video))).andExpect(status().isOk());
+        RequestPostProcessor reviewer = account("rev", "'inventory.high_value.review'");
+        String review = jdbc.queryForObject("SELECT id FROM inventory_high_value_reviews WHERE merchant_id=?", String.class, merchant);
+
+        mockMvc.perform(get("/api/v1/inventory/high-value-reviews").with(reviewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value(review))
+                .andExpect(jsonPath("$.data.items[0].subject_summary.item_name").value("报损测试酒水"))
+                .andExpect(jsonPath("$.data.items[0].subject_summary.quantity").value(3))
+                .andExpect(jsonPath("$.data.items[0].subject_summary.adjustment_type").value("damage"));
+
+        decide(reviewer, review, "approved")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("approved"));
+        assertThat(available()).isEqualTo(7);
+    }
+
+    // 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」）：
+    // 报损发起人即使同时持主管复核码，也不能批准自己的高价值报损，库存不动。
+    @Test
+    void applicantCannotApproveOwnHighValueDamage() throws Exception {
+        arrival(600_000L);
+        String photo = upload("evidence.jpg", "image/jpeg", "photo");
+        String video = upload("evidence.mp4", "video/mp4", "video");
+        report("damage", body("碰落破损", List.of(photo), List.of(video))).andExpect(status().isOk());
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'inventory.high_value.review')", "fs018_role_" + suffix);
+        String review = jdbc.queryForObject("SELECT id FROM inventory_high_value_reviews WHERE merchant_id=?", String.class, merchant);
+
+        decide(staff, review, "approved")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("HIGH_VALUE_REVIEW_SELF_APPROVAL"));
+        assertThat(available()).isEqualTo(10);
+        assertThat(jdbc.queryForObject("SELECT review_status FROM inventory_high_value_reviews WHERE id=?", String.class, review))
+                .isEqualTo("pending");
+    }
+
+    /** 后台高价值复核页「批准」「驳回」的真实请求形状（蛇形键）。 */
+    private ResultActions decide(RequestPostProcessor who, String review, String decision) throws Exception {
+        return mockMvc.perform(post("/api/v1/inventory/high-value-reviews/" + review + "/review").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"decision\":\"" + decision + "\",\"reason\":\"核对无误\"}"));
+    }
+
+    /** 同商户另一员工账号（门店主管等）。 */
+    private RequestPostProcessor account(String tag, String permissions) {
+        String other = "fs018_" + tag + "_" + suffix;
+        String role = "fs018_role_" + tag + "_" + suffix;
+        jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'报损复核回归','project','active',now())", role, role);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code IN(" + permissions + ")", role);
+        jdbc.update("INSERT INTO access_users(id,username,account_type,organization_id,merchant_id,status,created_at) VALUES(?,?,'staff',?,?,'active',now())", other, other, project, merchant);
+        jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", other, role);
+        jdbc.update("INSERT INTO staff_level_assignments(user_id,staff_level_id,organization_id) VALUES(?,'lvl_m3_upper',?)", other, project);
+        AccessActor actor = new AccessActor(other, other, "staff", project, merchant, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private ResultActions report(String type, String body) throws Exception {

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -17,6 +17,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { hasPermissions } from "../security/PermissionGate";
 import { shortId } from "../format/ids";
+import { ApiError } from "../../shared/apiError";
 import type { GovernanceSpaceRow, BusinessEntityRow, AccessUserRow } from "../types";
 
 // 招商前漏斗行类型（后端 leasing.* 记录的前端视图，camelCase 由 adminClient 统一转换）。
@@ -39,6 +40,7 @@ interface LeasingIntentRow {
   intendedSpaceId?: string;
   lastStageChangeAt?: string;
   rentTerms?: { rentBillingMode?: string } | null;
+  pendingStage?: string | null;
 }
 interface LeasingBrandRow {
   id: string;
@@ -47,6 +49,23 @@ interface LeasingBrandRow {
   businessType?: string;
   blacklistReason?: string;
 }
+// 第十八批第 30 条 黑名单例外放行单（PGM L502：记录操作人、审批人、理由、时间和关联线索或意向）。
+interface LeasingBlacklistExceptionRow {
+  id: string;
+  brandId?: string;
+  brandName?: string;
+  targetType?: string;
+  leadId?: string | null;
+  reason?: string;
+  requestedBy?: string;
+  requestedAt?: string;
+  status?: string;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  usedLeadId?: string | null;
+  usedIntentId?: string | null;
+}
+type ExceptionDraft = { targetType: "lead_create" | "intent_create"; brandId?: string; leadId?: string; label: string };
 interface LeasingFollowUpRow {
   id: string;
   refType?: string;
@@ -86,6 +105,14 @@ const BUSINESS_TYPES = ["bar", "catering", "retail", "amusement", "media", "othe
 const BUSINESS_TYPE_LABELS: Record<string, string> = { bar: "酒吧", catering: "餐饮", retail: "零售", amusement: "游乐", media: "传媒", other: "其他" };
 const METHOD_LABELS: Record<string, string> = { phone: "电话", visit: "拜访", wechat: "微信" };
 const REF_TYPE_LABELS: Record<string, string> = { lead: "线索", intent: "意向" };
+// 第十八批第 30 条：意向须逐级推进（PGM L500），选中意向时推进阶段默认取下一阶段；进入方案报价、商务谈判须主管确认（PGM L502）。
+const NEXT_STAGE: Record<string, string> = { initial_contact: "requirement_confirmed", requirement_confirmed: "proposal_quoted", proposal_quoted: "negotiation", negotiation: "pending_signing" };
+const KEY_STAGES = ["proposal_quoted", "negotiation"];
+const EXCEPTION_TARGET_LABELS: Record<string, string> = { lead_create: "新建线索", intent_create: "由线索新建意向" };
+const EXCEPTION_STATUS_LABELS: Record<string, string> = { pending_approval: "待审批", approved: "已批准", rejected: "已驳回", used: "已使用" };
+function isBlacklisted(error: unknown) {
+  return error instanceof ApiError && error.detailCode === "LEASING_BRAND_BLACKLISTED";
+}
 function label(map: Record<string, string>, code: string | null | undefined): string {
   if (!code) return "-";
   return map[code] ?? code;
@@ -124,6 +151,12 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [intents, setIntents] = React.useState<LeasingIntentRow[]>([]);
   const [brands, setBrands] = React.useState<LeasingBrandRow[]>([]);
   const [followUps, setFollowUps] = React.useState<LeasingFollowUpRow[]>([]);
+  const [exceptions, setExceptions] = React.useState<LeasingBlacklistExceptionRow[]>([]);
+  // 黑名单例外放行：被拦或在黑名单品牌上发起的申请草稿；按批准新建线索时用的放行单。
+  const [exceptionDraft, setExceptionDraft] = React.useState<ExceptionDraft | null>(null);
+  const [exceptionReason, setExceptionReason] = React.useState("");
+  const [exceptionApprover, setExceptionApprover] = React.useState("");
+  const [leadException, setLeadException] = React.useState<LeasingBlacklistExceptionRow | null>(null);
   // 到期待跟进线索（V219 提醒窗天数后台可配，判定在后端 /leads/follow-up-due，前端只展示）。
   const [dueLeads, setDueLeads] = React.useState<LeasingLeadRow[]>([]);
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。
@@ -150,7 +183,9 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [leadStatus, setLeadStatus] = React.useState("following_up");
   // 意向表单
   const [intentSpaceId, setIntentSpaceId] = React.useState("");
-  const [targetStage, setTargetStage] = React.useState("negotiation");
+  const [targetStage, setTargetStage] = React.useState("requirement_confirmed");
+  const [intentApprover, setIntentApprover] = React.useState("");
+  const [intentNote, setIntentNote] = React.useState("");
   const [signMerchantId, setSignMerchantId] = React.useState("");
   const [signSubjectId, setSignSubjectId] = React.useState("");
   const [spaces, setSpaces] = React.useState<GovernanceSpaceRow[]>([]);
@@ -217,6 +252,9 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       setFollowUps(f);
       setDueLeads(d ?? []);
       try {
+        setExceptions((await api.get<LeasingBlacklistExceptionRow[]>("/api/v1/leasing/blacklist-exceptions")) ?? []);
+      } catch { setExceptions([]); }
+      try {
         const [sp, mc, en, us] = await Promise.all([
           api.get<GovernanceSpaceRow[]>("/api/v1/platform/spaces"),
           api.get<Array<{ id: string; displayName?: string; companyName?: string; merchantName?: string }>>("/api/v1/platform/merchants"),
@@ -254,6 +292,12 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const pagedLeads = usePagedRows(leadSort.sorted, 10, `${kpiFocus?.subset ?? ""}:${query}:${leadSort.key}:${leadSort.direction}`);
 
   const followingCount = leads.filter(isFollowing).length;
+
+  const selectedIntentStage = intent.selected?.stage;
+  React.useEffect(() => {
+    const next = NEXT_STAGE[selectedIntentStage ?? ""];
+    if (next) setTargetStage(next);
+  }, [intent.selected?.id, selectedIntentStage]);
 
   function openLeadDetail(row: LeasingLeadRow) {
     setPhoneReveal(null);
@@ -362,9 +406,15 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       source,
       intendedBusinessType,
       intendedSpaceId,
-      brandId: brand.selected?.id ?? null,
+      brandId: leadException?.brandId ?? brand.selected?.id ?? null,
+      ...(leadException ? { blacklistExceptionId: leadException.id } : {}),
     };
-    await runAction("leasing_lead_created", request, () => api.post("/api/v1/leasing/leads", request));
+    const brandId = request.brandId;
+    await runAction("leasing_lead_created", request, () => api.post("/api/v1/leasing/leads", request).catch((error: unknown) => {
+      if (isBlacklisted(error) && brandId) setExceptionDraft({ targetType: "lead_create", brandId, label: `品牌 ${brand.selected?.brandName ?? brandId} 新建线索` });
+      throw error;
+    }));
+    setLeadException(null);
     // 成功或失败都收起弹窗：字段是页面态不丢失，失败信息在页面 leasing-error 区展示。
     setLeadFlowOpen(false);
   }
@@ -415,7 +465,38 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       setFormError("已签约的线索不能再次创建意向。");
       return;
     }
-    const request = { idempotencyKey: nextKey("leasing-intent-create"), leadId: lead.selected.id, intendedSpaceId: intentSpaceId };
+    const leadId = lead.selected.id;
+    const request = { idempotencyKey: nextKey("leasing-intent-create"), leadId, intendedSpaceId: intentSpaceId };
+    await runAction("leasing_intent_created", request, () => api.post("/api/v1/leasing/intents", request).catch((error: unknown) => {
+      if (isBlacklisted(error)) setExceptionDraft({ targetType: "intent_create", leadId, label: `由线索 ${lead.selected?.contactName ?? leadId} 新建意向` });
+      throw error;
+    }));
+  }
+
+  // 第十八批第 30 条：申请黑名单例外放行（理由必填、最终审批人可选），审批走主管复核待办；批准后由申请人本人按批准新建线索或转意向。
+  async function requestBlacklistException() {
+    if (!exceptionDraft) return;
+    if (!exceptionReason.trim()) { setFormError("申请黑名单例外放行必须填写理由。"); return; }
+    const request = {
+      idempotencyKey: nextKey("leasing-blacklist-exception"),
+      targetType: exceptionDraft.targetType,
+      brandId: exceptionDraft.brandId,
+      leadId: exceptionDraft.leadId,
+      reason: exceptionReason.trim(),
+      finalApproverId: exceptionApprover || undefined,
+    };
+    const ok = await runAction("leasing_blacklist_exception_requested", request, () => api.post("/api/v1/leasing/blacklist-exceptions", request));
+    if (ok) { setExceptionDraft(null); setExceptionReason(""); }
+  }
+
+  async function proceedWithException(row: LeasingBlacklistExceptionRow) {
+    if (row.targetType === "lead_create") {
+      setLeadException(row);
+      setFormError("");
+      setLeadFlowOpen(true);
+      return;
+    }
+    const request = { idempotencyKey: nextKey("leasing-intent-create"), leadId: row.leadId, intendedSpaceId: intentSpaceId, blacklistExceptionId: row.id };
     await runAction("leasing_intent_created", request, () => api.post("/api/v1/leasing/intents", request));
   }
 
@@ -424,8 +505,11 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       setFormError(TEXT.noIntent);
       return;
     }
-    const request = { idempotencyKey: nextKey("leasing-intent-advance"), targetStage, supervisorUserId: "staff_supervisor" };
-    await runAction("leasing_intent_advanced", request, () => api.post(`/api/v1/leasing/intents/${intent.selected!.id}/advance`, request));
+    const keyStage = KEY_STAGES.includes(targetStage);
+    const request = { idempotencyKey: nextKey("leasing-intent-advance"), targetStage, ...(keyStage && intentApprover ? { finalApproverId: intentApprover } : {}) };
+    setIntentNote("");
+    const ok = await runAction("leasing_intent_advanced", request, () => api.post(`/api/v1/leasing/intents/${intent.selected!.id}/advance`, request));
+    if (ok && keyStage) setIntentNote(`已提交主管确认，批准后进入「${label(STAGE_LABELS, targetStage)}」。审批在「主管复核待办」办理。`);
   }
 
   const signTurnoverOnly = intent.selected?.rentTerms?.rentBillingMode === "turnover_only";
@@ -506,7 +590,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const intentsTable = (
     <div className="admin-table-scroll">
       <table className="admin-table" data-testid="leasing-intents-table">
-        <thead><tr><th>选择</th><th>意向号</th><th>来源线索</th><th>阶段</th><th>意向空间</th><th>详情</th></tr></thead>
+        <thead><tr><th>选择</th><th>意向号</th><th>来源线索</th><th>阶段</th><th>待确认阶段</th><th>意向空间</th><th>详情</th></tr></thead>
         <tbody>
           {intents.map((row) => (
             <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`leasing-intent-row-${row.id}`}
@@ -516,6 +600,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <td>{row.id}</td>
               <td>{row.leadId ?? "-"}</td>
               <td>{label(STAGE_LABELS, row.stage)}</td>
+              <td>{row.pendingStage ? `${label(STAGE_LABELS, row.pendingStage)}（待主管确认）` : "-"}</td>
               <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-007" objectId={row.intendedSpaceId}>{row.intendedSpaceId ?? "-"}</TraceLink></td>
             <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看租赁意向详情" onClick={(event) => { event.stopPropagation(); openIntentDetail(row); }}>查看详情</button></td></tr>
           ))}
@@ -539,6 +624,34 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <td>{label(BUSINESS_TYPE_LABELS, row.businessType)}</td>
               <td>{row.blacklistReason || "-"}</td>
             <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看品牌详情" onClick={(event) => { event.stopPropagation(); openBrandDetail(row); }}>查看详情</button></td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const exceptionsTable = (
+    <div className="admin-table-scroll">
+      <table className="admin-table" data-testid="leasing-blacklist-exceptions-table">
+        <thead><tr><th>放行事项</th><th>品牌</th><th>关联线索或意向</th><th>理由</th><th>申请人</th><th>申请时间</th><th>审批人</th><th>批准时间</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody>
+          {exceptions.map((row) => (
+            <tr key={row.id} data-testid={`leasing-blacklist-exception-row-${row.id}`}>
+              <td>{label(EXCEPTION_TARGET_LABELS, row.targetType)}</td>
+              <td>{row.brandName ?? row.brandId ?? "-"}</td>
+              <td>{[row.leadId || row.usedLeadId ? `线索 ${row.leadId ?? row.usedLeadId}` : "", row.usedIntentId ? `意向 ${row.usedIntentId}` : ""].filter(Boolean).join("；") || "-"}</td>
+              <td>{row.reason ?? "-"}</td>
+              <td>{row.requestedBy ?? "-"}</td>
+              <td>{cnDate(row.requestedAt)}</td>
+              <td>{row.approvedBy ?? "-"}</td>
+              <td>{cnDate(row.approvedAt)}</td>
+              <td>{label(EXCEPTION_STATUS_LABELS, row.status)}</td>
+              <td>{row.status === "approved" ? (
+                <button type="button" data-testid={`leasing-blacklist-exception-use-${row.id}`} disabled={busyAction !== ""} onClick={() => void proceedWithException(row)}>
+                  {row.targetType === "lead_create" ? "按批准新建线索" : "按批准转意向"}
+                </button>
+              ) : "-"}</td>
+            </tr>
           ))}
         </tbody>
       </table>
@@ -618,6 +731,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             <div className="admin-form-grid" data-testid="leasing-intent-form">
               <label>意向空间<select data-testid="leasing-intent-space" value={intentSpaceId} onChange={(e) => setIntentSpaceId(e.target.value)}><option value="">请选择空间</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>推进阶段<select data-testid="leasing-intent-stage" value={targetStage} onChange={(e) => setTargetStage(e.target.value)}><option value="requirement_confirmed">需求确认</option><option value="proposal_quoted">方案报价</option><option value="negotiation">商务谈判</option><option value="pending_signing">待签约</option></select></label>
+              {KEY_STAGES.includes(targetStage) ? <label>最终审批人<select data-testid="leasing-intent-final-approver" value={intentApprover} onChange={(e) => setIntentApprover(e.target.value)}><option value="">不指定（直接上级确认）</option>{salesUsers.map((x) => <option key={x.id} value={x.id}>{(x.username ?? x.id)}（{shortId(x.id)}）</option>)}</select></label> : null}
               <label>签约商户<select data-testid="leasing-sign-merchant" value={signMerchantId} onChange={(e) => setSignMerchantId(e.target.value)}><option value="">请选择商户</option>{merchantList.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.merchantName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>合同主体<select data-testid="leasing-sign-subject" value={signSubjectId} onChange={(e) => setSignSubjectId(e.target.value)}><option value="">请选择经营主体</option>{entities.map((x) => <option key={x.id} value={x.id}>{(x.entityName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>合同生效日<CnDatePicker data-testid="leasing-sign-effective-date" value={signEffectiveDate} onChange={setSignEffectiveDate} /></label>
@@ -629,6 +743,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
               <button type="button" data-testid="leasing-intent-advance" disabled={busyAction !== ""} onClick={() => void advanceIntent()}>推进意向</button>
               <button type="button" data-testid="leasing-intent-sign" disabled={busyAction !== ""} onClick={() => void signIntent()}>签约→合同草稿</button>
             </div>
+            {intentNote ? <div className="admin-state" data-testid="leasing-intent-pending-note">{intentNote}</div> : null}
 
             {/* 品牌库：录入品牌走引导式弹窗；拉黑原因 + 拉入黑名单为品牌处置动作，原样保留。 */}
             <div className="admin-form-row" data-testid="leasing-brand-create-entry">
@@ -640,12 +755,27 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
             </div>
             <div className="admin-form-row" data-testid="leasing-brand-actions">
               <button type="button" data-testid="leasing-brand-blacklist" disabled={busyAction !== ""} onClick={() => void blacklistBrand()}>拉入黑名单</button>
+              {brand.selected?.brandType === "blacklist" ? (
+                <button type="button" data-testid="leasing-brand-blacklist-exception-open" onClick={() => setExceptionDraft({ targetType: "lead_create", brandId: brand.selected!.id, label: `品牌 ${brand.selected!.brandName ?? brand.selected!.id} 新建线索` })}>申请黑名单例外放行（新建线索）</button>
+              ) : null}
             </div>
+            {exceptionDraft ? (
+              <div className="admin-form-grid" data-testid="leasing-blacklist-exception-form">
+                <span className="admin-muted-action">申请黑名单例外放行：{exceptionDraft.label}。须持单独授予的黑名单例外放行权限，按层级经主管审批，本人不能审批；批准后由本人按批准办理一次。</span>
+                <label>理由<input data-testid="leasing-blacklist-exception-reason" value={exceptionReason} onChange={(e) => setExceptionReason(e.target.value)} placeholder="必填" /></label>
+                <label>最终审批人<select data-testid="leasing-blacklist-exception-approver" value={exceptionApprover} onChange={(e) => setExceptionApprover(e.target.value)}><option value="">不指定（直接上级审批）</option>{salesUsers.map((x) => <option key={x.id} value={x.id}>{(x.username ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+                <div className="admin-form-row">
+                  <button type="button" data-testid="leasing-blacklist-exception-submit" disabled={busyAction !== ""} onClick={() => void requestBlacklistException()}>提交例外放行申请</button>
+                  <button type="button" data-testid="leasing-blacklist-exception-cancel" onClick={() => setExceptionDraft(null)}>取消</button>
+                </div>
+              </div>
+            ) : null}
             {formError ? <div data-testid="leasing-error" className="admin-inline-error">{formError}</div> : null}
 
             {leadsTable}
             {intentsTable}
             {brandsTable}
+            {exceptionsTable}
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="leasing-follow-ups-table">
                 <thead><tr><th>对象</th><th>方式</th><th>内容</th><th>下次计划</th><th>详情</th></tr></thead>
@@ -674,7 +804,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
         submitLabel="创建线索"
         submitting={busyAction !== ""}
         error={formError}
-        onClose={() => setLeadFlowOpen(false)}
+        onClose={() => { setLeadFlowOpen(false); setLeadException(null); }}
         onSubmit={() => void createLead()}
         steps={[
           {
@@ -706,7 +836,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
           { label: "来源", value: label(SOURCE_LABELS, source) },
           { label: "意向业态", value: label(BUSINESS_TYPE_LABELS, intendedBusinessType) },
           { label: "意向空间", value: intendedSpaceId },
-          { label: "关联品牌", value: brand.selected?.brandName ?? "未关联" },
+          { label: "关联品牌", value: leadException ? `${leadException.brandName ?? leadException.brandId}（按黑名单例外放行）` : brand.selected?.brandName ?? "未关联" },
         ]}
       />
       <GuidedFlowModal

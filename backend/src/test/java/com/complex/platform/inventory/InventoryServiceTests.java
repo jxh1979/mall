@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -80,6 +80,9 @@ class InventoryServiceTests {
 
     private static final AccessActor ADMIN_ACTOR =
             new AccessActor("usr_admin", "admin", "platform_admin", "org_platform", null, "active");
+    /** 第十八批第 24 条 24-R3：发起人／录入人以外的复核人。 */
+    private static final AccessActor OTHER_REVIEWER =
+            new AccessActor("usr_reviewer_other", "reviewer_other", "platform_admin", "org_platform", null, "active");
     private static final AccessActor MERCHANT_A_ACTOR =
             new AccessActor("usr_staff_a", "staff_a", "staff", "org_a", "m_a", "active");
     private static final AccessActor MERCHANT_B_ACTOR =
@@ -107,9 +110,15 @@ class InventoryServiceTests {
         traceabilityRepository = new InMemoryTraceabilityRepository();
         riskAlertService = mock(com.complex.platform.evidence.RiskAlertService.class);
         // V350：高价值判定全平台归一——测试注入可配阈值端口，默认 5000 元（500000 分）。
-        highValueDecisionService = new HighValueDecisionService(inventoryRepository, authorizationService);
-        highValueDecisionService.thresholdPort = (projectId, merchantId) -> configuredThresholdCent;
+        highValueDecisionService = new HighValueDecisionService(inventoryRepository);
+        highValueDecisionService.thresholdPort = () -> configuredThresholdCent;
         configuredThresholdCent = 500_000L;
+        // 第十八批第 24 条 24-R4：盘点差异单测物品按低价值（到货价 10 元 < 阈值），高价值差异须照片＋视频由
+        // StocktakeVarianceSelfReviewJdbcIntegrationTests 走真库覆盖。
+        for (String varianceItem : List.of("item_a", "item_ambi", "item_b", "item_c", "item_d", "item_insf", "item_recon",
+                "item_x", "item_y")) {
+            inventoryRepository.seedCost(varianceItem, 1_000L);
+        }
         service = new InventoryService(
                 inventoryRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -1427,7 +1436,7 @@ class InventoryServiceTests {
         assertThat(frozen.status()).isEqualTo("disputed_frozen");
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
 
-        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+        InventoryHighValueReviewRecord decided = reviewHighValueAsOther(reviewId,
                 new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                         "review-approve", "approved", "confirmed"));
         assertThat(decided.reviewStatus()).isEqualTo("approved");
@@ -1467,7 +1476,7 @@ class InventoryServiceTests {
                 "cancel-hv-reject", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
 
-        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+        InventoryHighValueReviewRecord decided = reviewHighValueAsOther(reviewId,
                 new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                         "review-reject", "rejected", "insufficient"));
         assertThat(decided.reviewStatus()).isEqualTo("rejected");
@@ -1581,7 +1590,7 @@ class InventoryServiceTests {
                 "broken case", 30_000L, List.of("att_photo"), List.of("att_video")));
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
 
-        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+        InventoryHighValueReviewRecord decided = reviewHighValueAsOther(reviewId,
                 new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                         "damage-approve-review", "approved", "confirmed"));
 
@@ -1604,7 +1613,7 @@ class InventoryServiceTests {
                 "broken case", 30_000L, List.of("att_photo"), List.of("att_video")));
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
 
-        InventoryHighValueReviewRecord decided = service.reviewHighValue(reviewId,
+        InventoryHighValueReviewRecord decided = reviewHighValueAsOther(reviewId,
                 new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                         "damage-reject-review", "rejected", "insufficient"));
 
@@ -1632,7 +1641,7 @@ class InventoryServiceTests {
         assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
                 .isEqualTo(8); // 未即时扣减
 
-        service.reviewHighValue(review.id(),
+        reviewHighValueAsOther(review.id(),
                 new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                         "variance-approve-review", "approved", "确认差异"));
         assertThat(inventoryRepository.findStockBalance(item.id(), "warehouse_1").orElseThrow().availableQuantity())
@@ -1714,13 +1723,35 @@ class InventoryServiceTests {
         return item;
     }
 
-    /** 手工标记为高价值的物品：进货价很低（10 元），但标记压过进货价。 */
+    /** 手工标记为高价值的物品：进货价很低（10 元），但标记压过进货价。第十八批第 24 条起由库房主管经标记入口标记，建物料不再带。 */
     private InventoryItemRecord createManuallyMarkedItem(String idempotencyKey) {
         InventoryItemRecord item = service.createInventoryItem(new InventoryItemRequest(
                 idempotencyKey, null, List.of(), null, null,
-                "MM " + idempotencyKey, "spirit", "bottle", 0, "active", true));
+                "MM " + idempotencyKey, "spirit", "bottle", 0, "active", false));
+        item = service.markInventoryItemHighValue(item.id(), new com.complex.platform.inventory.dto.InventoryItemHighValueMarkRequest(
+                idempotencyKey + "-mark", true, "进口名酒按高价值管"));
         inventoryRepository.seedCost(item.id(), 1_000L);
         return item;
+    }
+
+    /** 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：复核由发起人／录入人以外的人办理，办完恢复原身份。 */
+    private <T> T asOtherReviewer(java.util.function.Supplier<T> action) {
+        AccessActor previous = authorizationService.currentActor();
+        when(authorizationService.currentActor()).thenReturn(OTHER_REVIEWER);
+        try {
+            return action.get();
+        } finally {
+            when(authorizationService.currentActor()).thenReturn(previous);
+        }
+    }
+
+    private InventoryHighValueReviewRecord reviewHighValueAsOther(String reviewId,
+            com.complex.platform.inventory.dto.HighValueReviewDecisionRequest request) {
+        return asOtherReviewer(() -> service.reviewHighValue(reviewId, request));
+    }
+
+    private InventoryVarianceRecord reviewVarianceAsOther(String stocktakeId, String varianceId, ReviewVarianceRequest request) {
+        return asOtherReviewer(() -> service.reviewVariance(stocktakeId, varianceId, request));
     }
 
     /** 进货价未录（成本台账无基准）的物品：判定侧必须按「进货价未知」一律拦下。 */
@@ -2310,11 +2341,12 @@ class InventoryServiceTests {
                 new java.math.BigDecimal("3"), new java.math.BigDecimal("0"),
                 "damage", null, -3000L, null));
 
-        InventoryVarianceRecord reviewed = service.reviewVariance(stocktake.id(), variance.id(),
+        InventoryVarianceRecord reviewed = reviewVarianceAsOther(stocktake.id(), variance.id(),
                 new ReviewVarianceRequest("rev-appr", "approved", "confirmed damage"));
 
         assertThat(reviewed.reviewStatus()).isEqualTo("approved");
-        assertThat(reviewed.reviewedBy()).isEqualTo("usr_admin");
+        assertThat(reviewed.reviewedBy()).isEqualTo(OTHER_REVIEWER.id());
+        assertThat(reviewed.recordedBy()).isEqualTo("usr_admin");
         assertThat(reviewed.reviewedAt()).isNotNull();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
@@ -2334,7 +2366,7 @@ class InventoryServiceTests {
                 new java.math.BigDecimal("10"), new java.math.BigDecimal("7"),
                 "shortage", null, -1500L, null));
 
-        service.reviewVariance(stocktake.id(), variance.id(),
+        reviewVarianceAsOther(stocktake.id(), variance.id(),
                 new ReviewVarianceRequest("rev-recon", "approved", "confirmed shortage"));
 
         assertThat(inventoryRepository.findStockBalance("item_recon", "loc_recon").orElseThrow().availableQuantity())
@@ -2356,7 +2388,7 @@ class InventoryServiceTests {
                 new java.math.BigDecimal("10"), new java.math.BigDecimal("8"),
                 "shortage", null, -1000L, null));
 
-        service.reviewVariance(stocktake.id(), variance.id(),
+        reviewVarianceAsOther(stocktake.id(), variance.id(),
                 new ReviewVarianceRequest("rev-ambi", "approved", "shortage"));
 
         // -2 从首行 loc_ambi_1 吸收：6→4，loc_ambi_2 不动；warehouse 合计 10→8 与实盘一致。
@@ -2382,7 +2414,7 @@ class InventoryServiceTests {
         inventoryRepository.saveStockBalance(new StockBalanceRecord(
                 "bal-insf", "item_insf", "loc_insf", 1, 0, 1, java.time.Instant.now(), null, "wh_insf"));
 
-        assertThatThrownBy(() -> service.reviewVariance(stocktake.id(), variance.id(),
+        assertThatThrownBy(() -> reviewVarianceAsOther(stocktake.id(), variance.id(),
                 new ReviewVarianceRequest("rev-insf", "approved", "shortage")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -2398,7 +2430,7 @@ class InventoryServiceTests {
                 new java.math.BigDecimal("4"), new java.math.BigDecimal("4"),
                 "supplier_fault", "sup_1", 1L, null));
 
-        InventoryVarianceRecord reviewed = service.reviewVariance(stocktake.id(), variance.id(),
+        InventoryVarianceRecord reviewed = reviewVarianceAsOther(stocktake.id(), variance.id(),
                 new ReviewVarianceRequest("rev-rej", "rejected", "not justified"));
 
         assertThat(reviewed.reviewStatus()).isEqualTo("rejected");
@@ -2412,11 +2444,11 @@ class InventoryServiceTests {
                 "var-dup", "item_c", null,
                 new java.math.BigDecimal("2"), new java.math.BigDecimal("1"),
                 "shortage", null, -500L, null));
-        service.reviewVariance(stocktake.id(), variance.id(),
+        reviewVarianceAsOther(stocktake.id(), variance.id(),
                 new ReviewVarianceRequest("rev-dup-1", "approved", null));
 
         // 不同幂等键的第二次复核 → 非 pending，被拒（条件 UPDATE 0 行）。
-        assertThatThrownBy(() -> service.reviewVariance(stocktake.id(), variance.id(),
+        assertThatThrownBy(() -> reviewVarianceAsOther(stocktake.id(), variance.id(),
                 new ReviewVarianceRequest("rev-dup-2", "rejected", null)))
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).code())
@@ -3000,7 +3032,7 @@ class InventoryServiceTests {
         assertThat(handover.damagedOrShort()).isEqualTo(1);
         assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("disputed_frozen");
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
-        service.reviewHighValue(reviewId, new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
+        reviewHighValueAsOther(reviewId, new com.complex.platform.inventory.dto.HighValueReviewDecisionRequest(
                 "review-ho-dmg", "approved", "confirmed"));
         assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("cancelled");
 

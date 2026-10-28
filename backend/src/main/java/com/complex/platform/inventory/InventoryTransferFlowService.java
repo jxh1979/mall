@@ -1,18 +1,24 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.access.staff.EmployeeNoticeRecord;
+import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.Hashing;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.EvidenceAttachmentRecord;
 import com.complex.platform.evidence.EvidenceAttachmentValidator;
 import com.complex.platform.evidence.EvidenceEventRepository;
+import com.complex.platform.facility.FacilityWorkOrderRecord;
+import com.complex.platform.facility.FacilityWorkOrderService;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.ArApItemSourceRecord;
 import com.complex.platform.finance.FinanceRepository;
@@ -28,6 +34,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -58,6 +65,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 实际清偿。借入方单方报废不构成归还」；台账 §25「不得无记录地直接改变所有权」；DEC-R3-38 跨商户借调一律按内部结算价）：
  * 一方登记（附证据）→ 另一方确认并挂主管复核 → 主管通过进财务复核 → 财务通过按建单锁定内部结算价形成借入方对借出方应付（独立跟进）→
  * 借出方登记实物处置完成，该数量的归还事项结束、保管主体回到借出方；全部数量归还或处置完成后借用单 returned。所有权始终不动。
+ * 第十八批第 18 条：借用逾期未归还自动建物业工单并通知借出方主管（见「借用逾期」节）；门店要货签收与借调买断收货写调拨（transfer）入库流水。
  */
 @Service
 public class InventoryTransferFlowService {
@@ -91,6 +99,15 @@ public class InventoryTransferFlowService {
     // 第十八批第 1 条（ENUM:187）：派生应付的到期日记该项目当前营业日。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+    // 第十八批第 18 条（BSM:1201/1372）：借用逾期走统一物业工单，并给借出方主管发员工系统通知；未装配（单测 new）时不建单。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    FacilityWorkOrderService workOrders;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    JdbcStaffRepository staff;
+    /** 逾期作业逐单经本类代理的小事务（同 InventoryService.postExpiredSavedBottlesToStock 范式）；未注入时直接调用。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    org.springframework.context.ApplicationContext applicationContext;
+    private static final DateTimeFormatter DUE_TEXT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(LocalZone.ID);
 
     public InventoryTransferFlowService(JdbcTemplate jdbc, InventoryRepository repository, FinanceRepository finance,
             SupervisorReviewService reviews, AuthorizationService auth, IdempotencyService idempotency,
@@ -241,15 +258,7 @@ public class InventoryTransferFlowService {
         }
         String warehouseId = requireText(r.warehouseId(), "warehouse_id");
         String locationId = requireText(r.locationId(), "location_id");
-        Map<String, Object> warehouse = jdbc.queryForList("SELECT project_id,merchant_id,status FROM warehouses WHERE id=?", warehouseId)
-                .stream().findFirst().orElse(Map.of());
-        if (!"active".equals(warehouse.get("status")) || !o.toOwnerId().equals(warehouse.get("merchant_id"))) {
-            throw ApiException.badRequest("TRANSFER_RECEIVE_WAREHOUSE_INVALID", "收货仓库须为本门店在用仓库");
-        }
-        String projectId = (String) warehouse.get("project_id");
-        if (repository.hasActiveStocktakeForWarehouse(warehouseId) || repository.hasActiveStocktakeForWarehouse(locationId)) {
-            throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED", "仓库正在盘点中，盘点结束前库存变动已冻结");
-        }
+        String projectId = requireReceiveWarehouse(o, warehouseId, locationId);
         List<InventoryTransferLineRecord> lines = repository.listTransferLinesByOrder(o.id());
         Map<String, ReceiveTransferLineRequest> byLine = new LinkedHashMap<>();
         for (ReceiveTransferLineRequest in : r.lines() == null ? List.<ReceiveTransferLineRequest>of() : r.lines()) {
@@ -295,7 +304,9 @@ public class InventoryTransferFlowService {
                 repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(receiptNo + "_h" + (seq++), code,
                         o.fromOwnerType(), o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), o.id(), now));
             }
-            String movementId = accepted > 0 ? stockIn(o, line, accepted, warehouseId, locationId, projectId, receiptNo, actor, now) : null;
+            // 第十八批第 18 条（BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）：合格入库记调拨流水，单价仍取锁定内部结算价。
+            String movementId = accepted > 0
+                    ? stockIn(o, line, line.itemId(), accepted, warehouseId, locationId, projectId, receiptNo, actor, now, "transfer") : null;
             jdbc.update("""
                     INSERT INTO inventory_transfer_receipts(id,receipt_no,transfer_order_id,line_id,arrived_quantity,accepted_quantity,
                      rejected_quantity,short_quantity,accepted_trace_codes,warehouse_id,location_id,movement_id,payable_item_id,received_by,received_at)
@@ -305,6 +316,47 @@ public class InventoryTransferFlowService {
                     movementId, payableId, actor, Timestamp.from(now));
         }
         return move(o, "pending_receipt", complete ? "completed" : "discrepancy", trimToNull(r.operatorNote()));
+    }
+
+    /** 收货仓库须为接收方本商户在用仓库（否则 400），仓库或库位盘点冻结 409；返回仓库所属项目。 */
+    private String requireReceiveWarehouse(InventoryTransferOrderRecord o, String warehouseId, String locationId) {
+        Map<String, Object> warehouse = jdbc.queryForList("SELECT project_id,merchant_id,status FROM warehouses WHERE id=?", warehouseId)
+                .stream().findFirst().orElse(Map.of());
+        if (!"active".equals(warehouse.get("status")) || !o.toOwnerId().equals(warehouse.get("merchant_id"))) {
+            throw ApiException.badRequest("TRANSFER_RECEIVE_WAREHOUSE_INVALID", "收货仓库须为本门店在用仓库");
+        }
+        if (repository.hasActiveStocktakeForWarehouse(warehouseId) || repository.hasActiveStocktakeForWarehouse(locationId)) {
+            throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED", "仓库正在盘点中，盘点结束前库存变动已冻结");
+        }
+        return (String) warehouse.get("project_id");
+    }
+
+    /**
+     * 第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」「收货时扫码核对防调包」；ENUM:162「调拨」）：借调买断收货由接收方
+     * 本商户账号办理（平台管理员除外，403 STORE_RECEIPT_ONLY）；物品档案按商户归属，接收方逐行选本商户物品（缺行、不存在或不属接收方 400），
+     * 全部数量入接收方在用仓库库位、记调拨（transfer）入库流水，单价取建单锁定内部结算价。与翻码、应付同一事务。
+     */
+    void purchaseStockIn(InventoryTransferOrderRecord o, ReceiveTransferRequest r, Instant now) {
+        requireStoreMerchant(o);
+        String warehouseId = requireText(r == null ? null : r.warehouseId(), "warehouse_id");
+        String locationId = requireText(r.locationId(), "location_id");
+        String projectId = requireReceiveWarehouse(o, warehouseId, locationId);
+        Map<String, String> itemByLine = new LinkedHashMap<>();
+        for (ReceiveTransferLineRequest in : r.lines() == null ? List.<ReceiveTransferLineRequest>of() : r.lines()) {
+            itemByLine.put(in.lineId(), trimToNull(in.itemId()));
+        }
+        List<InventoryTransferLineRecord> lines = repository.listTransferLinesByOrder(o.id());
+        for (InventoryTransferLineRecord line : lines) {
+            String itemId = itemByLine.get(line.id());
+            if (itemId == null || !repository.findInventoryItemById(itemId).map(item -> o.toOwnerId().equals(item.merchantId())).orElse(false)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "买断收货须逐行选本商户物品");
+            }
+        }
+        String actor = auth.currentActor().id();
+        String receiptNo = "trp_" + Hashing.idempotencyCode(o.id());
+        for (InventoryTransferLineRecord line : lines) {
+            stockIn(o, line, itemByLine.get(line.id()), line.quantity(), warehouseId, locationId, projectId, receiptNo, actor, now, "transfer");
+        }
     }
 
     // ── 差异处理 ──
@@ -684,6 +736,101 @@ public class InventoryTransferFlowService {
                 INSERT INTO inventory_transfer_order_events(id,transfer_order_id,from_status,to_status,operator_id,note,operated_at)
                 VALUES(?,?,?,?,?,?,?)
                 """, "trfe_" + UUID.randomUUID(), orderId, from, to, auth.currentActor().id(), note, Timestamp.from(Instant.now()));
+        // 第十八批第 18 条（BSM:1201「继续催办，直到归还或双方另行处理为止」）：全部归还或实物处置完成（两条路径都经此）即结束逾期工单。
+        if ("returned".equals(to) && workOrders != null) {
+            String workOrderId = jdbc.queryForObject("SELECT overdue_work_order_id FROM inventory_transfer_orders WHERE id=?", String.class, orderId);
+            if (workOrderId != null) {
+                workOrders.closeLendingOverdue(workOrderId, "借用物已全部归还或实物处置完成");
+            }
+        }
+    }
+
+    // ── 借用逾期（第十八批第 18 条） ──
+
+    /**
+     * BSM:1201「超过约定归还时间仍未归还的，系统自动生成一张工单并通知借出方主管，按与其他工单相同的超时升级路径继续催办，直到归还或双方另行
+     * 处理为止」：已收货、到了约定归还时间、还没建过逾期工单的借用单逐单小事务建单；单单失败只留失败审计，下一轮再试。返回本轮建单数。
+     */
+    public int raiseLendingOverdue(Instant now) {
+        InventoryTransferFlowService self = applicationContext != null ? applicationContext.getBean(InventoryTransferFlowService.class) : this;
+        List<String> ids = jdbc.queryForList("""
+                SELECT id FROM inventory_transfer_orders
+                 WHERE transfer_type='lending' AND lending_mode='borrow' AND status='received'
+                   AND return_due_at <= ? AND overdue_work_order_id IS NULL
+                 ORDER BY return_due_at, id
+                """, String.class, Timestamp.from(now));
+        int created = 0;
+        for (String id : ids) {
+            try {
+                if (self.raiseLendingOverdueOne(id, now)) {
+                    created++;
+                }
+            } catch (RuntimeException exception) {
+                audit.recordFailure("inventory.transfer_order_overdue_work_order_failed", "not_applicable", OBJECT_TYPE, id, null, null,
+                        exception instanceof ApiException api ? api.code() : "INTERNAL_ERROR");
+            }
+        }
+        return created;
+    }
+
+    /**
+     * 单张借用单：加锁复核仍为已收货、已到期、未建过逾期工单，且还有尚未归还也未登记无法归还的数量（全部数量都已登记无法归还＝双方已在另行处理，
+     * 不建）。工单进统一物业工单（BSM:1372），类型其他、普通优先级、时限按「其他×普通」策略、待派单由客户关怀部派单（BSM:1385），记借出方与其项目；
+     * 单上回写工单号（防重、归还后结束催办）；同事务通知借出方主管（库存域「门店主管」口径：持 inventory.high_value.review 的借出方在用账号）。
+     */
+    @Transactional
+    public boolean raiseLendingOverdueOne(String orderId, Instant now) {
+        if (workOrders == null) {
+            return false;
+        }
+        InventoryTransferOrderRecord o = lockBorrow(orderId);
+        String existing = jdbc.queryForObject("SELECT overdue_work_order_id FROM inventory_transfer_orders WHERE id=?", String.class, o.id());
+        if (!"received".equals(o.status()) || o.returnDueAt() == null || o.returnDueAt().isAfter(now) || existing != null) {
+            return false;
+        }
+        InventoryLendingFacts facts = repository.lendingFacts(o.id());
+        List<String> open = new ArrayList<>();
+        for (InventoryTransferLineRecord line : repository.listTransferLinesByOrder(o.id())) {
+            if (facts.outstanding(line) > 0) {
+                Map<String, Object> item = jdbc.queryForList("SELECT item_name,unit FROM inventory_items WHERE id=?", line.itemId()).stream()
+                        .findFirst().orElse(Map.of());
+                open.add(Objects.toString(item.get("item_name"), line.itemId()) + " " + facts.outstanding(line) + Objects.toString(item.get("unit"), "件"));
+            }
+        }
+        if (open.isEmpty()) {
+            return false;
+        }
+        String borrowerName = jdbc.queryForList("SELECT merchant_name FROM merchants WHERE id=?", String.class, o.toOwnerId()).stream()
+                .findFirst().orElse(o.toOwnerId());
+        String title = "借用逾期未归还：" + o.id();
+        String description = "借入方：" + borrowerName + "；约定归还时间：" + DUE_TEXT.format(o.returnDueAt()) + "（北京时间）；未还："
+                + String.join("、", open) + "。";
+        FacilityWorkOrderRecord workOrder = workOrders.createLendingOverdue(projectOfMerchant(o.fromOwnerId()), o.fromOwnerId(), title, description);
+        jdbc.update("UPDATE inventory_transfer_orders SET overdue_work_order_id=? WHERE id=?", workOrder.id(), o.id());
+        notifyLenderSupervisors(o, title, description + "已生成工单 " + workOrder.code() + "，请督促借入方归还或与对方另行处理。", now);
+        audit.recordSuccess("inventory.transfer_order_overdue_work_order_created", "not_applicable", OBJECT_TYPE, o.id(), null, null,
+                Map.of("work_order_id", workOrder.id()));
+        return true;
+    }
+
+    /** 借出方在用账号中有效持「门店主管」码的，各发一条员工系统通知（无员工档案的跳过）。 */
+    private void notifyLenderSupervisors(InventoryTransferOrderRecord o, String title, String body, Instant now) {
+        if (staff == null) {
+            return;
+        }
+        List<AccessActor> users = jdbc.query("""
+                SELECT id, username, account_type, organization_id, merchant_id, status FROM access_users
+                 WHERE status='active' AND merchant_id=? ORDER BY id
+                """, (rs, n) -> new AccessActor(rs.getString("id"), rs.getString("username"), rs.getString("account_type"),
+                rs.getString("organization_id"), rs.getString("merchant_id"), rs.getString("status")), o.fromOwnerId());
+        for (AccessActor user : users) {
+            if (!auth.hasEffectivePermission(user, InventoryService.REMEDY_SUPERVISOR_APPROVE)) {
+                continue;
+            }
+            staff.findProfileByUserId(user.id()).ifPresent(profile -> staff.saveNotice(new EmployeeNoticeRecord(
+                    "notice_" + UUID.randomUUID().toString().replace("-", ""), profile.id(), "system_notice", title, body,
+                    false, "pending", null, "system", now, now)));
+        }
     }
 
     // ── 内部 ──
@@ -916,24 +1063,25 @@ public class InventoryTransferFlowService {
         return ((Number) row.get(key)).intValue();
     }
 
-    private String stockIn(InventoryTransferOrderRecord o, InventoryTransferLineRecord line, int quantity, String warehouseId,
-            String locationId, String projectId, String receiptNo, String actor, Instant now) {
+    /** 接收方入库：itemId 为接收方本商户物品（门店要货即明细物品），流水类型由调用方给（门店要货与借调买断都是调拨 transfer）。 */
+    private String stockIn(InventoryTransferOrderRecord o, InventoryTransferLineRecord line, String itemId, int quantity, String warehouseId,
+            String locationId, String projectId, String receiptNo, String actor, Instant now, String movementType) {
         jdbc.update("""
                 INSERT INTO inventory_stock_balances(id,item_id,location_id,quantity,reserved_quantity,available_quantity,updated_at,warehouse_id,project_id,merchant_id)
                 VALUES(?,?,?,0,0,0,now(),?,?,?) ON CONFLICT(item_id,location_id) DO NOTHING
-                """, "tbal_" + Hashing.idempotencyCode(line.itemId() + ":" + locationId), line.itemId(), locationId, warehouseId, projectId, o.toOwnerId());
+                """, "tbal_" + Hashing.idempotencyCode(itemId + ":" + locationId), itemId, locationId, warehouseId, projectId, o.toOwnerId());
         Map<String, Object> balance = jdbc.queryForMap(
-                "SELECT warehouse_id,project_id,merchant_id FROM inventory_stock_balances WHERE item_id=? AND location_id=? FOR UPDATE", line.itemId(), locationId);
+                "SELECT warehouse_id,project_id,merchant_id FROM inventory_stock_balances WHERE item_id=? AND location_id=? FOR UPDATE", itemId, locationId);
         if (!Objects.equals(warehouseId, balance.get("warehouse_id")) || !Objects.equals(projectId, balance.get("project_id"))
                 || !Objects.equals(o.toOwnerId(), balance.get("merchant_id"))) {
             throw ApiException.badRequest("TRANSFER_RECEIVE_WAREHOUSE_INVALID", "库位已有库存属于其他仓库、项目或货权");
         }
         jdbc.update("UPDATE inventory_stock_balances SET quantity=quantity+?,available_quantity=available_quantity+?,updated_at=now() WHERE item_id=? AND location_id=?",
-                quantity, quantity, line.itemId(), locationId);
+                quantity, quantity, itemId, locationId);
         String seed = Hashing.idempotencyCode(receiptNo + ":" + line.id());
-        repository.saveStockBatch(new InventoryStockBatchRecord("tb_" + seed, line.itemId(), locationId, receiptNo, null, quantity, null,
+        repository.saveStockBatch(new InventoryStockBatchRecord("tb_" + seed, itemId, locationId, receiptNo, null, quantity, null,
                 "active", List.of(), now, now, o.toOwnerId()), projectId);
-        return repository.saveStockMovement(new StockMovementRecord("tm_" + seed, "inbound", line.itemId(), null, locationId, quantity,
+        return repository.saveStockMovement(new StockMovementRecord("tm_" + seed, movementType, itemId, null, locationId, quantity,
                 line.unitPriceCent(), null, "inventory_transfer", o.id(), null, actor, List.of(), "completed", now, o.toOwnerId()), projectId).id();
     }
 

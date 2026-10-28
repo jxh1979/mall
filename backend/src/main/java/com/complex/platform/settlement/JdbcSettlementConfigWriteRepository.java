@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.LocalZone;
@@ -43,7 +43,8 @@ public class JdbcSettlementConfigWriteRepository {
                 List.of("project_id", "merchant_id", "role_type")),
         POINTS_ACCRUAL_RATE("points_accrual_rate_configs", "points_accrual_rate",
                 List.of("project_id", "merchant_id")),
-        // V350：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用）按 项目 × 商户。同 Path 2 草案/转正范式。
+        // 第十八批第 24 条：全平台统一「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用）只一行（项目、商户为空）；
+        //   草案经最高权限审批批准后由本通用换行转正（SettlementConfigWriteService.highValueThresholdDecided）。
         HIGH_VALUE_THRESHOLD("high_value_thresholds", "high_value_threshold",
                 List.of("project_id", "merchant_id")),
         // V346（P0-E）：营业额抽成规则收进配置中心草案闸。scope = 合同 × 商户
@@ -285,23 +286,49 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("updated_by", updatedBy), String.class);
     }
 
-    /** V350 全平台高价值判定阈值落草案（项目 × 商户；merchant_id NULL=该项目通用）。单位：分，比的是物品进货价。 */
-    public String upsertHighValueThresholdDraft(String id, String projectId, String merchantId,
-                                              long highValueThresholdCent, String updatedBy) {
-        return jdbcTemplate.queryForObject("""
+    /**
+     * 第十八批第 24 条 全平台高价值判定阈值落草案（只一行全平台作用域，项目、商户为空）。单位：分，比的是最近一次实际到货价。
+     * 已有一条在审草案即不写、返回 null（服务层据此 409，不覆盖在审草案）。
+     */
+    public String insertHighValueThresholdDraft(String id, long highValueThresholdCent, long minCent, long maxCent,
+                                                String updatedBy) {
+        return jdbcTemplate.query("""
                 INSERT INTO high_value_thresholds
-                    (id, project_id, merchant_id, high_value_threshold_cent, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :merchant_id, :high_value_threshold_cent, 'active', TRUE, :updated_by, now())
+                    (id, project_id, merchant_id, high_value_threshold_cent, high_value_threshold_min_cent,
+                     high_value_threshold_max_cent, status, is_draft, updated_by, updated_at)
+                VALUES (:id, NULL, NULL, :high_value_threshold_cent, :min_cent, :max_cent, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
-                             is_draft) WHERE status = 'active' DO UPDATE SET
-                    high_value_threshold_cent = EXCLUDED.high_value_threshold_cent,
-                    updated_by = EXCLUDED.updated_by,
-                    updated_at = now()
+                             is_draft) WHERE status = 'active' DO NOTHING
                 RETURNING id
                 """, new MapSqlParameterSource()
-                .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
+                .addValue("id", id)
                 .addValue("high_value_threshold_cent", highValueThresholdCent)
-                .addValue("updated_by", updatedBy), String.class);
+                .addValue("min_cent", minCent).addValue("max_cent", maxCent)
+                .addValue("updated_by", updatedBy), rs -> rs.next() ? rs.getString(1) : null);
+    }
+
+    /** 第十八批第 24 条：草案回写最高权限审批单号。 */
+    public void setHighValueThresholdReviewId(String id, String reviewId) {
+        jdbcTemplate.update("UPDATE high_value_thresholds SET review_id = :review_id WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", id).addValue("review_id", reviewId));
+    }
+
+    /** 第十八批第 24 条：锁住在审草案并取其审批单号（不存在或已非在审草案返回 null）。 */
+    public String lockHighValueThresholdDraftReviewId(String id) {
+        return jdbcTemplate.query("""
+                SELECT review_id FROM high_value_thresholds
+                 WHERE id = :id AND is_draft = TRUE AND status = 'active'
+                   FOR UPDATE
+                """, new MapSqlParameterSource().addValue("id", id), rs -> rs.next() ? rs.getString(1) : null);
+    }
+
+    /** 第十八批第 24 条：当前生效的全平台阈值（审批原件的「变更前适用版本」）。 */
+    public List<java.util.Map<String, Object>> listActiveHighValueThresholds() {
+        return jdbcTemplate.queryForList("""
+                SELECT id, high_value_threshold_cent, high_value_threshold_min_cent, high_value_threshold_max_cent
+                  FROM high_value_thresholds
+                 WHERE status = 'active' AND is_draft = FALSE AND project_id IS NULL AND merchant_id IS NULL
+                """, new MapSqlParameterSource());
     }
 
     /**
@@ -743,8 +770,9 @@ public class JdbcSettlementConfigWriteRepository {
                       FROM points_accrual_rate_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
                     SELECT id, 'high_value_threshold',
-                           'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
-                               || ' 高价值判定阈值(进货价) ' || high_value_threshold_cent || '分',
+                           '高价值判定阈值(最近一次实际到货价) ' || high_value_threshold_cent || ' 分，上下限 '
+                               || COALESCE(high_value_threshold_min_cent::text, '-') || '～'
+                               || COALESCE(high_value_threshold_max_cent::text, '-') || ' 分',
                            updated_at
                       FROM high_value_thresholds WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

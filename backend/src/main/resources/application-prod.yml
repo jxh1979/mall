@@ -1,4 +1,4 @@
-# 文件版本：V0.05
+# 文件版本：V0.06
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -70,3 +70,4 @@ bar.pending-clear-alert.scheduled.enabled: true              # TK-27 待清台�
 facility.alarm-escalation.scheduled.enabled: true            # HP-F01 设备告警超时只在当班范围升级、换班未结告警须下一班明确接手(BSM「楼宇运营」告警条,默认 60s 一轮)
 parking.credit-cost.scheduled.enabled: true                 # HP-P01 停车消费抵免成本按月合并为城市项目公司对承担商户的普通内部结算应收(付款时点按付账日规则固化,每日一轮处理已结束月份)
 settlement.merchant-statement-notice.scheduled.enabled: true  # 第十八批第 13 条 BSM「结算金额出账……一律短信通知」:普通内部结算往来到出账日逐笔短信通知对方商户(每日 09:00 一轮,发送日志去重)
+inventory.lending-overdue.scheduled.enabled: true            # 第十八批第 18 条 BSM「超过约定归还时间仍未归还的，系统自动生成一张工单并通知借出方主管」:借用逾期逐单建物业工单并通知借出方主管(同单只建一次,默认 300s 一轮)

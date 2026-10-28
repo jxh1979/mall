@@ -7836,6 +7836,168 @@
         }
       }
     },
+    "/api/v1/inventory/items/{id}/high-value-mark": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "markInventoryItemHighValue",
+        "summary": "物料手工标记或取消标记高价值",
+        "description": "第十八批第 24 条 24-R5（ENUM:164「或由库房主管以上岗位手工标记为高价值，标记与取消标记都必须填写理由并留痕，一线库管无此权限」；BSM:1196「限库房主管及以上岗位」）：持库房主管复核码；manual_high_value=true 标记、false 取消，reason 必填（缺 400）；物料不存在 404、跨商户 403 CROSS_MERCHANT_FORBIDDEN、值未变 409 INVENTORY_ITEM_HIGH_VALUE_MARK_UNCHANGED；成功审计留标记前后值与理由。建物料不再接受手工标记。",
+        "x-permission": "inventory.high_value.review",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.item.high_value_marked",
+        "x-audit-event-failure": "inventory.item.high_value_mark_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "库存物料 id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "manual_high_value",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键"
+                  },
+                  "manual_high_value": {
+                    "type": "boolean",
+                    "description": "标记后的值：true 手工标记为高价值，false 取消标记"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "description": "标记或取消的理由（留痕）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/items/{id}/safety-stock": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "updateInventoryItemSafetyStock",
+        "summary": "修改已有物料的安全库存",
+        "description": "第十八批第 33 条 33-R4：物料安全库存（inventory_items.min_quantity）供智能采购建议量「安全库存＋近 7 天销量－当前可用库存－在途量」使用；权限与新建物料同码 inventory.stock.move；min_quantity 必填且不得为负（400 VALIDATION_FAILED），物料不存在 404 INVENTORY_ITEM_NOT_FOUND，跨商户 403 CROSS_MERCHANT_FORBIDDEN，无权限 403 PERMISSION_DENIED；成功审计留修改前后值，失败（含无权限）记失败事件。只改安全库存，不开放别的物料字段。",
+        "x-permission": "inventory.stock.move",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.item.safety_stock_updated",
+        "x-audit-event-failure": "inventory.item.safety_stock_update_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "库存物料 id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "min_quantity"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键"
+                  },
+                  "min_quantity": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "修改后的安全库存（不得为负）"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/inventory/purchase-requests": {
       "get": {
         "tags": [
@@ -9004,6 +9166,7 @@
         ],
         "operationId": "listHighValueReviews",
         "summary": "查询库存域高价值复核单(报损/盘点差异/存酒作废)",
+        "description": "第十八批第 24 条 24-R2：后台高价值复核页（ADM-INV-004）门店主管与财务共用——持 inventory.high_value.review 或 finance.ar_ap.manage 任一可列；只持财务码、不持主管复核码的账号只列 subject_type=saved_bottle_stock_disposal（存酒库房存货处置，财务那一道）。每行带只读 subject_summary（报损/盘点差异/存酒库房处置取调整单的 item_name、quantity、unit、location_id、adjustment_type、reason；存酒作废取 saved_bottle_id、item_name 与剩余量）。",
         "x-permission": "inventory.high_value.review",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -9025,7 +9188,11 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "x-auth-context": "staff-token"
+        "x-auth-context": "staff-token",
+        "x-permissions-any-of": [
+          "inventory.high_value.review",
+          "finance.ar_ap.manage"
+        ]
       }
     },
     "/api/v1/inventory/high-value-reviews/{id}/review": {
@@ -9035,7 +9202,7 @@
         ],
         "operationId": "reviewHighValue",
         "summary": "复核高价值动作(approve生效/reject回滚)；存酒库房存货处置须门店主管与财务两道审批",
-        "description": "OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条门店主管与财务审批，同赔付方案审批）：subject_type=saved_bottle_stock_disposal 的复核单须带 role——supervisor 核 inventory.high_value.review（门店主管）、finance 核 finance.ar_ap.manage（财务）；审批人不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL），两道不得同一人（409 HIGH_VALUE_REVIEW_SAME_APPROVER）；只批一道时仍为 pending，两道都批才 approved 并扣库存、写同类型流水，任一道驳回即 rejected 不扣。其余复核对象不读 role、只认 inventory.high_value.review（持财务码 403）。",
+        "description": "OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条门店主管与财务审批，同赔付方案审批）：subject_type=saved_bottle_stock_disposal 的复核单须带 role——supervisor 核 inventory.high_value.review（门店主管）、finance 核 finance.ar_ap.manage（财务）；审批人不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL），两道不得同一人（409 HIGH_VALUE_REVIEW_SAME_APPROVER）；只批一道时仍为 pending，两道都批才 approved 并扣库存、写同类型流水，任一道驳回即 rejected 不扣。其余复核对象不读 role、只认 inventory.high_value.review（持财务码 403）。第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：报损、盘点差异、存酒作废复核单的审批人同样不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL）。",
         "x-permission": "inventory.high_value.review",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -9349,7 +9516,7 @@
         ],
         "operationId": "createTransferOrder",
         "summary": "新建跨主体流转单",
-        "description": "V277 调拨（supply：平台供货主体→商户）与借调（lending：商户→商户，lending_mode 为 borrow 借用或 purchase 买断）建单。FS-019（BSM L1201「「借」只转移保管责任、不转移所有权（仅适用于不可消费物品；可消费物品的借用实质是调，交付时所有权随之转移）」「不可消费物品（设备、器具等）的借用必须约定归还时间」）：借用须带 return_due_at（应归还期限），否则 400 VALIDATION_FAILED；借用明细物料须为不可消费物品（inventory_items.non_consumable），可消费物品只能买断，否则 400 VALIDATION_FAILED。门店要货建单为草稿（draft），借调为 created。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "description": "V277 调拨（supply：平台供货主体→商户）与借调（lending：商户→商户，lending_mode 为 borrow 借用或 purchase 买断）建单。FS-019（BSM L1201「「借」只转移保管责任、不转移所有权（仅适用于不可消费物品；可消费物品的借用实质是调，交付时所有权随之转移）」「不可消费物品（设备、器具等）的借用必须约定归还时间」）：借用须带 return_due_at（应归还期限），否则 400 VALIDATION_FAILED；借用明细物料须为不可消费物品（inventory_items.non_consumable），可消费物品只能买断，否则 400 VALIDATION_FAILED。第十八批第 18 条（ENUM:162 库存流水「调拨」「借出」）：借调（lending，借用与买断）须带 from_location_id（出让方本商户出货库位，交货时从此扣库存），缺填 400 VALIDATION_FAILED。门店要货建单为草稿（draft），借调为 created。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
         "x-permission": "inventory.transfer_order.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -9441,7 +9608,7 @@
                   "from_location_id": {
                     "type": "string",
                     "maxLength": 64,
-                    "description": "出货库位（可空）。"
+                    "description": "出货库位：借调（lending）必填，为出让方本商户库位（交货时从此扣库存）；门店要货可空。"
                   },
                   "to_location_id": {
                     "type": "string",
@@ -9512,7 +9679,7 @@
         ],
         "operationId": "shipTransferOrder",
         "summary": "调拨发货／借用交货扫码",
-        "description": "门店要货（supply）：待出库→配送中（供货侧办理，商户账号 403 SUPPLY_SIDE_ONLY）。借调：created→shipped。FS-019（BSM L1201「借出时间取借出方交货扫码的时刻」「每一步都必须扫码」）：借用单有随货溯源码时 scanned_trace_codes 须与本单码集完全一致（漏扫 400 TRACE_CODE_INCOMPLETE、非本单码 400 TRACE_CODE_MISMATCH），每码记一行保管台账（change_kind=custody，changed_at 即借出时间）。提交编号为路径单号（M724-F06），重复提交返回第一次的结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "description": "门店要货（supply）：待出库→配送中（供货侧办理，商户账号 403 SUPPLY_SIDE_ONLY）。借调：created→shipped，须由出让方（from_owner_id）本商户账号办理（平台管理员除外，否则 403 LENDER_SHIP_ONLY）；第十八批第 18 条（ENUM:162 库存流水「调拨」「借出（跨主体借调中不可消费物品交付给借入方）」；DEC-R7-04）：按 from_location_id 逐行扣出让方库存（扣减带出让方商户谓词），借用写借出流水（lend_out，不消耗批次），买断写调拨流水（transfer，按 FEFO 消耗批次、成本按移动加权转出），business_type=inventory_transfer、business_id=单号；可用不足或库位不属出让方 409 STOCK_INSUFFICIENT，出货库位盘点冻结 409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED，整单不发货。FS-019（BSM L1201「借出时间取借出方交货扫码的时刻」「每一步都必须扫码」）：借用单有随货溯源码时 scanned_trace_codes 须与本单码集完全一致（漏扫 400 TRACE_CODE_INCOMPLETE、非本单码 400 TRACE_CODE_MISMATCH），每码记一行保管台账（change_kind=custody，changed_at 即借出时间）。提交编号为路径单号（M724-F06），重复提交返回第一次的结果。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
         "x-permission": "inventory.transfer_order.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -9590,7 +9757,10 @@
           "SUPPLY_SIDE_ONLY",
           "TRACE_CODE_MISMATCH",
           "TRACE_CODE_INCOMPLETE",
-          "TRANSFER_CANCEL_PENDING"
+          "TRANSFER_CANCEL_PENDING",
+          "LENDER_SHIP_ONLY",
+          "STOCK_INSUFFICIENT",
+          "INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED"
         ]
       }
     },
@@ -9601,7 +9771,7 @@
         ],
         "operationId": "returnTransferOrder",
         "summary": "借用归还（借出方收货扫码）",
-        "description": "FS-019 借用归还（BSM L1201「不得伪造归还扫码或实际归还时间」「实际归还时间取借出方收货扫码的时刻」「结束对应数量的原物归还事项」；台账 §25「归还后，保管责任回到出借方并关闭借用关系」）：只对借用型（lending/borrow）已收货（received）的单；只由借出方（from_owner_id）商户账号办理（平台管理员除外，否则 403 LENDER_RETURN_ONLY）；lines 按行登记归还数量（可分多次），没有数量大于 0 的行 400 TRANSFER_RETURN_REQUIRES_SCAN；有随货码的行 trace_codes 须逐件扫码：个数＝returned_quantity、只能是本行借出且尚未归还、未登记无法归还的码，否则 400 TRACE_CODE_MISMATCH；数量超过尚未归还数 409 TRANSFER_RETURN_EXCEEDS_OUTSTANDING。每码保管主体翻回借出方、在借单置空并记保管台账（changed_at 即实际归还时间），所有权始终不动；写 inventory_transfer_returns；全部数量都已归还或实物处置完成才置 returned 并留痕，否则保持 received。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "description": "FS-019 借用归还（BSM L1201「不得伪造归还扫码或实际归还时间」「实际归还时间取借出方收货扫码的时刻」「结束对应数量的原物归还事项」；台账 §25「归还后，保管责任回到出借方并关闭借用关系」）：只对借用型（lending/borrow）已收货（received）的单；只由借出方（from_owner_id）商户账号办理（平台管理员除外，否则 403 LENDER_RETURN_ONLY）；lines 按行登记归还数量（可分多次），没有数量大于 0 的行 400 TRANSFER_RETURN_REQUIRES_SCAN；有随货码的行 trace_codes 须逐件扫码：个数＝returned_quantity、只能是本行借出且尚未归还、未登记无法归还的码，否则 400 TRACE_CODE_MISMATCH；数量超过尚未归还数 409 TRANSFER_RETURN_EXCEEDS_OUTSTANDING。每码保管主体翻回借出方、在借单置空并记保管台账（changed_at 即实际归还时间），所有权始终不动；写 inventory_transfer_returns；第十八批第 18 条（ENUM:162「归还（借入方将借用物品归还借出方）」）：本次归还数量回借出方出货库位（from_location_id）并写归还流水（lend_return，business_type=inventory_transfer），成本按该行借出流水原出库总成本累计分摊（各次之和等于原成本），出货库位盘点冻结 409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED；无法归还的件实物处置完成不回库、不写归还流水；全部数量都已归还或实物处置完成才置 returned 并留痕，否则保持 received。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
         "x-permission": "inventory.transfer_order.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -9707,7 +9877,8 @@
           "TRACE_CODE_MISMATCH",
           "TRACE_OWNER_MISMATCH",
           "VALIDATION_FAILED",
-          "TRANSFER_ORDER_NOT_FOUND"
+          "TRANSFER_ORDER_NOT_FOUND",
+          "INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED"
         ]
       }
     },
@@ -10246,7 +10417,7 @@
         ],
         "operationId": "receiveTransferOrder",
         "summary": "调拨收货／门店要货签收",
-        "description": "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写入库流水（business_type=inventory_transfer）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "description": "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写调拨流水（movement_type=transfer，business_type=inventory_transfer；第十八批第 18 条 BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）；第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货须由接收方（to_owner_id）本商户账号办理（平台管理员除外，否则 403 STORE_RECEIPT_ONLY），带 warehouse_id（接收方在用仓库，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID，盘点冻结 409）、location_id 与逐行 lines[].item_id（接收方本商户物品；缺行、不存在或不属接收方 400 VALIDATION_FAILED），全部数量入该库位并写调拨流水（transfer，单价＝明细锁定内部结算价）。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
         "x-permission": "inventory.transfer_order.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -10316,22 +10487,19 @@
                   },
                   "warehouse_id": {
                     "type": "string",
-                    "description": "门店要货签收：合格部分入库的本门店仓库。"
+                    "description": "门店要货签收与借调买断收货：入库的本商户在用仓库。"
                   },
                   "location_id": {
                     "type": "string",
-                    "description": "门店要货签收：合格部分入库库位。"
+                    "description": "门店要货签收与借调买断收货：入库库位。"
                   },
                   "lines": {
                     "type": "array",
-                    "description": "门店要货签收：逐行登记。",
+                    "description": "门店要货签收与借调买断收货：逐行登记。",
                     "items": {
                       "type": "object",
                       "required": [
-                        "line_id",
-                        "arrived_quantity",
-                        "accepted_quantity",
-                        "rejected_quantity"
+                        "line_id"
                       ],
                       "properties": {
                         "line_id": {
@@ -10341,17 +10509,17 @@
                         "arrived_quantity": {
                           "type": "integer",
                           "minimum": 0,
-                          "description": "实收数量。"
+                          "description": "实收数量（门店要货签收必填）。"
                         },
                         "accepted_quantity": {
                           "type": "integer",
                           "minimum": 0,
-                          "description": "合格接收数量。"
+                          "description": "合格接收数量（门店要货签收必填）。"
                         },
                         "rejected_quantity": {
                           "type": "integer",
                           "minimum": 0,
-                          "description": "拒收数量。"
+                          "description": "拒收数量（门店要货签收必填）。"
                         },
                         "accepted_trace_codes": {
                           "type": "array",
@@ -10359,6 +10527,10 @@
                             "type": "string"
                           },
                           "description": "合格接收件的溯源码。"
+                        },
+                        "item_id": {
+                          "type": "string",
+                          "description": "借调买断收货必填：该行入库的接收方本商户物品 ID。"
                         }
                       }
                     }
@@ -22077,6 +22249,7 @@
         ],
         "operationId": "decideBarOrderItemVoid",
         "summary": "退菜退酒审批决策（通过/驳回）",
+        "description": "第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」）：审批人不得是退品申请人，同一人持申请与审批两码也不得自批（409 BAR_ORDER_ITEM_VOID_SELF_APPROVAL）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.order_item.void",
         "x-data-scope": "project-bar-table",
@@ -26959,6 +27132,7 @@
         ],
         "operationId": "recordInventoryStocktakeVariance",
         "summary": "录入库存盘点差异行",
+        "description": "第十八批第 24 条 24-R4（ENUM:164「报损/盘点差异/存酒作废须照片+视频双证据+主管复核」；18D 裁决补充第 14 条「只高价值的要」）：高价值物品（最近一次实际到货价大于或等于阈值、手工标记或阈值未配置）差异不为 0 时 photo_attachment_ids 与 video_attachment_ids 必填且须为真实上传的照片、视频（缺 400 HIGH_VALUE_EVIDENCE_REQUIRED，附件不存在或类型不符 400）；低价值不要求。差异须经他人复核才纠账。",
         "x-permission": "inventory.stocktake.variance_record",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -27006,6 +27180,7 @@
         ],
         "operationId": "reviewInventoryStocktakeVariance",
         "summary": "复核库存盘点差异（approved/rejected）",
+        "description": "第十八批第 24 条：录入该差异的人不得复核（409 INVENTORY_VARIANCE_SELF_REVIEW，PGM:529）；带照片与视频的（高价值）差异批准前复核证据文件仍真实存在且类型对得上。",
         "x-permission": "inventory.stocktake.variance_review",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -29407,7 +29582,7 @@
         "x-audit-event-success": "leasing.lead.created",
         "x-audit-event-failure": "leasing.lead.create_failed",
         "x-auth-context": "staff-token",
-        "description": "V161 重建：来源 4 类(outbound/online_inquiry/referral/exhibition)，同品牌黑名单则拦截。状态默认 pending_follow_up。",
+        "description": "V161 重建：来源 4 类(outbound/online_inquiry/referral/exhibition)，同品牌黑名单则拦截（409 LEASING_BRAND_BLACKLISTED）；带本人申请且已批准、未使用、品牌相符的黑名单例外放行单（blacklist_exception_id，target_type=lead_create）时放行并记该单已用（PGM「招商运营细则」），单不可用 409 LEASING_BLACKLIST_EXCEPTION_INVALID。状态默认 pending_follow_up。",
         "requestBody": {
           "$ref": "#/components/requestBodies/LeasingLeadRequest"
         },
@@ -29657,6 +29832,7 @@
         "x-audit-event-success": "leasing.intent.created",
         "x-audit-event-failure": "leasing.intent.create_failed",
         "x-auth-context": "staff-token",
+        "description": "由拉黑前既有线索（线索建于品牌本次拉黑之前）新建意向被拦 409 LEASING_BRAND_BLACKLISTED（PGM「招商运营细则」：黑名单品牌拦截同品牌新线索，以及由拉黑前既有线索新建意向）；带本人申请且已批准、未使用、线索与品牌相符的黑名单例外放行单（blacklist_exception_id，target_type=intent_create）时放行并记该单已用，单不可用 409 LEASING_BLACKLIST_EXCEPTION_INVALID；未被拦时该字段忽略。已签约线索 409 LEASING_LEAD_ALREADY_SIGNED。",
         "requestBody": {
           "$ref": "#/components/requestBodies/LeasingIntentRequest"
         },
@@ -29698,7 +29874,7 @@
         "x-audit-event-success": "leasing.intent.advanced",
         "x-audit-event-failure": "leasing.intent.advance_failed",
         "x-auth-context": "staff-token",
-        "description": "关键阶段(proposal_quoted/negotiation)须带 supervisor_user_id 主管确认，否则阻断。",
+        "description": "意向须逐级推进（初步接触→需求确认→方案报价→商务谈判→待签约），向前跳级 409 LEASING_INTENT_STAGE_SKIP，回退照常；进入方案报价（proposal_quoted）或商务谈判（negotiation）须主管确认（PGM「招商运营细则」）：不直接改阶段，送统一审批（action_type=leasing.intent.key_stage，发起人沿直接上级到 final_approver_id 指定的最终审批人，不填即直接上级），返回的意向以 pending_stage／pending_review_id 记待确认，审批通过才进入该阶段并由 last_stage_change_by 记确认人，驳回阶段不变；已有待确认 409 LEASING_INTENT_STAGE_PENDING_REVIEW。送审留痕 leasing.intent.key_stage_requested。",
         "parameters": [
           {
             "name": "intent_id",
@@ -29894,6 +30070,82 @@
             "$ref": "#/components/responses/Success"
           },
           "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/leasing/blacklist-exceptions": {
+      "get": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "listLeasingBlacklistExceptions",
+        "summary": "招商黑名单例外放行单清单",
+        "description": "每单列放行事项（target_type）、品牌、关联线索（lead_id／used_lead_id）与意向（used_intent_id）、理由、申请人（requested_by）与申请时间、审批人（approved_by）与批准时间、状态（pending_approval 待审批／approved 已批准／rejected 已驳回／used 已使用）。项目员工只见本项目，平台管理员全量。",
+        "x-permission": "leasing.lead.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "leasing.blacklist_exception.viewed",
+        "x-audit-event-failure": "leasing.blacklist_exception.view_failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "leasing"
+        ],
+        "operationId": "createLeasingBlacklistException",
+        "summary": "申请招商黑名单例外放行",
+        "description": "PGM「招商运营细则」：黑名单品牌拦截同品牌新线索，以及由拉黑前既有线索新建意向；确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。target_type=lead_create 填 brand_id（新建同品牌线索）；target_type=intent_create 填 lead_id（由该线索新建意向，品牌取该线索的品牌）；reason 必填。申请进统一审批（action_type=leasing.blacklist_exception，发起人沿直接上级到 final_approver_id 指定的最终审批人，不填即直接上级），本人审批 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN；批准后由申请人本人在新建线索（createLeasingLead）或线索转意向（createLeasingIntent）时带 blacklist_exception_id 用一次。线索不存在 404 LEASING_LEAD_NOT_FOUND；品牌不存在 404 LEASING_BRAND_NOT_FOUND。",
+        "x-permission": "leasing.brand.blacklist_exception",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "leasing.blacklist_exception.requested",
+        "x-audit-event-failure": "leasing.blacklist_exception.request_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/LeasingBlacklistExceptionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
             "$ref": "#/components/responses/Error"
           },
           "403": {
@@ -42655,6 +42907,87 @@
         }
       }
     },
+    "/api/v1/dealers/contracts/{id}/designated-handler": {
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "designateDealerContractHandler",
+        "summary": "指定合同销售主体经办人",
+        "description": "第十八批第 31 条（BSM:1247「合同销售主体指定经办人」）：改派直接覆盖，合同清单回显 designated_handler_user_id / designated_handler_by / designated_handler_at。经销商停用后，对方确认留证与原订单尾款到账登记只由该经办人办理；此处不校验经办人权限，办理时各自按 dealer.order.manage 与项目范围核验。",
+        "x-permission": "dealer.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.contract.handler_designated",
+        "x-audit-event-failure": "dealer.contract.handler_designate_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销合同编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "handler_user_id": {
+                    "type": "string",
+                    "description": "指定经办人账号",
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "handler_user_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/dealers/contracts/{id}/price-catalogs": {
       "get": {
         "tags": [
@@ -44184,7 +44517,7 @@
         ],
         "operationId": "registerDealerOrderPayment",
         "summary": "登记经销订单到账",
-        "description": "ENUM:176：只接受 bank_transfer 对公转账 / platform_online 平台线上支付，现金与个人账户 400 PAYMENT_METHOD_FORBIDDEN。订单已取消 / 待退款时的到账按迟到款记录并进入待退款（E-13）。 已部分退货订单仍可收取剩余尾款；以原订单金额减已确认退货金额后的净应收判断足额、多收及逾期。",
+        "description": "ENUM:176：只接受 bank_transfer 对公转账 / platform_online 平台线上支付，现金与个人账户 400 PAYMENT_METHOD_FORBIDDEN。订单已取消 / 待退款时的到账按迟到款记录并进入待退款（E-13）。 已部分退货订单仍可收取剩余尾款；以原订单金额减已确认退货金额后的净应收判断足额、多收及逾期。第十八批第 31 条（BSM:1247）：经销商已停用后，原订单尾款须由合同销售主体指定经办人登记（未指定 409 DEALER_HANDLER_NOT_DESIGNATED，非本人 403 DEALER_HANDLER_ONLY），且只许对公转账（409 DEALER_DEACTIVATED_BANK_TRANSFER_ONLY），由财务到账核验后冲减原应收；核验通过的到账记录即收款凭证（第十八批裁决补充 15），经办人交付对方后登记对方确认留证「结果交付」。",
         "x-permission": "dealer.order.manage",
         "x-data-scope": "project",
         "x-auth-context": "staff-token",
@@ -44416,6 +44749,166 @@
                 },
                 "required": [
                   "idempotency_key"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/dealers/orders/{id}/counterparty-confirmations": {
+      "get": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "listDealerCounterpartyConfirmations",
+        "summary": "经办人确认留证清单",
+        "description": "第十八批第 31 条：本订单的对方确认留证（确认事项 matter_type、已核验联系人 contact_name、确认内容与时间、凭证、经办人 handler_user_id；used_by_id / used_at 为被哪个入口用掉）。",
+        "x-permission": "dealer.order.view",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dealer.counterparty_confirmation.viewed",
+        "x-audit-event-failure": "dealer.counterparty_confirmation.view_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "dealer"
+        ],
+        "operationId": "recordDealerCounterpartyConfirmation",
+        "summary": "登记对方确认留证",
+        "description": "第十八批第 31 条（BSM:1247「通过已核验的企业联系人取得签收、退货等确认并留证，经办人不得代替对方确认」）：只由订单所属合同的指定经办人登记（未指定 409 DEALER_HANDLER_NOT_DESIGNATED，非本人 403 DEALER_HANDLER_ONLY）；确认人固定取经销商档案已核验联系人，请求不收确认人（档案无联系人 409 DEALER_VERIFIED_CONTACT_MISSING）；须上传本订单交付业务（business_type=dealer_delivery）下对方确认的真实凭证。经销商停用后，签收、退货申请、合同未约定的运费确认、交付差异方案、超收用途各须用掉一条同订单、同事项、未用过的确认；结果交付只留证。停用后原订单尾款的收款凭证即财务核验通过的到账记录（订单号、金额、到账时间、核验人；第十八批裁决补充 15），经办人交付对方后登记结果交付，related_object_id 填到账记录号。",
+        "x-permission": "dealer.order.manage",
+        "x-data-scope": "project",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dealer.counterparty_confirmation.recorded",
+        "x-audit-event-failure": "dealer.counterparty_confirmation.record_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "经销订单编号",
+              "maxLength": 80
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "同一请求重试必须复用幂等键",
+                    "maxLength": 128
+                  },
+                  "matter_type": {
+                    "type": "string",
+                    "description": "确认事项",
+                    "enum": [
+                      "delivery_receipt",
+                      "return_request",
+                      "freight_confirmation",
+                      "delivery_resolution",
+                      "overpayment_use",
+                      "result_delivery"
+                    ]
+                  },
+                  "related_object_id": {
+                    "type": "string",
+                    "description": "结果交付时必填：退款单、发票号或到账记录号",
+                    "maxLength": 128
+                  },
+                  "content": {
+                    "type": "string",
+                    "description": "对方确认内容",
+                    "minLength": 1
+                  },
+                  "confirmed_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "对方确认时间（不晚于当前）"
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "description": "对方确认的真实凭证"
+                  }
+                },
+                "required": [
+                  "idempotency_key",
+                  "matter_type",
+                  "content",
+                  "confirmed_at",
+                  "evidence_attachment_ids"
                 ]
               }
             }
@@ -45038,6 +45531,11 @@
                     "description": "同一请求重试必须复用幂等键",
                     "maxLength": 128
                   },
+                  "counterparty_confirmation_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "经销商已停用时必填：指定经办人为本订单登记、尚未使用的「超收用途」类对方确认留证；缺少、事项不符或已用过 409 DEALER_COUNTERPARTY_CONFIRMATION_REQUIRED。未停用时忽略。"
+                  },
                   "usage": {
                     "type": "string",
                     "description": "资金用途",
@@ -45211,6 +45709,11 @@
                     "type": "string",
                     "description": "同一请求重试必须复用幂等键",
                     "maxLength": 128
+                  },
+                  "counterparty_confirmation_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "经销商已停用时必填：指定经办人为本订单登记、尚未使用的「退货申请」类对方确认留证；缺少、事项不符或已用过 409 DEALER_COUNTERPARTY_CONFIRMATION_REQUIRED。未停用时忽略。"
                   },
                   "reason_type": {
                     "type": "string",
@@ -46036,6 +46539,11 @@
                     "type": "string",
                     "description": "同一请求重试必须复用幂等键",
                     "maxLength": 128
+                  },
+                  "counterparty_confirmation_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "经销商已停用时必填（只在合同未约定、须双方确认时）：指定经办人为本订单登记、尚未使用的「运费确认」类对方确认留证；缺少、事项不符或已用过 409 DEALER_COUNTERPARTY_CONFIRMATION_REQUIRED。未停用时忽略。"
                   },
                   "return_freight_bearer": {
                     "type": "string",
@@ -51778,7 +52286,7 @@
         ],
         "operationId": "settlementConfigActivateDraft",
         "summary": "复核转正:单行/归属/归因规则草案转正",
-        "description": "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。",
+        "description": "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -52061,8 +52569,8 @@
           "settlement"
         ],
         "operationId": "settlementConfigUpsertHighValueThreshold",
-        "summary": "维护高价值判定阈值(草案)",
-        "description": "结算配置中心 V350：按 项目公司 × 商户 配置全平台唯一的「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定；落草案(is_draft=TRUE，不动生效行)，须经差人复核转正后生效。阈值未配置时判定侧一律按高价值拦下走审批。",
+        "summary": "提交高价值判定阈值调整(最高权限审批)",
+        "description": "第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」）：全平台统一一个「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定。请求不带项目、商户；阈值、下限、上限与理由同时必填，满足 0 ≤ 下限 ≤ 阈值 ≤ 上限（否则 400 VALIDATION_FAILED）。提交只落全平台一行草案并进统一审批的最高权限策略（settlement.high_value_threshold.configure，top_authority），草案回写审批单号 review_id；已有一条在审草案时再提交 409 HIGH_VALUE_THRESHOLD_REVIEW_PENDING。最高权限批准后草案转正、原生效行（含出厂 hvt_default）下线；驳回则草案下线、判定仍读原值。不经「复核转正」生效。阈值未配置时判定侧一律按高价值拦下走审批。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -52081,19 +52589,33 @@
                   "idempotency_key": {
                     "type": "string"
                   },
-                  "project_id": {
-                    "type": "string"
-                  },
-                  "merchant_id": {
-                    "type": "string"
-                  },
                   "high_value_threshold_cent": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "高价值判定阈值（分）：最近一次实际到货价大于或等于本值即高价值"
+                  },
+                  "high_value_threshold_min_cent": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "阈值下限（分），与上限须同时配置"
+                  },
+                  "high_value_threshold_max_cent": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "阈值上限（分），与下限须同时配置"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "调整理由（进最高权限审批原件）"
                   }
                 },
                 "required": [
                   "idempotency_key",
-                  "high_value_threshold_cent"
+                  "high_value_threshold_cent",
+                  "high_value_threshold_min_cent",
+                  "high_value_threshold_max_cent",
+                  "reason"
                 ]
               }
             }
@@ -64202,6 +64724,86 @@
         "x-audit-event-failure": "inventory.purchase_workbench.view_failed"
       }
     },
+    "/api/v1/inventory/purchase-suggestions": {
+      "get": {
+        "summary": "读取智能采购建议（建议量＝安全库存＋近 7 天销量－当前可用－在途，大于 0 才列出）",
+        "description": "第十八批第 33 条（BSM:1211「系统根据安全库存、销量和在途数量生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单，不得自动向供应商下单」；第十八批裁决 5）：按（项目，货权，物料）即时计算，不存表、不建单、不下单。安全库存取物料 min_quantity；近 7 天为滚动 7×24 小时；销量＝酒吧售出（减退酒回补、加退酒驳回重扣）＋经销出库（减经销退货与交付差异退回的实物回库），门店要货（调拨）、赠饮、积分兑换、手工出库不计，货权按流水库位所在库存行；在途＝已批准未收完的采购（approved/ordered/expected/arrived 的数量－合格接收－批准终止）。商户账号只见本货权；项目不可达 403 CROSS_PROJECT_FORBIDDEN，无权限 403 PERMISSION_DENIED。采购人员人工调整后走现有 POST /api/v1/inventory/purchase-requests 与采购审批。",
+        "tags": [
+          "inventory"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "综合体（项目）id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "建议行（只含建议量大于 0 的物料）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PurchaseSuggestion"
+                      }
+                    }
+                  },
+                  "required": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "operationId": "getPurchaseSuggestions",
+        "x-permission": "inventory.purchase_request.manage",
+        "x-scope": "按真实项目及商户货权核验；商户账号只计本货权的库存、流水与采购，平台账号按项目可达范围。",
+        "x-audit-events": [
+          "inventory.purchase_suggestion.viewed",
+          "inventory.purchase_suggestion.view_failed"
+        ],
+        "x-audit-boundary": "权限与数据范围核验位于 read helper 内，成功和失败各记录真实事件；失败仍抛原异常。",
+        "x-terminal-implementation": "只读计算，本方法未注解 GuardedAction，不写采购申请。",
+        "x-data-scope": "project-merchant",
+        "x-auth-context": "staff-token",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "inventory.purchase_suggestion.viewed",
+        "x-audit-event-failure": "inventory.purchase_suggestion.view_failed"
+      }
+    },
     "/api/v1/inventory/purchase-requests/{id}": {
       "get": {
         "summary": "读取采购数量、逐次验收及独立结算事实",
@@ -74932,6 +75534,16 @@
           }
         }
       },
+      "LeasingBlacklistExceptionRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LeasingBlacklistExceptionRequest"
+            }
+          }
+        }
+      },
       "LeasingSignRequest": {
         "required": true,
         "content": {
@@ -81484,10 +82096,6 @@
             ],
             "description": "库存物品.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
-          "manual_high_value": {
-            "type": "boolean",
-            "description": "库存物品.manual_high_value 字段：手工标记为高价值。"
-          },
           "non_consumable": {
             "type": "boolean",
             "description": "库存物品.non_consumable 字段：不可消费物品（设备、器具等），FS-019 只有不可消费物品才能借用（BSM L1201）。"
@@ -84819,6 +85427,24 @@
             "format": "int64",
             "description": "成本单价（分，非负）；未显式传 variance_amount_cent 时按 variance_qty×unit_cost_cents 估算。",
             "minimum": 0
+          },
+          "photo_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50,
+            "description": "差异照片证据附件 id；高价值差异必填（照片＋视频双证据）。"
+          },
+          "video_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50,
+            "description": "差异视频证据附件 id；高价值差异必填（照片＋视频双证据）。"
           }
         }
       },
@@ -85671,6 +86297,11 @@
             "type": "string",
             "description": "关联品牌库 id。",
             "maxLength": 64
+          },
+          "blacklist_exception_id": {
+            "type": "string",
+            "description": "黑名单例外放行单 id（品牌已拉黑时凭本人已批准的放行单新建线索）。",
+            "maxLength": 64
           }
         }
       },
@@ -85759,12 +86390,17 @@
             "type": "object",
             "description": "报价租金条款(自由结构，签约时喂入合同)。",
             "additionalProperties": true
+          },
+          "blacklist_exception_id": {
+            "type": "string",
+            "description": "黑名单例外放行单 id（拉黑前既有线索转意向被拦时凭本人已批准的放行单放行）。",
+            "maxLength": 64
           }
         }
       },
       "LeasingIntentAdvanceRequest": {
         "type": "object",
-        "description": "请求载荷 LeasingIntentAdvanceRequest（V161 意向 5 阶段推进，关键阶段须主管确认）。",
+        "description": "请求载荷 LeasingIntentAdvanceRequest（V161 意向 5 阶段逐级推进，关键阶段送主管确认）。",
         "additionalProperties": false,
         "required": [
           "target_stage"
@@ -85786,9 +86422,53 @@
               "pending_signing"
             ]
           },
-          "supervisor_user_id": {
+          "final_approver_id": {
             "type": "string",
-            "description": "主管确认人 id(关键阶段必填)。",
+            "description": "主线最终审批人 id（关键阶段送审用，不填按发起人直接上级）。",
+            "maxLength": 64
+          }
+        }
+      },
+      "LeasingBlacklistExceptionRequest": {
+        "type": "object",
+        "description": "请求载荷 LeasingBlacklistExceptionRequest（第十八批第 30 条 招商黑名单例外放行申请）。",
+        "additionalProperties": false,
+        "required": [
+          "target_type",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "target_type": {
+            "type": "string",
+            "description": "放行事项：lead_create 新建同品牌线索／intent_create 由拉黑前既有线索新建意向。",
+            "enum": [
+              "lead_create",
+              "intent_create"
+            ]
+          },
+          "brand_id": {
+            "type": "string",
+            "description": "品牌 id（lead_create 必填）。",
+            "maxLength": 64
+          },
+          "lead_id": {
+            "type": "string",
+            "description": "线索 id（intent_create 必填，品牌取该线索的品牌）。",
+            "maxLength": 64
+          },
+          "reason": {
+            "type": "string",
+            "description": "申请理由。",
+            "maxLength": 500
+          },
+          "final_approver_id": {
+            "type": "string",
+            "description": "主线最终审批人 id（不填按发起人直接上级）。",
             "maxLength": 64
           }
         }
@@ -86691,7 +87371,7 @@
           },
           "source": {
             "type": "string",
-            "description": "工单来源，默认 platform。",
+            "description": "工单来源，默认 platform。lending_overdue（借用逾期未归还）由系统自动生成（第十八批第 18 条，BSM:1201），人工建单 400 VALIDATION_FAILED，不列入本请求可选值。",
             "enum": [
               "merchant_self",
               "platform",
@@ -91416,6 +92096,25 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "designated_handler_user_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "designated_handler_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "designated_handler_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         },
         "required": [
@@ -91445,7 +92144,10 @@
           "first_payment_anchor",
           "first_payment_fixed_at",
           "balance_due_anchor",
-          "balance_due_fixed_at"
+          "balance_due_fixed_at",
+          "designated_handler_user_id",
+          "designated_handler_by",
+          "designated_handler_at"
         ]
       },
       "DealerOrderRecord": {
@@ -91703,6 +92405,11 @@
             "type": "string",
             "minLength": 1
           },
+          "counterparty_confirmation_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "经销商已停用时必填：指定经办人为本订单登记、尚未使用的「签收」类对方确认留证；缺少、事项不符或已用过 409 DEALER_COUNTERPARTY_CONFIRMATION_REQUIRED。未停用时忽略。"
+          },
           "delivery_batch_id": {
             "type": "string"
           },
@@ -91711,7 +92418,8 @@
             "format": "date-time"
           },
           "buyer_contact": {
-            "type": "string"
+            "type": "string",
+            "description": "已核验收货确认人；经销商已停用时可省略，签收人取所用对方确认留证的已核验联系人"
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -91735,7 +92443,6 @@
           "idempotency_key",
           "delivery_batch_id",
           "confirmed_at",
-          "buyer_contact",
           "evidence_attachment_ids",
           "lines"
         ]
@@ -91783,6 +92490,11 @@
           "idempotency_key": {
             "type": "string",
             "minLength": 1
+          },
+          "counterparty_confirmation_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "经销商已停用时必填：指定经办人为本订单登记、尚未使用的「交付差异」类对方确认留证；缺少、事项不符或已用过 409 DEALER_COUNTERPARTY_CONFIRMATION_REQUIRED。未停用时忽略。"
           },
           "quantity": {
             "type": "integer",
@@ -98024,6 +98736,63 @@
           }
         },
         "required": []
+      },
+      "PurchaseSuggestion": {
+        "type": "object",
+        "description": "第十八批第 33 条智能采购建议行；reason 由系统按算式拼出（安全库存 a ＋ 近 7 天销量 b － 当前可用 c － 在途 d ＝ 建议采购 q）。",
+        "required": [
+          "project_id",
+          "merchant_id",
+          "item_id",
+          "item_name",
+          "safety_stock",
+          "sales_quantity",
+          "available_quantity",
+          "in_transit_quantity",
+          "suggested_quantity",
+          "reason"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string"
+          },
+          "merchant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "货权商户；平台货权为空"
+          },
+          "item_id": {
+            "type": "string"
+          },
+          "item_name": {
+            "type": "string"
+          },
+          "safety_stock": {
+            "type": "integer",
+            "description": "物料安全库存 min_quantity"
+          },
+          "sales_quantity": {
+            "type": "integer",
+            "description": "近 7 天销量净额"
+          },
+          "available_quantity": {
+            "type": "integer",
+            "description": "本项目本货权当前可用库存合计"
+          },
+          "in_transit_quantity": {
+            "type": "integer",
+            "description": "已批准未收完的采购数量"
+          },
+          "suggested_quantity": {
+            "type": "integer",
+            "description": "建议采购量（大于 0）"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "AmusementCapacitySnapshot": {
         "type": "object",

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -1272,6 +1272,11 @@ public class BarOrderService {
         }
         String decision = normalizeVoidDecision(actual.decision());
         String reviewer = authorizationService.currentActor().id();
+        // 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」）：
+        // 申请与审批权限码分离之外，同一人持两码也不得审批自己的申请。
+        if (reviewer.equals(current.requestedByUserId())) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_VOID_SELF_APPROVAL", "审批人不得是申请人");
+        }
         String reviewReason = trimToNull(actual.reason());
         Instant now = Instant.now();
 

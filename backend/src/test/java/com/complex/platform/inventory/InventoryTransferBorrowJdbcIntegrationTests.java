@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -14,6 +14,7 @@ import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
 import com.complex.platform.governance.review.SupervisorReviewService;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 「实际归还时间取借出方收货扫码的时刻」「结束对应数量的原物归还事项」「不得伪造归还扫码或实际归还时间」
  * 「不可消费借用物无法归还时……由借出所有权方与借入保管方确认原因、数量和实物处置，并经主管及财务复核；赔偿……形成借入方对借出方的应付。
  * 双方确认的实物处置实际完成后，结束对应数量的原物归还事项；未付赔偿款单独跟进直到实际清偿」；ENUM L166；台账 §25；DEC-R3-38；批准 13｜Q18。
+ * 第十八批第 18 条（ENUM:162 库存流水「借出（跨主体借调中不可消费物品交付给借入方）、归还（借入方将借用物品归还借出方）」；DEC-R7-04）：
+ * 借出方交货扣借出方出货库位并写借出流水，借出方收货扫码归还按原出库成本回该库位并写归还流水。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -67,6 +70,9 @@ class InventoryTransferBorrowJdbcIntegrationTests {
     @Autowired
     private EvidenceEventService evidence;
 
+    @Autowired
+    private InventoryRepository repository;
+
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "fs019_prj_" + suffix;
     private final String lender = "fs019_lender_" + suffix;
@@ -74,6 +80,7 @@ class InventoryTransferBorrowJdbcIntegrationTests {
     private final String third = "fs019_third_" + suffix;
     private final String device = "fs019_device_" + suffix;
     private final String liquor = "fs019_liquor_" + suffix;
+    private final String location = "fs019_loc_" + suffix;
     private final String codeA = "FS019A" + suffix;
     private final String codeB = "FS019B" + suffix;
     private RequestPostProcessor admin;
@@ -97,6 +104,11 @@ class InventoryTransferBorrowJdbcIntegrationTests {
         for (String code : List.of(codeA, codeB)) {
             jdbc.update("INSERT INTO inventory_trace_codes(id,trace_code,item_id,merchant_id,owner_type,owner_id) VALUES(?,?,?,?,'merchant',?)", "tc_" + code, code, device, lender, lender);
         }
+        // 第十八批第 18 条：借出方出货库位有 5 台——两笔带单价入库建立成本基准（3×100＋2×101＝502 分），另有一个 5 台的批次。
+        stockIn(3, 100L, "a");
+        stockIn(2, 101L, "b");
+        repository.saveStockBatch(new InventoryStockBatchRecord("fs019_batch_" + suffix, device, location, "B1", null, 5, null,
+                "active", List.of(), Instant.now(), Instant.now(), lender), project);
         String role = "fs019_role_" + suffix;
         jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'借用回归','project','active',now())", role, role);
         jdbc.update("""
@@ -239,6 +251,81 @@ class InventoryTransferBorrowJdbcIntegrationTests {
         assertThat(orderStatus(id)).isEqualTo("returned");
         assertThat(jdbc.queryForObject("SELECT status FROM ar_ap_items WHERE id=?", String.class, payableId)).isEqualTo("pending_payment");
         assertThat(count("SELECT count(*) FROM inventory_transfer_returns WHERE transfer_order_id=?", id)).isEqualTo(1);
+        // 第十八批第 18 条：无法归还的件处置完成不回库——只有归还的 1 件写了归还流水，余额＝5－2＋1。
+        assertThat(movements(id, "lend_return")).hasSize(1);
+        assertThat(balance()).isEqualTo(4);
+    }
+
+    // 第十八批第 18 条（ENUM:162「借出（跨主体借调中不可消费物品交付给借入方）、归还（借入方将借用物品归还借出方）」；DEC-R7-04；
+    // BSM:1201「借出方始终是这批货的所有权人」）：借出方交货扫码写一条借出（lend_out）扣借出方出货库位、不动批次；借出方分两次收货扫码
+    // 归还，各写一条归还（lend_return）回该库位，两条成本之和＝借出时转出的原成本（按原出库总成本累计分摊，不按已舍入单价乘数量）。
+    @Test
+    void lendOutDeductsTheLenderLocationAndReturnsRestoreItAtTheOriginalCost() throws Exception {
+        String id = lentOut();
+        List<Map<String, Object>> out = movements(id, "lend_out");
+        assertThat(out).hasSize(1);
+        assertThat(out.getFirst()).containsEntry("source_location_id", location).containsEntry("target_location_id", null)
+                .containsEntry("quantity", 2).containsEntry("merchant_id", lender).containsEntry("business_id", id);
+        assertThat(balance()).isEqualTo(3);
+        assertThat(batchQuantity()).isEqualTo(5);
+        long outCost = (Long) out.getFirst().get("total_cost_cent");
+        assertThat(outCost).isEqualTo(201L);
+
+        call(lenderStaff, id, "return", "{\"lines\":[{\"line_id\":\"" + id + "_l0\",\"returned_quantity\":1,\"trace_codes\":[\"" + codeA + "\"]}]}")
+                .andExpect(status().isOk());
+        assertThat(balance()).isEqualTo(4);
+        call(lenderStaff, id, "return", "{\"lines\":[{\"line_id\":\"" + id + "_l0\",\"returned_quantity\":1,\"trace_codes\":[\"" + codeB + "\"]}]}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("returned"));
+        assertThat(balance()).isEqualTo(5);
+        List<Map<String, Object>> back = movements(id, "lend_return");
+        assertThat(back).hasSize(2).allSatisfy(m -> assertThat(m).containsEntry("target_location_id", location)
+                .containsEntry("source_location_id", null).containsEntry("quantity", 1).containsEntry("merchant_id", lender));
+        assertThat(back.stream().mapToLong(m -> (Long) m.get("total_cost_cent")).sum()).isEqualTo(outCost);
+    }
+
+    // 第十八批第 18 条复核：借出不是领用或消耗（BSM:1201「借出方始终是这批货的所有权人」；BSM:1165 商户领用或出库才计成本），
+    // 借出（lend_out）不计入期间出库成本汇总——分红「销货成本」与 GET /api/v1/inventory/cost-summary 同取这个汇总。
+    @Test
+    void lendOutIsNotCountedInTheOutboundCostSummary() throws Exception {
+        String id = lentOut();
+        assertThat(movements(id, "lend_out")).hasSize(1);
+        Instant now = Instant.now();
+        InventoryCostSummaryRecord summary = repository.sumOutboundCost(lender, null, "p0", "p1",
+                now.minusSeconds(86_400), now.plusSeconds(86_400));
+        assertThat(summary.outboundTotalCostCent()).isZero();
+        assertThat(summary.outboundMovementCount()).isZero();
+    }
+
+    // 第十八批第 18 条：借调发货要扣出让方库位库存，建单须带出货库位（from_location_id），缺填 400。
+    @Test
+    void lendingOrderRequiresTheLenderShipFromLocation() throws Exception {
+        String body = borrowBody(device, 2, List.of(codeA, codeB), DUE).replace("\"from_location_id\":\"" + location + "\",", "");
+        mockMvc.perform(post(BASE).with(admin).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(count("SELECT count(*) FROM inventory_transfer_orders WHERE from_owner_id=?", lender)).isZero();
+    }
+
+    // 第十八批第 18 条：出货库位可用不足 409 STOCK_INSUFFICIENT——单仍新建、无流水、无交货保管台账、余额不动。
+    @Test
+    void shipIsRejectedWhenTheLenderLocationLacksStock() throws Exception {
+        jdbc.update("UPDATE inventory_stock_balances SET quantity=1, available_quantity=1 WHERE item_id=? AND location_id=?", device, location);
+        String id = createBorrow(2, List.of(codeA, codeB));
+        call(lenderStaff, id, "ship", "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("STOCK_INSUFFICIENT"));
+        assertThat(orderStatus(id)).isEqualTo("created");
+        assertThat(count("SELECT count(*) FROM inventory_stock_movements WHERE business_id=?", id)).isZero();
+        assertThat(count("SELECT count(*) FROM inventory_trace_ownership_history WHERE transfer_order_id=?", id)).isZero();
+        assertThat(balance()).isEqualTo(1);
+    }
+
+    // 第十八批第 18 条（BSM:1201「借出时间取借出方交货扫码的时刻」）：交货扣借出方库存，须由借出方办理——借入方账号 403 LENDER_SHIP_ONLY，余额不动。
+    @Test
+    void borrowerAccountCannotShipTheLendersStock() throws Exception {
+        String id = createBorrow(2, List.of(codeA, codeB));
+        call(borrowerStaff, id, "ship", "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}")
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("LENDER_SHIP_ONLY"));
+        assertThat(orderStatus(id)).isEqualTo("created");
+        assertThat(balance()).isEqualTo(5);
     }
 
     // R3：双方确认＝另一方商户确认，登记方同商户同事与第三方商户都不能确认。
@@ -313,9 +400,9 @@ class InventoryTransferBorrowJdbcIntegrationTests {
     private String borrowBody(String itemId, int quantity, List<String> codes, String due) {
         return """
                 {"idempotency_key":"%s","transfer_type":"lending","lending_mode":"borrow","from_owner_type":"merchant","from_owner_id":"%s",
-                 "to_owner_type":"merchant","to_owner_id":"%s",%s
+                 "to_owner_type":"merchant","to_owner_id":"%s","from_location_id":"%s",%s
                  "lines":[{"item_id":"%s","quantity":%d,"unit_price_cent":80000,"trace_codes":%s}]}
-                """.formatted(key(), lender, borrower, due == null ? "" : "\"return_due_at\":\"" + due + "\",", itemId, quantity, json(codes));
+                """.formatted(key(), lender, borrower, location, due == null ? "" : "\"return_due_at\":\"" + due + "\",", itemId, quantity, json(codes));
     }
 
     private String createBorrow(int quantity, List<String> codes) throws Exception {
@@ -409,6 +496,26 @@ class InventoryTransferBorrowJdbcIntegrationTests {
 
     private String custodian(String code) {
         return jdbc.queryForObject("SELECT custodian_id FROM inventory_trace_codes WHERE trace_code=?", String.class, code);
+    }
+
+    /** 夹具：带单价入库借出方出货库位（经真实成本引擎落成本基准）。 */
+    private void stockIn(int quantity, long unitCostCent, String tag) {
+        repository.atomicIncreaseStockBalance(device, location, quantity, "fs019_bal_" + suffix, lender, null, project);
+        repository.saveStockMovement(new StockMovementRecord("fs019_in_" + tag + suffix, "inbound", device, null, location, quantity,
+                unitCostCent, null, "fixture", "fs019_fixture_" + suffix, null, null, List.of(), "completed", Instant.now(), lender), project);
+    }
+
+    private List<Map<String, Object>> movements(String orderId, String type) {
+        return jdbc.queryForList("SELECT * FROM inventory_stock_movements WHERE business_type='inventory_transfer' AND business_id=? AND movement_type=? ORDER BY created_at,id",
+                orderId, type);
+    }
+
+    private int balance() {
+        return jdbc.queryForObject("SELECT quantity FROM inventory_stock_balances WHERE item_id=? AND location_id=?", Integer.class, device, location);
+    }
+
+    private int batchQuantity() {
+        return jdbc.queryForObject("SELECT COALESCE(sum(quantity),0)::int FROM inventory_stock_batches WHERE item_id=? AND location_id=?", Integer.class, device, location);
     }
 
     private long count(String sql, Object... args) {

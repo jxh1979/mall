@@ -28,10 +28,8 @@ class HighValueDecisionServiceTests {
     @BeforeEach
     void setUp() {
         repository = mock(InventoryRepository.class);
-        AuthorizationService authorizationService = mock(AuthorizationService.class);
-        when(authorizationService.currentProjectScopeQuietly()).thenReturn(Optional.empty());
-        service = new HighValueDecisionService(repository, authorizationService);
-        service.thresholdPort = (projectId, merchantId) -> thresholdCent;
+        service = new HighValueDecisionService(repository);
+        service.thresholdPort = () -> thresholdCent;
         thresholdCent = 500_000L; // 出厂默认 5000 元
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -300,6 +300,23 @@ class SavedBottleStockDisposalJdbcIntegrationTests {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
 
         assertThat(body).contains(own).doesNotContain(other);
+    }
+
+    // 第十八批第 24 条 24-R2：只持财务应收应付管理码的账号也能进高价值复核页，只列存酒库房存货处置单（财务那一道），
+    // 不列报损、盘点差异、存酒作废等只认主管复核码的复核单。
+    @Test
+    void financeOnlyAccountListsOnlySavedBottleStockDisposalReviews() throws Exception {
+        String disposal = "o1302_hvr_dsp_" + suffix;
+        String damage = "o1302_hvr_dmg_" + suffix;
+        for (String[] row : new String[][] {{disposal, "saved_bottle_stock_disposal"}, {damage, "damage_report"}}) {
+            jdbc.update("INSERT INTO inventory_high_value_reviews(id,subject_type,subject_id,photo_attachment_ids,video_attachment_ids,review_status,created_at,merchant_id,created_by) "
+                    + "VALUES(?,?,?,'[]'::jsonb,'[]'::jsonb,'pending',now(),?,'o1302_creator')", row[0], row[1], "adj_" + row[0], merchant);
+        }
+
+        String body = mockMvc.perform(get("/api/v1/inventory/high-value-reviews").with(finance))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        assertThat(body).contains(disposal).doesNotContain(damage);
     }
 
     /** 存酒库房里已有到期转入的存货（余额行同 R1 回库写入的形状）。 */

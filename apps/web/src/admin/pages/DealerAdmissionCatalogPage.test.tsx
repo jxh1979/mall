@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -140,6 +140,20 @@ describe("DealerAdmissionCatalogPage 经销商准入与价格目录（ADM-DLR-00
     await waitFor(() => expect(screen.getByTestId("dealer-review-approve")).toBeDisabled());
     expect(screen.getByTestId("dealer-review-reject")).toBeDisabled();
     expect(screen.getByRole("link", { name: "查看企业资料 1" })).toHaveAttribute("href", "/api/v1/evidence/attachments/c/file");
+  });
+
+  // 第十八批第 31 条复核（BSM:1247「合同销售主体指定经办人」）：经办人从员工列表选，提交内部用户编号（后端按 AccessActor.id 比对），不提交登录名。
+  it("第十八批第 31 条：指定经办人从员工列表选择，提交用户编号而不是登录名", async () => {
+    const api = makeApi(); const oldGet = api.get;
+    api.get = vi.fn(async (url: string) => url === "/api/v1/access/users" ? [{ id: "usr_8f3a21", username: "zhangsan", accountType: "staff" }] : oldGet(url)) as AdminApiClient["get"];
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("dealer-select-dlr_2")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("dealer-select-dlr_2"));
+    await waitFor(() => expect(screen.queryByTestId("contract-handler-user")?.textContent ?? "").toContain("zhangsan"));
+    fireEvent.change(screen.getByTestId("contract-handler-user"), { target: { value: "usr_8f3a21" } });
+    fireEvent.click(screen.getByTestId("contract-handler-designate-dct_1"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/contracts/dct_1/designated-handler", expect.objectContaining({ handlerUserId: "usr_8f3a21" })));
+    expect(api.post).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ handlerUserId: "zhangsan" }));
   });
 
 });

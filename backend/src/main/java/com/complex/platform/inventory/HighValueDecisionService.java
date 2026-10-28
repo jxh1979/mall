@@ -1,6 +1,5 @@
 package com.complex.platform.inventory;
 
-import com.complex.platform.access.AuthorizationService;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -59,7 +58,6 @@ public class HighValueDecisionService {
     public static final String BASIS_BELOW_THRESHOLD = "below_threshold";
 
     private final InventoryRepository repository;
-    private final AuthorizationService authorizationService;
 
     /**
      * 阈值配置端口（实现在结算配置中心侧）。字段注入免改构造点；生产恒注入。
@@ -68,20 +66,18 @@ public class HighValueDecisionService {
     @Autowired(required = false)
     HighValueThresholdPort thresholdPort;
 
-    public HighValueDecisionService(InventoryRepository repository, AuthorizationService authorizationService) {
+    public HighValueDecisionService(InventoryRepository repository) {
         this.repository = repository;
-        this.authorizationService = authorizationService;
     }
 
     /**
      * 判定某物品是否高价值。
      *
      * @param inventoryItemId 物品（库存物料）id；null / 查不到 = 到货价未知 ⇒ 高价值
-     * @param merchantId      物品归属商户（阈值作用域用，权威值由调用方给，不取请求体）
+     * @param merchantId      物品归属商户（第十八批第 24 条起阈值全平台统一、不按商户取；参数保留给各调用点传归属）
      */
     public HighValueDecision decide(String inventoryItemId, String merchantId) {
-        Long threshold = thresholdPort == null ? null : thresholdPort.findHighValueThresholdCent(
-                authorizationService.currentProjectScopeQuietly().orElse(null), merchantId);
+        Long threshold = thresholdPort == null ? null : thresholdPort.findHighValueThresholdCent();
         if (threshold == null) {
             return new HighValueDecision(true, null, purchaseUnitCostCent(inventoryItemId).orElse(null),
                     BASIS_THRESHOLD_UNSET);

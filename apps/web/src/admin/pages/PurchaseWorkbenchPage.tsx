@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
@@ -18,6 +18,8 @@ type Allocation = { id: string; sourcePaymentId: string; targetItemId: string; a
 type PrepaymentResolution = { id: string; resolutionType: string; sourcePaymentId?: string; amountCent: number; refundDueDate?: string; contractBasis: string; reason: string; reviewId?: string; status: string; requestedBy: string; postedAt?: string; supplierRefundItemId?: string; originalItemId?: string; reversalItemId?: string; replacementItemId?: string };
 type Payment = { id: string; amountCent: number; bankFlowRef?: string };
 type Detail = { purchase: Purchase; projectId: string; reviewId?: string; acceptedQuantity: number; terminatedQuantity: number; remainingQuantity: number; receipts: Receipt[]; resolutions: Resolution[]; consignmentSales: Sale[]; returns: Return[]; payables?: Payable[]; allocations?: Allocation[]; settlementTerms?: Terms; settlementMethod?: string; consignmentSaleBasis?: string; prepaymentCashPaidCent?: number; prepaymentAllocatedCent?: number; prepaymentResolutions?: PrepaymentResolution[]; prepaymentRefundReservedCent?: number; prepaymentPayments?: Payment[] };
+// 第十八批第 33 条：智能采购建议（GET /api/v1/inventory/purchase-suggestions，只读即时计算）。
+type Suggestion = { projectId: string; merchantId?: string | null; itemId: string; itemName: string; suggestedQuantity: number; reason: string };
 type Options = { projects: Option[]; entities: Option[]; merchants: Option[]; suppliers: Option[]; inventoryItems: Option[]; warehouses: Option[]; contracts: Contract[] };
 type Action = "contract-create" | "terms" | "contract-approve" | "purchase-create" | "approve" | "order" | "arrive" | "receive" | "resolution" | "sale" | "sale-confirm" | "allocate" | "return" | "handover" | "finance-review" | "prepayment-resolution" | "prepayment-post";
 const VIEW = "inventory.purchase_request.view", MANAGE = "inventory.purchase_request.manage", CONTRACT = "inventory.supply_contract.manage", FINANCE = "finance.ar_ap.manage", EVIDENCE = "evidence.attachment.create";
@@ -52,6 +54,8 @@ export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActi
   const [scope, setScope] = React.useState<string[]>([]);
   const [prices, setPrices] = React.useState<Record<string, string>>({});
   const [proofs, setProofs] = React.useState<{ id: string; name: string }[]>([]);
+  const [suggestionProject, setSuggestionProject] = React.useState("");
+  const [suggestions, setSuggestions] = React.useState<Suggestion[]>([]);
   const request = React.useRef<{ fingerprint: string; key: string } | null>(null);
   const set = (field: string, value: string) => setForm(v => ({ ...v, [field]: value }));
   const itemName = (id: string) => { const row = options.inventoryItems.find(x => x.id === id); return row ? `${name(row)}（${row.unit ?? "未配置单位"}）` : id; };
@@ -80,6 +84,17 @@ export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActi
     const seq = ++selection.current; setAction(null); setProofs([]); setContract(null); setError("");
     try { const result = await api.get<{ contract: Contract; reviewId?: string; terms?: Terms }>(`/api/v1/inventory/supply-contracts/${enc(id)}/terms`); if (seq === selection.current) setContract(result); }
     catch (e) { if (seq === selection.current) setError(e instanceof Error ? e.message : "合同原件读取失败"); }
+  }
+  async function readSuggestions(id: string) {
+    setSuggestionProject(id); setSuggestions([]); setError("");
+    if (!id) return;
+    try { setSuggestions(await api.get<Suggestion[]>(`/api/v1/inventory/purchase-suggestions?project_id=${enc(id)}`)); }
+    catch (e) { setError(`采购建议读取失败：${e instanceof Error ? e.message : "请稍后重试"}`); }
+  }
+  // BSM:1211「生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单」：只预填现有建单表单，由采购人员改后提交，不自动建单或下单。
+  function purchaseFromSuggestion(s: Suggestion, c: Contract) {
+    open("purchase-create");
+    setForm(v => ({ ...v, supplyContractId: c.id, itemId: s.itemId, quantity: String(s.suggestedQuantity), reason: s.reason }));
   }
   function permissions(a: Action): string[] {
     if (a.startsWith("contract") || a === "terms") return [CONTRACT];
@@ -208,6 +223,13 @@ export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActi
         {actionButton("terms", "", !draft)}{actionButton("contract-approve", "", !draft)}
       </div>}
     </section>
+    {can([MANAGE]) && <section className="admin-panel"><h3>采购建议</h3>
+      <label>采购建议综合体<select aria-label="采购建议综合体" value={suggestionProject} disabled={busy} onChange={e => void readSuggestions(e.target.value)}><option value="">请选择</option>{options.projects.map(p => <option key={p.id} value={p.id}>{name(p)}</option>)}</select></label>
+      {suggestionProject && <table className="admin-table"><thead><tr><th>商品</th><th>货权</th><th>建议采购量</th><th>理由</th><th>操作</th></tr></thead><tbody>{suggestions.map(s => {
+        const c = usableContracts.find(c => c.projectId === s.projectId && (c.merchantId ?? null) === (s.merchantId ?? null) && c.purchasableScope.includes(s.itemId));
+        return <tr key={`${s.merchantId ?? ""}:${s.itemId}`}><td>{s.itemName}</td><td>{s.merchantId ? options.merchants.find(m => m.id === s.merchantId)?.merchantName ?? s.merchantId : "平台"}</td><td>{s.suggestedQuantity}</td><td>{s.reason}</td><td>{c ? <PermissionButton permissionsState={effectivePermissions} permissions={[MANAGE]} disabled={busy} onClick={() => purchaseFromSuggestion(s, c)}>按建议发起采购</PermissionButton> : "无可用已批准合同"}</td></tr>;
+      })}</tbody></table>}
+    </section>}
     <section className="admin-panel"><h3>采购申请与履约</h3>{actionButton("purchase-create")}{!canView && <p>无采购查看权限；不能读取采购原件。</p>}
       <table className="admin-table"><thead><tr><th>采购单</th><th>商品</th><th>供应商</th><th>原采购量</th><th>进度</th><th>操作</th></tr></thead><tbody>{purchases.map(p => <tr key={p.id}><td>{p.requestNo}</td><td>{itemName(p.itemId)}</td><td>{supplierName(p.supplierId)}</td><td>{p.quantity}</td><td>{status(p.status)}</td><td><button type="button" disabled={busy} onClick={() => void readPurchase(p.id)}>查看采购</button></td></tr>)}</tbody></table>
       {detail && <div><h4>采购 {detail.purchase.requestNo}</h4><p>原采购 {detail.purchase.quantity}；合格接收 {detail.acceptedQuantity}；批准终止 {detail.terminatedQuantity}；尚待处理 {detail.remainingQuantity}。数量处理完成不代表货款结清。</p>{approvalLink(detail.reviewId)}

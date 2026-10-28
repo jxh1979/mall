@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -80,6 +80,9 @@ public class SupervisorReviewService {
                     List.of("reason", "before_after"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("bar_business_day", "bar.business_day.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
+            // 第十八批第 24 条（ENUM:164 高价值判定阈值「全平台统一可配，调整须最高权限审批并留痕」）。
+            new SupervisorReviewPolicyRecord("settlement_high_value_threshold", "settlement.high_value_threshold.configure", 0, 3, true,
+                    List.of("reason", "before_after"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("inventory_purchase_request", "inventory.purchase_request", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "inventory.purchase.approve"),
             new SupervisorReviewPolicyRecord("inventory_purchase_terminate", "inventory.purchase_terminate", 0, 1, true,
@@ -118,6 +121,13 @@ public class SupervisorReviewService {
             // HP-F03（BSM L1408「楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证」）：
             // 恒阻断；发起人沿直接上级链到其指定的最终审批人（设备台账仅平台／项目物业方可写，所有权主体即该方）。
             new SupervisorReviewPolicyRecord("facility_equipment_scrap", "facility.equipment.scrap", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批第 30 条（PGM L502「确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请」）：
+            // 恒阻断；发起人沿直接上级链到其指定的最终审批人（PGM L540）。
+            new SupervisorReviewPolicyRecord("leasing_blacklist_exception", "leasing.blacklist_exception", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批第 30 条（PGM L502「意向五阶段中进入方案报价、商务谈判须主管确认才能推进」）：恒阻断，同上。
+            new SupervisorReviewPolicyRecord("leasing_intent_key_stage", "leasing.intent.key_stage", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // HP-P01（BSM L1438「免费放行和减免须经物业主管审批」）：恒阻断；最终审批人须经角色持有停车减免审批权限（物业主管）。
             new SupervisorReviewPolicyRecord("parking_release_waive", "parking.release.waive", 0, 1, true,

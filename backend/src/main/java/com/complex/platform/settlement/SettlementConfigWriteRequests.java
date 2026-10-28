@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.util.List;
 
@@ -106,12 +106,12 @@ public final class SettlementConfigWriteRequests {
     }
 
     /**
-     * V350 high_value_thresholds：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用）。
-     * highValueThresholdCent=单笔已出品退品金额「超过」本值即高价值（须先审后行 + 双证据），单位分，须≥0；
-     * 出厂默认 500000（5000 元）；merchantId 留空=该项目通用。
+     * 第十八批第 24 条 high_value_thresholds：全平台统一「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用，ENUM:164）。
+     * highValueThresholdCent＝物品最近一次实际到货价大于或等于本值即高价值，单位分；须同时配置下限与上限（0 ≤ 下限 ≤ 阈值 ≤ 上限）；
+     * 出厂默认 500000（5000 元）；reason 必填，提交后进最高权限审批，批准后生效。
      */
-    public record HighValueThresholdRequest(String idempotencyKey, String projectId, String merchantId,
-                                          Long highValueThresholdCent) {
+    public record HighValueThresholdRequest(String idempotencyKey, Long highValueThresholdCent,
+                                          Long highValueThresholdMinCent, Long highValueThresholdMaxCent, String reason) {
     }
 
     /**

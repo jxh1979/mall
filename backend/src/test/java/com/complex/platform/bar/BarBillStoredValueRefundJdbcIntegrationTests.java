@@ -1,9 +1,12 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.customer.CustomerStoredValueAccountRecord;
 import com.complex.platform.finance.RefundPayableSettled;
@@ -18,6 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -45,6 +50,7 @@ class BarBillStoredValueRefundJdbcIntegrationTests {
     private String merchantId;
     private String customerId;
     private String phone;
+    private String reviewerId;
 
     @BeforeEach
     void setUp() {
@@ -62,6 +68,15 @@ class BarBillStoredValueRefundJdbcIntegrationTests {
         // 酒吧退款分级授权闸（AUD-007）：给操作者本域自助额度，否则 REFUND_REVIEW_REQUIRED。
         jdbcTemplate.update("INSERT INTO refund_authority_limits (id, subject_type, subject_id, refund_domain, limit_amount_cent)"
                 + " VALUES (?, 'staff', ?, 'bar', 100000000) ON CONFLICT DO NOTHING", "ral_tk20r2_" + suffix, userId);
+        // 第十八批第 24 条 24-R3（PGM:529）：退品审批由同商户另一员工办理（申请人不得审批自己的申请）。
+        reviewerId = "usr_rev_" + merchantId;
+        accessRepository.createUser(new com.complex.platform.access.AccessUser(
+                reviewerId, "merchant_reviewer", "staff", "org_1", merchantId, "active", Instant.now()));
+        accessRepository.saveUserPermissionOverrides(reviewerId,
+                List.of("customer.stored_value.refund", "bar.bill.refund", "bar.order_item.void_decide"),
+                com.complex.platform.access.AccessRepository.Effect.GRANT, "退品审批测试授权", reviewerId);
+        jdbcTemplate.update("INSERT INTO refund_authority_limits (id, subject_type, subject_id, refund_domain, limit_amount_cent)"
+                + " VALUES (?, 'staff', ?, 'bar', 100000000) ON CONFLICT DO NOTHING", "ral_rev_tk20r2_" + suffix, reviewerId);
         phone = "139" + String.format("%08d", Math.abs(suffix.hashCode()) % 100_000_000);
         customerRepository.saveCustomer(new com.complex.platform.customer.CustomerRecord(
                 customerId, phone, "139****" + phone.substring(7), "active", null, null, Instant.now(), Instant.now()));
@@ -150,7 +165,7 @@ class BarBillStoredValueRefundJdbcIntegrationTests {
         BarOrderItemVoidRecord voided = orderService.voidOrderItem(orderId, new BarOrderItemVoidRequest(
                 "void-rj-" + suffix, null, List.of(), itemId, "客人退品", false, billId, null));
         assertThat(cardBalance()).isEqualTo(5_000L);
-        orderService.decideOrderItemVoid(voided.id(), new BarOrderItemVoidDecisionRequest("void-rj-decide-" + suffix, "rejected", "不予退品"));
+        asReviewer(() -> orderService.decideOrderItemVoid(voided.id(), new BarOrderItemVoidDecisionRequest("void-rj-decide-" + suffix, "rejected", "不予退品")));
         assertThat(cardBalance()).isEqualTo(3_000L);
 
         org.assertj.core.api.Assertions.assertThatCode(() -> billingService.applyBillAdjustment(billId, new BarBillAdjustmentRequest(
@@ -213,9 +228,42 @@ class BarBillStoredValueRefundJdbcIntegrationTests {
                 "void-st-" + suffix, null, List.of(), itemId, "客人退品", false, billId, null));
         assertThat(billStatus(billId)).containsEntry("payment_status", "paid");
 
-        orderService.decideOrderItemVoid(voided.id(), new BarOrderItemVoidDecisionRequest("void-st-decide-" + suffix, "approved", "同意退品"));
+        asReviewer(() -> orderService.decideOrderItemVoid(voided.id(), new BarOrderItemVoidDecisionRequest("void-st-decide-" + suffix, "approved", "同意退品")));
 
         assertThat(billStatus(billId)).containsEntry("payment_status", "partial_refunded");
+    }
+
+    /** 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：退品申请人即使持退酒审批码也不能审批自己的申请。 */
+    @Test
+    void applicantCannotDecideOwnItemVoid() {
+        Instant now = Instant.now();
+        String billId = seedUnpaidBill(5_000L);
+        String orderId = "order_tk20r2_" + suffix;
+        barRepository.saveProduct(new BarProductRecord("product_tk20r2_" + suffix, "bar_tk20r2_" + suffix, merchantId, "退品酒", "spirit",
+                2_000L, "CNY", null, null, false, "active", now, now, null, null, null, false, null, null, null));
+        String itemId = "item_tk20r2_" + suffix;
+        barRepository.saveOrderItem(new BarOrderItemRecord(itemId, orderId, "product_tk20r2_" + suffix, "退品酒", 1, 2_000L, 2_000L,
+                "pending", now, now, null, 0L, false, null, null, null, false, false, null));
+        settle(billId, "sv-self-" + suffix, 5_000L, "stored_value");
+        BarOrderItemVoidRecord voided = orderService.voidOrderItem(orderId, new BarOrderItemVoidRequest(
+                "void-self-" + suffix, null, List.of(), itemId, "客人退品", false, billId, null));
+
+        assertThatThrownBy(() -> orderService.decideOrderItemVoid(voided.id(),
+                new BarOrderItemVoidDecisionRequest("void-self-decide-" + suffix, "approved", "自己批")))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("BAR_ORDER_ITEM_VOID_SELF_APPROVAL");
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM bar_order_item_voids WHERE id = ?", String.class, voided.id()))
+                .isEqualTo("pending");
+    }
+
+    /** 以同商户另一员工（退品审批人）身份执行，结束后恢复申请人身份。 */
+    private void asReviewer(Runnable action) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(reviewerId, "merchant_reviewer", "staff", "org_1", merchantId, "active"), "token", List.of()));
+        try {
+            action.run();
+        } finally {
+            TestSecurityActors.asMerchantUser(merchantId);
+        }
     }
 
     // ---------- 造数 ----------

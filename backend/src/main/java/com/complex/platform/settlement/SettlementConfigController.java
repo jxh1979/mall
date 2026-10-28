@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
@@ -113,10 +113,17 @@ public class SettlementConfigController {
         return ApiResponse.ok(null);
     }
 
-    /** V350：全平台高价值判定阈值（项目 × 商户，单位分；比的是物品进货价）落草案。 */
+    /**
+     * 第十八批第 24 条：全平台统一高价值判定阈值（单位分；最近一次实际到货价大于或等于本值即高价值）连同上下限与理由提交最高权限审批；
+     * 权限、范围与校验失败按 OpenAPI 声明的失败事件留痕。
+     */
     @PostMapping("/high-value-threshold")
     public ApiResponse<Void> saveHighValueThreshold(@RequestBody HighValueThresholdRequest request) {
-        writeService.saveHighValueThreshold(request, requireManageActor());
+        auditFailure("settlement.config.high_value_thresholds.update_failed", "settlement.config.manage", "high_value_thresholds", null,
+                request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveHighValueThreshold(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 

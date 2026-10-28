@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { TechDetails } from "../components/TechDetails";
@@ -18,11 +18,14 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 
 // 后端写权限码（InventoryController：POST /stock-movements）
 const STOCK_MOVE_PERMISSION = "inventory.stock.move";
+// 第十八批第 24 条 24-R5（ENUM:164「或由库房主管以上岗位手工标记为高价值，标记与取消标记都必须填写理由并留痕，一线库管无此权限」）：
+// 标记与取消走 POST /api/v1/inventory/items/{id}/high-value-mark，持库房主管复核码。
+const HIGH_VALUE_MARK_PERMISSION = "inventory.high_value.review";
 
 const TEXT = {
   title: "库存台账",
   description: "集中查看物料、库存余额和库存流水，支持按 OpenAPI 契约登记库存移动；负库存禁止，高价值酒水保持在线核销。",
-  evidence: "接口证据：读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements、/api/v1/inventory/cost-summary；登记 POST /api/v1/inventory/stock-movements。",
+  evidence: "接口证据：读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements、/api/v1/inventory/cost-summary；登记 POST /api/v1/inventory/stock-movements；修改安全库存 POST /api/v1/inventory/items/{id}/safety-stock。",
   loadFailed: "库存台账读取失败",
   actionFailed: "库存移动登记失败",
   quantityInvalid: "移动数量必须大于 0，禁止负库存调整。",
@@ -124,6 +127,16 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [costSummary, setCostSummary] = React.useState<CostSummaryView | null>(null);
   // 行明细抽屉：整行可点 -> 该物料/余额/流水完整字段（状态中文·时间中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 第十八批第 24 条 24-R5：手工标记／取消标记高价值（理由必填）。
+  const [markTarget, setMarkTarget] = React.useState<InventoryItemRow | null>(null);
+  const [markReason, setMarkReason] = React.useState("");
+  const [markError, setMarkError] = React.useState("");
+  const [marking, setMarking] = React.useState(false);
+  // 第十八批第 33 条 33-R4：修改已有物料的安全库存（采购建议量算式用；权限与新建物料同码）。
+  const [stockTarget, setStockTarget] = React.useState<InventoryItemRow | null>(null);
+  const [stockValue, setStockValue] = React.useState("");
+  const [stockError, setStockError] = React.useState("");
+  const [stockSaving, setStockSaving] = React.useState(false);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -222,6 +235,47 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     }
   }
 
+  async function submitHighValueMark() {
+    if (!markTarget) return;
+    const requestBody = {
+      idempotency_key: `admin-high-value-mark-${markTarget.id}-${Date.now()}`,
+      manual_high_value: !markTarget.manualHighValue,
+      reason: markReason.trim(),
+    };
+    setMarking(true);
+    setMarkError("");
+    try {
+      const result = await api.post(`/api/v1/inventory/items/${encodeURIComponent(markTarget.id)}/high-value-mark`, requestBody);
+      setActionResult({ action: "inventory_item_high_value_marked", requestBody, result });
+      setMarkTarget(null);
+      await reload();
+    } catch (actionError) {
+      setMarkError(actionError instanceof Error ? actionError.message : "高价值标记失败");
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  async function submitSafetyStock() {
+    if (!stockTarget) return;
+    const requestBody = {
+      idempotency_key: `admin-safety-stock-${stockTarget.id}-${Date.now()}`,
+      min_quantity: Number(stockValue.trim()),
+    };
+    setStockSaving(true);
+    setStockError("");
+    try {
+      const result = await api.post(`/api/v1/inventory/items/${encodeURIComponent(stockTarget.id)}/safety-stock`, requestBody);
+      setActionResult({ action: "inventory_item_safety_stock_updated", requestBody, result });
+      setStockTarget(null);
+      await reload();
+    } catch (actionError) {
+      setStockError(actionError instanceof Error ? actionError.message : "安全库存修改失败");
+    } finally {
+      setStockSaving(false);
+    }
+  }
+
   function openItemDetail(item: InventoryItemRow) {
     setDetail({
       title: `${TEXT.items} · ${item.itemName ?? item.itemCode ?? item.id}`,
@@ -295,11 +349,41 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
         <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
       </FormModal>
+      <FormModal
+        open={markTarget !== null}
+        title={markTarget?.manualHighValue ? "取消高价值标记" : "手工标记为高价值"}
+        description={markTarget ? `物料：${markTarget.itemName ?? markTarget.itemCode ?? markTarget.id}。标记与取消标记都须填写理由，留痕可查。` : undefined}
+        testId="inventory-high-value-mark"
+        submitTestId="inventory-high-value-mark-submit"
+        submitLabel={markTarget?.manualHighValue ? "取消标记" : "标记高价值"}
+        submitting={marking}
+        error={markError || undefined}
+        validate={() => (markReason.trim() === "" ? "请填写理由。" : null)}
+        onClose={() => setMarkTarget(null)}
+        onSubmit={() => void submitHighValueMark()}
+      >
+        <label>理由<input data-testid="inventory-high-value-mark-reason" value={markReason} onChange={(event) => setMarkReason(event.target.value)} /></label>
+      </FormModal>
+      <FormModal
+        open={stockTarget !== null}
+        title="修改安全库存"
+        description={stockTarget ? `物料：${stockTarget.itemName ?? stockTarget.itemCode ?? stockTarget.id}。采购建议量＝安全库存＋近 7 天销量－当前可用库存－在途量。` : undefined}
+        testId="inventory-safety-stock"
+        submitTestId="inventory-safety-stock-submit"
+        submitLabel="保存安全库存"
+        submitting={stockSaving}
+        error={stockError || undefined}
+        validate={() => (/^\d+$/.test(stockValue.trim()) ? null : "安全库存须为不小于 0 的整数。")}
+        onClose={() => setStockTarget(null)}
+        onSubmit={() => void submitSafetyStock()}
+      >
+        <label>安全库存<input data-testid="inventory-safety-stock-input" type="number" min="0" step="1" value={stockValue} onChange={(event) => setStockValue(event.target.value)} /></label>
+      </FormModal>
       <h3>{TEXT.items}</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-items-table">
-          <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th><th>详情</th></tr></thead>
-          <tbody>{items.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-item-row-${item.id}`} onClick={() => openItemDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openItemDetail(item); } }}><td onClick={(event) => event.stopPropagation()}>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看物料详情" onClick={(event) => { event.stopPropagation(); openItemDetail(item); }}>查看详情</button></td></tr>)}</tbody>
+          <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th><th>安全库存</th><th>高价值标记</th><th>详情</th></tr></thead>
+          <tbody>{items.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-item-row-${item.id}`} onClick={() => openItemDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openItemDetail(item); } }}><td onClick={(event) => event.stopPropagation()}>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td><td onClick={(event) => event.stopPropagation()}><span data-testid={`inventory-item-min-quantity-${item.id}`}>{item.minQuantity ?? 0}</span> <PermissionButton permissionsState={effectivePermissions} permissions={[STOCK_MOVE_PERMISSION]} data-testid={`inventory-item-safety-stock-${item.id}`} onClick={() => { setStockValue(String(item.minQuantity ?? 0)); setStockError(""); setStockTarget(item); }}>修改安全库存</PermissionButton></td><td onClick={(event) => event.stopPropagation()}>{item.manualHighValue ? "已手工标记" : "未标记"} <PermissionButton permissionsState={effectivePermissions} permissions={[HIGH_VALUE_MARK_PERMISSION]} data-testid={`inventory-item-high-value-mark-${item.id}`} onClick={() => { setMarkReason(""); setMarkError(""); setMarkTarget(item); }}>{item.manualHighValue ? "取消标记" : "标记高价值"}</PermissionButton></td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看物料详情" onClick={(event) => { event.stopPropagation(); openItemDetail(item); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>

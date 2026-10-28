@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -31,9 +31,11 @@ public class DealerDeliveryService {
     private final SupervisorReviewService reviews;
     private final InventoryQuarantineService inventory;
     private final AuditEventService audit;
+    private final DealerCounterpartyConfirmationService confirmations;
     public DealerDeliveryService(JdbcDealerOrderRepository orders,JdbcDealerDeliveryRepository delivery,DealerOrderService money,
             AuthorizationService authorization,IdempotencyService idempotency,EvidenceEventRepository evidence,EvidenceAttachmentValidator files,
-            SupervisorReviewService reviews,InventoryQuarantineService inventory,AuditEventService audit) {
+            SupervisorReviewService reviews,InventoryQuarantineService inventory,AuditEventService audit,DealerCounterpartyConfirmationService confirmations) {
+        this.confirmations=confirmations;
         this.orders=orders; this.delivery=delivery; this.money=money; this.authorization=authorization; this.idempotency=idempotency;
         this.evidence=evidence; this.files=files; this.reviews=reviews; this.inventory=inventory; this.audit=audit;
     }
@@ -67,7 +69,9 @@ public class DealerDeliveryService {
                 Batch batch=delivery.batch(requireText(request.deliveryBatchId(),"delivery_batch_id"))
                         .filter(b->orderId.equals(b.orderId())).orElseThrow(()->ApiException.notFound("DEALER_DELIVERY_BATCH_NOT_FOUND","发运批次不存在"));
                 checkTime(request.confirmedAt(),batch.shippedAt());
-                String contact=requireText(request.buyerContact(),"buyer_contact");
+                // 第十八批第 31 条：经销商已停用时须用掉一条签收类对方确认，签收人取其已核验联系人，不认经办人填写。
+                var confirmation=confirmations.consumeIfDeactivated(orderId,order.dealerId(),"delivery_receipt",request.counterpartyConfirmationId());
+                String contact=confirmation!=null?confirmation.contactName():requireText(request.buyerContact(),"buyer_contact");
                 proofs(orderId,request.evidenceAttachmentIds());
                 if(request.lines()==null || request.lines().isEmpty()) throw invalid("本次签收明细不能为空");
                 Set<String> seen=new HashSet<>();
@@ -107,6 +111,7 @@ public class DealerDeliveryService {
             if(request==null) throw invalid("请填写双方确认的差异处理方案");
             return idempotency.execute("dealerDeliveryResolution:"+discrepancyId,request.idempotencyKey(),request,()->{
                 DealerOrderRecord order=orders.lockOrder(found.orderId()).orElseThrow();
+                confirmations.consumeIfDeactivated(order.id(),order.dealerId(),"delivery_resolution",request.counterpartyConfirmationId());
                 Discrepancy difference=delivery.discrepancy(discrepancyId).orElseThrow();
                 if(request.quantity()<=0 || request.quantity()>difference.quantity()-difference.reservedQuantity()) throw invalid("方案数量超过尚未被其他有效方案占用的差异数量");
                 if(!Set.of("replacement","price_adjustment").contains(requireText(request.resolutionType(),"resolution_type"))) throw invalid("请选择补交或确认调款");
@@ -252,7 +257,9 @@ public class DealerDeliveryService {
         }
         return order;
     }
-    private void proofs(String orderId,List<String> ids) {
+    private void proofs(String orderId,List<String> ids) { requireDeliveryProofs(evidence,files,orderId,ids); }
+    /** 本订单交付业务（business_type=dealer_delivery）的真实上传附件；对方确认留证同口径复用。 */
+    static void requireDeliveryProofs(EvidenceEventRepository evidence,EvidenceAttachmentValidator files,String orderId,List<String> ids) {
         if(ids==null || ids.isEmpty()) throw invalid("须上传真实的双方确认或实物凭证");
         for(String id:ids) {
             var attachment=evidence.findAttachmentById(id).orElseThrow(()->invalid("凭证不存在"));

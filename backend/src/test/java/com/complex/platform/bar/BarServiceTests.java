@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -51,6 +51,7 @@ class BarServiceTests {
     private InMemoryAuditEventRepository auditEventRepository;
     private CapturingBarReceivableLedgerService receivableLedgerService;
     private AuthorizationService authorizationService;
+    private static final String VOID_REVIEWER = "usr_void_reviewer";
     private BarService service;
     private final BarInvitationTokenSigner invitationSigner = new BarInvitationTokenSigner("test-bar-invitation-secret");
     private BarBillingService billingService;
@@ -100,7 +101,7 @@ class BarServiceTests {
         private String lastMerchantId;
 
         StubHighValueDecisionService() {
-            super(null, null);
+            super(null);
         }
 
         @Override
@@ -143,6 +144,13 @@ class BarServiceTests {
         when(accessRepository.listPermissions()).thenReturn(List.of(
                 new com.complex.platform.access.PermissionDefinition("bar.bill.refund", "退款", "bar", "high", false, "active"),
                 new com.complex.platform.access.PermissionDefinition("bar.order_item.void_decide", "退酒审批", "bar", "high", false, "active")));
+        // 第十八批第 24 条 24-R3（PGM:529）：退品审批人（申请人以外的人）同持退款与退酒审批码。
+        when(accessRepository.findPermissionEffects(org.mockito.ArgumentMatchers.eq(VOID_REVIEWER), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(List.of(
+                        new AccessRepository.PermissionEffect(VOID_REVIEWER, "bar.bill.refund", AccessRepository.Effect.GRANT,
+                                AccessRepository.Source.ROLE, "explicit_refund", null, null, false, false),
+                        new AccessRepository.PermissionEffect(VOID_REVIEWER, "bar.order_item.void_decide", AccessRepository.Effect.GRANT,
+                                AccessRepository.Source.ROLE, "explicit_void_review", null, null, false, false)));
         when(accessRepository.findPermissionEffects(org.mockito.ArgumentMatchers.eq("usr_admin"), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(List.of(
                         new AccessRepository.PermissionEffect("usr_admin", "bar.bill.refund", AccessRepository.Effect.GRANT,
@@ -3203,7 +3211,7 @@ class BarServiceTests {
         assertThat(BarMinSpend.retainedBalanceCent(barRepository, session.id())).isEqualTo(40000L);
         assertThat(BarMinSpend.consumedCent(barRepository, session.id())).isEqualTo(100000L);
 
-        service.decideOrderItemVoid(voided.id(),
+        decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-ret6-decide", "rejected", "not justified"));
 
         assertThat(barRepository.listBillAdjustments(bill.id()))
@@ -3647,7 +3655,7 @@ class BarServiceTests {
         assertThat(voided.approvalRequired()).isTrue();
         assertThat(voided.status()).isEqualTo("pending");
 
-        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+        BarOrderItemVoidRecord decided = decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-approve-decide-1", "approved", "supervisor ok"));
 
         // 审批通过 → status 回写 approved，落审批人/时点/理由。
@@ -3675,7 +3683,7 @@ class BarServiceTests {
                 "void-reject-1", "x", List.of(), orderItemId, "mistake", false, null, null));
         assertThat(voided.status()).isEqualTo("pending");
 
-        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+        BarOrderItemVoidRecord decided = decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-reject-decide-1", "rejected", "not justified"));
 
         // 审批驳回 → status 回写 rejected。
@@ -3685,7 +3693,7 @@ class BarServiceTests {
                 .get().extracting(BarOrderItemVoidRecord::status).isEqualTo("rejected");
 
         // 已决策（非 pending）再次决策被拒。
-        assertThatThrownBy(() -> service.decideOrderItemVoid(voided.id(),
+        assertThatThrownBy(() -> decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-reject-decide-2", "approved", "late")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -3727,7 +3735,7 @@ class BarServiceTests {
         assertThat(barRepository.bills.get(bill.id()).payableAmountCent()).isEqualTo(payableBeforeVoid - 200000L);
 
         // 驳回：对称冲销 → 库存回到 void 前 3、账单回到 void 前 payable、明细恢复 delivered/未撤单。
-        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+        BarOrderItemVoidRecord decided = decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-rej-reverse-decide", "rejected", "not justified"));
         assertThat(decided.status()).isEqualTo("rejected");
         assertThat(barRepository.findStockBalance("inventory_void_rej_reverse", "bar_1"))
@@ -3773,7 +3781,7 @@ class BarServiceTests {
         assertThat(payableAfterVoid).isEqualTo(payableBeforeVoid - 200000L);
 
         // 通过：保持已施加副作用，不冲销。
-        service.decideOrderItemVoid(voided.id(),
+        decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-appr-keep-decide", "approved", "supervisor ok"));
         assertThat(barRepository.findStockBalance("inventory_void_appr_keep", "bar_1"))
                 .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
@@ -3807,7 +3815,7 @@ class BarServiceTests {
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
                 "void-rej-idem-1", "quality issue", List.of(), orderItemId, "spoiled", true, bill.id(), null));
 
-        service.decideOrderItemVoid(voided.id(),
+        decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-rej-idem-decide-1", "rejected", "not justified"));
         int stockAfterFirst = barRepository.findStockBalance("inventory_void_rej_idem", "bar_1")
                 .map(StockBalanceSnapshot::quantity).orElseThrow();
@@ -3815,7 +3823,7 @@ class BarServiceTests {
                 .filter(a -> a.adjustmentType().endsWith("_reversal")).count();
 
         // 二次决策被 pending 守卫拦截 → 不会重复冲销（幂等）。
-        assertThatThrownBy(() -> service.decideOrderItemVoid(voided.id(),
+        assertThatThrownBy(() -> decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-rej-idem-decide-2", "rejected", "again")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -3863,7 +3871,7 @@ class BarServiceTests {
                 .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(5);
 
         // 第一次驳回：对称冲销，库存 5→3，落一条 waiver_reversal、应付加回。
-        service.decideOrderItemVoid(voided.id(),
+        decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-rej-once-decide-1", "rejected", "not justified"));
         assertThat(barRepository.findStockBalance("inventory_void_rej_once", "bar_1"))
                 .get().extracting(StockBalanceSnapshot::quantity).isEqualTo(3);
@@ -3872,7 +3880,7 @@ class BarServiceTests {
                 .filter(a -> "waiver_reversal".equals(a.adjustmentType())).count()).isEqualTo(1L);
 
         // 第二次驳回（不同 idempotencyKey）：行锁内 status 已非 pending → 被拒，库存不再扣减、不再加 waiver_reversal。
-        assertThatThrownBy(() -> service.decideOrderItemVoid(voided.id(),
+        assertThatThrownBy(() -> decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("void-rej-once-decide-2", "rejected", "again")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -3954,7 +3962,7 @@ class BarServiceTests {
                 "void-highvalue-approve-1", "quality issue", List.of("att-void-photo", "att-void-video"), f.orderItemId(),
                 "bottle spoiled", true, f.bill().id(), "quality_defect"));
 
-        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+        BarOrderItemVoidRecord decided = decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("decide-highvalue-approve", "approved", "supervisor ok"));
 
         assertThat(decided.status()).isEqualTo("approved");
@@ -3978,7 +3986,7 @@ class BarServiceTests {
         BarOrderItemVoidRecord pending = service.voidOrderItem(f.order().id(), new BarOrderItemVoidRequest(
                 "void-evidence-review-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
                 "bottle spoiled", true, f.bill().id(), "quality_defect"));
-        assertThatThrownBy(() -> service.decideOrderItemVoid(pending.id(),
+        assertThatThrownBy(() -> decideAsReviewer(pending.id(),
                 new BarOrderItemVoidDecisionRequest("decide-missing-video", "approved", "confirmed")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("EVIDENCE_PHOTO_VIDEO_REQUIRED"));
@@ -3990,7 +3998,7 @@ class BarServiceTests {
                 "void-lost-evidence-1", "quality issue", List.of("att-void-photo", "att-void-video"), g.orderItemId(),
                 "bottle spoiled", true, g.bill().id(), "quality_defect"));
         java.nio.file.Files.delete(evidenceDirectory.resolve("v.mp4"));
-        assertThatThrownBy(() -> service.decideOrderItemVoid(withBoth.id(),
+        assertThatThrownBy(() -> decideAsReviewer(withBoth.id(),
                 new BarOrderItemVoidDecisionRequest("decide-lost-file", "approved", "confirmed")))
                 .isInstanceOf(ApiException.class);
         assertThat(barRepository.orderItems.get(g.orderItemId()).voided()).isFalse();
@@ -4006,7 +4014,7 @@ class BarServiceTests {
                 "void-highvalue-reject-1", "quality issue", List.of("att-void-photo"), f.orderItemId(),
                 "bottle spoiled", true, f.bill().id(), "quality_defect"));
 
-        BarOrderItemVoidRecord decided = service.decideOrderItemVoid(voided.id(),
+        BarOrderItemVoidRecord decided = decideAsReviewer(voided.id(),
                 new BarOrderItemVoidDecisionRequest("decide-highvalue-reject", "rejected", "证据不足"));
 
         assertThat(decided.status()).isEqualTo("rejected");
@@ -5439,5 +5447,16 @@ class BarServiceTests {
             String operatorNote,
             List<String> evidenceAttachmentIds
     ) {
+    }
+
+    /** 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：退品审批由申请人以外的平台账号办理，办完恢复原身份。 */
+    private BarOrderItemVoidRecord decideAsReviewer(String voidId, BarOrderItemVoidDecisionRequest request) {
+        var previous = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        TestSecurityActors.asPlatformAdmin(VOID_REVIEWER);
+        try {
+            return service.decideOrderItemVoid(voidId, request);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(previous);
+        }
     }
 }

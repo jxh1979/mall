@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -65,6 +65,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-AMU-004", label: "巡检到期任务", route: "/admin/amusement/inspection-tasks" },
   { pageId: "ADM-INV-001", label: "库存台账", route: "/admin/inventory/ledger" },
   { pageId: "ADM-INV-002", label: "跨主体调拨与借调", route: "/admin/inventory/transfers" },
+  { pageId: "ADM-INV-004", label: "高价值复核", route: "/admin/inventory/high-value-reviews" },
   { pageId: "ADM-FIN-002", label: "对账差异", route: "/admin/finance/reconciliation" },
   { pageId: "ADM-FIN-003", label: "退款分级授权", route: "/admin/finance/refund-authority" },
   { pageId: "ADM-MER-001", label: "商户服务工单", route: "/admin/merchant-service/tickets" },
@@ -156,6 +157,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-INV-002") {
     await expect(page.getByTestId("inventory-transfer-page")).toBeVisible();
     await expect(page.getByTestId("inventory-transfer-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-INV-004") {
+    await expect(page.getByTestId("inventory-high-value-review-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-006") {
     await expect(page.getByTestId("finance-merchant-expense-page")).toBeVisible();
     await expect(page.getByTestId("merchant-expense-table")).toBeVisible();
@@ -807,7 +810,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("customer-account-search")).toBeVisible();
         await page.getByLabel("客人手机号").fill("13900001234");
         await page.getByTestId("customer-account-search-button").click();
-        await expect(page.getByTestId("customer-account-status")).toContainText("正常");
+        await expect(page.getByTestId("customer-account-status")).toContainText("有效");
         continue;
       }
       if (spec.pageId === "ADM-TER-001") {
@@ -864,7 +867,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("contracts-table")).toBeVisible();
         await expect(page.getByTestId("contract-draft-open")).toBeVisible();
         await page.getByRole("tab", { name: "② 审批与配置" }).click();
-        await expect(page.getByTestId("contract-flow-table")).toBeVisible();
+        await expect(page.getByTestId("contract-flow-table-new")).toBeVisible();
         await page.getByRole("tab", { name: "③ 变更与结算" }).click();
         await expect(page.getByTestId("contract-settlements-table")).toBeVisible();
         continue;
@@ -1026,19 +1029,22 @@ test.describe("full admin remaining pages acceptance", () => {
     await adminLogin(page);
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-002")!);
-    // 引导式流程一期：主按钮打开分步弹窗 → 基本信息 → 联系人 → 经营与租赁 → 确认页创建。
+    // 引导式流程（单屏范式 singlePage=true）：基本信息 + 联系人 + 经营与租赁 同屏，业态与联系电话必填，一次「下一步」到确认页 → 创建。
     await page.getByTestId("organization-merchant-create-open").click();
     await page.getByTestId("organization-merchant-name").fill("二期测试商户");
+    await page.getByTestId("organization-merchant-type").selectOption("retail");
+    await page.getByTestId("organization-merchant-contact-phone").fill("13800000000");
     await page.getByTestId("organization-merchant-flow-next").click();
     await page.getByTestId("organization-merchant-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("商户档案已创建");
     await expect(page.getByTestId("admin-action-result")).toContainText("Created Merchant");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-003")!);
+    await page.getByTestId("subject-bindings-change-action").selectOption("inactive");
     await page.getByTestId("subject-bindings-change-reason").fill("总控验收主体绑定变更");
     await page.getByTestId("subject-bindings-submit-change").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("操作：主体绑定变更已提交");
-    await expect(page.getByTestId("admin-action-result")).toContainText("evidence-full-admin");
+    await expect(page.getByTestId("admin-action-result")).toContainText("总控验收主体绑定变更");
 
     // 合同生命周期工作台（V162 重建）：起草合同为可审计写动作（商户/主体/起止日期必填，POST /api/v1/contracts）。
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-CONT-001")!);
@@ -1073,9 +1079,12 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("已生成待复核记录：review-demo");
     await expect(page.getByTestId("supervisor-review-current-review")).toContainText("review-demo");
     await expect(page.getByTestId("supervisor-review-approve")).toBeEnabled();
+    // 评估出的单是本人发起，按 PGM:529 改选另一员工发起的待复核单批准。
+    await page.getByTestId("supervisor-review-pending-select-review-pending-1").click();
+    await expect(page.getByTestId("supervisor-review-current-review")).toContainText("review-pending-1");
     await page.getByTestId("supervisor-review-approval-comment").fill("证据齐备，同意放行");
     await page.getByTestId("supervisor-review-approve").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("复核单 review-demo 全部节点已通过，单据生效");
+    await expect(page.getByTestId("admin-action-result")).toContainText("复核单 review-pending-1 全部节点已通过，单据生效");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-TKT-002")!);
     await page.getByTestId("dynamic-pricing-simulate").click();
@@ -1099,6 +1108,7 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("操作：酒吧账单已生成");
     await page.getByTestId("bar-order-deliver").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("状态：已送达");
+    await page.getByLabel("本次付款凭据编号").fill("PAY-E2E-1");
     await page.getByTestId("bar-order-settle").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("已支付");
 
@@ -1133,7 +1143,9 @@ test.describe("full admin remaining pages acceptance", () => {
     // 引导式流程 phase-7：新增场次收起为主按钮 + 分步弹窗（入口→填字段→下一步→提交）。
     await page.getByTestId("amusement-session-create-open").click();
     await page.getByTestId("amusement-session-name").fill("验收场次");
-    await page.getByTestId("amusement-session-capacity").fill("12");
+    await page.getByTestId("amusement-session-project").selectOption("amuse-1");
+    await page.getByTestId("amusement-session-start").fill("2099-01-01T10:00");
+    await page.getByTestId("amusement-session-end").fill("2099-01-01T12:00");
     await page.getByTestId("amusement-session-guided-next").click();
     await page.getByTestId("amusement-session-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("游乐场次已创建");
@@ -1238,11 +1250,8 @@ test.describe("full admin remaining pages acceptance", () => {
     await adminLogin(page, "/admin/merchant-portal/scope");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-002")!);
-    await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("merchant-1:billing");
-    await expect(page.getByTestId("merchant-scope-work-orders-table")).toContainText("merchant-1:work-orders");
-    await page.getByTestId("merchant-scope-confirm").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_scope_confirmed");
-    await expect(page.getByTestId("admin-action-result")).toContainText("merchant_authorized_scope_checked");
+    await expect(page.getByTestId("merchant-scope-bills-table")).toContainText("MBILL-1");
+    await expect(page.getByTestId("merchant-scope-work-orders-table")).toContainText("空调漏水");
 
     // 商户专区一期:merchant 账号整个会话按 merchant_portal 终端上报,我的账单页可用(后端 currentMerchantScope 只回本商户)。
     const billsRequestPromise = page.waitForRequest((request) => request.url().includes("/api/v1/merchant-billing/bills"));
@@ -1315,7 +1324,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("vendor-site-entries-table")).toContainText("vendor-user");
         await expect(page.getByTestId("vendor-site-entry-completion-upload")).toBeEnabled();
         await page.getByTestId("vendor-site-entry-completion-note").fill("完工材料已上传");
-        await page.getByTestId("vendor-site-entry-completion-attachments").fill("att-completion-1");
+        await page.getByTestId("vendor-site-entry-completion-attachments").setInputFiles({ name: "completion.png", mimeType: "image/png", buffer: Buffer.from("e2e-completion") });
         await page.getByTestId("vendor-site-entry-completion-upload").click();
         await expect(page.getByTestId("admin-action-result")).toContainText("外包完工资料已上传");
       }

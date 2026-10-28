@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.util.List;
@@ -16,6 +16,7 @@ import java.util.List;
  * <p>{@code subjectType} 取值：{@code damage_report}/{@code stock_variance}/{@code saved_bottle_void}/
  * {@code saved_bottle_stock_disposal}（OBS-13-02 存酒库房存货处置，门店主管与财务两道审批）；
  * {@code subjectId} 关联 movement/adjustment/saved_bottle。{@code reviewStatus}：pending/approved/rejected。
+ * <p>{@code subjectSummary}（第十八批第 24 条 24-R2，只读）：后台复核页列表连表取的复核对象摘要，写入不落库。
  */
 public record InventoryHighValueReviewRecord(
         String id,
@@ -34,8 +35,26 @@ public record InventoryHighValueReviewRecord(
         // OBS-13-02：发起人与两道审批人（审批人不得是发起人、两道不得同一人，同赔付方案审批）。
         String createdBy,
         String supervisorApprovedBy,
-        String financeApprovedBy
+        String financeApprovedBy,
+        SubjectSummary subjectSummary
 ) {
+    /** 复核对象摘要：报损、盘点差异、存酒库房处置取调整单的物品、数量、单位、库位、调整类型与原因；存酒作废取存酒编号、物品与剩余量。 */
+    public record SubjectSummary(String itemName, Integer quantity, String unit, String locationId, String adjustmentType,
+            String reason, String savedBottleId) {
+    }
+
+    public InventoryHighValueReviewRecord(String id, String subjectType, String subjectId, List<String> photoAttachmentIds,
+            List<String> videoAttachmentIds, String reviewStatus, String reviewerUserId, String reason, Instant createdAt,
+            Instant reviewedAt, String merchantId, String createdBy, String supervisorApprovedBy, String financeApprovedBy) {
+        this(id, subjectType, subjectId, photoAttachmentIds, videoAttachmentIds, reviewStatus, reviewerUserId, reason, createdAt,
+                reviewedAt, merchantId, createdBy, supervisorApprovedBy, financeApprovedBy, null);
+    }
+
+    InventoryHighValueReviewRecord withSubjectSummary(SubjectSummary summary) {
+        return new InventoryHighValueReviewRecord(id, subjectType, subjectId, photoAttachmentIds, videoAttachmentIds, reviewStatus,
+                reviewerUserId, reason, createdAt, reviewedAt, merchantId, createdBy, supervisorApprovedBy, financeApprovedBy, summary);
+    }
+
     public InventoryHighValueReviewRecord(String id, String subjectType, String subjectId, List<String> photoAttachmentIds,
             List<String> videoAttachmentIds, String reviewStatus, String reviewerUserId, String reason, Instant createdAt,
             Instant reviewedAt, String merchantId) {

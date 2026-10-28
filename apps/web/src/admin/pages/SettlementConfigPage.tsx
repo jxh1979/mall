@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -17,6 +17,7 @@ import { DistributionSchemePanel } from "./DistributionSchemePanel";
 // 批1（本文件）：加「通票分账」栏目（antd Tabs 外层）——8 类配置块，每块=当前生效值 + GuidedFlowModal「改」落草案；
 //   + 集中的待复核草案队列（转正泛化 /{configType}/{id}/activate；软删仅 merchant_rate/revenue_stream_attribution）。
 // 一切写动作走 settlement.config.manage + idempotency_key；转正/软删走后端「差人复核」（自己起草的不能自己转正）。
+// 第十八批第 24 条：加「高价值判定」页签——全平台统一阈值连同上下限与理由提交最高权限审批，批准后才生效（不在本页复核转正）。
 const MANAGE = ["settlement.config.manage"];
 const BASE = "/api/v1/settlement/config";
 
@@ -34,7 +35,8 @@ type EditKey =
   | "channel_fee"
   | "revenue_stream_attribution"
   | "commission_rate"
-  | "points_accrual_rate";
+  | "points_accrual_rate"
+  | "high_value_threshold";
 
 type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: string; endpoint: string };
 
@@ -64,7 +66,19 @@ const COMMISSION_POINTS_BLOCKS: BlockDef[] = [
   },
 ];
 
-const ALL_BLOCKS: BlockDef[] = [...BLOCKS, ...COMMISSION_POINTS_BLOCKS];
+// 第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，
+// 须同时配置上下限），大于或等于阈值即高价值」）。
+const HIGH_VALUE_BLOCKS: BlockDef[] = [
+  {
+    key: "high_value_threshold",
+    title: "高价值判定阈值（最近一次实际到货价）",
+    defaultKey: "high_value_threshold_cent",
+    endpoint: "high-value-threshold",
+    note: "全平台统一一个金额（当前生效值以分计）：物品最近一次实际到货价大于或等于该值即高价值，退酒、报损、盘点差异、存酒作废共用。出厂默认 5000 元；调整须同时填写阈值的下限与上限和调整理由，提交后进最高权限审批，批准后才生效。",
+  },
+];
+
+const ALL_BLOCKS: BlockDef[] = [...BLOCKS, ...COMMISSION_POINTS_BLOCKS, ...HIGH_VALUE_BLOCKS];
 
 const ROLE_TYPE_OPTIONS: [string, string][] = [
   ["sales", "销售人员"],
@@ -142,8 +156,8 @@ const GROUP_LABELS: Record<string, string> = {
   attribution_rule: "收入归因规则",
   commission_rate: "卡座提成费率",
   points_accrual_rate: "积分累计率",
-  // V350：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用一个值，比的是物品进货价）。
-  high_value_threshold: "高价值判定阈值(进货价)",
+  // 第十八批第 24 条：全平台「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用一个值，比的是最近一次实际到货价）。
+  high_value_threshold: "高价值判定阈值(最近一次实际到货价)",
   // V346（P0-E）：营业额抽成规则在「合同工作台」填写并落草案，在此复核转正后才对结算生效。
   turnover_rent_rule: "营业额抽成规则",
   // 批10/E：内部结算 SKU 目录条目在「内部结算价目录」页维护并落草案，此队列可直接复核转正。
@@ -151,7 +165,7 @@ const GROUP_LABELS: Record<string, string> = {
 };
 // 支持「下线」（软删）的草案类型，对齐后端 archive 白名单。
 // V340 提成/积分：商户级特例条目须可下线，否则该商户被特例永久遮挡、回落不到项目/全局默认口径。
-// V350 高价值判定阈值：商户级特例条目同理可下线（回落项目/全局默认），全局默认种子由后端守卫拦住。
+// 第十八批第 24 条：高价值判定阈值全平台只一行、只经最高权限审批调整，不可下线。
 // V346 抽成规则：合同终止/换规则时须可下线，下线后该合同不再产生抽成应收。
 // S6 赠送权益预扣：项目/票种特例条目可下线（回落上层默认），全局默认种子由后端守卫拦住。
 const ARCHIVABLE = new Set([
@@ -159,7 +173,6 @@ const ARCHIVABLE = new Set([
   "revenue_stream_attribution",
   "commission_rate",
   "points_accrual_rate",
-  "high_value_threshold",
   "turnover_rent_rule",
   "pass_gift_cost",
   // 批10/E：目录条目草案可直接下线（弃草案）；生效条目的下线归档在「内部结算价目录」页做。
@@ -198,6 +211,11 @@ type Form = {
   // S6 赠送权益预估成本：预扣模式 + 按票计整额（元，提交时换算成分）。
   predeductMode: string;
   ticketGiftAmountYuan: string;
+  // 第十八批第 24 条：高价值判定阈值与其下限、上限（元，提交时换算成分）＋调整理由。
+  highValueThresholdYuan: string;
+  highValueThresholdMinYuan: string;
+  highValueThresholdMaxYuan: string;
+  reason: string;
 };
 const EMPTY_FORM: Form = {
   projectId: "", methodType: "by_rank_tier",
@@ -208,6 +226,7 @@ const EMPTY_FORM: Form = {
   beneficiaryKind: "entity",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
   predeductMode: "by_ticket_amount", ticketGiftAmountYuan: "",
+  highValueThresholdYuan: "", highValueThresholdMinYuan: "", highValueThresholdMaxYuan: "", reason: "",
 };
 
 function nextKey(prefix: string) {
@@ -427,13 +446,18 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
                     ) : null}
                   </td>
                   <td style={{ display: "flex", gap: 8 }}>
-                    <PermissionButton
-                      permissionsState={effectivePermissions}
-                      permissions={MANAGE}
-                      data-testid={`settlement-config-activate-${d.id}`}
-                      disabled={busy === `activate-${d.id}`}
-                      onClick={() => void activate(d)}
-                    >{busy === `activate-${d.id}` ? "转正中…" : "复核转正"}</PermissionButton>
+                    {/* 第十八批第 24 条：高价值判定阈值只经最高权限审批生效，不在此复核转正。 */}
+                    {d.configGroup === "high_value_threshold" ? (
+                      <span data-testid={`settlement-config-top-authority-${d.id}`}>最高权限审批中</span>
+                    ) : (
+                      <PermissionButton
+                        permissionsState={effectivePermissions}
+                        permissions={MANAGE}
+                        data-testid={`settlement-config-activate-${d.id}`}
+                        disabled={busy === `activate-${d.id}`}
+                        onClick={() => void activate(d)}
+                      >{busy === `activate-${d.id}` ? "转正中…" : "复核转正"}</PermissionButton>
+                    )}
                     {ARCHIVABLE.has(d.configGroup) ? (
                       <PermissionButton
                         permissionsState={effectivePermissions}
@@ -474,6 +498,16 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
     </div>
   );
 
+  // 第十八批第 24 条：高价值判定阈值全平台一个值，调整进最高权限审批（「审批链与节点裁决」页办理），批准后才生效。
+  const highValueTab = (
+    <div data-testid="settlement-config-high-value">
+      <p className="admin-muted-action">
+        高价值判定阈值全平台统一，调整须经最高权限审批并留痕：提交后在「审批链与节点裁决」页由最高权限人员审批，批准后才生效，驳回则维持原值。
+      </p>
+      {renderBlocks(HIGH_VALUE_BLOCKS)}
+    </div>
+  );
+
   return (
     <section data-testid="settlement-config-page">
       <AdminPageHeader
@@ -492,6 +526,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
             // FS-021-R3：三个付账日、钱路指派规则与非积分商户账单异议期。
             { key: "internal-pay-days", label: "付账日与钱路指派", forceRender: true,
               children: <InternalPayDaysPanel api={api} effectivePermissions={effectivePermissions} /> },
+            { key: "high-value", label: "高价值判定", forceRender: true, children: highValueTab },
           ]}
         />
         {/* 待复核草案队列各栏目共用一份（testid 唯一），放在页签下方常驻，任一栏目改动落草案后都在此复核转正。 */}
@@ -504,7 +539,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
           title={`修改配置 · ${ALL_BLOCKS.find((b) => b.key === editing)!.title}`}
           testId="settlement-config-guided"
           submitTestId="settlement-config-submit"
-          submitLabel="保存草案"
+          submitLabel={editing === "high_value_threshold" ? "提交最高权限审批" : "保存草案"}
           submitting={busy === `edit-${editing}`}
           error={formError || undefined}
           onClose={() => setEditing(null)}
@@ -696,6 +731,13 @@ function editSteps(
         <label>商户 id（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
         <label>每积 1 分所需消费金额（分，须大于 0；100 = 每 1 元积 1 分）<input data-testid="settlement-config-field-amountCentPerPoint" type="number" min={1} value={form.amountCentPerPoint} onChange={setField("amountCentPerPoint")} /></label></>);
       break;
+    case "high_value_threshold":
+      content = (<>
+        <label>高价值判定阈值（元；最近一次实际到货价大于或等于此值即高价值）<input data-testid="settlement-config-field-highValueThresholdYuan" type="number" min={0} value={form.highValueThresholdYuan} onChange={setField("highValueThresholdYuan")} /></label>
+        <label>阈值下限（元）<input data-testid="settlement-config-field-highValueThresholdMinYuan" type="number" min={0} value={form.highValueThresholdMinYuan} onChange={setField("highValueThresholdMinYuan")} /></label>
+        <label>阈值上限（元）<input data-testid="settlement-config-field-highValueThresholdMaxYuan" type="number" min={0} value={form.highValueThresholdMaxYuan} onChange={setField("highValueThresholdMaxYuan")} /></label>
+        <label>调整理由<input data-testid="settlement-config-field-reason" value={form.reason} onChange={setField("reason")} /></label></>);
+      break;
   }
   return [{ title: "配置内容", validate: () => validate(key, form), content }];
 }
@@ -724,6 +766,9 @@ function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]):
     case "revenue_stream_attribution": return [scope, { label: "收入流业态", value: REVENUE_STREAM_OPTIONS.find(([v]) => v === form.revenueStream)?.[1] ?? form.revenueStream }, { label: "收款方类型", value: BENEFICIARY_KIND_OPTIONS.find(([v]) => v === form.beneficiaryKind)?.[1] ?? form.beneficiaryKind }, { label: "收款主体", value: form.beneficiaryKind === "per_merchant" ? "各商户自己" : (form.managementEntityId || "—") }];
     case "commission_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "该项目通用" }, { label: "角色档", value: ROLE_TYPE_OPTIONS.find(([v]) => v === form.roleType)?.[1] ?? form.roleType }, { label: "提成率万分比", value: form.rateBp || "—" }];
     case "points_accrual_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "每积1分所需消费（分）", value: form.amountCentPerPoint || "—" }];
+    case "high_value_threshold": return [{ label: "作用范围", value: "全平台统一" },
+      { label: "高价值判定阈值", value: `${form.highValueThresholdYuan} 元（下限 ${form.highValueThresholdMinYuan} 元，上限 ${form.highValueThresholdMaxYuan} 元）` },
+      { label: "调整理由", value: form.reason.trim() }, { label: "生效方式", value: "最高权限审批批准后生效" }];
   }
 }
 
@@ -780,6 +825,15 @@ function validate(key: EditKey, form: Form): string | null {
     case "points_accrual_rate":
       return isIntInRange(form.amountCentPerPoint, 1, Number.MAX_SAFE_INTEGER)
         ? null : "每积 1 分所需消费金额需为大于 0 的整数（分）；100 = 每 1 元积 1 分。";
+    case "high_value_threshold": {
+      const yuan = (s: string) => (s.trim() === "" ? Number.NaN : Number(s));
+      const value = yuan(form.highValueThresholdYuan);
+      const min = yuan(form.highValueThresholdMinYuan);
+      const max = yuan(form.highValueThresholdMaxYuan);
+      if (![value, min, max].every((n) => Number.isFinite(n) && n >= 0)) return "阈值、下限、上限须同时填写不小于 0 的金额（元）。";
+      if (!(min <= value && value <= max)) return "须满足 下限 ≤ 阈值 ≤ 上限。";
+      return form.reason.trim() === "" ? "调整理由必填。" : null;
+    }
   }
 }
 
@@ -834,5 +888,14 @@ function buildBody(key: EditKey, form: Form, idempotencyKey: string): Record<str
       return { idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), roleType: form.roleType, rateBp: Number(form.rateBp) };
     case "points_accrual_rate":
       return { idempotencyKey, projectId: project, merchantId: orUndef(form.merchantId), amountCentPerPoint: Number(form.amountCentPerPoint) };
+    case "high_value_threshold":
+      // 全平台一行：不带项目、商户；元→分。
+      return {
+        idempotencyKey,
+        highValueThresholdCent: Math.round(Number(form.highValueThresholdYuan) * 100),
+        highValueThresholdMinCent: Math.round(Number(form.highValueThresholdMinYuan) * 100),
+        highValueThresholdMaxCent: Math.round(Number(form.highValueThresholdMaxYuan) * 100),
+        reason: form.reason.trim(),
+      };
   }
 }

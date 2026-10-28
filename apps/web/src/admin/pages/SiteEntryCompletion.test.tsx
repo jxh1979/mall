@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
@@ -26,7 +26,9 @@ describe("施工整改闭环", () => {
   it("整改状态提交实际文件后使用服务端附件编号", async () => {
     const p = props("rectifying");
     render(<VendorSiteEntriesPage {...p} />);
-    const fileInput = await screen.findByTestId("vendor-site-entry-completion-attachments");
+    // 选中单据后清空已选文件的 effect 与读材料历史的 effect 同批执行：等历史请求发出再选文件，免得刚选的文件被补跑的 effect 清掉。
+    await waitFor(() => expect(p.api.get).toHaveBeenCalledWith("/api/v1/facility/site-entry-reports/report-a/history"));
+    const fileInput = screen.getByTestId("vendor-site-entry-completion-attachments");
     const file = new File(["actual-image"], "completion.png", { type: "image/png" });
     fireEvent.change(fileInput, { target: { files: [file] } });
     fireEvent.click(screen.getByTestId("vendor-site-entry-completion-upload"));

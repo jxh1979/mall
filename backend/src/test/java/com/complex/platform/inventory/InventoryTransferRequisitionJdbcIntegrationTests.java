@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -42,6 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款。
  * 未出库数量可经审批取消」；BSM L1213 / ENUM L169 九态；台账 §25「调拨买断或正式供货销售在接收方验收后转移所有权，并同步生成应收应付」；
  * 操作员裁决 2026-10-19 第 2 条「本批做，不同意退回草稿：供货主体不同意时退回草稿，门店改后可重新提交，不想要了再自行取消」。
+ * 第十八批第 18 条（BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」「「调」是买断，成交时所有权转移给接收方」；ENUM:162「调拨」）：
+ * 门店要货签收与借调买断两侧都记调拨（transfer）流水——买断出让方交货扣出让方库位，接收方收货入本商户物品。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -74,6 +76,8 @@ class InventoryTransferRequisitionJdbcIntegrationTests {
     private final String item = "fs011_item_" + suffix;
     private final String warehouse = "fs011_wh_" + suffix;
     private final String location = "fs011_loc_" + suffix;
+    private final String sourceItem = "fs011_srcitem_" + suffix;
+    private final String sourceLocation = "fs011_srcloc_" + suffix;
     private RequestPostProcessor admin;
     private RequestPostProcessor store;
     private RequestPostProcessor otherStore;
@@ -196,7 +200,7 @@ class InventoryTransferRequisitionJdbcIntegrationTests {
         assertThat(jdbc.queryForMap("SELECT quantity,merchant_id,project_id,warehouse_id FROM inventory_stock_balances WHERE item_id=? AND location_id=?", item, location))
                 .containsEntry("quantity", 16).containsEntry("merchant_id", merchant).containsEntry("project_id", project).containsEntry("warehouse_id", warehouse);
         assertThat(jdbc.queryForList("SELECT movement_type,quantity,unit_cost_cent FROM inventory_stock_movements WHERE business_type='inventory_transfer' AND business_id=?", id))
-                .singleElement().satisfies(m -> assertThat(m).containsEntry("movement_type", "inbound").containsEntry("quantity", 16).containsEntry("unit_cost_cent", 500L));
+                .singleElement().satisfies(m -> assertThat(m).containsEntry("movement_type", "transfer").containsEntry("quantity", 16).containsEntry("unit_cost_cent", 500L));
         assertThat(receipt.get("movement_id")).isNotNull();
     }
 
@@ -227,21 +231,48 @@ class InventoryTransferRequisitionJdbcIntegrationTests {
         assertThat(orderStatus(id)).isEqualTo("pending_receipt");
     }
 
-    // 借调买断同为内部送货：发货不挂账，接收方收货后按货款形成应付。
+    // 借调买断同为内部送货：发货不挂账，接收方收货后按货款形成应付。第十八批第 18 条：出让方交货扣出让方出货库位并写一条调拨（transfer）出，
+    // 接收方收货把货入本商户物品、本门店库位并写一条调拨（transfer）入，单价按建单锁定内部结算价。
     @Test
     void lendingPurchasePostsPayableOnReceiptNotOnShip() throws Exception {
-        String id = JsonPath.read(mockMvc.perform(post(BASE).with(admin).contentType(MediaType.APPLICATION_JSON).content("""
-                        {"idempotency_key":"%s","transfer_type":"lending","lending_mode":"purchase","from_owner_type":"merchant",
-                         "from_owner_id":"%s","to_owner_type":"merchant","to_owner_id":"%s",
-                         "lines":[{"item_id":"%s","quantity":4,"unit_price_cent":250,"trace_codes":[]}]}
-                        """.formatted(key(), otherMerchant, merchant, item)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("created"))
-                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
-        call(admin, id, "ship", null).andExpect(status().isOk());
+        String id = lentPurchase();
+        call(otherStore, id, "ship", null).andExpect(status().isOk());
         assertThat(count("SELECT count(*) FROM ar_ap_items WHERE source_type='inventory_transfer' AND source_id=?", id)).isZero();
-        step(admin, id, "receive", "{}", "received");
+        assertThat(jdbc.queryForObject("SELECT quantity FROM inventory_stock_balances WHERE item_id=? AND location_id=?", Integer.class, sourceItem, sourceLocation))
+                .isEqualTo(6);
+        assertThat(jdbc.queryForList("SELECT source_location_id,target_location_id,quantity,merchant_id FROM inventory_stock_movements WHERE business_type='inventory_transfer' AND business_id=? AND movement_type='transfer'", id))
+                .singleElement().satisfies(m -> assertThat(m).containsEntry("source_location_id", sourceLocation).containsEntry("target_location_id", null)
+                        .containsEntry("quantity", 4).containsEntry("merchant_id", otherMerchant));
+
+        step(store, id, "receive", purchaseReceipt(id, item, warehouse), "received");
         assertThat(jdbc.queryForObject("SELECT amount_cent FROM ar_ap_items WHERE source_type='inventory_transfer' AND source_id=?", Long.class, id))
                 .isEqualTo(1000L);
+        assertThat(jdbc.queryForMap("SELECT quantity,merchant_id,project_id,warehouse_id FROM inventory_stock_balances WHERE item_id=? AND location_id=?", item, location))
+                .containsEntry("quantity", 4).containsEntry("merchant_id", merchant).containsEntry("project_id", project).containsEntry("warehouse_id", warehouse);
+        assertThat(jdbc.queryForList("SELECT item_id,source_location_id,quantity,unit_cost_cent,merchant_id FROM inventory_stock_movements WHERE business_type='inventory_transfer' AND business_id=? AND movement_type='transfer' AND target_location_id=?", id, location))
+                .singleElement().satisfies(m -> assertThat(m).containsEntry("item_id", item).containsEntry("source_location_id", null)
+                        .containsEntry("quantity", 4).containsEntry("unit_cost_cent", 250L).containsEntry("merchant_id", merchant));
+    }
+
+    // 第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」「收货时扫码核对防调包」）：买断收货写接收方库存，须接收方本商户账号办理、
+    // 入本商户物品与本门店在用仓库——选出让方物品 400、他商户仓库 400、出让方账号 403，均不入库、不挂账、单仍已发货。
+    @Test
+    void lendingPurchaseReceiptMustStockTheReceiversOwnItemInItsOwnWarehouse() throws Exception {
+        String otherWarehouse = "fs011_wh2_" + suffix;
+        jdbc.update("INSERT INTO warehouses(id,project_id,warehouse_type,name,status,merchant_id) VALUES(?,?,'main','出让方仓','active',?)", otherWarehouse, project, otherMerchant);
+        String id = lentPurchase();
+        call(otherStore, id, "ship", null).andExpect(status().isOk());
+
+        call(store, id, "receive", purchaseReceipt(id, sourceItem, warehouse)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        call(store, id, "receive", purchaseReceipt(id, item, otherWarehouse)).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("TRANSFER_RECEIVE_WAREHOUSE_INVALID"));
+        call(otherStore, id, "receive", purchaseReceipt(id, item, warehouse)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("STORE_RECEIPT_ONLY"));
+
+        assertThat(orderStatus(id)).isEqualTo("shipped");
+        assertThat(count("SELECT count(*) FROM inventory_stock_balances WHERE location_id=?", location)).isZero();
+        assertThat(count("SELECT count(*) FROM ar_ap_items WHERE source_type='inventory_transfer' AND source_id=?", id)).isZero();
     }
 
     // 签收转移货权、计入门店库存并形成门店应付供货主体的货款（BSM L1212「门店签收」）：供货侧非商户账号不得代门店签收。
@@ -412,6 +443,26 @@ class InventoryTransferRequisitionJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("draft"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+    }
+
+    /** 第十八批第 18 条夹具：出让方（otherMerchant）出货库位有 10 件自有物品，按蛇形键建一张买断单（4 件、单价 250 分）。 */
+    private String lentPurchase() throws Exception {
+        jdbc.update("INSERT INTO inventory_items(id,item_name,item_type,unit,min_quantity,status,merchant_id,created_at,updated_at) VALUES(?,'出让方酒水','liquor','瓶',0,'active',?,now(),now())", sourceItem, otherMerchant);
+        jdbc.update("INSERT INTO inventory_stock_balances(id,item_id,location_id,quantity,reserved_quantity,available_quantity,merchant_id,project_id,updated_at) VALUES(?,?,?,10,0,10,?,?,now())",
+                "fs011_srcbal_" + suffix, sourceItem, sourceLocation, otherMerchant, project);
+        return JsonPath.read(mockMvc.perform(post(BASE).with(admin).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"idempotency_key":"%s","transfer_type":"lending","lending_mode":"purchase","from_owner_type":"merchant",
+                         "from_owner_id":"%s","to_owner_type":"merchant","to_owner_id":"%s","from_location_id":"%s",
+                         "lines":[{"item_id":"%s","quantity":4,"unit_price_cent":250,"trace_codes":[]}]}
+                        """.formatted(key(), otherMerchant, merchant, sourceLocation, sourceItem)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("created"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+    }
+
+    /** 买断收货（蛇形键）：收货仓库、库位与逐行本商户物品。 */
+    private String purchaseReceipt(String orderId, String itemId, String warehouseId) {
+        return "{\"warehouse_id\":\"" + warehouseId + "\",\"location_id\":\"" + location + "\",\"scanned_trace_codes\":[],"
+                + "\"lines\":[{\"line_id\":\"" + orderId + "_l0\",\"item_id\":\"" + itemId + "\"}]}";
     }
 
     private void walkToPendingReceipt(String id) throws Exception {

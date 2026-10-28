@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -399,11 +399,18 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public StockMovementRecord saveSourceReturnMovement(StockMovementRecord movement, String projectId) {
+        // 第十八批第 18 条：借用归还（lend_return）同为按原出库成本恢复的实物回库。
         if (InventoryCostMath.direction(movement.sourceLocationId(), movement.targetLocationId()) != InventoryCostMath.Direction.INBOUND
-                || !"return".equals(movement.movementType())) {
+                || !("return".equals(movement.movementType()) || "lend_return".equals(movement.movementType()))) {
             throw new IllegalArgumentException("原出库成本仅可用于实物退回入库");
         }
         return saveStockMovement(movement, projectId, true);
+    }
+
+    @Override
+    public Optional<Long> findStockMovementTotalCostCent(String movementId) {
+        return jdbcTemplate.query("SELECT total_cost_cent FROM inventory_stock_movements WHERE id = :id", Map.of("id", movementId),
+                (rs, n) -> rs.getObject("total_cost_cent", Long.class)).stream().filter(java.util.Objects::nonNull).findFirst();
     }
 
     private StockMovementRecord saveStockMovement(StockMovementRecord movement, String projectId, boolean sourceReturn) {
@@ -645,6 +652,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("project_id", projectId, java.sql.Types.VARCHAR)
                 .addValue("from", java.time.OffsetDateTime.ofInstant(from, java.time.ZoneOffset.UTC))
                 .addValue("to", java.time.OffsetDateTime.ofInstant(to, java.time.ZoneOffset.UTC));
+        // 第十八批第 18 条复核：借出（lend_out）不是领用或消耗，借出方仍是所有权人（BSM:1201），不计入出库成本。
         return jdbcTemplate.query("""
                 SELECT COUNT(*) AS movement_count,
                        COALESCE(SUM(total_cost_cent), 0) AS total_cost,
@@ -652,6 +660,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                   FROM inventory_stock_movements
                  WHERE source_location_id IS NOT NULL
                    AND target_location_id IS NULL
+                   AND movement_type <> 'lend_out'
                    AND (CAST(:merchant_id AS VARCHAR) IS NULL OR merchant_id = :merchant_id)
                    AND (:project_id IS NULL OR project_id = :project_id)
                    AND created_at >= :from
@@ -2277,13 +2286,31 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public List<InventoryHighValueReviewRecord> listHighValueReviews() {
+        // 第十八批第 24 条 24-R2：后台复核页列表连表取复核对象摘要（报损/盘点差异/存酒库房处置连调整单与物品，存酒作废连存酒）。
         return jdbcTemplate.query("""
-                SELECT id, subject_type, subject_id, photo_attachment_ids, video_attachment_ids,
-                       review_status, reviewer_user_id, reason, created_at, reviewed_at, merchant_id,
-                       created_by, supervisor_approved_by, finance_approved_by
-                  FROM inventory_high_value_reviews
-                 ORDER BY created_at DESC, id
-                """, rowMapper::mapHighValueReview);
+                SELECT r.id, r.subject_type, r.subject_id, r.photo_attachment_ids, r.video_attachment_ids,
+                       r.review_status, r.reviewer_user_id, r.reason, r.created_at, r.reviewed_at, r.merchant_id,
+                       r.created_by, r.supervisor_approved_by, r.finance_approved_by,
+                       COALESCE(ai.item_name, bi.item_name, sb.bottle_name) AS summary_item_name,
+                       COALESCE(a.quantity, sb.remaining_quantity) AS summary_quantity,
+                       COALESCE(ai.unit, sb.unit) AS summary_unit,
+                       a.location_id AS summary_location_id,
+                       a.adjustment_type AS summary_adjustment_type,
+                       a.reason AS summary_reason,
+                       sb.id AS summary_saved_bottle_id
+                  FROM inventory_high_value_reviews r
+                  LEFT JOIN inventory_stock_adjustments a
+                         ON r.subject_type <> 'saved_bottle_void' AND a.id = r.subject_id
+                  LEFT JOIN inventory_items ai ON ai.id = a.item_id
+                  LEFT JOIN saved_bottles sb ON r.subject_type = 'saved_bottle_void' AND sb.id = r.subject_id
+                  LEFT JOIN inventory_items bi ON bi.id = sb.item_id
+                 ORDER BY r.created_at DESC, r.id
+                """, (rs, rowNumber) -> rowMapper.mapHighValueReview(rs, rowNumber).withSubjectSummary(
+                        new InventoryHighValueReviewRecord.SubjectSummary(
+                                rs.getString("summary_item_name"), rs.getObject("summary_quantity", Integer.class),
+                                rs.getString("summary_unit"), rs.getString("summary_location_id"),
+                                rs.getString("summary_adjustment_type"), rs.getString("summary_reason"),
+                                rs.getString("summary_saved_bottle_id"))));
     }
 
     // ── P1#18：供应商资质（进货查验） ─────────────────────────────────────────────
@@ -2500,12 +2527,13 @@ class JdbcInventoryRepository implements InventoryRepository {
                 INSERT INTO inventory_variance (
                     id, stocktake_id, item_id, batch_no, book_qty, counted_qty, variance_qty,
                     variance_amount_cent, reason, supplier_id, review_status, reviewed_by, reviewed_at,
-                    posted_ar_ap_item_id, created_at, updated_at
+                    posted_ar_ap_item_id, created_at, updated_at, recorded_by, photo_attachment_ids, video_attachment_ids
                 )
                 VALUES (
                     :id, :stocktake_id, :item_id, :batch_no, :book_qty, :counted_qty, :variance_qty,
                     :variance_amount_cent, :reason, :supplier_id, :review_status, :reviewed_by, :reviewed_at,
-                    :posted_ar_ap_item_id, :created_at, :updated_at
+                    :posted_ar_ap_item_id, :created_at, :updated_at, :recorded_by,
+                    CAST(:photo_attachment_ids AS jsonb), CAST(:video_attachment_ids AS jsonb)
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     review_status = EXCLUDED.review_status,
@@ -2528,7 +2556,10 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("reviewed_at", offset(variance.reviewedAt()))
                 .addValue("posted_ar_ap_item_id", variance.postedArApItemId())
                 .addValue("created_at", offset(variance.createdAt()))
-                .addValue("updated_at", offset(variance.updatedAt())));
+                .addValue("updated_at", offset(variance.updatedAt()))
+                .addValue("recorded_by", variance.recordedBy())
+                .addValue("photo_attachment_ids", writeList(variance.photoAttachmentIds()))
+                .addValue("video_attachment_ids", writeList(variance.videoAttachmentIds())));
         return variance;
     }
 
@@ -2538,7 +2569,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 SELECT v.id, v.stocktake_id, v.item_id, v.batch_no, v.book_qty, v.counted_qty,
                        v.variance_qty, v.variance_amount_cent, v.reason, v.supplier_id,
                        v.review_status, v.reviewed_by, v.reviewed_at, v.posted_ar_ap_item_id,
-                       s.merchant_id, v.created_at, v.updated_at
+                       s.merchant_id, v.created_at, v.updated_at, v.recorded_by,
+                       v.photo_attachment_ids, v.video_attachment_ids
                   FROM inventory_variance v
                   JOIN stocktake s ON s.id = v.stocktake_id
                  WHERE v.id = :id
@@ -2552,7 +2584,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 SELECT v.id, v.stocktake_id, v.item_id, v.batch_no, v.book_qty, v.counted_qty,
                        v.variance_qty, v.variance_amount_cent, v.reason, v.supplier_id,
                        v.review_status, v.reviewed_by, v.reviewed_at, v.posted_ar_ap_item_id,
-                       s.merchant_id, v.created_at, v.updated_at
+                       s.merchant_id, v.created_at, v.updated_at, v.recorded_by,
+                       v.photo_attachment_ids, v.video_attachment_ids
                   FROM inventory_variance v
                   JOIN stocktake s ON s.id = v.stocktake_id
                  WHERE v.stocktake_id = :stocktake_id

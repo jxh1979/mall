@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
@@ -14,6 +14,9 @@ import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.governance.PlatformService;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
 import com.complex.platform.leasing.dto.LeasingFollowUpRequest;
@@ -32,6 +35,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import com.complex.platform.common.NotificationWindowConfig;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -51,6 +55,14 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
     private static final Set<String> INTENT_STAGES = Set.of("initial_contact", "requirement_confirmed",
             "proposal_quoted", "negotiation", "pending_signing");
     private static final Set<String> INTENT_KEY_STAGES = Set.of("proposal_quoted", "negotiation");
+    // 第十八批第 30 条：五阶段推进顺序（PGM L500、ENUM L249），阶段中文名用于提示。
+    private static final List<String> INTENT_STAGE_ORDER = List.of("initial_contact", "requirement_confirmed",
+            "proposal_quoted", "negotiation", "pending_signing");
+    private static final Map<String, String> STAGE_NAMES = Map.of("initial_contact", "初步接触",
+            "requirement_confirmed", "需求确认", "proposal_quoted", "方案报价", "negotiation", "商务谈判",
+            "pending_signing", "待签约");
+    static final String KEY_STAGE_ACTION = "leasing.intent.key_stage";
+    static final String KEY_STAGE_OBJECT = "leasing_intent";
     private static final Set<String> BRAND_TYPES = Set.of("intentional", "prospective", "partner", "blacklist");
     private static final Set<String> FOLLOW_UP_REF_TYPES = Set.of("lead", "intent");
     // V219:招商跟进提醒窗天数迁入 notification_windows(key=leasing.lead_follow_up),缺配置兜底 3(行为不变)。
@@ -64,25 +76,31 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
     private final ContractService contractService;
     private final PlatformService platformService;
     private final NotificationWindowConfig windowConfig;
+    private final SupervisorReviewService reviews;
+    private final LeasingBlacklistExceptionService blacklistExceptions;
 
     @org.springframework.beans.factory.annotation.Autowired
     public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, ContractService contractService,
-            PlatformService platformService, NotificationWindowConfig windowConfig) {
+            PlatformService platformService, NotificationWindowConfig windowConfig,
+            SupervisorReviewService reviews, LeasingBlacklistExceptionService blacklistExceptions) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.contractService = contractService;
         this.platformService = platformService;
         this.windowConfig = windowConfig;
+        this.reviews = reviews;
+        this.blacklistExceptions = blacklistExceptions;
     }
 
     /** 测试便捷构造:提醒窗回落默认。 */
     public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, ContractService contractService,
-            PlatformService platformService) {
+            PlatformService platformService, SupervisorReviewService reviews,
+            LeasingBlacklistExceptionService blacklistExceptions) {
         this(repository, auditEventService, authorizationService, contractService, platformService,
-                new NotificationWindowConfig());
+                new NotificationWindowConfig(), reviews, blacklistExceptions);
     }
 
     // ============ 线索 ============
@@ -117,16 +135,29 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         return l.lastFollowUpAt() != null ? l.lastFollowUpAt() : l.createdAt();
     }
 
+    /**
+     * 新建线索。黑名单品牌拦截同品牌新线索；确需继续的凭本人已批准的黑名单例外放行单放行（第十八批第 30 条，PGM L502），
+     * 同一事务记该单已用与所建线索。
+     */
+    @Transactional
     public LeasingLeadRecord createLead(LeasingLeadRequest request) {
         authorizationService.requirePlatformScope();
         LeasingLeadRequest actual = requireRequest(request);
         String source = requireEnum(actual.source(), LEAD_SOURCES, "source");
         String brandId = trimToNull(actual.brandId());
-        requireBrandNotBlacklisted(brandId);
+        String leadId = "lead_" + UUID.randomUUID();
+        if (findBlacklistedBrand(brandId).isPresent()) {
+            String exceptionId = trimToNull(actual.blacklistExceptionId());
+            if (exceptionId == null) {
+                throw ApiException.conflict("LEASING_BRAND_BLACKLISTED",
+                        "该品牌已列入黑名单，不能新建招商线索；确需继续须由具备黑名单例外放行权限的人员申请并经主管审批");
+            }
+            blacklistExceptions.consume(exceptionId, LeasingBlacklistExceptionService.LEAD_CREATE, brandId, leadId, null);
+        }
         requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()));
         Instant now = Instant.now();
         LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(
-                "lead_" + UUID.randomUUID(), requireText(actual.contactName(), "contact_name"),
+                leadId, requireText(actual.contactName(), "contact_name"),
                 trimToNull(actual.contactPhone()), source, trimToNull(actual.intendedBusinessType()),
                 trimToNull(actual.intendedSpaceId()), actual.intendedAreaSqm(), brandId, null,
                 "pending_follow_up", null, null, null, now, now));
@@ -239,10 +270,22 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         if ("signed".equals(lead.status())) {
             throw ApiException.conflict("LEASING_LEAD_ALREADY_SIGNED", "已签约的线索不能再次创建意向");
         }
+        String intentId = "intent_" + UUID.randomUUID();
+        // 第十八批第 30 条（PGM L502「黑名单品牌拦截……由拉黑前既有线索新建意向」）：线索建于品牌本次拉黑之前即拉黑前既有线索，拦截；
+        // 确需继续的凭本人已批准的例外放行单放行。拉黑后经例外放行建的线索、已解黑品牌的线索不拦；再次拉黑以新的拉黑时点为准。
+        if (createdBeforeBlacklisted(lead)) {
+            String exceptionId = trimToNull(actual.blacklistExceptionId());
+            if (exceptionId == null) {
+                throw ApiException.conflict("LEASING_BRAND_BLACKLISTED",
+                        "该品牌已列入黑名单，拉黑前的既有线索不能新建意向；确需继续须由具备黑名单例外放行权限的人员申请并经主管审批");
+            }
+            blacklistExceptions.consume(exceptionId, LeasingBlacklistExceptionService.INTENT_CREATE, lead.brandId(), lead.id(),
+                    intentId);
+        }
         requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()));
         Instant now = Instant.now();
         LeasingIntentRecord saved = repository.saveIntent(new LeasingIntentRecord(
-                "intent_" + UUID.randomUUID(), lead.id(), "initial_contact",
+                intentId, lead.id(), "initial_contact",
                 trimToNull(actual.intendedSpaceId()) != null ? trimToNull(actual.intendedSpaceId()) : lead.intendedSpaceId(),
                 actual.intendedAreaSqm() != null ? actual.intendedAreaSqm() : lead.intendedAreaSqm(),
                 actual.rentTerms() == null ? Map.of() : actual.rentTerms(), now, null, lead.projectId(), now, now));
@@ -255,25 +298,68 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         return saved;
     }
 
-    /** 意向阶段推进；关键阶段（方案报价/商务谈判）须带主管确认人，否则阻断。 */
+    /**
+     * 意向阶段推进（第十八批第 30 条）：须逐级推进、不得向前跳级（PGM L500 五阶段顺序；回退与原地维持现状）；
+     * 进入方案报价、商务谈判须主管确认（PGM L502）——不直接改阶段，送统一审批（发起人沿直接上级到其指定的最终审批人，PGM L540），
+     * 记下待确认阶段，审批通过才进入（{@link #keyStageDecided}）；已有待确认的不能再推进。
+     */
+    @Transactional
     public LeasingIntentRecord advanceIntent(String intentId, LeasingIntentAdvanceRequest request) {
         authorizationService.requirePlatformScope();
         LeasingIntentAdvanceRequest actual = requireRequest(request);
         String target = requireEnum(actual.targetStage(), INTENT_STAGES, "target_stage");
-        String supervisor = trimToNull(actual.supervisorUserId());
-        if (INTENT_KEY_STAGES.contains(target) && supervisor == null) {
-            throw ApiException.conflict("LEASING_INTENT_SUPERVISOR_REQUIRED",
-                    "推进到 " + target + " 状态需要主管确认");
-        }
         LeasingIntentRecord ex = requireIntent(intentId);
+        int current = INTENT_STAGE_ORDER.indexOf(ex.stage());
+        if (INTENT_STAGE_ORDER.indexOf(target) > current + 1) {
+            throw ApiException.conflict("LEASING_INTENT_STAGE_SKIP", "意向阶段须逐级推进：当前" + STAGE_NAMES.get(ex.stage())
+                    + "，下一阶段为" + STAGE_NAMES.get(INTENT_STAGE_ORDER.get(current + 1)));
+        }
+        if (ex.pendingReviewId() != null) {
+            throw ApiException.conflict("LEASING_INTENT_STAGE_PENDING_REVIEW", "该意向已有待主管确认的阶段推进，主管确认后再推进");
+        }
         Instant now = Instant.now();
+        if (INTENT_KEY_STAGES.contains(target)) {
+            String summary = "意向 " + ex.id() + " 推进到 " + STAGE_NAMES.get(target);
+            var decision = reviews.evaluate(new SupervisorReviewEvaluateRequest(
+                    requireText(actual.idempotencyKey(), "idempotency_key") + ":review", summary, List.of(),
+                    KEY_STAGE_ACTION, KEY_STAGE_OBJECT, ex.id(), null, summary, trimToNull(actual.finalApproverId()), List.of()));
+            LeasingIntentRecord pending = repository.saveIntent(new LeasingIntentRecord(ex.id(), ex.leadId(), ex.stage(),
+                    ex.intendedSpaceId(), ex.intendedAreaSqm(), ex.rentTerms(), ex.lastStageChangeAt(), ex.lastStageChangeBy(),
+                    ex.projectId(), ex.createdAt(), now, target, decision.reviewId()));
+            auditEventService.recordSuccess("leasing.intent.key_stage_requested", "leasing.intent.manage", "leasing_intent",
+                    ex.id(), null, actual.idempotencyKey(), Map.of("review_id", decision.reviewId(), "pending_stage", target));
+            return pending;
+        }
         LeasingIntentRecord saved = repository.saveIntent(new LeasingIntentRecord(ex.id(), ex.leadId(), target,
-                ex.intendedSpaceId(), ex.intendedAreaSqm(), ex.rentTerms(), now, supervisor, ex.projectId(),
+                ex.intendedSpaceId(), ex.intendedAreaSqm(), ex.rentTerms(), now, null, ex.projectId(),
                 ex.createdAt(), now));
         auditEventService.recordSuccess("leasing.intent.advanced", "leasing.intent.manage", "leasing_intent", ex.id(),
-                null, actual.idempotencyKey(), Map.of("stage", target, "supervisor_user_id",
-                        supervisor == null ? "" : supervisor));
+                null, actual.idempotencyKey(), Map.of("stage", target));
         return saved;
+    }
+
+    /** 关键阶段主管确认结论回写：批准进入待确认阶段并记确认人（终审人）与时间；驳回阶段不变。两种结论都清空待确认。 */
+    @EventListener
+    @Transactional
+    public void keyStageDecided(SupervisorReviewDecisionRecord d) {
+        if (!KEY_STAGE_ACTION.equals(d.actionType()) || !KEY_STAGE_OBJECT.equals(d.objectType())
+                || !List.of("approved", "rejected").contains(d.reviewStatus())) {
+            return;
+        }
+        Optional<LeasingIntentRecord> found = repository.findIntentByPendingReviewId(d.reviewId());
+        if (found.isEmpty()) {
+            return;
+        }
+        LeasingIntentRecord ex = found.get();
+        boolean approved = "approved".equals(d.reviewStatus());
+        String reviewer = authorizationService.currentActor().id();
+        Instant now = Instant.now();
+        repository.saveIntent(new LeasingIntentRecord(ex.id(), ex.leadId(), approved ? ex.pendingStage() : ex.stage(),
+                ex.intendedSpaceId(), ex.intendedAreaSqm(), ex.rentTerms(), approved ? now : ex.lastStageChangeAt(),
+                approved ? reviewer : ex.lastStageChangeBy(), ex.projectId(), ex.createdAt(), now));
+        auditEventService.recordSuccess("leasing.intent.key_stage_" + d.reviewStatus(), "leasing.intent.manage",
+                "leasing_intent", ex.id(), null, null, Map.of("review_id", d.reviewId(),
+                        approved ? "approved_by" : "rejected_by", reviewer, "stage", approved ? ex.pendingStage() : ex.stage()));
     }
 
     /**
@@ -487,16 +573,16 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         return authorizationService.currentProjectScopeQuietly().orElse(null);
     }
 
-    private void requireBrandNotBlacklisted(String brandId) {
-        if (brandId == null) {
-            return;
-        }
-        repository.findBrandById(brandId).ifPresent(b -> {
-            if ("blacklist".equals(b.brandType())) {
-                throw ApiException.conflict("LEASING_BRAND_BLACKLISTED",
-                        "该品牌已列入黑名单，不能新建招商线索，如需继续需更高权限审批");
-            }
-        });
+    private Optional<LeasingBrandRecord> findBlacklistedBrand(String brandId) {
+        return brandId == null ? Optional.empty()
+                : repository.findBrandById(brandId).filter(b -> "blacklist".equals(b.brandType()));
+    }
+
+    /** 拉黑前既有线索：品牌现为黑名单，且线索建于本次拉黑时点之前。 */
+    private boolean createdBeforeBlacklisted(LeasingLeadRecord lead) {
+        return findBlacklistedBrand(trimToNull(lead.brandId()))
+                .map(b -> b.blacklistedAt() != null && lead.createdAt() != null && lead.createdAt().isBefore(b.blacklistedAt()))
+                .orElse(false);
     }
 
     /** 3.13：意向空间传了就必须真实存在（空间=地产主数据，不允许挂空编号；不传=尚未定位，放行）。 */

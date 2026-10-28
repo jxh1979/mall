@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -94,6 +94,7 @@ const GroupOverviewPage = React.lazy(() => import("./pages/GroupOverviewPage").t
 const PurchaseWorkbenchPage = React.lazy(() => import("./pages/PurchaseWorkbenchPage").then((m) => ({ default: m.PurchaseWorkbenchPage })));
 const InventoryLedgerPage = React.lazy(() => import("./pages/InventoryLedgerPage").then((m) => ({ default: m.InventoryLedgerPage })));
 const InventoryTransferWorkbenchPage = React.lazy(() => import("./pages/InventoryTransferWorkbenchPage").then((m) => ({ default: m.InventoryTransferWorkbenchPage })));
+const InventoryHighValueReviewPage = React.lazy(() => import("./pages/InventoryHighValueReviewPage").then((m) => ({ default: m.InventoryHighValueReviewPage })));
 const BarOrdersPage = React.lazy(() => import("./pages/BarOrdersPage").then((m) => ({ default: m.BarOrdersPage })));
 const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m) => ({ default: m.StoredWinePage })));
 const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
@@ -262,6 +263,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <InventoryTransferWorkbenchPage {...props} />;
     case "ADM-INV-003":
       return <PurchaseWorkbenchPage {...props} />;
+    case "ADM-INV-004":
+      return <InventoryHighValueReviewPage {...props} />;
     case "ADM-FIN-002":
       return <ReconciliationPage {...props} />;
     case "ADM-TER-001":
@@ -599,7 +602,8 @@ export default function AdminApp() {
     if (target.pageId === "ADM-STF-003") return hasPermissions(effectivePermissions, ["staff.payroll.manage"]) ? ["staff.payroll.manage"] : ["staff.tax_bracket.manage"];
     if (target.pageId === "ADM-INV-003" && hasPermissions(effectivePermissions, ["inventory.supply_contract.manage"])) return ["inventory.supply_contract.manage"];
     // 营业日配置页综合体与酒吧两套共用（ENUM:187 按每个项目、每家酒吧可配）：持有其中一个查看码即可进入，都没有照旧拒绝。
-    if (target.pageId === "ADM-AMU-008") {
+    // 第十八批第 24 条：高价值复核页门店主管与财务共用，持主管复核码或财务应收应付管理码任一即可进入。
+    if (target.pageId === "ADM-AMU-008" || target.pageId === "ADM-INV-004") {
       const held = target.requiredPermissions.find((code) => hasPermissions(effectivePermissions, [code]));
       return held ? [held] : target.requiredPermissions;
     }

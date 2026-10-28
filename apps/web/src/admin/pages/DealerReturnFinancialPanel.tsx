@@ -1,12 +1,13 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
+import { CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
 import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps } from "../types";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 
 const money = (value = 0) => `¥${(value / 100).toFixed(2)}`;
 const key = () => `return-fin-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-type Props = AdminPageProps & { returnId: string; status?: string; refundApproved?: boolean; bearer?: string; refundable?: boolean | null; reasonType?: string; contract?: { returnFreightBearer?: string | null; firstLegFreightRefundable?: boolean | null } | null; onChanged: () => void };
+type Props = AdminPageProps & { returnId: string; status?: string; refundApproved?: boolean; bearer?: string; refundable?: boolean | null; reasonType?: string; contract?: { returnFreightBearer?: string | null; firstLegFreightRefundable?: boolean | null } | null; onChanged: () => void; orderId?: string; deactivated?: boolean };
 type Refund = { id: string; component: string; amountCent: number; status: string; financeRefundId?: string | null };
 type Facts = { goodsAmountCent: number; goodsOffsetCent: number; goodsRefundCent: number; goodsRefundedCent: number; freightAdjustmentId?: string | null; freightStatus?: string | null; firstLegAdjustmentCent: number; firstLegOffsetCent: number; firstLegRefundCent: number; firstLegRefundedCent: number; refunds: Refund[] };
 const state: Record<string, string> = { pending_approval: "审批中", approved: "已批准", applied: "已登记调减", processing: "退款处理中", failed: "退款失败", refunded: "退款成功", requested: "财务待办理", rejected: "已驳回" };
@@ -45,6 +46,9 @@ export function DealerReturnFinancialPanel(props: Props) {
   const [amount, setAmount] = React.useState("");
   const [note, setNote] = React.useState("");
   const [evidence, setEvidence] = React.useState<string[]>([]);
+  const [confirmationId, setConfirmationId] = React.useState("");
+  // 第十八批第 31 条：合同未约定、须双方确认（BSM:1241）且经销商已停用时，须选运费类对方确认留证；已锁定合同规则不要求。
+  const needsConfirmation = !!props.deactivated && !!props.orderId && (!lockedBearer || props.contract?.firstLegFreightRefundable == null);
   const [financeId, setFinanceId] = React.useState<string | null>(null);
   const canFinance = useCan(effectivePermissions, ["finance.ar_ap.view"]);
   async function load() { try { setFacts(await api.get<Facts>(`/api/v1/dealers/returns/${encodeURIComponent(returnId)}/financial`)); } catch (e) { setError(e instanceof Error ? e.message : "款项读取失败"); } }
@@ -58,7 +62,8 @@ export function DealerReturnFinancialPanel(props: Props) {
   function confirm() {
     const cent = Math.round(Number(amount) * 100);
     if (amount.trim() === "" || !Number.isSafeInteger(cent) || cent < 0 || (!refundable && cent !== 0) || !evidence.length || !note.trim()) { setError("请填写明确金额、说明并上传双方确认或原合同凭证；不退首程费时填0。"); return; }
-    void post(`/api/v1/dealers/returns/${encodeURIComponent(returnId)}/freight-confirmation`, { returnFreightBearer: bearer, firstLegFreightRefundable: refundable, firstLegAdjustmentCent: cent, note, evidenceAttachmentIds: evidence });
+    if (needsConfirmation && !confirmationId) { setError("经销商已停用，请先选择指定经办人登记的对方确认留证"); return; }
+    void post(`/api/v1/dealers/returns/${encodeURIComponent(returnId)}/freight-confirmation`, { returnFreightBearer: bearer, firstLegFreightRefundable: refundable, firstLegAdjustmentCent: cent, note, evidenceAttachmentIds: evidence, ...(needsConfirmation ? { counterpartyConfirmationId: confirmationId } : {}) });
   }
   return <section data-testid="return-financial"><h4>退货款项与首程运费</h4>{error ? <p role="alert">{error}</p> : null}
     {facts ? <><table className="admin-table"><thead><tr><th>项目</th><th>核定减款</th><th>冲减未收款</th><th>应退现金</th><th>实际已退</th></tr></thead><tbody>
@@ -72,6 +77,7 @@ export function DealerReturnFinancialPanel(props: Props) {
       <label>本次首程减款金额（元）<input data-testid="freight-amount" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></label>
       <label>金额和合同依据说明<input data-testid="freight-note" value={note} onChange={e => setNote(e.target.value)} /></label>
       <ReturnEvidenceUpload key={returnId} api={api} effectivePermissions={effectivePermissions} type="dealer_return" id={returnId} permission="dealer.return.manage" testId="freight-evidence" onChanged={setEvidence} />
+      {needsConfirmation ? <CounterpartyConfirmationPick api={api} orderId={props.orderId!} matterType="freight_confirmation" value={confirmationId} onChange={setConfirmationId} /> : null}
       <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.manage"]} disabled={busy} data-testid="freight-confirm" onClick={confirm}>确认并提交运费减款审批</PermissionButton>
     </div> : null}
     <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.refund.execute"]} disabled={busy || props.status === "pending_reversal" || (!props.refundApproved && !facts.firstLegRefundCent)} data-testid="return-refund-prepare" onClick={() => void post(`/api/v1/dealers/returns/${encodeURIComponent(returnId)}/refunds/execute`, {})}>交财务办理原路退款</PermissionButton>

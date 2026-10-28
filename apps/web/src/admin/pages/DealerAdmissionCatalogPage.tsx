@@ -1,11 +1,12 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton, useCan } from "../security/Can";
-import type { AdminPageProps } from "../types";
+import { shortId } from "../format/ids";
+import type { AccessUserRow, AdminPageProps } from "../types";
 
 /**
  * 经销商准入与价格目录（ADM-DLR-001，CG-11a）。
@@ -17,7 +18,7 @@ type Admission = { dealerId: string; companyAttachmentIds: string[]; contractAtt
 const DOCUMENTS = [["companyAttachmentIds", "company", "企业资料"], ["contractAttachmentIds", "contract", "合同"], ["invoiceAttachmentIds", "invoice", "开票资料"], ["bankAttachmentIds", "bank", "银行资料"]] as const;
 type Documents = Pick<Admission, "companyAttachmentIds" | "contractAttachmentIds" | "invoiceAttachmentIds" | "bankAttachmentIds">;
 const emptyDocuments = (): Documents => ({ companyAttachmentIds: [], contractAttachmentIds: [], invoiceAttachmentIds: [], bankAttachmentIds: [] });
-type ContractRow = { id: string; contractNo?: string; salesEntityId?: string; centralWarehouseId?: string; validFrom?: string; validTo?: string; status?: string };
+type ContractRow = { id: string; contractNo?: string; salesEntityId?: string; centralWarehouseId?: string; validFrom?: string; validTo?: string; status?: string; designatedHandlerUserId?: string | null };
 type CatalogRow = { id: string; version?: number; status?: string; editedBy?: string; submittedBy?: string; approvedBy?: string; note?: string };
 type CatalogLine = { id: string; itemId?: string; spec?: string; unitPriceCent?: number; taxRateBps?: number | null; expectedRestockDate?: string | null };
 type InquiryRow = { id: string; itemId?: string; spec?: string; quantity?: number; status?: string; quotedPriceCent?: number | null; quotedBy?: string | null; quoteValidUntil?: string | null; note?: string };
@@ -54,6 +55,8 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
   const [inquiries, setInquiries] = React.useState<InquiryRow[]>([]);
   const [stock, setStock] = React.useState<StockRow[]>([]);
   const [portalAccounts, setPortalAccounts] = React.useState<PortalAccountRow[]>([]);
+  const [staffUsers, setStaffUsers] = React.useState<AccessUserRow[]>([]);
+  const [handlerUserId, setHandlerUserId] = React.useState("");
   const [admission, setAdmission] = React.useState<Admission | null>(null);
   const [documents, setDocuments] = React.useState<Documents>(emptyDocuments);
   const [uploading, setUploading] = React.useState(false);
@@ -91,6 +94,7 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
     async () => {
       const rows = await api.get<DealerRow[]>("/api/v1/dealers");
       setDealers(rows ?? []);
+      try { setStaffUsers((await api.get<AccessUserRow[]>("/api/v1/access/users")) ?? []); } catch { setStaffUsers([]); }
     },
     { onError: setGlobalError, fallbackMessage: "经销商列表读取失败", onStart: () => setGlobalError(null) },
   );
@@ -233,6 +237,16 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
     setContractNo("");
     await loadDealerData(selected);
     return { 经销合同: c?.id, 合同编号: c?.contractNo };
+  });
+
+  // 第十八批第 31 条（BSM:1247「合同销售主体指定经办人」）：经办人从员工列表选、提交用户编号（后端按用户编号认经办人本人）；改派直接覆盖。
+  const userLabel = (id: string) => { const u = staffUsers.find((x) => x.id === id); return u ? `${u.username}（${shortId(u.id)}）` : id; };
+  const designateHandler = (contract: ContractRow) => run("dealer_contract_handler_designated", async () => {
+    if (!selected) throw new Error("请先选择经销商");
+    if (!handlerUserId) throw new Error("请先在「指定经办人」下拉中选择员工");
+    await api.post<ContractRow>(`/api/v1/dealers/contracts/${encodeURIComponent(contract.id)}/designated-handler`, { idempotencyKey: key(), handlerUserId });
+    await loadDealerData(selected);
+    return { 合同编号: contract.contractNo, 指定经办人: userLabel(handlerUserId) };
   });
 
   const createDraft = () => run("dealer_price_catalog_drafted", async () => {
@@ -406,15 +420,21 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
             <label>到期日期<input type="date" data-testid="contract-to-input" value={validTo} onChange={(e) => setValidTo(e.target.value)} /></label>
             <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.manage"]} data-testid="contract-create" onClick={() => void createContract()}>登记合同</PermissionButton>
           </div>
+          <div className="admin-form-grid" data-testid="dealer-contract-handler-form">
+            <label>指定经办人<select data-testid="contract-handler-user" value={handlerUserId} onChange={(e) => setHandlerUserId(e.target.value)}><option value="">请选择员工</option>{staffUsers.map((x) => <option key={x.id} value={x.id}>{x.username}（{shortId(x.id)}）</option>)}</select></label>
+            <span className="admin-muted-action">选好员工后在合同行点「指定经办人」。</span>
+          </div>
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="dealer-contract-table">
-              <thead><tr><th>合同编号</th><th>销售主体</th><th>中心仓</th><th>有效期</th><th>状态</th><th>操作</th></tr></thead>
+              <thead><tr><th>合同编号</th><th>销售主体</th><th>中心仓</th><th>有效期</th><th>状态</th><th>指定经办人</th><th>操作</th></tr></thead>
               <tbody>
                 {contracts.map((c) => (
                   <tr key={c.id} className={contractId === c.id ? "admin-row-selected" : undefined}>
                     <td>{c.contractNo ?? c.id}</td><td>{c.salesEntityId ?? "—"}</td><td>{c.centralWarehouseId ?? "—"}</td>
                     <td>{cnDate(c.validFrom)} 至 {cnDate(c.validTo)}</td><td>{label(CONTRACT_STATUS, c.status)}</td>
-                    <td><button type="button" data-testid={`contract-select-${c.id}`} onClick={() => void selectContract(c.id)}>查看目录与外显</button></td>
+                    <td data-testid={`contract-handler-${c.id}`}>{c.designatedHandlerUserId ? userLabel(c.designatedHandlerUserId) : "未指定"}</td>
+                    <td><button type="button" data-testid={`contract-select-${c.id}`} onClick={() => void selectContract(c.id)}>查看目录与外显</button>
+                      <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.manage"]} data-testid={`contract-handler-designate-${c.id}`} onClick={() => void designateHandler(c)}>指定经办人</PermissionButton></td>
                   </tr>
                 ))}
               </tbody>

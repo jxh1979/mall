@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -39,8 +39,9 @@ public class FacilityWorkOrderService {
     static final Set<String> TYPES = Set.of("repair", "cleaning", "complaint", "rectification", "inspection",
             "internal_collaboration", "other");
     static final Set<String> PRIORITIES = Set.of("urgent", "high", "normal");
-    /** ROOT-03 clients-R8（BSM 第 1379 行）：customer＝消费客人通过客人端投诉，客人即提单方（只经 {@link #createCustomerComplaint} 建单）。 */
-    static final Set<String> SOURCES = Set.of("merchant_self", "platform", "equipment_alarm", "inspection", "customer");
+    /** ROOT-03 clients-R8（BSM 第 1379 行）：customer＝消费客人通过客人端投诉，客人即提单方（只经 {@link #createCustomerComplaint} 建单）；
+     * 第十八批第 18 条（BSM:1201「超过约定归还时间仍未归还的，系统自动生成一张工单」）：lending_overdue＝借用逾期由系统自动生成（只经 {@link #createLendingOverdue}）。 */
+    static final Set<String> SOURCES = Set.of("merchant_self", "platform", "equipment_alarm", "inspection", "customer", "lending_overdue");
     /** 已写处理结论的状态（V166 chk_fwo_status 闭集里完工之后的各态）：客人可对本人投诉评满意度（ROOT-03-R26）。 */
     private static final Set<String> RESOLVED_STATUSES = Set.of("pending_review", "pending_acceptance", "accepted", "closed");
     /**
@@ -140,6 +141,9 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderRequest r = require(request);
         if ("customer".equals(trimToNull(r.source()))) {
             throw ApiException.badRequest("VALIDATION_FAILED", "客人投诉只能由客人在官方 App、小程序提交");
+        }
+        if ("lending_overdue".equals(trimToNull(r.source()))) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "借用逾期工单由系统自动生成，不能人工新建");
         }
         // 第十二批操作员裁决第 15 条「提单员工就是承接人」：员工建单的提单员工＝在后台点「新建工单」的当前登录员工，不取客户端传的 reporter_id。
         if ("staff".equals(trimToNull(r.reporterType()))) {
@@ -538,6 +542,35 @@ public class FacilityWorkOrderService {
             String idempotencyKey) {
         return createInternal(new FacilityWorkOrderRequest("complaint", "normal", title, description, "customer", null, null,
                 customerId, "customer", projectId, null, idempotencyKey), idempotencyKey, null);
+    }
+
+    /**
+     * 第十八批第 18 条（BSM:1201「超过约定归还时间仍未归还的，系统自动生成一张工单并通知借出方主管，按与其他工单相同的超时升级路径继续催办」；
+     * BSM:1372「都进统一工单」；BSM:1385「工单由客户关怀部负责处理」）：借用逾期系统建单——类型其他、普通优先级（时限按「其他×普通」策略）、
+     * 来源 lending_overdue、提单方系统、待派单，记借出方与其项目。系统作业没有登录人，不走员工范围闸；超时由现有超时清单与标记处理。
+     */
+    @Transactional
+    public FacilityWorkOrderRecord createLendingOverdue(String projectId, String lenderMerchantId, String title, String description) {
+        return createInternal(new FacilityWorkOrderRequest("other", "normal", title, description, "lending_overdue", null, null,
+                "system", "system", projectId, lenderMerchantId, null), null, null);
+    }
+
+    /** 借用物全部归还或实物处置完成：系统结束该逾期工单（已关闭的不动），写处理结论并留痕。 */
+    @Transactional
+    public void closeLendingOverdue(String workOrderId, String resolution) {
+        FacilityWorkOrderRecord cur = loadForUpdate(workOrderId);
+        if ("closed".equals(cur.status())) {
+            return;
+        }
+        Instant now = Instant.now();
+        FacilityWorkOrderRecord closed = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(), cur.priority(), "closed",
+                cur.title(), cur.description(), cur.source(), cur.spaceId(), cur.equipmentId(), cur.reporterId(),
+                cur.reporterType(), cur.assigneeId(), cur.responseDueAt(), cur.handleDueAt(), cur.assignedAt(),
+                cur.respondedAt(), cur.completedAt(), cur.verifiedAt(), cur.verifierId(), cur.satisfaction(), cur.overtime(),
+                resolution, cur.projectId(), cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
+                cur.reporterConfirmedBy());
+        repository.updateWorkOrder(closed);
+        audit("facility.work_order_closed_by_system", closed.id(), null, Map.of("status", "closed", "source", closed.source()));
     }
 
     /** clients-R8 本人投诉列表：只返回提单方为本人的客人投诉。 */

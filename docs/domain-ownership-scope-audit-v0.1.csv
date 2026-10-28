@@ -147,6 +147,7 @@ customers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope;
 data_cleanup_jobs,global_reference,global_reference,global reference/configuration table,safe as global reference; tenant-specific overrides require separate scoped table,V0.07,covered
 dealer_admission_submissions,inherited,dealer_id,dealer_id -> dealers -> project_id; reads and writes require authorized dealer scope,must join through scope path before multi-complex rollout,V0.07,covered
 dealer_contracts,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+dealer_counterparty_confirmations,direct,project_id,project_id column on dealer_counterparty_confirmations,ready for project/merchant scoped query enforcement,V0.07,covered
 dealer_delivery_batch_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 dealer_delivery_batches,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 dealer_delivery_discrepancies,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
@@ -279,6 +280,7 @@ inventory_transfer_returns,single_complex_default,P0_SINGLE_COMPLEX,single-compl
 inventory_variance,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 invoice_subject_rules,direct,project_id,project_id column on invoice_subject_rules,ready for project/merchant scoped query enforcement,V0.07,covered
 issued_entitlements,direct,venue_id,venue_id column on issued_entitlements,ready for project/merchant scoped query enforcement,V0.07,covered
+leasing_blacklist_exceptions,direct,project_id,project_id column on leasing_blacklist_exceptions,ready for project/merchant scoped query enforcement,V0.07,covered
 leasing_brands,direct,project_id,project_id column on leasing_brands,ready for project/merchant scoped query enforcement,V0.07,covered
 leasing_follow_ups,direct,project_id,project_id column on leasing_follow_ups,ready for project/merchant scoped query enforcement,V0.07,covered
 leasing_intents,direct,project_id,project_id column on leasing_intents,ready for project/merchant scoped query enforcement,V0.07,covered

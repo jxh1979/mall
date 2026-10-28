@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,6 +17,9 @@ import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.governance.PlatformService;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
 import com.complex.platform.leasing.dto.LeasingFollowUpRequest;
@@ -44,6 +47,8 @@ class LeasingServiceTests {
     private final ContractService contractService = mock(ContractService.class);
     private final PlatformService platformService = mock(PlatformService.class);
     private final AuditEventService audit = mock(AuditEventService.class);
+    private final SupervisorReviewService reviews = mock(SupervisorReviewService.class);
+    private final LeasingBlacklistExceptionService blacklistExceptions = mock(LeasingBlacklistExceptionService.class);
     private LeasingService service;
 
     @BeforeEach
@@ -55,7 +60,9 @@ class LeasingServiceTests {
         when(authz.isPlatformAdmin(org.mockito.ArgumentMatchers.any())).thenReturn(true);
         // 3.13 默认：空间存在性放行（专项用例再覆写为 false）。
         org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
-        service = new LeasingService(repo, audit, authz, contractService, platformService);
+        // 第十八批第 30 条：关键阶段送统一审批，模拟返回待审复核单（恒阻断策略）。
+        when(reviews.evaluate(any())).thenAnswer(inv -> pendingReview(inv.getArgument(0)));
+        service = new LeasingService(repo, audit, authz, contractService, platformService, reviews, blacklistExceptions);
     }
 
     // 3.13：意向空间传了必须真实存在（挂空编号=400）；不传放行。
@@ -165,26 +172,65 @@ class LeasingServiceTests {
                         e -> assertThat(e.code()).isEqualTo("LEASING_BRAND_BLACKLISTED"));
     }
 
+    /**
+     * 第十八批第 30 条 R4（PGM L502「意向五阶段中进入方案报价、商务谈判须主管确认才能推进」）：送审不改阶段、记待确认；
+     * 有待确认不能再推进；驳回阶段不变、清空待确认；批准才进入并记确认人。
+     */
     @Test
-    void intentKeyStageRequiresSupervisor() {
+    void intentKeyStageWaitsForSupervisorReview() {
         LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
                 "赵六", null, "exhibition", "retail", "sp_2", null, null, "k1"));
         LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), "sp_2", null, Map.of(), "k2"));
         assertThat(intent.stage()).isEqualTo("initial_contact");
         assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isEqualTo("converted_to_intent");
 
-        // 非关键阶段无需主管。
+        // 非关键阶段直接推进。
         service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("requirement_confirmed", null, "k3"));
-        // 关键阶段缺主管 → 阻断。
+        LeasingIntentRecord sent = service.advanceIntent(intent.id(),
+                new LeasingIntentAdvanceRequest("proposal_quoted", "usr_gm", "k4"));
+        assertThat(sent.stage()).isEqualTo("requirement_confirmed");
+        assertThat(sent.pendingStage()).isEqualTo("proposal_quoted");
+        org.mockito.ArgumentCaptor<SupervisorReviewEvaluateRequest> sentReview =
+                org.mockito.ArgumentCaptor.forClass(SupervisorReviewEvaluateRequest.class);
+        verify(reviews).evaluate(sentReview.capture());
+        assertThat(sentReview.getValue().actionType()).isEqualTo("leasing.intent.key_stage");
+        assertThat(sentReview.getValue().objectId()).isEqualTo(intent.id());
+        assertThat(sentReview.getValue().finalApproverId()).isEqualTo("usr_gm");
         assertThatThrownBy(() -> service.advanceIntent(intent.id(),
-                new LeasingIntentAdvanceRequest("proposal_quoted", null, "k4")))
+                new LeasingIntentAdvanceRequest("proposal_quoted", null, "k5")))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.code()).isEqualTo("LEASING_INTENT_SUPERVISOR_REQUIRED"));
-        // 关键阶段带主管 → 通过。
-        LeasingIntentRecord advanced = service.advanceIntent(intent.id(),
-                new LeasingIntentAdvanceRequest("proposal_quoted", "usr_supervisor", "k5"));
+                        e -> assertThat(e.code()).isEqualTo("LEASING_INTENT_STAGE_PENDING_REVIEW"));
+
+        service.keyStageDecided(decided(sent.pendingReviewId(), intent.id(), "rejected"));
+        LeasingIntentRecord rejected = repo.findIntentById(intent.id()).orElseThrow();
+        assertThat(rejected.stage()).isEqualTo("requirement_confirmed");
+        assertThat(rejected.pendingStage()).isNull();
+        assertThat(rejected.pendingReviewId()).isNull();
+
+        LeasingIntentRecord again = service.advanceIntent(intent.id(),
+                new LeasingIntentAdvanceRequest("proposal_quoted", null, "k6"));
+        service.keyStageDecided(decided(again.pendingReviewId(), intent.id(), "approved"));
+        LeasingIntentRecord advanced = repo.findIntentById(intent.id()).orElseThrow();
         assertThat(advanced.stage()).isEqualTo("proposal_quoted");
-        assertThat(advanced.lastStageChangeBy()).isEqualTo("usr_supervisor");
+        assertThat(advanced.lastStageChangeBy()).isEqualTo("usr_admin");
+        assertThat(advanced.pendingStage()).isNull();
+        assertThat(advanced.pendingReviewId()).isNull();
+    }
+
+    /** 第十八批第 30 条 R1／R2：拉黑后凭例外放行单建的同品牌线索，转意向不再拦（线索建于拉黑之后）；只在被拦时用单。 */
+    @Test
+    void leadCreatedByBlacklistExceptionConvertsWithoutAnotherException() {
+        LeasingBrandRecord brand = service.createBrand(new LeasingBrandRequest("回归品牌", "prospective", "餐饮", "r2b"));
+        service.blacklistBrand(brand.id(), new LeasingBrandBlacklistRequest(true, "多次违约", "r2bl"));
+
+        LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                "王五", null, "outbound", null, null, null, brand.id(), "r2l", "lbe_1"));
+        verify(blacklistExceptions).consume(org.mockito.ArgumentMatchers.eq("lbe_1"), org.mockito.ArgumentMatchers.eq("lead_create"),
+                org.mockito.ArgumentMatchers.eq(brand.id()), org.mockito.ArgumentMatchers.eq(lead.id()),
+                org.mockito.ArgumentMatchers.isNull());
+        LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), null, null, Map.of(), "r2i", "lbe_1"));
+        assertThat(intent.stage()).isEqualTo("initial_contact");
+        verify(blacklistExceptions, org.mockito.Mockito.times(1)).consume(any(), any(), any(), any(), any());
     }
 
     /**
@@ -207,7 +253,7 @@ class LeasingServiceTests {
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("LEASING_INTENT_NOT_PENDING_SIGNING"));
 
-        service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "k4"));
+        advanceTo(intent.id(), "pending_signing");
         String statusBeforeSign = repo.findLeadById(lead.id()).orElseThrow().status();
         ContractRecord contract = service.signIntent(intent.id(), new LeasingSignRequest(
                 "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k5"));
@@ -236,7 +282,7 @@ class LeasingServiceTests {
                 "周九", null, "online_inquiry", null, null, null, null, "tov1"));
         LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), null, null,
                 Map.of("rentBillingMode", "turnover_only"), "tov2"));
-        service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "tov3"));
+        advanceTo(intent.id(), "pending_signing");
         service.signIntent(intent.id(), new LeasingSignRequest(
                 "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "tov4", 500000L));
         org.mockito.ArgumentCaptor<com.complex.platform.contract.dto.ContractDraftRequest> draft =
@@ -256,7 +302,7 @@ class LeasingServiceTests {
         LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
                 "孙八", null, "referral", null, null, null, null, "e1"));
         LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), null, null, Map.of(), "e2"));
-        service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "e3"));
+        advanceTo(intent.id(), "pending_signing");
         service.signIntent(intent.id(), new LeasingSignRequest(
                 "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "e4"));
         assertThat(repo.findLeadById(lead.id()).orElseThrow().status()).isNotEqualTo("signed");
@@ -313,7 +359,7 @@ class LeasingServiceTests {
                 lead.ownerUserId(), lead.status(), lead.lostOrHoldReason(), lead.lastFollowUpAt(),
                 "lease-current-project", lead.createdAt(), lead.updatedAt()));
         LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), "sp_1", null, Map.of(), "k2"));
-        service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "k4"));
+        advanceTo(intent.id(), "pending_signing");
 
         ContractRecord contract = service.signIntent(intent.id(), new LeasingSignRequest(
                 null, "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k5"));
@@ -366,7 +412,7 @@ class LeasingServiceTests {
             LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
                     "孙八", "13800002222", "online_inquiry", businessType, "sp_1", null, null, "k_other_lead_" + n));
             LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), "sp_1", null, Map.of(), "k_other_intent_" + n));
-            service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "k_other_adv_" + n));
+            advanceTo(intent.id(), "pending_signing");
             ContractRecord contract = service.signIntent(intent.id(), new LeasingSignRequest(
                     null, "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "k_other_sign_" + n));
             assertThat(contract.id()).isEqualTo("ctr_other");
@@ -438,6 +484,69 @@ class LeasingServiceTests {
         assertThat(repo.findLeadById("lead_signed_intent").orElseThrow().status()).isEqualTo("signed");
     }
 
+    /** 第十八批第 30 条 R1（PGM L502「黑名单品牌拦截……由拉黑前既有线索新建意向」）：拉黑前建的线索转意向 409，意向不建、线索状态不动。 */
+    @Test
+    void leadCreatedBeforeBrandBlacklistedCannotConvertToIntent() {
+        LeasingBrandRecord brand = service.createBrand(new LeasingBrandRequest("旧品牌", "prospective", "餐饮", "r1b"));
+        Instant earlier = Instant.now().minus(1, ChronoUnit.HOURS);
+        repo.saveLead(new LeasingLeadRecord("lead_pre_black", "老客户", null, "outbound", null, null, null, brand.id(), "u",
+                "following_up", null, null, null, earlier, earlier));
+        service.blacklistBrand(brand.id(), new LeasingBrandBlacklistRequest(true, "多次违约", "r1bl"));
+
+        assertThatThrownBy(() -> service.createIntent(new LeasingIntentRequest("lead_pre_black", null, null, Map.of(), "r1i")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("LEASING_BRAND_BLACKLISTED"));
+        assertThat(repo.listIntents(null)).isEmpty();
+        assertThat(repo.findLeadById("lead_pre_black").orElseThrow().status()).isEqualTo("following_up");
+    }
+
+    /** 第十八批第 30 条 R3（PGM L500 五阶段顺序推进；ENUM L249）：不得向前跳级，被拒阶段不变；逐级推进与回退照常。 */
+    @Test
+    void intentStageCannotSkipForward() {
+        LeasingLeadRecord lead = service.createLead(new LeasingLeadRequest(
+                "跳级客户", null, "outbound", null, null, null, null, "r3l"));
+        LeasingIntentRecord intent = service.createIntent(new LeasingIntentRequest(lead.id(), null, null, Map.of(), "r3i"));
+
+        assertThatThrownBy(() -> service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("pending_signing", null, "r3a")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("LEASING_INTENT_STAGE_SKIP"));
+        assertThat(repo.findIntentById(intent.id()).orElseThrow().stage()).isEqualTo("initial_contact");
+        assertThat(service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("requirement_confirmed", null, "r3b")).stage())
+                .isEqualTo("requirement_confirmed");
+        assertThatThrownBy(() -> service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("negotiation", null, "r3c")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("LEASING_INTENT_STAGE_SKIP"));
+
+        LeasingIntentRecord at = repo.findIntentById(intent.id()).orElseThrow();
+        repo.saveIntent(new LeasingIntentRecord(at.id(), at.leadId(), "negotiation", at.intendedSpaceId(), at.intendedAreaSqm(),
+                at.rentTerms(), at.lastStageChangeAt(), at.lastStageChangeBy(), at.projectId(), at.createdAt(), at.updatedAt()));
+        assertThat(service.advanceIntent(intent.id(), new LeasingIntentAdvanceRequest("requirement_confirmed", null, "r3d")).stage())
+                .isEqualTo("requirement_confirmed");
+    }
+
+    /** 逐级推进到目标阶段；方案报价、商务谈判模拟主管批准（第十八批第 30 条：不得跳级、关键阶段须主管确认）。 */
+    private void advanceTo(String intentId, String target) {
+        List<String> order = List.of("initial_contact", "requirement_confirmed", "proposal_quoted", "negotiation", "pending_signing");
+        String stage = repo.findIntentById(intentId).orElseThrow().stage();
+        for (int i = order.indexOf(stage) + 1; i <= order.indexOf(target); i++) {
+            String next = order.get(i);
+            LeasingIntentRecord after = service.advanceIntent(intentId,
+                    new LeasingIntentAdvanceRequest(next, null, "adv_" + intentId + "_" + next));
+            if (after.pendingReviewId() != null) {
+                service.keyStageDecided(decided(after.pendingReviewId(), intentId, "approved"));
+            }
+        }
+    }
+
+    private static SupervisorReviewDecisionRecord pendingReview(SupervisorReviewEvaluateRequest r) {
+        return new SupervisorReviewDecisionRecord("review_" + r.idempotencyKey(), "leasing_intent_key_stage", r.actionType(),
+                r.objectType(), r.objectId(), true, "pending_review", 1, null, "blocked", r.violationSummary(), List.of(),
+                Instant.now(), "usr_admin", "one_level_up", null);
+    }
+
+    private static SupervisorReviewDecisionRecord decided(String reviewId, String intentId, String status) {
+        return new SupervisorReviewDecisionRecord(reviewId, "leasing_intent_key_stage", "leasing.intent.key_stage",
+                "leasing_intent", intentId, false, status, 1, 1, status, null, List.of(), Instant.now(), "usr_admin",
+                "one_level_up", null);
+    }
+
     private static final class InMemoryLeasingRepository implements LeasingRepository {
         @Override
         public Optional<LeasingLeadRecord> findLeadByIdForUpdate(String id) {
@@ -483,6 +592,11 @@ class LeasingServiceTests {
         @Override
         public Optional<LeasingIntentRecord> findIntentById(String id) {
             return Optional.ofNullable(intents.get(id));
+        }
+
+        @Override
+        public Optional<LeasingIntentRecord> findIntentByPendingReviewId(String reviewId) {
+            return intents.values().stream().filter(i -> reviewId.equals(i.pendingReviewId())).findFirst();
         }
 
         // CG-01：意向 ↔ 合同绑定 + 线索 CAS 置已签约（与 JdbcLeasingRepository 同语义）。

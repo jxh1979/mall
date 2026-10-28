@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -208,6 +208,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/platform/business-entity-bindings": state.businessBindings,
     "/api/v1/contracts": { items: state.contracts, page: 1, pageSize: 500, total: state.contracts.length },
     "/api/v1/platform/supervisor-review-policies": state.supervisorReviewPolicies,
+    "/api/v1/platform/supervisor-review/pending": [{ decision: { reviewId: "review-pending-1", policyCode: "contract_violation_l3", actionType: "contract_violation", objectType: "contract", objectId: "contract-1", initiatedBy: "staff-initiator-2", requiredLevel: 3 }, schedule: null }],
     "/api/v1/platform/merchants": [{ id: "bar-main", merchantName: "主酒吧", merchantType: "bar", status: "active" }, { id: "merchant-1", merchantName: "Main Merchant", projectId: "venue-1", businessEntityId: "org-1", contactName: "Jack", admissionStep: "商户档案", organizationId: "org-1", displayName: "Main Merchant", companyName: "Main Company", mallBlockCode: "1F-A", areaSquareMeter: 128.5, leasedAreaSquareMeter: 120, secondaryContactName: "Jack", rentPerSquareMeter: 12.3, cooperationForm: "fixed_rent_plus_commission", status: "active", riskLevel: "normal", auditEvidenceRef: "audit://admission/merchant-1" }],
     "/api/v1/platform/projects": [{ id: "venue-1", merchantId: "merchant-1", name: "Main Venue", code: "VENUE", venueType: "complex", status: "active" }],
     "/api/v1/platform/spaces": [{ id: "area-1", spaceName: "Gate A", projectId: "venue-1", spaceType: "gate", floorNo: "1F", areaSquareMeter: 20, venueId: "venue-1", areaId: "area-1", name: "Gate A", code: "GATE-A", areaType: "operation", pointType: "gate", status: "active" }],
@@ -248,7 +249,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/bar/products": [{ id: "drink-1", barId: "bar-main", productName: "Mock Drink", productType: "spirit", priceCent: 3000, internalSettlementPriceCent: 1200, status: "active", soldOut: false }],
     "/api/v1/bar/production-tickets": empty,
     "/api/v1/bar/reservations": [{ id: "reservation-1", reservationNo: "RSV-1", customerName: "Guest A", partySize: 2, depositAmount: 2000, status: "reserved", reservedAt: now }],
-    "/api/v1/bar/orders": [{ id: "order-1", tableId: "table-1", salesStaffId: "staff_sales_1", status: "paid", totalAmount: 6000, createdAt: now, items: [], bills: [{ id: "bill-bar-1", status: "open", salesRoleType: "sales", commissionRateBp: 1500 }] }],
+    "/api/v1/bar/orders": [{ id: "order-1", tableId: "table-1", salesStaffId: "staff_sales_1", status: "paid", totalAmount: 6000, createdAt: now, items: [{ id: "order-item-1", productName: "精酿啤酒", quantity: 1, amountCent: 6000, deliveryStatus: "pending" }], bills: [{ id: "bill-bar-1", status: "open", salesRoleType: "sales", commissionRateBp: 1500 }] }],
     "/api/v1/bar/table-sessions": state.barTableSessions,
     "/api/v1/inventory/stock-movements": empty,
     "/api/v1/inventory/items": [{ id: "item-1", itemCode: "WINE", itemName: "Wine", category: "drink", unit: "bottle", status: "active", minQuantity: 2 }],

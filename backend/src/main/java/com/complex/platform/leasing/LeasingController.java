@@ -7,6 +7,7 @@ import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.contract.ContractRecord;
+import com.complex.platform.leasing.dto.LeasingBlacklistExceptionRequest;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
 import com.complex.platform.leasing.dto.LeasingFollowUpRequest;
@@ -31,10 +32,13 @@ public class LeasingController {
 
     private final LeasingService service;
     private final AuthorizationService authorizationService;
+    private final LeasingBlacklistExceptionService blacklistExceptions;
 
-    public LeasingController(LeasingService service, AuthorizationService authorizationService) {
+    public LeasingController(LeasingService service, AuthorizationService authorizationService,
+            LeasingBlacklistExceptionService blacklistExceptions) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.blacklistExceptions = blacklistExceptions;
     }
 
     // ---- 线索 ----
@@ -143,6 +147,21 @@ public class LeasingController {
         authorizationService.requirePermission("leasing.brand.blacklist");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.blacklistBrand(brandId, request));
+    }
+
+    // ---- 黑名单例外放行（第十八批第 30 条，PGM L502：须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批） ----
+    @GetMapping("/blacklist-exceptions")
+    public ApiResponse<PageResponse<LeasingBlacklistExceptionService.BlacklistException>> listBlacklistExceptions() {
+        authorizationService.requirePermission("leasing.lead.manage");
+        return ApiResponse.ok(blacklistExceptions.list());
+    }
+
+    @PostMapping("/blacklist-exceptions")
+    public ApiResponse<LeasingBlacklistExceptionService.BlacklistException> requestBlacklistException(
+            @RequestBody @jakarta.validation.Valid LeasingBlacklistExceptionRequest request) {
+        authorizationService.requirePermission("leasing.brand.blacklist_exception");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(blacklistExceptions.request(request));
     }
 
     // ---- 跟进 ----

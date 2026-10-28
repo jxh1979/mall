@@ -1,6 +1,7 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { withBase } from "../basePath";
+import { CounterpartyConfirmationPick } from "./CounterpartyConfirmation";
 
 export type DeliveryApi = {
   get<T>(path: string): Promise<T>;
@@ -13,13 +14,14 @@ type Difference = { id: string; orderLineId: string; discrepancyType: string; qu
 type Batch = { id: string; resolutionId?: string | null; shippedAt: string; evidenceAttachmentIds?: string[]; lines: { orderLineId: string; quantity: number; recordedQuantity: number; acceptedQuantity: number }[] };
 type Receipt = { id: string; batchId: string; confirmedAt: string; buyerContact: string; evidenceAttachmentIds: string[]; lines: { orderLineId: string; acceptedQuantity: number; rejectedQuantity: number; damagedQuantity: number; shortQuantity: number }[] };
 export type DeliveryProgress = { deliveryCompletedAt?: string | null; netReceivableCent: number; receivedCent: number; pendingRefundCent: number; moneyStatus: string; batches: Batch[]; receipts: Receipt[]; discrepancies: Difference[] };
-type Props = { api: DeliveryApi; orderId: string; status?: string; portal?: boolean; canManage: boolean; canShip?: boolean; onChanged: () => Promise<void> };
+type Props = { api: DeliveryApi; orderId: string; status?: string; portal?: boolean; canManage: boolean; canShip?: boolean; onChanged: () => Promise<void>; deactivated?: boolean; confirmationVersion?: number };
 const names: Record<string, string> = { rejected: "拒收", damaged: "收到破损", short: "短少", replacement: "补交", price_adjustment: "确认调款", return_resalable: "实际退回且验收可售", return_quarantine: "实际退回并隔离", loss_confirmed: "实际损失处置", accepted_as_is: "双方确认由收货方留用", pending_approval: "待审批", approved: "已批准，待实际处理", completed: "该数量处理完成", settled: "交付差异款项已结清", unpaid: "尚有未收货款", pending_refund: "交付差异原路退款未结清" };
 const money = (cent: number) => `¥${(cent / 100).toFixed(2)}`;
 const stamp = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 23);
 const newKey = () => `delivery-${crypto.randomUUID()}`;
 
-export function DealerDeliveryPanel({ api, orderId, status, portal = false, canManage, canShip = false, onChanged }: Props) {
+export function DealerDeliveryPanel({ api, orderId, status, portal = false, canManage, canShip = false, onChanged, deactivated = false, confirmationVersion = 0 }: Props) {
+  const [confirmationId, setConfirmationId] = React.useState("");
   const base = portal ? "/api/v1/dealer-portal/orders/" : "/api/v1/dealers/orders/";
   const [progress, setProgress] = React.useState<DeliveryProgress | null>(null);
   const [lines, setLines] = React.useState<{ id: string; itemId: string; spec: string }[]>([]);
@@ -48,7 +50,9 @@ export function DealerDeliveryPanel({ api, orderId, status, portal = false, canM
   }, [api, base, orderId]);
   React.useEffect(() => { setProgress(null); setProofs([]); setMode(null); setQuantities({}); setKey(newKey()); void load().catch(e => setError(e instanceof Error ? e.message : "交付记录读取失败")); }, [load]);
   const item = (lineId: string) => { const row = lines.find(l => l.id === lineId); return row ? `${row.itemId}（${row.spec || "默认规格"}）` : lineId; };
-  function open(next: NonNullable<typeof mode>) { setMode(next); setProofs([]); setAt(stamp()); setKey(newKey()); setError(""); setQuantity(""); setAmount(""); setBasis(""); setResponsibility(""); }
+  // 第十八批第 31 条：经销商已停用时，签收与差异方案须用掉一条对应事项的对方确认留证（签收人取其已核验联系人）。
+  const confirmationMatter = deactivated && !portal ? (!mode ? "delivery_receipt" : mode.kind === "proposal" ? "delivery_resolution" : null) : null;
+  function open(next: NonNullable<typeof mode>) { setMode(next); setConfirmationId(""); setProofs([]); setAt(stamp()); setKey(newKey()); setError(""); setQuantity(""); setAmount(""); setBasis(""); setResponsibility(""); }
   async function upload(selected: FileList | null) {
     if (!selected?.length || busy) return;
     if (!api.postForm) { setError("当前客户端无法上传凭证，请刷新后重试"); return; }
@@ -79,6 +83,7 @@ export function DealerDeliveryPanel({ api, orderId, status, portal = false, canM
     try {
       if (!proofs.length) throw new Error("请先上传本次实际签收、双方确认或实物处理凭证");
       if (!at || !Number.isFinite(new Date(at).getTime())) throw new Error("请填写实际时间");
+      if (confirmationMatter && !confirmationId) throw new Error("经销商已停用，请先选择指定经办人登记的对方确认留证");
       const evidenceAttachmentIds = proofs.map(p => p.id);
       let path: string; let body: Record<string, unknown>;
       if (mode?.kind === "proposal") {
@@ -93,7 +98,7 @@ export function DealerDeliveryPanel({ api, orderId, status, portal = false, canM
         body = { completedAt: new Date(at).toISOString() };
       } else {
         const batch = progress?.batches.find(b => b.id === batchId);
-        if (!batch || !contact.trim()) throw new Error("请选择实际发运批次并填写已核验的收货确认人");
+        if (!batch || (!confirmationMatter && !contact.trim())) throw new Error("请选择实际发运批次并填写已核验的收货确认人");
         const receiptLines = batch.lines.map(line => {
           const values = (quantities[line.orderLineId] ?? ["", "", "", ""]).map(v => v === "" ? 0 : Number(v));
           if (values.some(v => !Number.isSafeInteger(v) || v < 0) || values.reduce((a, b) => a + b, 0) > line.quantity - line.recordedQuantity) throw new Error("分类数量须为非负整数，且不超过本批尚未登记数量");
@@ -101,11 +106,11 @@ export function DealerDeliveryPanel({ api, orderId, status, portal = false, canM
         }).filter(l => l.acceptedQuantity + l.rejectedQuantity + l.damagedQuantity + l.shortQuantity > 0);
         if (!receiptLines.length) throw new Error("请填写本次实际数量，不能直接把整单标记完成");
         path = `${base}${encodeURIComponent(orderId)}/sign`;
-        body = { deliveryBatchId: batchId, confirmedAt: new Date(at).toISOString(), buyerContact: contact.trim(), lines: receiptLines };
+        body = { deliveryBatchId: batchId, confirmedAt: new Date(at).toISOString(), buyerContact: confirmationMatter ? undefined : contact.trim(), lines: receiptLines };
       }
       setBusy(true);
-      await api.post(path, { ...body, idempotencyKey: key, evidenceAttachmentIds });
-      setProofs([]); setQuantities({}); setMode(null); setKey(newKey());
+      await api.post(path, { ...body, idempotencyKey: key, evidenceAttachmentIds, ...(confirmationMatter ? { counterpartyConfirmationId: confirmationId } : {}) });
+      setProofs([]); setQuantities({}); setMode(null); setKey(newKey()); setConfirmationId("");
       await load(); await onChanged(); setNotice("本次事实已记录；数量、审批和款项进度请分别核对。");
     } catch (e) { setError(e instanceof Error ? e.message : "交付处理失败"); } finally { setBusy(false); }
   }
@@ -131,7 +136,7 @@ export function DealerDeliveryPanel({ api, orderId, status, portal = false, canM
     </>}
     {(canReceive || mode) && <fieldset disabled={busy} data-testid="delivery-facts-form"><legend>{mode?.kind === "proposal" ? "双方确认的差异方案" : mode?.kind === "physical" ? "实际原物交接或处置" : mode?.kind === "replacement" ? "补交实际出库" : "本次实际签收"}</legend>
       {!mode && <><label>发运批次<select aria-label="发运批次" value={batchId} onChange={e => { setBatchId(e.target.value); setQuantities({}); setKey(newKey()); }}>{progress?.batches.map((b, i) => <option key={b.id} value={b.id}>{b.resolutionId ? "补交" : "原发运"}批次 {i + 1}</option>)}</select></label>
-        <label>已核验收货确认人<input aria-label="已核验收货确认人" value={contact} onChange={e => setContact(e.target.value)} /></label>
+        {confirmationMatter ? null : <label>已核验收货确认人<input aria-label="已核验收货确认人" value={contact} onChange={e => setContact(e.target.value)} /></label>}
         <table className="admin-table"><thead><tr><th>商品</th><th>尚未登记</th>{["合格接收", "拒收", "收到破损", "短少"].map(v => <th key={v}>{v}</th>)}</tr></thead><tbody>{batch?.lines.map(line => <tr key={line.orderLineId}><td>{item(line.orderLineId)}</td><td>{line.quantity - line.recordedQuantity}</td>{["合格接收", "拒收", "收到破损", "短少"].map((label, index) => <td key={label}><input type="number" min="0" max={line.quantity - line.recordedQuantity} aria-label={`${item(line.orderLineId)} ${label}`} value={quantities[line.orderLineId]?.[index] ?? ""} onChange={e => setQuantities(current => { const row = [...(current[line.orderLineId] ?? ["", "", "", ""])]; row[index] = e.target.value; return { ...current, [line.orderLineId]: row }; })} /></td>)}</tr>)}</tbody></table></>}
       {mode?.kind === "proposal" && <><label>本方案数量<input aria-label="本方案数量" type="number" min="1" value={quantity} onChange={e => setQuantity(e.target.value)} /></label>
         <label>处理方式<select value={resolutionType} onChange={e => setResolutionType(e.target.value)}><option value="replacement">补交</option><option value="price_adjustment">确认调款</option></select></label>
@@ -139,6 +144,7 @@ export function DealerDeliveryPanel({ api, orderId, status, portal = false, canM
         {resolutionType === "price_adjustment" && <label>双方确认调减货款（元）<input aria-label="双方确认调减货款" value={amount} onChange={e => setAmount(e.target.value)} /></label>}
         <label>双方确认责任方<input value={responsibility} onChange={e => setResponsibility(e.target.value)} /></label><label>合同及双方确认依据<textarea value={basis} onChange={e => setBasis(e.target.value)} /></label>
         <label>主管最终审批人账号<input value={approver} onChange={e => setApprover(e.target.value)} /></label><label>财务最终审批人账号<input value={finance} onChange={e => setFinance(e.target.value)} /></label></>}
+      {confirmationMatter && <CounterpartyConfirmationPick key={`${confirmationMatter}-${confirmationVersion}`} api={api} orderId={orderId} matterType={confirmationMatter} value={confirmationId} onChange={setConfirmationId} version={confirmationVersion} />}
       {mode?.kind !== "proposal" && <label>实际时间<input aria-label="实际时间" type="datetime-local" step="0.001" value={at} onChange={e => setAt(e.target.value)} /></label>}
       <label>本次真实凭证<input aria-label="实际交接凭证" type="file" accept="image/*,video/*" multiple onChange={e => void upload(e.target.files)} /></label>
       <ul>{proofs.map(p => <li key={p.id}>{p.name}（已上传）</li>)}</ul>

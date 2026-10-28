@@ -1,4 +1,4 @@
-# 招商获客业务域 PRD（V1.08·据需求重建）
+# 招商获客业务域 PRD（V1.09·据需求重建）
 
 > 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径；最终业务解释仍以三份业务 HTML 为准。
 >
@@ -23,11 +23,11 @@
 - **分配**：招商主管手动指派给招商员（不自动分、不抢单、不共享池）。线索带 `owner_user_id`（负责人）。
 - **状态流转**：待跟进→跟进中→已转意向→洽谈中→已签约；旁支 已流失 / 已搁置（可从多数态进入，留原因）。招商线索在已签约前，可从待跟进、跟进中、已转意向或洽谈中转为已流失或已搁置；转换时必须填写原因，已签约后不得回退至未签约状态。
 - **已签约守卫**：人工状态接口不得写入 `signed`，仅合同审批生效回调可置已签约；已签线索不得回退或再次创建意向。状态修改、负责人指派、转意向及跟进回写均校验该动作权限与线索真实项目范围的交集，在事务中锁定并重读原线索，避免跨项目写入及旧状态覆盖并发生效结果。前端按当前已签状态禁用回退及转意向，正常跟进和负责人维护保留；其他来源态白名单仍按独立缺口跟进。
-- 「已转意向」时生成 `leasing_intent`（进入 §3）。品牌已拉黑的，既有线索也不得新建意向；确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。**当前 `LeasingService.createIntent` 未执行该黑名单守卫或例外放行流程，属待实现；M08 不改代码。**
+- 「已转意向」时生成 `leasing_intent`（进入 §3）。品牌已拉黑的，既有线索也不得新建意向；确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。第十八批第 30 条落地：`LeasingService.createIntent` 对拉黑前既有线索（线索建于品牌本次拉黑之前；已解黑品牌的线索、拉黑后经例外放行建的线索不拦，再次拉黑以新的拉黑时点为准）转意向 409 `LEASING_BRAND_BLACKLISTED`，意向不建、线索状态不动；例外放行见 §4。
 
 ## 3. 意向管理（5 阶段独立流转 + 关键阶段卡控）
-- 5 阶段顺序推进：初步接触 → 需求确认 → 方案报价 → 商务谈判 → 待签约；这是业务约束。**当前 `advanceIntent` 仅校验目标阶段是否在枚举中，未校验相邻顺序，属待实现；M08 不改代码。**
-- **关键阶段卡控**：进入「方案报价」「商务谈判」需**主管确认**才可推进；其余阶段招商员自由推进。卡控走现有主管复核机制（留审批人+时间+原因）。
+- 5 阶段顺序推进：初步接触 → 需求确认 → 方案报价 → 商务谈判 → 待签约；这是业务约束。第十八批第 30 条落地：`LeasingService.advanceIntent` 向前跳级 409 `LEASING_INTENT_STAGE_SKIP`（提示当前阶段与下一阶段），回退与原地维持现状。
+- **关键阶段卡控**：进入「方案报价」「商务谈判」需**主管确认**才可推进；其余阶段招商员自由推进。卡控走现有主管复核机制（留审批人+时间+原因）。第十八批第 30 条落地：推进到方案报价或商务谈判不直接改阶段，送统一审批（`leasing.intent.key_stage`，发起人沿直接上级到其指定的最终审批人 `final_approver_id`，不填即直接上级），意向记 `pending_stage`／`pending_review_id`（V563）；主管在「主管复核待办」（ADM-GOV-006）填审批意见批准后才进入该阶段并由 `last_stage_change_by` 记确认人，驳回阶段不变，本人审批 403 `SUPERVISOR_SELF_REVIEW_FORBIDDEN`；已有待确认再推进 409 `LEASING_INTENT_STAGE_PENDING_REVIEW`；请求删去前端写死的 `supervisor_user_id`。招商工作台选中意向时推进阶段默认取下一阶段，意向表列「待确认阶段」。
 - 「待签约」→ 签约：触发 §6 转商户。
 - 意向记录意向业态、意向铺位/空间、意向面积、报价租金条款（喂入转商户与合同）。
 - **意向业态词表（V348 + V384）**：与商户业态同一套六值——酒吧 bar / 餐饮 catering / 零售 retail / 游乐 amusement / 演出传媒 media / 其他 other（`leasing_leads.intended_business_type` 加 CHECK `chk_leasing_leads_business_format`，线索阶段可留空）。签约转商户时该值直接落成 `merchants.merchant_type`；自动落 `other` 时必须同时指定主管公司并说明理由，未指定不得开通结算与分账。**当前签约自动建档在业态留空时会落 `other`，但未同时校验主管公司与理由，属待实现；M08 不改代码。**
@@ -35,7 +35,7 @@
 ## 4. 品牌/客户库（4 类 + 去重 + 黑名单拦截）
 - 4 类：意向品牌 / 储备品牌 / 合作品牌 / 黑名单品牌。
 - **用途**：仅作意向、储备、合作、黑名单的基础资料库；品牌名用于线索去重（建线索时按品牌查重、提示已有）。
-- **黑名单**：主管可拉黑品牌；拉黑后，同品牌新建线索，以及由拉黑前既有线索新建意向均被拦截。确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。上述既有线索转意向守卫与例外放行流程当前均属待实现。
+- **黑名单**：主管可拉黑品牌；拉黑后，同品牌新建线索，以及由拉黑前既有线索新建意向均被拦截。确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。第十八批第 30 条落地：权限 `leasing.brand.blacklist_exception`（授出须审批，出厂只给平台管理员，V563）；申请 `POST /api/v1/leasing/blacklist-exceptions`（`target_type` 为新建线索 `lead_create` 填品牌、由线索新建意向 `intent_create` 填线索，理由必填，可指定最终审批人）进统一审批（`leasing.blacklist_exception`，按层级到最终审批人，本人审批 403 `SUPERVISOR_SELF_REVIEW_FORBIDDEN`）；批准后申请人本人在被拦时带 `blacklist_exception_id` 新建线索或转意向用一次，放行单（`leasing_blacklist_exceptions`）记已用与所建线索或意向，留痕 `leasing.blacklist_exception.used` 含操作人、审批人、理由、时间和关联线索或意向；单不可用（非本人、未批准、已驳回、已用、品牌或线索不符）409 `LEASING_BLACKLIST_EXCEPTION_INVALID`；品牌未被拦时带了单号不用单。放行单清单 `GET /api/v1/leasing/blacklist-exceptions`；招商工作台在黑名单品牌与被拦提示处给申请入口，放行单表列操作人、审批人、理由、时间、关联线索或意向与状态，已批准的给「按批准新建线索／转意向」。
 
 ## 5. 跟进
 - 跟进记录：每次跟进记 时间 / 方式（电话/到访/微信…）/ 内容 / 下次跟进计划时间。
@@ -79,7 +79,7 @@
 - `leasing.brand.blacklist`（拉黑/解黑品牌，high·需审批——属高危授权范围「提权/敏感」之外的业务高危，走主管复核）
 - `leasing.convert`（签约转商户，high·需审批）
 - 主管确认/审批复用现有 supervisor_review 机制。
-- 黑名单例外放行必须是单独授予的权限，不以 `leasing.brand.blacklist` 或一般主管确认替代；当前权限、层级审批、自审禁止与全字段审计的实现均属待实现。
+- 黑名单例外放行必须是单独授予的权限，不以 `leasing.brand.blacklist` 或一般主管确认替代；第十八批第 30 条落地为 `leasing.brand.blacklist_exception`（见 §4）。
 
 ## 8. 数据模型（迁移 V161，对齐 §1 枚举落 CHECK）
 - `leasing_leads`(id, source CHECK 4 值, contact_name, contact_phone, intended_business_type, intended_space_id, intended_area, owner_user_id, status CHECK 7 值, lost_reason, project_id, last_follow_up_at, created/updated_at)
@@ -95,6 +95,7 @@
 - 线索：`GET/POST /leasing/leads`、`POST /leads/{id}/assign`、`POST /leads/{id}/status`；目标转换端点为 `POST /leads/{id}/to-intent`。
 - 意向：`GET/POST /leasing/intents`、`POST /intents/{id}/advance`（推进阶段，关键阶段触发主管确认）、`POST /intents/{id}/sign`（签约→转商户）
 - 品牌库：`GET/POST /leasing/brands`、`POST /brands/{id}/blacklist`
+- 黑名单例外放行：`GET/POST /leasing/blacklist-exceptions`（第十八批第 30 条，见 §4）
 - 跟进：`GET/POST /leasing/follow-ups`
 - **实现缺口（M08 仅登记）**：当前 Controller 没有 `POST /leads/{id}/to-intent`，实际以 `POST /intents` 携带 `leadId` 建意向，须补端点并与 OpenAPI 对齐；`createIntent` 以随机 ID 新建，未见按幂等键去重，不能声称全部写操作均已幂等。签约链对合同草稿、自动建商户与四主体绑定使用按意向派生的稳定幂等键；其余写操作的幂等边界须逐项实现和验证。所有现有及后续写操作均须保持项目隔离与审计留痕。
 
@@ -115,6 +116,7 @@
 
 | 日期 | 类型 | 章节 | 内容 |
 |---|---|---|---|
+| 2026-10-28 | 改 | 版本、§2、§3、§4、§7、§9 | 版本升至 V1.09：第十八批第 30 条——拉黑前既有线索转意向拦截、黑名单例外放行（单独授予权限、按层级主管审批、禁止自审、全字段留痕）、意向不得向前跳级、进入方案报价与商务谈判经主管复核确认后才生效（PGM「招商运营细则」），各节「待实现」改为落地记录 |
 | 2026-10-26 | 改 | 版本、§10 | 版本升至 V1.08：第十六批第 37、38 条——招商工作台意向阶段补「初步接触」，线索状态中文按 ENUM「招商线索状态」改为洽谈中／已流失／已搁置（含操作结果区）；`method` 字段名由「支付方式」改为「方式」（PGM「全局原则 · 界面全中文（所有终端零英文）」） |
 | 2026-10-17 | 改 | §2、§3、§6A | 版本升至 V1.05：CG-01 招商线索「已签约」改到合同生效时（PGM「招商运营细则」）——签约只起草合同并绑定来源意向（V442 `leasing_intents.contract_id`），合同生效后置已签约并留痕 `leasing.lead.signed`；审批驳回不置；已签约线索改其他状态 409 `LEASING_LEAD_ALREADY_SIGNED`。登记 `createIntent` 仍可回写线索的残余缺口。 |
 | 2026-07-28 | 增 | §6A | 到期/变更/退出衔接（P2 BSM-0267） |
