@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -312,6 +312,100 @@ class JdbcBarRepository implements BarRepository {
     public Optional<String> findReservationCustomerPhone(String reservationId) {
         return jdbcTemplate.queryForList("SELECT customer_phone FROM bar_reservations WHERE id = :id AND customer_phone IS NOT NULL",
                 Map.of("id", reservationId), String.class).stream().findFirst().map(piiCipher::decrypt);
+    }
+
+    // 第十八批 C 段第 15 条：单列更新——saveReservation 的 upsert 列表不含 no_show_at，后续保存不会覆盖。
+    @Override
+    public void markReservationNoShow(String reservationId, Instant at) {
+        jdbcTemplate.update("UPDATE bar_reservations SET no_show_at = :at WHERE id = :id",
+                Map.of("id", reservationId, "at", java.sql.Timestamp.from(at)));
+    }
+
+    @Override
+    public Integer staffBookingNoShowLimitPct(String barId) {
+        List<Integer> limit = jdbcTemplate.queryForList("SELECT staff_booking_no_show_limit_pct FROM merchants WHERE id = :id",
+                Map.of("id", barId), Integer.class);
+        return limit.isEmpty() ? null : limit.getFirst();
+    }
+
+    @Override
+    public int[] staffBookingNoShowStats(String barId, String staffId, Instant from, Instant to, Instant now) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) AS bookings, count(no_show_at) AS no_shows FROM bar_reservations
+                 WHERE bar_id = :bar_id AND order_source = 'staff' AND sales_staff_id = :staff_id AND delete_status <> 'approved'
+                   AND latest_arrival_at >= :from AND latest_arrival_at < :to AND latest_arrival_at <= :now
+                """, Map.of("bar_id", barId, "staff_id", staffId, "from", java.sql.Timestamp.from(from),
+                        "to", java.sql.Timestamp.from(to), "now", java.sql.Timestamp.from(now)),
+                (rs, n) -> new int[] {rs.getInt("bookings"), rs.getInt("no_shows")});
+    }
+
+    @Override
+    public boolean hasActiveStaffBookingSuspension(String barId, String staffId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM bar_staff_booking_suspensions
+                                WHERE merchant_id = :merchant_id AND staff_user_id = :staff_id AND status = 'suspended')
+                """, Map.of("merchant_id", barId, "staff_id", staffId), Boolean.class));
+    }
+
+    @Override
+    public BarStaffBookingSuspensionRecord saveStaffBookingSuspension(BarStaffBookingSuspensionRecord s) {
+        jdbcTemplate.update("""
+                INSERT INTO bar_staff_booking_suspensions (id, merchant_id, staff_user_id, status, stat_month, no_show_count,
+                       booking_count, limit_pct, trigger_reservation_id, suspended_at, restored_by, restored_at)
+                VALUES (:id, :merchant_id, :staff_user_id, :status, :stat_month, :no_show_count,
+                       :booking_count, :limit_pct, :trigger_reservation_id, :suspended_at, :restored_by, :restored_at)
+                ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, restored_by = EXCLUDED.restored_by,
+                       restored_at = EXCLUDED.restored_at
+                """, new MapSqlParameterSource()
+                .addValue("id", s.id()).addValue("merchant_id", s.merchantId()).addValue("staff_user_id", s.staffUserId())
+                .addValue("status", s.status()).addValue("stat_month", s.statMonth()).addValue("no_show_count", s.noShowCount())
+                .addValue("booking_count", s.bookingCount()).addValue("limit_pct", s.limitPct())
+                .addValue("trigger_reservation_id", s.triggerReservationId())
+                .addValue("suspended_at", java.sql.Timestamp.from(s.suspendedAt()))
+                .addValue("restored_by", s.restoredBy(), java.sql.Types.VARCHAR)
+                .addValue("restored_at", s.restoredAt() == null ? null : java.sql.Timestamp.from(s.restoredAt()), java.sql.Types.TIMESTAMP));
+        return s;
+    }
+
+    @Override
+    public Optional<BarStaffBookingSuspensionRecord> findStaffBookingSuspension(String id) {
+        return jdbcTemplate.query("SELECT * FROM bar_staff_booking_suspensions WHERE id = :id", Map.of("id", id),
+                this::mapStaffBookingSuspension).stream().findFirst();
+    }
+
+    @Override
+    public List<BarStaffBookingSuspensionRecord> listStaffBookingSuspensions(Optional<String> merchantScope) {
+        return jdbcTemplate.query("""
+                SELECT * FROM bar_staff_booking_suspensions
+                 WHERE status = 'suspended' AND (CAST(:merchant_id AS VARCHAR) IS NULL OR merchant_id = :merchant_id)
+                 ORDER BY suspended_at DESC, id
+                """, new MapSqlParameterSource().addValue("merchant_id", merchantScope.orElse(null), java.sql.Types.VARCHAR),
+                this::mapStaffBookingSuspension);
+    }
+
+    @Override
+    public boolean pourDeviceEquipped(String itemId, String locationId) {
+        return jdbcTemplate.queryForList("""
+                SELECT COALESCE(w.pour_device_equipped, FALSE) FROM inventory_stock_balances b
+                  LEFT JOIN warehouses w ON w.id = b.warehouse_id
+                 WHERE b.item_id = :item_id AND b.location_id = :location_id
+                """, Map.of("item_id", itemId, "location_id", locationId), Boolean.class).stream().anyMatch(Boolean.TRUE::equals);
+    }
+
+    @Override
+    public int pourLossRatePct(String barId) {
+        int factory = com.complex.platform.governance.MerchantPercentParamRecord.Param.POUR_LOSS_RATE.factoryDefault();
+        List<Integer> configured = jdbcTemplate.queryForList("SELECT pour_loss_rate_pct FROM merchants WHERE id = :id",
+                Map.of("id", barId), Integer.class);
+        return configured.isEmpty() || configured.getFirst() == null ? factory : configured.getFirst();
+    }
+
+    private BarStaffBookingSuspensionRecord mapStaffBookingSuspension(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+        java.sql.Timestamp restoredAt = rs.getTimestamp("restored_at");
+        return new BarStaffBookingSuspensionRecord(rs.getString("id"), rs.getString("merchant_id"), rs.getString("staff_user_id"),
+                rs.getString("status"), rs.getString("stat_month"), rs.getInt("no_show_count"), rs.getInt("booking_count"),
+                rs.getInt("limit_pct"), rs.getString("trigger_reservation_id"), rs.getTimestamp("suspended_at").toInstant(),
+                rs.getString("restored_by"), restoredAt == null ? null : restoredAt.toInstant());
     }
 
     @Override

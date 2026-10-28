@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.GiftReversedEvent;
@@ -206,6 +206,18 @@ public class BarGiftConsumer {
                 orderId, barId, merchantId, table.get().id(), null, null, "gift", "delivered",
                 0L, "CNY", "gift_redeem", null, null, now, now, ORDER_TYPE_GIFT));
 
+        // 4b) 第十八批 C 段第 17 条同根（BSM 第 1065 行 / ENUM 第 106 行「未配备采集设备的吧台，必须按标准出酒量配酒，也按该标准计算扣减与
+        //     标准损耗，不得按零损耗记账」；第十八批裁决 4）：按杯赠饮商品在未配设备的吧台出酒，与点单出品同一算法记一行 0 元赠送明细——
+        //     实际出酒量＝标准出酒量，标准损耗＝标准出酒量×本酒吧损耗率阈值。吧台＝本次实际扣库库存行（物料＋default 库位）所挂库房，不扣库按未配处理。
+        //     配有设备的吧台：赠饮核销没有设备采集的实际出酒量来源（设备对接不在第 17 条），维持原样不记。明细 id 由核销号派生，重复事件同行覆盖。
+        Integer standardPour = giftProduct.standardPourVolume();
+        if (standardPour != null && !(deductStock && repository.pourDeviceEquipped(inventoryItemId, STOCK_LOCATION_DEFAULT))) {
+            repository.saveOrderItem(new BarOrderItemRecord(
+                    "order_item_" + slug(seed), orderId, giftProduct.id(), giftProduct.productName(), 1, 0L, 0L, "delivered",
+                    now, now, standardPour, BarPourLoss.standardLoss(standardPour, repository.pourLossRatePct(barId)),
+                    false, null, null, null, false, true, now));
+        }
+
         // 5) 桥表落地（幂等键 verification_id；撞唯一键即跳过，不重复扣减）。
         boolean inserted = repository.insertGiftRedemptionIfAbsent(new BarGiftRedemptionRecord(
                 "gift_" + slug(seed),
@@ -277,6 +289,14 @@ public class BarGiftConsumer {
             // 反向回补余额：负数量增量恢复原扣减（atomicDecreaseStock 以负数实现回补）。
             repository.atomicDecreaseStock(reverseInventoryItemId, STOCK_LOCATION_DEFAULT, -1);
         }
+        // 第十八批 C 段第 17 条同根：核销时 4b 段记下的赠送明细照点单退酒写法置撤单，出酒量与损耗原值保留——
+        //     冲正后权益可再核销、另起新单新明细，被冲正的这行不能仍算已出酒。
+        repository.findOrderItemById("order_item_" + slug("gift:" + verificationId)).ifPresent(item ->
+                repository.saveOrderItem(new BarOrderItemRecord(
+                        item.id(), item.orderId(), item.productId(), item.productName(), item.quantity(),
+                        item.unitPriceCent(), item.amountCent(), "voided", item.createdAt(), now,
+                        item.actualPourVolume(), item.lossVolume(), true, "赠饮核销冲正", now, null,
+                        redemption.inventoryMovementId() != null, item.isGift(), item.deliveredAt())));
         repository.saveGiftRedemption(new BarGiftRedemptionRecord(
                 redemption.id(),
                 redemption.entitlementId(),

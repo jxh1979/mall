@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -258,6 +258,32 @@ class SettlementDistributionSchemeJdbcIntegrationTests {
         assertThat(jdbc.queryForList("SELECT merchant_id FROM merchant_zone_notices WHERE source_id = ? AND merchant_id IN (?, ?)",
                 String.class, id, own, stillAffected))
                 .as("本项目已由本项目版管辖的酒吧不挂；本项目版晚于本版生效的照挂").containsExactly(stillAffected);
+    }
+
+    /**
+     * 18C 核对后操作员裁决补充第 12 条同口径：本项目版凭短期经营激励转正、激励到期日早于全平台新版的生效营业日——到那天本项目新售票已改回
+     * 此前在用的方案，本项目版不再管辖，全平台新版对本项目酒吧适用，照常挂通告。
+     */
+    @Test
+    void globalActivationNotifiesBarsWhoseOwnVersionIncentiveLapsesFirst() throws Exception {
+        String own = bar("gc", "13800000031");
+        passTicketCovering(own);
+        String ownVersion = "tdsv_own_" + suffix;
+        jdbc.update("INSERT INTO ticket_distribution_scheme_versions(id,project_id,status,notified_at,effective_at)"
+                + " VALUES(?,?,'notified',now(),now() - interval '1 day')", ownVersion, project);
+        jdbc.update("""
+                INSERT INTO pass_incentive_applications (id, scheme_version_id, project_id, kind, status, reason, term_value, term_unit,
+                    trial_result, max_excess_cent, valid_from, valid_until)
+                VALUES (?, ?, ?, 'initial', 'approved', '开业季保底', 2, 'day', '[]'::jsonb, 100, now() - interval '1 day',
+                        now() + interval '1 day')""", "pia_tds_" + suffix, ownVersion, project);
+        String id = draftId(mockMvc.perform(post(BASE).with(drafter).contentType(MediaType.APPLICATION_JSON).content("""
+                {"idempotency_key":"tds_global2_%s","project_id":null,"tiers":%s,"first_segment":[]}
+                """.formatted(suffix, rowsJson(2, 5700, 4300)))).andExpect(status().isOk()));
+
+        mockMvc.perform(post(BASE + "/" + id + "/activate").with(approver)).andExpect(status().isOk());
+
+        assertThat(jdbc.queryForList("SELECT merchant_id FROM merchant_zone_notices WHERE source_id = ? AND merchant_id = ?",
+                String.class, id, own)).as("本项目版的激励在本版生效前已到期，本版对本项目酒吧适用").containsExactly(own);
     }
 
     /** 通告期数值、单位与上下限须同时填写；改成 10 天后，转正生效日＝转正日＋10 天。 */

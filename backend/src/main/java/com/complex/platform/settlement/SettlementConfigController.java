@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
@@ -12,6 +12,8 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.CommissionR
 import com.complex.platform.settlement.SettlementConfigWriteRequests.ComprehensiveServiceFeeRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionMethodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.DistributionSchemeRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.IncentiveApplicationRequest;
+import com.complex.platform.settlement.SettlementConfigWriteRequests.IncentiveDecisionRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.MerchantRateRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.NoticePeriodRequest;
 import com.complex.platform.settlement.SettlementConfigWriteRequests.PassGiftCostRequest;
@@ -43,6 +45,7 @@ public class SettlementConfigController {
     private final SettlementConfigWriteService writeService;
     private final DistributionSchemeService schemeService;
     private final com.complex.platform.evidence.AuditEventService audit;
+    private static final String INCENTIVE_APPROVE = "settlement.bill.special_approve";
 
     public SettlementConfigController(AuthorizationService authorizationService,
                                       SettlementConfigService settlementConfigService,
@@ -182,7 +185,10 @@ public class SettlementConfigController {
                 request == null ? null : request.idempotencyKey(), () -> schemeService.saveDraft(request, requireManageActor())));
     }
 
-    /** 差人复核转正：当日逐家向受影响酒吧发通告即视为送达，生效日＝转正日＋通告期（操作员裁决第十八批第 1 条）。 */
+    /**
+     * 差人复核转正：当日逐家向受影响酒吧发通告即视为送达，生效日＝转正日＋通告期（操作员裁决第十八批第 1 条）。
+     * 第 75 条：转正前按最低可能可分配池金额逐票种试算第一段，不通过且没有已批准的首次短期经营激励申请 409 POOL_TRIAL_FAILED。
+     */
     @PostMapping("/distribution-scheme/{id}/activate")
     public ApiResponse<DistributionSchemeService.SchemeVersion> activateDistributionScheme(@PathVariable("id") String id) {
         return ApiResponse.ok(auditFailure("settlement.config.draft.activate_failed", id, null,
@@ -196,12 +202,48 @@ public class SettlementConfigController {
                 request == null ? null : request.idempotencyKey(), () -> schemeService.saveNoticePeriod(request, requireManageActor())));
     }
 
+    /**
+     * 第 75 条短期经营激励申请（ENUM L52「须在配置生效前提交短期经营激励申请并经项目之上的平台权限审批」）：草案版本提交首次申请，
+     * 已凭激励放行转正的版本提交到期重审；由结算配置管理人员代娱乐平台公司提交（settlement.config.manage＋平台域）。
+     */
+    @PostMapping("/distribution-scheme/{id}/incentive-applications")
+    public ApiResponse<DistributionSchemeService.IncentiveApplication> submitIncentiveApplication(
+            @PathVariable("id") String id, @RequestBody IncentiveApplicationRequest request) {
+        return ApiResponse.ok(auditFailure("settlement.config.pass_incentive.submit_failed", "settlement.config.manage",
+                "pass_incentive_applications", id, request == null ? null : request.idempotencyKey(),
+                () -> schemeService.submitIncentive(id, request, requireManageActor())));
+    }
+
+    /** 第 75 条审批：批准（项目之上的平台权限，DEC-R3-2026-08-04-13；审批人不得是提交人）。 */
+    @PostMapping("/incentive-applications/{id}/approve")
+    public ApiResponse<DistributionSchemeService.IncentiveApplication> approveIncentiveApplication(
+            @PathVariable("id") String id, @RequestBody IncentiveDecisionRequest request) {
+        return ApiResponse.ok(auditFailure("settlement.config.pass_incentive.approve_failed", INCENTIVE_APPROVE,
+                "pass_incentive_applications", id, request == null ? null : request.idempotencyKey(),
+                () -> schemeService.decideIncentive(id, true, request, requireIncentiveApprover())));
+    }
+
+    /** 第 75 条审批：驳回（同批准的权限与差人规则）。 */
+    @PostMapping("/incentive-applications/{id}/reject")
+    public ApiResponse<DistributionSchemeService.IncentiveApplication> rejectIncentiveApplication(
+            @PathVariable("id") String id, @RequestBody IncentiveDecisionRequest request) {
+        return ApiResponse.ok(auditFailure("settlement.config.pass_incentive.reject_failed", INCENTIVE_APPROVE,
+                "pass_incentive_applications", id, request == null ? null : request.idempotencyKey(),
+                () -> schemeService.decideIncentive(id, false, request, requireIncentiveApprover())));
+    }
+
     /** 分账方案三个写口按 OpenAPI 声明的失败事件留痕（权限、范围与校验失败一律记，再原样抛出）。 */
     private <T> T auditFailure(String failureEvent, String businessId, String idempotencyKey, java.util.function.Supplier<T> action) {
+        return auditFailure(failureEvent, "settlement.config.manage", "ticket_distribution_scheme_versions", businessId,
+                idempotencyKey, action);
+    }
+
+    private <T> T auditFailure(String failureEvent, String permission, String table, String businessId, String idempotencyKey,
+                               java.util.function.Supplier<T> action) {
         try {
             return action.get();
         } catch (RuntimeException exception) {
-            audit.recordFailure(failureEvent, "settlement.config.manage", "ticket_distribution_scheme_versions", businessId, null,
+            audit.recordFailure(failureEvent, permission, table, businessId, null,
                     idempotencyKey, exception instanceof com.complex.platform.common.api.ApiException api ? api.code() : "INTERNAL_ERROR");
             throw exception;
         }
@@ -249,6 +291,20 @@ public class SettlementConfigController {
     public ApiResponse<Void> activateAttributionRuleDraft(@PathVariable("id") String id) {
         writeService.activateDraft("attribution_rule", id, requireManageActor());
         return ApiResponse.ok(null);
+    }
+
+    /**
+     * 第 75 条激励审批闸（DEC-R3-2026-08-04-13「项目之上的平台权限」）：settlement.bill.special_approve（高敏，只授平台负责人）
+     * ＋平台域，且须能看全部项目（平台管理员或勾了「可以查看全部项目」的角色）；只管单个项目的人 403。
+     */
+    private String requireIncentiveApprover() {
+        authorizationService.requirePermission(INCENTIVE_APPROVE);
+        authorizationService.requirePlatformScope();
+        if (!authorizationService.allowsPlatformScope(authorizationService.currentActor(), INCENTIVE_APPROVE)) {
+            throw com.complex.platform.common.api.ApiException.forbidden("PLATFORM_SCOPE_REQUIRED",
+                    "短期经营激励须由项目之上的平台权限审批");
+        }
+        return authorizationService.currentActor().id();
     }
 
     /** 编辑/转正/软删统一闸:settlement.config.manage(高敏)+ 平台 scope;返回操作者 id 供 updated_by/审计。 */

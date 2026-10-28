@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.util.List;
 import java.util.Optional;
@@ -171,6 +171,15 @@ public interface PlatformRepository {
     MerchantPendingClearAlertRecord findPendingClearAlert(String merchantId);
 
     void savePendingClearAlert(String merchantId, int valueMinutes, int minMinutes, int maxMinutes);
+
+    /** 第十八批 C 段：酒吧（商户）百分比参数（值与上下限同配；三者皆空＝未配置）。只有 JDBC 实现。 */
+    default MerchantPercentParamRecord findPercentParam(String merchantId, MerchantPercentParamRecord.Param param) {
+        throw new UnsupportedOperationException("findPercentParam");
+    }
+
+    default void savePercentParam(String merchantId, MerchantPercentParamRecord.Param param, int valuePct, int minPct, int maxPct) {
+        throw new UnsupportedOperationException("savePercentParam");
+    }
 
     default com.complex.platform.common.api.PageResponse<BusinessEntityRecord> listBusinessEntitiesPaged(
             String projectId, int page, int size) {

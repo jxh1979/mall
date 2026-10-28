@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -406,7 +406,7 @@ public class PlatformService {
 
     /**
      * 第十批 TK-27（BSM L1058「业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限」；按仓库「值与上下限同配」范式，
-     * 同 StoredValueService.configureBonusPolicy）：值、下限、上限三者同填且值在闭区间内，否则 400；不另设硬上下限。
+     * 同 TicketRewardConfigService 的 range 校验）：值、下限、上限三者同填且值在闭区间内，否则 400；不另设硬上下限。
      */
     public MerchantPendingClearAlertRecord configurePendingClearAlert(String merchantId,
                                                                       com.complex.platform.governance.dto.MerchantPendingClearAlertRequest request) {
@@ -425,6 +425,50 @@ public class PlatformService {
                     }
                     repository.savePendingClearAlert(id, value, min, max);
                     return repository.findPendingClearAlert(id);
+                });
+    }
+
+    /** 第十八批 C 段：读酒吧（商户）百分比参数（第 15 条员工代订爽约率上限 BSM:1468；第 17 条损耗率阈值 BSM:2015）。 */
+    public MerchantPercentParamRecord getPercentParam(String merchantId, MerchantPercentParamRecord.Param param) {
+        try {
+            authorizationService.requirePlatformScope();
+            String id = requireText(merchantId, "merchant_id");
+            requireMerchant(id);
+            MerchantPercentParamRecord result = repository.findPercentParam(id, param);
+            auditEventService.recordSuccess("merchant.viewed", "merchant.profile.view", "merchant", id, null, null,
+                    Map.of("entry", "/api/v1/platform/merchants/{merchant_id}/" + param.path()));
+            return result;
+        } catch (RuntimeException exception) {
+            // OpenAPI 两个读口声明 x-audit-event-failure: merchant.view_failed。
+            auditEventService.recordFailure("merchant.view_failed", "merchant.profile.view", "merchant", merchantId, null, null,
+                    codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /**
+     * 第十八批 C 段：配置酒吧（商户）百分比参数。BSM:1468、BSM:2015「须同时配置上下限」，按仓库「值与上下限同配」范式（同 TK-27）：
+     * 值、下限、上限三者同填，下限不小于该参数的下限底线（损耗率阈值为 1，见 {@link MerchantPercentParamRecord.Param}）、上限不大于 100，值在闭区间内，否则 400。
+     * 不涉钱（爽约率上限只决定是否停用代订权限；损耗量不进任何金额计算），HTML 未写审批级别，不走版本审批。
+     */
+    public MerchantPercentParamRecord configurePercentParam(String merchantId, MerchantPercentParamRecord.Param param,
+                                                            com.complex.platform.governance.dto.MerchantPercentParamRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        String event = "merchant." + param.column();
+        return executeWrite("configurePercentParam:" + param.column() + ":" + id, request == null ? null : request.idempotencyKey(),
+                request, MerchantPercentParamRecord.class, event + "_configured", event + "_config_failed",
+                "merchant.profile.manage", "merchant", () -> {
+                    requireMerchant(id);
+                    Integer value = request == null ? null : request.valuePct();
+                    Integer min = request == null ? null : request.minPct();
+                    Integer max = request == null ? null : request.maxPct();
+                    if (value == null || min == null || max == null || min < param.minFloor() || min > value || value > max || max > 100) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "须同时填写" + param.label() + "及其上下限（整数百分比，下限不小于 "
+                                + param.minFloor() + "、上限不大于 100），值须在上下限内");
+                    }
+                    repository.savePercentParam(id, param, value, min, max);
+                    return repository.findPercentParam(id, param);
                 });
     }
 
@@ -1287,6 +1331,9 @@ public class PlatformService {
             return record.id();
         }
         if (value instanceof MerchantPendingClearAlertRecord record) {
+            return record.merchantId();
+        }
+        if (value instanceof MerchantPercentParamRecord record) {
             return record.merchantId();
         }
         if (value instanceof ProjectRecord record) {

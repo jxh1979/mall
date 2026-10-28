@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -171,7 +171,7 @@ class MerchantConsumptionRewardReleaseJdbcIntegrationTests {
     // 操作员裁决补充（第十四批）第 2 条：退款冲回成长值后立即按当前滚动周期成长值重新定级，低于现级就降并通知。
     @Test
     void merchantGrowthUpgradesAtOnceAndRefundReversalRegradesAtOnce() {
-        jdbc.update("INSERT INTO customer_member_levels(id,project_id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) VALUES(?,NULL,'base','新乐会员',0,0,10000,'active',now(),now()),(?,NULL,'silver','银卡',1,200,10000,'active',now(),now())", "lv_b_" + s, "lv_s_" + s);
+        jdbc.update("INSERT INTO customer_member_levels(id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) VALUES(?,'base','新乐会员',0,0,10000,'active',now(),now()),(?,'silver','银卡',1,200,10000,'active',now(),now())", "lv_b_" + s, "lv_s_" + s);
         String member = customer();
         String bill = bill(member, 30_000L, true, now.minus(31, ChronoUnit.HOURS), now.minus(30, ChronoUnit.HOURS), now.minus(27, ChronoUnit.HOURS), "");
         rewards.tryCreateForBarBill(bill);

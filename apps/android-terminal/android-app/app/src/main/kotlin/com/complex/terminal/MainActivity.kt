@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import android.app.Activity
 import android.content.Intent
@@ -2088,6 +2088,8 @@ class MainActivity : Activity() {
     "pending" -> "处理中"
     "paid" -> "已支付"; "partial_paid" -> "部分支付"; "unpaid" -> "未支付"
     "settled" -> "已结算"; "unsettled" -> "未结算"; "not_required" -> "无需"
+    // 第十八批 C 段第 15 条：ENUM 第 103 行订台定金状态「免收（员工代订）」（订位成功提示用）。
+    "staff_waived" -> "免收（员工代订）"
     "pending_review" -> "待审核"; "active" -> "已生效"; "superseded" -> "已被替换"; "revoked" -> "已撤销"
     "acknowledged" -> "已知悉"; "consented" -> "已同意"; "declined" -> "已拒绝"
     else -> raw ?: "-"

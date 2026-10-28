@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.LocalDate;
 
@@ -31,7 +31,6 @@ public record SettlementBillRecord(
         // S6 收款主体快照:G 的收款方(解析自 revenue_stream_attribution 的 pass_gift_cost 流;月结时定格)。
         String giftBeneficiaryEntityId,
         String distributionMethod,
-        String specialApprovalRef,
         String status,
         // 六业态收入归属(terminology-canonical §三):通票收入归属的 L3 管理公司/业态主体(娱乐平台公司)。
         // 由 revenue_stream_attribution 按 (项目, all_pass_ticket) 解析;未配置=null(零金额影响,仅归属留白)。

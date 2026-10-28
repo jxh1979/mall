@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 
 /**
  * 会员忠诚度配置服务的租户隔离 + 写路径 project_id 绑定 + DB CHECK 前置校验单测。
+ * 第十八批第 12 条：会员等级与生日加倍规则全平台一套，写入须全国范围授权；签到阶梯仍按综合体。
  * 用 Mock AuthorizationService 精确控制 token scope，无需真实 DB/权限授予。
  */
 class LoyaltyConfigAdminServiceTests {
@@ -31,46 +32,45 @@ class LoyaltyConfigAdminServiceTests {
             new LoyaltyConfigAdminService(repository, authorization, audit);
 
     @Test
-    void createLevelBindsProjectScopeOverRequestBodyForScopedAdmin() {
-        when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
+    void createLevelByNationwideAdminIsGlobal() {
+        when(authorization.allowsPlatformScope(any(), any())).thenReturn(true);
         when(repository.saveMemberLevel(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, "prj_HACK", "gold", "金卡", 2, 5000L, 15000, "active"));
+        service.saveMemberLevel(new MemberLevelConfigRequest(null, "gold", "金卡", 2, 5000L, 15000, "active"));
 
         ArgumentCaptor<CustomerMemberLevelRecord> saved = ArgumentCaptor.forClass(CustomerMemberLevelRecord.class);
         org.mockito.Mockito.verify(repository).saveMemberLevel(saved.capture());
-        assertThat(saved.getValue().projectId()).isEqualTo("prj_A");
         assertThat(saved.getValue().id()).startsWith("member_level_");
+        assertThat(saved.getValue().levelCode()).isEqualTo("gold");
     }
 
     @Test
-    void createLevelByPlatformAdminRequiresExplicitProjectId() {
-        when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.empty());
+    void projectScopedAdminCannotWriteNationwideLevel() {
+        when(authorization.allowsPlatformScope(any(), any())).thenReturn(false);
 
         assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
-                null, null, "gold", "金卡", 2, 5000L, 15000, "active")))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("project_id is required");
+                null, "gold", "金卡", 2, 5000L, 15000, "active")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).saveMemberLevel(any());
     }
 
     @Test
-    void updatingLevelWithUnknownIdInScopeIsNotFound() {
-        when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
-        when(repository.listMemberLevels("prj_A")).thenReturn(java.util.List.of());
+    void updatingLevelWithUnknownIdIsNotFound() {
+        when(authorization.allowsPlatformScope(any(), any())).thenReturn(true);
+        when(repository.listAllMemberLevels()).thenReturn(java.util.List.of());
 
         assertThatThrownBy(() -> service.saveMemberLevel(new MemberLevelConfigRequest(
-                "member_level_ghost", "prj_A", "gold", "金卡", 2, 5000L, 15000, "active")))
+                "member_level_ghost", "gold", "金卡", 2, 5000L, 15000, "active")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("未找到");
     }
 
     @Test
     void birthdayMultiplierMustExceedParity() {
-        when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
+        when(authorization.allowsPlatformScope(any(), any())).thenReturn(true);
 
         assertThatThrownBy(() -> service.saveBirthdayRule(new BirthdayRuleConfigRequest(
-                null, "prj_A", "生日双倍", "birthday_day", 10000, "active")))
+                null, "生日双倍", "birthday_day", 10000, "active")))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("multiplier_basis_points");
     }

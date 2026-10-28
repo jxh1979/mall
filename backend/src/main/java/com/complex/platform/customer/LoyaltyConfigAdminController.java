@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 会员忠诚度运营配置后台端点（会员忠诚度 PRD §3/§6）：等级档位/门槛/保级/倍率、连续签到阶梯、生日加倍规则。
  * 查看需 customer.loyalty.view，维护需 customer.loyalty.manage。POST 兼作新增/更新（请求体 id 空=新增、非空=更新）。
  * 与既有 {@code /api/v1/loyalty/member-levels}（LoyaltyController 只读 GET）分路径，本处为带权限闸的配置读写通道。
+ * 第十八批第 12 条：会员等级与生日加倍规则全平台一套，不带 project_id；签到阶梯仍按综合体。
  */
 @RestController
 @RequestMapping("/api/v1/loyalty/config")
@@ -28,9 +29,8 @@ public class LoyaltyConfigAdminController {
     }
 
     @GetMapping("/member-levels")
-    public ApiResponse<PageResponse<CustomerMemberLevelRecord>> listMemberLevels(
-            @RequestParam(name = "project_id", required = false) String projectId) {
-        return ApiResponse.ok(service.listMemberLevels(projectId));
+    public ApiResponse<PageResponse<CustomerMemberLevelRecord>> listMemberLevels() {
+        return ApiResponse.ok(service.listMemberLevels());
     }
 
     @PostMapping("/member-levels")
@@ -52,9 +52,8 @@ public class LoyaltyConfigAdminController {
     }
 
     @GetMapping("/birthday-rules")
-    public ApiResponse<PageResponse<CustomerBirthdayRuleRecord>> listBirthdayRules(
-            @RequestParam(name = "project_id", required = false) String projectId) {
-        return ApiResponse.ok(service.listBirthdayRules(projectId));
+    public ApiResponse<PageResponse<CustomerBirthdayRuleRecord>> listBirthdayRules() {
+        return ApiResponse.ok(service.listBirthdayRules());
     }
 
     @PostMapping("/birthday-rules")

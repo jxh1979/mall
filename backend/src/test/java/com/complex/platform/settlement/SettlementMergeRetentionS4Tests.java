@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -106,8 +106,6 @@ class SettlementMergeRetentionS4Tests {
         expected.put("gift_cost_cent", 0L); // S6:未配非零 G 规则(种子 by_ticket_amount+0)恒 0=逐分不变
         expected.put("gift_beneficiary_entity_id", "be_ent_platform"); // V372 归属种子:归娱乐平台公司
         expected.put("distribution_method", "by_rank_tier");
-        expected.put("special_approval_ref", null);
-        expected.put("special_approval_valid_until", null);
         expected.put("status", "confirmed");
         expected.put("confirmed_at", null);
         expected.put("settled_at", null);

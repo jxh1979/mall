@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -115,7 +115,7 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
             Map.entry("dividend_reserve_released", "分红留存已释放"), Map.entry("dealer_order", "经销订单"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
-            Map.entry("platform_incentive_subsidy", "平台激励补贴(超池特批)"),
+            Map.entry("platform_incentive_subsidy", "平台激励补贴"),
             Map.entry("bar_deposit_refund", "订台定金达标退回"),
             Map.entry("ticket_points_issuance", "门票积分发行月结"),
             Map.entry("staff_payroll", "员工工资"),

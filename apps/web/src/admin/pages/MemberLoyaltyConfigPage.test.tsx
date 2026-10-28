@@ -1,13 +1,13 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MemberLoyaltyConfigPage } from "./MemberLoyaltyConfigPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
-const LEVELS = [{ id: "member_level_1", projectId: "prj_A", levelCode: "gold", levelName: "金卡", levelRank: 2, upgradeThreshold: 5000, pointMultiplierBasisPoints: 15000, status: "active" }];
+const LEVELS = [{ id: "member_level_1", levelCode: "gold", levelName: "金卡", levelRank: 2, upgradeThreshold: 5000, pointMultiplierBasisPoints: 15000, status: "active" }];
 const TIERS = [{ id: "check_in_tier_1", projectId: "prj_A", streakDays: 7, awardPoints: 100, status: "active" }];
-const BIRTHDAYS = [{ id: "birthday_rule_1", projectId: "prj_A", ruleName: "生日双倍", windowType: "birthday_day", multiplierBasisPoints: 20000, status: "active" }];
+const BIRTHDAYS = [{ id: "birthday_rule_1", ruleName: "生日双倍", windowType: "birthday_day", multiplierBasisPoints: 20000, status: "active" }];
 
 function makeApi(post = vi.fn().mockResolvedValue({})): AdminApiClient {
   const get = vi.fn().mockImplementation((url: string) => {
@@ -39,15 +39,34 @@ describe("MemberLoyaltyConfigPage 会员等级与忠诚度(ADM-CUS-004)", () => 
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
     await screen.findByTestId("member-levels-table");
-    fireEvent.change(screen.getByLabelText("综合体 id 查询"), { target: { value: "prj_A" } });
     fireEvent.change(screen.getByLabelText("等级代码"), { target: { value: "silver" } });
     fireEvent.change(screen.getByLabelText("等级名称"), { target: { value: "银卡" } });
     fireEvent.change(screen.getByLabelText("积分倍率"), { target: { value: "1.2" } });
     fireEvent.click(screen.getByTestId("member-level-save"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/loyalty/config/member-levels",
-      expect.objectContaining({ levelCode: "silver", levelName: "银卡", pointMultiplierBasisPoints: 12000, projectId: "prj_A" }),
+      expect.objectContaining({ levelCode: "silver", levelName: "银卡", pointMultiplierBasisPoints: 12000 }),
     ));
+  });
+
+  // 第十八批第 12 条（BSM L820/L821、ENUM L70/L72「全平台统一」，DEC-R3-2026-08-04-35）与同根的生日加倍规则（BSM L831 / ENUM L87「全国平台统一规定，
+  // 不按项目分别配置」）：不填综合体 id 也能新增，提交体不带 projectId。
+  it("会员等级与生日加倍规则全平台一套，新增不带综合体", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const setGlobalError = vi.fn();
+    renderPage(makeApi(post), setGlobalError);
+    await waitFor(() => expect(screen.getByTestId("member-levels-table").textContent).toContain("金卡"));
+    fireEvent.change(screen.getByLabelText("等级代码"), { target: { value: "silver" } });
+    fireEvent.change(screen.getByLabelText("等级名称"), { target: { value: "银卡" } });
+    fireEvent.click(screen.getByTestId("member-level-save"));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("projectId");
+    fireEvent.change(screen.getByLabelText("生日规则名称"), { target: { value: "生日双倍积分" } });
+    fireEvent.click(screen.getByTestId("birthday-rule-save"));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls[1]?.[0]).toBe("/api/v1/loyalty/config/birthday-rules");
+    expect(post.mock.calls[1]?.[1]).not.toHaveProperty("projectId");
+    expect(setGlobalError).not.toHaveBeenCalled();
   });
 
   // OBS-13-01（BSM L820）：等级只按滚动统计周期内的成长值与升级门槛定级，保护期等三项参数全平台统一另行配置；

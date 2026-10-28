@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -10,6 +10,8 @@ enum BarReadOperation implements AuditedOperation {
     LIST_PRODUCTION_TICKET_EVENTS("bar.production_ticket_event.viewed", "bar.production_ticket_event.viewed_failed", "bar.production_ticket.view", "bar_production_ticket_event"),
     LIST_PRODUCTS("bar.product.viewed", "bar.product.viewed_failed", "bar.order.create", "bar_product"),
     LIST_RESERVATIONS("bar.reservation.viewed", "bar.reservation.view_failed", "bar.reservation.view", "bar_reservation"),
+    // 第十八批 C 段第 15 条：代订权限停用中的经手员工（店长复核用）。
+    LIST_STAFF_BOOKING_SUSPENSIONS("bar.staff_booking_suspension.viewed", "bar.staff_booking_suspension.view_failed", "bar.staff_booking.restore", "bar_staff_booking_suspension"),
     LIST_TABLES("bar.table.viewed", "bar.table.view_failed", "bar.table.view", "bar_table"),
     // BYOD 一期:空位视图凭 bar.reservation.create(能订位自然能看空位),不放大到桌位管理。
     LIST_TABLE_AVAILABILITY("bar.table_availability.viewed", "bar.table_availability.view_failed", "bar.reservation.create", "bar_table"),

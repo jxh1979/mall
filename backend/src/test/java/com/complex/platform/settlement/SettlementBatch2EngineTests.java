@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -191,10 +191,10 @@ class SettlementBatch2EngineTests {
         assertThat(bill.get("status")).isEqualTo("confirmed");
     }
 
-    // ---- ③ 第一段合计 > 份池 → 待特批(draft,不确认);不削第一段、第二段为 0 ----
+    // ---- ③ 第一段合计 > 份池 → 结算单照常 confirmed(第 75 条:结算环节不设超池待审批);不削第一段、第二段为 0 ----
 
     @Test
-    void overPoolKeepsDraftForSpecialApproval() {
+    void overPoolBillIsConfirmedWithOverflowColumn() {
         String pid = newProject();
         // 池 80000;两家第一段固定额合计 200000 > 80000。
         PassPoolFixtures.snapshot(jdbcTemplate, "tk_" + pid, pid, 80000L, PassPoolFixtures.FACTORY_SCHEME,
@@ -208,12 +208,11 @@ class SettlementBatch2EngineTests {
         assertThat(num(bill, "available_pool_cent")).isEqualTo(80000L);
         assertThat(num(bill, "distributed_cent")).isEqualTo(200000L);   // 超可分配池:绝对承诺不削
         assertThat(num(bill, "pool_overflow_cent")).isEqualTo(120000L); // 第一段超池额单列
-        assertThat(bill.get("status")).isEqualTo("draft");             // 保持 draft 待特批
-        assertThat(bill.get("special_approval_ref")).isNull();         // 待人工填
+        assertThat(bill.get("status")).isEqualTo("confirmed");         // 结算环节不再设超池待审批
         assertThat(num(bill, "pool_undistributed_cent")).isZero();     // P2=max(0,P−Q)=0,无余额可留
     }
 
-    /** 边界①:Q &gt; P 且该票还有第二段酒吧——第二段为 0(不削第一段),名次仍留痕,整月走特批。 */
+    /** 边界①:Q &gt; P 且该票还有第二段酒吧——第二段为 0(不削第一段),名次仍留痕,超出额过账时由娱乐平台公司承担。 */
     @Test
     void overPoolByPhaseOneLeavesZeroForSecondSegmentBars() {
         String pid = newProject();
@@ -229,7 +228,7 @@ class SettlementBatch2EngineTests {
         assertThat(itemAmount(pid, "tb")).isZero();             // 第二段整段为 0
         assertThat(itemRank(pid, "tb")).isEqualTo(2);           // 名次仍留痕(当期全月名次)
         assertThat(num(bill, "distributed_cent")).isEqualTo(90000L);
-        assertThat(bill.get("status")).isEqualTo("draft");      // 超池 → 待特批(既有路径)
+        assertThat(bill.get("status")).isEqualTo("confirmed");  // 第 75 条:超池单照常 confirmed
         assertThat(num(bill, "pool_undistributed_cent")).isZero();
     }
 
@@ -267,8 +266,6 @@ class SettlementBatch2EngineTests {
         expected.put("gift_cost_cent", 0L);                            // S6:无赠送计提 → G 恒 0
         expected.put("gift_beneficiary_entity_id", "be_ent_platform"); // V372 归属种子
         expected.put("distribution_method", "by_rank_tier");
-        expected.put("special_approval_ref", null);
-        expected.put("special_approval_valid_until", null);
         expected.put("status", "confirmed");
         expected.put("confirmed_at", null);
         expected.put("settled_at", null);

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -8,12 +8,12 @@ import { PermissionButton } from "../security/Can";
 
 // 会员忠诚度运营配置（会员忠诚度 PRD §3 等级 / §6 连续签到 + 生日加倍）。后端新增端点 /api/v1/loyalty/config/*。
 type MemberLevelRow = {
-  id: string; projectId?: string | null; levelCode: string; levelName: string; levelRank: number;
+  id: string; levelCode: string; levelName: string; levelRank: number;
   upgradeThreshold: number;
   pointMultiplierBasisPoints: number; status: string;
 };
 type CheckInTierRow = { id: string; projectId?: string | null; streakDays: number; awardPoints: number; status: string };
-type BirthdayRuleRow = { id: string; projectId?: string | null; ruleName: string; windowType: string; multiplierBasisPoints: number; status: string };
+type BirthdayRuleRow = { id: string; ruleName: string; windowType: string; multiplierBasisPoints: number; status: string };
 
 const VIEW = ["customer.loyalty.view"];
 const MANAGE = ["customer.loyalty.manage"];
@@ -39,7 +39,8 @@ const EMPTY_BIRTHDAY: BirthdayForm = { editingId: "", ruleName: "", windowType: 
 /**
  * 会员等级与忠诚度配置页（ADM-CUS-004）：会员等级档位/升级门槛/积分倍率、连续签到阶梯奖励、生日加倍规则。
  * OBS-13-01（BSM L820）：等级按滚动统计周期内的成长值定级；滚动统计周期、保护期、提前通知天数三项参数全平台统一，在「门票积分、成长值与销售责任」页提交审批。
- * 均按综合体（project_id）配置；平台管理员填综合体 id 查询/配置，项目级管理员由登录归属自动绑定（服务层覆盖）。
+ * 第十八批第 12 条：会员等级与生日加倍规则全平台一套（BSM L820/L821/L831），仅全国范围账号可写；签到阶梯按综合体（project_id）配置，
+ * 平台管理员填综合体 id 查询/配置，项目级管理员由登录归属自动绑定（服务层覆盖）。
  * 查看需 customer.loyalty.view，维护需 customer.loyalty.manage。
  * 备注：列表仅显示生效中(active)配置；将某项改为停用/归档后即从列表隐去。
  */
@@ -57,9 +58,9 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
   const { loading, error, reload } = useAdminResource(
     async () => {
       const [lv, ti, bd] = await Promise.all([
-        api.get<MemberLevelRow[]>(`/api/v1/loyalty/config/member-levels${qs}`),
+        api.get<MemberLevelRow[]>("/api/v1/loyalty/config/member-levels"),
         api.get<CheckInTierRow[]>(`/api/v1/loyalty/config/check-in-tiers${qs}`),
-        api.get<BirthdayRuleRow[]>(`/api/v1/loyalty/config/birthday-rules${qs}`),
+        api.get<BirthdayRuleRow[]>("/api/v1/loyalty/config/birthday-rules"),
       ]);
       setLevels(lv ?? []); setTiers(ti ?? []); setBirthdays(bd ?? []);
     },
@@ -73,17 +74,15 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
     void reload();
   }, [query, reload]);
 
-  // 写路径共用 project_id：查询框已锁定的综合体优先，否则用录入框（新增时平台管理员必填）。
+  // 签到阶梯写路径 project_id：查询框已锁定的综合体优先，否则用录入框（新增时平台管理员必填）。
   function writeProjectId(): string { return query.trim() || projectId.trim(); }
 
   async function saveLevel() {
-    if (!levelForm.editingId && !writeProjectId()) { setGlobalError("请先在上方填写综合体 id（新增时必填）"); return; }
     if (!levelForm.levelCode.trim() || !levelForm.levelName.trim()) { setGlobalError("请填写等级代码与等级名称"); return; }
     const mult = Math.round(Number(levelForm.multiplier) * 10000);
     if (!Number.isFinite(mult) || mult <= 0) { setGlobalError("积分倍率需为大于 0 的数字（如 1.0、1.5）"); return; }
     await api.post("/api/v1/loyalty/config/member-levels", {
       id: levelForm.editingId || null,
-      projectId: writeProjectId(),
       levelCode: levelForm.levelCode.trim(), levelName: levelForm.levelName.trim(),
       levelRank: Number(levelForm.levelRank) || 0,
       upgradeThreshold: Number(levelForm.upgradeThreshold) || 0,
@@ -106,12 +105,11 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
   }
 
   async function saveBirthday() {
-    if (!birthdayForm.editingId && !writeProjectId()) { setGlobalError("请先在上方填写综合体 id（新增时必填）"); return; }
     if (!birthdayForm.ruleName.trim()) { setGlobalError("请填写生日规则名称"); return; }
     const mult = Math.round(Number(birthdayForm.multiplier) * 10000);
     if (!Number.isFinite(mult) || mult <= 10000) { setGlobalError("生日倍率需大于 1.0 倍（如 2.0）"); return; }
     await api.post("/api/v1/loyalty/config/birthday-rules", {
-      id: birthdayForm.editingId || null, projectId: writeProjectId(),
+      id: birthdayForm.editingId || null,
       ruleName: birthdayForm.ruleName.trim(), windowType: birthdayForm.windowType,
       multiplierBasisPoints: mult, status: birthdayForm.status,
     });
@@ -123,7 +121,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
     <section data-testid="member-loyalty-config-page">
       <AdminPageHeader
         title="会员等级与忠诚度配置"
-        description="按综合体维护会员等级档位/升级门槛/积分倍率、连续签到阶梯奖励、生日加倍规则。改配置不改代码；列表仅显示生效中配置。查看需会员忠诚度查看权限，维护需会员忠诚度维护权限。"
+        description="会员等级档位/升级门槛/积分倍率与生日加倍规则全平台统一（仅全国范围账号可维护）；连续签到阶梯按综合体维护。改配置不改代码；列表仅显示生效中配置。查看需会员忠诚度查看权限，维护需会员忠诚度维护权限。"
       />
       <div className="admin-form-row" data-testid="loyalty-project-filter">
         <label>综合体 id<input aria-label="综合体 id 查询" placeholder="综合体 id（留空看平台缺省）" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
@@ -132,7 +130,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
       </div>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {/* ---- 会员等级 ---- */}
-        <h3>会员等级档位（按滚动统计周期内的成长值定级，达到升级门槛立即升级）</h3>
+        <h3>会员等级档位（全平台统一；按滚动统计周期内的成长值定级，达到升级门槛立即升级）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="member-levels-table">
             <thead><tr><th>排序</th><th>代码</th><th>名称</th><th>升级门槛</th><th>积分倍率</th><th>状态</th><th>操作</th></tr></thead>
@@ -187,7 +185,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
         </div>
 
         {/* ---- 生日加倍 ---- */}
-        <h3>生日加倍规则（生日当天/当月消费积分加倍，与等级倍率叠加）</h3>
+        <h3>生日加倍规则（全平台统一；生日当天/当月消费积分加倍，与等级倍率叠加）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="birthday-rules-table">
             <thead><tr><th>规则名称</th><th>生效窗口</th><th>倍率</th><th>状态</th><th>操作</th></tr></thead>

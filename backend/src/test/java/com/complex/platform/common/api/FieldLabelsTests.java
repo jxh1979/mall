@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -57,6 +57,19 @@ class FieldLabelsTests {
     void translatesKeyPrefixedChineseMessages() {
         assertThat(FieldLabels.translate("quantity 必须大于 0")).isEqualTo("数量必须大于 0");
         assertThat(FieldLabels.translate("merchant_id：M001")).isEqualTo("商户：M001");
+    }
+
+    /** 会员等级、签到阶梯、生日加倍配置（/api/v1/loyalty/config/*）的数值校验键：报错里不能外泄英文键，中文名与前端字典同口径。 */
+    @Test
+    void loyaltyConfigNumericKeysAreChinese() {
+        assertThat(FieldLabels.translate("level_rank 必须大于等于 0")).isEqualTo("层级必须大于等于 0");
+        assertThat(FieldLabels.translate("upgrade_threshold 必须大于等于 0")).isEqualTo("升级门槛必须大于等于 0");
+        assertThat(FieldLabels.translate("point_multiplier_basis_points 必须大于等于 1"))
+                .isEqualTo("积分倍率（万分比）必须大于等于 1");
+        assertThat(FieldLabels.translate("streak_days 必须大于等于 1")).isEqualTo("连续天数必须大于等于 1");
+        assertThat(FieldLabels.translate("award_points 必须大于等于 0")).isEqualTo("奖励积分必须大于等于 0");
+        assertThat(FieldLabels.translate("multiplier_basis_points 必须大于等于 10001"))
+                .isEqualTo("倍率（万分比）必须大于等于 10001");
     }
 
     /** 已经是中文业务话术的照原样透传，别被兜底吞掉。 */

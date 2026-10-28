@@ -20,4 +20,13 @@ public final class BarPourLoss {
     public static boolean exceedsThreshold(long lossVolume, Integer lossThreshold) {
         return lossThreshold != null && lossThreshold >= 0 && lossVolume > lossThreshold;
     }
+
+    /**
+     * 第十八批 C 段第 17 条（BSM 第 1065 行 / ENUM 第 106 行「未配备采集设备的吧台，必须按标准出酒量配酒，也按该标准计算扣减与标准损耗，
+     * 不得按零损耗记账」；第十八批裁决 4）：标准损耗＝标准出酒总量×本酒吧损耗率阈值（%），四舍五入到整数且至少 1
+     * （损耗量列为整数，防小标准量被取整成零损耗）。点单出品与通票赠饮出品共用。
+     */
+    public static long standardLoss(int standardPourVolumeTotal, int lossRatePct) {
+        return Math.max(1L, ((long) standardPourVolumeTotal * lossRatePct + 50) / 100);
+    }
 }

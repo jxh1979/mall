@@ -15,6 +15,8 @@ public record WarehouseRecord(
         String warehouseType,
         String name,
         String status,
+        // 第十八批 C 段第 17 条（BSM 第 1065 行）：吧台是否配有出酒量采集设备（只对 bar_counter）。
+        boolean pourDeviceEquipped,
         Instant createdAt,
         Instant updatedAt
 ) {

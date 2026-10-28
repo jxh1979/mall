@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -346,6 +346,35 @@ describe("OrganizationMerchantPage 存档/删除写路径（M012-008）", () => 
     expect(String(url)).toContain("/api/v1/platform/merchants/m-bar/pending-clear-alert");
     const body = JSON.parse(String((init as RequestInit).body));
     expect(body).toMatchObject({ value_minutes: 30, min_minutes: 10, max_minutes: 60 });
+  });
+
+  // 第十八批 C 段第 15 条（BSM:1468「经手员工的爽约率超过后台配置的上限时（业务参数，按酒吧可配，须同时配置上下限），自动停用其代订权限」）
+  // 与第 17 条（BSM:2015 损耗率阈值「按酒吧可配，出厂默认 5%，须同时配置上下限」；第十八批裁决 4）：酒吧商户行两项参数入口，
+  // 先读当前值（爽约率上限未配置不自动停用；损耗率阈值未配置按出厂 5%），再按值、下限、上限三者同填 PUT（单位 %）。
+  it.each([
+    ["merchant-no-show-limit-m-bar", "staff-booking-no-show-limit", null, "未配置，不自动停用", ""],
+    ["merchant-pour-loss-rate-m-bar", "pour-loss-rate", 5, "未配置，按出厂 5%", "5"],
+  ])("酒吧商户参数 %s：读当前值后 PUT 值与上下限（蛇形键）", async (testId, path, effective, hint, prefill) => {
+    const BAR = [{ id: "m-bar", project_id: "p-1", merchant_name: "酒吧丁", merchant_type: "bar", status: "active" }];
+    const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
+    vi.spyOn(window, "prompt").mockReturnValueOnce("8").mockReturnValueOnce("3").mockReturnValueOnce("10");
+    renderPage((url, init) => {
+      if (url.includes(`/${path}`) && init?.method === "PUT") return ok({ merchant_id: "m-bar", value_pct: 8, min_pct: 3, max_pct: 10, effective_pct: 8 });
+      if (url.includes(`/${path}`)) return ok({ merchant_id: "m-bar", value_pct: null, min_pct: null, max_pct: null, effective_pct: effective });
+      if (url.includes("/platform/merchants")) return envelope(BAR);
+      return undefined;
+    });
+    await waitFor(() => expect(screen.queryByTestId("merchant-actions-m-bar")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-actions-m-bar"));
+    await waitFor(() => expect(screen.queryByTestId(testId)).toBeTruthy());
+    fireEvent.click(screen.getByTestId(testId));
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const putCalls = () => fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    await waitFor(() => expect(putCalls()).toHaveLength(1));
+    expect(window.prompt).toHaveBeenNthCalledWith(1, expect.stringContaining(hint), prefill);
+    const [url, init] = putCalls()[0]!;
+    expect(String(url)).toContain(`/api/v1/platform/merchants/m-bar/${path}`);
+    expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ value_pct: 8, min_pct: 3, max_pct: 10 });
   });
 
   it("写路径失败可见：存档接口报错 → setGlobalError 收到错误信息，不成未处理拒绝", async () => {

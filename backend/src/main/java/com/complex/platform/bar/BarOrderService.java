@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -48,13 +47,6 @@ public class BarOrderService {
     private final AuditEventService auditEventService;
     private final TraceabilityService traceabilityService;
     private final BarReceivableLedgerService receivableLedgerService;
-    /**
-     * P0#4 按杯 pour cost 强制采集策略（文档 bar §17.4 / R6）。
-     * true = 拒绝模式（从严，默认）：按杯出品缺 actual_pour_volume 直接拒单（POUR_VOLUME_REQUIRED）；
-     * false = 标准量兜底模式：缺量时按 standard_pour_volume 计、loss=0，但落 inventory.loss_exception
-     * 异常事件并标记 needs_review，严禁静默 loss=0 无标记。门店可通过 bar.pour-cost.strict-mode 配置切换。
-     */
-    private final boolean pourCostStrictMode;
 
     // 扫码点单功能标志（bar.scan_order.enabled，默认关）：开启后允许 placeScanOrder——
     // 扫桌台二维码下单，绑开台会话 + 继承入场闸（点单环节不重复年龄核验），来源标 app/miniapp。
@@ -101,14 +93,12 @@ public class BarOrderService {
     @Autowired
     public BarOrderService(BarRepository repository, AuthorizationService authorizationService,
             AuditEventService auditEventService, TraceabilityService traceabilityService,
-            BarReceivableLedgerService receivableLedgerService,
-            @Value("${bar.pour-cost.strict-mode:true}") boolean pourCostStrictMode) {
+            BarReceivableLedgerService receivableLedgerService) {
         this.repository = repository;
         this.authorizationService = authorizationService;
         this.auditEventService = auditEventService;
         this.traceabilityService = traceabilityService;
         this.receivableLedgerService = receivableLedgerService;
-        this.pourCostStrictMode = pourCostStrictMode;
     }
 
     BarProductRecord createProduct(BarProductRequest request) {
@@ -622,10 +612,8 @@ public class BarOrderService {
                         deliveryEvidenceAttachmentIds
                 );
             }
-            // REQ-22 / P0#4 按杯出酒量/损耗（文档 bar §17.4 / R6）：按杯出品强制采集 actual_pour_volume。
-            // 缺量时按策略处理：拒绝模式直接拒单；兜底模式按标准量计 loss=0 并落异常事件标记 needs_review，
-            // 严禁静默 loss=0 无标记。actual>standard 记损耗，超阈值落 inventory.loss_exception 核查留痕。
-            PourCostResult pour = resolvePourCost(product, delivered, quantity, item, actual.idempotencyKey());
+            // 第十八批 C 段第 17 条：按杯出酒量与损耗按出酒吧台有无采集设备二分（见 resolvePourCost）。
+            PourCostResult pour = resolvePourCost(order, product, delivered, quantity, item, actual.idempotencyKey());
             Integer actualPourVolume = pour.actualPourVolume();
             long lossVolume = pour.lossVolume();
             repository.saveOrderItem(new BarOrderItemRecord(
@@ -696,48 +684,32 @@ public class BarOrderService {
     }
 
     /**
-     * P0#4 按杯 pour cost 强制采集（文档 bar §17.4 / R6）。
+     * 第十八批 C 段第 17 条（BSM 第 1065 行 / ENUM 第 106 行「配有出酒量采集设备的吧台，实际出酒量必须由设备采集；未配备采集设备的吧台，
+     * 必须按标准出酒量配酒，也按该标准计算扣减与标准损耗，不得按零损耗记账」；第十八批裁决 4「标准损耗＝标准出酒量×本酒吧损耗率阈值」）。
+     * 出酒吧台＝该按杯商品扣库库存行所挂库房（吧台库存）；不扣库或库存行未挂配设备的吧台，按未配设备处理。
      *
      * <ul>
-     *   <li>非按杯出品项（未配置 standard_pour_volume）：维持原行为，仅透传可空 actual_pour_volume，loss=0。</li>
-     *   <li>按杯出品 + 已采集 actual_pour_volume：actual>standard 记损耗，超阈值落 inventory.loss_exception。</li>
-     *   <li>按杯出品 + 缺 actual_pour_volume + 拒绝模式（默认）：抛 POUR_VOLUME_REQUIRED 拒单。</li>
-     *   <li>按杯出品 + 缺 actual_pour_volume + 兜底模式：按 standard×quantity 记实际量、loss=0，
-     *       但落 inventory.loss_exception 异常事件标记 needs_review，留痕核查（绝不静默）。</li>
+     *   <li>非按杯出品项（未配置 standard_pour_volume）：透传可空 actual_pour_volume，loss=0。</li>
+     *   <li>按杯、吧台未配设备：按标准出酒量配酒，实际量＝标准×杯数（不取请求量）；标准损耗＝标准×杯数×本酒吧损耗率阈值，
+     *       四舍五入到整数且至少 1（损耗量列为整数，防小标准量被取整成零损耗）。</li>
+     *   <li>按杯、吧台配有设备：缺设备采集的实际出酒量拒单 POUR_VOLUME_REQUIRED；超出标准×杯数记损耗，超商品级阈值落 inventory.loss_exception。</li>
      * </ul>
      */
-    private PourCostResult resolvePourCost(BarProductRecord product, Map<String, Object> delivered,
+    private PourCostResult resolvePourCost(BarOrderRecord order, BarProductRecord product, Map<String, Object> delivered,
             int quantity, BarOrderItemRecord item, String idempotencyKey) {
         Integer actualPourVolume = optionalPourVolume(delivered);
-        // 非按杯出品项：不强制采集，保持既有可空透传。
         if (product.standardPourVolume() == null) {
             return new PourCostResult(actualPourVolume, 0L);
         }
-        // 按杯出品但缺 actual_pour_volume：消除"不传则 loss=0"静默绕过。
-        if (actualPourVolume == null) {
-            if (pourCostStrictMode) {
-                throw ApiException.badRequest(
-                        "POUR_VOLUME_REQUIRED",
-                        "按杯出品必须填写实际出酒量");
-            }
-            // 标准量兜底：按标准量计、loss=0，但落异常事件标记 needs_review 留痕（严禁静默）。
+        boolean deviceEquipped = product.stockDeductionRequired()
+                && repository.pourDeviceEquipped(product.inventoryItemId(), product.stockLocationId());
+        if (!deviceEquipped) {
             int standardTotal = product.standardPourVolume() * quantity;
-            auditEventService.recordSuccess(
-                    "inventory.loss_exception",
-                    "bar.order.deliver",
-                    "bar_order_item",
-                    item.id(),
-                    null,
-                    idempotencyKey,
-                    Map.of(
-                            "product_id", product.id(),
-                            "reason", "pour_volume_fallback",
-                            "actual_pour_volume", standardTotal,
-                            "loss_volume", 0,
-                            "needs_review", true));
-            return new PourCostResult(standardTotal, 0L);
+            return new PourCostResult(standardTotal, BarPourLoss.standardLoss(standardTotal, repository.pourLossRatePct(order.barId())));
         }
-        // 已采集：计算损耗，超阈值落异常事件。
+        if (actualPourVolume == null) {
+            throw ApiException.badRequest("POUR_VOLUME_REQUIRED", "该吧台配有出酒量采集设备，按杯出品必须有设备采集的实际出酒量");
+        }
         long lossVolume = BarPourLoss.lossVolume(product.standardPourVolume(), quantity, actualPourVolume);
         if (BarPourLoss.exceedsThreshold(lossVolume, product.lossThreshold())) {
             auditEventService.recordSuccess(

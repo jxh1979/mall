@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -68,6 +68,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-GOV-007", label: "空间类型字典", module: "治理", group: "governance", route: "/admin/governance/space-types", requiredPermissions: ["governance.space.view"] },
   { pageId: "ADM-GOV-008", label: "场地营业时间", module: "治理", group: "governance", route: "/admin/governance/venue-business-hours", requiredPermissions: ["governance.space.view"] },
   { pageId: "ADM-GOV-009", label: "审批链与节点裁决", module: "治理", group: "governance", route: "/admin/governance/approval-chain", requiredPermissions: ["governance.supervisor_review.view"] },
+  { pageId: "ADM-GOV-010", label: "商户处罚记录", module: "治理", group: "governance", route: "/admin/governance/merchant-penalties", requiredPermissions: ["merchant.penalty.record"] },
   { pageId: "ADM-VND-004", label: "外包下属账号", module: "外包工作台", group: "vendor", route: "/admin/vendor/subordinates", requiredPermissions: ["partner.subordinate.view"], accountForms: ["vendor"] },
   { pageId: "ADM-TER-001", label: "终端开关矩阵", module: "终端", group: "integration", route: "/admin/terminals/switch-matrix", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-TER-002", label: "终端设备", module: "终端", group: "integration", route: "/admin/terminals/devices", requiredPermissions: ["terminal.switch.view"] },

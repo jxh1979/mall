@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,6 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 消费扣款顺序写死为先扣本金、后扣赠送金……仅商户级卡例外……退卡只退未消费的本金，赠送金不退现……销户时……再退剩余本金，赠送金清零」；
  * BSM「我的余额」：「含本金与赠送金分列……每笔充值……本金与赠送金拆分……每笔扣款……扣减的本金与赠送金各多少」；
  * BSM「支付方式」：「商户级卡消费扣款顺序由发卡商户自定、由平台运营代为录入后台」）。
+ *
+ * <p>第十八批第 11 条：赠送比例取 ticket_reward_config_versions 中已审批、已生效的版本（通用卡 stored_value_bonus 按项目，
+ * 商户级卡 merchant_card_bonus 按发卡商户；ENUM L86、BSM L521），充值流水记下所用版本 bonus_config_version_id。
  *
  * <p>走真实 Flyway 迁移库，{@code @Transactional} 每用例回滚；充值走正路 topup → 柜台确认入账，消费 / 退卡走正路服务方法，
  * 追 {@code customer_stored_value_accounts.principal_cent / bonus_cent / balance_cent / status} 与
@@ -71,10 +74,11 @@ class StoredValuePrincipalBonusJdbcIntegrationTests {
         TestSecurityActors.clear();
     }
 
-    /** 充值按项目赠送比例拆为本金与赠送金两段分别记账；余额 = 两段之和；流水记录拆分。 */
+    /** 充值按项目已生效的赠送比例版本拆为本金与赠送金两段分别记账；余额 = 两段之和；流水记录拆分并锁定所用版本。 */
     @Test
     void topupSplitsPrincipalAndBonusByProjectPolicy() {
-        storedValueService.configureBonusPolicy(projectId, 1000, 0, 2000, "测试赠送比例");
+        String version = bonusVersion("stored_value_bonus", projectId, null, 1000, "approved", 1);
+        assertThat(storedValueService.topupRules(projectId, null).bonusBps()).isEqualTo(1000);
         topupViaCounter(projectId, null, 10_000L);
 
         Map<String, Object> account = account(projectId, null);
@@ -85,6 +89,43 @@ class StoredValuePrincipalBonusJdbcIntegrationTests {
         assertThat(topup.get("amount_cent")).isEqualTo(11_000L);
         assertThat(topup.get("principal_cent")).isEqualTo(10_000L);
         assertThat(topup.get("bonus_cent")).isEqualTo(1_000L);
+        assertThat(topup.get("bonus_config_version_id")).isEqualTo(version);
+    }
+
+    /** 第十八批第 11 条（ENUM L86「商户级卡同样可以设赠送，每笔充值一样拆为本金与赠送金两段分别记账」）：商户级卡按发卡商户已审批生效的版本赠送并锁版本。 */
+    @Test
+    void merchantCardTopupUsesApprovedEffectiveBonusVersion() {
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                + " VALUES (?, '赠送测试商户', 'catering', 'active', now(), now())", merchantId);
+        Instant now = Instant.now();
+        customerRepository.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(
+                merchantId, true, 10_000, true, "merchant_prepaid", now, now));
+        String version = bonusVersion("merchant_card_bonus", null, merchantId, 1000, "approved", 1);
+
+        topupViaCounter(null, merchantId, 10_000L);
+
+        Map<String, Object> account = account(null, merchantId);
+        assertThat(account.get("principal_cent")).isEqualTo(10_000L);
+        assertThat(account.get("bonus_cent")).isEqualTo(1_000L);
+        Map<String, Object> topup = singleTxn(account, "topup");
+        assertThat(topup.get("bonus_cent")).isEqualTo(1_000L);
+        assertThat(topup.get("bonus_config_version_id")).isEqualTo(version);
+        assertThat(storedValueService.topupRules(null, merchantId).bonusBps()).isEqualTo(1000);
+    }
+
+    /** BSM L521「经高敏权限“转正”审批通过后按指定日期生效」：待审批、生效后才批准、未到生效时间的版本都不赠送。 */
+    @Test
+    void unapprovedLateApprovedOrFutureVersionsGrantNoBonus() {
+        bonusVersion("stored_value_bonus", projectId, null, 1000, "pending_review", 1);
+        bonusVersion("stored_value_bonus", projectId, null, 2000, "approved_late", 2);
+        bonusVersion("stored_value_bonus", projectId, null, 3000, "future", 3);
+
+        topupViaCounter(projectId, null, 10_000L);
+
+        Map<String, Object> topup = singleTxn(account(projectId, null), "topup");
+        assertThat(topup.get("bonus_cent")).isEqualTo(0L);
+        assertThat(topup.get("bonus_config_version_id")).isNull();
+        assertThat(storedValueService.topupRules(projectId, null).bonusBps()).isZero();
     }
 
     /** 未配置赠送比例的项目不赠送（本金 = 实付，赠送金 0）。 */
@@ -100,7 +141,7 @@ class StoredValuePrincipalBonusJdbcIntegrationTests {
     /** 通用卡消费先扣本金、后扣赠送金；流水记录扣减的本金与赠送金各多少。 */
     @Test
     void consumeDeductsPrincipalBeforeBonusOnGeneralCard() {
-        storedValueService.configureBonusPolicy(projectId, 1000, 0, 2000, "测试赠送比例");
+        bonusVersion("stored_value_bonus", projectId, null, 1000, "approved", 1);
         topupViaCounter(projectId, null, 10_000L);
 
         storedValueService.consumeInternal(customerId, projectId, null, 10_500L, "测试消费", "cg06-consume-" + suffix);
@@ -184,24 +225,24 @@ class StoredValuePrincipalBonusJdbcIntegrationTests {
         assertThat(voided.get("bonus_cent")).isEqualTo(-500L);
     }
 
-    /** 赠送比例须同时配置上下限且取值落在闭区间内。 */
-    @Test
-    void bonusPolicyRequiresBoundsAndValueWithinThem() {
-        assertThatThrownBy(() -> storedValueService.configureBonusPolicy(projectId, 3000, 0, 2000, "越界"))
-                .isInstanceOf(ApiException.class)
-                .extracting(e -> ((ApiException) e).code()).isEqualTo("VALIDATION_FAILED");
-        assertThatThrownBy(() -> storedValueService.configureBonusPolicy(projectId, 1000, null, 2000, "缺下限"))
-                .isInstanceOf(ApiException.class)
-                .extracting(e -> ((ApiException) e).code()).isEqualTo("VALIDATION_FAILED");
-        assertThat(customerRepository.findStoredValueBonusPolicy(projectId)).isEmpty();
-
-        StoredValueBonusPolicyRecord saved = storedValueService.configureBonusPolicy(projectId, 1000, 500, 2000, "正常配置");
-        assertThat(saved.bonusBps()).isEqualTo(1000);
-        assertThat(jdbcTemplate.queryForMap("SELECT bonus_bps, min_bps, max_bps FROM stored_value_bonus_policies WHERE project_id = ?",
-                projectId)).containsEntry("bonus_bps", 1000).containsEntry("min_bps", 500).containsEntry("max_bps", 2000);
-    }
-
     // ---------- helpers ----------
+
+    /**
+     * 直插一条赠送比例版本（payload 与 TicketRewardConfigService 写入同形：驼峰 fixedValue/minimumValue/maximumValue）。
+     * state：approved＝已批准且已生效；pending_review＝待审批；approved_late＝生效时间过后才批准；future＝已批准但未到生效时间。
+     */
+    private String bonusVersion(String kind, String project, String merchant, int bps, String state, int seq) {
+        String id = "trc_cg06_" + UUID.randomUUID().toString().replace("-", "");
+        Instant now = Instant.now();
+        Instant effective = "future".equals(state) ? now.plusSeconds(3600) : now.minusSeconds(600 + seq);
+        Instant approved = "approved_late".equals(state) ? effective.plusSeconds(60) : effective.minusSeconds(60);
+        jdbcTemplate.update("INSERT INTO ticket_reward_config_versions(id,kind,project_id,merchant_id,version,payload,effective_at,status,created_by,created_at,approved_at)"
+                        + " VALUES(?,?,?,?,?,?::jsonb,?,?,'test',now(),?)",
+                id, kind, project, merchant, "V0.0" + seq, "{\"fixedValue\":" + bps + ",\"minimumValue\":0,\"maximumValue\":10000}",
+                java.sql.Timestamp.from(effective), "pending_review".equals(state) ? "pending_review" : "approved",
+                "pending_review".equals(state) ? null : java.sql.Timestamp.from(approved));
+        return id;
+    }
 
     /** 柜台 POS 充值：支付意图（pos 通路）+ 卡范围绑定直接落库，再走正路柜台确认入账（与 M006 柜台充值用例同范式）。 */
     private void topupViaCounter(String project, String merchant, long amountCent) {
@@ -229,7 +270,7 @@ class StoredValuePrincipalBonusJdbcIntegrationTests {
 
     private Map<String, Object> singleTxn(Map<String, Object> account, String type) {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT amount_cent, principal_cent, bonus_cent FROM customer_stored_value_transactions WHERE account_id = ? AND txn_type = ?",
+                "SELECT amount_cent, principal_cent, bonus_cent, bonus_config_version_id FROM customer_stored_value_transactions WHERE account_id = ? AND txn_type = ?",
                 account.get("id"), type);
         assertThat(rows).as("txn_type=" + type).hasSize(1);
         return rows.get(0);

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -115,7 +115,26 @@ class MerchantCardExitNoticeJdbcIntegrationTests {
                 .andExpect(jsonPath(item + ".holds_card").value(contains(true)));
     }
 
+    /** 第 11 条（BSM L833「商户级卡的充值资金归发卡商户预收，平台不代收、不介入该笔资金的归属」；DEC-CFG-2026-08-03-11「关闭「可由后台改为平台统一收取」开关」；
+     *  cg-pending-decisions 第 16 条「不恢复平台代收」）：资金模式只可为商户预收，请求按前端真实形状（蛇形键）。 */
+    @Test
+    void merchantCardFundModeOnlyMerchantPrepaid() throws Exception {
+        cardConfig("platform_collect").andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        cardConfig("merchant_prepaid").andExpect(status().isOk()).andExpect(jsonPath("$.data.fund_ownership").value("merchant_prepaid"));
+    }
+
     // ---------- helpers ----------
+
+    private ResultActions cardConfig(String fundOwnership) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "mcen-card-" + UUID.randomUUID());
+        body.put("merchant_id", shopId);
+        body.put("card_issuance_enabled", true);
+        body.put("fund_ownership", fundOwnership);
+        body.put("consume_order", "principal_first");
+        return mockMvc.perform(post("/api/v1/loyalty/stored-value/merchant-card-config").with(platform)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
+    }
 
     private Map<String, Object> notice(int publishDays) {
         Map<String, Object> body = new LinkedHashMap<>();

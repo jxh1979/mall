@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarReservationRecord;
@@ -100,8 +100,8 @@ public interface CustomerRepository {
         throw new UnsupportedOperationException("saveMemberLevel not supported by this repository");
     }
 
-    /** 按 project 升序排（level_rank）列出生效等级配置。projectId 可空（综合体级全局）。 */
-    default List<CustomerMemberLevelRecord> listMemberLevels(String projectId) {
+    /** 按 level_rank 升序列出生效等级配置（第十八批第 12 条：会员等级全平台一套）。 */
+    default List<CustomerMemberLevelRecord> listMemberLevels() {
         return List.of();
     }
 
@@ -117,12 +117,13 @@ public interface CustomerRepository {
         throw new UnsupportedOperationException("saveBirthdayRule not supported by this repository");
     }
 
-    default List<CustomerBirthdayRuleRecord> listActiveBirthdayRules(String projectId) {
+    /** 生效的生日加倍规则（全平台一套，BSM L831）。 */
+    default List<CustomerBirthdayRuleRecord> listActiveBirthdayRules() {
         return List.of();
     }
 
-    /** 状态无关、按 project 严格过滤列出等级配置（含 inactive/archived）；供写路径 resolveId 与唯一性预检用，JDBC 实现走 project_id = :project_id。 */
-    default List<CustomerMemberLevelRecord> listMemberLevelsByProject(String projectId) {
+    /** 状态无关列出全部等级配置（含 inactive/archived）；供写路径 resolveId 与唯一性预检用。 */
+    default List<CustomerMemberLevelRecord> listAllMemberLevels() {
         return List.of();
     }
 
@@ -131,8 +132,8 @@ public interface CustomerRepository {
         return List.of();
     }
 
-    /** 状态无关、按 project 严格过滤列出生日规则（含 inactive）；供写路径 resolveId 与唯一性预检用。 */
-    default List<CustomerBirthdayRuleRecord> listBirthdayRulesByProject(String projectId) {
+    /** 状态无关列出全部生日规则（含 inactive）；供写路径 resolveId 与唯一性预检用。 */
+    default List<CustomerBirthdayRuleRecord> listAllBirthdayRules() {
         return List.of();
     }
 
@@ -266,13 +267,15 @@ public interface CustomerRepository {
         throw new UnsupportedOperationException("saveStoredValueMerchantRefundRule not supported by this repository");
     }
 
-    /** CG-06a 通用卡充值赠送比例（按项目；projectScope 见 {@link StoredValueBonusPolicyRecord#scopeOf}）。 */
-    default Optional<StoredValueBonusPolicyRecord> findStoredValueBonusPolicy(String projectScope) {
-        return Optional.empty();
-    }
+    /** 第十八批第 11 条：某时点生效的储值充值赠送比例版本（id 与万分比）。 */
+    record StoredValueBonusVersion(String id, int bps) {}
 
-    default StoredValueBonusPolicyRecord saveStoredValueBonusPolicy(StoredValueBonusPolicyRecord policy) {
-        throw new UnsupportedOperationException("saveStoredValueBonusPolicy not supported by this repository");
+    /**
+     * 第十八批第 11 条（ENUM L86；BSM L521）：储值充值赠送比例取某时点已审批、批准不晚于生效、已到生效时间的最新一版
+     * （kind＝{@link TicketRewardConfigService#STORED_VALUE_BONUS} 按项目，{@link TicketRewardConfigService#MERCHANT_CARD_BONUS} 按发卡商户）；无＝不赠送。
+     */
+    default Optional<StoredValueBonusVersion> findEffectiveStoredValueBonus(String kind, String projectId, String merchantId, Instant at) {
+        return Optional.empty();
     }
 
     /** 幂等校验：按 idempotency_key 查已落库的储值流水。 */

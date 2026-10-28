@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -455,6 +455,24 @@ public class BarController {
         authorizationService.requirePermission("bar.reservation.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createReservation(request));
+    }
+
+    /** 第十八批 C 段第 15 条（BSM 第 1468 行）：代订权限因爽约率超限停用中的经手员工（店长复核用）。 */
+    @GetMapping("/staff-booking-suspensions")
+    public ApiResponse<PageResponse<BarStaffBookingSuspensionRecord>> listStaffBookingSuspensions() {
+        authorizationService.requirePermission("bar.staff_booking.restore");
+        return ApiResponse.ok(service.listStaffBookingSuspensions());
+    }
+
+    /** 第十八批 C 段第 15 条：店长复核后恢复经手员工的代订权限。 */
+    @PostMapping("/staff-booking-suspensions/{id}/restore")
+    public ApiResponse<BarStaffBookingSuspensionRecord> restoreStaffBookingSuspension(
+            @PathVariable String id,
+            @RequestBody(required = false) BarStaffBookingSuspensionRecord.RestoreRequest request
+    ) {
+        authorizationService.requirePermission("bar.staff_booking.restore");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.restoreStaffBookingSuspension(id, request));
     }
 
     @PostMapping("/reservations/{id}/pay-deposit")

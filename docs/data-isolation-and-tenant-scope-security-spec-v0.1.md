@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V557**，发现 **257** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V562**，发现 **258** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -119,6 +119,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_scan_order_payments` | `merchant_id` | direct | V539 | `V539__bar_reservation_hold_and_scan_order_payments.sql` |
 | `bar_service_responsibilities` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
 | `bar_shifts` | `merchant_id` + `project_id` | direct | V095 | `V095__bar_shift_handover.sql` |
+| `bar_staff_booking_suspensions` | `merchant_id` | direct | V559 | `V559__bar_staff_booking_deposit_waived_and_no_show.sql` |
 | `bar_table_session_adjustments` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_table_sessions` | `merchant_id` | direct | V019 | `V019__p1_bar_table_session_adjustments.sql` |
 | `bar_tables` | `merchant_id` + `space_id` | direct | V047, V084 | `V047__bar_security_merchant_isolation.sql`<br>`V084__object_space_mapping.sql` |
@@ -139,12 +140,10 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `contract_settlements` | `project_id` | direct | V162 | `V162__contract_lifecycle.sql` |
 | `contract_spaces` | `project_id` + `space_id` | direct | V080, V162 | `V080__contract_scope_and_spaces.sql`<br>`V162__contract_lifecycle.sql` |
 | `contracts` | `merchant_id` + `project_id` | direct | V010, V162 | `V010__p0_foundation_residual_platform_terminal_evidence.sql`<br>`V162__contract_lifecycle.sql` |
-| `customer_birthday_rules` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
 | `customer_blacklist_requests` | `project_id` | direct | V537 | `V537__customer_identity_and_member_status.sql` |
 | `customer_check_in_tiers` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
 | `customer_home_content_drafts` | `project_id` | direct | V542 | `V542__b14_review_fixes_deposit_payout_drafts.sql` |
 | `customer_home_contents` | `project_id` | direct | V541 | `V541__customer_voucher_codes_notices_and_home_content.sql` |
-| `customer_member_levels` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
 | `customer_points_rules` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
 | `customer_redemption_catalog_items` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
 | `customer_restriction_settings` | `project_id` | direct | V537 | `V537__customer_identity_and_member_status.sql` |
@@ -209,6 +208,8 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_consumption_rewards` | `merchant_id` + `project_id` | direct | V527 | `V527__merchant_consumption_rewards.sql` |
 | `merchant_expense_entries` | `merchant_id` | direct | V297 | `V297__merchant_expense_ledger.sql` |
 | `merchant_fee_notification_recipient` | `merchant_id` | direct | V182 | `V182__merchant_fee_notification_recipient.sql` |
+| `merchant_penalty_point_bounds` | `project_id` | direct | V561 | `V561__merchant_penalty_records.sql` |
+| `merchant_penalty_records` | `merchant_id` + `project_id` | direct | V561 | `V561__merchant_penalty_records.sql` |
 | `merchant_points_issuance_fees` | `project_id` | direct | V528 | `V528__merchant_reward_release_refund_and_issuance_fee.sql` |
 | `merchant_projects` | `merchant_id` + `project_id` | direct | V441 | `V441__m736_role_viewable_projects_and_merchant_projects.sql` |
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
@@ -229,6 +230,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `parking_vendor_payments` | `project_id` | direct | V533 | `V533__parking_operations.sql` |
 | `pass_gift_cost_configs` | `project_id` | direct | V373 | `V373__pass_gift_cost_configs.sql` |
 | `pass_gift_cost_variance_ledger` | `project_id` | direct | V377 | `V377__pass_gift_variance_ledger.sql` |
+| `pass_incentive_applications` | `project_id` | direct | V562 | `V562__pass_first_segment_pool_trial_and_incentive.sql` |
 | `pass_pool_snapshot_first_segment` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `pass_pool_snapshots` | `project_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `pass_pool_unit_results` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
@@ -282,7 +284,6 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `staff_shift_schedules` | `project_id` | direct | V214 | `V214__tenant_scope_staff_service_tables.sql` |
 | `staff_work_phone_events` | `space_id` | direct | V468 | `V468__staff_cover_and_work_phone_attendance.sql` |
 | `stocktake` | `merchant_id` | direct | V108 | `V108__inventory_variance_to_ap.sql` |
-| `stored_value_bonus_policies` | `project_id` | direct | V444 | `V444__stored_value_principal_bonus_split.sql` |
 | `stored_value_merchant_refund_rules` | `merchant_id` | direct | V176 | `V176__stored_value_merchant_refund_rules.sql` |
 | `stored_value_topup_batches` | `project_id` | direct | V517 | `V517__stored_value_topup_batches_and_consume_reversal.sql` |
 | `stored_value_topup_intents` | `merchant_id` + `project_id` | direct | V284 | `V284__stored_value_topup_intents.sql` |
@@ -303,7 +304,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `ticket_payment_route_fees` | `project_id` | direct | V555 | `V555__ticket_channel_fee_route_and_sales_layers.sql` |
 | `ticket_points_issuance_fees` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_refunds` | `merchant_id` | direct | V220 | `V220__ticket_refunds_merchant_id.sql` |
-| `ticket_reward_config_versions` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
+| `ticket_reward_config_versions` | `merchant_id` + `project_id` | direct | V469, V558 | `V469__ticket_use_rewards_and_issuance_facts.sql`<br>`V558__stored_value_bonus_versions_and_nationwide_loyalty_levels.sql` |
 | `ticket_safety_events` | `project_id` | direct | V526 | `V526__ticket_refund_reasons_and_safety_exception.sql` |
 | `ticket_use_rewards` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |

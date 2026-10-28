@@ -1,8 +1,9 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -162,7 +163,7 @@ class BarServiceTests {
         entryService.financeService = financeServiceStub;
         barOrderService = new BarOrderService(barRepository, authorizationService, auditEventService,
                 new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
-                receivableLedgerService, true);
+                receivableLedgerService);
         // V350：退酒高价值判定改走全平台唯一入口（物品进货价 vs 后台单一阈值）。默认低价值，
         // 需要高价值分支的用例各自把 highValueStub.highValue 置 true。
         highValueStub = new StubHighValueDecisionService();
@@ -829,8 +830,9 @@ class BarServiceTests {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
-    void createReservationComputesRatioDepositPendingFromMinConsumption() {
-        // 规则 min_consumption_ratio、ratio=30%、桌台低消 1000 元(=100000分) → 定金 300 元(=30000分)、status=pending（非0）。
+    void staffReservationWaivesDepositEvenWithRatioRule() {
+        // 第十八批 C 段第 15 条（BSM 第 1062 行「员工代客订台不收定金」；ENUM 第 103 行「免收（员工代订）」）：
+        // 本酒吧配了低消比例定金规则（30%），员工代订仍免收，金额 0、无付款意向、不出现定金待付审计。
         service.createDepositRule(new BarDepositRuleRequest(
                 "deposit-rule-ratio", "rule", List.of(), "bar_t16",
                 "bar", "bar_t16", "min_consumption_ratio", null, 3000, 60));
@@ -841,36 +843,13 @@ class BarServiceTests {
                 "resv-t16-ratio", "create reservation", List.of(), "bar_t16",
                 table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
 
-        assertThat(reservation.depositAmountCent()).isEqualTo(30000L);
-        assertThat(reservation.depositStatus()).isEqualTo("pending");
-        assertThat(reservation.depositIntentId()).isNotNull();
+        assertThat(reservation.depositAmountCent()).isZero();
+        assertThat(reservation.depositStatus()).isEqualTo("staff_waived");
+        assertThat(reservation.depositIntentId()).isNull();
+        assertThat(reservation.depositPaidAt()).isNull();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("bar.reservation_deposit_required");
-    }
-
-    @Test
-    void createReservationComputesFixedDepositPending() {
-        service.createDepositRule(new BarDepositRuleRequest(
-                "deposit-rule-fixed", "rule", List.of(), "bar_t16f",
-                "bar", "bar_t16f", "fixed", 20000L, null, 30));
-        BarTableRecord table = service.createTable(new BarTableRequest(
-                "table-t16-fixed", "create table", List.of(), "bar_t16f",
-                "VIP FIXED", "card_seat", 100000L, 2, "active"));
-        BarReservationRecord reservation = service.createReservation(new BarReservationRequest(
-                "resv-t16-fixed", "create reservation", List.of(), "bar_t16f",
-                table.id(), Instant.parse("2026-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
-
-        assertThat(reservation.depositAmountCent()).isEqualTo(20000L);
-        assertThat(reservation.depositStatus()).isEqualTo("pending");
-    }
-
-    @Test
-    void createReservationWithoutRuleKeepsBackwardCompatibleNotRequired() {
-        BarReservationRecord reservation = createReservation("resv-t16-none", "bar_norule", 2);
-        assertThat(reservation.depositAmountCent()).isEqualTo(0L);
-        assertThat(reservation.depositStatus()).isEqualTo("not_required");
-        assertThat(reservation.depositIntentId()).isNull();
+                .doesNotContain("bar.reservation_deposit_required");
     }
 
     @Test
@@ -946,9 +925,21 @@ class BarServiceTests {
         BarTableRecord table = service.createTable(new BarTableRequest(
                 "table-" + key, "create table", List.of(), "bar_" + key,
                 "VIP " + key, "card_seat", 100000L, 2, "active"));
-        return service.createReservation(new BarReservationRequest(
+        return pendingDeposit(service.createReservation(new BarReservationRequest(
                 "resv-" + key, "create reservation", List.of(), "bar_" + key,
-                table.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
+                table.id(), Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000")),
+                fixedAmountCent);
+    }
+
+    /** 第十八批 C 段第 15 条：员工代订一律免收定金；定金链用例直接把订台置为待支付造数（客人自助订台的定金形态）。 */
+    private BarReservationRecord pendingDeposit(BarReservationRecord r, long amountCent) {
+        return barRepository.saveReservation(new BarReservationRecord(r.id(), r.barId(), r.merchantId(), r.tableId(), r.customerId(),
+                r.reservedAt(), r.guestCount(), r.allowedPassFreeGuestCount(), amountCent, "pending", r.orderSource(), r.salesStaffId(),
+                r.status(), r.createdTerminal(), r.deviceId(), r.evidenceAttachmentIds(), r.createdAt(), r.updatedAt(), r.depositRule(),
+                r.depositIntentId(), r.depositPaidAt(), r.depositSettlement(), r.invitationToken(), r.invitationSignature(),
+                r.invitationCapacity(), r.invitationStatus(), r.invitationIssuedAt(), r.archivedAt(), r.archivedBy(), r.deleteStatus(),
+                r.deleteRequestedBy(), r.deleteRequestedAt(), r.deleteReason(), r.depositChannel(), r.depositSettledAt(),
+                r.latestArrivalAt(), r.holdStatus()));
     }
 
     @Test
@@ -1593,10 +1584,11 @@ class BarServiceTests {
     @Test
     void deliveryWithExcessPourRecordsLossAndEmitsLossExceptionWhenOverThreshold() {
         BarReservationRecord reservation = createReservation("reservation-pour-loss", "bar_1", 2);
-        // 标准 30ml/杯，损耗阈值 10ml；按杯销售配置（REQ-22）
+        // 标准 30ml/杯，损耗阈值 10ml；按杯销售配置（REQ-22）。第十八批 C 段第 17 条：出酒吧台配有采集设备，按设备实际量计损耗。
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-loss", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
-                "active", null, null, false, 30, "ml", 10, null, null, null, null));
+                "active", "inventory_whisky_loss", "bar_1", true, 30, "ml", 10, null, null, null, null));
+        equippedCounterStock("inventory_whisky_loss");
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-loss", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
@@ -1619,12 +1611,13 @@ class BarServiceTests {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
-    void deliveryRejectsByGlassWhenActualPourVolumeMissingInStrictMode() {
-        // 默认拒绝模式：按杯产品（配置 standard_pour_volume）出品缺 actual_pour_volume → 拒单。
+    void deliveryRejectsByGlassAtCounterWithPourDeviceWhenActualPourVolumeMissing() {
+        // 第十八批 C 段第 17 条（BSM 第 1065 行「配有出酒量采集设备的吧台，实际出酒量必须由设备采集」）：缺实际出酒量 → 拒单。
         BarReservationRecord reservation = createReservation("reservation-pour-required", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-required", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
-                "active", null, null, false, 30, "ml", 10, null, null, null, null));
+                "active", "inventory_whisky_required", "bar_1", true, 30, "ml", 10, null, null, null, null));
+        equippedCounterStock("inventory_whisky_required");
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-required", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
@@ -1641,36 +1634,35 @@ class BarServiceTests {
         assertThat(barRepository.orderItems.get(orderItemId).deliveryStatus()).isEqualTo("pending");
     }
 
-    @Test
-    void deliveryByGlassFallbackModeUsesStandardVolumeAndMarksNeedsReviewWhenActualMissing() {
-        // 兜底模式：缺 actual_pour_volume → 按标准量计、loss=0，但落异常事件标记 needs_review（严禁静默）。
-        BarOrderService fallbackOrderService = new BarOrderService(
-                barRepository, authorizationService,
-                new AuditEventService(auditEventRepository),
-                new TraceabilityService(mock(TraceabilityRepository.class), authorizationService),
-                receivableLedgerService, false);
+    /** 第十八批 C 段第 17 条：该物品在 bar_1 库位有库存，且所挂吧台配有出酒量采集设备。 */
+    private void equippedCounterStock(String itemId) {
+        barRepository.saveStockBalance(new StockBalanceSnapshot("balance-" + itemId, itemId, "bar_1", 5, 0, 5, Instant.now()));
+        barRepository.pourDeviceStock.add(itemId + ":bar_1");
+    }
 
-        BarReservationRecord reservation = createReservation("reservation-pour-fallback", "bar_1", 2);
+    @Test
+    void deliveryByGlassAtCounterWithoutPourDeviceUsesStandardVolumeAndStandardLoss() {
+        // 第十八批 C 段第 17 条（BSM 第 1065 行「未配备采集设备的吧台，必须按标准出酒量配酒，也按该标准计算扣减与标准损耗，不得按零损耗记账」；
+        // 第十八批裁决 4「标准损耗＝标准出酒量×本酒吧损耗率阈值」，未配置按出厂 5%）：吧台未配设备、不传实际出酒量照常出品。
+        BarReservationRecord reservation = createReservation("reservation-pour-standard", "bar_1", 2);
         BarProductRecord product = service.createProduct(new BarProductRequest(
-                "product-pour-fallback", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
+                "product-pour-standard", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
                 "active", null, null, false, 30, "ml", 10, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
-                "order-pour-fallback", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
+                "order-pour-standard", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
-        fallbackOrderService.deliverOrder(order.id(), new BarOrderDeliveryRequest(
-                "deliver-pour-fallback", "deliver", List.of(),
+        assertThatCode(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
+                "deliver-pour-standard", "deliver", List.of(),
                 List.of(Map.of("order_item_id", orderItemId, "quantity", 2)),
-                "staff_1", List.of()));
+                "staff_1", List.of()))).doesNotThrowAnyException();
 
-        // 2 杯标准 30ml → 兜底实际量 60ml，损耗 0。
+        // 2 杯标准 30ml → 实际量按标准 60ml，标准损耗 60×5%＝3ml，属正常记账、不落兜底待核查事件。
         assertThat(barRepository.listOrderItems(order.id()).getFirst().actualPourVolume()).isEqualTo(60);
-        assertThat(barRepository.listOrderItems(order.id()).getFirst().lossVolume()).isEqualTo(0L);
+        assertThat(barRepository.listOrderItems(order.id()).getFirst().lossVolume()).isEqualTo(3L);
         assertThat(auditEventRepository.events.stream()
-                .anyMatch(event -> "inventory.loss_exception".equals(event.eventName())
-                        && "pour_volume_fallback".equals(event.metadata().get("reason"))
-                        && Boolean.TRUE.equals(event.metadata().get("needs_review")))).isTrue();
+                .anyMatch(event -> "pour_volume_fallback".equals(event.metadata().get("reason")))).isFalse();
     }
 
     @Test
@@ -3014,9 +3006,9 @@ class BarServiceTests {
         // BSM L1062「并台按合并台的合计最低消费进度判断；达标时，各笔定金分别原路退回」：A 已退不重复，B 并台达标后新退。
         BarReservationRecord a = reservationWithFixedDeposit("depa", 20000L, 30); // bar_depa，台位低消 100000
         BarTableRecord tableB = createTable("depb", "bar_depa", "active", 60000L);
-        BarReservationRecord b = service.createReservation(new BarReservationRequest(
+        BarReservationRecord b = pendingDeposit(service.createReservation(new BarReservationRequest(
                 "resv-depb", "create reservation", List.of(), "bar_depa", tableB.id(),
-                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000")), 20000L);
         service.payReservationDeposit(a.id(), new BarReservationDepositActionRequest("pay-depa", "pay", List.of(), "cash"));
         service.payReservationDeposit(b.id(), new BarReservationDepositActionRequest("pay-depb", "pay", List.of(), "cash"));
         BarTableSessionRecord sessionA = openSession("depa", a.tableId(), "bar_depa", a.id());
@@ -3502,9 +3494,9 @@ class BarServiceTests {
         // 最低消费进度判断」：合并达标前拆台，达标的一侧定金退、未达标一侧仍 paid。
         BarReservationRecord a = reservationWithFixedDeposit("spld", 20000L, 30); // bar_spld，台位低消 100000
         BarTableRecord tableB = createTable("spld-b", "bar_spld", "active", 60000L);
-        BarReservationRecord b = service.createReservation(new BarReservationRequest(
+        BarReservationRecord b = pendingDeposit(service.createReservation(new BarReservationRequest(
                 "resv-spld-b", "create reservation", List.of(), "bar_spld", tableB.id(),
-                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000"));
+                Instant.parse("2030-06-20T21:00:00Z"), 2, "staff_sales", null, null, Instant.parse("2030-06-20T23:00:00Z"), "13800000000")), 20000L);
         service.payReservationDeposit(a.id(), new BarReservationDepositActionRequest("pay-spld-a", "pay", List.of(), "cash"));
         service.payReservationDeposit(b.id(), new BarReservationDepositActionRequest("pay-spld-b", "pay", List.of(), "cash"));
         BarTableSessionRecord sessionA = openSession("spld-a", a.tableId(), "bar_spld", a.id());
@@ -4224,7 +4216,7 @@ class BarServiceTests {
                 barRepository, scopedAuth,
                 new AuditEventService(auditEventRepository),
                 new TraceabilityService(mock(TraceabilityRepository.class), scopedAuth),
-                receivableLedgerService, true);
+                receivableLedgerService);
 
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
@@ -4699,6 +4691,13 @@ class BarServiceTests {
         private final List<BarCommissionCalculationRecord> commissions = new ArrayList<>();
         private final Map<String, StockBalanceSnapshot> stockBalances = new LinkedHashMap<>();
         private final List<StockMovementSnapshot> stockMovements = new ArrayList<>();
+        /** 第十八批 C 段第 17 条：所挂吧台配有出酒量采集设备的库存行（物品:库位）。 */
+        private final java.util.Set<String> pourDeviceStock = new java.util.HashSet<>();
+
+        @Override
+        public boolean pourDeviceEquipped(String itemId, String locationId) {
+            return pourDeviceStock.contains(itemId + ":" + locationId);
+        }
 
         @Override
         public BarTableRecord saveTable(BarTableRecord table) {

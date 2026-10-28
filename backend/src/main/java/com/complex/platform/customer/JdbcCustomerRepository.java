@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -859,15 +859,14 @@ class JdbcCustomerRepository implements CustomerRepository {
     public CustomerMemberLevelRecord saveMemberLevel(CustomerMemberLevelRecord level) {
         jdbcTemplate.update("""
                 INSERT INTO customer_member_levels (
-                    id, project_id, level_code, level_name, level_rank, upgrade_threshold,
+                    id, level_code, level_name, level_rank, upgrade_threshold,
                     point_multiplier_basis_points, status, created_at, updated_at
                 )
                 VALUES (
-                    :id, :project_id, :level_code, :level_name, :level_rank, :upgrade_threshold,
+                    :id, :level_code, :level_name, :level_rank, :upgrade_threshold,
                     :point_multiplier_basis_points, :status, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
-                    project_id = EXCLUDED.project_id,
                     level_code = EXCLUDED.level_code,
                     level_name = EXCLUDED.level_name,
                     level_rank = EXCLUDED.level_rank,
@@ -877,7 +876,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("id", level.id())
-                .addValue("project_id", level.projectId())
                 .addValue("level_code", level.levelCode())
                 .addValue("level_name", level.levelName())
                 .addValue("level_rank", level.levelRank())
@@ -890,13 +888,12 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
-    public List<CustomerMemberLevelRecord> listMemberLevels(String projectId) {
+    public List<CustomerMemberLevelRecord> listMemberLevels() {
         return jdbcTemplate.query("""
                 SELECT * FROM customer_member_levels
                  WHERE status = 'active'
-                   AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
                  ORDER BY level_rank ASC, id ASC
-                """, new MapSqlParameterSource("project_id", projectId), this::mapMemberLevel);
+                """, this::mapMemberLevel);
     }
 
     @Override
@@ -937,11 +934,10 @@ class JdbcCustomerRepository implements CustomerRepository {
     public CustomerBirthdayRuleRecord saveBirthdayRule(CustomerBirthdayRuleRecord rule) {
         jdbcTemplate.update("""
                 INSERT INTO customer_birthday_rules (
-                    id, project_id, rule_name, window_type, multiplier_basis_points, status, created_at, updated_at
+                    id, rule_name, window_type, multiplier_basis_points, status, created_at, updated_at
                 )
-                VALUES (:id, :project_id, :rule_name, :window_type, :multiplier_basis_points, :status, :created_at, :updated_at)
+                VALUES (:id, :rule_name, :window_type, :multiplier_basis_points, :status, :created_at, :updated_at)
                 ON CONFLICT (id) DO UPDATE SET
-                    project_id = EXCLUDED.project_id,
                     rule_name = EXCLUDED.rule_name,
                     window_type = EXCLUDED.window_type,
                     multiplier_basis_points = EXCLUDED.multiplier_basis_points,
@@ -949,7 +945,6 @@ class JdbcCustomerRepository implements CustomerRepository {
                     updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("id", rule.id())
-                .addValue("project_id", rule.projectId())
                 .addValue("rule_name", rule.ruleName())
                 .addValue("window_type", rule.windowType())
                 .addValue("multiplier_basis_points", rule.multiplierBasisPoints())
@@ -960,13 +955,12 @@ class JdbcCustomerRepository implements CustomerRepository {
     }
 
     @Override
-    public List<CustomerBirthdayRuleRecord> listActiveBirthdayRules(String projectId) {
+    public List<CustomerBirthdayRuleRecord> listActiveBirthdayRules() {
         return jdbcTemplate.query("""
                 SELECT * FROM customer_birthday_rules
                  WHERE status = 'active'
-                   AND (project_id IS NOT DISTINCT FROM :project_id OR project_id IS NULL)
                  ORDER BY multiplier_basis_points DESC, id ASC
-                """, new MapSqlParameterSource("project_id", projectId), this::mapBirthdayRule);
+                """, this::mapBirthdayRule);
     }
 
     @Override
@@ -1012,12 +1006,12 @@ class JdbcCustomerRepository implements CustomerRepository {
     // 收紧租户隔离至 strict-0：以下方法以真实 project_id 列做行级过滤（`project_id = :project_id`），
     // 为多综合体就绪提供按 token scope 的 scoped 读取通道（AC-ISO-1，§4）。既有查询保持不变、向后兼容。
 
-    public List<CustomerMemberLevelRecord> listMemberLevelsByProject(String projectId) {
+    @Override
+    public List<CustomerMemberLevelRecord> listAllMemberLevels() {
         return jdbcTemplate.query("""
                 SELECT * FROM customer_member_levels
-                 WHERE project_id = :project_id
                  ORDER BY level_rank ASC, id ASC
-                """, Map.of("project_id", projectId), this::mapMemberLevel);
+                """, this::mapMemberLevel);
     }
 
     public List<CustomerCheckInTierRecord> listCheckInTiersByProject(String projectId) {
@@ -1028,12 +1022,12 @@ class JdbcCustomerRepository implements CustomerRepository {
                 """, Map.of("project_id", projectId), this::mapCheckInTier);
     }
 
-    public List<CustomerBirthdayRuleRecord> listBirthdayRulesByProject(String projectId) {
+    @Override
+    public List<CustomerBirthdayRuleRecord> listAllBirthdayRules() {
         return jdbcTemplate.query("""
                 SELECT * FROM customer_birthday_rules
-                 WHERE project_id = :project_id
                  ORDER BY multiplier_basis_points DESC, id ASC
-                """, Map.of("project_id", projectId), this::mapBirthdayRule);
+                """, this::mapBirthdayRule);
     }
 
     public List<CustomerRedemptionCatalogItemRecord> listRedemptionCatalogItemsByProject(String projectId) {
@@ -1056,7 +1050,6 @@ class JdbcCustomerRepository implements CustomerRepository {
     private CustomerMemberLevelRecord mapMemberLevel(ResultSet rs, int rowNumber) throws SQLException {
         return new CustomerMemberLevelRecord(
                 rs.getString("id"),
-                rs.getString("project_id"),
                 rs.getString("level_code"),
                 rs.getString("level_name"),
                 rs.getInt("level_rank"),
@@ -1081,7 +1074,6 @@ class JdbcCustomerRepository implements CustomerRepository {
     private CustomerBirthdayRuleRecord mapBirthdayRule(ResultSet rs, int rowNumber) throws SQLException {
         return new CustomerBirthdayRuleRecord(
                 rs.getString("id"),
-                rs.getString("project_id"),
                 rs.getString("rule_name"),
                 rs.getString("window_type"),
                 rs.getInt("multiplier_basis_points"),
@@ -1215,15 +1207,18 @@ class JdbcCustomerRepository implements CustomerRepository {
         jdbcTemplate.update("""
                 INSERT INTO customer_stored_value_transactions (
                     id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                    payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
+                    payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent,
+                    bonus_config_version_id
                 )
                 VALUES (
                     :id, :account_id, :customer_id, :txn_type, :amount_cent, :balance_after_cent,
-                    :payment_intent_id, :reason, :idempotency_key, :created_at, :paid_at, :principal_cent, :bonus_cent
+                    :payment_intent_id, :reason, :idempotency_key, :created_at, :paid_at, :principal_cent, :bonus_cent,
+                    :bonus_config_version_id
                 )
                 """, new MapSqlParameterSource()
                 .addValue("principal_cent", txn.principalCent())
                 .addValue("bonus_cent", txn.bonusCent())
+                .addValue("bonus_config_version_id", txn.bonusConfigVersionId())
                 .addValue("id", txn.id())
                 .addValue("account_id", txn.accountId())
                 .addValue("customer_id", txn.customerId())
@@ -1243,7 +1238,8 @@ class JdbcCustomerRepository implements CustomerRepository {
             String customerId, String accountId, int page, int size) {
         return jdbcTemplate.query("""
                 SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent,
+                       bonus_config_version_id
                   FROM customer_stored_value_transactions
                  WHERE customer_id = :customer AND account_id = :account
                  ORDER BY created_at DESC, id DESC LIMIT :size OFFSET :offset
@@ -1283,7 +1279,8 @@ class JdbcCustomerRepository implements CustomerRepository {
         }
         return jdbcTemplate.query("""
                 SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent,
+                       bonus_config_version_id
                   FROM customer_stored_value_transactions
                  WHERE idempotency_key = :key
                 """, Map.of("key", key), this::mapStoredValueTransaction).stream().findFirst();
@@ -1388,37 +1385,21 @@ class JdbcCustomerRepository implements CustomerRepository {
                 rs.getString("consume_order"));
     }
 
-    // CG-06a 通用卡充值赠送比例（按项目，值与上下限同在）。
+    // 第十八批第 11 条：储值充值赠送比例的生效版本（ticket_reward_config_versions；payload 由 TicketRewardConfigService 以驼峰键写入）。
+    // 与会员等级参数同口径：已审批、批准不晚于生效、已到生效时间的最新一版。
     @Override
-    public Optional<StoredValueBonusPolicyRecord> findStoredValueBonusPolicy(String projectScope) {
+    public Optional<StoredValueBonusVersion> findEffectiveStoredValueBonus(String kind, String projectId, String merchantId, Instant at) {
         return jdbcTemplate.query("""
-                SELECT project_id, bonus_bps, min_bps, max_bps, updated_by, updated_at
-                  FROM stored_value_bonus_policies WHERE project_id = :project_id
-                """, new MapSqlParameterSource().addValue("project_id", projectScope),
-                (rs, n) -> new StoredValueBonusPolicyRecord(rs.getString("project_id"), rs.getInt("bonus_bps"),
-                        rs.getInt("min_bps"), rs.getInt("max_bps"), rs.getString("updated_by"),
-                        nullableInstant(rs, "updated_at"))).stream().findFirst();
-    }
-
-    @Override
-    public StoredValueBonusPolicyRecord saveStoredValueBonusPolicy(StoredValueBonusPolicyRecord policy) {
-        jdbcTemplate.update("""
-                INSERT INTO stored_value_bonus_policies (project_id, bonus_bps, min_bps, max_bps, updated_by, updated_at)
-                VALUES (:project_id, :bonus_bps, :min_bps, :max_bps, :updated_by, :updated_at)
-                ON CONFLICT (project_id) DO UPDATE SET
-                    bonus_bps = EXCLUDED.bonus_bps,
-                    min_bps = EXCLUDED.min_bps,
-                    max_bps = EXCLUDED.max_bps,
-                    updated_by = EXCLUDED.updated_by,
-                    updated_at = EXCLUDED.updated_at
-                """, new MapSqlParameterSource()
-                .addValue("project_id", policy.projectId())
-                .addValue("bonus_bps", policy.bonusBps())
-                .addValue("min_bps", policy.minBps())
-                .addValue("max_bps", policy.maxBps())
-                .addValue("updated_by", policy.updatedBy())
-                .addValue("updated_at", timestampWithTimeZone(policy.updatedAt() == null ? java.time.Instant.now() : policy.updatedAt())));
-        return policy;
+                SELECT id, (payload->>'fixedValue')::int AS bps
+                  FROM ticket_reward_config_versions
+                 WHERE kind = :kind
+                   AND project_id IS NOT DISTINCT FROM :project_id
+                   AND merchant_id IS NOT DISTINCT FROM :merchant_id
+                   AND status = 'approved' AND approved_at <= effective_at AND effective_at <= :at
+                 ORDER BY effective_at DESC LIMIT 1
+                """, new MapSqlParameterSource().addValue("kind", kind).addValue("project_id", projectId)
+                        .addValue("merchant_id", merchantId).addValue("at", timestampWithTimeZone(at)),
+                (rs, n) -> new StoredValueBonusVersion(rs.getString("id"), rs.getInt("bps"))).stream().findFirst();
     }
 
     @Override
@@ -1555,7 +1536,8 @@ class JdbcCustomerRepository implements CustomerRepository {
         }
         return jdbcTemplate.query("""
                 SELECT id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,
-                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent
+                       payment_intent_id, reason, idempotency_key, created_at, paid_at, principal_cent, bonus_cent,
+                       bonus_config_version_id
                   FROM customer_stored_value_transactions
                  WHERE id = :id
                  FOR UPDATE
@@ -1654,7 +1636,8 @@ class JdbcCustomerRepository implements CustomerRepository {
                 nullableInstant(rs, "created_at"),
                 nullableInstant(rs, "paid_at"),
                 rs.getLong("principal_cent"),
-                rs.getLong("bonus_cent"));
+                rs.getLong("bonus_cent"),
+                rs.getString("bonus_config_version_id"));
     }
 
 }

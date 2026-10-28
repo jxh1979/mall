@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -347,6 +347,46 @@ public class BarService {
                 BarReservationRecord.class,
                 BarWriteOperation.CREATE_RESERVATION,
                 () -> entryService.createReservation(request, null, "staff", "web")
+        );
+    }
+
+    /** 第十八批 C 段第 15 条（BSM 第 1468 行）：代订权限停用中的经手员工（按商户范围）。 */
+    public PageResponse<BarStaffBookingSuspensionRecord> listStaffBookingSuspensions() {
+        return operations.readPage(
+                BarReadOperation.LIST_STAFF_BOOKING_SUSPENSIONS,
+                () -> repository.listStaffBookingSuspensions(authorizationService.currentMerchantScope())
+        );
+    }
+
+    /** 第十八批 C 段第 15 条（BSM 第 1468 行「……自动停用其代订权限，由店长复核后恢复」）：店长复核恢复，只限本商户。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
+    @Transactional
+    public BarStaffBookingSuspensionRecord restoreStaffBookingSuspension(String suspensionId,
+            BarStaffBookingSuspensionRecord.RestoreRequest request) {
+        String id = operations.requireText(suspensionId, "suspension_id");
+        return operations.executeWrite(
+                "restoreBarStaffBooking:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarStaffBookingSuspensionRecord.class,
+                BarWriteOperation.RESTORE_STAFF_BOOKING,
+                () -> {
+                    BarStaffBookingSuspensionRecord suspension = repository.findStaffBookingSuspension(id)
+                            .orElseThrow(() -> com.complex.platform.common.api.ApiException.notFound(
+                                    "BAR_STAFF_BOOKING_SUSPENSION_NOT_FOUND", "代订权限停用记录不存在"));
+                    authorizationService.currentMerchantScope().ifPresent(scope -> {
+                        if (!scope.equals(suspension.merchantId())) {
+                            throw com.complex.platform.common.api.ApiException.forbidden(
+                                    "CROSS_MERCHANT_FORBIDDEN", "该停用记录属于其他商户");
+                        }
+                    });
+                    if (!"suspended".equals(suspension.status())) {
+                        throw com.complex.platform.common.api.ApiException.conflict(
+                                "BAR_STAFF_BOOKING_NOT_SUSPENDED", "该员工的代订权限不在停用中");
+                    }
+                    return repository.saveStaffBookingSuspension(
+                            suspension.restored(authorizationService.currentActor().id(), java.time.Instant.now()));
+                }
         );
     }
 

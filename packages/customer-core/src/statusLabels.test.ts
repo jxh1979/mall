@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { describe, it, expect } from "vitest";
 import { formatBusinessStatus } from "./statusLabels";
 
@@ -113,6 +113,10 @@ describe("formatBusinessStatus KPI前置批全局补充", () => {
   it("酒吧账单退款状态翻中文（第十六批第 16 条，ENUM「账单状态」部分退款、已退款）", () => {
     expect(formatBusinessStatus("partial_refunded")).toBe("部分退款");
     expect(formatBusinessStatus("refunded")).toBe("已退款");
+  });
+
+  it("订台定金状态「免收（员工代订）」翻中文（第十八批 C 段第 15 条，ENUM 第 103 行）", () => {
+    expect(formatBusinessStatus("staff_waived")).toBe("免收（员工代订）");
   });
 
   it("多义词不进全局表：保持既有值或原样兜底", () => {

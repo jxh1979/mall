@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
@@ -7,14 +7,15 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
+import { hasPermissions } from "../security/PermissionGate";
 import { BarVenueSelect } from "../components/BarVenueSelect";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { firstSubmitTime, forgetSubmitTime } from "../../shared/operationKey";
-import type { AdminPageProps, BarReservationRow, BarTableRow, BarTableSessionRow } from "../types";
+import type { AdminPageProps, BarReservationRow, BarStaffBookingSuspensionRow, BarTableRow, BarTableSessionRow } from "../types";
 
 const BAR_CHECKIN_PERMISSION = "bar.table.guest_checkin";
 const BAR_TRANSFER_PERMISSION = "bar.table_session.transfer";
@@ -37,6 +38,8 @@ const BAR_RESERVATION_CREATE_PERMISSION = "bar.reservation.create";
 const BAR_SESSION_CREATE_PERMISSION = "bar.table_session.create";
 // 第十批 TK-27-R2（BSM L1058）：清台登记恢复空闲与开台同权限码。
 const BAR_TABLE_OPEN_CLOSE_PERMISSION = "bar.table.open_close";
+// 第十八批 C 段第 15 条（BSM L1468「……自动停用其代订权限，由店长复核后恢复」）。
+const BAR_STAFF_BOOKING_RESTORE_PERMISSION = "bar.staff_booking.restore";
 
 function nextRenewedUntil(minutes: number) {
   return new Date(Date.now() + minutes * 60_000).toISOString();
@@ -64,6 +67,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [reservations, setReservations] = React.useState<BarReservationRow[]>([]);
   const [reservationNotice, setReservationNotice] = React.useState<string | null>(null);
   const [sessions, setSessions] = React.useState<BarTableSessionRow[]>([]);
+  const [suspensions, setSuspensions] = React.useState<BarStaffBookingSuspensionRow[]>([]);
+  const canRestoreStaffBooking = hasPermissions(effectivePermissions, [BAR_STAFF_BOOKING_RESTORE_PERMISSION]);
   const { setSelectedId, selected: selectedReservation } = useSelectedRow(reservations);
   const [selectedSessionId, setSelectedSessionId] = React.useState("");
   const [guestCount, setGuestCount] = React.useState("1");
@@ -146,11 +151,14 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       // 副资源容错（外包页范式）：订台预定是卡座/开台会话之外的独立面板，可能因权限/500 单独失败——
       // 降级为区块提示，不拖垮卡座与开台会话主内容。
       // 原第四个 /bar/orders 拉取结果从未被使用却会拖垮整页（一失败即整页白屏），已删除。
-      const [tableRows, reservationRes, sessionRows] = await Promise.all([
+      const [tableRows, reservationRes, sessionRows, suspensionRes] = await Promise.all([
         api.get<BarTableRow[]>("/api/v1/bar/tables"),
         loadSecondary(() => api.get<BarReservationRow[]>("/api/v1/bar/reservations"), [] as BarReservationRow[]),
         api.get<BarTableSessionRow[]>("/api/v1/bar/table-sessions"),
+        loadSecondaryIfPermitted(canRestoreStaffBooking,
+          () => api.get<BarStaffBookingSuspensionRow[]>("/api/v1/bar/staff-booking-suspensions"), [] as BarStaffBookingSuspensionRow[]),
       ]);
+      setSuspensions(suspensionRes.data);
       setTables(tableRows);
       setReservations(reservationRes.data);
       setReservationNotice(reservationRes.notice);
@@ -311,6 +319,23 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       setTableCreateError(message);
       setGlobalError(message);
       setActionResult({ action: "bar_table_create", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 第十八批 C 段第 15 条（BSM L1468）：店长复核后恢复经手员工的代订权限。
+  async function restoreStaffBooking(id: string) {
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post(`/api/v1/bar/staff-booking-suspensions/${encodeURIComponent(id)}/restore`, {});
+      setActionResult({ action: "bar_staff_booking_restored", status: "restored", result });
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "恢复代订权限失败";
+      setGlobalError(message);
+      setActionResult({ action: "bar_staff_booking_restored", status: "failed", message });
     } finally {
       setSubmitting(false);
     }
@@ -656,6 +681,29 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           </div>
         ) : null}
       </AdminDataState>
+      {canRestoreStaffBooking ? (
+        <>
+          <h3>代订权限停用</h3>
+          <p className="admin-muted-action">经手员工本自然月代订的爽约率超过本酒吧配置的上限时，系统自动停用其代订权限；店长复核后在此恢复。</p>
+          <div className="admin-table-scroll">
+            <table className="admin-table" data-testid="bar-staff-booking-suspensions-table">
+              <thead><tr><th>经手员工</th><th>统计月份</th><th>爽约/代订（笔）</th><th>爽约率上限</th><th>停用时间</th><th>操作</th></tr></thead>
+              <tbody>{suspensions.length === 0 ? (
+                <tr><td colSpan={6} className="admin-muted-action">暂无代订权限停用中的员工</td></tr>
+              ) : suspensions.map((row) => (
+                <tr key={row.id} data-testid={`bar-staff-booking-suspension-${row.id}`}>
+                  <td>{row.staffUserId}</td>
+                  <td>{row.statMonth}</td>
+                  <td>{row.noShowCount}/{row.bookingCount}</td>
+                  <td>{row.limitPct}%</td>
+                  <td>{cnDate(row.suspendedAt)}</td>
+                  <td><HighRiskConfirm label="复核恢复" impact={`将恢复员工 ${row.staffUserId} 的代订权限。`} disabled={submitting} onConfirm={() => void restoreStaffBooking(row.id)} permissionsState={effectivePermissions} permissions={[BAR_STAFF_BOOKING_RESTORE_PERMISSION]} irreversible={false} data-testid={`bar-staff-booking-restore-${row.id}`} /></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

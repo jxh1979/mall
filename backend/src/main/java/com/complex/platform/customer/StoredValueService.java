@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -41,8 +41,8 @@ import com.complex.platform.common.Strings;
  *
  * <p><b>B1d⑤ 储值卡分级</b>：每个操作带 {@code merchantId}——为空=综合体通用卡（综合体内各商户通用，按 project 隔离）；
  * 非空=商户级卡（只能在该发卡商户消费，按 merchant 隔离）。账户按卡范围 (customer, project, merchant) 精确解析，
- * 「只扣指定的那一张」（请求点名卡范围，不自动跨卡）。商户卡充值资金归属由开关 {@code fundOwnership} 决定
- * （默认 merchant_prepaid=发卡商户预收；platform_collect=平台代收消费时结算给商户），记账接财务结算。
+ * 「只扣指定的那一张」（请求点名卡范围，不自动跨卡）。商户卡充值资金归发卡商户预收（merchant_prepaid；第十八批第 11 条按
+ * BSM L833、DEC-CFG-2026-08-03-11 关闭平台代收入口，下游 platform_collect 分支只对已定格的旧卡生效）。
  */
 @Service
 public class StoredValueService {
@@ -280,12 +280,11 @@ public class StoredValueService {
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
-        // CG-06a（ENUM「储值卡类型与收款主体」：每笔充值拆为本金与赠送金两段分别记账，赠送比例按项目可配）：
-        // 本金 = 实付；赠送金 = 实付 × 项目赠送比例（仅综合体通用卡；商户级卡赠送口径 HTML 未写，赠送金 0）。
-        long bonusCent = account.merchantId() == null
-                ? repository.findStoredValueBonusPolicy(StoredValueBonusPolicyRecord.scopeOf(account.projectId()))
-                        .map(policy -> MoneyRounding.bpsOf(intent.amountCent(), policy.bonusBps())).orElse(0L)
-                : 0L;
+        // CG-06a／第十八批第 11 条（ENUM L86「每笔充值拆为本金与赠送金两段分别记账」「商户级卡同样可以设赠送……资金与成本全部归发卡商户承担」；
+        // BSM L521「每一笔单据在生成时就把所用配置版本固化在单上」）：本金 = 实付；赠送金 = 实付 × 此刻生效的赠送比例版本，流水记下所用版本；无生效版本不赠送。
+        java.util.Optional<CustomerRepository.StoredValueBonusVersion> bonusVersion =
+                bonusVersion(account.projectId(), account.merchantId(), now);
+        long bonusCent = bonusVersion.map(v -> MoneyRounding.bpsOf(intent.amountCent(), v.bps())).orElse(0L);
         long principalAfter = account.principalCent() + intent.amountCent();
         long bonusAfter = account.bonusCent() + bonusCent;
         long balanceAfter = principalAfter + bonusAfter;
@@ -296,11 +295,15 @@ public class StoredValueService {
                         account.id(), customerId, "topup", intent.amountCent() + bonusCent, balanceAfter,
                         // V231：充值即支付，paid_at=交易完成时刻 now（与写流水同事务）。
                         paymentIntentId, "top-up settled", "sv_settle_" + paymentIntentId, now, now,
-                        intent.amountCent(), bonusCent));
+                        intent.amountCent(), bonusCent, bonusVersion.map(CustomerRepository.StoredValueBonusVersion::id).orElse(null)));
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("amount_cent", intent.amountCent());
         detail.put("principal_cent", intent.amountCent());
         detail.put("bonus_cent", bonusCent);
+        bonusVersion.ifPresent(v -> {
+            detail.put("bonus_config_version_id", v.id());
+            detail.put("bonus_bps", v.bps());
+        });
         detail.put("principal_after_cent", principalAfter);
         detail.put("bonus_after_cent", bonusAfter);
         detail.put("balance_after_cent", balanceAfter);
@@ -1126,7 +1129,7 @@ public class StoredValueService {
     }
 
     /**
-     * 商户卡平台配置（AUD-061）：开通/关闭发卡资格 + 设资金模式（预收/代收）。仅平台可改
+     * 商户卡平台配置（AUD-061）：开通/关闭发卡资格 + 设资金模式（只可商户预收，见下）。仅平台可改
      * （requirePlatformScope 拒 merchant-scoped 调用方）；资金模式只影响之后新开的卡（开卡时定格），已发卡不变。
      * 发卡资格/资金模式与商户自设的退款规则并存于同一行，读改存互不覆盖。
      */
@@ -1154,10 +1157,11 @@ public class StoredValueService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "扣款顺序必须为先本金后赠送金（principal_first）或先赠送金后本金（bonus_first）");
         }
+        // 第十八批第 11 条（BSM L833「商户级卡的充值资金归发卡商户预收，平台不代收、不介入该笔资金的归属」；
+        // DEC-CFG-2026-08-03-11「关闭「可由后台改为平台统一收取」开关」；cg-pending-decisions 第 16 条「不恢复平台代收」）。
         String mode = fundOwnership == null || fundOwnership.isBlank() ? FUND_MERCHANT_PREPAID : fundOwnership.trim();
-        if (!FUND_MERCHANT_PREPAID.equals(mode) && !FUND_PLATFORM_COLLECT.equals(mode)) {
-            throw ApiException.badRequest("VALIDATION_FAILED",
-                    "资金归属必须为商户预收（merchant_prepaid）或平台代收（platform_collect）");
+        if (!FUND_MERCHANT_PREPAID.equals(mode)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "商户级卡充值资金归发卡商户预收，平台不代收");
         }
         // 仅平台可改：fail-closed 拒商户/外包 scope 调用方（authorizationService 为 null=旧构造/单测不强制）。
         if (authorizationService != null) {
@@ -1173,54 +1177,16 @@ public class StoredValueService {
                 order == null ? existing.consumeOrder() : order));
     }
 
-    // ============================================================
-    // CG-06a 通用卡充值赠送比例（业务参数，按项目可配，须同时配置上下限；仅平台可改）
-    // ============================================================
-
-    @Transactional
-    @GuardedAction(capability = "customer.stored_value.refund", permission = "customer.stored_value.refund")
-    public StoredValueBonusPolicyRecord configureBonusPolicy(String projectId, Integer bonusBps, Integer minBps,
-                                                             Integer maxBps, String reason) {
-        if (authorizationService != null) {
-            authorizationService.requirePlatformScope();
-        }
-        String scope = StoredValueBonusPolicyRecord.scopeOf(projectId);
-        try {
-            // ENUM「储值卡类型与收款主体」：「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」——值与上下限同在，取值落在闭区间内。
-            if (bonusBps == null || minBps == null || maxBps == null
-                    || minBps < 0 || maxBps > 10_000 || minBps > bonusBps || bonusBps > maxBps) {
-                throw ApiException.badRequest("VALIDATION_FAILED",
-                        "须同时填写赠送比例及其上下限（万分比，0-10000），赠送比例须在上下限内");
-            }
-            String actor = authorizationService == null ? null : authorizationService.currentActor().id();
-            StoredValueBonusPolicyRecord saved = repository.saveStoredValueBonusPolicy(new StoredValueBonusPolicyRecord(
-                    scope, bonusBps, minBps, maxBps, actor, now()));
-            Map<String, Object> detail = new LinkedHashMap<>();
-            detail.put("project_scope", scope);
-            detail.put("bonus_bps", bonusBps);
-            detail.put("min_bps", minBps);
-            detail.put("max_bps", maxBps);
-            detail.put("reason", reason == null ? "" : reason);
-            auditEventService.recordSuccess("stored_value.bonus_policy_configured", "customer.stored_value.refund",
-                    "stored_value_bonus_policy", scope, null, null, detail);
-            return saved;
-        } catch (ApiException e) {
-            auditEventService.recordFailure("stored_value.bonus_policy_config_failed", "customer.stored_value.refund",
-                    "stored_value_bonus_policy", scope, null, null, e.code());
-            throw e;
-        }
-    }
-
     /**
      * ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：客人充值前读的规则。
      * merchantId 为空＝综合体通用卡：赠送比例按项目、扣款顺序写死先本金后赠送金（同句「不可配置」）；非空＝该商户的商户级卡：扣款顺序与退款
-     * 比例按平台代录的商户卡规则（无配置按缺省），商户卡充值现行不赠送（赠送比例 0）。客人会话由控制器校验。
+     * 比例按平台代录的商户卡规则（无配置按缺省），赠送比例按发卡商户。赠送比例取此刻生效的版本（无＝0）。客人会话由控制器校验。
      */
     public CustomerStoredValueTopupRulesResponse topupRules(String projectId, String merchantId) {
         String merchant = trimToNull(merchantId);
+        int bonusBps = bonusVersion(trimToNull(projectId), merchant, now())
+                .map(CustomerRepository.StoredValueBonusVersion::bps).orElse(0);
         if (merchant == null) {
-            int bonusBps = repository.findStoredValueBonusPolicy(StoredValueBonusPolicyRecord.scopeOf(projectId))
-                    .map(StoredValueBonusPolicyRecord::bonusBps).orElse(0);
             return new CustomerStoredValueTopupRulesResponse("general", trimToNull(projectId), null, bonusBps,
                     StoredValueMerchantRefundRuleRecord.CONSUME_PRINCIPAL_FIRST, "先扣本金、后扣赠送金", TOPUP_BONUS_TEXT,
                     TOPUP_REFUND_TEXT, true, null);
@@ -1228,7 +1194,7 @@ public class StoredValueService {
         StoredValueMerchantRefundRuleRecord rule = repository.findStoredValueMerchantRefundRule(merchant)
                 .orElse(StoredValueMerchantRefundRuleRecord.defaultAllowed(merchant));
         boolean bonusFirst = StoredValueMerchantRefundRuleRecord.CONSUME_BONUS_FIRST.equals(rule.consumeOrder());
-        return new CustomerStoredValueTopupRulesResponse("merchant", null, merchant, 0, rule.consumeOrder(),
+        return new CustomerStoredValueTopupRulesResponse("merchant", null, merchant, bonusBps, rule.consumeOrder(),
                 bonusFirst ? "先扣赠送金、后扣本金" : "先扣本金、后扣赠送金", TOPUP_BONUS_TEXT, TOPUP_REFUND_TEXT,
                 rule.refundAllowed(), rule.refundRatioBps());
     }
@@ -1237,13 +1203,11 @@ public class StoredValueService {
     private static final String TOPUP_BONUS_TEXT = "每笔充值拆为本金与赠送金两段分别记账。";
     private static final String TOPUP_REFUND_TEXT = "退卡只退未消费的本金，赠送金不退现、未使用部分按活动规则作废或收回。";
 
-    public StoredValueBonusPolicyRecord getBonusPolicy(String projectId) {
-        if (authorizationService != null) {
-            authorizationService.requirePlatformScope();
-        }
-        String scope = StoredValueBonusPolicyRecord.scopeOf(projectId);
-        return repository.findStoredValueBonusPolicy(scope)
-                .orElse(new StoredValueBonusPolicyRecord(scope, 0, 0, 0, null, null));
+    /** 第十八批第 11 条：某时点生效的赠送比例版本——商户级卡按发卡商户（不看项目），综合体通用卡按项目。 */
+    private java.util.Optional<CustomerRepository.StoredValueBonusVersion> bonusVersion(String projectId, String merchantId, Instant at) {
+        return merchantId == null
+                ? repository.findEffectiveStoredValueBonus(TicketRewardConfigService.STORED_VALUE_BONUS, projectId, null, at)
+                : repository.findEffectiveStoredValueBonus(TicketRewardConfigService.MERCHANT_CARD_BONUS, null, merchantId, at);
     }
 
     /** 发卡资格门控：商户卡（merchantId 非空）充值前须平台已开通发卡资格，默认关→拒。通用卡不受限。 */

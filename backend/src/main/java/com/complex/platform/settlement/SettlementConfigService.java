@@ -37,9 +37,8 @@ public class SettlementConfigService {
         //   费率统一看下面的「门票综合服务费」。
         defaults.add(new ConfigItem("通票分账", "distribution_method", "各酒吧分配方式",
                 configRepository.findDistributionMethod(null)));
-        // S9:超池特批(平台负责人短期激励)有效期,到期自动失效不再允许超池过账。
-        //   V368:期限带单位(3 天 / 3 个月),总览直接显示带单位的写法,免得看的人还要猜单位。
-        defaults.add(new ConfigItem("通票分账", "special_approval_term", "超池特批有效期",
+        // 第 75 条:短期经营激励单次有效期上限(按项目可配,出厂 3 个月);V368 带单位显示(3 天 / 3 个月)。
+        defaults.add(new ConfigItem("通票分账", "special_approval_term", "短期经营激励单次有效期上限",
                 configRepository.findSpecialApprovalTerm(null).label()));
         var svcFee = configRepository.findComprehensiveServiceFee(null, null, null);
         defaults.add(new ConfigItem("门票综合服务费", "comprehensive_service_fee", "综合服务费(比例或固定额)",

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.access.AccessActor;
@@ -112,12 +112,12 @@ public class SettlementMonthlyJob {
                 String status = repository.findBillStatusByPeriod(null, month.atDay(1), month.atEndOfMonth());
                 if (status == null || "draft".equals(status) || "confirmed".equals(status)) {
                     String billId = service.settleMonth(null, month);
-                    // ① 过账(补 postBill 生产触发缺口):对未越池、已 confirmed 的常规单自动挂应付台账;
-                    //   超池 draft 单不 confirmed → 不过账,待人工特批 confirmed 后走网关端点 ②(POST /bills/{id}/post)。
+                    // ① 过账(补 postBill 生产触发缺口):结算单一律 confirmed(第 75 条:结算环节不设超池待审批,超池额过账时由
+                    //   娱乐平台公司承担),开过账闸即自动挂应付台账;网关端点 ②(POST /bills/{id}/post)供人工过账。
                     //   postBill @Transactional 全或无 + 幂等,confirmed 单重跑不重复挂账。
                     //   🔴 过账独立闸(与作业运行解耦):过账仅在 settlement.monthly.posting.enabled=true(默认 false·不进 application-prod.yml)时执行。
                     //   月度作业开关 settlement.monthly.scheduled.enabled 在 prod 本就 =true(算账单),但过账保持关——settleMonth 照常算
-                    //   confirmed 单(内部计算不落账本),直到用户拍板翻 posting.enabled 才首次真过账。网关 POST /bills/{id}/post 人工特批路径不受此闸。
+                    //   confirmed 单(内部计算不落账本),直到用户拍板翻 posting.enabled 才首次真过账。网关 POST /bills/{id}/post 人工过账不受此闸。
                     if (postingEnabled && "confirmed".equals(repository.findBillStatus(billId))) {
                         postingService.postBill(billId);
                     }

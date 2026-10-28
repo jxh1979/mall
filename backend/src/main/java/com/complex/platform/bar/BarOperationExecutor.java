@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -87,6 +87,7 @@ public class BarOperationExecutor {
         if (value instanceof BarProductCategoryRecord record) return record.id();
         if (value instanceof BarComboRecord record) return record.id();
         if (value instanceof BarCatalogDeleteDecision record) return record.id();
+        if (value instanceof BarStaffBookingSuspensionRecord record) return record.id();
         return null;
     }
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -153,6 +153,7 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("warehouse_type"),
                 resultSet.getString("name"),
                 resultSet.getString("status"),
+                resultSet.getBoolean("pour_device_equipped"),
                 instant(resultSet, "created_at"),
                 instant(resultSet, "updated_at")
         );

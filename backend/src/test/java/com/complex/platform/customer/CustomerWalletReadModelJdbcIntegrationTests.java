@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
@@ -84,7 +84,10 @@ class CustomerWalletReadModelJdbcIntegrationTests {
     @Test
     void topupRulesTellConsumeOrderBonusAndRefundBeforeTopup() throws Exception {
         Instant now = Instant.now();
-        customers.saveStoredValueBonusPolicy(new StoredValueBonusPolicyRecord(f.projectId, 500, 0, 1000, "usr_wrm", now));
+        // 第十八批第 11 条：通用卡赠送比例取已审批、已生效的版本（ticket_reward_config_versions，payload 驼峰键）。
+        jdbc.update("INSERT INTO ticket_reward_config_versions(id,kind,project_id,version,payload,effective_at,status,created_by,created_at,approved_at)"
+                + " VALUES(?,'stored_value_bonus',?,'V0.01','{\"fixedValue\":500,\"minimumValue\":0,\"maximumValue\":1000}'::jsonb,?,'approved','usr_wrm',now(),?)",
+                "trc_wrm_" + f.suffix, f.projectId, java.sql.Timestamp.from(now.minusSeconds(60)), java.sql.Timestamp.from(now.minusSeconds(120)));
         mockMvc.perform(get("/api/v1/customer/stored-value/topup-rules").param("project_id", f.projectId)
                         .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", f.token)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.card_scope").value("general"))

@@ -1,15 +1,19 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
-type Kind = "points" | "growth" | "national" | "sales_contract" | "recovery_waiver" | "merchant_points" | "merchant_growth" | "level_rolling_months" | "level_protection_months" | "level_notice_days";
-type Row = { id: string; kind: Kind; version: string; status: string; ticketTypeId?: string; businessFormat?: string; effectiveAt: string; publishedAt?: string; reviewId?: string; values: Record<string, unknown> };
+type Kind = "points" | "growth" | "national" | "sales_contract" | "recovery_waiver" | "merchant_points" | "merchant_growth" | "level_rolling_months" | "level_protection_months" | "level_notice_days" | "merchant_card_bonus" | "stored_value_bonus";
+type Row = { id: string; kind: Kind; version: string; status: string; ticketTypeId?: string; businessFormat?: string; merchantId?: string; effectiveAt: string; publishedAt?: string; reviewId?: string; values: Record<string, unknown> };
 type Option = { id: string; name?: string; entityName?: string; ticketName?: string; barId?: string };
-const kinds: Record<Kind, string> = { points: "门票固定积分", growth: "门票成长值", national: "全国积分等待与发行单价", sales_contract: "合同销售主体", recovery_waiver: "全国待追回积分豁免线", merchant_points: "商户业态积分获取率", merchant_growth: "商户业态成长值规则", level_rolling_months: "会员等级滚动统计周期（月）", level_protection_months: "会员等级保护期（月）", level_notice_days: "降级提前通知天数（天）" };
+const kinds: Record<Kind, string> = { points: "门票固定积分", growth: "门票成长值", national: "全国积分等待与发行单价", sales_contract: "合同销售主体", recovery_waiver: "全国待追回积分豁免线", merchant_points: "商户业态积分获取率", merchant_growth: "商户业态成长值规则", level_rolling_months: "会员等级滚动统计周期（月）", level_protection_months: "会员等级保护期（月）", level_notice_days: "降级提前通知天数（天）", merchant_card_bonus: "商户级卡充值赠送比例（商户提出、平台代录）", stored_value_bonus: "综合体通用卡充值赠送比例" };
 // OBS-13-01（BSM L820「业务参数，全平台统一可配……须同时配置上下限」「变更须经审批、只对后续周期生效」）：三项会员等级参数全国生效，无公告要求。
 const levelKind = (k: Kind) => k === "level_rolling_months" || k === "level_protection_months" || k === "level_notice_days";
+// 第十八批第 11 条（ENUM L86「商户级卡同样可以设赠送……赠送比例由发卡商户提出、由平台运营代为录入后台」「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」；
+// BSM L521 涉钱配置版本化审批）：商户级卡按发卡商户、通用卡按综合体（可空＝无项目通用卡），无公告要求。
+const bonusKind = (k: Kind) => k === "merchant_card_bonus" || k === "stored_value_bonus";
+const bonusFields: Array<[string, string]> = [["fixedValue", "赠送比例（万分比）"], ["minimumValue", "赠送比例下限（万分比）"], ["maximumValue", "赠送比例上限（万分比）"]];
 // 第十一批 TK-04-R1（BSM L822「按商户业态可配，须同时配置上下限」；操作员 2026-10-21 裁决补充第 4 条）：商户业态规则全国生效，按业态分别配置。
 const formats: Record<string, string> = { bar: "酒吧", catering: "餐饮", retail: "零售", amusement: "游乐", media: "传媒", other: "其他" };
 const labels: Record<string, string> = { pending_review: "待审批", approved: "已审批", rejected: "已驳回" };
@@ -24,6 +28,8 @@ const numberFields: Record<Kind, Array<[string, string]>> = {
   level_rolling_months: [["fixedValue", "滚动统计周期（月）"], ["minimumValue", "滚动统计周期下限（月）"], ["maximumValue", "滚动统计周期上限（月）"]],
   level_protection_months: [["fixedValue", "保护期（月）"], ["minimumValue", "保护期下限（月）"], ["maximumValue", "保护期上限（月）"]],
   level_notice_days: [["fixedValue", "降级提前通知天数"], ["minimumValue", "提前通知天数下限"], ["maximumValue", "提前通知天数上限"]],
+  merchant_card_bonus: bonusFields,
+  stored_value_bonus: bonusFields,
 };
 const list = (value: Option[] | { items: Option[] }) => Array.isArray(value) ? value : value.items;
 
@@ -33,6 +39,7 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
   const [ticket, setTicket] = React.useState("");
   const [values, setValues] = React.useState<Record<string, string>>({ waitingHours: "24" });
   const [format, setFormat] = React.useState("");
+  const [merchant, setMerchant] = React.useState("");
   const [rows, setRows] = React.useState<Row[]>([]);
   const [projects, setProjects] = React.useState<Option[]>([]);
   const [tickets, setTickets] = React.useState<Option[]>([]);
@@ -47,13 +54,15 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
   const [publicationReason, setPublicationReason] = React.useState("");
   const manage = ["ticket.reward.config.manage"];
   const merchantKind = kind === "merchant_points" || kind === "merchant_growth";
-  const nationwide = kind === "national" || kind === "recovery_waiver" || merchantKind || levelKind(kind);
+  const merchantBonus = kind === "merchant_card_bonus";
+  const generalBonus = kind === "stored_value_bonus";
+  const nationwide = kind === "national" || kind === "recovery_waiver" || merchantKind || levelKind(kind) || merchantBonus;
 
   const load = React.useCallback(async () => {
-    const qs = nationwide ? "" : project ? `?project_id=${encodeURIComponent(project)}` : null;
+    const qs = nationwide ? "" : project ? `?project_id=${encodeURIComponent(project)}` : generalBonus ? "" : null;
     if (qs === null) { setRows([]); return; }
     setRows(await api.get<Row[]>(`/api/v1/loyalty/ticket-reward-configs${qs}`));
-  }, [api, project, nationwide]);
+  }, [api, project, nationwide, generalBonus]);
   React.useEffect(() => { void load().catch(e => setError(e.message)); }, [load]);
   React.useEffect(() => {
     void Promise.all([
@@ -76,13 +85,14 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
       payload[key] = Number(values[key]);
     }
     if (!effective || !reason.trim() || !approver.trim()) throw new Error("请填写未来生效时间、原因和最终审批人");
-    if (!nationwide && (!project || !ticket)) throw new Error("请选择综合体和票种");
+    if (!nationwide && !generalBonus && (!project || !ticket)) throw new Error("请选择综合体和票种");
     if (merchantKind && !format) throw new Error("请选择商户业态");
+    if (merchantBonus && !merchant.trim()) throw new Error("请填写发卡商户 id");
     if (kind === "national") payload.receiverEntityId = values.receiverEntityId;
     if (kind === "sales_contract") Object.assign(payload, { sellerEntityId: values.sellerEntityId, sellerMerchantId: tickets.find(t => t.id === ticket)?.barId ?? null, contractNumber: values.contractNumber, attachmentIds: attachments });
     return api.post("/api/v1/loyalty/ticket-reward-configs", {
-      idempotencyKey: crypto.randomUUID(), kind, projectId: nationwide ? null : project,
-      ticketTypeId: nationwide ? null : ticket, ...(merchantKind ? { businessFormat: format } : {}), values: payload, effectiveAt: new Date(effective).toISOString(),
+      idempotencyKey: crypto.randomUUID(), kind, projectId: nationwide ? null : project || null,
+      ticketTypeId: nationwide || generalBonus ? null : ticket, ...(merchantKind ? { businessFormat: format } : {}), ...(merchantBonus ? { merchantId: merchant.trim() } : {}), values: payload, effectiveAt: new Date(effective).toISOString(),
       reason, finalApproverId: approver.trim(),
       parallelLines: kind === "sales_contract" ? Object.entries(reviewers).map(([lineCode, finalApproverId]) => ({ lineCode, finalApproverId: finalApproverId.trim() })) : [],
     });
@@ -107,8 +117,9 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
     <div className="admin-form-row">
       <label>配置类型<select aria-label="配置类型" value={kind} onChange={e => { const next = e.target.value as Kind; setKind(next); setValues(next === "recovery_waiver" ? { fixedValue: "100" } : next === "national" ? { waitingHours: "24", merchantWaitingHours: "24" } : {}); }}>{Object.entries(kinds).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>
       {merchantKind && <label>商户业态<select aria-label="商户业态" value={format} onChange={e => setFormat(e.target.value)}><option value="">请选择</option>{Object.entries(formats).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>}
-      {!nationwide && <><label>综合体<select aria-label="综合体" value={project} onChange={e => { setProject(e.target.value); setAttachments([]); }}><option value="">请选择</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
-        <label>票种<select aria-label="票种" value={ticket} onChange={e => { setTicket(e.target.value); setAttachments([]); }}><option value="">请选择</option>{tickets.map(t => <option key={t.id} value={t.id}>{t.ticketName ?? t.id}</option>)}</select></label></>}
+      {merchantBonus && <label>发卡商户 id<input aria-label="发卡商户 id" value={merchant} onChange={e => setMerchant(e.target.value)} /></label>}
+      {!nationwide && <><label>综合体<select aria-label="综合体" value={project} onChange={e => { setProject(e.target.value); setAttachments([]); }}><option value="">{generalBonus ? "不限项目（无项目通用卡）" : "请选择"}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
+        {!generalBonus && <label>票种<select aria-label="票种" value={ticket} onChange={e => { setTicket(e.target.value); setAttachments([]); }}><option value="">请选择</option>{tickets.map(t => <option key={t.id} value={t.id}>{t.ticketName ?? t.id}</option>)}</select></label>}</>}
     </div>
     <div className="admin-form-row">
       {numberFields[kind].map(([key, title]) => <label key={key}>{title}<input aria-label={title} type="number" min="0" step={key.includes("Price") ? "0.000001" : "1"} value={values[key] ?? ""} onChange={e => setValues(v => ({ ...v, [key]: e.target.value }))} /></label>)}
@@ -122,7 +133,7 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
     </div>
     <label>公告说明<input aria-label="公告说明" value={publicationReason} onChange={e => setPublicationReason(e.target.value)} /></label>
     <table className="admin-table"><thead><tr><th>类型／版本</th><th>审批</th><th>生效时间</th><th>公告</th></tr></thead><tbody>
-      {rows.filter(r => r.kind === kind).map(row => <tr key={row.id}><td>{kinds[row.kind]}{row.businessFormat ? `（${formats[row.businessFormat] ?? row.businessFormat}）` : ""} · {row.version}<details><summary>查看审批内容</summary>{numberFields[row.kind].map(([field, title]) => <p key={field}>{title}：{String(row.values[field] ?? "未填")}</p>)}{["sellerEntityId", "receiverEntityId"].map(field => row.values[field] ? <p key={field}>{field === "sellerEntityId" ? "合同销售方" : "积分结算收款方"}：{entities.find(entity => entity.id === row.values[field])?.entityName ?? String(row.values[field])}</p> : null)}{row.values.contractNumber ? <p>合同编号：{String(row.values.contractNumber)}</p> : null}{Array.isArray(row.values.attachmentIds) && row.values.attachmentIds.map((id, i) => <a key={String(id)} href={`/api/v1/evidence/attachments/${encodeURIComponent(String(id))}/file`} target="_blank" rel="noreferrer">合同凭证 {i + 1}</a>)}</details></td><td>{labels[row.status] ?? row.status}{row.reviewId ? `（${row.reviewId}）` : ""}</td><td>{new Date(row.effectiveAt).toLocaleString("zh-CN")}</td><td>{row.publishedAt ? new Date(row.publishedAt).toLocaleString("zh-CN") : levelKind(row.kind) ? "无需公告" : <PermissionButton permissionsState={effectivePermissions} permissions={manage} disabled={busy || row.status !== "approved" || !publicationReason.trim()} onClick={() => void action(() => api.post(`/api/v1/loyalty/ticket-reward-configs/${encodeURIComponent(row.id)}/publish`, { idempotencyKey: crypto.randomUUID(), reason: publicationReason }))}>发布已审批版本</PermissionButton>}</td></tr>)}
+      {rows.filter(r => r.kind === kind).map(row => <tr key={row.id}><td>{kinds[row.kind]}{row.businessFormat ? `（${formats[row.businessFormat] ?? row.businessFormat}）` : ""}{row.merchantId ? `（发卡商户 ${row.merchantId}）` : ""} · {row.version}<details><summary>查看审批内容</summary>{numberFields[row.kind].map(([field, title]) => <p key={field}>{title}：{String(row.values[field] ?? "未填")}</p>)}{["sellerEntityId", "receiverEntityId"].map(field => row.values[field] ? <p key={field}>{field === "sellerEntityId" ? "合同销售方" : "积分结算收款方"}：{entities.find(entity => entity.id === row.values[field])?.entityName ?? String(row.values[field])}</p> : null)}{row.values.contractNumber ? <p>合同编号：{String(row.values.contractNumber)}</p> : null}{Array.isArray(row.values.attachmentIds) && row.values.attachmentIds.map((id, i) => <a key={String(id)} href={`/api/v1/evidence/attachments/${encodeURIComponent(String(id))}/file`} target="_blank" rel="noreferrer">合同凭证 {i + 1}</a>)}</details></td><td>{labels[row.status] ?? row.status}{row.reviewId ? `（${row.reviewId}）` : ""}</td><td>{new Date(row.effectiveAt).toLocaleString("zh-CN")}</td><td>{row.publishedAt ? new Date(row.publishedAt).toLocaleString("zh-CN") : levelKind(row.kind) || bonusKind(row.kind) ? "无需公告" : <PermissionButton permissionsState={effectivePermissions} permissions={manage} disabled={busy || row.status !== "approved" || !publicationReason.trim()} onClick={() => void action(() => api.post(`/api/v1/loyalty/ticket-reward-configs/${encodeURIComponent(row.id)}/publish`, { idempotencyKey: crypto.randomUUID(), reason: publicationReason }))}>发布已审批版本</PermissionButton>}</td></tr>)}
     </tbody></table>
   </section>;
 }

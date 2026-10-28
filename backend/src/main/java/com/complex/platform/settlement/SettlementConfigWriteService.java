@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.analytics.OperatingParamsService;
 import com.complex.platform.common.Hashing;
@@ -73,21 +73,23 @@ public class SettlementConfigWriteService {
         // S8 语义收窄(V374):method_type 仅指【第二段】的分配方式,只有 by_rank_tier 有意义;
         //   by_venue_per_guest / by_fixed_amount 已由商户级固定规则(每客单价/固定额,第一段)取代,写入口下线。
         String method = requireOneOf(req.methodType(), "method_type", "by_rank_tier");
-        // S9/V368：超池特批有效期 = 数值 + 单位。两项留空 = 出厂默认 3 个月(业务口径「期限可配，默认不超过 3 个月」)。
-        //   下限只到「1 个单位」——配 3 天的短期激励是合法的(用户 2026-07-28 纠正「也可以三天」)；没有上限。
-        int termValue = req.specialApprovalTermValue() == null ? 3 : req.specialApprovalTermValue();
-        String termUnit = req.specialApprovalTermUnit() == null || req.specialApprovalTermUnit().isBlank()
-                ? "month"
-                : requireOneOf(req.specialApprovalTermUnit(), "special_approval_term_unit", "day", "month");
-        if (termValue < 1) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "特批期数（special_approval_term_value）必须大于等于 1");
+        // 第 75 条（ENUM L52「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」）：
+        //   短期经营激励单次有效期上限＝数值 + 单位（V368「也可以三天」），连同该参数的下限、上限（同一单位）四项同时必填，1 ≤ 下限 ≤ 数值 ≤ 上限。
+        String termUnit = requireOneOf(req.specialApprovalTermUnit(), "special_approval_term_unit", "day", "month");
+        Integer termValue = req.specialApprovalTermValue();
+        Integer termMin = req.specialApprovalTermMinValue();
+        Integer termMax = req.specialApprovalTermMaxValue();
+        if (termValue == null || termMin == null || termMax == null || termMin < 1 || termValue < termMin || termValue > termMax) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "短期经营激励单次有效期上限须同时填写数值（special_approval_term_value）、"
+                    + "单位、下限（special_approval_term_min_value）与上限（special_approval_term_max_value），下限不小于 1，数值须在上下限内");
         }
         String scopeKey = defaultScope(req.projectId());
         String landedId = writeRepository.upsertDistributionMethodDraft(draftId("tdc_d_", scopeKey, idem),
-                req.projectId(), method, termValue, termUnit, actorId);
+                req.projectId(), method, termValue, termUnit, termMin, termMax, actorId);
+        String unitLabel = "day".equals(termUnit) ? " 天" : " 个月";
         audit("settlement.config.ticket_distribution_configs.updated", "ticket_distribution_configs", landedId, idem,
                 Map.of("project_scope", scopeKey, "method_type", method,
-                        "special_approval_term", termValue + ("day".equals(termUnit) ? " 天" : " 个月")));
+                        "special_approval_term", termValue + unitLabel + "（下限 " + termMin + unitLabel + "，上限 " + termMax + unitLabel + "）"));
     }
 
     public void saveMerchantRate(MerchantRateRequest request, String actorId) {

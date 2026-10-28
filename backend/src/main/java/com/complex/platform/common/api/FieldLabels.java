@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -189,6 +189,12 @@ public final class FieldLabels {
         p("crew_count", "人员数量");
         p("level_code", "等级编码");
         p("level_name", "等级名称");
+        p("level_rank", "层级");
+        p("upgrade_threshold", "升级门槛");
+        p("point_multiplier_basis_points", "积分倍率（万分比）");
+        p("streak_days", "连续天数");
+        p("award_points", "奖励积分");
+        p("multiplier_basis_points", "倍率（万分比）");
         p("staff_level_id", "员工职级");
         p("sales_position", "销售岗位");
         p("position_code", "岗位编码");
@@ -322,7 +328,17 @@ public final class FieldLabels {
         p("settlement_entity_id", "结算主体");
         p("settlement_subject_id", "结算主体");
         p("statement_id", "对账单号");
-        p("special_approval_ref", "特批单号");
+        // 第 75 条：短期经营激励申请与单次有效期上限（须同时配置上下限）。
+        p("special_approval_term_value", "短期经营激励单次有效期上限");
+        p("special_approval_term_unit", "短期经营激励有效期单位");
+        p("special_approval_term_min_value", "有效期上限参数的下限");
+        p("special_approval_term_max_value", "有效期上限参数的上限");
+        p("incentive_applications", "短期经营激励申请");
+        p("term_value", "激励期限");
+        p("term_unit", "激励期限单位");
+        p("max_excess_cent", "最大超出额");
+        p("trial_result", "逐票种试算结果");
+        p("decision_note", "审批意见");
         p("ar_ap_item_id", "应收应付明细");
         p("expense_type", "费用类型");
         p("fee_event", "费用事件");
@@ -507,6 +523,11 @@ public final class FieldLabels {
         p("remind_minutes", "最晚到店前提醒分钟数");
         p("min_minutes", "分钟数下限");
         p("max_minutes", "分钟数上限");
+        p("pour_device_equipped", "是否配有出酒量采集设备");
+        p("suspension_id", "代订权限停用记录");
+        p("penalty_points", "扣分");
+        p("min_penalty_points", "单次扣分下限");
+        p("max_penalty_points", "单次扣分上限");
         p("reported_channel", "上报渠道");
         p("robot_task_ref", "机器人任务号");
         p("scenario", "场景");

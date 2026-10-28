@@ -1,6 +1,6 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.21
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.22
 
-> 版本：V0.21 ｜ 最后更新：2026-10-19 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
+> 版本：V0.22 ｜ 最后更新：2026-10-27 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
 > **M09 现行口径（2026-09-03）：** 三份业务 HTML 是业务真源；本文细化但不得新增业务。迁移、Java、OpenAPI、页面和测试只证明当前实现事实，不得反向定义业务规则。下文带“建议”“任务”或未标已落地的结构/API 均为目标设计或缺口，不代表当前实现。R7/R5 横幅仅作历史留痕，现行实现以本轮逐项标注为准。
@@ -367,7 +367,7 @@ flowchart TD
 
 ### 5.9 吧台按杯损耗率
 
-按杯销售按标准出酒量/容量扣减库存，超出标准部分记损耗；有采集设备时实际出酒量必须由设备采集，无设备时必须按标准出酒量配酒，也按该标准计算扣减与标准损耗，禁止按零损耗记账。损耗率按“当期损耗量 ÷ 标准出酒量”计算；超过按酒吧配置的安全阈值即转核查工单，出厂默认 5%，须同时配置上下限。当前 Java 按订单项件数 `quantity` 扣库存，实际/标准容量只用于损耗计算，`bar.pour-cost.strict-mode` 是未绑定设备有无或状态的全局配置；V058/Java 另使用商品级绝对损耗量阈值并只记录异常事件，尚未形成按标准出酒量/容量扣减、设备实采超标量记损耗、损耗率阈值和核查工单闭环。
+按杯销售按标准出酒量/容量扣减库存，超出标准部分记损耗；有采集设备时实际出酒量必须由设备采集，无设备时必须按标准出酒量配酒，也按该标准计算扣减与标准损耗，禁止按零损耗记账。损耗率按“当期损耗量 ÷ 标准出酒量”计算；超过按酒吧配置的安全阈值即转核查工单，出厂默认 5%，须同时配置上下限。当前 Java 按订单项件数 `quantity` 扣库存，实际/标准容量只用于损耗计算，第十八批第 17 条（V560）已按吧台有无采集设备二分、删除全局 `bar.pour-cost.strict-mode` 与 `loss=0` 兜底；V058/Java 另使用商品级绝对损耗量阈值并只记录异常事件，尚未形成按标准出酒量/容量扣减、设备实采超标量记损耗、损耗率阈值和核查工单闭环。
 
 ## 6. 数据库表结构
 
@@ -805,6 +805,7 @@ V112 已建立两张子表并提供正式 list/create API；供应商主表没�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-27 | 改 | 按杯销售损耗现状句 | 版本升 V0.22；第十八批第 17 条（V560）已按吧台有无采集设备二分、删除全局 `bar.pour-cost.strict-mode` 与 `loss=0` 兜底，现状句同步；按容量扣减与损耗率转核查工单仍未落地 | BSM L1065；ENUM L106；第十八批裁决 4 |
 | 2026-10-19 | 改 | §1、§3 聚合表 | 版本升 V0.21；FS-011 门店要货九态、签收与差异处理落地（V503/V504，`InventoryTransferFlowService`），聚合表改为实际表名 | BSM L1212–L1213；操作员裁决 2026-10-19 第 2 条 |
 | 2026-10-17 | 增 | §3 聚合表、§8 | 版本升 V0.19；CG-11d 独立经销商 Web 门户（V454：terminal_capability_switches / 灰度层 CHECK 加 dealer_portal、总开关行 tcs_term_dealer_portal、dealer_portal_accounts、role_dealer_portal 与 dealer_portal.* 权限、dealer.portal_account.manage；`/api/v1/dealer-portal/**` 15 操作 + 门户账号 2 操作 + 内部开通 1；SessionIssuer.revokeUserSessions 停用即作废会话；DeviceCredentialVerifier 对 dealer_portal 与 web 同口径按 Cookie 会话判证明） | BSM:1217-1218、1246；ENUM:181、233 |
 | 2026-10-17 | 增 | §3 聚合表、§8 | 版本升 V0.19；CG-11d 独立经销商 Web 门户（V454：terminal_capability_switches / 灰度层 CHECK 加 dealer_portal、总开关行 tcs_term_dealer_portal、dealer_portal_accounts、role_dealer_portal 与 dealer_portal.* 权限、dealer.portal_account.manage；`/api/v1/dealer-portal/**` 15 操作 + 内部门户账号 2 操作；SessionIssuer.revokeUserSessions 停用即作废会话；DeviceCredentialVerifier 对 dealer_portal 与 web 同口径按 Cookie 会话判证明） | BSM:1217-1218、1246；ENUM:181、233 |

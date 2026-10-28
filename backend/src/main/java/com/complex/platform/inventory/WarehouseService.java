@@ -94,9 +94,48 @@ public class WarehouseService {
                             type,
                             name,
                             status,
+                            false,
                             now,
                             now
                     ));
+                }
+        );
+    }
+
+    /**
+     * 第十八批 C 段第 17 条（BSM 第 1065 行 / ENUM 第 106 行「配有出酒量采集设备的吧台……未配备采集设备的吧台……」）：登记吧台是否配有
+     * 出酒量采集设备（物理事实，只对吧台库存 bar_counter）。按商户范围；非吧台 409 WAREHOUSE_NOT_BAR_COUNTER。
+     */
+    @GuardedAction(capability = "inventory.warehouse.manage")
+    @Transactional
+    public WarehouseRecord setPourDevice(String warehouseId, com.complex.platform.inventory.dto.WarehousePourDeviceRequest request) {
+        String id = requireText(warehouseId, "warehouse_id");
+        return executeWrite(
+                "setWarehousePourDevice:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                WarehouseRecord.class,
+                "inventory.warehouse.pour_device_updated",
+                "inventory.warehouse.pour_device_update_failed",
+                "inventory.warehouse.manage",
+                "warehouse",
+                () -> {
+                    Boolean equipped = requireRequest(request).pourDeviceEquipped();
+                    if (equipped == null) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "pour_device_equipped is required");
+                    }
+                    WarehouseRecord warehouse = repository.findWarehouseById(id)
+                            .orElseThrow(() -> ApiException.notFound("WAREHOUSE_NOT_FOUND", "库房不存在"));
+                    authorizationService.currentMerchantScope().ifPresent(scope -> {
+                        if (!scope.equals(warehouse.merchantId())) {
+                            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该库房属于其他商户");
+                        }
+                    });
+                    if (!"bar_counter".equals(warehouse.warehouseType())) {
+                        throw ApiException.conflict("WAREHOUSE_NOT_BAR_COUNTER", "只有吧台库存才登记是否配有出酒量采集设备");
+                    }
+                    return repository.saveWarehouse(new WarehouseRecord(warehouse.id(), warehouse.projectId(), warehouse.merchantId(),
+                            warehouse.warehouseType(), warehouse.name(), warehouse.status(), equipped, warehouse.createdAt(), Instant.now()));
                 }
         );
     }

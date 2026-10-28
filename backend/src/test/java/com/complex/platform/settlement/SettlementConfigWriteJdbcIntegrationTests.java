@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -179,7 +179,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
         //   S8 语义收窄(V374):method_type 仅指第二段方式,只剩 by_rank_tier 合法——Path 2 的
         //   草案/转正切换观测点改由同表的特批有效期承担(3 个月 → 6 天)。
         writeService.saveDistributionMethod(
-                new DistributionMethodRequest("d1", PROJECT, "by_rank_tier", 6, "day"), DRAFTER);
+                new DistributionMethodRequest("d1", PROJECT, "by_rank_tier", 6, "day", 1, 90), DRAFTER);
         assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_rank_tier");
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("3 个月");
         writeService.activateDraft("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
@@ -325,14 +325,46 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 DRAFTER)).startsWith("sku_");
     }
 
+    /**
+     * 第 75 条 75-R4(ENUM L52「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」):
+     * 短期经营激励单次有效期上限按前端真实请求形状(蛇形键)提交——缺下限、或数值不在上下限内 400;四项齐全落草案,
+     * 转正后本项目取项目值(带上下限),他项目仍取全局出厂 3 个月。
+     */
+    @Test
+    void incentiveTermLimitNeedsBothBoundsPerProject() throws Exception {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper()
+                .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
+                .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        assertValidationFailed(() -> writeService.saveDistributionMethod(json.readValue("""
+                {"idempotency_key":"it1","project_id":"%s","method_type":"by_rank_tier","special_approval_term_value":2,
+                 "special_approval_term_unit":"month","special_approval_term_max_value":6}
+                """.formatted(PROJECT), DistributionMethodRequest.class), DRAFTER));
+        assertValidationFailed(() -> writeService.saveDistributionMethod(json.readValue("""
+                {"idempotency_key":"it2","project_id":"%s","method_type":"by_rank_tier","special_approval_term_value":7,
+                 "special_approval_term_unit":"month","special_approval_term_min_value":1,"special_approval_term_max_value":6}
+                """.formatted(PROJECT), DistributionMethodRequest.class), DRAFTER));
+
+        writeService.saveDistributionMethod(json.readValue("""
+                {"idempotency_key":"it3","project_id":"%s","method_type":"by_rank_tier","special_approval_term_value":2,
+                 "special_approval_term_unit":"month","special_approval_term_min_value":1,"special_approval_term_max_value":6}
+                """.formatted(PROJECT), DistributionMethodRequest.class), DRAFTER);
+        writeService.activateDraft("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
+
+        assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("2 个月");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT special_approval_term_min_value || '-' || special_approval_term_max_value FROM ticket_distribution_configs
+                 WHERE project_id = ? AND is_draft = FALSE AND status = 'active'""", String.class, PROJECT)).isEqualTo("1-6");
+        assertThat(billRepository.findSpecialApprovalTerm("proj_scw_other").label()).as("他项目取全局出厂值").isEqualTo("3 个月");
+    }
+
     /** S8 写入口收窄:①方式只剩 by_rank_tier(第二段);②每客单价/固定额严格二选一,双填双空均拒。 */
     @Test
     void s8NarrowedWriteGatesRejectLegacyMethodAndAmbiguousRate() {
         // 旧项目级方式已由商户级固定规则取代 → 写入口 400。
         assertValidationFailed(() -> writeService.saveDistributionMethod(
-                new DistributionMethodRequest("dx", PROJECT, "by_fixed_amount", null, null), DRAFTER));
+                new DistributionMethodRequest("dx", PROJECT, "by_fixed_amount", 3, "month", 1, 6), DRAFTER));
         assertValidationFailed(() -> writeService.saveDistributionMethod(
-                new DistributionMethodRequest("dy", PROJECT, "by_venue_per_guest", null, null), DRAFTER));
+                new DistributionMethodRequest("dy", PROJECT, "by_venue_per_guest", 3, "month", 1, 6), DRAFTER));
         // 同行双值 = 无从消歧(两段化后无项目级 method 兜底)→ 拒;双空同拒。
         assertValidationFailed(() -> writeService.saveMerchantRate(
                 new MerchantRateRequest("mx", PROJECT, MERCHANT, 500L, 6000L), DRAFTER));

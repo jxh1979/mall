@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -48,6 +48,52 @@ public interface BarRepository {
     /** OBS-13-03-R1：员工代订留存的客人手机号（解密后）。内存桩默认没有。 */
     default Optional<String> findReservationCustomerPhone(String reservationId) {
         return Optional.empty();
+    }
+
+    // ── 第十八批 C 段第 15 条（BSM 第 1468 行）员工代订爽约与代订权限停用；只有 JDBC 实现，内存桩默认如下。
+
+    /** 超时释放的员工代订记一笔爽约到经手员工名下（只写爽约时刻，不进订台记录）。内存桩默认无操作。 */
+    default void markReservationNoShow(String reservationId, java.time.Instant at) {
+    }
+
+    /** 该酒吧员工代订爽约率上限（%）；未配置为空＝不自动停用。内存桩默认未配置。 */
+    default Integer staffBookingNoShowLimitPct(String barId) {
+        return null;
+    }
+
+    /** 该酒吧该经手员工最晚到店时间在 [from, to) 且已到（≤ now）的员工代订：{笔数, 其中爽约笔数}。内存桩默认无。 */
+    default int[] staffBookingNoShowStats(String barId, String staffId, java.time.Instant from, java.time.Instant to, java.time.Instant now) {
+        return new int[] {0, 0};
+    }
+
+    /** 该经手员工在该酒吧的代订权限是否停用中。内存桩默认否。 */
+    default boolean hasActiveStaffBookingSuspension(String barId, String staffId) {
+        return false;
+    }
+
+    default BarStaffBookingSuspensionRecord saveStaffBookingSuspension(BarStaffBookingSuspensionRecord suspension) {
+        return suspension;
+    }
+
+    default Optional<BarStaffBookingSuspensionRecord> findStaffBookingSuspension(String id) {
+        return Optional.empty();
+    }
+
+    /** 停用中的记录（商户范围为空＝平台视角全部）。 */
+    default List<BarStaffBookingSuspensionRecord> listStaffBookingSuspensions(Optional<String> merchantScope) {
+        return List.of();
+    }
+
+    // ── 第十八批 C 段第 17 条（BSM 第 1065 行；第十八批裁决 4）按杯出酒：吧台有无采集设备与本酒吧损耗率阈值。
+
+    /** 按杯商品扣库库存行（物品＋库位）所挂库房是否为配有出酒量采集设备的吧台；查不到即未配。内存桩默认未配。 */
+    default boolean pourDeviceEquipped(String itemId, String locationId) {
+        return false;
+    }
+
+    /** 本酒吧损耗率阈值（%），未配置取出厂 5（BSM 第 2015 行）。内存桩默认出厂值。 */
+    default int pourLossRatePct(String barId) {
+        return com.complex.platform.governance.MerchantPercentParamRecord.Param.POUR_LOSS_RATE.factoryDefault();
     }
 
     List<BarTableRecord> listTables(Optional<String> merchantScope);

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
@@ -206,6 +206,40 @@ public class TicketPricingService {
             }
         }
         return new CustomerPrice(base, publicPrice, hits, selected, best);
+    }
+
+    /**
+     * 第 75 条（ENUM L52「按当前赠送权益预估成本与当前最低实付价组合计算」）：该票种当前可能的最低实付单价，供结算域第一段试算。
+     * 基础价取日历价（工作日、周末各一）与每条在售价格规则（会员、新人、学生、团体、渠道等资格价）在这两种日子的价；
+     * 再对每个基础价叠加每条已发布、未过期的动态定价规则（不论渠道与条件，含最低价、最高价夹值）——覆盖客人价「动态公开价与资格价取低」
+     * 与后台、渠道按价格规则下单再叠动态价两条路径；取全部组合里的最小值。
+     */
+    public long lowestUnitPriceCent(String ticketTypeId, LocalDate today) {
+        TicketTypeRecord ticketType = repository.findTicketTypeById(ticketTypeId)
+                .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
+        List<Long> bases = new java.util.ArrayList<>();
+        for (LocalDate day : List.of(today.with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.MONDAY)),
+                today.with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SATURDAY)))) {
+            bases.add(resolveUnitPrice(ticketType, null, day));
+            for (TicketPriceRuleRecord rule : repository.listPriceRules()) {
+                if (ticketTypeId.equals(rule.ticketTypeId()) && "active".equals(rule.status()) && rule.archivedAt() == null
+                        && "none".equals(rule.deleteStatus())) {
+                    bases.add(resolveUnitPrice(ticketType, rule, day));
+                }
+            }
+        }
+        List<TicketDynamicPricingRuleRecord> dynamics = repository.listDynamicPricingRules().stream()
+                .filter(rule -> ticketTypeId.equals(rule.ticketTypeId()) && "published".equals(rule.status())
+                        && !rule.effectiveTo().isBefore(today))
+                .toList();
+        long lowest = Long.MAX_VALUE;
+        for (long base : bases) {
+            lowest = Math.min(lowest, base);
+            for (TicketDynamicPricingRuleRecord rule : dynamics) {
+                lowest = Math.min(lowest, clampPrice(base + dynamicAdjustment(base, rule), rule.minPriceCent(), rule.maxPriceCent()));
+            }
+        }
+        return lowest;
     }
 
     DynamicPriceResult applyPublishedDynamicPricing(

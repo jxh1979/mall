@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -11,9 +11,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.LocalZone;
+import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
+import com.complex.platform.governance.review.SupervisorReviewService;
+import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
@@ -36,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
  * OBS-13-01（第十四批）真库：会员等级按滚动统计周期内的成长值定级、升级起保护期、降级预警、「已保级」与降级补发通知，三项等级参数版本化审批。
  * 依据：BSM L820「等级与成长值」；ENUM L70；操作员裁决补充（第十四批）第 1 条（只有升级才起保护期，期末定级后不再起新一轮、按滚动成长值定级
  * 直到下次升级；发了「已保级」到期前再跌回也不降）。成长值流水直插（商户消费来源），每日作业入口 evaluateLevels 按给定时点跑。
+ * 第十八批 C 段（待开发清单第 11、12 条）：储值赠送比例两类版本的平台代录与审批；会员等级与生日加倍规则全平台一套的后台写入。
  */
 @SpringBootTest(properties = {"spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test", "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"})
@@ -48,6 +54,7 @@ class LoyaltyLevelProtectionJdbcIntegrationTests {
     @Autowired TicketRewardConfigService configs;
     @Autowired CustomerRepository customers;
     @Autowired ObjectMapper json;
+    @Autowired SupervisorReviewService reviews;
 
     private final String key = UUID.randomUUID().toString().replace("-", "");
     /** 本轮保护期截止（北京时间正午），各例按它前后推算。 */
@@ -299,6 +306,135 @@ class LoyaltyLevelProtectionJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT read_at FROM customer_level_notices WHERE id=?", Timestamp.class, others)).isNull();
     }
 
+    /** 第 11 条（ENUM L86「商户级卡同样可以设赠送……赠送比例由发卡商户提出、由平台运营代为录入后台，商户不自行改动」；BSM L521 涉钱配置版本化、
+     *  值与上下限同配、经审批按指定日期生效；cg-pending-decisions 第 11、13 条）：前端真实请求形状（蛇形键）由平台代录，进审批、批准后版本落库。 */
+    @Test
+    void merchantCardBonusEnteredByPlatformGoesThroughApproval() throws Exception {
+        String platform = entity("platform");
+        String requester = actor(platform, List.of(TicketRewardConfigService.MANAGE, TicketRewardConfigService.VIEW));
+        String approver = approver(platform, requester);
+        RequestPostProcessor who = staff(requester, platform);
+        Instant effective = Instant.now().plus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS);
+        String scope = "\"merchant_id\":\"" + merchant + "\",";
+        String values = "{\"fixed_value\":1000,\"minimum_value\":0,\"maximum_value\":2000}";
+
+        String created = bonus(who, "1", "merchant_card_bonus", scope, values, effective, approver).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending_review"))
+                .andExpect(jsonPath("$.data.merchant_id").value(merchant))
+                .andReturn().getResponse().getContentAsString();
+        bonus(who, "2", "merchant_card_bonus", "", values, effective.plusSeconds(60), approver).andExpect(status().isBadRequest());
+        bonus(who, "3", "merchant_card_bonus", scope + "\"project_id\":\"p_" + key + "\",", values, effective.plusSeconds(120), approver)
+                .andExpect(status().isBadRequest());
+        bonus(who, "4", "merchant_card_bonus", scope, "{\"fixed_value\":3000,\"minimum_value\":0,\"maximum_value\":2000}", effective.plusSeconds(180), approver)
+                .andExpect(status().isBadRequest());
+        RequestPostProcessor shop = new StaffRequestFixture(jdbc).staff("u_shop_" + key, "staff", "p_" + key, merchant, TicketRewardConfigService.MANAGE);
+        bonus(shop, "5", "merchant_card_bonus", scope, values, effective.plusSeconds(240), approver).andExpect(status().isForbidden());
+
+        approve(approver, platform, JsonPath.read(created, "$.data.review_id"));
+        assertThat(jdbc.queryForMap("SELECT status, merchant_id, (payload->>'fixedValue')::int AS bps FROM ticket_reward_config_versions WHERE id=?",
+                (String) JsonPath.read(created, "$.data.id")))
+                .containsEntry("status", "approved").containsEntry("merchant_id", merchant).containsEntry("bps", 1000);
+    }
+
+    /** 第 11 条（ENUM L86 通用卡「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」；cg-pending-decisions 第 13 条「赠送比例及其上下限均遵守既有涉钱配置审批与版本规则」）：
+     *  综合体通用卡赠送比例按综合体提交审批，不再存即生效。 */
+    @Test
+    void generalCardBonusPerProjectGoesThroughApproval() throws Exception {
+        String platform = entity("platform");
+        String requester = actor(platform, List.of(TicketRewardConfigService.MANAGE, TicketRewardConfigService.VIEW));
+        String approver = approver(platform, requester);
+        RequestPostProcessor who = staff(requester, platform);
+        Instant effective = Instant.now().plus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS);
+        String scope = "\"project_id\":\"p_" + key + "\",";
+
+        String created = bonus(who, "1", "stored_value_bonus", scope, "{\"fixed_value\":1000,\"minimum_value\":0,\"maximum_value\":2000}", effective, approver)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending_review"))
+                .andExpect(jsonPath("$.data.project_id").value("p_" + key))
+                .andReturn().getResponse().getContentAsString();
+        bonus(who, "2", "stored_value_bonus", scope, "{\"fixed_value\":3000,\"minimum_value\":0,\"maximum_value\":2000}", effective.plusSeconds(60), approver)
+                .andExpect(status().isBadRequest());
+        bonus(who, "3", "stored_value_bonus", scope, "{\"fixed_value\":1000,\"maximum_value\":2000}", effective.plusSeconds(120), approver)
+                .andExpect(status().isBadRequest());
+
+        approve(approver, platform, JsonPath.read(created, "$.data.review_id"));
+        assertThat(jdbc.queryForMap("SELECT status, project_id, (payload->>'fixedValue')::int AS bps FROM ticket_reward_config_versions WHERE id=?",
+                (String) JsonPath.read(created, "$.data.id")))
+                .containsEntry("status", "approved").containsEntry("bps", 1000);
+    }
+
+    /** 第 12 条（BSM L820「客人在全国任一项目的消费均计入该周期内的成长值计算；达到门槛立即升级」、BSM L821「全国平台统一规定」、ENUM L70/L72、
+     *  DEC-R3-2026-08-04-35）：会员等级全平台一套——平台账号不带综合体录入的等级即用于定级，同编码重复 409，只到本人项目的账号不能写。 */
+    @Test
+    void adminConfiguredLevelDrivesRegrade() throws Exception {
+        String platform = entity("platform");
+        RequestPostProcessor who = staff(actor(platform, List.of("customer.loyalty.manage", "customer.loyalty.view")), platform);
+        String body = "{\"level_code\":\"diamond\",\"level_name\":\"钻石\",\"level_rank\":4,\"upgrade_threshold\":1000,"
+                + "\"point_multiplier_basis_points\":20000,\"status\":\"active\"}";
+
+        loyaltyConfig(who, "member-levels", body).andExpect(status().isOk()).andExpect(jsonPath("$.data.level_code").value("diamond"));
+        loyaltyConfig(who, "member-levels", body).andExpect(status().isConflict());
+        loyaltyConfig(projectStaff(), "member-levels", body.replace("diamond", "black")).andExpect(status().isForbidden());
+
+        String c = customer();
+        account(c, "base", end.minus(10, ChronoUnit.DAYS), null);
+        growth(c, 1000, end.minus(1, ChronoUnit.DAYS));
+        loyalty.evaluateLevels(end);
+        assertThat(level(c)).as("后台录入的全平台等级用于定级").isEqualTo("diamond");
+    }
+
+    /** 第 12 条同根（BSM L831 / ENUM L87「生日倍率与生日窗口全国平台统一规定，不按项目分别配置」；DEC-R8-97-13）：生日加倍规则全平台一套，
+     *  平台账号不带综合体录入即生效，同名重复 409，只到本人项目的账号不能写。 */
+    @Test
+    void adminConfiguredBirthdayRuleApplies() throws Exception {
+        String platform = entity("platform");
+        RequestPostProcessor who = staff(actor(platform, List.of("customer.loyalty.manage", "customer.loyalty.view")), platform);
+        String body = "{\"rule_name\":\"生日三倍_" + key + "\",\"window_type\":\"birthday_day\",\"multiplier_basis_points\":30000,\"status\":\"active\"}";
+
+        loyaltyConfig(who, "birthday-rules", body).andExpect(status().isOk());
+        loyaltyConfig(who, "birthday-rules", body).andExpect(status().isConflict());
+        loyaltyConfig(projectStaff(), "birthday-rules", body.replace("三倍", "四倍")).andExpect(status().isForbidden());
+
+        LocalDate today = LocalDate.now(LocalZone.ID);
+        CustomerRecord birthdayToday = new CustomerRecord("c_" + key, "13700000000", "***", "active", today, null, null, null);
+        assertThat(loyalty.birthdayMultiplierBasisPoints(birthdayToday, Instant.now())).isGreaterThanOrEqualTo(30_000L);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions bonus(RequestPostProcessor who, String n, String kind, String scope, String values,
+            Instant effective, String approver) throws Exception {
+        return mockMvc.perform(post("/api/v1/loyalty/ticket-reward-configs").header("X-Terminal-Type", "web").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"bonus-" + key + "-" + n + "\",\"kind\":\"" + kind + "\"," + scope + "\"values\":" + values
+                        + ",\"effective_at\":\"" + effective + "\",\"reason\":\"储值赠送比例调整\",\"final_approver_id\":\"" + approver + "\"}"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions loyaltyConfig(RequestPostProcessor who, String path, String body) throws Exception {
+        return mockMvc.perform(post("/api/v1/loyalty/config/" + path).header("X-Terminal-Type", "web").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body.replaceFirst("\\{", "{\"idempotency_key\":\"" + UUID.randomUUID() + "\",")));
+    }
+
+    /** 只到本人项目的员工账号（普通角色，没有勾「可以查看全部项目」）。 */
+    private RequestPostProcessor projectStaff() {
+        return new StaffRequestFixture(jdbc).staff("u_prj_" + key, "staff", "p_" + key, null, "customer.loyalty.manage", "customer.loyalty.view");
+    }
+
+    private String approver(String platform, String requester) {
+        String approver = actor(platform, List.of(TicketRewardConfigService.MANAGE, TicketRewardConfigService.VIEW,
+                "ticket.reward.rule.approve", "governance.supervisor_review.approve"));
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", requester, approver);
+        jdbc.update("INSERT INTO staff_level_assignments(user_id,staff_level_id,organization_id,assigned_by,assigned_at) VALUES(?,'lvl_m1_lower',?,'fixture-hr-approved',now())",
+                approver, platform);
+        return approver;
+    }
+
+    private void approve(String approver, String platform, String reviewId) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(approver, approver, "platform_admin", platform, null, "active"), null, List.of()));
+        assertThat(reviews.approve(reviewId, new SupervisorReviewApprovalRequest("approve-" + UUID.randomUUID(), "核实",
+                List.of(), null, "approved", "通过")).reviewStatus()).isEqualTo("approved");
+    }
+
     private org.springframework.test.web.servlet.ResultActions submit(RequestPostProcessor who, String n, String values, Instant effective, String approver) throws Exception {
         return mockMvc.perform(post("/api/v1/loyalty/ticket-reward-configs").header("X-Terminal-Type", "web").with(who)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -311,8 +447,8 @@ class LoyaltyLevelProtectionJdbcIntegrationTests {
     }
 
     private void level(String code, String name, int rank, long threshold) {
-        jdbc.update("INSERT INTO customer_member_levels(id,project_id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) "
-                + "VALUES(?,NULL,?,?,?,?,10000,'active',now(),now())", "lv_" + code + "_" + key, code, name, rank, threshold);
+        jdbc.update("INSERT INTO customer_member_levels(id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) "
+                + "VALUES(?,?,?,?,?,10000,'active',now(),now())", "lv_" + code + "_" + key, code, name, rank, threshold);
     }
 
     private String customer() {

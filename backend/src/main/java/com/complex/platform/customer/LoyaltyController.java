@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -49,11 +48,10 @@ public class LoyaltyController {
         return ApiResponse.ok(customerService.fulfillPointsRedemption(redemptionId));
     }
 
+    /** 第十八批第 12 条：会员等级全平台一套（BSM L820/L821），不按综合体。 */
     @GetMapping("/member-levels")
-    public ApiResponse<PageResponse<CustomerMemberLevelRecord>> listMemberLevels(
-            @RequestParam(name = "project_id", required = false) String projectId
-    ) {
-        List<CustomerMemberLevelRecord> levels = repository.listMemberLevels(projectId);
+    public ApiResponse<PageResponse<CustomerMemberLevelRecord>> listMemberLevels() {
+        List<CustomerMemberLevelRecord> levels = repository.listMemberLevels();
         return ApiResponse.ok(new PageResponse<>(levels, 1, levels.size(), levels.size()));
     }
 
@@ -160,22 +158,8 @@ public class LoyaltyController {
                 request.consumeOrder()));
     }
 
-    // ---- CG-06a：通用卡充值赠送比例（业务参数，按项目可配，须同时配置上下限；仅平台可改）----
-
-    @PostMapping("/stored-value/bonus-policies")
-    public ApiResponse<StoredValueBonusPolicyRecord> configureBonusPolicy(
-            @RequestBody @jakarta.validation.Valid com.complex.platform.customer.dto.StoredValueBonusPolicyRequest request
-    ) {
-        return ApiResponse.ok(storedValueService.configureBonusPolicy(
-                request.projectId(), request.bonusBps(), request.minBps(), request.maxBps(), request.reason()));
-    }
-
-    @GetMapping("/stored-value/bonus-policies/{project_id}")
-    public ApiResponse<StoredValueBonusPolicyRecord> getBonusPolicy(
-            @PathVariable("project_id") String projectId
-    ) {
-        return ApiResponse.ok(storedValueService.getBonusPolicy(projectId));
-    }
+    // 第十八批第 11 条：通用卡与商户级卡充值赠送比例改走奖励规则版本审批（POST /api/v1/loyalty/ticket-reward-configs，
+    // kind=stored_value_bonus / merchant_card_bonus），原「存即生效」的 bonus-policies 端点删除。
 
     // 积分转赠风控配置已随「积分转赠下线」移除（HTML：积分不支持会员间转赠）。
 }

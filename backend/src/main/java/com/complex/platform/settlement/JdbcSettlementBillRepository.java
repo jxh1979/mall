@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
@@ -108,6 +108,20 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
         return fee == null ? new RouteFee(null, 0) : fee;
     }
 
+    /**
+     * 第 75 条（ENUM L52「按费率最高的支付通路计取通路费」）：各支付通路在该项目下生效的通路费率（每个通路项目特例＞全局默认，同
+     * {@link #findRouteFee}）中的最高值；未配置＝0。储值付款的通路费来自充值时的支付通路，同属这些行。
+     */
+    public int findMaxRouteFeeBps(String projectId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT COALESCE(MAX(fee_bps), 0) FROM (
+                    SELECT DISTINCT ON (channel) fee_bps FROM channel_fee_configs
+                     WHERE status = 'active' AND is_draft = FALSE AND fee_layer = 'route'
+                       AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
+                     ORDER BY channel, (project_id IS NOT NULL) DESC) r
+                """, new MapSqlParameterSource("project_id", projectId), Integer.class);
+    }
+
     /** 分配方式：项目特例优先，否则全局默认，否则建表默认 by_rank_tier。 */
     public String findDistributionMethod(String projectId) {
         String method = jdbcTemplate.query("""
@@ -122,11 +136,9 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /**
-     * S9 超池特批有效期：项目特例优先，否则全局默认（建表默认 3 个月 = 业务口径「期限可配，默认不超过 3 个月」）。
-     * 与分配方式同表同维度——超池特批就是该分配方式的溢出出口，同一业务对象同一处配。
-     *
-     * <p>V368（用户 2026-07-28 纠正）：期限不再只能按月。三天的短期激励也要配得出来，
-     * 所以读回「数值 + 单位」，单位 day/month。
+     * 第 75 条（ENUM L52「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」；
+     * BSM L752「单次激励期限不得超过后台配置的上限」）：短期经营激励单次有效期上限——项目特例优先，否则全局默认（出厂 3 个月）。
+     * 读回「数值 + 单位」，单位 day/month（V368）；该参数自身的上下限只在写入时校验。
      */
     public SpecialApprovalTerm findSpecialApprovalTerm(String projectId) {
         SpecialApprovalTerm term = jdbcTemplate.query("""
@@ -795,7 +807,6 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("gift_cost_cent", bill.giftCostCent())
                 .addValue("gift_beneficiary_entity_id", bill.giftBeneficiaryEntityId())
                 .addValue("distribution_method", bill.distributionMethod())
-                .addValue("special_approval_ref", bill.specialApprovalRef())
                 .addValue("status", bill.status())
                 .addValue("attributed_entity_id", bill.attributedEntityId())
                 .addValue("combo_discount_cent", bill.comboDiscountCent())
@@ -813,7 +824,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     available_pool_cent, distributed_cent,
                     comp_service_fee_pooled_cent, comp_service_fee_exclusive_cent, fee_beneficiary_entity_id,
                     gift_cost_cent, gift_beneficiary_entity_id,
-                    distribution_method, special_approval_ref, status,
+                    distribution_method, status,
                     attributed_entity_id, combo_discount_cent, rounding_residual_cent,
                     rounding_residual_entity_id,
                     pool_undistributed_cent, pool_undistributed_entity_id,
@@ -825,7 +836,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     :available_pool_cent, :distributed_cent,
                     :comp_service_fee_pooled_cent, :comp_service_fee_exclusive_cent, :fee_beneficiary_entity_id,
                     :gift_cost_cent, :gift_beneficiary_entity_id,
-                    :distribution_method, :special_approval_ref, :status,
+                    :distribution_method, :status,
                     :attributed_entity_id, :combo_discount_cent, :rounding_residual_cent,
                     :rounding_residual_entity_id,
                     :pool_undistributed_cent, :pool_undistributed_entity_id,
@@ -844,14 +855,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     gift_cost_cent                  = EXCLUDED.gift_cost_cent,
                     gift_beneficiary_entity_id      = EXCLUDED.gift_beneficiary_entity_id,
                     distribution_method = EXCLUDED.distribution_method,
-                    -- D7 防覆盖：已填的特批引用不被 settleMonth 重跑清 null（引擎恒写 null）；status 一旦特批过
-                    --   （special_approval_ref 非空）就锁死不被重跑打回 draft，其余（未特批）单照常按引擎新算态覆盖。
-                    -- S9 到期回收：冻结只在【特批仍在有效期内】时成立；到期后本单回到普通单待遇——按引擎新算态
-                    --   覆盖 status（仍超池即打回 draft，须平台负责人重新特批才能再过账）。过期引用不清空（留痕保全）。
-                    special_approval_ref = COALESCE(settlement_bills.special_approval_ref, EXCLUDED.special_approval_ref),
-                    status              = CASE WHEN settlement_bills.special_approval_ref IS NOT NULL
-                                                AND settlement_bills.special_approval_valid_until >= CURRENT_DATE
-                                               THEN settlement_bills.status ELSE EXCLUDED.status END,
+                    status              = EXCLUDED.status,
                     attributed_entity_id = EXCLUDED.attributed_entity_id,
                     combo_discount_cent = EXCLUDED.combo_discount_cent,
                     rounding_residual_cent = EXCLUDED.rounding_residual_cent,
@@ -985,26 +989,6 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 rs -> rs.next() ? rs.getString("status") : null);
     }
 
-    /**
-     * D7(对抗复核 risk2):该月份结算单【仍在有效期内】的 special_approval_ref(未特批/已过期/无单返 null);
-     * 供 settleMonth 冻结已特批单防重算漂移。
-     *
-     * <p>S9 到期回收:过期特批不再冻结——引擎照常重算,仍超池就打回 draft 待重新特批。
-     */
-    public String findActiveSpecialApprovalRefByPeriod(String projectId, java.time.LocalDate periodStart,
-            java.time.LocalDate periodEnd) {
-        return jdbcTemplate.query("""
-                SELECT special_approval_ref FROM settlement_bills
-                 WHERE COALESCE(project_id, '__DEFAULT__') = COALESCE(:project_id, '__DEFAULT__')
-                   AND period_start = :period_start AND period_end = :period_end
-                   AND special_approval_valid_until >= CURRENT_DATE
-                """, new MapSqlParameterSource()
-                .addValue("project_id", projectId)
-                .addValue("period_start", java.sql.Date.valueOf(periodStart))
-                .addValue("period_end", java.sql.Date.valueOf(periodEnd)),
-                rs -> rs.next() ? rs.getString("special_approval_ref") : null);
-    }
-
     /** 该单待过账明细：status='draft' 且 final_amount_cent≠0（FS-021-R1：负额=向商户追回，过账为单独追收应收；final=0 不取）。
      *  D7：带 distribution_method，供过账区分池明细是否走超额 C 口径两段拆。 */
     public List<PostableItem> findPostableItems(String billId) {
@@ -1054,10 +1038,10 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                                String payeeProjectId) {
     }
 
-    // ---- D7 超池特批出口 + 超额 C 口径 ----
+    // ---- D7 超额 C 口径（第 75 条：结算环节不设超池审批，超出部分过账时由娱乐平台公司承担）----
 
     /**
-     * D7 过账/特批用超池上下文：结算单状态 + 可分配池 availablePool + <b>应分总额</b> pooledDistributed
+     * D7 过账用超池上下文：结算单状态 + 可分配池 availablePool + <b>应分总额</b> pooledDistributed
      * （专属直付不占池、不参与越池判定）。overPool = pooledDistributed > availablePool；单不存在返回 null。
      * 第十八批第 2 条：逐份分账后各份「第一段实分＋第二段实分＋通票未核销减除额＋未分配＋暂挂＋尾差」恒等于本份池，
      * 只有第一段合计超过本份池时多出 pool_overflow_cent，故应分总额＝可分配池＋第一段超池额，与引擎越池判定同口径。
@@ -1066,9 +1050,6 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     public OverPoolContext findOverPoolContext(String billId) {
         return jdbcTemplate.query("""
                 SELECT b.status, b.project_id, b.period_start, b.available_pool_cent,
-                       b.special_approval_valid_until,
-                       (b.special_approval_ref IS NOT NULL
-                        AND b.special_approval_valid_until >= CURRENT_DATE) AS special_approval_active,
                        b.available_pool_cent + b.pool_overflow_cent AS pooled_distributed_cent
                   FROM settlement_bills b
                  WHERE b.id = :id
@@ -1076,42 +1057,12 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 rs -> rs.next()
                         ? new OverPoolContext(rs.getString("status"), rs.getString("project_id"),
                                 rs.getLong("available_pool_cent"), rs.getLong("pooled_distributed_cent"),
-                                rs.getBoolean("special_approval_active"),
-                                rs.getObject("special_approval_valid_until", java.time.LocalDate.class),
                                 rs.getObject("period_start", java.time.LocalDate.class))
                         : null);
     }
 
-    /**
-     * D7 特批出口：填 special_approval_ref 并把 status draft→confirmed（仅当仍 draft，防重复特批/并发覆盖）。
-     * S9：同时按配置期限落到期日 = 特批当日 + termMonths 月（DB 单一时钟，与到期判定 CURRENT_DATE 同源）。
-     *
-     * @return 落库的到期日；null = 未更新任何行（非 draft，调用方据此判 409）
-     */
-    public java.time.LocalDate markBillSpecialApproved(String billId, String specialApprovalRef,
-                                                       SpecialApprovalTerm term) {
-        return jdbcTemplate.query("""
-                UPDATE settlement_bills
-                   SET special_approval_ref = :ref,
-                       special_approval_valid_until =
-                           (CURRENT_DATE + make_interval(months => :months, days => :days))::date,
-                       status = 'confirmed', updated_at = now()
-                 WHERE id = :id AND status = 'draft'
-                RETURNING special_approval_valid_until
-                """, new MapSqlParameterSource()
-                .addValue("id", billId).addValue("ref", specialApprovalRef)
-                // V368：一次 make_interval 同时收两种单位——配「月」走月历(1月31日+3月=4月30日)、
-                //   配「天」走自然日，另一格为 0。到期日仍在 DB 侧算，与到期判定同一时钟。
-                .addValue("months", term.months()).addValue("days", term.days()),
-                rs -> rs.next() ? rs.getObject("special_approval_valid_until", java.time.LocalDate.class) : null);
-    }
-
-    /**
-     * D7 超池上下文读投影：overPool = pooledDistributedCent &gt; availablePoolCent。
-     * S9：specialApprovalActive = 有特批引用且到期日 ≥ 今日（DB 侧算，单一时钟）。
-     */
+    /** D7 超池上下文读投影：overPool = pooledDistributedCent &gt; availablePoolCent。 */
     public record OverPoolContext(String status, String projectId, long availablePoolCent, long pooledDistributedCent,
-                                  boolean specialApprovalActive, java.time.LocalDate specialApprovalValidUntil,
                                   java.time.LocalDate periodStart) {
         public boolean overPool() {
             return pooledDistributedCent > availablePoolCent;
@@ -1124,9 +1075,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * S4 财务对账读投影:月度结算单头列表(倒序,最多 limit 单)。回答财务三个问题:
      * 这单收了多少综合服务费、池链支与专属支各多少、归了谁(收款主体中文名一并带出)。
      *
-     * <p>超池特批入口(S9 遗留补齐):加带 special_approval_ref / special_approval_valid_until 与
-     * pooled_distributed_cent(池分配合计,同 {@link #findOverPoolContext} 口径)——平台负责人在结算审阅页
-     * 直接看到哪些单因超池停在 draft、超了多少、特批后有效到哪天。
+     * <p>带 pooled_distributed_cent(池分配合计,同 {@link #findOverPoolContext} 口径)——结算审阅页直接看到哪些单超池、超了多少
+     * (第 75 条:超出部分过账时由娱乐平台公司承担,不设结算期审批)。
      * 第十八批第 2 条（ENUM L52「三者即使同归一个主体，也必须分三栏分别列示」）：未分配池余额、通票未核销减除额（及归属主体）、
      * 尾差三栏分列，另带暂挂待补配金额与第一段超池额。
      */
@@ -1138,7 +1088,6 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        b.fee_beneficiary_entity_id, be.entity_name AS fee_beneficiary_entity_name,
                        b.available_pool_cent, b.distributed_cent, b.combo_discount_cent,
                        b.rounding_residual_cent, b.distribution_method, b.status,
-                       b.special_approval_ref, b.special_approval_valid_until,
                        b.available_pool_cent + b.pool_overflow_cent AS pooled_distributed_cent,
                        b.pool_undistributed_cent, b.unverified_deduction_cent, b.unverified_deduction_entity_id,
                        ude.entity_name AS unverified_deduction_entity_name, b.pool_suspended_cent,
@@ -1172,8 +1121,6 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         rs.getLong("available_pool_cent"), rs.getLong("distributed_cent"),
                         rs.getLong("combo_discount_cent"), rs.getLong("rounding_residual_cent"),
                         rs.getString("distribution_method"), rs.getString("status"),
-                        rs.getString("special_approval_ref"),
-                        rs.getObject("special_approval_valid_until", java.time.LocalDate.class),
                         rs.getLong("pooled_distributed_cent"),
                         rs.getLong("pool_undistributed_cent"), rs.getLong("unverified_deduction_cent"),
                         rs.getString("unverified_deduction_entity_id"), rs.getString("unverified_deduction_entity_name"),
@@ -1184,8 +1131,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
 
     /**
      * S4 结算单头读投影(财务对账用,金额带符号:负数月=当月净追回)。
-     * 特批三列:specialApprovalRef/specialApprovalValidUntil(已特批单)、pooledDistributedCent(池分配合计,
-     * 与 availablePoolCent 比对即知是否超池、超了多少;超池判定与 {@link OverPoolContext#overPool()} 同口径)。
+     * pooledDistributedCent(池分配合计,与 availablePoolCent 比对即知是否超池、超了多少;超池判定与 {@link OverPoolContext#overPool()} 同口径)。
      */
     public record BillSummary(String id, String projectId, java.time.LocalDate periodStart,
                               java.time.LocalDate periodEnd, long ticketRevenueCent, long channelFeeCent,
@@ -1195,7 +1141,6 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                               String feeBeneficiaryEntityId, String feeBeneficiaryEntityName,
                               long availablePoolCent, long distributedCent, long comboDiscountCent,
                               long roundingResidualCent, String distributionMethod, String status,
-                              String specialApprovalRef, java.time.LocalDate specialApprovalValidUntil,
                               long pooledDistributedCent,
                               // 第十八批第 2 条（ENUM L52「三者即使同归一个主体，也必须分三栏分别列示」）：未分配池余额、
                               //   通票未核销减除额（及归属主体）与尾差（roundingResidualCent）三栏分列；暂挂待补配。
@@ -1207,7 +1152,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /**
-     * S9/V368 超池特批有效期读投影：数值 + 单位(day/month)。
+     * 短期经营激励单次有效期（上限配置与申请期限同一读法）：数值 + 单位(day/month)。
      * 用户 2026-07-28 纠正「不是指校验大于等于一个月，也可以三天」——三天的短期激励必须配得出来。
      */
     public record SpecialApprovalTerm(int value, String unit) {
@@ -1216,12 +1161,9 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
             return "day".equals(unit);
         }
 
-        int months() {
-            return byDay() ? 0 : value;
-        }
-
-        int days() {
-            return byDay() ? value : 0;
+        /** from 起算 value 天/月后的那一天（月按月历：1月31日+3月=4月30日）。 */
+        public java.time.LocalDate after(java.time.LocalDate from) {
+            return byDay() ? from.plusDays(value) : from.plusMonths(value);
         }
 
         /** 给人看的写法：「3 天」/「3 个月」。总览页、草案摘要、审计留痕都用它，全站一个说法。 */
