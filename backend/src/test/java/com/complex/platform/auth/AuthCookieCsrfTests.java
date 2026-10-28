@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.auth;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -135,6 +135,23 @@ class AuthCookieCsrfTests {
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value("written"));
+    }
+
+    @Test
+    void loginWithStaleAccessCookieAndNoCsrfHeaderSucceeds() throws Exception {
+        // #549：停服/会话过期后浏览器仍留着 HttpOnly 旧令牌 Cookie（JS 清不掉），登录不能被 CSRF 拦成 403。
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .cookie(new Cookie(AuthCookies.ACCESS_COOKIE, "stale-token"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login_name": "p0_admin",
+                                  "password": "secret",
+                                  "device_id": "web-1",
+                                  "terminal_type": "web"
+                                }
+                                """))
+                .andExpect(status().isOk());
     }
 
     @Test
