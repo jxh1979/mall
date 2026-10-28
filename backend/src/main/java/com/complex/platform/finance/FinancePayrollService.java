@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -192,6 +192,9 @@ public class FinancePayrollService {
         if(!auth.currentActorHasPermission(permission))return Set.of();
         Scope s=scope(permission);
         if(s.reach().platformAdmin())return null;
+        // 第十八批 E 段 20-R3：商户账号查看各经营项目里本商户的工资应付，只按商户
+        if(merchantRead(s))return new HashSet<>(jdbc.queryForList(
+                "SELECT ar_ap_item_id FROM staff_payroll_statements WHERE ar_ap_item_id IS NOT NULL AND merchant_id=?",String.class,s.merchant()));
         Set<String> ids=s.reach().organizationIds();
         if(ids.isEmpty())return Set.of();
         String slots=String.join(",",Collections.nCopies(ids.size(),"?"));
@@ -201,11 +204,26 @@ public class FinancePayrollService {
         return new HashSet<>(jdbc.queryForList(sql,String.class,args.toArray()));
     }
 
-    public void requireReadScope(String statementId,String permission) {checkScope(wage(statementId,false),scope(permission));}
+    public void requireReadScope(String statementId,String permission) {
+        Wage w=wage(statementId,false);Scope s=scope(permission);
+        // 第十八批 E 段 20-R3：商户账号读工资应付只比商户；付款写仍走 checkScope
+        if(merchantRead(s)) {
+            if(!s.merchant().equals(w.merchant()))throw ApiException.forbidden("PAYROLL_FINANCE_SCOPE_MISMATCH","无权读取或付款该项目、商户与发薪主体的工资");
+            return;
+        }
+        checkScope(w,s);
+    }
+    private static boolean merchantRead(Scope s) {return !s.reach().platformAdmin()&&s.merchant()!=null&&!s.merchant().isBlank();}
     public String requireEvidenceScope(String id,String evidencePermission) {
         String permission="evidence.timeline.view".equals(evidencePermission)?VIEW:PAY;
         Scope scope=scope(permission,evidencePermission);var a=attempt(id);
-        Wage w=wage((String)a.get("statement_id"),false);checkScope(w,scope);return w.merchant();
+        Wage w=wage((String)a.get("statement_id"),false);
+        // 第十八批 E 段 20-R4 扫尾：查看付款凭据与 requireReadScope 同口径，商户账号只比商户；上传仍走 checkScope
+        if(VIEW.equals(permission)&&merchantRead(scope)) {
+            if(!scope.merchant().equals(w.merchant()))throw ApiException.forbidden("PAYROLL_FINANCE_SCOPE_MISMATCH","无权读取或付款该项目、商户与发薪主体的工资");
+            return w.merchant();
+        }
+        checkScope(w,scope);return w.merchant();
     }
     private Scope scope(String... permissions) {
         auth.requirePermissions(permissions);var actor=auth.currentActor();

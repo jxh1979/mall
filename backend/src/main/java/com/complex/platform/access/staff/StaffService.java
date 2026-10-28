@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -131,7 +131,8 @@ public class StaffService {
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord submitRegistration(StaffRegistrationRequest request) {
         if (request == null) throw ApiException.badRequest("VALIDATION_FAILED", "须填写注册资料");
-        requireRegistrationScope(request.projectId(), request.merchantId());
+        // 第十八批 E 段 19-R1（移植 M738）：登记到的项目按 staff.profile.submit 可触及的项目判（持可跨项目角色的含该角色可查看的项目）。
+        requireRegistrationScope(request.projectId(), request.merchantId(), reachOf("staff.profile.submit"));
         String approvingCompany = registrations.merchantApprovingCompany(request.merchantId());
         try {
             return idempotencyService.execute(
@@ -190,12 +191,14 @@ public class StaffService {
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord reviewRegistration(String id, StaffRegistrationReviewRequest request) {
         try {
+            // 第十八批 E 段 19-R1（移植 M738）：范围按 staff.profile.review 在幂等之前判，用原提交编号重试同样先按当前范围判。
+            var reach = reachOf("staff.profile.review");
+            StaffProfileRecord profile = requireProfileInScope(id, reach);
             return idempotencyService.execute(
                     "reviewStaffRegistration:" + id,
                     request.idempotencyKey(),
                     request,
                     () -> {
-                        StaffProfileRecord profile = requireProfileInScope(id);
                         if (!"submitted".equals(profile.registrationStatus())) {
                             throw ApiException.conflict("INVALID_STATE",
                                     "登记不在已提交状态：" + profile.registrationStatus());
@@ -208,8 +211,7 @@ public class StaffService {
                         }
                         if (!authorizationService.isMasterAuthority(actor)
                                 && (trimToNull(actor.merchantId()) != null
-                                    || profile.companyId() == null
-                                    || !profile.companyId().equals(registrations.actorCompany(actor)))) {
+                                    || !profileReachable(reach, actor, profile))) {
                             throw ApiException.forbidden("COMPANY_APPROVAL_REQUIRED", "须由该申请所属公司或商户对应域公司审批");
                         }
                         Instant now = Instant.now();
@@ -237,9 +239,11 @@ public class StaffService {
                             // 班次/考勤/请假/通知/打卡)对其一律 403;此前仅 platform_admin 桥可用。幂等(ON CONFLICT DO NOTHING)。
                             accessRepository.assignUserRole(created.id(), "role_staff_self");
                             if (profile.staffLevelId() != null) {
+                                // M738-F06/F07：职级随审批落地，本次审批已对该档案核过 staff.profile.review 的审批范围（含按所属公司通过的域公司人事），
+                                // 传 reach 表示不再另核新账号范围、不另按职级管理权限核
                                 accessService.assignStaffLevel(new com.complex.platform.access.dto.StaffLevelAssignmentRequest(
                                         request.idempotencyKey() + ":level", request.operatorNote(), created.id(),
-                                        profile.staffLevelId(), null, "CNY", null));
+                                        profile.staffLevelId(), null, "CNY", null), reach);
                             }
                             StaffProfileRecord approved = profile.withRegistrationReview(
                                     created.id(), "approved", actor.id(), now, null);
@@ -290,11 +294,17 @@ public class StaffService {
         AccessActor actor = authorizationService.currentActor();
         List<StaffProfileRecord> profiles;
         if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) == null) {
+            // 第十八批 E 段 19-R1（移植 M738）：本人那一份只在该码另有非可跨项目来源时照旧按本公司；凭可跨项目角色的按档案登记项目逐项目取。
+            var reach = reachOf("staff.profile.view");
             var scoped = new java.util.LinkedHashMap<String, StaffProfileRecord>();
-            repository.listProfilesByProject(authorizationService.requireProjectScope(actor)).stream()
-                    .filter(p -> p.companyId().equals(registrations.actorCompany(actor)))
-                    .forEach(p -> scoped.put(p.id(),p));
-            repository.listProfilesByCompany(registrations.actorCompany(actor)).forEach(p -> scoped.put(p.id(),p));
+            if (reach.ownBySource()) {
+                repository.listProfilesByProject(authorizationService.requireProjectScope(actor)).stream()
+                        .filter(p -> p.companyId().equals(registrations.actorCompany(actor)))
+                        .forEach(p -> scoped.put(p.id(),p));
+                repository.listProfilesByCompany(registrations.actorCompany(actor)).forEach(p -> scoped.put(p.id(),p));
+            }
+            // ponytail: 每个可触及项目查一次；项目多到成为负担时改成一次 project_id IN (...) 查询
+            reach.projects().forEach(project -> repository.listProfilesByProject(project).forEach(p -> scoped.put(p.id(),p)));
             profiles = scoped.values().stream().filter(p -> includeArchived || p.archivedAt() == null).toList();
         } else {
             profiles = repository.listProfiles(merchantScopeOrNull(), includeArchived);
@@ -318,7 +328,7 @@ public class StaffService {
     @GuardedAction(permission = "staff.profile.submit")
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord archiveProfile(String id, boolean archive, String reason) {
-        StaffProfileRecord profile = requireProfileInScope(id);
+        StaffProfileRecord profile = requireProfileInScope(id, reachOf("staff.profile.submit"));
         String r = archive ? requireReason(reason) : null;
         Instant now = Instant.now();
         StaffProfileRecord updated = archive
@@ -351,7 +361,7 @@ public class StaffService {
     public com.complex.platform.governance.review.SupervisorReviewDecisionRecord setEmploymentStatus(String id,
             com.complex.platform.access.staff.dto.StaffEmploymentStatusRequest request) {
         try {
-        StaffProfileRecord profile = requireProfileInScope(id);
+        StaffProfileRecord profile = requireProfileInScope(id, reachOf("staff.profile.review"));
         if (request == null || request.employmentStatus() == null
                 || !java.util.Set.of("pending_entry", "employed", "trial", "suspended", "departed")
                         .contains(request.employmentStatus())) {
@@ -379,7 +389,7 @@ public class StaffService {
     @org.springframework.transaction.annotation.Transactional
     public StaffProfileRecord setSalesPosition(String id,
             com.complex.platform.access.staff.dto.StaffSalesPositionRequest request) {
-        StaffProfileRecord profile = requireProfileInScope(id);
+        StaffProfileRecord profile = requireProfileInScope(id, reachOf("staff.profile.review"));
         if (request == null || request.salesPosition() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须指定是否为销售岗");
         }
@@ -399,7 +409,7 @@ public class StaffService {
         // 最高权限逐笔开放（治理地图第 528 行第④类）：最高权限发起的删除只校验档案存在，不按公司或登记范围。
         StaffProfileRecord profile = authorizationService.isMasterAuthority(authorizationService.currentActor())
                 ? repository.findProfileById(id).orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id))
-                : requireProfileInScope(id);
+                : requireProfileInScope(id, reachOf("staff.profile.review"));
         if (profile.archivedAt() == null) {
             throw ApiException.badRequest("STAFF_PROFILE_NOT_ARCHIVED", "员工档案必须先存档才能申请删除");
         }
@@ -513,12 +523,13 @@ public class StaffService {
     @GuardedAction(permission = "staff.device.review")
     public StaffDeviceCredentialRecord approveRebind(String credId, StaffDeviceRebindDecisionRequest request) {
         try {
+            // 第十八批 E 段 19-R1（移植 M738）：范围在幂等之前判
+            StaffDeviceCredentialRecord credential = requireCredentialInScope(credId, reachOf("staff.device.review"));
             return idempotencyService.execute(
                     "approveStaffDeviceRebind:" + credId,
                     request.idempotencyKey(),
                     request,
                     () -> {
-                        StaffDeviceCredentialRecord credential = requireCredentialInScope(credId);
                         if (!"pending_review".equals(credential.bindStatus())) {
                             throw ApiException.conflict("INVALID_STATE",
                                     "设备凭证不在待审核状态：" + credential.bindStatus());
@@ -607,12 +618,13 @@ public class StaffService {
     @GuardedAction(permission = "staff.device.revoke")
     public StaffDeviceCredentialRecord revokeCredential(String credId, StaffDeviceRevokeRequest request) {
         try {
+            // 第十八批 E 段 19-R1（移植 M738）：范围在幂等之前判
+            StaffDeviceCredentialRecord credential = requireCredentialInScope(credId, reachOf("staff.device.revoke"));
             return idempotencyService.execute(
                     "revokeStaffDeviceCredential:" + credId,
                     request.idempotencyKey(),
                     request,
                     () -> {
-                        StaffDeviceCredentialRecord credential = requireCredentialInScope(credId);
                         if ("revoked".equals(credential.bindStatus())
                                 || "superseded".equals(credential.bindStatus())) {
                             throw ApiException.conflict("INVALID_STATE",
@@ -647,9 +659,12 @@ public class StaffService {
     public StaffShiftRecord upsertShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
         try {
         authorizationService.requirePermission("staff.shift.manage");
+        // 第十八批 E 段 19-R1（移植 M738）：按 staff.shift.manage 可触及的范围在幂等之前先核排班员工
+        var reach = reachOf("staff.shift.manage");
+        if (request != null && trimToNull(request.userId()) != null) requireUserInScope(request.userId().trim(), reach);
         return idempotencyService.execute("staffShiftSubmit", request == null ? null : request.idempotencyKey(), request,
                 () -> {
-                    StaffShiftRecord submitted = staffApprovals.submitShifts(List.of(draftShift(request)), request.idempotencyKey()).shifts().getFirst();
+                    StaffShiftRecord submitted = staffApprovals.submitShifts(List.of(draftShift(request, reach)), request.idempotencyKey()).shifts().getFirst();
                     // U16-006：operation 级成功事件；governance.supervisor_review.evaluated 只属于 evaluateSupervisorReview。
                     auditEventService.recordSuccess("staff.shift.submitted", "staff.shift.manage", "staff_shift", submitted.id(), null,
                             request.idempotencyKey(), Map.of("review_id", String.valueOf(submitted.reviewId()), "publication_status", String.valueOf(submitted.publicationStatus())));
@@ -663,12 +678,13 @@ public class StaffService {
         }
     }
 
-    private StaffShiftRecord draftShift(com.complex.platform.access.staff.dto.StaffShiftRequest request) {
+    private StaffShiftRecord draftShift(com.complex.platform.access.staff.dto.StaffShiftRequest request,
+            AuthorizationService.ProjectReach reach) {
         if (request == null || trimToNull(request.userId()) == null || request.workDate() == null
                 || request.startAt() == null || request.endAt() == null || !request.endAt().isAfter(request.startAt())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "须填写员工、工作日期及有效的开始结束时间");
         }
-        requireUserInScope(request.userId().trim());
+        requireUserInScope(request.userId().trim(), reach);
         Instant now = clock.instant();
         StaffShiftRecord previous = trimToNull(request.shiftId()) == null
                 ? repository.findShiftByUserStart(request.userId().trim(), request.startAt()).orElse(null)
@@ -710,9 +726,15 @@ public class StaffService {
             com.complex.platform.access.staff.dto.StaffShiftBatchRequest request) {
         try {
         authorizationService.requirePermission("staff.shift.manage");
+        // 第十八批 E 段 19-R1（移植 M738）：按 staff.shift.manage 可触及的范围在幂等之前先逐个核请求里的员工
+        var reach = reachOf("staff.shift.manage");
+        if (request != null && request.userIds() != null) {
+            request.userIds().stream().map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct()
+                    .forEach(id -> requireUserInScope(id, reach));
+        }
         return idempotencyService.execute("staffShiftBatchSubmit", request == null ? null : request.idempotencyKey(), request,
                 () -> {
-                    com.complex.platform.access.staff.dto.StaffShiftBatchResult submitted = draftShiftBatch(request);
+                    com.complex.platform.access.staff.dto.StaffShiftBatchResult submitted = draftShiftBatch(request, reach);
                     // U16-006：一批一条 operation 级成功事件，business_id=审批单。
                     auditEventService.recordSuccess("staff.shift.submitted", "staff.shift.manage", "staff_shift", submitted.reviewId(), null,
                             request.idempotencyKey(), Map.of("created", submitted.createdCount(), "updated", submitted.updatedCount(), "publication_status", String.valueOf(submitted.publicationStatus())));
@@ -726,7 +748,7 @@ public class StaffService {
     }
 
     private com.complex.platform.access.staff.dto.StaffShiftBatchResult draftShiftBatch(
-            com.complex.platform.access.staff.dto.StaffShiftBatchRequest request) {
+            com.complex.platform.access.staff.dto.StaffShiftBatchRequest request, AuthorizationService.ProjectReach reach) {
         if (request == null || request.startDate() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写排班起始日期");
         }
@@ -759,7 +781,7 @@ public class StaffService {
         List<String> points = request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds().stream()
                 .map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct().toList();
 
-        userIds.forEach(this::requireUserInScope);
+        userIds.forEach(id -> requireUserInScope(id, reach));
         java.util.List<StaffShiftRecord> saved = new java.util.ArrayList<>();
         for (java.time.LocalDate date : dates) {
             Instant startAt = date.atTime(startTime).atZone(LocalZone.ID).toInstant();
@@ -768,7 +790,7 @@ public class StaffService {
             Instant endAt = endDate.atTime(endTime).atZone(LocalZone.ID).toInstant();
             for (String userId : userIds) {
                 StaffShiftRecord row = draftShift(new com.complex.platform.access.staff.dto.StaffShiftRequest(
-                        request.idempotencyKey(), userId, date, startAt, endAt, points, request.note(), null, request.nightDutyManager()));
+                        request.idempotencyKey(), userId, date, startAt, endAt, points, request.note(), null, request.nightDutyManager()), reach);
                 saved.add(row);
             }
         }
@@ -805,11 +827,12 @@ public class StaffService {
     public List<StaffApprovalService.History> shiftHistory(String id) {
         auditEventService.recordSuccess("staff.shift.history_viewed", "staff.shift.manage", "staff_shift", id, null, null, Map.of());
         authorizationService.requirePermission("staff.shift.manage");
+        var reach = reachOf("staff.shift.manage");
         var history = staffApprovals.history(id);
         if (history.isEmpty()) {
             var shift = repository.findShiftById(id).orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "排班不存在"));
-            requireUserInScope(shift.userId());
-        } else { requireUserInScope(history.getFirst().after().userId()); }
+            requireUserReadable(shift.userId(), reach);
+        } else { requireUserReadable(history.getFirst().after().userId(), reach); }
         return history;
     }
 
@@ -829,8 +852,10 @@ public class StaffService {
         if (coverUserId == null) throw ApiException.badRequest("VALIDATION_FAILED", "须填写顶班员工");
         if (coverUserId.equals(shift.userId())) throw ApiException.badRequest("VALIDATION_FAILED", "顶班员工不能是原班次员工");
         String reason = requireReason(request.reason());
-        requireUserInScope(shift.userId());
-        requireUserInScope(coverUserId);
+        // 第十八批 E 段 19-R1（移植 M738）：原班次员工与顶班员工都按 staff.shift.manage 可触及的范围判，在幂等之前
+        var reach = reachOf("staff.shift.manage");
+        requireUserInScope(shift.userId(), reach);
+        requireUserInScope(coverUserId, reach);
         if (request.startAt() == null || request.endAt() == null || !request.endAt().isAfter(request.startAt())
                 || request.startAt().isBefore(shift.startAt()) || request.endAt().isAfter(shift.endAt())) {
             throw ApiException.badRequest("COVER_RANGE_INVALID", "顶班起止须在原班次范围内且结束晚于开始");
@@ -871,7 +896,7 @@ public class StaffService {
         authorizationService.requirePermission("staff.shift.manage");
         var source = repository.findShiftById(shiftId)
                 .orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "原排班不存在"));
-        requireUserInScope(source.userId());
+        requireUserReadable(source.userId(), reachOf("staff.shift.manage"));
         List<StaffShiftCoverRecord> covers = repository.listShiftCovers(shiftId);
         auditEventService.recordSuccess("staff.shift.covers_viewed", "staff.shift.manage", "staff_shift", shiftId, null, null, Map.of("count", covers.size()));
         return covers;
@@ -880,7 +905,8 @@ public class StaffService {
     // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 默认 500 保留既有一次拉取。
     public PageResponse<StaffShiftRecord> listShifts(java.time.LocalDate workDate, String userId, int page, int size) {
         authorizationService.requirePermission("staff.shift.manage");
-        return repository.listShiftsPaged(workDate, userId, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
+        var reach = reachOf("staff.shift.manage");
+        return repository.listShiftsPaged(workDate, userId, readProjectScope(), staffMerchantScope(), staffOwnCompany(reach), staffProjectIds(reach), page, size);
     }
 
     /** U06-001：员工所属经营主体配置键，写读共用——商户员工 merchant:<merchantId>，公司员工 company:<companyId>；不回落 projectId。 */
@@ -1075,7 +1101,8 @@ public class StaffService {
 
     public PageResponse<StaffAttendanceRecord> listAttendance(java.time.LocalDate date, int page, int size) {
         authorizationService.requirePermission("staff.attendance.view");
-        return repository.listAttendanceOnPaged(date, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
+        var reach = reachOf("staff.attendance.view");
+        return repository.listAttendanceOnPaged(date, readProjectScope(), staffMerchantScope(), staffOwnCompany(reach), staffProjectIds(reach), page, size);
     }
 
     @GuardedAction(permission = "staff.notice.view")
@@ -1204,33 +1231,35 @@ public class StaffService {
         return authorizationService.currentMerchantScope().orElse(null);
     }
 
-    /** 读取并校验 profile 在当前 scope 内（跨商户不可见即拒绝）。 */
-    private StaffProfileRecord requireProfileInScope(String id) {
+    /** 读取并校验 profile 在当前 scope 内（跨商户不可见即拒绝）。reach 由调用方按入口权限码在取锁、进入幂等之前算好（第十八批 E 段 19-R1，移植 M738）。 */
+    private StaffProfileRecord requireProfileInScope(String id, AuthorizationService.ProjectReach reach) {
         StaffProfileRecord profile = repository.findProfileById(id)
                 .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id));
         var actor = authorizationService.currentActor();
         if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) == null) {
-            if (!profile.companyId().equals(registrations.actorCompany(actor))) {
+            if (!profileReachable(reach, actor, profile)) {
                 throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "该员工不在当前公司范围内");
             }
         } else {
-            requireRegistrationScope(profile.projectId(), profile.merchantId());
+            requireRegistrationScope(profile.projectId(), profile.merchantId(), reach);
         }
         return profile;
     }
 
     private StaffProfileRecord requireOwnProfile(String id) {
-        StaffProfileRecord profile = requireProfileInScope(id);
+        // 本人自助照旧，不接可跨项目判定（M738）
+        StaffProfileRecord profile = requireProfileInScope(id,
+                AuthorizationService.ProjectReach.ownOnly(authorizationService.currentActor().organizationId()));
         if (!authorizationService.currentActor().id().equals(profile.userId())) {
             throw ApiException.forbidden("STAFF_OWNER_REQUIRED", "只能操作本人的员工档案及手机");
         }
         return profile;
     }
 
-    private void requireRegistrationScope(String projectId, String merchantId) {
+    private void requireRegistrationScope(String projectId, String merchantId, AuthorizationService.ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
         if (authorizationService.isPlatformAdmin(actor)) return;
-        if (!authorizationService.requireProjectScope(actor).equals(projectId)) {
+        if (!reach.covers(projectId)) {
             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能处理其他公司的员工登记");
         }
         if (trimToNull(actor.merchantId()) != null && !actor.merchantId().equals(trimToNull(merchantId))) {
@@ -1238,11 +1267,11 @@ public class StaffService {
         }
     }
 
-    private StaffDeviceCredentialRecord requireCredentialInScope(String credId) {
+    private StaffDeviceCredentialRecord requireCredentialInScope(String credId, AuthorizationService.ProjectReach reach) {
         StaffDeviceCredentialRecord credential = repository.findCredentialById(credId)
                 .orElseThrow(() -> ApiException.notFound("CREDENTIAL_NOT_FOUND",
                         "员工设备凭证不存在：" + credId));
-        requireProfileInScope(credential.staffProfileId());
+        requireProfileInScope(credential.staffProfileId(), reach);
         return credential;
     }
 
@@ -1388,9 +1417,10 @@ public class StaffService {
         String effectiveMerchant = merchantScope != null ? merchantScope : trimToNull(merchantId);
         var actor = authorizationService.currentActor();
         var reach = authorizationService.projectReach(actor, "staff.profile.view");
+        // 第十八批 E 段 20-R3：商户账号只按商户（effectiveMerchant 已是本商户），看得到各经营项目里本商户的派驻记录
         java.util.List<StaffDispatchRecord> items = repository.listDispatches(trimToNull(userId), effectiveMerchant,
-                reach.onlyOwnProject().orElse(null)).stream()
-                .filter(row -> reach.covers(row.projectId()))
+                merchantScope != null ? null : reach.onlyOwnProject().orElse(null)).stream()
+                .filter(row -> merchantScope != null || reach.covers(row.projectId()))
                 .filter(row -> merchantScope != null || accessRepository.findUserById(row.userId())
                         .filter(employee -> authorizationService.canReachUser(reach, employee)).isPresent())
                 .toList();
@@ -1517,17 +1547,59 @@ public class StaffService {
                 ? null : registrations.actorCompany(actor);
     }
 
+    /** 第十八批 E 段 19-R1（移植 M738）：按入口权限码算可触及范围（M736 补记⑤）；在取行锁、进入幂等之前调用。 */
+    private AuthorizationService.ProjectReach reachOf(String permissionCode) {
+        return authorizationService.projectReach(authorizationService.currentActor(), permissionCode);
+    }
+
+    /** M738（2026-10-16 所选选项原文一；非平台管理员、非商户用）：凭可跨项目角色的部分按档案登记项目（project_id，改挂时跟着变）判；
+     *  本人那一份只在该码另有非可跨项目来源（ownBySource）时照旧按本公司。非持有人 projects 为空，结果与原先相同。 */
+    private boolean profileReachable(AuthorizationService.ProjectReach reach, AccessActor actor, StaffProfileRecord profile) {
+        return (reach.ownBySource() && profile.companyId() != null && profile.companyId().equals(registrations.actorCompany(actor)))
+                || (profile.projectId() != null && reach.projects().contains(profile.projectId()));
+    }
+
+    /** M738：人事列表「本人那一份」的公司；该码没有非可跨项目来源时为 null。平台管理员、商户账号恒为 null。 */
+    private String staffOwnCompany(AuthorizationService.ProjectReach reach) {
+        return reach.ownBySource() ? staffCompanyScope() : null;
+    }
+
+    /** M738：人事列表的登记项目集合。平台管理员、商户账号返回 null（与上一个同为 null＝照旧不按公司过滤）；其余＝reach.projects()（非持有人为空）。 */
+    private java.util.Set<String> staffProjectIds(AuthorizationService.ProjectReach reach) {
+        return staffCompanyScope() == null ? null : reach.projects();
+    }
+
     private String projectScope() {
         return staffCompanyScope() == null ? authorizationService.currentProjectScopeQuietly().orElse(null) : null;
     }
 
+    /** 第十八批 E 段 20-R3（治理地图第 659 行；XM-M001-D 答复 3 第 10 条「要把财务、员工排班等列表对商户账号改为只按商户过滤」）：
+     *  排班、考勤、请假列表的项目条件——商户账号为 null（只按商户，看得到各经营项目里本商户的），其余同 projectScope()。写入口不用。 */
+    private String readProjectScope() {
+        return staffMerchantScope() != null ? null : projectScope();
+    }
+
+    /** 第十八批 E 段 20-R3：读详情（排班历史、顶班记录、扣罚申诉）——商户账号只核员工档案的商户；其余同 requireUserInScope。 */
+    private void requireUserReadable(String userId, AuthorizationService.ProjectReach reach) {
+        String merchant = staffMerchantScope();
+        if (merchant == null) {
+            requireUserInScope(userId, reach);
+            return;
+        }
+        StaffProfileRecord profile = repository.findProfileByUserId(userId)
+                .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在"));
+        if (!merchant.equals(profile.merchantId())) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该员工不在当前商户范围内");
+        }
+    }
+
     /** 清单 P1(2026-07-03 审计):按项目 scope 守卫写/审批——项目主管只可操作本综合体员工;
-     * 平台管理员(空 scope)放行。scope 由 token 派生,不取请求体。 */
-    private void requireUserInScope(String userId) {
+     * 平台管理员放行。第十八批 E 段 19-R1（移植 M738）：范围按调用方传入的入口权限码可触及范围（由 token 派生，不取请求体）。 */
+    private void requireUserInScope(String userId, AuthorizationService.ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
         StaffProfileRecord target = repository.findProfileByUserId(userId).orElse(null);
         if (target != null && target.companyId() != null) {
-            requireProfileInScope(target.id());
+            requireProfileInScope(target.id(), reach);
             return;
         }
         if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) != null) {
@@ -1537,13 +1609,12 @@ public class StaffService {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该员工不在当前商户范围内");
             }
         }
-        authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
-            String userProject = repository.findUserProjectId(userId).orElse(null);
-            if (!scope.equals(userProject)) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
-                        "该员工不在当前项目范围内");
-            }
-        });
+        // M738：没有在用档案的按档案最近一条的登记项目判（平台管理员恒真；真正没有员工档案的一律拒）
+        String userProject = repository.findUserProjectId(userId).orElse(null);
+        if (!reach.covers(userProject)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
+                    "该员工不在当前项目范围内");
+        }
     }
 
     /** F批(2026-07-02 拍板):固定工资=员工档案月薪,人事维护。 */
@@ -1554,7 +1625,7 @@ public class StaffService {
                     || request.monthlySalaryCent() == null || request.monthlySalaryCent() < 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写用户与非负的月薪金额");
             }
-            requireUserInScope(request.userId().trim());
+            requireUserInScope(request.userId().trim(), reachOf("staff.payroll.manage"));
             throw ApiException.conflict("PAYROLL_SCHEME_REQUIRED","基础工资须通过完整薪资方案及原人事、财务审批后生效");
         } catch (RuntimeException exception) {
             // openapi-p0 契约:失败路径落 x-audit-event-failure 事件后再抛(审计闭合)。
@@ -1574,9 +1645,12 @@ public class StaffService {
             com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
         try {
             authorizationService.requirePermission("staff.payroll.manage");
+            // 第十八批 E 段 19-R1（移植 M738）：范围在幂等之前判，用原提交编号重试同样先按当前范围判
+            var reach = reachOf("staff.payroll.manage");
+            if (request != null && trimToNull(request.userId()) != null) requireUserInScope(request.userId().trim(), reach);
             return idempotencyService.execute("addStaffPayrollAdjustment",
                     request == null ? null : request.idempotencyKey(), request,
-                    () -> doAddPayrollAdjustment(request), com.complex.platform.governance.review.SupervisorReviewDecisionRecord.class);
+                    () -> doAddPayrollAdjustment(request, reach), com.complex.platform.governance.review.SupervisorReviewDecisionRecord.class);
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("staff.payroll.adjustment_add_failed", "staff.payroll.manage",
                     "staff_payroll_adjustment", request == null ? null : request.userId(), null,
@@ -1586,7 +1660,7 @@ public class StaffService {
     }
 
     private com.complex.platform.governance.review.SupervisorReviewDecisionRecord doAddPayrollAdjustment(
-            com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request) {
+            com.complex.platform.access.staff.dto.StaffPayrollAdjustmentRequest request, AuthorizationService.ProjectReach reach) {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.adjType() == null || !java.util.Set.of("bonus", "penalty").contains(request.adjType())
@@ -1595,7 +1669,7 @@ public class StaffService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "必须填写用户、月份（YYYY-MM）、调整类型（奖励/扣罚）、大于 0 的金额与理由");
         }
-        requireUserInScope(request.userId().trim());
+        requireUserInScope(request.userId().trim(), reach);
         var review = staffApprovals.submitPayrollAdjustment(request);
         auditEventService.recordSuccess("staff.payroll.adjustment_requested", "staff.payroll.manage",
                 "staff_payroll_adjustment", review.objectId(), null, request.idempotencyKey(),
@@ -1649,7 +1723,7 @@ public class StaffService {
             authorizationService.requirePermission("staff.payroll.view_mine");
         } else {
             authorizationService.requirePermission("staff.payroll.manage");
-            requireUserInScope(requireText(target, "user_id"));
+            requireUserReadable(requireText(target, "user_id"), reachOf("staff.payroll.manage"));
         }
         List<StaffAdjustmentAppealRecord> items = repository.listAppeals(target);
         auditEventService.recordSuccess("staff.payroll.adjustment_appeals_viewed", "staff.payroll.view_mine",
@@ -1662,9 +1736,12 @@ public class StaffService {
     public void addCommission(com.complex.platform.access.staff.dto.StaffCommissionRequest request) {
         try {
             authorizationService.requirePermission("staff.payroll.manage");
+            // 第十八批 E 段 19-R1（移植 M738）：范围在幂等之前判
+            var reach = reachOf("staff.payroll.manage");
+            if (request != null && trimToNull(request.userId()) != null) requireUserInScope(request.userId().trim(), reach);
             idempotencyService.execute("addStaffCommission",
                     request == null ? null : request.idempotencyKey(), request,
-                    () -> doAddCommission(request), String.class);
+                    () -> doAddCommission(request, reach), String.class);
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("staff.payroll.commission_add_failed", "staff.payroll.manage",
                     "staff_commission_ledger", request == null ? null : request.userId(), null,
@@ -1673,13 +1750,14 @@ public class StaffService {
         }
     }
 
-    private String doAddCommission(com.complex.platform.access.staff.dto.StaffCommissionRequest request) {
+    private String doAddCommission(com.complex.platform.access.staff.dto.StaffCommissionRequest request,
+            AuthorizationService.ProjectReach reach) {
         if (request == null || request.userId() == null || request.userId().isBlank()
                 || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")
                 || request.amountCent() == null || request.amountCent() < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写用户、月份与非负金额");
         }
-        requireUserInScope(request.userId().trim());
+        requireUserInScope(request.userId().trim(), reach);
         var actor = authorizationService.currentActor();
         String id = "cml_" + UUID.randomUUID();
         repository.insertCommission(id, request.userId().trim(), request.month(),
@@ -1736,7 +1814,7 @@ public class StaffService {
                     || request.userId() == null || request.userId().isBlank()) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份（YYYY-MM）与用户");
             }
-            requireUserInScope(request.userId().trim());
+            requireUserInScope(request.userId().trim(), reachOf("staff.payroll.manage"));
             throw ApiException.conflict("PAYROLL_FINANCE_RESULT_REQUIRED","请从财务工资支付入口登记并核实实际银行成功结果");
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("staff.payroll.pay_failed", "staff.payroll.manage",
@@ -1851,9 +1929,10 @@ public class StaffService {
                     || !java.util.Set.of("approve", "reject").contains(request.decision())) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "审批结论必须为通过或驳回");
             }
+            var reach = reachOf("staff.shift.manage");
             StaffLeaveRequestRecord current = repository.findLeaveById(id)
                     .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
-            requireUserInScope(current.userId());
+            requireUserInScope(current.userId(), reach);
             if (!current.status().equals("pending")) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请假申请已审批，不能重复处理");
             }
@@ -1925,9 +2004,10 @@ public class StaffService {
                     || !java.util.Set.of("approve", "reject").contains(request.decision())) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "销假审批结论必须为批准或驳回");
             }
+            var reach = reachOf("staff.shift.manage");
             StaffLeaveRequestRecord current = repository.findLeaveById(id)
                     .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
-            requireUserInScope(current.userId());
+            requireUserInScope(current.userId(), reach);
             if (!"revoke_requested".equals(current.status())) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "只有员工本人已申请销假（待销假审批）的请假才能办理");
             }
@@ -1968,7 +2048,8 @@ public class StaffService {
 
     public PageResponse<StaffLeaveRequestRecord> listLeaves(String status, int page, int size) {
         authorizationService.requirePermission("staff.shift.manage");
-        return repository.listLeavesPaged(status, null, projectScope(), staffMerchantScope(), staffCompanyScope(), page, size);
+        var reach = reachOf("staff.shift.manage");
+        return repository.listLeavesPaged(status, null, readProjectScope(), staffMerchantScope(), staffOwnCompany(reach), staffProjectIds(reach), page, size);
     }
 
     /** F批(2026-07-02 拍板六态口径):考勤月视图——出勤/缺勤(有排班无上班卡)/迟到/早退/

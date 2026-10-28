@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.customer.TicketPointsBilling.*;
@@ -199,7 +199,7 @@ public class TicketPointsBillingService {
         }
     }
 
-    public List<Map<String,Object>> scheduleAdjustments(String id){requireVisible(find(id));return jdbc.queryForList("SELECT id,outage_id,previous_objection_deadline,previous_due_date,objection_deadline,due_date,unpaid_amount_cent,created_at FROM ticket_points_bill_schedule_adjustments WHERE bill_id=? ORDER BY created_at,id",id);}
+    public List<Map<String,Object>> scheduleAdjustments(String id){requireReadable(find(id));return jdbc.queryForList("SELECT id,outage_id,previous_objection_deadline,previous_due_date,objection_deadline,due_date,unpaid_amount_cent,created_at FROM ticket_points_bill_schedule_adjustments WHERE bill_id=? ORDER BY created_at,id",id);}
 
     /** 出账事务完成后的定时通知，复用真实发送日志；提醒结果不参与异议期起算。 */
     public void notifyPublishedBills(){
@@ -217,15 +217,17 @@ public class TicketPointsBillingService {
     private boolean publishIfReachable(Bill bill,Rule rule,Instant now){
         // 只有承担方实际具备页面查看权限，才形成“商户专区可查看”事实；首次登录不参与计时。
         List<com.complex.platform.access.AccessActor> recipients=jdbc.query("SELECT * FROM access_users WHERE status='active' AND ((?::text IS NOT NULL AND merchant_id=?) OR (?::text IS NULL AND organization_id=?))",(r,n)->new com.complex.platform.access.AccessActor(r.getString("id"),r.getString("username"),r.getString("account_type"),r.getString("organization_id"),r.getString("merchant_id"),r.getString("status")),bill.sellerMerchantId(),bill.sellerMerchantId(),bill.sellerMerchantId(),bill.sellerEntityId());
-        if(recipients.stream().noneMatch(actor->auth.hasEffectivePermission(actor,VIEW)&&auth.projectReach(actor,VIEW).covers(bill.projectId())))return false;
+        // 第十八批 E 段组间遗漏（第 20 条连带；治理地图第 659 行「看到的是每一个项目内他经营的商户」，同 readable）：账号商户即本账单卖方商户的视为可达——
+        // 商户账号都归属主项目，否则本商户在经营项目的账单永远停在待公布；其余照旧按项目覆盖。
+        if(recipients.stream().noneMatch(actor->auth.hasEffectivePermission(actor,VIEW)&&((bill.sellerMerchantId()!=null&&bill.sellerMerchantId().equals(actor.merchantId()))||auth.projectReach(actor,VIEW).covers(bill.projectId()))))return false;
         LocalDate deadline=deadline(now.atZone(LocalZone.ID).toLocalDate(),rule.objectionWorkingDays(),bill.projectId());
         jdbc.update("UPDATE ticket_points_monthly_bills SET visible_at=?,objection_deadline=?,due_date=? WHERE id=? AND visible_at IS NULL",Timestamp.from(now),deadline,due(deadline,rule.payDays()),bill.id());
         audit.recordSuccess("ticket.points.bill.published",MANAGE,"ticket_points_bill",bill.id(),null,bill.id(),Map.of("billing_month",bill.billingMonth().toString(),"amount_cent",bill.amountCent(),"receiver_entity_id",bill.receiverEntityId(),"project_id",bill.projectId()));
         return true;
     }
-    public List<Map<String,Object>> objections(String id){requireVisible(find(id));return jdbc.queryForList("SELECT id,reason,submitted_at,status,resolution,resolved_at FROM ticket_points_bill_objections WHERE bill_id=? ORDER BY submitted_at",id);}
+    public List<Map<String,Object>> objections(String id){requireReadable(find(id));return jdbc.queryForList("SELECT id,reason,submitted_at,status,resolution,resolved_at FROM ticket_points_bill_objections WHERE bill_id=? ORDER BY submitted_at",id);}
     /** 账单明细：门票行取原票／人份／次份，商户消费行取来源消费单据（ENUM L77 从单据可反查）。 */
-    public List<FeeLine> items(String id){requireVisible(find(id));return jdbc.query("""
+    public List<FeeLine> items(String id){requireReadable(find(id));return jdbc.query("""
             SELECT f.*,r.parent_ticket_id,r.slot_index,r.use_index,'ticket_use' AS source_type,r.parent_ticket_id AS source_id
               FROM ticket_points_monthly_bill_items i JOIN ticket_points_issuance_fees f ON f.reward_id=i.reward_id JOIN ticket_use_rewards r ON r.id=f.reward_id WHERE i.bill_id=?
             UNION ALL
@@ -243,8 +245,8 @@ public class TicketPointsBillingService {
             return new CaseReceipt(objectionId,"open",review);
         },CaseReceipt.class);
     }
-    public List<Bill> list(String project){auth.requirePermission(VIEW);if(project!=null&&!auth.projectReach(auth.currentActor(),VIEW).covers(project))throw forbidden();
-        return jdbc.query(SELECT+" WHERE (?::text IS NULL OR b.project_id=?) ORDER BY b.billing_month DESC,b.id",this::bill,project,project).stream().filter(this::visible).toList();}
+    public List<Bill> list(String project){auth.requirePermission(VIEW);if(project!=null&&auth.currentMerchantIdQuietly().isEmpty()&&!auth.projectReach(auth.currentActor(),VIEW).covers(project))throw forbidden();
+        return jdbc.query(SELECT+" WHERE (?::text IS NULL OR b.project_id=?) ORDER BY b.billing_month DESC,b.id",this::bill,project,project).stream().filter(this::readable).toList();}
     @Transactional public CaseReceipt object(String id,ObjectionRequest r){Bill b=find(id);requireVisible(b);requireText(r.reason(),"reason");if(b.visibleAt()==null)throw invalid("该账单尚未公布，异议期尚未开始");
         return idem.execute("ticketPointsObjection:"+id,requireText(r.idempotencyKey(),"idempotency_key"),r,()->{
             jdbc.queryForList("SELECT id FROM ticket_points_monthly_bills WHERE id=? FOR UPDATE",String.class,id);
@@ -261,6 +263,10 @@ public class TicketPointsBillingService {
     private Rule effective(LocalDate month){return jdbc.query("SELECT * FROM ticket_points_billing_rules WHERE status='approved' AND effective_month<=? ORDER BY effective_month DESC LIMIT 1",this::rule,month).stream().findFirst().orElseThrow(()->invalid("缺少该账期已审批的全国积分账期版本"));}
     private boolean visible(Bill b){if(!auth.projectReach(auth.currentActor(),VIEW).covers(b.projectId()))return false;String m=auth.currentActor().merchantId();if(m!=null)return m.equals(b.sellerMerchantId());String org=auth.currentActor().organizationId();return b.sellerEntityId().equals(org)||b.receiverEntityId().equals(org)||auth.allowsPlatformScope(auth.currentActor(),VIEW);}
     private void requireVisible(Bill b){auth.requirePermission(VIEW);if(!visible(b))throw forbidden();}
+    // 第十八批 E 段 20-R4（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：只用于读——
+    // 商户账号（非平台管理员）看本商户为卖方的账单不再限本人项目；其余同 visible。提异议（object）仍走 requireVisible。
+    private boolean readable(Bill b){String m=auth.currentMerchantIdQuietly().orElse(null);return m!=null?m.equals(b.sellerMerchantId()):visible(b);}
+    private void requireReadable(Bill b){auth.requirePermission(VIEW);if(!readable(b))throw forbidden();}
     private void national(String permission){auth.requirePermission(permission);if(!auth.allowsPlatformScope(auth.currentActor(),permission))throw forbidden();}
     private void nationalApprover(String user){if(jdbc.queryForObject("SELECT count(*) FROM access_users u JOIN business_entities e ON e.id=u.organization_id WHERE u.id=? AND u.status='active' AND e.status='active' AND e.entity_role='platform'",Integer.class,requireText(user,"final_approver_id"))!=1)throw invalid("全国账期、日历和故障事实须由全国获授权平台主管审批");}
     private String openReview(String key,String type,String id,String reason,String approver){var r=reviews.evaluate(new SupervisorReviewEvaluateRequest(key+":review",reason,List.of(),"ticket.reward.national",type,id,0L,reason,approver,List.of()));if(!"pending_review".equals(r.reviewStatus()))throw invalid("全国积分事项须经过审批");return r.reviewId();}

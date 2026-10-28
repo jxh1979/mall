@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -78,6 +78,8 @@ class LoyaltyConfigAdminServiceTests {
     @Test
     void checkInTierStreakMustBeAtLeastOne() {
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
+        when(authorization.projectReach(any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_A"));
 
         assertThatThrownBy(() -> service.saveCheckInTier(new CheckInTierConfigRequest(
                 null, "prj_A", 0, 100L, "active")))
@@ -88,6 +90,9 @@ class LoyaltyConfigAdminServiceTests {
     @Test
     void saveCheckInTierBindsScopeAndGeneratesId() {
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
+        // 18E（第 19 条 19-R2）：请求里的项目在可触及范围内才用它；本例只到本人项目
+        when(authorization.projectReach(any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_A"));
         when(repository.saveCheckInTier(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.saveCheckInTier(new CheckInTierConfigRequest(null, "prj_X", 7, 200L, "active"));

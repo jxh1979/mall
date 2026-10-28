@@ -1,4 +1,4 @@
-# 部署与变更流程 V0.07（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并）
+# 部署与变更流程 V0.08（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并；第 73 条：PR 单测工作流）
 
 ## 为什么改
 此前:AI 直推 main、部署只跑后端测试、治理门禁不 gate 部署 → 曾带着红门禁(scope 登记/安全基线/后台矩阵漂移)上生产。补三道真门禁。
@@ -7,6 +7,7 @@
 1. **部署门禁(硬阻断,.160)**:`complex-deploy-api.sh`/`complex-deploy-web.sh` 在构建前逐项执行固定的预部署门禁清单（含 HTML 台账、条目引用与参数分层三项）(delivery-gates 快子集,静态无需 DB);红即 `exit 1` 不碰生产。
 2. **本地 pre-push 钩子(.160)**:禁止 `git push ...:main`;正道走 feature 分支 + PR。紧急覆盖 `ALLOW_MAIN_PUSH=1`(须在 PR/说明记录原因)。
 3. **GitHub Actions(独立、隔离,✅已激活 2026-07-06)**:生效定义是 `.github/workflows/predeploy-gates.yml`,`ops/ci/predeploy-gates.yml` 是它的字节一致镜像(`verify:delivery-gates-docs` 机检两者一致、checkout 实际字段为 `fetch-depth: 0`、事件基线及预部署执行步骤有效;浅克隆会让 html-ledger-sync/html-param-tier 取不到基线)。现于 PR/push 到 main 时在 GitHub ubuntu runner 上跑 `verify:predeploy`。即便激活,私有库免费版也无法设 required check,只是可见信号 + 独立复现;硬阻断由第 1、2 道承担。
+   - **PR 单测工作流(2026-10-29 第 73 条,EV-07c-15)**:另有两份只在 PR 到 main 时触发的工作流(不随 push main 重跑,同分支新推送取消旧运行)。`.github/workflows/backend-tests.yml` 在 `backend/**`、`docs/openapi/**`、`tools/run-backend-maven.mjs` 或本文件变化时触发,起 PostgreSQL 服务容器(与 160 complex-postgres 同一镜像摘要,库账号口令用仓内测试默认值,不引用 secrets)跑 `node tools/run-backend-maven.mjs -B -ntp test` 后端全量;`.github/workflows/web-tests.yml` 在 `apps/web/**`、`apps/customer-app/**`、`apps/customer-miniapp/**`、`packages/**`、`package.json`、`package-lock.json`、`tsconfig.base.json` 或本文件变化时触发,跑 `npm ci --ignore-scripts`、`npm run typecheck`、`npm run test:unit`(四个工作区)。私有库免费版设不了必需检查,两者同样只是可见信号;`ops/160/merge-pr.sh` 仍只等 predeploy-gates。
 4. **合并前置检查(`ops/160/merge-pr.sh`,2026-08-07 门禁升级批 1 补;2026-09-03 M001 修订)**:合并前取本分支 head commit 对应的 predeploy-gates run,`gh run watch --exit-status` 等到绿后,再次核对远端分支与 PR head 仍是该 commit,并以 `gh pr merge --match-head-commit <已验 SHA>` 合并;等待期间分支被推新 commit 即中止。非成功即中止并打印 run URL。补的正是第 3 道"只是可见信号"的缺口——把"人记得去看一眼"变成机器动作。逃生口 `SKIP_CI_WAIT=1`(打印醒目警告,**须在 PR 说明原因**)。
 
 ## 变更流程

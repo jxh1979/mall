@@ -1,4 +1,4 @@
-# 地产全链业务域 PRD（V0.11 授权基线）
+# 地产全链业务域 PRD（V0.12 授权基线）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -81,7 +81,7 @@
 
 - **授权依据**：BSM「停车场」章（城市项目公司运营；道闸、车牌识别和计费由第三方停车系统执行，平台拿回入出场记录、缴费结果和车位占用，费率、抵免规则和月租车位在本平台配置并下发）；ENUM 账单类型「车位月租」；决策台账停车 P1～P8。
 - **实现现状（HP-P01 第一组，V533）**：
-  - 业务参数：`parking_policies` 按项目一行，免费时长、超出后每小时费率、每日封顶、离场宽限、消费抵免门槛、抵免时长、员工车辆优惠（万分比，10000＝免费）七项各带上下限，须一次给齐、0 ≤ 下限 ≤ 值 ≤ 上限（`PARKING_POLICY_BOUNDS_REQUIRED` / `PARKING_POLICY_OUT_OF_BOUNDS`）；不插出厂行，项目未配置时试算、缴费与下发一律 409 `PARKING_POLICY_NOT_CONFIGURED`，不回落默认值（BSM「计费：免费时长、超出后按小时计费」「出厂默认值实施前补定」）。`GET/PUT /api/v1/parking/policies/{project_id}`，权限 `parking.ops.view` / `parking.config.manage`，按项目范围校验。
+  - 业务参数：`parking_policies` 按项目一行，免费时长、超出后每小时费率、每日封顶、离场宽限、消费抵免门槛、抵免时长、员工车辆优惠（万分比，10000＝免费）七项各带上下限，须一次给齐、0 ≤ 下限 ≤ 值 ≤ 上限（`PARKING_POLICY_BOUNDS_REQUIRED` / `PARKING_POLICY_OUT_OF_BOUNDS`）；不插出厂行，项目未配置时试算、缴费与下发一律 409 `PARKING_POLICY_NOT_CONFIGURED`，不回落默认值（BSM「计费：免费时长、超出后按小时计费」；BSM 该句「出厂默认值实施前补定」已由第十八批操作员裁决第 7 条定为「不设出厂值」：维持现状，各项目自己配齐七项后才能用）。`GET/PUT /api/v1/parking/policies/{project_id}`，权限 `parking.ops.view` / `parking.config.manage`，按项目范围校验。
   - 停车系统接入：开放平台端点经 `parking_vendor_bindings` 与项目一一绑定（随停车系统开通由运维登记）；回写走既有开放平台回调（验签、防重放、幂等、适配器字段映射，适配器类型 `parking`），事件 `vehicle_entered` / `vehicle_exited` / `payment_reported` / `occupancy_reported` / `anomaly_reported` 落 `parking_sessions`、`parking_vendor_payments`、`parking_occupancy_snapshots`；端点未绑定 403 `PARKING_ENDPOINT_NOT_BOUND`。出场时停车系统应收 − 停车系统自收 − 平台已收仍大于 0、且没有待批或已批足以覆盖的免费放行／减免的，记逃费；停车系统回传的超长滞留、逃费同样进统一异常队列（`risk_alerts.source_domain=parking`，`parking.fee_evasion` / `parking.overstay`），由物业跟进（BSM「异常与留痕：识别失败、道闸故障」）。缴费回写与平台收款对不上（停车系统有平台无、金额不符、平台已收而出场时停车系统仍未回报）进第三方对账差异（`business_type=parking`，`parking_payment_mismatch`）；抵到 0 元的已缴记录没有资金往来，出场时不进对账差异。下发：停车系统按开放平台应用签名拉取 `GET /api/open/d/{endpoint_key}/parking/config`（七项参数、生效且在租期内合同的有效月租车牌及合同起止日、在职员工的有效车牌）与 `GET /api/open/d/{endpoint_key}/parking/payments`（平台已收停车费与离场宽限截止，供道闸放行）。
   - 客人端缴费：`GET /api/v1/customer/parking/sessions` 按车牌或临时码查在场车辆，按下发给停车系统的同一套规则试算（先扣免费时长，剩余按营业日切段、不足一小时按一小时、每段与每日封顶取小）；`POST /api/v1/customer/parking/payments` 按应缴拉起支付意向（`business_order_type=parking_fee`），收款主体为本项目唯一有效的城市项目公司（`CITY_PROJECT_COMPANY_MISSING`），离场宽限内已缴不能再下单（`PARKING_ALREADY_PAID`）；`POST .../payments/{payment_id}/confirm` 经渠道核验成功才记已缴，离场宽限截止＝缴费时刻＋本项目离场宽限时限，收入按支付意向成功写内部核算（来源「停车费」）。不保存车牌与账户的代扣绑定（BSM「缴费：出口扫码支付」）。客人端「停车缴费」页，出口二维码带项目与车牌／临时码直达。
   - 商户月租车位：合同租金条款 `parkingMonthlyCent`（后台合同草稿与草稿编辑录「车位月租（元/月）」）逐期出账，账单费目 `parking_monthly`、应收来源 `contract_parking_monthly`「车位月租」，0 不出；随生效整租期预排，变更／续租沿用合同既有出账链路；退租齐单核对把有约定未出账的车位月租计为缺单。月租车牌 `parking_monthly_vehicles` 只能登记在约定了车位月租的合同上（`PARKING_MONTHLY_NOT_CONTRACTED`），同合同同车牌只一条有效（BSM「商户与员工车位：商户月租车位按合同约定」）。月租车牌的登记、撤销与清单只在平台后台办理（BSM「月租车位在本平台后台配置并下发给停车系统」），商户、外包账号即使持 `parking.vehicle.manage`（商户用于登记本商户员工车辆）也 403 `PLATFORM_SCOPE_REQUIRED`。
@@ -118,6 +118,7 @@
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-29 | 改 | 版本、§6A | V0.12：第十八批 E 段第 60 条——停车七项参数按操作员裁决第 7 条「不设出厂值」维持现状，现状句依据改引该裁决；停车工作台未配置提示去掉「出厂默认值实施前补定」 | 决策台账第十八批裁决第 7 条 |
 | 2026-10-26 | 改 | 版本、§6A | V0.11：第十七批——酒吧账单作废并冲正的原路退款应付结清后，停车消费抵免同样重核（未使用的撤销或重核，已使用的保留） | 第十二批 HP-P01（BSM「停车场」章「消费抵免」条「对应消费退款成功后，未使用的抵免按剩余有效消费重核」；决策台账 N03）；操作员裁决补充第 1 条（第十七批）「全部自动冲回（推荐）」 |
 | 2026-10-26 | 改 | 版本、§6A | V0.10：第十六批第 9 条——停车场工作台月租车牌、员工车辆、人工放行三张清单与商户专区「员工车辆」改为列出接口返回的已登记行（此前恒为空） | BSM「员工车辆由所属主体登记车牌后，按后台配置免费或折扣」「人工放行、减免、滞留与逃费记录留痕并进异常队列」；待开发清单 2026-10-25 第 9 条 |
 | 2026-10-21 | 改 | §6A | V0.09（同版续记，第三轮复核修正）：客人端停车页消费抵免一行的金额改按实际少收＝停车费−max(抵后应收, 已缴)，与后端折回小时数同口径（先缴费、后达标再续缴时不再多显示） | 第十二批操作员裁决 2026-10-21 第 11 条「少收了就按少收金额折回的小时数」 |

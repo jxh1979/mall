@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1073,9 +1073,10 @@ class AmusementHardCapacityAutoReopenJdbcIntegrationTests {
             case "capacity" -> controller.listCapacitySnapshots().data().items().stream().map(AmusementCapacitySnapshotRecord::projectId).toList();
             default -> throw new AssertionError(surface);
         };
-        assertThat(projects).doesNotContain(outside);
+        // 第十八批 E 段 20-R4（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：
+        // outside 经 bind 把另一综合体追加为本商户经营项目；商户账号只按商户，看得到它；项目员工仍只到可触及综合体。
         assertThat(projects).containsExactlyInAnyOrderElementsOf("platform".equals(mode)
-                ? List.of(projectId, sameComplexOtherMerchant) : List.of(projectId));
+                ? List.of(projectId, sameComplexOtherMerchant) : List.of(projectId, outside));
     }
 
     @Test

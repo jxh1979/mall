@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -16,6 +16,7 @@ import com.complex.platform.terminal.dto.DeviceMerchantRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
+import com.complex.platform.terminal.dto.SecurityXrayRegisterRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -50,6 +51,8 @@ public class TerminalDeviceService {
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final Set<String> TERMINAL_TYPES = Set.of("staff_work_phone", "tablet", "kiosk");
+    // 第 63 条：安检 X 光设备只在后台登记（不进上面员工端领用绑定的类型，/devices/bind 照旧拒绝）
+    private static final String SECURITY_XRAY = "security_xray";
     private static final Set<String> KIOSK_MODES = Set.of("ticketing", "service");
     private static final Set<String> KIOSK_STATUSES = Set.of("online", "degraded", "offline");
     private static final Set<String> DEVICE_CREDENTIAL_REJECTION_CODES = Set.of(
@@ -71,6 +74,9 @@ public class TerminalDeviceService {
     private com.complex.platform.access.staff.StaffWorkPhoneAttendanceService workPhoneAttendance;
     @org.springframework.beans.factory.annotation.Autowired
     private com.complex.platform.access.AccessRepository accessRepository;
+    // 第 63 条（BSM:800）：安检 X 光设备登记故障即开维修工单（统一工单）
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.facility.FacilityWorkOrderService facilityWorkOrders;
 
     public TerminalDeviceService(
             TerminalDeviceRepository repository,
@@ -285,6 +291,67 @@ public class TerminalDeviceService {
                 "terminal.device.scrapped", "terminal.device.scrap_failed");
     }
 
+    /** 第 63 条：安检 X 光设备修好后恢复在用（维修中 → 在用）；其他设备不走这里（409）。 */
+    @Transactional
+    public DeviceBindingResponse completeDeviceRepair(String id, DeviceLifecycleRequest request) {
+        return transitionLifecycle(
+                id, request, "bound", Set.of("repair"),
+                "terminal.device.repair_completed", "terminal.device.repair_complete_failed");
+    }
+
+    /**
+     * 第 63 条（BSM:800「安检环节不产生按人记录，仅记设备状态、故障事件与维修工单留痕」；PGM:618「设备要绑定员工、班次、点位和状态」；
+     * PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：后台登记安检 X 光设备——编号、型号、绑定点位、责任人四项必填，登记即在用。
+     * 不接设备接口、不发设备凭证（X 光机不登录本系统）；当班员工与班次由该点位的排班取得，不另记。
+     * 范围闸在幂等之前：绑定点位与责任人都要在本人能管的范围内。
+     */
+    @Transactional
+    public DeviceBindingResponse registerSecurityXray(SecurityXrayRegisterRequest request) {
+        return executeWrite(
+                "registerSecurityXray",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                DeviceBindingResponse.class,
+                "terminal.device.xray_registered",
+                "terminal.device.xray_register_failed",
+                LIFECYCLE_PERMISSION,
+                () -> {
+                    SecurityXrayRegisterRequest actual = requireRequest(request);
+                    requireAttributionInScope(null, requireText(actual.boundSpaceId(), "bound_space_id"),
+                            requireText(actual.staffId(), "staff_id"));
+                    requireNewHolderInScope(actual.staffId(), null);
+                },
+                () -> insertSecurityXray(request)
+        );
+    }
+
+    private DeviceBindingResponse insertSecurityXray(SecurityXrayRegisterRequest actual) {
+        String code = requireText(actual.deviceCode(), "device_code");
+        String model = requireText(actual.deviceModel(), "device_model");
+        String space = requireText(actual.boundSpaceId(), "bound_space_id");
+        String staff = requireText(actual.staffId(), "staff_id");
+        String id = "dev_" + slug(code);
+        if (repository.findByDeviceCode(code).isPresent() || repository.findByDeviceId(code).isPresent()
+                || repository.findById(id).isPresent()) {
+            throw ApiException.conflict("DEVICE_CODE_EXISTS", "设备编号已登记：" + code);
+        }
+        Instant now = Instant.now();
+        TerminalDeviceRecord saved = repository.insertSecurityXray(new TerminalDeviceRecord(id, code, code, SECURITY_XRAY,
+                "space", space, null, null, null, null, null, space, staff, "bound", now, null, null, null, null, now, now,
+                model, null));
+        repository.saveStatusEvent(new TerminalDeviceStatusEventRecord(
+                "dev_evt_" + UUID.randomUUID().toString().replace("-", ""),
+                saved.id(),
+                saved.deviceCode(),
+                "terminal.device.xray_registered",
+                saved.status(),
+                null,
+                saved.staffId(),
+                now
+        ));
+        return toResponse(saved, null);
+    }
+
     private DeviceBindingResponse transitionLifecycle(
             String id,
             DeviceLifecycleRequest request,
@@ -330,6 +397,18 @@ public class TerminalDeviceService {
             throw ApiException.conflict("INVALID_DEVICE_STATUS",
                     "设备状态 " + existing.status() + " 不能流转到 " + targetStatus);
         }
+        boolean xray = SECURITY_XRAY.equals(existing.terminalType());
+        // 第 63 条：修复完成（维修中 → 在用）只用于安检 X 光设备
+        if ("bound".equals(targetStatus) && !xray) {
+            throw ApiException.conflict("INVALID_DEVICE_STATUS", "只有安检 X 光设备可以登记修复完成");
+        }
+        // 第 63 条（BSM:800「仅记设备状态、故障事件与维修工单留痕」）：安检 X 光设备登记故障即开一张维修工单，与送修同一事务
+        String repairWorkOrderId = existing.repairWorkOrderId();
+        if (xray && "repair".equals(targetStatus)) {
+            repairWorkOrderId = facilityWorkOrders.createSecurityXrayFault(
+                    repository.findSpaceProjectId(existing.boundSpaceId()).orElse(null), existing.boundSpaceId(),
+                    existing.deviceCode(), reason, authorizationService.currentActor().id()).id();
+        }
         Instant now = Instant.now();
         TerminalDeviceRecord updated = new TerminalDeviceRecord(
                 existing.id(),
@@ -352,7 +431,9 @@ public class TerminalDeviceService {
                 existing.returnReason(),
                 existing.unbindReason(),
                 existing.createdAt(),
-                now
+                now,
+                existing.deviceModel(),
+                repairWorkOrderId
         );
         // P2 并发缺口①修复：状态流转改条件 UPDATE（WHERE id AND status=:expectedFrom），
         // 按受影响行数判冲突。上面的前态校验给出清晰错误码（INVALID/TERMINAL_STATUS）；
@@ -482,7 +563,9 @@ public class TerminalDeviceService {
                                 existing.returnReason(),
                                 existing.unbindReason(),
                                 existing.createdAt(),
-                                now
+                                now,
+                                existing.deviceModel(),
+                                existing.repairWorkOrderId()
                         );
                         TerminalDeviceRecord saved = repository.save(updated);
                         repository.saveStatusEvent(new TerminalDeviceStatusEventRecord(
@@ -980,7 +1063,9 @@ public class TerminalDeviceService {
                 trimToNull(actual.reason()),
                 existing.unbindReason(),
                 existing.createdAt(),
-                now
+                now,
+                existing.deviceModel(),
+                existing.repairWorkOrderId()
         );
         TerminalDeviceRecord saved = repository.save(returned);
         revokeDeviceCredential(saved.deviceId(), now);
@@ -1030,7 +1115,9 @@ public class TerminalDeviceService {
                 existing.returnReason(),
                 reason,
                 existing.createdAt(),
-                now
+                now,
+                existing.deviceModel(),
+                existing.repairWorkOrderId()
         );
         TerminalDeviceRecord saved = repository.save(unbound);
         revokeDeviceCredential(saved.deviceId(), now);
@@ -1192,7 +1279,9 @@ public class TerminalDeviceService {
                 record.staffId(),
                 record.status(),
                 record.updatedAt(),
-                deviceToken
+                deviceToken,
+                record.deviceModel(),
+                record.repairWorkOrderId()
         );
     }
 
@@ -1214,7 +1303,9 @@ public class TerminalDeviceService {
                 response.staffId(),
                 response.status(),
                 response.updatedAt(),
-                null
+                null,
+                response.deviceModel(),
+                response.repairWorkOrderId()
         );
     }
 

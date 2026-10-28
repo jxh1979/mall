@@ -127,3 +127,64 @@ describe("MerchantZoneBillsPage 行明细抽屉（整行可点·日期中文）"
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
   });
 });
+
+// 18E 第 21 条（BSM:1323「商户专区须设一张费用总表……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示」）。
+describe("MerchantZoneBillsPage 费用总表与当期综合账单", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant-zone/bills");
+  });
+
+  const STATEMENT = {
+    month: "2026-09",
+    merchant_id: "m-1",
+    merchant_name: "测试店",
+    fee_items: [
+      { fee_name: "固定租金", billing_basis: "按合同约定", bearer: "测试店", amount_cent: 1000000 },
+      { fee_name: "会员系统服务费", billing_basis: "每份商户合同在“按有效会员消费金额比例”或“固定月费”中二选一", bearer: "测试店", amount_cent: null },
+    ],
+    bill: {
+      lines: [{ fee_name: "固定租金", amount_cent: 1000000, paid_amount_cent: 400000, unpaid_amount_cent: 600000 }],
+      total_amount_cent: 1000000,
+      paid_amount_cent: 400000,
+      unpaid_amount_cent: 600000,
+    },
+  };
+
+  it("没有账单时也显示两块，未出账名目显示「本期未出账」，切换月份请求带 ?month=", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/fee-statement")) {
+        return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: STATEMENT }),
+          { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      return Promise.resolve(envelope([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "merchant", accountType: "merchant_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo: vi.fn(),
+    };
+    render(<MerchantZoneBillsPage {...props} />);
+    await waitFor(() => expect(screen.queryByTestId("merchant-zone-fee-statement")?.textContent ?? "").toContain("费用总表"));
+    expect(screen.getByTestId("merchant-zone-fee-statement").textContent).toContain("当期综合账单");
+    const items = screen.getByTestId("merchant-zone-fee-items").textContent ?? "";
+    expect(items).toContain("按合同约定");
+    expect(items).toContain("本期未出账");
+    expect(items).toContain("10,000.00");
+    const bill = screen.getByTestId("merchant-zone-fee-bill").textContent ?? "";
+    expect(bill).toContain("合计");
+    expect(bill).toContain("4,000.00");
+    expect(bill).toContain("6,000.00");
+    const month = screen.getByTestId("merchant-zone-fee-month") as HTMLInputElement;
+    expect(month.type).toBe("month");
+    expect(month.value).toBe("2026-09");
+    fireEvent.change(month, { target: { value: "2026-08" } });
+    await waitFor(() => expect(fetchMock.mock.calls.map((call) => String(call[0])).some((url) =>
+      url.includes("/api/v1/merchant-portal/fee-statement?month=2026-08"))).toBe(true));
+  });
+});

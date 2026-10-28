@@ -1,6 +1,6 @@
 package com.complex.platform.leasing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -76,6 +76,8 @@ public class LeasingBlacklistExceptionService {
             if (r == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请填写黑名单例外放行申请");
             }
+            // 18E（第 19 条补充）：由线索新建意向的项目闸在幂等之前——同一幂等键重放也要再过（范围闸在幂等之前）
+            Map<String, Object> intentLead = INTENT_CREATE.equals(trimToNull(r.targetType())) ? requireLeadInReach(r.leadId()) : null;
             return idempotency.execute("leasingBlacklistException", key, r, () -> {
                 String target = requireText(r.targetType(), "target_type");
                 String leadId = null;
@@ -83,15 +85,9 @@ public class LeasingBlacklistExceptionService {
                 String project = null;
                 String what;
                 if (INTENT_CREATE.equals(target)) {
-                    Map<String, Object> lead = jdbc.queryForList("SELECT id, brand_id, project_id FROM leasing_leads WHERE id=?",
-                            requireText(r.leadId(), "lead_id")).stream().findFirst()
-                            .orElseThrow(() -> ApiException.notFound("LEASING_LEAD_NOT_FOUND", "招商线索不存在或已被删除"));
+                    Map<String, Object> lead = intentLead;
                     leadId = (String) lead.get("id");
                     project = (String) lead.get("project_id");
-                    AccessActor actor = auth.currentActor();
-                    if (!auth.isPlatformAdmin(actor) && (project == null || !auth.canReachProject(actor, project, PERM))) {
-                        throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "招商线索不在本权限可触及的项目范围内");
-                    }
                     brandId = requireText((String) lead.get("brand_id"), "brand_id");
                     what = "由线索 " + leadId + " 新建意向";
                 } else if (LEAD_CREATE.equals(target)) {
@@ -129,6 +125,19 @@ public class LeasingBlacklistExceptionService {
             }
             throw error;
         }
+    }
+
+    /** 由线索新建意向：线索须存在，且在放行权限可触及的项目里（平台管理员不限）。 */
+    private Map<String, Object> requireLeadInReach(String leadId) {
+        Map<String, Object> lead = jdbc.queryForList("SELECT id, brand_id, project_id FROM leasing_leads WHERE id=?",
+                requireText(leadId, "lead_id")).stream().findFirst()
+                .orElseThrow(() -> ApiException.notFound("LEASING_LEAD_NOT_FOUND", "招商线索不存在或已被删除"));
+        String project = (String) lead.get("project_id");
+        AccessActor actor = auth.currentActor();
+        if (!auth.isPlatformAdmin(actor) && (project == null || !auth.canReachProject(actor, project, PERM))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "招商线索不在本权限可触及的项目范围内");
+        }
+        return lead;
     }
 
     /** 审批结论回写：批准记批准人（终审人）与时间；驳回不能再用，确需继续可重新申请。 */
@@ -186,13 +195,17 @@ public class LeasingBlacklistExceptionService {
         audit.recordSuccess("leasing.blacklist_exception.used", PERM, OBJECT, exceptionId, null, null, meta);
     }
 
-    /** 放行单清单：与线索清单同口径（项目员工只见本项目，平台管理员／全局平台员工全量）。 */
+    /** 放行单清单：与线索清单同口径（平台管理员全量；其余按 leasing.lead.manage 可触及的项目，18E（第 19 条 19-R2））。 */
     public PageResponse<BlacklistException> list() {
         auth.requirePlatformScope();
         String scope = auth.currentProjectScopeQuietly().orElse(null);
+        List<String> projects = scope == null ? List.of()
+                : List.copyOf(auth.projectReach(auth.currentActor(), "leasing.lead.manage").organizationIds());
         List<BlacklistException> rows = scope == null
                 ? jdbc.query(SELECT + " ORDER BY x.requested_at DESC, x.id LIMIT 500", this::map)
-                : jdbc.query(SELECT + " WHERE x.project_id=? ORDER BY x.requested_at DESC, x.id LIMIT 500", this::map, scope);
+                : projects.isEmpty() ? List.of()
+                : jdbc.query(SELECT + " WHERE x.project_id IN (" + String.join(",", java.util.Collections.nCopies(projects.size(), "?"))
+                        + ") ORDER BY x.requested_at DESC, x.id LIMIT 500", this::map, projects.toArray());
         audit.recordSuccess("leasing.blacklist_exception.viewed", "leasing.lead.manage", OBJECT, "all", null, null,
                 Map.of("count", rows.size()));
         return new PageResponse<>(rows, 1, 500, rows.size());

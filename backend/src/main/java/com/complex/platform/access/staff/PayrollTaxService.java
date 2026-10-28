@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AccessRepository;
@@ -126,7 +126,7 @@ public class PayrollTaxService {
             }
             var currentEmployeePermissions=legacyPermissions;
             var rows=originals.stream().filter(row->(row.payrollCalculationId()==null?currentEmployeePermissions:completePermissions)
-                .stream().anyMatch(permission->recordInScope(row,permission))).toList();
+                .stream().anyMatch(permission->recordReadable(row,permission))).toList();
             success("assessments_viewed",ASSESSMENT,userId,null,Map.of("month",month,"count",rows.size()));return rows;
         }catch(RuntimeException e){failure("assessments_view_failed",ASSESSMENT,userId,e);throw e;}
     }
@@ -278,7 +278,7 @@ public class PayrollTaxService {
             if(!currentReviewer(row.reviewId(),ASSESSMENT,id)) {
                 var permissions=row.payrollCalculationId()==null?employeeReadPermissions(row.userId()):
                     List.of(VIEW,MANAGE).stream().filter(auth::currentActorHasPermission).toList();
-                if(permissions.stream().noneMatch(permission->recordInScope(row,permission)))
+                if(permissions.stream().noneMatch(permission->recordReadable(row,permission)))
                     throw ApiException.forbidden("STAFF_SCOPE_MISMATCH","无权处理原认定所属项目和商户的税务事实");
             }
         } else {
@@ -286,13 +286,21 @@ public class PayrollTaxService {
             if(row.payrollCalculationId()==null)employee(row.userId(),MANAGE);
             requireRecordScope(row,MANAGE);
         }
-        if(!auth.canReachProject(actor,row.projectId(),evidencePermission)
+        // 第十八批 E 段 20-R4 扫尾：查看凭据时商户账号只比商户（与认定列表同口径）；上传仍须可触及原认定项目与发薪主体
+        String readMerchant=reading?auth.currentMerchantIdQuietly().orElse(null):null;
+        if(readMerchant!=null?!readMerchant.equals(row.merchantId()):(!auth.canReachProject(actor,row.projectId(),evidencePermission)
                 || (row.payrollCalculationId()!=null&&!auth.canReachProject(actor,row.payerCompanyId(),evidencePermission))
-                || (actor.merchantId()!=null && !Objects.equals(actor.merchantId(),row.merchantId())))
+                || (actor.merchantId()!=null && !Objects.equals(actor.merchantId(),row.merchantId()))))
             throw ApiException.forbidden("TAX_EVIDENCE_SCOPE_MISMATCH","税务认定不在证据权限的实际项目和商户范围内");
         return row.merchantId();
     }
 
+    /** 第十八批 E 段 20-R4 扫尾（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：只用于读（认定列表、凭据查看）——
+     *  商户账号（非平台管理员）只核商户，看得到各经营项目里本商户的；写入口用 recordInScope／requireRecordScope。 */
+    private boolean recordReadable(PayrollTaxAssessment row,String permission) {
+        String merchant=auth.currentMerchantIdQuietly().orElse(null);
+        return merchant!=null?merchant.equals(row.merchantId()):recordInScope(row,permission);
+    }
     private boolean recordInScope(PayrollTaxAssessment row,String permission) {
         var actor=auth.currentActor();
         return auth.canReachProject(actor,row.projectId(),permission)
@@ -388,12 +396,17 @@ public class PayrollTaxService {
         return auth.canReachUser(actor,u,permission) && auth.canReachProject(actor,p.projectId(),permission)
                 && (actor.merchantId()==null || Objects.equals(actor.merchantId(),p.merchantId()));
     }
+    /** 第十八批 E 段 20-R4 扫尾：只用于读（同 recordReadable）——商户账号只核员工档案的商户；写入口用 employeeInScope。 */
+    private boolean employeeReadable(StaffProfileRecord p,com.complex.platform.access.AccessUser u,String permission) {
+        String merchant=auth.currentMerchantIdQuietly().orElse(null);
+        return merchant!=null?merchant.equals(p.merchantId()):employeeInScope(p,u,permission);
+    }
     private List<String> employeeReadPermissions(String user) {
         requireRead();
         var profile=staff.findProfileByUserId(requireText(user,"user_id")).orElseThrow(()->ApiException.notFound("STAFF_NOT_FOUND","员工档案不存在"));
         var account=access.findUserById(user).orElseThrow(()->ApiException.notFound("STAFF_NOT_FOUND","员工账号不存在"));
         var permissions=List.of(VIEW,MANAGE).stream().filter(auth::currentActorHasPermission)
-                .filter(permission->employeeInScope(profile,account,permission)).toList();
+                .filter(permission->employeeReadable(profile,account,permission)).toList();
         if(permissions.isEmpty())throw ApiException.forbidden("STAFF_SCOPE_MISMATCH","无权处理该员工的税务认定");
         if(profile.projectId()==null || profile.companyId()==null)throw invalid("须先明确员工实际项目和工资发放主体");
         return permissions;

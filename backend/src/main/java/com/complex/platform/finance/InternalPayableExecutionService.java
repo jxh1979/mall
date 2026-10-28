@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -232,17 +232,16 @@ public class InternalPayableExecutionService {
         }
     }
 
-    /** 商户专区「门票分账」：本商户作为对方的、已可查看的普通内部结算往来及其执行状态。 */
+    /** 商户专区「门票分账」：本商户作为对方的、已可查看的普通内部结算往来及其执行状态。
+     *  第十八批 E 段 20-R3：商户账号看各经营项目里本商户的往来，只按商户（不再按本人项目过滤）。 */
     public List<Execution> merchantTicketSettlements() {
         auth.requirePermission(PORTAL_VIEW);
         String merchant = auth.currentMerchantIdQuietly()
                 .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行"));
-        var reach = auth.projectReach(auth.currentActor(), PORTAL_VIEW);
         return jdbc.queryForList("""
                         SELECT ar_ap_item_id, project_id FROM internal_payable_schedules WHERE counterparty_id=? AND visible_at<=now()
                          ORDER BY visible_at DESC, ar_ap_item_id
                         """, merchant).stream()
-                .filter(row -> reach.covers((String) row.get("project_id")))
                 .map(row -> repository.findArApItemById((String) row.get("ar_ap_item_id")).orElseThrow())
                 .map(item -> view(item, schedule(item.id())))
                 .toList();
@@ -276,7 +275,7 @@ public class InternalPayableExecutionService {
         if (merchant == null || !merchant.equals(item.counterpartyId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "只有收款方所属公司的财务负责人可审批更换收款账户");
         }
-        // 与商户专区「门票分账」列表同口径：按固化付款时点的项目（往来对方所属项目）判定；平台单台账行本身无项目归属。
+        // 按固化付款时点的项目（往来对方所属项目）判定，写入口只到本人项目（列表对商户账号只按商户，第十八批 E 段 20-R3）；平台单台账行本身无项目归属。
         String project = jdbc.queryForObject("SELECT project_id FROM internal_payable_schedules WHERE ar_ap_item_id=?", String.class,
                 item.id());
         if (!auth.projectReach(auth.currentActor(), permission).covers(project)) {

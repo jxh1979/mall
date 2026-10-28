@@ -47,7 +47,10 @@ class ComplianceServiceTests {
                 repository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
-                new AuthorizationService(Mockito.mock(AccessRepository.class))
+                new AuthorizationService(Mockito.mock(AccessRepository.class)),
+                null,
+                null,
+                new ObjectMapper()
         );
     }
 
@@ -360,6 +363,36 @@ class ComplianceServiceTests {
                     r.dueDate().equals(record.dueDate()));
             reminders.add(record);
             return record;
+        }
+
+        @Override
+        public List<ComplianceItemTypeConfigRecord> findItemTypeConfigs() {
+            return List.of();
+        }
+
+        @Override
+        public void saveItemTypeConfig(ComplianceItemTypeConfigRecord record, String actorId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public java.util.Optional<ComplianceExpiryItemRecord> findExpiryItemForUpdate(String id) {
+            return java.util.Optional.ofNullable(expiryItems.get(id));
+        }
+
+        @Override
+        public void markGraceRequested(String id, LocalDate graceUntil, String reviewId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int decideGrace(String id, String reviewId, String decision) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void renewExpiryItem(String id, LocalDate validFrom, LocalDate validTo, String documentNo, List<String> evidenceAttachmentIds) {
+            throw new UnsupportedOperationException();
         }
     }
 }

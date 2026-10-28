@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -129,9 +129,15 @@ class SingleUseGrantRequestTransactionTests {
     private final String otherUserId = "usr_xmj2_" + suffix;
     private final String merchantId = "mch_xmj_" + suffix;
 
+    // 18E（第 19 条 19-R2）：本类员工都归 org；新建线索落本人项目、须是真实项目，用到时临时补一行项目、用完删掉
+    private boolean orgProjectAdded;
+
     @AfterEach
     void cleanUp() {
         SecurityContextHolder.clearContext();
+        if (orgProjectAdded) {
+            jdbcTemplate.update("DELETE FROM projects WHERE id = 'org'");
+        }
         jdbcTemplate.update("DELETE FROM user_roles WHERE user_id IN (?, ?)", userId, otherUserId);
         jdbcTemplate.update("DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE role_name LIKE ?)", roleName("%"));
         jdbcTemplate.update("DELETE FROM roles WHERE role_name LIKE ?", roleName("%"));
@@ -889,6 +895,8 @@ class SingleUseGrantRequestTransactionTests {
     // 标成只能重放后控制器照常执行：线索建两条（消耗一次、业务两次）。
     @Test
     void aConcurrentResubmissionOutsideTheIdempotencyLayerIsDeniedAndRunsTheActionOnce() throws Exception {
+        orgProjectAdded = jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) "
+                + "VALUES ('org', 'complex', 'org', 'active', now(), now()) ON CONFLICT (id) DO NOTHING") == 1;
         staffWithSingleUseGrant(null, "leasing.lead.manage");
         String body = """
                 {"idempotency_key": "xmj-lead-same-%s", "contact_name": "%s", "source": "referral"}

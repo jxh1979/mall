@@ -1,11 +1,11 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { Tabs } from "antd";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, GovernanceProjectRow } from "../types";
 
-// HP-P01 停车场工作台（BSM「停车场」L1425–L1452）：业务参数按项目、值与上下限同配（L1434～L1437，出厂默认值实施前补定）；
+// HP-P01 停车场工作台（BSM「停车场」L1425–L1452）：业务参数按项目、值与上下限同配（L1434～L1437；不设出厂值，第十八批裁决第 7 条）；
 // 在场与出场记录、缴费回写与车位占用由第三方停车系统回传（L1433／L1444）；月租车牌与员工车辆在本平台登记并下发（L1428／L1437）；
 // 人工放行由当班保安登记原因、车牌，免费放行和减免须经物业主管审批（L1438）；
 // 消费抵免台账列出抵免、构成资格的消费及其归属主体与按组成比例的成本分担（「消费抵免」条）。
@@ -81,7 +81,7 @@ function PolicyPanel({ props, project }: { props: AdminPageProps; project: strin
       }
       setForm(next);
       setNotice("");
-    }).catch(() => { setForm({}); setNotice("本项目尚未配置停车业务参数：停车业务暂不可用，出厂默认值实施前补定。"); });
+    }).catch(() => { setForm({}); setNotice("本项目尚未配置停车业务参数：停车业务暂不可用，须由本项目配齐七项参数后才能使用（不设出厂默认值）。"); });
   }, [props.api, project]);
   React.useEffect(load, [load]);
   const write = useWrite(props, load);

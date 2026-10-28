@@ -6,6 +6,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,7 +77,8 @@ class JdbcComplianceRepository implements ComplianceRepository {
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, merchant_id, item_type, item_name, document_no,
                        issuing_authority, valid_from, valid_to, reminder_days, expiry_action, status,
-                       owner_user_id, source_type, human_confirmed, evidence_attachment_ids, created_at, updated_at
+                       owner_user_id, source_type, human_confirmed, evidence_attachment_ids, created_at, updated_at,
+                       grace_status, grace_until
                   FROM compliance_expiry_items
                  ORDER BY valid_to ASC, id
                 """, this::mapExpiryItem);
@@ -86,7 +89,8 @@ class JdbcComplianceRepository implements ComplianceRepository {
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, merchant_id, item_type, item_name, document_no,
                        issuing_authority, valid_from, valid_to, reminder_days, expiry_action, status,
-                       owner_user_id, source_type, human_confirmed, evidence_attachment_ids, created_at, updated_at
+                       owner_user_id, source_type, human_confirmed, evidence_attachment_ids, created_at, updated_at,
+                       grace_status, grace_until
                   FROM compliance_expiry_items
                  WHERE merchant_id = :merchant_id
                  ORDER BY valid_to ASC, id
@@ -154,6 +158,99 @@ class JdbcComplianceRepository implements ComplianceRepository {
                     generated_at = EXCLUDED.generated_at
                 """, reminderParameters(record));
         return record;
+    }
+
+    @Override
+    public List<ComplianceItemTypeConfigRecord> findItemTypeConfigs() {
+        return jdbcTemplate.query("""
+                SELECT item_type, grace_days, grace_min_days, grace_max_days, warning_months, warning_min_months, warning_max_months
+                  FROM compliance_item_type_configs
+                 ORDER BY item_type
+                """, (rs, rowNumber) -> new ComplianceItemTypeConfigRecord(
+                rs.getString("item_type"),
+                rs.getObject("grace_days", Integer.class),
+                rs.getObject("grace_min_days", Integer.class),
+                rs.getObject("grace_max_days", Integer.class),
+                rs.getObject("warning_months", Integer.class),
+                rs.getObject("warning_min_months", Integer.class),
+                rs.getObject("warning_max_months", Integer.class)));
+    }
+
+    @Override
+    public void saveItemTypeConfig(ComplianceItemTypeConfigRecord record, String actorId) {
+        jdbcTemplate.update("""
+                INSERT INTO compliance_item_type_configs (item_type, grace_days, grace_min_days, grace_max_days,
+                    warning_months, warning_min_months, warning_max_months, updated_by, updated_at)
+                VALUES (:item_type, :grace_days, :grace_min_days, :grace_max_days,
+                    :warning_months, :warning_min_months, :warning_max_months, :updated_by, now())
+                ON CONFLICT (item_type) DO UPDATE SET
+                    grace_days = EXCLUDED.grace_days,
+                    grace_min_days = EXCLUDED.grace_min_days,
+                    grace_max_days = EXCLUDED.grace_max_days,
+                    warning_months = EXCLUDED.warning_months,
+                    warning_min_months = EXCLUDED.warning_min_months,
+                    warning_max_months = EXCLUDED.warning_max_months,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                """, new MapSqlParameterSource()
+                .addValue("item_type", record.itemType())
+                .addValue("grace_days", record.graceDays(), Types.INTEGER)
+                .addValue("grace_min_days", record.graceMinDays(), Types.INTEGER)
+                .addValue("grace_max_days", record.graceMaxDays(), Types.INTEGER)
+                .addValue("warning_months", record.warningMonths(), Types.INTEGER)
+                .addValue("warning_min_months", record.warningMinMonths(), Types.INTEGER)
+                .addValue("warning_max_months", record.warningMaxMonths(), Types.INTEGER)
+                .addValue("updated_by", actorId));
+    }
+
+    @Override
+    public Optional<ComplianceExpiryItemRecord> findExpiryItemForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, subject_type, subject_id, merchant_id, item_type, item_name, document_no,
+                       issuing_authority, valid_from, valid_to, reminder_days, expiry_action, status,
+                       owner_user_id, source_type, human_confirmed, evidence_attachment_ids, created_at, updated_at,
+                       grace_status, grace_until
+                  FROM compliance_expiry_items
+                 WHERE id = :id
+                   FOR UPDATE
+                """, Map.of("id", id), this::mapExpiryItem).stream().findFirst();
+    }
+
+    @Override
+    public void markGraceRequested(String id, LocalDate graceUntil, String reviewId) {
+        jdbcTemplate.update("""
+                UPDATE compliance_expiry_items
+                   SET grace_status = 'pending_review', grace_until = :grace_until, grace_review_id = :review_id, updated_at = now()
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("grace_until", graceUntil)
+                .addValue("review_id", reviewId));
+    }
+
+    @Override
+    public int decideGrace(String id, String reviewId, String decision) {
+        return jdbcTemplate.update("""
+                UPDATE compliance_expiry_items
+                   SET grace_status = :decision, updated_at = now()
+                 WHERE id = :id AND grace_review_id = :review_id AND grace_status = 'pending_review'
+                """, Map.of("id", id, "review_id", reviewId, "decision", decision));
+    }
+
+    @Override
+    public void renewExpiryItem(String id, LocalDate validFrom, LocalDate validTo, String documentNo, List<String> evidenceAttachmentIds) {
+        jdbcTemplate.update("""
+                UPDATE compliance_expiry_items
+                   SET valid_from = :valid_from, valid_to = :valid_to, document_no = :document_no,
+                       evidence_attachment_ids = CAST(:evidence_attachment_ids AS jsonb),
+                       grace_status = NULL, grace_until = NULL, grace_review_id = NULL, updated_at = now()
+                 WHERE id = :id
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("valid_from", validFrom)
+                .addValue("valid_to", validTo)
+                .addValue("document_no", documentNo, Types.VARCHAR)
+                .addValue("evidence_attachment_ids", writeJson(evidenceAttachmentIds)));
     }
 
     private MapSqlParameterSource contractKeyDateParameters(ContractKeyDateRecord record) {
@@ -252,7 +349,9 @@ class JdbcComplianceRepository implements ComplianceRepository {
                 resultSet.getBoolean("human_confirmed"),
                 readStringList(resultSet.getString("evidence_attachment_ids")),
                 resultSet.getTimestamp("created_at").toInstant(),
-                resultSet.getTimestamp("updated_at").toInstant()
+                resultSet.getTimestamp("updated_at").toInstant(),
+                resultSet.getString("grace_status"),
+                resultSet.getObject("grace_until", LocalDate.class)
         );
     }
 

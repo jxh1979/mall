@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -391,7 +391,12 @@ class PayrollTaxVersionJdbcIntegrationTests {
         var pending=taxes.submitVersion(draft.id(),submit(draft.id(),PayrollTaxService.VERSION));
         String other="tax_outside_"+UUID.randomUUID().toString().substring(0,8), outsider="reader_"+other;
         jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'mall','非经办项目','active',now(),now())",other);
-        StaffTestActors.grant(jdbc,access,outsider,other);
+        // 第十八批 E 段 19-R1：setup 已把夹具角色 role_m010_fixture 勾成「可以查看全部项目」，持有它的人按 PGM:659 可看全部项目的复核单；
+        // 「无关的别项目人员」改挂只含查看码、两项勾选都没有的普通角色（断言不变）。
+        access.createUser(new com.complex.platform.access.AccessUser(outsider,outsider,"staff",other,null,"active",java.time.Instant.now()));
+        jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'E段回归','project','active',now())","role_"+other,"非经办查看 "+other);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'governance.supervisor_review.view')","role_"+other);
+        access.assignUserRole(outsider,"role_"+other);
         StaffTestActors.actor(outsider,"staff",other,null);StaffTestActors.alignRowToSession(jdbc);
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/platform/supervisor-review/"+pending.reviewId())
                         .header("X-Terminal-Type","web")

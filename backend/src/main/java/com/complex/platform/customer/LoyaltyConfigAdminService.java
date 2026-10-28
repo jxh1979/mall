@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -193,9 +193,27 @@ public class LoyaltyConfigAdminService {
 
     // ---- 共用私有工具 ----
 
-    /** 读路径 project_id：项目级管理员强制其 scope；平台管理员用请求参数（可空=看平台缺省行）。 */
+    /**
+     * 读路径 project_id：平台管理员用请求参数（可空=看平台缺省行）；其余带了且在 customer.loyalty.view 可触及范围内的用它
+     * （18E（第 19 条 19-R2），治理地图第 659 行），否则本人项目；本人项目也不在该码可触及范围内的 403（见 reachableOrOwn）。
+     */
     private String resolveReadProjectId(String requestedProjectId) {
-        return authorizationService.currentProjectScopeQuietly().orElse(requestedProjectId);
+        return authorizationService.currentProjectScopeQuietly()
+                .map(own -> reachableOrOwn(requestedProjectId, VIEW, own))
+                .orElse(requestedProjectId);
+    }
+
+    private String reachableOrOwn(String requestedProjectId, String code, String own) {
+        String requested = requestedProjectId == null || requestedProjectId.isBlank() ? null : requestedProjectId.trim();
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), code);
+        if (requested != null && !requested.equals(own) && reach.covers(requested)) {
+            return requested;
+        }
+        // 18E 复核：该码只经勾选别的项目的角色持有时本人项目也碰不到（治理地图第 659 行「逐个勾选的只能查看被选中的项目」），不回退本人项目。
+        if (!reach.covers(own)) {
+            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "无权访问该项目的数据");
+        }
+        return own;
     }
 
     /** 全平台一套的配置（会员等级、生日加倍规则）：须有全国范围授权；只到本人项目或逐个勾选项目的账号不能写。 */
@@ -205,10 +223,11 @@ public class LoyaltyConfigAdminService {
         }
     }
 
-    /** 写路径 project_id：项目级管理员强制绑定 token scope（覆盖请求体）；平台管理员须显式给。 */
+    /** 写路径 project_id：平台管理员须显式给；其余带了且在 customer.loyalty.manage 可触及范围内的用它（18E（第 19 条 19-R2）），否则本人项目；本人项目也不可触及的 403。 */
     private String resolveWriteProjectId(String requestedProjectId) {
         Optional<String> scope = authorizationService.currentProjectScopeQuietly();
-        return scope.orElseGet(() -> requireText(requestedProjectId, "project_id"));
+        return scope.map(own -> reachableOrOwn(requestedProjectId, MANAGE, own))
+                .orElseGet(() -> requireText(requestedProjectId, "project_id"));
     }
 
     /** id 空=新增；非空=更新。 */

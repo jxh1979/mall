@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -350,6 +350,12 @@ public class StaffPayrollConfigurationService {
             requireScope(new Scope(actor,reach),project,merchant,payer);
             requireScope(scope(permission),project,merchant,payer);return merchant;
         }
+        // 第十八批 E 段 20-R4 扫尾：查看凭据与方案等查看同口径（visible，商户账号只按商户）；上传仍走 requireScope
+        if(reading) {
+            if(!visible(scope(MANAGE),project,merchant,payer)||!visible(scope(permission),project,merchant,payer))
+                throw ApiException.forbidden("PAYROLL_SCOPE_MISMATCH","无权处理该项目、商户或发薪主体的工资");
+            return merchant;
+        }
         requireScope(scope(MANAGE),project,merchant,payer);
         requireScope(scope(permission),project,merchant,payer);
         return merchant;
@@ -414,7 +420,10 @@ public class StaffPayrollConfigurationService {
     static YearMonth month(String value){try{return YearMonth.parse(requireText(value,"month"));}catch(java.time.DateTimeException e){throw invalid("月份须为年月格式");}}
     static String key(SubmitRequest r){if(r==null)throw invalid("须填写提交内容");return requireText(r.idempotencyKey(),"idempotency_key");}
     static void draft(String status){if(!"draft".equals(status))throw ApiException.conflict("PAYROLL_DRAFT_REQUIRED","仅草稿可提交，原已审批版本保留");}
-    boolean visible(Scope s,String p,String m,String c){return s.reach().covers(p)&&(c==null||s.reach().covers(c))&&(s.actor().merchantId()==null||Objects.equals(s.actor().merchantId(),m));}
+    /** 只用于读（方案、期间事实、评分调整、试算、工资单可见）。第十八批 E 段 20-R3：商户账号只按商户，看得到各经营项目里本商户的；写入口用 requireScope。 */
+    boolean visible(Scope s,String p,String m,String c){
+        if(!s.reach().platformAdmin()&&s.actor().merchantId()!=null)return Objects.equals(s.actor().merchantId(),m);
+        return s.reach().covers(p)&&(c==null||s.reach().covers(c))&&(s.actor().merchantId()==null||Objects.equals(s.actor().merchantId(),m));}
     static String id(String prefix){return prefix+"_"+UUID.randomUUID().toString().replace("-","");}
     static String version(int seq){return "V"+(seq/100)+"."+String.format("%02d",seq%100);}
     String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw invalid("工资依据无法保存");}}

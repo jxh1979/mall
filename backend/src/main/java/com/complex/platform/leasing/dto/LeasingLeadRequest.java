@@ -15,12 +15,20 @@ public record LeasingLeadRequest(
         BigDecimal intendedAreaSqm,
         String brandId,
         String idempotencyKey,
-        String blacklistExceptionId
+        String blacklistExceptionId,
+        // 18E（第 19 条 19-R2）：落地项目（可选）；不带时有意向铺位的取铺位所在项目，否则取本人项目
+        String projectId
 ) {
+    public LeasingLeadRequest(String contactName, String contactPhone, String source, String intendedBusinessType,
+            String intendedSpaceId, BigDecimal intendedAreaSqm, String brandId, String idempotencyKey, String blacklistExceptionId) {
+        this(contactName, contactPhone, source, intendedBusinessType, intendedSpaceId, intendedAreaSqm, brandId, idempotencyKey,
+                blacklistExceptionId, null);
+    }
+
     /** 不带黑名单例外放行单的构造。 */
     public LeasingLeadRequest(String contactName, String contactPhone, String source, String intendedBusinessType,
             String intendedSpaceId, BigDecimal intendedAreaSqm, String brandId, String idempotencyKey) {
         this(contactName, contactPhone, source, intendedBusinessType, intendedSpaceId, intendedAreaSqm, brandId, idempotencyKey,
-                null);
+                null, null);
     }
 }

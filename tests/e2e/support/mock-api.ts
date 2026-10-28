@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -452,7 +452,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/facility/inspections/tasks": assignedRows(state.facilityInspectionTasks, options, "assigneeId"),
     "/api/v1/facility/site-entry-reports": assignedRows(state.siteEntryReports, options, "vendorUserId"),
     "/api/v1/analytics/metric-anomalies": state.metricAnomalies,
-    "/api/v1/compliance/reminders": { items: [{ id: "crm-1", reminder_type: "renewal", source_type: "contract", source_id: "contract-1", due_date: "2026-08-01", reminder_at: "2026-07-15", severity: "high", status: "open", blocking_suggested: true, message: "示例到期提醒" }] },
+    "/api/v1/compliance/reminders": { items: [{ id: "crm-1", reminder_type: "upcoming", source_type: "contract", source_id: "contract-1", due_date: "2026-08-01", reminder_at: "2026-07-15", severity: "high", status: "open", blocking_suggested: true, message: "示例到期提醒" }] },
     "/api/v1/compliance/contract-key-dates": { items: [{ id: "ckd-1", contract_id: "contract-1", merchant_id: "merchant-1", date_type: "renewal", title: "示例续约日", due_date: "2026-08-01", status: "open", source_type: "contract", human_confirmed: false }] },
     "/api/v1/compliance/expiry-items": { items: [{ id: "cei-1", subject_type: "merchant", subject_id: "merchant-1", merchant_id: "merchant-1", item_type: "business_license", item_name: "示例营业执照", document_no: "BL-001", issuing_authority: "市监局", valid_from: "2025-01-01", valid_to: "2026-12-31", expiry_action: "block", status: "active", source_type: "manual", human_confirmed: true }] },
     "/api/v1/compliance/wecom/risk-hits": { items: [{ hit_id: "wrh-1", conversation_id: "conv-1", message_id: "msg-1", rule_code: "PRIVATE_CONTACT", risk_level: "high", matched_snippet: "示例脱敏片段", status: "open", reviewer_id: null, review_note: null, project_id: "project_1" }] },

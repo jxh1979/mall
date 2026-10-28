@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -299,19 +299,26 @@ public class ServiceOrderService {
         return withFailureAudit("service.order.create_failed", "service.order.create",
                 "service_order", null, request == null ? null : request.idempotencyKey(), () -> {
             authorizationService.requirePermission("service.order.create");
+            // 第十八批 E 段 19-R1（移植 M738）：按本入口权限码算可触及范围，进入幂等之前先核履约人（重试同样先核）。
+            var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
+            String performer = request == null ? null : trimToNull(request.performerUserId());
+            if (performer != null) {
+                requirePerformerInScope(reach, performer);
+            }
             return idempotencyService.execute("createServiceOrder",
                     request == null ? null : request.idempotencyKey(), request,
-                    () -> doCreateOrder(request), ServiceOrderRecord.class);
+                    () -> doCreateOrder(request, reach), ServiceOrderRecord.class);
         });
     }
 
-    private ServiceOrderRecord doCreateOrder(com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request) {
+    private ServiceOrderRecord doCreateOrder(com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest request,
+            AuthorizationService.ProjectReach reach) {
         if (request == null || request.catalogItemId() == null || request.catalogItemId().isBlank()
                 || request.performerUserId() == null || request.performerUserId().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须指定服务目录项与服务人员");
         }
         // 清单 P1:项目员工只可为本综合体履约人下单(空 scope=平台放行)。守卫先于目录查找。
-        requirePerformerInScope(request.performerUserId().trim());
+        requirePerformerInScope(reach, request.performerUserId().trim());
         ServiceCatalogItemRecord item = repository.findCatalogItem(request.catalogItemId().trim())
                 .filter(ServiceCatalogItemRecord::active)
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ITEM_NOT_FOUND", "服务项不存在或已停用"));
@@ -319,10 +326,11 @@ public class ServiceOrderService {
         Instant now = Instant.now();
         // TK-23-R3(BSM L1070「费率变更形成新版本并指定生效日期,只对生效日之后发生的单据有效;每笔提成在下单时锁定当时的费率版本」):
         // 已复核草案到了生效营业日 → 先翻为现行版本(fee_version+1、清空草案)再快照;WHERE 条件保证并发下单只翻一次。
-        // 第十八批第 1 条：生效营业日按本单酒吧（未选酒吧按操作者当前项目）。
+        // 第十八批第 1 条：生效营业日按本单酒吧；第十八批 E 段 19-R1：未选酒吧按履约人档案项目（新单的 project_id 本就按履约人档案落，
+        // 持可跨项目角色的人给别的项目的履约人下单时按该项目；非持有人与原先按操作者当前项目相同）。
         String orderBar = trimToNull(request.barId());
         LocalDate orderDay = businessDayResolver.businessDate(
-                orderBar == null ? authorizationService.currentProjectScopeQuietly().orElse(null) : null, orderBar, now);
+                orderBar == null ? staffRepository.findUserProjectId(request.performerUserId().trim()).orElse(null) : null, orderBar, now);
         if (item.nextApprovedBy() != null && item.nextEffectiveFrom() != null
                 && !item.nextEffectiveFrom().isAfter(orderDay)) {
             repository.promoteApprovedFeeDraft(item.id(), orderDay);
@@ -374,15 +382,18 @@ public class ServiceOrderService {
         return withFailureAudit("service.order.pay_confirm_failed", "service.order.create",
                 "service_order", id, request == null ? null : request.idempotencyKey(), () -> {
             authorizationService.requirePermission("service.order.create");
+            var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
+            requirePerformerInScope(reach, require(id).performerUserId());
             return idempotencyService.execute("markServiceOrderPaid:" + id,
                     request == null ? null : request.idempotencyKey(), request,
-                    () -> doMarkPaid(id, request), ServiceOrderRecord.class);
+                    () -> doMarkPaid(id, request, reach), ServiceOrderRecord.class);
         });
     }
 
-    private ServiceOrderRecord doMarkPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request) {
+    private ServiceOrderRecord doMarkPaid(String id, com.complex.platform.serviceorder.dto.ServiceOrderMarkPaidRequest request,
+            AuthorizationService.ProjectReach reach) {
         ServiceOrderRecord current = require(id);
-        requirePerformerInScope(current.performerUserId());
+        requirePerformerInScope(reach, current.performerUserId());
         if (!current.status().equals("created")) {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "订单当前状态为 " + current.status() + "，只有新建状态可执行此操作");
@@ -425,15 +436,18 @@ public class ServiceOrderService {
         return withFailureAudit("service.order.complete_failed", "service.order.create",
                 "service_order", id, request == null ? null : request.idempotencyKey(), () -> {
             authorizationService.requirePermission("service.order.create");
+            var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
+            requirePerformerInScope(reach, require(id).performerUserId());
             return idempotencyService.execute("completeServiceOrder:" + id,
                     request == null ? null : request.idempotencyKey(), request,
-                    () -> doComplete(id, request), ServiceOrderRecord.class);
+                    () -> doComplete(id, request, reach), ServiceOrderRecord.class);
         });
     }
 
-    private ServiceOrderRecord doComplete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request) {
+    private ServiceOrderRecord doComplete(String id, com.complex.platform.serviceorder.dto.ServiceOrderActionRequest request,
+            AuthorizationService.ProjectReach reach) {
         ServiceOrderRecord current = require(id);
-        requirePerformerInScope(current.performerUserId());
+        requirePerformerInScope(reach, current.performerUserId());
         // P2-#4:仅 paid 可完成(移除 accepted 绕过路径;paid 蕴含 paid_at!=null,无收款不得完成)。
         if (!current.status().equals("paid")) {
             throw ApiException.badRequest("NOT_PAID_YET",
@@ -497,15 +511,11 @@ public class ServiceOrderService {
     }
 
     /** 清单 P1(2026-07-03 审计):按项目 scope 守卫——项目员工只可操作本综合体履约人的服务单;
-     * 平台管理员(空 scope)放行。scope 由 token 派生(currentProjectScopeQuietly),不取请求体。 */
-    private void requirePerformerInScope(String performerUserId) {
-        authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
-            String performerProject = staffRepository.findUserProjectId(performerUserId).orElse(null);
-            if (!scope.equals(performerProject)) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
-                        "服务人员不在当前项目范围内，无权操作");
-            }
-        });
+     * 平台管理员放行。第十八批 E 段 19-R1（移植 M738）:按入口权限码算的可触及范围(projectReach,由 token 派生,不取请求体)判履约人档案项目。 */
+    private void requirePerformerInScope(AuthorizationService.ProjectReach reach, String performerUserId) {
+        if (!reach.covers(staffRepository.findUserProjectId(performerUserId).orElse(null))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "服务人员不在当前项目范围内，无权操作");
+        }
     }
 
     private ServiceOrderRecord persistStatus(ServiceOrderRecord current, String toStatus, Instant completedAt,
@@ -533,12 +543,13 @@ public class ServiceOrderService {
 
     private ServiceOrderRecord doCancel(String id, com.complex.platform.serviceorder.dto.ServiceOrderCancelRequest request) {
         authorizationService.requirePermission("service.order.create");
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
         if (request == null || request.reason() == null || request.reason().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "取消订单必须填写理由");
         }
         ServiceOrderRecord current = repository.findOrder(id)
                 .orElseThrow(() -> ApiException.notFound("SERVICE_ORDER_NOT_FOUND", "服务订单不存在或已被删除"));
-        requirePerformerInScope(current.performerUserId());
+        requirePerformerInScope(reach, current.performerUserId());
         if (current.status().equals("completed")) {
             throw ApiException.badRequest("ALREADY_COMPLETED",
                     "服务单已完成履约并完成分账,不能取消;如需退款走财务退款流程");
@@ -567,8 +578,9 @@ public class ServiceOrderService {
     /** H批:向客人出示**公司统一收款码**(代收;个人码流程已废弃)。 */
     public Map<String, String> orderPaymentCode(String id) {
         authorizationService.requirePermission("service.order.create");
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
         ServiceOrderRecord order = require(id);
-        requirePerformerInScope(order.performerUserId());
+        requirePerformerInScope(reach, order.performerUserId());
         String qr = repository.companyPayQr();
         if (qr.isBlank()) {
             throw ApiException.badRequest("COMPANY_PAY_QR_NOT_CONFIGURED",
@@ -601,9 +613,9 @@ public class ServiceOrderService {
 
     public PageResponse<ServiceOrderRecord> listOrders(java.time.LocalDate date, String status) {
         authorizationService.requirePermission("service.catalog.manage");
-        // P0 租户隔离(V214):项目员工只见本综合体服务单;平台管理员全量。
-        return page(repository.listOrders(date, status,
-                authorizationService.currentProjectScopeQuietly().orElse(null)));
+        // P0 租户隔离(V214):项目员工只见本综合体服务单;平台管理员全量。第十八批 E 段 19-R1（移植 M738）:持可跨项目角色的按本入口权限码可触及的项目。
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.catalog.manage");
+        return page(repository.listOrdersInProjects(date, status, reach.platformAdmin() ? null : reach.organizationIds()));
     }
 
     /** H批:履约人当月完成次数+分账应得(公司代收,月结进薪资提成并代扣个税)。TK-23-R2:与薪资月结同源(提成台账 month=营业日年月)。 */

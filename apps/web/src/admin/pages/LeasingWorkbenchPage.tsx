@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -18,7 +18,7 @@ import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { hasPermissions } from "../security/PermissionGate";
 import { shortId } from "../format/ids";
 import { ApiError } from "../../shared/apiError";
-import type { GovernanceSpaceRow, BusinessEntityRow, AccessUserRow } from "../types";
+import type { GovernanceSpaceRow, BusinessEntityRow, AccessUserRow, GovernanceProjectRow } from "../types";
 
 // 招商前漏斗行类型（后端 leasing.* 记录的前端视图，camelCase 由 adminClient 统一转换）。
 interface LeasingLeadRow {
@@ -189,6 +189,11 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
   const [signMerchantId, setSignMerchantId] = React.useState("");
   const [signSubjectId, setSignSubjectId] = React.useState("");
   const [spaces, setSpaces] = React.useState<GovernanceSpaceRow[]>([]);
+  // 第十八批 E 段第 19 条（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
+  // 新建线索、录入品牌可选所属项目；能看到两个以上项目才显示，不选＝后端按意向空间所在项目或本人所在项目落。
+  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
+  const [leadProjectId, setLeadProjectId] = React.useState("");
+  const [brandProjectId, setBrandProjectId] = React.useState("");
   const [merchantList, setMerchantList] = React.useState<Array<{ id: string; displayName?: string; companyName?: string; merchantName?: string }>>([]);
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [salesUsers, setSalesUsers] = React.useState<AccessUserRow[]>([]);
@@ -263,6 +268,9 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
         ]);
         setSpaces(sp ?? []); setMerchantList(mc ?? []); setEntities(en ?? []); setSalesUsers(us ?? []);
       } catch { /* 无权限→保持空字典 */ }
+      try {
+        setProjects((await api.get<GovernanceProjectRow[]>("/api/v1/platform/projects")) ?? []);
+      } catch { setProjects([]); }
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => { setGlobalError(null); setPhoneReveal(null); } },
   );
@@ -408,6 +416,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       intendedSpaceId,
       brandId: leadException?.brandId ?? brand.selected?.id ?? null,
       ...(leadException ? { blacklistExceptionId: leadException.id } : {}),
+      ...(leadProjectId ? { projectId: leadProjectId } : {}),
     };
     const brandId = request.brandId;
     await runAction("leasing_lead_created", request, () => api.post("/api/v1/leasing/leads", request).catch((error: unknown) => {
@@ -539,7 +548,8 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
       setFormError(TEXT.brandNameRequired);
       return;
     }
-    const request = { idempotencyKey: nextKey("leasing-brand-create"), brandName, brandType, businessType: brandBusinessType };
+    const request = { idempotencyKey: nextKey("leasing-brand-create"), brandName, brandType, businessType: brandBusinessType,
+      ...(brandProjectId ? { projectId: brandProjectId } : {}) };
     const ok = await runAction("leasing_brand_created", request, () => api.post("/api/v1/leasing/brands", request));
     if (ok) setBrandFlowOpen(false);
   }
@@ -826,6 +836,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
                 <label>来源<select data-testid="leasing-lead-source" value={source} onChange={(e) => setSource(e.target.value)}><option value="outbound">外拓</option><option value="online_inquiry">线上咨询</option><option value="referral">转介绍</option><option value="exhibition">展会</option></select></label>
                 <label>意向业态<select data-testid="leasing-lead-business-type" value={intendedBusinessType} onChange={(e) => setIntendedBusinessType(e.target.value)}>{BUSINESS_TYPES.map((t) => <option key={t} value={t}>{BUSINESS_TYPE_LABELS[t]}</option>)}</select></label>
                 <label>意向空间<select data-testid="leasing-lead-space" value={intendedSpaceId} onChange={(e) => setIntendedSpaceId(e.target.value)}><option value="">请选择空间（可空）</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+                {projects.length > 1 ? <label>所属项目<select data-testid="leasing-lead-project" value={leadProjectId} onChange={(e) => setLeadProjectId(e.target.value)}><option value="">{intendedSpaceId ? "按意向空间所在项目" : "本人所在项目"}</option>{projects.map((x) => <option key={x.id} value={x.id}>{x.name ?? x.id}</option>)}</select></label> : null}
               </>
             ),
           },
@@ -859,6 +870,7 @@ export function LeasingWorkbenchPage({ api, setActionResult, setGlobalError, nav
                 <label>品牌名称<input data-testid="leasing-brand-name" value={brandName} onChange={(e) => setBrandName(e.target.value)} /></label>
                 <label>品牌类型<select data-testid="leasing-brand-type" value={brandType} onChange={(e) => setBrandType(e.target.value)}><option value="intentional">意向品牌</option><option value="prospective">潜在品牌</option><option value="partner">合作品牌</option></select></label>
                 <label>业态<select data-testid="leasing-brand-business" value={brandBusinessType} onChange={(e) => setBrandBusinessType(e.target.value)}>{BUSINESS_TYPES.map((t) => <option key={t} value={t}>{BUSINESS_TYPE_LABELS[t]}</option>)}</select></label>
+                {projects.length > 1 ? <label>所属项目<select data-testid="leasing-brand-project" value={brandProjectId} onChange={(e) => setBrandProjectId(e.target.value)}><option value="">本人所在项目</option>{projects.map((x) => <option key={x.id} value={x.id}>{x.name ?? x.id}</option>)}</select></label> : null}
               </>
             ),
           },

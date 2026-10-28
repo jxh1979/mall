@@ -1,6 +1,6 @@
 package com.complex.platform.energy;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.access.*;
 import com.complex.platform.analytics.AnalyticsRepository;
@@ -212,9 +212,10 @@ class EnergyWorkflowJdbcIntegrationTests {
         assertThatThrownBy(()->finance.registerArApPayment(nullItem,request)).isInstanceOf(ApiException.class);
         jdbc.update("UPDATE access_users SET merchant_id=? WHERE id=?",merchant,reader);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(new AccessActor(reader,reader,"staff",project,merchant,"active"),"test",List.of()));
+        // 18E（20-R3）：商户账号只按商户过滤（XM-M001-D 答复 3 第 10 条），不再与可触及项目取交集
         var merchantPage=finance.listArApItems("ENERGY-SCOPE-"+suffix,1,10);
-        assertThat(merchantPage.total()).isEqualTo(1);
-        assertThat(merchantPage.items()).extracting(com.complex.platform.finance.ArApItemRecord::id).containsExactly(ownItem);
+        assertThat(merchantPage.total()).isEqualTo(4);
+        assertThat(merchantPage.items()).extracting(com.complex.platform.finance.ArApItemRecord::id).containsExactlyInAnyOrder(ownItem,otherItem,foreignItem,nullItem);
     }
 
     @Test void exportUsesItsOwnGrantAndIncludesRowsBeyondTheFirstPage(){

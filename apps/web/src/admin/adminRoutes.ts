@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -115,6 +115,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-MER-007", label: "费用通知", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/fee-recipients", requiredPermissions: ["merchant.portal.fee_recipient.manage"], accountForms: ["merchant"] },
   { pageId: "ADM-MER-008", label: "我的分红", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/dividends", requiredPermissions: ["finance.dividend.view"], accountForms: ["merchant"] },
   { pageId: "ADM-MER-009", label: "员工车辆", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/staff-vehicles", requiredPermissions: ["parking.vehicle.manage"], accountForms: ["merchant"] },
+  { pageId: "ADM-MER-010", label: "我的证照", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/licenses", requiredPermissions: ["compliance.expiry_item.view", "compliance.reminder.view"], accountForms: ["merchant"] },
   { pageId: "ADM-FLR-001", label: "商场平面图导入", module: "地产/空间", group: "ops", route: "/admin/space/floor-plans", requiredPermissions: ["floor_plan.view"] },
   { pageId: "ADM-COMP-001", label: "合规到期提醒台账", module: "合规", group: "compliance", route: "/admin/compliance/reminders", requiredPermissions: ["compliance.reminder.view"] },
   { pageId: "ADM-COMP-002", label: "企微会话合规监察", module: "合规", group: "compliance", route: "/admin/compliance/wecom", requiredPermissions: ["wecom.risk_hit.view"] },

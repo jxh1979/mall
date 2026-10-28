@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -177,7 +177,7 @@ class SupervisorReviewControllerTests {
         SupervisorReviewDecisionRecord approved = new SupervisorReviewDecisionRecord("review_grant", "permission_grant_l1", "access.scope_change",
                 "access_grant_request", "agr_1", false, "approved", 1, 1, "approved", "scope", List.of(),
                 Instant.parse("2026-06-16T00:00:00Z"), "usr_hr", "one_level_up", null);
-        when(service.findReview("review_grant")).thenReturn(java.util.Optional.of(pending), java.util.Optional.of(approved));
+        when(service.findReview("review_grant", "governance.supervisor_review.approve")).thenReturn(java.util.Optional.of(pending), java.util.Optional.of(approved));
 
         mockMvc.perform(post("/api/v1/platform/supervisor-review/review_grant/approve")
                         .with(user("ops").roles("P0_SMOKE"))
@@ -211,7 +211,7 @@ class SupervisorReviewControllerTests {
         SupervisorReviewDecisionRecord pending = new SupervisorReviewDecisionRecord("review_grant", "permission_grant_l1", "access.scope_change",
                 "access_grant_request", "agr_1", true, "pending_review", 1, null, null, "scope", List.of(),
                 Instant.parse("2026-06-16T00:00:00Z"), "usr_hr", "one_level_up", null);
-        when(service.findReview("review_grant")).thenReturn(java.util.Optional.of(pending));
+        when(service.findReview("review_grant", "governance.supervisor_review.approve")).thenReturn(java.util.Optional.of(pending));
         doThrow(ApiException.forbidden("PERMISSION_DENIED", "没有操作权限：access.grant_request.review"))
                 .when(authorizationService)
                 .requirePermissions("access.grant_request.review", "governance.supervisor_review.approve");
@@ -355,6 +355,12 @@ class SupervisorReviewControllerTests {
         @Bean
         StaffHrRoutingService staffHrRoutingService() {
             return Mockito.mock(StaffHrRoutingService.class);
+        }
+
+        // 18E 复核后操作员裁决补充第 16 条：服务按字段注入人事仓储（三类人事复核单按所处理员工的登记项目判可见），切片里给桩
+        @Bean
+        com.complex.platform.access.staff.JdbcStaffRepository jdbcStaffRepository() {
+            return Mockito.mock(com.complex.platform.access.staff.JdbcStaffRepository.class);
         }
 
         @Bean

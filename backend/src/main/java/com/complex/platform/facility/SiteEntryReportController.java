@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -125,30 +125,33 @@ public class SiteEntryReportController {
     // ── P0-A/GAP-07 进场报备联系人手机号展示脱敏（V339）。无 pii.contact_phone.view 的读端看掩码；
     // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式。 ──
     private SiteEntryReportRecord maskPhoneForUnauthorized(SiteEntryReportRecord record) {
-        if (record == null || viewPhonePlaintext(java.util.stream.Stream.of(record.contactPhone()))) {
-            return record;
-        }
-        return record.withMaskedPhone();
+        return record == null || plaintextRows(java.util.List.of(record)).test(record) ? record : record.withMaskedPhone();
     }
 
     private PageResponse<SiteEntryReportRecord> maskPhonesForUnauthorized(PageResponse<SiteEntryReportRecord> page) {
-        if (viewPhonePlaintext(page.items().stream().map(SiteEntryReportRecord::contactPhone))) {
-            return page;
-        }
-        return new PageResponse<>(page.items().stream().map(SiteEntryReportRecord::withMaskedPhone).toList(),
+        var plaintext = plaintextRows(page.items());
+        return new PageResponse<>(page.items().stream().map(record -> plaintext.test(record) ? record : record.withMaskedPhone()).toList(),
                 page.page(), page.pageSize(), page.total());
     }
 
-    // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：持有明文码、且这次响应里确有非空电话，才核验明文码并返回明文
-    // ——单次来源在这里消耗，长期来源不产生消耗；否则返回掩码、不碰明文码。一次响应只核一次（列表按整页判断）。
-    private boolean viewPhonePlaintext(java.util.stream.Stream<String> phones) {
-        if (phones.noneMatch(phone -> phone != null && !phone.isBlank())
+    // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：持有明文码、且这次响应里确有可给明文的行，才核验明文码并返回明文
+    // ——单次来源在这里消耗，长期来源不产生消耗；否则返回掩码、不碰明文码。一次响应只核一次。
+    // 18E（第 19 条 19-R3）（治理地图第 877 行「也不免除项目范围检查」；第 659 行「在所分配的权限内」）：逐行判——有电话且行所属项目被明文码
+    // 可触及范围覆盖的行给明文，其余行掩码；外包账号只到本人项目，行为不变。
+    private java.util.function.Predicate<SiteEntryReportRecord> plaintextRows(java.util.List<SiteEntryReportRecord> rows) {
+        if (rows.stream().noneMatch(record -> record.contactPhone() != null && !record.contactPhone().isBlank())
                 || !authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
-            return false;
+            return record -> false;
+        }
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        java.util.function.Predicate<SiteEntryReportRecord> eligible = record -> record.contactPhone() != null
+                && !record.contactPhone().isBlank() && reach.covers(record.projectId());
+        if (rows.stream().noneMatch(eligible)) {
+            return record -> false;
         }
         authorizationService.requirePermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
         // 本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时不给明文
-        return !com.complex.platform.common.idempotency.IdempotentReplayContext.replayDiscardsConsumption();
+        return com.complex.platform.common.idempotency.IdempotentReplayContext.replayDiscardsConsumption() ? record -> false : eligible;
     }
 
     private void requireReadPermission() {

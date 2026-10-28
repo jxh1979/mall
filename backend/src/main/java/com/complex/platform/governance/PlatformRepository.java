@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +56,15 @@ public interface PlatformRepository {
      */
     default long countMerchantReferences(String merchantId) {
         return 0L;
+    }
+
+    /**
+     * 18E（第 20 条 20-R2）：商户的经营项目＝主项目加 merchant_projects 追加的项目（治理地图第 659 行）。
+     * 默认只取主项目（内存测试双子没有经营项目表）；JdbcPlatformRepository 覆写为主项目 UNION merchant_projects。
+     */
+    default List<String> listMerchantOperatingProjectIds(String merchantId) {
+        return findMerchantById(merchantId).map(MerchantRecord::projectId).filter(java.util.Objects::nonNull)
+                .map(List::of).orElse(List.of());
     }
 
     ProjectRecord saveProject(ProjectRecord project);
@@ -206,6 +215,42 @@ public interface PlatformRepository {
             String projectId, int page, int size) {
         return com.complex.platform.common.api.PageResponse.of(listSpaces().stream()
                 .filter(space -> projectId != null && projectId.equals(space.projectId())).toList(), page, size);
+    }
+
+    // 18E（第 19 条 19-R2）：可跨项目角色持有人按可触及项目集合取（空集合＝一行不出）。默认内存过滤（测试双子）；Jdbc 覆写为 project_id IN。
+    default com.complex.platform.common.api.PageResponse<BusinessEntityRecord> listBusinessEntitiesPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listBusinessEntities().stream()
+                .filter(entity -> projectIds.stream().anyMatch(projectId -> businessEntityInProject(entity.id(), projectId)))
+                .toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<MerchantRecord> listMerchantsPaged(
+            java.util.Collection<String> projectIds, boolean includeArchived, String businessFormat, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listMerchants(includeArchived).stream()
+                .filter(merchant -> merchant.projectId() != null && projectIds.contains(merchant.projectId()))
+                .filter(merchant -> businessFormat == null || businessFormat.equals(merchant.merchantType()))
+                .toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<ProjectRecord> listProjectsPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listProjects().stream()
+                .filter(project -> projectIds.contains(project.id())).toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<SpaceRecord> listSpacesPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listSpaces().stream()
+                .filter(space -> space.projectId() != null && projectIds.contains(space.projectId())).toList(), page, size);
+    }
+
+    default com.complex.platform.common.api.PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindingsPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return com.complex.platform.common.api.PageResponse.of(listBusinessEntityBindings().stream()
+                .filter(binding -> findMerchantById(binding.merchantId())
+                        .filter(merchant -> merchant.projectId() != null && projectIds.contains(merchant.projectId())).isPresent())
+                .toList(), page, size);
     }
 
     default com.complex.platform.common.api.PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindingsPaged(

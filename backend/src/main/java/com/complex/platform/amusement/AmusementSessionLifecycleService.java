@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -300,7 +300,7 @@ public class AmusementSessionLifecycleService {
 
     public List<Ending> endings(String sessionId) {
         return auditedRead(VIEW,"amusement_session",sessionId,()->{
-            requireScope(sessionId,VIEW);
+            requireScope(sessionId,VIEW,true);
             return jdbc.query("SELECT id FROM amusement_session_endings WHERE session_id=? ORDER BY confirmed_at",
                     (rs,n)->findEnding(rs.getString(1)),sessionId);
         });
@@ -308,7 +308,7 @@ public class AmusementSessionLifecycleService {
 
     public List<Map<String,Object>> followups(String sessionId) {
         return auditedRead(VIEW,"amusement_session",sessionId,()->{
-            requireScope(sessionId,VIEW);
+            requireScope(sessionId,VIEW,true);
             return jdbc.queryForList("""
                 SELECT f.* FROM amusement_session_followups f JOIN amusement_session_endings e ON e.id=f.ending_id
                  WHERE e.session_id=? ORDER BY f.created_at,f.id
@@ -320,17 +320,17 @@ public class AmusementSessionLifecycleService {
         String permission="amusement.verification.view";
         return auditedRead(permission,"amusement_project",projectId==null?"all":projectId,()->{
             auth.requirePermission(permission);
-            if(projectId!=null)requireProjectScope(projectId,permission);
-            var reach=auth.projectReach(auth.currentActor(),permission);
-            String merchant=auth.currentActor().merchantId();
+            if(projectId!=null)requireReadScope(projectId,permission);
+            // 第十八批 E 段 20-R4（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：商户账号只按商户，其余按可触及综合体
+            String merchant=auth.currentMerchantIdQuietly().orElse(null);
+            var reach=merchant==null?auth.projectReach(auth.currentActor(),permission):null;
             return jdbc.queryForList("""
                 SELECT l.*,p.merchant_id FROM amusement_concurrent_reset_log l
                   JOIN amusement_projects p ON p.id=l.project_id
                  WHERE l.complex_id IS NOT NULL AND (?::text IS NULL OR l.project_id=?)
                  ORDER BY l.reset_at DESC,l.id
                 """,projectId,projectId).stream()
-                    .filter(row->reach.covers((String)row.get("complex_id")))
-                    .filter(row->merchant==null || merchant.isBlank() || merchant.equals(row.get("merchant_id")))
+                    .filter(row->merchant==null?reach.covers((String)row.get("complex_id")):merchant.equals(row.get("merchant_id")))
                     .toList();
         });
     }
@@ -350,7 +350,7 @@ public class AmusementSessionLifecycleService {
     }
 
     public void requireEvidence(String sessionId,List<String> ids,boolean reading) {
-        requireScope(sessionId,reading?VIEW:END);
+        requireScope(sessionId,reading?VIEW:END,reading);
         for(String id:ids==null?List.<String>of():ids) {
             var attachment=evidence.findAttachmentById(id).orElseThrow(()->invalid("清场凭据不存在"));
             if(!"amusement_session".equals(attachment.businessType()) || !sessionId.equals(attachment.businessId()))
@@ -360,8 +360,9 @@ public class AmusementSessionLifecycleService {
     }
 
     public String requireEvidenceScope(String sessionId,String evidencePermission) {
-        requireScope(sessionId,"evidence.timeline.view".equals(evidencePermission)?VIEW:END);
-        String projectId=requireScope(sessionId,evidencePermission);
+        boolean reading="evidence.timeline.view".equals(evidencePermission);
+        requireScope(sessionId,reading?VIEW:END,reading);
+        String projectId=requireScope(sessionId,evidencePermission,reading);
         return repository.findProjectById(projectId).orElseThrow(()->missing("项目不存在")).merchantId();
     }
 
@@ -370,11 +371,26 @@ public class AmusementSessionLifecycleService {
     }
 
     private String requireScope(String sessionId,String permission) {
+        return requireScope(sessionId,permission,false);
+    }
+
+    private String requireScope(String sessionId,String permission,boolean reading) {
         auth.requirePermission(permission);
         AmusementSessionRecord session=repository.findSessionById(requireText(sessionId,"session_id"))
                 .orElseThrow(()->missing("场次不存在"));
-        requireProjectScope(session.projectId(),permission);
+        if(reading)requireReadScope(session.projectId(),permission);
+        else requireProjectScope(session.projectId(),permission);
         return session.projectId();
+    }
+
+    /** 第十八批 E 段 20-R4（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：只用于读——
+     *  商户账号（非平台管理员）只核游乐项目属本商户，不再限本人项目；其余同 {@link #requireProjectScope}。写入口仍走 requireProjectScope。 */
+    private void requireReadScope(String projectId,String permission) {
+        String merchant=auth.currentMerchantIdQuietly().orElse(null);
+        if(merchant==null){requireProjectScope(projectId,permission);return;}
+        auth.requirePermission(permission);
+        if(!merchant.equals(repository.findProjectById(projectId).map(AmusementProjectRecord::merchantId).orElse(null)))
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN","无权处理其他商户场次");
     }
 
     public void requireProjectScope(String projectId,String permission) {

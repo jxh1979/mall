@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.bar.BarBusinessDayService;
@@ -107,7 +107,8 @@ public class AmusementBusinessDayService {
     public Config original(String id) {
         Config row=find(id);
         auth.requirePermission("governance.supervisor_review.view");
-        if(row.reviewId()==null || reviews.findReview(row.reviewId()).isEmpty())throw ApiException.forbidden("FORBIDDEN","无权读取该配置审批原件");
+        // 第十八批 E 段 19-R1：借审批单的用户可见性（按 governance.supervisor_review.view 可触及的项目判发起人归属）
+        if(row.reviewId()==null || reviews.findReview(row.reviewId(),"governance.supervisor_review.view").isEmpty())throw ApiException.forbidden("FORBIDDEN","无权读取该配置审批原件");
         return row;
     }
 

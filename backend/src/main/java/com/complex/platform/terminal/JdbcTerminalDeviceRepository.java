@@ -66,6 +66,22 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
         return device;
     }
 
+    // 第 63 条：纯 INSERT（不走 device_id upsert），型号随行写入。
+    @Override
+    public TerminalDeviceRecord insertSecurityXray(TerminalDeviceRecord device) {
+        jdbcTemplate.update("""
+                INSERT INTO terminal_devices (
+                    id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
+                    merchant_id, location_point_id, staff_id, status, bound_at, created_at, updated_at, device_model
+                )
+                VALUES (
+                    :id, :device_id, :device_code, :terminal_type, :binding_scope, :bound_space_id,
+                    :merchant_id, :location_point_id, :staff_id, :status, :bound_at, :created_at, :updated_at, :device_model
+                )
+                """, deviceParameters(device));
+        return device;
+    }
+
     @Override
     public int compareAndSetStatus(String id, String expectedFrom, TerminalDeviceRecord updated) {
         // P2 并发缺口①修复：条件 UPDATE，仅当当前 status = :expected_from 时整行更新。
@@ -93,6 +109,7 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                     unbound_at = :unbound_at,
                     return_reason = :return_reason,
                     unbind_reason = :unbind_reason,
+                    repair_work_order_id = :repair_work_order_id,
                     updated_at = :updated_at
                  WHERE id = :id
                    AND status = :expected_from
@@ -105,7 +122,7 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
                        mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
                        staff_id, status, bound_at, returned_at, unbound_at, return_reason,
-                       unbind_reason, created_at, updated_at
+                       unbind_reason, created_at, updated_at, device_model, repair_work_order_id
                   FROM terminal_devices
                  WHERE device_code = :device_code
                 """, Map.of("device_code", deviceCode), this::mapDevice).stream().findFirst();
@@ -117,7 +134,7 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
                        mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
                        staff_id, status, bound_at, returned_at, unbound_at, return_reason,
-                       unbind_reason, created_at, updated_at
+                       unbind_reason, created_at, updated_at, device_model, repair_work_order_id
                   FROM terminal_devices
                  WHERE id = :id
                 """, Map.of("id", id), this::mapDevice).stream().findFirst();
@@ -129,7 +146,7 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
                        mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
                        staff_id, status, bound_at, returned_at, unbound_at, return_reason,
-                       unbind_reason, created_at, updated_at
+                       unbind_reason, created_at, updated_at, device_model, repair_work_order_id
                   FROM terminal_devices
                  WHERE device_id = :device_id
                 """, Map.of("device_id", deviceId), this::mapDevice).stream().findFirst();
@@ -164,7 +181,7 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 SELECT d.id, d.device_id, d.device_code, d.terminal_type, d.binding_scope, d.bound_space_id,
                        d.mdm_device_ref, d.kiosk_mode, d.merchant_id, d.venue_id, d.area_id, d.location_point_id,
                        d.staff_id, d.status, d.bound_at, d.returned_at, d.unbound_at, d.return_reason,
-                       d.unbind_reason, d.created_at, d.updated_at
+                       d.unbind_reason, d.created_at, d.updated_at, d.device_model, d.repair_work_order_id
                   FROM terminal_devices d
                 """ + scope + " ORDER BY d.updated_at DESC, d.id", parameters, this::mapDevice);
     }
@@ -431,7 +448,9 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 .addValue("return_reason", device.returnReason())
                 .addValue("unbind_reason", device.unbindReason())
                 .addValue("created_at", timestampWithTimeZone(device.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(device.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(device.updatedAt()))
+                .addValue("device_model", device.deviceModel())
+                .addValue("repair_work_order_id", device.repairWorkOrderId());
     }
 
     private MapSqlParameterSource statusEventParameters(TerminalDeviceStatusEventRecord event) {
@@ -501,7 +520,9 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                 resultSet.getString("return_reason"),
                 resultSet.getString("unbind_reason"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("device_model"),
+                resultSet.getString("repair_work_order_id")
         );
     }
 

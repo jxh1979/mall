@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -164,13 +164,16 @@ class PlatformControllerTests {
     void listingMerchantsReturnsPlaintextPhoneWithPiiPermission() throws Exception {
         // P0-A/GAP-07（V339）：有 pii.contact_phone.view 的读端才见联系电话明文。
         when(authorizationService.currentActorHasPermission("pii.contact_phone.view")).thenReturn(true);
+        // 18E（第 19 条 19-R3）：明文按行所属项目判——商户在本人项目、明文码只到本人项目（与现行等价）
+        when(authorizationService.projectReach(any(), any(String[].class)))
+                .thenReturn(AuthorizationService.ProjectReach.ownOnly("project_a"));
         when(service.listMerchants(eq(false), any(), anyInt(), anyInt())).thenReturn(new PageResponse<>(
                 List.of(new MerchantRecord(
                         "mch_1", "P0 Merchant", "other", "be_1", null, null, "Jane", "18800000011",
                         "Owner Wang", "1F-A", BigDecimal.valueOf(128.50), BigDecimal.valueOf(120.00),
                         "Jack", "18800000013", BigDecimal.valueOf(12.30), "lease", "active",
                         Instant.parse("2026-06-14T00:00:00Z"), Instant.parse("2026-06-14T00:00:00Z")
-                )), 1, 50, 1));
+                ).withProject("project_a")), 1, 50, 1));
 
         mockMvc.perform(get("/api/v1/platform/merchants")
                         .with(user("ops").roles("P0_SMOKE")))
@@ -454,7 +457,7 @@ class PlatformControllerTests {
         var controller = new PlatformController(service, authorization, Mockito.mock(VenueBusinessHoursService.class));
         var merchant = new MerchantRecord("mch_once", "商户", "other", null, null, null,
                 "甲", "18800000011", null, null, null, null, "乙", "18800000013",
-                null, null, "active", Instant.EPOCH, Instant.EPOCH);
+                null, null, "active", Instant.EPOCH, Instant.EPOCH).withProject("project_a"); // 18E 19-R3：明文按行所属项目判
         when(service.listMerchants(false, null, 1, 50))
                 .thenReturn(new PageResponse<>(List.of(merchant, merchant), 1, 50, 2));
         when(service.archiveMerchant(eq(merchant.id()), any())).thenReturn(merchant);

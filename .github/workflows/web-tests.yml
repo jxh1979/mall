@@ -1,0 +1,41 @@
+# 文件版本：V0.01
+name: web-tests
+# 前端各工作区类型检查与单测（第 73 条，EV-07c-15）：PR 到 main 时在 GitHub ubuntu runner 上装依赖后跑
+# npm run typecheck（customer-core、web、customer-app）与 npm run test:unit（customer-core、web、customer-app、customer-miniapp 四个工作区）。
+# 只在 PR 上、且前端相关路径变化时触发，不随 push main 重跑；同分支新推送取消旧运行。
+# 私有库免费版设不了必需检查，本工作流只是可见信号、不阻断合并；ops/160/merge-pr.sh 仍只等 predeploy-gates。
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "apps/customer-app/**"
+      - "apps/customer-miniapp/**"
+      - "packages/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.base.json"
+      - ".github/workflows/web-tests.yml"
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  TZ: America/Los_Angeles # 对齐 160 跑绿时的 node 时区
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1（AUD-068：固定完整 commit SHA，防可变标签漂移）
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0（同上）
+        with:
+          node-version: "22"
+          cache: npm
+      - name: 安装依赖
+        run: npm ci --ignore-scripts
+      - name: 类型检查
+        run: npm run typecheck
+      - name: 单测
+        run: npm run test:unit

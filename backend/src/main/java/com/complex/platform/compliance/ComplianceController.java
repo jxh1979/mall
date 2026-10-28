@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.compliance;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -7,15 +7,20 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.compliance.dto.ComplianceExpiryItemRequest;
+import com.complex.platform.compliance.dto.ComplianceGraceRequests.GraceRequest;
+import com.complex.platform.compliance.dto.ComplianceGraceRequests.ItemTypeConfigRequest;
+import com.complex.platform.compliance.dto.ComplianceGraceRequests.RenewalRequest;
 import com.complex.platform.compliance.dto.ComplianceReminderScanRequest;
 import com.complex.platform.compliance.dto.ContractKeyDateRequest;
 import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
 import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
 import com.complex.platform.compliance.dto.WecomRiskHitReviewRequest;
 import com.complex.platform.gate.TerminalSwitchGuard;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -83,6 +88,38 @@ public class ComplianceController {
         authorizationService.requirePermission("compliance.reminder.scan");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scanReminders(request));
+    }
+
+    // ---------------------------------------------------------------- 第十八批 E 段第 22 条 证照宽限期、预警提前量、续期登记（PGM:531）
+
+    @GetMapping("/item-type-configs")
+    public ApiResponse<List<ComplianceItemTypeConfigRecord>> listItemTypeConfigs() {
+        authorizationService.requirePermission("compliance.expiry_item.view");
+        return ApiResponse.ok(service.listItemTypeConfigs());
+    }
+
+    @PutMapping("/item-type-configs/{item_type}")
+    public ApiResponse<ComplianceItemTypeConfigRecord> saveItemTypeConfig(
+            @PathVariable("item_type") String itemType,
+            @RequestBody ItemTypeConfigRequest request
+    ) {
+        authorizationService.requirePermission("compliance.expiry_item.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.saveItemTypeConfig(itemType, request));
+    }
+
+    @PostMapping("/expiry-items/{id}/grace-requests")
+    public ApiResponse<ComplianceExpiryItemRecord> requestGrace(@PathVariable String id, @RequestBody GraceRequest request) {
+        authorizationService.requirePermission("compliance.grace_period.request");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestGrace(id, request));
+    }
+
+    @PostMapping("/expiry-items/{id}/renewal")
+    public ApiResponse<ComplianceExpiryItemRecord> renewExpiryItem(@PathVariable String id, @RequestBody RenewalRequest request) {
+        authorizationService.requirePermission("compliance.expiry_item.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.renewExpiryItem(id, request));
     }
 
     // ---------------------------------------------------------------- R5 T8 企微会话合规链

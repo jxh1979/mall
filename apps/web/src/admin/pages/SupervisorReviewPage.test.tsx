@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -452,6 +452,17 @@ describe("M043 真实审批信封与既有规则", () => {
     expect(screen.getByTestId("supervisor-review-forward-target").getAttribute("placeholder")).toContain("不是登录名");
     expect(screen.getByTestId("supervisor-review-final-approver").closest("label")?.textContent).toContain("用户编号");
     expect(screen.getByTestId("supervisor-review-beneficiary").closest("label")?.textContent).toContain("用户编号");
+  });
+
+  it("证照宽限期申请的动作类型与对象显示中文", async () => {
+    const pending = [{ decision: { review_id: "review_g1", policy_code: "compliance_grace_period", action_type: "compliance.expiry_item.grace", object_type: "compliance_expiry_item", object_id: "lic-1", initiated_by: "u-m", approval_level: "top_authority", required_level: 3, review_status: "pending_review" }, schedule: null }];
+    const policies = [{ policy_code: "compliance_grace_period", action_type: "compliance.expiry_item.grace", required_evidence_types: ["reason"], status: "active", blocks_by_default: true }];
+    renderPage(ADMIN_PERMS, { policies, pending });
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-review_g1").textContent).toContain("证照宽限期申请"));
+    const row = screen.getByTestId("supervisor-review-pending-review_g1").textContent ?? "";
+    expect(row).toContain("证照 / lic-1");
+    expect(row).not.toContain("未识别类型");
+    expect(screen.getByTestId("supervisor-review-row-compliance_grace_period").textContent).toContain("证照宽限期申请");
   });
 
   it("第三人不能按用户编号转交给直接受益人", async () => {

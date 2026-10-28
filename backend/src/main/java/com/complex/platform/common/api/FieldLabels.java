@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -364,6 +364,10 @@ public final class FieldLabels {
         p("ar_ap_item_id", "应收应付明细");
         p("expense_type", "费用类型");
         p("fee_event", "费用事件");
+        p("fee_items", "费用总表");
+        p("fee_name", "费用名目");
+        p("billing_basis", "计费基数");
+        p("bearer", "承担方");
         p("period", "期间");
         p("period_label", "期间名称");
         p("period_type", "期间类型");
@@ -499,6 +503,10 @@ public final class FieldLabels {
         p("gps_lng", "经度");
         p("device_id", "设备");
         p("device_code", "设备编码");
+        p("device_model", "设备型号");
+        p("repair_work_order_id", "维修工单");
+        p("bound_space_id", "绑定空间");
+        p("staff_id", "员工");
         p("terminal_type", "终端类型");
         p("kiosk_mode", "自助机模式");
         p("fallback_mode", "降级模式");
@@ -656,6 +664,14 @@ public final class FieldLabels {
         p("ref_type", "关联单据类型");
         p("request_id", "请求标识");
         p("reason", "原因");
+        // 第十八批 E 段第 22 条 证照宽限期与预警提前量（PGM:531）。
+        p("valid_to", "有效期止");
+        p("grace_days", "宽限天数");
+        p("grace_min_days", "宽限天数下限");
+        p("grace_max_days", "宽限天数上限");
+        p("warning_months", "预警提前月数");
+        p("warning_min_months", "预警提前月数下限");
+        p("warning_max_months", "预警提前月数上限");
         p("reason_code", "原因编码");
         p("note", "备注");
         p("comment", "备注");

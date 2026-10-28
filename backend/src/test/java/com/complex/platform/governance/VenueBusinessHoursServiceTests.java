@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -99,6 +99,12 @@ class VenueBusinessHoursServiceTests {
             @Override
             public AccessActor currentActor() {
                 return actor;
+            }
+            // 18E（第 19 条 19-R2）：服务改按入口权限码可触及的项目判；本类不挂可跨项目角色，只到本人项目（与现行等价）
+            @Override
+            public ProjectReach projectReach(AccessActor reachActor, String... permissionCodes) {
+                return isPlatformAdmin(reachActor) ? super.projectReach(reachActor, permissionCodes)
+                        : ProjectReach.ownOnly(requireProjectScope(reachActor));
             }
         };
     }

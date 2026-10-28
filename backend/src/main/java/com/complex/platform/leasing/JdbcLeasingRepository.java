@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -442,5 +442,71 @@ class JdbcLeasingRepository implements LeasingRepository {
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             return Map.of();
         }
+    }
+
+    // 18E（第 19 条 19-R2）：可跨项目角色持有人按可触及项目集合取（空集合直接返回空页）；谓词同上面各单项目版本，只把 = 换成 IN。
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingLeadRecord> listLeadsPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return pagedInProjects(projectIds, page, size, "*", "FROM leasing_leads WHERE project_id IN (:project_ids)",
+                "created_at DESC, id", new MapSqlParameterSource(), this::mapLead);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUpPaged(
+            java.time.Instant cutoff, java.util.Collection<String> projectIds, int page, int size) {
+        return pagedInProjects(projectIds, page, size, "*", "FROM leasing_leads WHERE status NOT IN ('signed', 'lost')"
+                        + " AND COALESCE(last_follow_up_at, created_at) < :cutoff AND project_id IN (:project_ids)",
+                "COALESCE(last_follow_up_at, created_at), id",
+                new MapSqlParameterSource("cutoff", timestampWithTimeZone(cutoff)), this::mapLead);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingIntentRecord> listIntentsPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return pagedInProjects(projectIds, page, size, "id, lead_id, stage, intended_space_id, intended_area_sqm, "
+                        + "rent_terms::text AS rent_terms, last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at, "
+                        + "pending_stage, pending_review_id",
+                "FROM leasing_intents WHERE project_id IN (:project_ids)", "created_at DESC, id", new MapSqlParameterSource(),
+                this::mapIntent);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingBrandRecord> listBrandsPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return pagedInProjects(projectIds, page, size, "*", "FROM leasing_brands WHERE project_id IN (:project_ids)",
+                "created_at DESC, id", new MapSqlParameterSource(), this::mapBrand);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingFollowUpRecord> listFollowUpsByRefPaged(
+            String refType, String refId, java.util.Collection<String> projectIds, int page, int size) {
+        return pagedInProjects(projectIds, page, size, "*",
+                "FROM leasing_follow_ups WHERE ref_type = :ref_type AND ref_id = :ref_id AND project_id IN (:project_ids)",
+                "created_at DESC, id", new MapSqlParameterSource().addValue("ref_type", refType).addValue("ref_id", refId),
+                this::mapFollowUp);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingFollowUpRecord> listAllFollowUpsPaged(
+            java.util.Collection<String> projectIds, int page, int size) {
+        return pagedInProjects(projectIds, page, size, "*", "FROM leasing_follow_ups WHERE project_id IN (:project_ids)",
+                "created_at DESC, id", new MapSqlParameterSource(), this::mapFollowUp);
+    }
+
+    private <T> com.complex.platform.common.api.PageResponse<T> pagedInProjects(java.util.Collection<String> projectIds, int page,
+            int size, String columns, String fromWhere, String orderBy, MapSqlParameterSource params,
+            org.springframework.jdbc.core.RowMapper<T> mapper) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        if (projectIds.isEmpty()) {
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        }
+        params.addValue("project_ids", projectIds);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) " + fromWhere, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<T> items = jdbcTemplate.query("SELECT " + columns + " " + fromWhere + " ORDER BY " + orderBy
+                + " LIMIT :limit OFFSET :offset", params, mapper);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 }

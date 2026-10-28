@@ -1,9 +1,10 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.access.AuthorizationService;
@@ -57,7 +58,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(47); // 包括工资、绩效、酒吧分配、合同三类（HP-C01）、门店要货未出库取消（FS-011）、借用物无法归还（FS-019）、楼宇设备报废（HP-F03）、停车免费放行与减免（HP-P01）、酒吧营业日（第十八批第 1 条）、招商黑名单例外放行与意向关键阶段确认（第十八批第 30 条）及高价值判定阈值（第十八批第 24 条）审批。
+        assertThat(page.total()).isEqualTo(49); // 包括工资、绩效、酒吧分配、合同三类（HP-C01）、门店要货未出库取消（FS-011）、借用物无法归还（FS-019）、楼宇设备报废（HP-F03）、停车免费放行与减免（HP-P01）、酒吧营业日（第十八批第 1 条）、招商黑名单例外放行与意向关键阶段确认（第十八批第 30 条）、高价值判定阈值（第十八批第 24 条）、证照宽限期（第十八批 E 段第 22 条）及商户加经营项目（第十八批 E 段第 20 条）审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
@@ -1340,9 +1341,32 @@ class SupervisorReviewServiceTests {
                                 com.complex.platform.auth.SessionIssuer.MASTER_USERNAME, com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "org_1", null, "active"),
                         "token", List.of()));
         assertThat(svc.listPending(200).items()).extracting(p -> p.decision().reviewId()).doesNotContain(far.reviewId());
-        assertThat(svc.findReview(far.reviewId())).isPresent();
+        assertThat(svc.findReview(far.reviewId(), "governance.supervisor_review.view")).isPresent();
         assertThat(auditEventRepository.events).filteredOn(e -> "governance.supervisor_review.viewed_cross_scope".equals(e.eventName()))
                 .extracting(AuditEvent::businessId).containsExactly(far.reviewId());
+    }
+
+    // 第十八批 E 段 19-R1：按编号读复核单分成内部读与用户读——内部调用方（审批监听、已按本服务范围核过对象的业务服务）用的无参版本
+    // 只按编号读、不做用户可见性；用户按编号读取走带入口权限码的版本，看不到的照旧 403 SUPERVISOR_REVIEW_SCOPE_FORBIDDEN。
+    @Test
+    void internalFindReviewReadsByIdWithoutUserVisibility() {
+        com.complex.platform.access.AccessRepository repo = levelAwareRepository(Map.of("usr_far_init", 3), null);
+        org.mockito.Mockito.when(repo.findUserById("usr_far_init")).thenReturn(Optional.of(new com.complex.platform.access.AccessUser(
+                "usr_far_init", "far", "staff", "org_2", null, "active", java.time.Instant.parse("2026-06-14T00:00:00Z"))));
+        SupervisorReviewService svc = new SupervisorReviewService(
+                new AuthorizationService(repo),
+                new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
+                reviewRepository,
+                new AuditEventService(auditEventRepository), publishedEvents::add);
+        reviewRepository.superiors.put("usr_far_init", "usr_far_sup");
+        TestSecurityActors.asSupervisor("usr_far_init", 1);
+        var far = svc.evaluate(evaluate("scope-far-internal", "v", List.of(), "contract_violation", "contract", "c_far_internal", 0L, "violation"));
+        TestSecurityActors.asSupervisor("usr_near_reader", 2);
+
+        assertThatCode(() -> svc.findReview(far.reviewId())).doesNotThrowAnyException();
+        assertThat(svc.findReview(far.reviewId())).isPresent();
+        assertThatThrownBy(() -> svc.findReview(far.reviewId(), "governance.supervisor_review.view"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_REVIEW_SCOPE_FORBIDDEN"));
     }
 
     // XM-D029-003（丁案）：准入闸六参路径拿不到收款人，免单复核单照常建、审批不因缺受益人被拒；授权类仍强制受益人、被授权人本人仍不能审批。

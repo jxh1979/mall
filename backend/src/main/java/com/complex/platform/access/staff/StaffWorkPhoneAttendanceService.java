@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AccessRepository;
@@ -457,10 +457,14 @@ public class StaffWorkPhoneAttendanceService {
 
     void requireScope(String userId,String permission) {
         var actor=auth.currentActor();
+        var reach=auth.projectReach(actor,permission);
         var target=access.findUserById(userId).orElseThrow(()->ApiException.notFound("STAFF_NOT_FOUND","员工不存在"));
-        if (!auth.canReachUser(actor,target,permission)) throw ApiException.forbidden("STAFF_SCOPE_MISMATCH","员工不在管理范围");
+        if (!auth.canReachUser(reach,target)) throw ApiException.forbidden("STAFF_SCOPE_MISMATCH","员工不在管理范围");
         var owner=staff.findProfileByUserId(actor.id()).orElse(null);
         var employee=staff.findProfileByUserId(userId).orElseThrow();
+        // 第十八批 E 段 19-R1（M738 iter1 所选选项原文一「角色勾了哪个项目，就看、管登记在该项目或改挂到该项目的员工。」）：
+        // 凭可跨项目角色触及的员工按档案登记项目判，不再比本人公司；其余照旧按本公司。
+        if (employee.projectId()!=null && reach.projects().contains(employee.projectId())) return;
         if (owner!=null && owner.companyId()!=null && !Objects.equals(owner.companyId(),employee.companyId()))
             throw ApiException.forbidden("STAFF_COMPANY_SCOPE_MISMATCH","员工不在本公司范围");
     }

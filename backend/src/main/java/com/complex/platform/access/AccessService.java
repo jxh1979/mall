@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.45
+// 文件版本：V0.46
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -1931,6 +1931,17 @@ public class AccessService {
      */
     @Transactional
     public StaffLevelAssignment assignStaffLevel(StaffLevelAssignmentRequest request) {
+        return assignStaffLevel(request, null);
+    }
+
+    /**
+     * 第十八批 E 段 19-R1（移植 M738）。M738-F06（2026-10-16 所选选项原文「审批落地职级时沿用已经核过的注册审批范围」）、M738-F07（2026-10-17 所选选项原文
+     * 「域公司审批已通过的注册，职级也能落地」）：员工注册审批通过时落地职级，该次审批已对来源档案核过 staff.profile.review 的审批范围（含按所属公司通过的域公司人事），
+     * 新账号就是本事务按该档案建出来的，故 reviewReach 非空时不再另核新账号的范围，也不按 access.staff_level.manage 另核；
+     * 只有 StaffService.reviewRegistration 传 reviewReach。为 null 时（独立职级分配入口）照旧按 access.staff_level.manage 现算并核目标范围。其余校验不变。
+     */
+    @Transactional
+    public StaffLevelAssignment assignStaffLevel(StaffLevelAssignmentRequest request, ProjectReach reviewReach) {
         AccessActor actor = authorizationService.currentActor();
         try {
             return idempotencyService.execute(
@@ -1945,9 +1956,12 @@ public class AccessService {
                         // M002-F41（治理地图「系统立即按变更后的岗位权限模板重算有效权限，旧岗位或旧范围派生权限同步失效」，R-002）：与其他定岗写入口
                         // 同一把员工行锁，先锁后读——下方岗位读取、分支与两种写入都在锁内，并发换岗或定岗提交后按锁内读到的当前岗位重算。
                         // M736：可触及项目在锁员工行之前算好；已定岗改职级转定岗时沿用同一个结果。
-                        ProjectReach reach = authorizationService.projectReach(actor, "access.staff_level.manage");
+                        ProjectReach reach = reviewReach != null ? reviewReach
+                                : authorizationService.projectReach(actor, "access.staff_level.manage");
                         AccessUser targetUser = lockTargetUser(userId);
-                        requireSameOrganization(actor, targetUser, reach);
+                        if (reviewReach == null) {
+                            requireSameOrganization(actor, targetUser, reach);
+                        }
                         if (repository.findStaffLevelById(request.staffLevelId()).isEmpty()) {
                             throw ApiException.badRequest("UNKNOWN_STAFF_LEVEL",
                                     "无法识别的员工职级：" + request.staffLevelId());

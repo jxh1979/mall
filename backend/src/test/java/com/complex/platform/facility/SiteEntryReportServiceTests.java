@@ -1,5 +1,5 @@
 package com.complex.platform.facility;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -279,6 +279,9 @@ class SiteEntryReportServiceTests {
         var auth = org.mockito.Mockito.spy(new AuthorizationService(null));
         org.mockito.Mockito.doAnswer(call -> projectId.equals(call.getArgument(1)))
                 .when(auth).canReachProject(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(String[].class));
+        // 18E（第 19 条 19-R3）：列表按可触及项目取数——只到本人项目（与现行等价）
+        org.mockito.Mockito.doReturn(AuthorizationService.ProjectReach.ownOnly(projectId))
+                .when(auth).projectReach(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(String[].class));
         return new SiteEntryReportService(reports, mock(AuditEventService.class), auth, evidence, attachments, idempotency);
     }
 

@@ -37,8 +37,12 @@ public class PartnerService {
     public PageResponse<ExternalPartnerOrgRecord> listPartnerOrgs() {
         authorizationService.requirePlatformScope();
         // 3.2 跨项目读隔离：项目员工只见本项目机构，平台管理员/全局平台员工全量。
-        List<ExternalPartnerOrgRecord> rows = repository.listOrgs(
-                authorizationService.currentProjectScopeQuietly().orElse(null));
+        // 18E（第 19 条 19-R2）：非平台管理员按 partner.org.view 可触及的项目取；恰好只到本人项目的走原来的单项目查询。
+        // ponytail: 逐项目各查一次，可触及项目多到成为负担时改成一条 IN 查询。
+        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
+        var reach = scope == null ? null : authorizationService.projectReach(authorizationService.currentActor(), "partner.org.view");
+        List<ExternalPartnerOrgRecord> rows = reach == null || reach.onlyOwnProject().isPresent() ? repository.listOrgs(scope)
+                : reach.organizationIds().stream().flatMap(projectId -> repository.listOrgs(projectId).stream()).toList();
         auditEventService.recordSuccess("partner_org.viewed", "partner.org.view", "partner_org", "all",
                 null, null, Map.of("count", rows.size()));
         return new PageResponse<>(rows, 1, rows.size(), rows.size());
