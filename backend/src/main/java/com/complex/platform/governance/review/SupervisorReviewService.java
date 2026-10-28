@@ -42,6 +42,8 @@ public class SupervisorReviewService {
     private final ApprovalChainService chainService;
     @Autowired
     private com.complex.platform.access.staff.StaffHrRoutingService staffHrRouting;
+    @Autowired
+    private com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
     // U09-005：事件发布器必填注入——批准后的员工落地（U05 StaffApprovalService.afterDecision）依赖该事件，不得静默不发。
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
@@ -60,6 +62,10 @@ public class SupervisorReviewService {
     public static final String STAFF_ADJUSTMENT_ACTION = "staff.payroll.adjustment.add";
     public static final String STAFF_ADJUSTMENT_APPEAL_ACTION = "staff.payroll.adjustment.appeal";
     public static final String HR_LINE = "hr_review";
+    // 18E 复核后操作员裁决补充第 16 条（所选选项原文「这三类人事复核单按所处理员工的登记项目判普通查看人能不能看；审批人、发起人本人照旧。」）：
+    // 员工状态变更、奖惩、排班发布三类复核单，普通查看人的「同项目」按所处理员工的登记项目判，见 visibleTo。
+    private static final java.util.Set<String> STAFF_SUBJECT_ACTIONS =
+            java.util.Set.of(STAFF_EMPLOYMENT_STATUS_ACTION, STAFF_ADJUSTMENT_ACTION, "staff.shift.publish");
 
     private final List<SupervisorReviewPolicyRecord> policies = List.of(
             new SupervisorReviewPolicyRecord("staff_payroll_scheme", "staff.payroll.scheme.change", 0, 3, true,
@@ -1142,7 +1148,8 @@ public class SupervisorReviewService {
         return supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
     }
 
-    /** 第十八批 E 段 19-R1（移植 M738）：用户按编号读复核单，按该入口权限码可触及的项目判发起人归属（当前审批人、被转发人、发起人本人照旧可见；最高权限逐笔放行留痕）。 */
+    /** 第十八批 E 段 19-R1（移植 M738）：用户按编号读复核单，按该入口权限码可触及的项目判发起人归属（当前审批人、被转发人、发起人本人照旧可见；最高权限逐笔放行留痕）。
+     *  按查看码读的员工状态变更、奖惩、排班发布三类复核单改按所处理员工的登记项目判（18E 复核后操作员裁决补充第 16 条，见 visibleTo）。 */
     public Optional<SupervisorReviewDecisionRecord> findReview(String reviewId, String permissionCode) {
         Optional<SupervisorReviewDecisionRecord> found = findReview(reviewId);
         found.ifPresent(review -> requireVisibleReview(review, permissionCode));
@@ -1152,7 +1159,8 @@ public class SupervisorReviewService {
     /**
      * M007-R6-02（PGM-1.10.1「所有业务数据默认按项目隔离……不提供关闭开关」、PGM-1.7.1「④看不到别的商户和别的项目的数据」）：
      * 待复核清单按当前操作人范围过滤——平台管理员跨范围查看留痕（D-032）；其余主体只看到发起人属本项目（有商户隔离键时同商户）的单据，
-     * 或自己是当前节点审批人 / 被转发人 / 发起人的单据。持密钥最高权限也按此过滤，不整表（红线④逐笔开放：按编号读取见 requireVisibleReview）。
+     * 或自己是当前节点审批人 / 被转发人 / 发起人的单据。员工状态变更、奖惩、排班发布三类人事复核单的「属本项目」按所处理员工的登记项目
+     * （staff_profiles.project_id）判，排班批次须全部员工的登记项目都在范围内，该单审批链上的审批人、被转发人与裁决人（含已裁决的）照旧按发起人判（18E 复核后操作员裁决补充第 16 条；商户隔离仍按发起人）。持密钥最高权限也按此过滤，不整表（红线④逐笔开放：按编号读取见 requireVisibleReview）。
      */
     public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
         AccessActor actor = authorizationService.currentActor();
@@ -1166,14 +1174,18 @@ public class SupervisorReviewService {
             AuthorizationService.ProjectReach reach = scopeOf(actor, VIEW_PERMISSION);
             String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
             // ponytail: filters the <= limit rows already fetched; move the scope join into the query if pending volume grows
-            items = all.stream().filter(item -> visibleTo(actor, reach, merchantId, item)).toList();
+            items = all.stream().filter(item -> visibleTo(actor, reach, merchantId, item, true)).toList();
         }
         return new PageResponse<>(items, 1, limit, items.size());
     }
 
-    private boolean visibleTo(AccessActor actor, AuthorizationService.ProjectReach reach, String merchantId, SupervisorReviewRepository.PendingReview item) {
+    /** bySubject：按查看码读（待复核清单、按编号读原件、审批链）时三类人事复核单按所处理员工的登记项目判；写入口（通过、重生成审批链）照旧按发起人。
+     *  该单审批链上任一节点的审批人、被转发人、裁决人（含已裁决、尚未轮到的）照旧按发起人判（裁决原文「审批人、发起人本人照旧」）。 */
+    private boolean visibleTo(AccessActor actor, AuthorizationService.ProjectReach reach, String merchantId, SupervisorReviewRepository.PendingReview item,
+                              boolean bySubject) {
         String reviewId = item.decision().reviewId();
-        boolean currentApprover = ApprovalChainService.currentNodes(supervisorReviewRepository.listChainNodes(reviewId)).stream()
+        List<ApprovalChainNode> nodes = supervisorReviewRepository.listChainNodes(reviewId);
+        boolean currentApprover = ApprovalChainService.currentNodes(nodes).stream()
                 .anyMatch(node -> actor.id().equals(node.approverId()) || actor.id().equals(node.forwardedTo()));
         if (currentApprover || (item.schedule() != null && actor.id().equals(item.schedule().forwardedTo()))) {
             return true;
@@ -1182,7 +1194,13 @@ public class SupervisorReviewService {
         if (actor.id().equals(initiator)) {
             return true;
         }
-        boolean sameProject = authorizationService.organizationIdOf(initiator).map(reach::covers).orElse(false);
+        boolean onChain = nodes.stream().anyMatch(node -> actor.id().equals(node.approverId()) || actor.id().equals(node.forwardedTo())
+                || actor.id().equals(node.decidedBy()));
+        List<String> subjectProjects = bySubject && !onChain && STAFF_SUBJECT_ACTIONS.contains(item.decision().actionType())
+                ? staffRepository.reviewSubjectProjectIds(reviewId) : null;
+        boolean sameProject = subjectProjects == null
+                ? authorizationService.organizationIdOf(initiator).map(reach::covers).orElse(false)
+                : !subjectProjects.isEmpty() && subjectProjects.stream().allMatch(reach::covers);
         Optional<String> initiatorMerchant = authorizationService.merchantIdOf(initiator);
         boolean sameMerchant = merchantId.isEmpty()
                 ? initiatorMerchant.isEmpty()
@@ -1199,7 +1217,7 @@ public class SupervisorReviewService {
         String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
         SupervisorReviewRepository.PendingReview item = new SupervisorReviewRepository.PendingReview(
                 record, supervisorReviewRepository.findSupervisorReviewSchedule(record.reviewId()).orElse(null));
-        if (!visibleTo(actor, reach, merchantId, item)) {
+        if (!visibleTo(actor, reach, merchantId, item, VIEW_PERMISSION.equals(permissionCode))) {
             if (authorizationService.isMasterAuthority(actor)) {
                 // XM-D029-002（红线④「持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕」）：按编号逐笔放行并留痕。
                 auditEventService.recordSuccess("governance.supervisor_review.viewed_cross_scope", VIEW_PERMISSION, "supervisor_review",

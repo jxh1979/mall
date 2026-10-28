@@ -273,6 +273,19 @@ public class JdbcStaffRepository {
                 (rs, n) -> rs.getString("project_id")).stream().filter(java.util.Objects::nonNull).findFirst();
     }
 
+    /** 18E 复核后操作员裁决补充第 16 条：员工状态变更、奖惩、排班发布复核单所处理员工的登记项目（staff_profiles.project_id），每名员工一项
+     *  （排班批次多名员工多项；按员工编号取最新一条档案，同 STAFF_PROJECT_SUBSELECT；没有登记项目的为 null）。 */
+    public List<String> reviewSubjectProjectIds(String reviewId) {
+        return jdbcTemplate.queryForList("""
+                SELECT p.project_id FROM staff_employment_status_revisions r JOIN staff_profiles p ON p.id = r.profile_id
+                 WHERE r.review_id = :review
+                UNION ALL
+                SELECT (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = u.user_id ORDER BY p.created_at DESC LIMIT 1)
+                  FROM (SELECT user_id FROM staff_payroll_adjustment_requests WHERE review_id = :review
+                        UNION SELECT after_value->>'userId' FROM staff_shift_revisions WHERE review_id = :review) u
+                """, Map.of("review", reviewId), String.class);
+    }
+
     public int closePayrollMonth(String month, String closedBy, java.time.Instant now, String projectScope) {
         return closePayrollMonth(month, closedBy, now, projectScope, null);
     }

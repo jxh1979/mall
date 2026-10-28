@@ -357,6 +357,12 @@ class SupervisorReviewControllerTests {
             return Mockito.mock(StaffHrRoutingService.class);
         }
 
+        // 18E 复核后操作员裁决补充第 16 条：服务按字段注入人事仓储（三类人事复核单按所处理员工的登记项目判可见），切片里给桩
+        @Bean
+        com.complex.platform.access.staff.JdbcStaffRepository jdbcStaffRepository() {
+            return Mockito.mock(com.complex.platform.access.staff.JdbcStaffRepository.class);
+        }
+
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);

@@ -514,6 +514,83 @@ class M738CrossProjectJdbcIntegrationTests {
                 .with(staffOfA("plain", plainRole("plain", "staff.attendance.view")))), "STAFF_SCOPE_MISMATCH");
     }
 
+    // 18E 复核后操作员裁决补充第 16 条（所选选项原文「这三类人事复核单按所处理员工的登记项目判普通查看人能不能看；审批人、发起人本人照旧。」）：
+    // A 的员工经只勾 B 的角色持有 staff.payroll.manage、staff.shift.manage、staff.profile.review（另经普通角色持有 staff.shift.manage 与查看码），
+    // 替 B 的员工 eB 提交奖惩、排班、状态变更三张复核单，再排一批 eA＋eB 的班。查看码 governance.supervisor_review.view。
+    // 修复前四张单都按发起人算 A：A 里只持查看码的普通员工在待复核清单里看得到（第一处断言即红）。
+    @Test
+    void staffReviewsForAnotherProjectsEmployeeFollowRegisteredProject() throws Exception {
+        String view = "governance.supervisor_review.view";
+        String eA = employee("ea", entityA);
+        String eB = employee("eb", entityB);
+        RequestPostProcessor holder = staffOfA("holder",
+                tickedBRole("holder", "staff.payroll.manage", "staff.shift.manage", "staff.profile.review"),
+                plainRole("holder_p", "staff.shift.manage", view));
+        // 状态变更须由该员工直属领导发起（不挂部门线：人事会签不解析，三张单都不生成审批链）
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, updated_by) VALUES (?, ?, ?)", eB, userId("holder"),
+                userId("holder"));
+        String adjustment = reviewIdOf(postJson(holder, "/api/v1/staff/payroll/adjustments", """
+                {"idempotency_key": "%s", "user_id": "%s", "month": "2098-07", "adj_type": "penalty", "amount_cent": 200, "reason": "M738 扣罚"}
+                """.formatted(key(), eB)));
+        String shift = reviewIdOf(postJson(holder, "/api/v1/staff/shifts", """
+                {"idempotency_key": "%s", "user_id": "%s", "shift_id": null, "work_date": "2099-04-01", "start_at": "2099-04-01T01:00:00Z",
+                 "end_at": "2099-04-01T09:00:00Z", "point_space_ids": [], "note": null, "night_duty_manager": false}
+                """.formatted(key(), eB)));
+        String employment = reviewIdOf(postJson(holder, "/api/v1/staff/profiles/" + profileId("eb") + "/employment-status", """
+                {"idempotency_key": "%s", "employment_status": "suspended", "reason": "M738 停岗"}
+                """.formatted(key())));
+        String mixed = reviewIdOf(postJson(holder, "/api/v1/staff/shifts/batch", """
+                {"idempotency_key": "%s", "user_ids": ["%s", "%s"], "start_date": "2099-04-02", "days": 1, "weekdays": [], "start_time": "09:00",
+                 "end_time": "17:00", "point_space_ids": [], "note": null, "night_duty_manager": false}
+                """.formatted(key(), eA, eB)));
+        List<String> forB = List.of(adjustment, shift, employment);
+        // 待审清单按到期时刻排序、最多 200 张：夹具单排到前面
+        jdbcTemplate.update("UPDATE supervisor_review_decisions SET due_at = TIMESTAMPTZ '2000-01-01 00:00:00+00' WHERE review_id IN (?, ?, ?, ?)",
+                adjustment, shift, employment, mixed);
+        RequestPostProcessor viewerA = staffOfA("viewa", plainRole("viewa", view));
+        RequestPostProcessor viewerB = account("viewb", "staff", entityB, null, plainRole("viewb", view));
+
+        // 修复前红：A 的普通查看人看得到这四张
+        assertThat(pendingIds(viewerA)).doesNotContainAnyElementsOf(List.of(adjustment, shift, employment, mixed));
+        assertThat(pendingIds(viewerB)).containsAll(forB).doesNotContain(mixed);
+        for (String id : forB) {
+            denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + id).with(viewerA)), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+            mockMvc.perform(get("/api/v1/platform/supervisor-review/" + id).with(viewerB))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.review_id").value(id));
+        }
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + adjustment + "/chain").with(viewerA)),
+                "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + adjustment + "/chain").with(viewerB)).andExpect(status().isOk());
+        // 批次里有一名员工登记在 A：B 的普通查看人也看不到（全部员工的登记项目都在范围内才算）
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + mixed).with(viewerB)), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+
+        // 审批人照旧：A 里只持查看码、是奖惩单当前节点审批人的人看得到（守护）
+        RequestPostProcessor approverA = staffOfA("apr", plainRole("apr", view));
+        jdbcTemplate.update("INSERT INTO supervisor_review_nodes (node_id, review_id, line_code, seq, approver_kind, approver_id, status) "
+                + "VALUES (?, ?, 'main', 1, 'user', ?, 'pending')", "nd_" + adjustment, adjustment, userId("apr"));
+        assertThat(pendingIds(approverA)).contains(adjustment).doesNotContain(shift, employment, mixed);
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + adjustment).with(approverA)).andExpect(status().isOk());
+        // 发起人本人照旧（守护）
+        assertThat(pendingIds(holder)).contains(adjustment, shift, employment, mixed);
+
+        // 审批人照旧（含已裁决的）：holder 在 A 的直属上级 sup 经普通角色持查看码与审批码，是排班发布单（one_level_up）唯一节点的审批人。
+        // 通过后已不是当前节点，按编号读原件与审批链照旧 200（审批链页通过后刷新即读这两项）；A 的普通查看人仍 403。修复前通过后读原件即 403。
+        RequestPostProcessor superior = staffOfA("sup", plainRole("sup", view, "governance.supervisor_review.approve"));
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, updated_by) VALUES (?, ?, ?)", userId("holder"), userId("sup"),
+                userId("holder"));
+        String decided = reviewIdOf(postJson(holder, "/api/v1/staff/shifts", """
+                {"idempotency_key": "%s", "user_id": "%s", "shift_id": null, "work_date": "2099-04-03", "start_at": "2099-04-03T01:00:00Z",
+                 "end_at": "2099-04-03T09:00:00Z", "point_space_ids": [], "note": null, "night_duty_manager": false}
+                """.formatted(key(), eB)));
+        approve(superior, decided).andExpect(status().isOk()).andExpect(jsonPath("$.data.review_status").value("approved"));
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + decided).with(superior))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.review_id").value(decided));
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + decided + "/chain").with(superior)).andExpect(status().isOk());
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + decided).with(viewerA)), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + decided + "/chain").with(viewerA)),
+                "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     private String userId(String tag) {
@@ -709,6 +786,19 @@ class M738CrossProjectJdbcIntegrationTests {
 
     private List<String> pendingReviews(RequestPostProcessor session) throws Exception {
         return mine(session, "/api/v1/platform/supervisor-review/pending", "$.data.items[*].decision.review_id");
+    }
+
+    /** 待复核清单里的全部复核单编号（经接口生成的单编号不带随机后缀，用例按编号比对）。 */
+    private List<String> pendingIds(RequestPostProcessor session) throws Exception {
+        return JsonPath.read(mockMvc.perform(get("/api/v1/platform/supervisor-review/pending").with(session))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.items[*].decision.review_id");
+    }
+
+    /** 提交须 200，取回复核单编号。 */
+    private static String reviewIdOf(ResultActions result) throws Exception {
+        return JsonPath.read(result.andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8),
+                "$.data.review_id");
     }
 
     private List<String> serviceOrders(RequestPostProcessor session) throws Exception {

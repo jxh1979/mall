@@ -47839,7 +47839,7 @@ paths:
       summary: 按编号读取有权查看的主管复核原件
       description: 审批依赖逐笔读取的真实原件及状态，不依赖待审列表前200条。复用原件项目和商户范围校验；最高权限按既有逐笔跨范围规则读取时额外留痕，不扩大待审清单。附件另走受控证据读取。 实际交付客户端为后台
         Web；后端沿统一终端总开关，没有新增 web-only 白名单。
-        18E：可见范围按 governance.supervisor_review.view 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；当前审批人、被转发人、发起人本人照旧可见；看不到的 403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）。
+        18E：可见范围按 governance.supervisor_review.view 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；当前审批人、被转发人、发起人本人照旧可见；看不到的 403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）。18E 复核后操作员裁决补充第 16 条：员工状态变更、奖惩、排班发布三类人事复核单改按所处理员工的登记项目（员工档案 project_id）判，排班批次须全部员工的登记项目都在可触及的项目内。该单审批链上的审批人、被转发人与裁决人（含已裁决的）照旧按发起人判。
       x-permission: governance.supervisor_review.view
       x-data-scope: project-merchant
       x-auth-context: staff-token
