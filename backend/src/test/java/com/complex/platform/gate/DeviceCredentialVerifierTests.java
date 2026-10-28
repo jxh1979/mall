@@ -109,6 +109,16 @@ class DeviceCredentialVerifierTests {
     }
 
     @Test
+    void webLoginWithoutCookieSessionPassesUnderEnforce() {
+        // #553：登录时浏览器还没有会话 Cookie，web/经销商门户的登录请求不能因缺 Cookie 被拒；其他写请求照旧拒（见上一条用例）。
+        for (String type : java.util.List.of("web", "dealer_portal")) {
+            MockHttpServletRequest login = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+            login.addHeader("X-Terminal-Type", type);
+            assertThat(verifier("enforce").verify(login).terminalType()).isEqualTo(type);
+        }
+    }
+
+    @Test
     void validSignatureDerivesTrustedTypeVerified() throws Exception {
         long ts = NOW;
         String sig = sign("POST", ts, "n1");

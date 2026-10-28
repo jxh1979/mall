@@ -62,6 +62,8 @@ public class DeviceCredentialVerifier {
     static final String STAFF_PRIVATE_PHONE = "staff_private_phone";
     static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", STAFF_PRIVATE_PHONE);
     private static final String STAFF_WORK_PHONE = "staff_work_phone";
+    /** #553：登录请求此时还没有会话 Cookie，web/经销商门户不能因缺 Cookie 拒登录。 */
+    private static final String WEB_LOGIN_PATH = "/api/v1/auth/login";
     private static final String EVENT = "terminal.device_credential";
     /** 哨兵：⑤ deviceId 与所用密钥归属不符（内部返回，非真实密钥）。 */
     private static final String INVALID_OWNER = " OWNER_MISMATCH";
@@ -182,7 +184,7 @@ public class DeviceCredentialVerifier {
         if (write) {
             if ("web".equals(terminalType) || "dealer_portal".equals(terminalType)) {
                 // CG-11d：独立经销商 Web 门户（第十一端）与员工 Web 端同口径——浏览器 Cookie 会话即证明，不要求设备凭证。
-                if (AuthCookies.readAccessToken(request) == null) {
+                if (AuthCookies.readAccessToken(request) == null && !WEB_LOGIN_PATH.equals(request.getRequestURI())) {
                     if (modeFor(terminalType) == Mode.ENFORCE) {
                         reject(terminalType, deviceId, "web_requires_cookie_session");
                     }
