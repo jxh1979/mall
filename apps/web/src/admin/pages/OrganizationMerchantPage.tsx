@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -8,14 +8,21 @@ import { auditTraceField } from "../components/AuditTrailHint";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { TablePager } from "../components/TablePager";
 import { hasPermissions } from "../security/PermissionGate";
-import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
-import { PermissionButton } from "../security/Can";
+import type { AccessUserRow, AdminPageProps, BusinessEntityRow, GovernanceProjectRow, MerchantAdmissionRow } from "../types";
+import { Can, PermissionButton } from "../security/Can";
+import { shortId } from "../format/ids";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 
 type MerchantRow = MerchantAdmissionRow & { projectId?: string | null };
+// 第十八批 E 段第 20 条（治理地图第 659 行「一个商户要在别的项目经营的，由能管理商户档案的人在商户档案里加经营项目，要经过审批才生效。」）：
+// GET /api/v1/platform/merchants/{merchant_id}/operating-projects 的返回（主项目、已生效的经营项目、申请记录、可申请的项目）。
+type ProjectOption = { projectId: string; projectName?: string | null };
+type OperatingProjectRequestRow = { id: string; projectId: string; projectName?: string | null; status: string; reason?: string | null; requestedAt?: string | null; decidedAt?: string | null };
+type OperatingProjectsView = { primaryProjectId?: string | null; primaryProjectName?: string | null; operatingProjects?: ProjectOption[]; requests?: OperatingProjectRequestRow[]; projectOptions?: ProjectOption[] };
+const OPERATING_REQUEST_STATUS_LABELS: Record<string, string> = { pending_approval: "待审批", approved: "已批准", rejected: "已驳回" };
 const ORGANIZATION_STATUS_LABELS: Record<string, string> = { pending_admission: "待准入", active: "正常", suspended: "暂停", terminated: "终止", archived: "归档", blacklisted: "黑名单" };
 const PROJECT_STATUS_LABELS: Record<string, string> = { draft: "草稿", pending_activation: "待启用", active: "已启用", suspended: "暂停", terminated: "终止", archived: "归档" };
 function formatOrganizationStatus(code?: string | null) {
@@ -99,6 +106,9 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   // FS-024：业态为其他时必填的主管公司（在用主体 id）与指定理由。
   const [supervisingCompanyId, setSupervisingCompanyId] = React.useState("");
   const [supervisingCompanyReason, setSupervisingCompanyReason] = React.useState("");
+  // 第十八批 E 段第 19 条（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
+  // 能看到两个以上项目时选所属项目；不选＝后端按本人所在项目落。
+  const [merchantProjectId, setMerchantProjectId] = React.useState("");
   const [formError, setFormError] = React.useState("");
   // 引导式创建流（一期范式）：主按钮 → 分步弹窗 → 确认创建。
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -109,6 +119,13 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [showArchived, setShowArchived] = React.useState(false);
   // V348 按业态筛商户（后端 merchantType 过滤）：""＝全部业态。
   const [typeFilter, setTypeFilter] = React.useState("");
+  // 第十八批 E 段第 20 条：商户行「经营项目」——当前查看的商户与其经营项目；加经营项目申请表单（项目、理由、最终审批人）。
+  const [operating, setOperating] = React.useState<{ merchant: MerchantRow; view: OperatingProjectsView | null } | null>(null);
+  const [operatingProjectId, setOperatingProjectId] = React.useState("");
+  const [operatingReason, setOperatingReason] = React.useState("");
+  const [operatingApprover, setOperatingApprover] = React.useState("");
+  const [approverUsers, setApproverUsers] = React.useState<AccessUserRow[]>([]);
+  const [operatingError, setOperatingError] = React.useState("");
 
   // 浏览器后退/前进也能进出聚焦视图：pushState 配合页面级 popstate 监听。
   // AdminApp 的 popstate 只重建 route/focus，本页的 ?kpi= 参数由本页自理，互不干扰。
@@ -223,6 +240,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
       contactName,
       contactPhone: contactPhone.trim(),
       ...(cooperationForm ? { cooperationForm } : {}),
+      ...(merchantProjectId ? { projectId: merchantProjectId } : {}),
       // FS-024：只在业态为其他时提交主管公司与理由（后端对其他业态填写一律拒绝）。
       ...(merchantType === "other" ? { supervisingCompanyId, supervisingCompanyReason: supervisingCompanyReason.trim() } : {}),
     };
@@ -368,6 +386,53 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     }
   }
 
+  async function loadOperatingProjects(row: MerchantRow) {
+    try {
+      setOperating({ merchant: row, view: await api.get<OperatingProjectsView>(`/api/v1/platform/merchants/${row.id}/operating-projects`) });
+    } catch (loadError) {
+      setOperating({ merchant: row, view: null });
+      setOperatingError(loadError instanceof Error ? loadError.message : "经营项目读取失败");
+    }
+  }
+
+  // 第十八批 E 段第 20 条：打开某商户的经营项目；持商户档案管理权限的取员工名单供选最终审批人（取不到即空列表，照招商黑名单例外放行的写法）。
+  async function openOperatingProjects(row: MerchantRow) {
+    setOperatingError("");
+    setOperatingProjectId("");
+    setOperatingReason("");
+    setOperatingApprover("");
+    await loadOperatingProjects(row);
+    if (hasPermissions(effectivePermissions, ["merchant.profile.manage"])) {
+      try {
+        setApproverUsers((await api.get<AccessUserRow[]>("/api/v1/access/users")) ?? []);
+      } catch { setApproverUsers([]); }
+    }
+  }
+
+  // 第十八批 E 段第 20 条：提交加经营项目申请（项目、理由必填；最终审批人不指定＝直接上级审批），审批在主管复核待办办理，批准才生效。
+  async function requestOperatingProject() {
+    if (!operating) return;
+    if (!operatingProjectId) { setOperatingError("请选择要加的经营项目。"); return; }
+    if (!operatingReason.trim()) { setOperatingError("加经营项目必须填写理由。"); return; }
+    setOperatingError("");
+    const request = {
+      idempotencyKey: `merchant-operating-project-${operating.merchant.id}-${Date.now()}`,
+      projectId: operatingProjectId,
+      reason: operatingReason.trim(),
+      ...(operatingApprover ? { finalApproverId: operatingApprover } : {}),
+    };
+    try {
+      const result = await api.post<unknown>(`/api/v1/platform/merchants/${operating.merchant.id}/operating-projects`, request);
+      setActionResult({ action: "merchant_operating_project_requested", request, result });
+      setOperatingProjectId("");
+      setOperatingReason("");
+      setOperatingApprover("");
+      await loadOperatingProjects(operating.merchant);
+    } catch (submitError) {
+      setOperatingError(submitError instanceof Error ? submitError.message : "加经营项目申请提交失败，请稍后重试。");
+    }
+  }
+
   // 状态子集 KPI（正常商户）聚焦时对商户表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
   const merchantStatusFilter = kpiFocus?.table === "merchants" ? kpiFocus.status : null;
   const visibleMerchants = merchantStatusFilter ? merchants.filter((row) => row.status === merchantStatusFilter) : merchants;
@@ -482,10 +547,35 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         <table className="admin-table" data-testid="organization-merchants-table">
           {/* 后端无“公司名/风险/留痕证据”字段（原按臆造字段读致整表“-”），列对齐真实字段：联系人/联系电话替换。 */}
           <thead><tr><th>商户</th><th>所属项目</th><th>业态</th><th>主管公司</th><th>联系人</th><th>联系电话</th><th>区块</th><th>面积</th><th>合作形式</th><th>状态</th><th>存档状态</th><th>操作</th><th>详情</th></tr></thead>
-          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{merchantProjectName(row)}</td><td>{row.merchantType ? formatBusinessStatus(row.merchantType) : "-"}</td><td>{row.merchantType === "other" ? supervisingCompanyName(row.supervisingCompanyId) : "-"}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{cooperationLabel(row.cooperationForm)}</td><td>{formatOrganizationStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <tbody>{visibleMerchants.map((row) => <tr key={row.id} data-testid={`organization-merchant-row-${row.id}`} className={`admin-row-clickable${row.id === focusObjectId ? " admin-row-selected" : ""}`} tabIndex={0} onClick={() => openMerchantDetail(row)} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openMerchantDetail(row); } }}><td>{display(row.merchantName)}</td><td>{merchantProjectName(row)}</td><td>{row.merchantType ? formatBusinessStatus(row.merchantType) : "-"}</td><td>{row.merchantType === "other" ? supervisingCompanyName(row.supervisingCompanyId) : "-"}</td><td>{display(row.contactName)}</td><td>{display(row.contactPhone)}</td><td>{display(row.mallBlockCode)}</td><td>{display(row.leasedAreaSquareMeter ?? row.areaSquareMeter)}</td><td>{cooperationLabel(row.cooperationForm)}</td><td>{formatOrganizationStatus(row.status)}</td><td>{merchantArchiveLabel(row)}</td><td onClick={(event) => event.stopPropagation()}>{merchantActions(row)}<Can permissionsState={effectivePermissions} permissions={["merchant.profile.view"]}><button type="button" data-testid={`merchant-operating-projects-${row.id}`} onClick={() => void openOperatingProjects(row)}>经营项目</button></Can></td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商户档案详情" onClick={(event) => { event.stopPropagation(); openMerchantDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
         <TablePager testid="organization-merchants-pager" page={merchantRows.page} pageCount={merchantRows.pageCount} total={merchantRows.total} onPrev={merchantRows.prev} onNext={merchantRows.next} />
       </div>
+      {operating ? (
+        <div className="admin-form-grid" data-testid="merchant-operating-projects-panel">
+          <span className="admin-muted-action">经营项目：{display(operating.merchant.merchantName)}。加经营项目须经审批才生效（按组织层级逐级审批，申请人不能审批自己的申请）；批准后各经营项目的员工与主项目的员工一样维护这份商户档案。</span>
+          {operating.view ? (
+            <>
+              <div>主项目：{display(operating.view.primaryProjectName ?? operating.view.primaryProjectId)}</div>
+              <div>已生效的经营项目：{operating.view.operatingProjects?.length ? operating.view.operatingProjects.map((row) => display(row.projectName ?? row.projectId)).join("、") : "无"}</div>
+              <table className="admin-table" data-testid="merchant-operating-project-requests">
+                <thead><tr><th>申请经营项目</th><th>状态</th><th>理由</th><th>申请时间</th><th>审批时间</th></tr></thead>
+                <tbody>{(operating.view.requests ?? []).map((row) => <tr key={row.id} data-testid={`merchant-operating-project-request-${row.id}`}><td>{display(row.projectName ?? row.projectId)}</td><td>{OPERATING_REQUEST_STATUS_LABELS[row.status] ?? "未识别状态"}</td><td>{display(row.reason)}</td><td>{cnDate(row.requestedAt)}</td><td>{cnDate(row.decidedAt)}</td></tr>)}</tbody>
+              </table>
+              <Can permissionsState={effectivePermissions} permissions={["merchant.profile.manage"]}>
+                <div className="admin-form-grid" data-testid="merchant-operating-project-form">
+                  <label>加经营项目<select data-testid="merchant-operating-project-select" value={operatingProjectId} onChange={(event) => setOperatingProjectId(event.target.value)}><option value="">请选择项目</option>{(operating.view.projectOptions ?? []).map((row) => <option key={row.projectId} value={row.projectId}>{display(row.projectName ?? row.projectId)}</option>)}</select></label>
+                  <label>理由<input data-testid="merchant-operating-project-reason" value={operatingReason} onChange={(event) => setOperatingReason(event.target.value)} placeholder="必填" /></label>
+                  <label>最终审批人<select data-testid="merchant-operating-project-approver" value={operatingApprover} onChange={(event) => setOperatingApprover(event.target.value)}><option value="">不指定（直接上级审批）</option>{approverUsers.map((user) => <option key={user.id} value={user.id}>{user.username ?? user.id}（{shortId(user.id)}）</option>)}</select></label>
+                  <div className="admin-form-row"><button type="button" data-testid="merchant-operating-project-submit" onClick={() => void requestOperatingProject()}>提交加经营项目申请</button></div>
+                </div>
+              </Can>
+            </>
+          ) : null}
+          {operatingError ? <div className="admin-inline-error" data-testid="merchant-operating-project-error">{operatingError}</div> : null}
+          <div className="admin-form-row"><button type="button" data-testid="merchant-operating-projects-close" onClick={() => setOperating(null)}>关闭</button></div>
+        </div>
+      ) : null}
     </>
   );
 
@@ -582,6 +672,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             content: (
               <>
                 <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
+                {projects.length > 1 ? <label>所属项目<select data-testid="organization-merchant-project" value={merchantProjectId} onChange={(event) => setMerchantProjectId(event.target.value)}><option value="">本人所在项目</option>{projects.map((row) => <option key={row.id} value={row.id}>{display(row.name)}</option>)}</select></label> : null}
                 <label>业态<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}><option value="">请选择业态</option>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
                 {merchantType === "other" ? (
                   <>
@@ -613,6 +704,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         ]}
         summary={[
           { label: "商户名称", value: merchantName },
+          ...(projects.length > 1 ? [{ label: "所属项目", value: merchantProjectId ? display(projects.find((row) => row.id === merchantProjectId)?.name) : "本人所在项目" }] : []),
           { label: "业态", value: merchantType ? formatBusinessStatus(merchantType) : "未选择" },
           ...(merchantType === "other" ? [{ label: "主管公司", value: supervisingCompanyName(supervisingCompanyId) }, { label: "指定理由", value: supervisingCompanyReason }] : []),
           { label: "联系人", value: contactName },

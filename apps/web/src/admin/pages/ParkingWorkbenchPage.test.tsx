@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -71,6 +71,15 @@ const FIELDS: Array<[string, string]> = [
 
 describe("ParkingWorkbenchPage", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  // 第十八批裁决第 7 条「不设出厂值」：未配置提示须写明本项目配齐七项才能用，不得再说出厂默认值以后补定。
+  it("unconfiguredNoticeHasNoFactoryDefault：参数未配置（409）时提示须本项目配齐七项，不提出厂默认值补定", async () => {
+    render(<ParkingWorkbenchPage {...props()} />);
+    await waitFor(() => expect(screen.queryByTestId("parking-policy-unconfigured")?.textContent).toContain("本项目尚未配置停车业务参数"));
+    const notice = screen.getByTestId("parking-policy-unconfigured").textContent ?? "";
+    expect(notice).toContain("配齐七项参数");
+    expect(document.body.textContent).not.toContain("实施前补定");
+  });
 
   it("policyTabRequiresBoundsBeforeSubmit：七项值与上下限缺一不能提交，填齐后按分与万分比 PUT 蛇形键", async () => {
     render(<ParkingWorkbenchPage {...props()} />);

@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,7 +59,7 @@ class LeasingServiceTests {
         when(authz.currentProjectScopeQuietly()).thenReturn(Optional.empty());
         when(authz.isPlatformAdmin(org.mockito.ArgumentMatchers.any())).thenReturn(true);
         // 3.13 默认：空间存在性放行（专项用例再覆写为 false）。
-        org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
+        org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
         // 第十八批第 30 条：关键阶段送统一审批，模拟返回待审复核单（恒阻断策略）。
         when(reviews.evaluate(any())).thenAnswer(inv -> pendingReview(inv.getArgument(0)));
         service = new LeasingService(repo, audit, authz, contractService, platformService, reviews, blacklistExceptions);
@@ -68,7 +68,7 @@ class LeasingServiceTests {
     // 3.13：意向空间传了必须真实存在（挂空编号=400）；不传放行。
     @Test
     void createLeadRejectsNonexistentIntendedSpace() {
-        org.mockito.Mockito.when(platformService.spaceExists("space_ghost")).thenReturn(false);
+        org.mockito.Mockito.when(platformService.spaceExists(org.mockito.ArgumentMatchers.eq("space_ghost"), org.mockito.ArgumentMatchers.any())).thenReturn(false);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createLead(new com.complex.platform.leasing.dto.LeasingLeadRequest(
                 "张三", "13800000000", "outbound", "retail", "space_ghost", null, null, "k_sp_lead")))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
@@ -127,6 +127,9 @@ class LeasingServiceTests {
 
         // prj_a 项目员工：只见 prj_a。
         when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_a"));
+        // 18E（第 19 条 19-R2）：列表改按入口权限码可触及的项目取；本例不挂可跨项目角色，只到本人项目
+        when(authz.projectReach(any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_a"));
         assertThat(service.listLeads().items()).extracting(LeasingLeadRecord::id)
                 .contains("lead_a").doesNotContain("lead_b");
         assertThat(service.listBrands().items()).extracting(LeasingBrandRecord::id)
@@ -265,7 +268,7 @@ class LeasingServiceTests {
         assertThat(repo.contractOfIntent(intent.id())).isEqualTo("ctr_new");
         // AUD-003 边界：带既有 merchant_id 签约不新建绑定（其绑定由治理域管理），只有自动建商户路径才建。
         org.mockito.Mockito.verify(platformService, org.mockito.Mockito.never())
-                .createBusinessEntityBinding(org.mockito.ArgumentMatchers.any());
+                .createBusinessEntityBinding(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     /**
@@ -382,7 +385,7 @@ class LeasingServiceTests {
         // AUD-003：自动建商户后必建"四主体"权威绑定（经营/合同/结算主体默认同一公司=cs）。
         org.mockito.ArgumentCaptor<com.complex.platform.governance.dto.BusinessEntityBindingRequest> bindingCaptor =
                 org.mockito.ArgumentCaptor.forClass(com.complex.platform.governance.dto.BusinessEntityBindingRequest.class);
-        order.verify(platformService).createBusinessEntityBinding(bindingCaptor.capture());
+        order.verify(platformService).createBusinessEntityBinding(bindingCaptor.capture(), org.mockito.ArgumentMatchers.eq("leasing.convert"));
         com.complex.platform.governance.dto.BusinessEntityBindingRequest binding = bindingCaptor.getValue();
         assertThat(binding.merchantId()).isEqualTo("mch_auto");
         assertThat(binding.operationEntityId()).isEqualTo("cs");

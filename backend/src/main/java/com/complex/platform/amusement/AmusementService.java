@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -936,7 +936,8 @@ public class AmusementService {
                     var actor = authorizationService.currentActor();
                     var reach = authorizationService.projectReach(actor, "amusement.session.view");
                     String merchant = trimToNull(actor.merchantId());
-                    return visibleProjectRows(repository.listSessionsScoped(reach.platformAdmin(),
+                    // 第十八批 E 段 20-R4（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：商户账号只按商户取，不再限本人项目
+                    return visibleProjectRows(repository.listSessionsScoped(reach.platformAdmin() || merchant != null,
                                     reach.organizationIds(), merchant),
                             AmusementSessionRecord::projectId, reach, merchant);
                 }
@@ -1008,6 +1009,9 @@ public class AmusementService {
         return rows.stream().filter(row -> visible.computeIfAbsent(projectId.apply(row), id -> {
             var project = repository.findProjectById(id).orElse(null);
             if (project == null || (merchant != null && !merchant.equals(project.merchantId()))) return false;
+            // 第十八批 E 段 20-R4（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：
+            // 商户账号（非平台管理员）只按商户，不再限本人项目；本方法只用于读。
+            if (merchant != null && !reach.platformAdmin()) return true;
             try {
                 return reach.covers(amusementBusinessDayService.complexId(id));
             } catch (ApiException unresolved) {

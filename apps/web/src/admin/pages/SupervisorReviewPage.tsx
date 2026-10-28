@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -32,6 +32,8 @@ const REVIEW_LABELS: Record<string, string> = {
   "parking.release.waive": "停车免费放行与减免", parking_manual_release: "停车人工放行",
   "leasing.blacklist_exception": "黑名单例外放行", leasing_blacklist_exception: "黑名单例外放行单",
   "leasing.intent.key_stage": "招商意向关键阶段确认", leasing_intent: "招商意向",
+  "merchant.project.add": "商户加经营项目", merchant_project_request: "加经营项目申请",
+  "compliance.expiry_item.grace": "证照宽限期申请", compliance_expiry_item: "证照",
 };
 
 function formatReviewValue(value?: string | null) {

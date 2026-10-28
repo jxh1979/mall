@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
@@ -61,7 +61,14 @@ class PlatformServiceTests {
                 platformRepository,
                 operations,
                 auditEventService,
-                new AuthorizationService(null)
+                new AuthorizationService(null) {
+            // 18E（第 19 条 19-R2）：服务改按入口权限码可触及的项目判；本类不挂可跨项目角色，只到本人项目（与现行等价）
+            @Override
+            public ProjectReach projectReach(AccessActor reachActor, String... permissionCodes) {
+                return isPlatformAdmin(reachActor) ? super.projectReach(reachActor, permissionCodes)
+                        : ProjectReach.ownOnly(requireProjectScope(reachActor));
+            }
+                }
         );
         // F-AUTHZ-02：治理写方法现首行 requirePlatformScope()，以平台管理员身份运行既有写用例。
         TestSecurityActors.asPlatformAdmin();
@@ -1272,7 +1279,7 @@ class PlatformServiceTests {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor("employee-a", "employee-a", "employee", "org_1", null, "active"), "token", List.of()));
         org.junit.jupiter.api.Assertions.assertAll(
-                () -> assertThat(service.spaceExists("scoped-space-b")).isFalse(),
+                () -> assertThat(service.spaceExists("scoped-space-b", "org_1")).isFalse(),
                 () -> assertThatThrownBy(() -> service.createSpace(new com.complex.platform.governance.dto.SpaceRequest(
                         "cross-parent", null, List.of(), "org_1", null, "scoped-space-b", "空间", "shop",
                         null, null, null, "active"))).isInstanceOf(ApiException.class),

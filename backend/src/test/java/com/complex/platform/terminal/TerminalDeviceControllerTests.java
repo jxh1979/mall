@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.terminal;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -168,6 +168,8 @@ class TerminalDeviceControllerTests {
                         null,
                         "unbound",
                         Instant.parse("2026-06-14T00:00:00Z"),
+                        null,
+                        null,
                         null
                 ));
 
@@ -399,7 +401,7 @@ class TerminalDeviceControllerTests {
                 .thenReturn(new DeviceBindingResponse(
                         "dev_1", "staff_work_phone", "P0-ANDROID-1", null, null, "point_1",
                         "merchant_a", null, null, "point_1", null, "bound",
-                        Instant.parse("2026-06-14T00:00:00Z"), null));
+                        Instant.parse("2026-06-14T00:00:00Z"), null, null, null));
 
         mockMvc.perform(put("/api/v1/terminals/devices/dev_1/merchant")
                         .with(user("ops").roles("P0_SMOKE"))

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -44,12 +44,20 @@ public class VenueBusinessHoursService {
         // M015-015：平台管理员经 projectScopeOrAll() 取全量；其余走会抛的 currentProjectScopeQuietly。
         Optional<String> projectScope = projectScopeOrAll();
         List<VenueBusinessHoursRecord> rows = projectScope.isPresent()
-                ? repository.listByProject(projectScope.get())
+                ? listInReach(projectScope.get())
                 : repository.listAll();
         auditEventService.recordSuccess(
                 "venue_business_hours.viewed", "governance.space.view", "venue_business_hours", "all",
                 null, null, Map.of("count", rows.size()));
         return rows;
+    }
+
+    // 18E（第 19 条 19-R2）：按 governance.space.view 可触及的项目取；恰好只到本人项目的走原来的单项目查询。
+    // ponytail: 逐项目各查一次，可触及项目多到成为负担时改成一条 IN 查询。
+    private List<VenueBusinessHoursRecord> listInReach(String ownProject) {
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), "governance.space.view");
+        return reach.onlyOwnProject().isPresent() ? repository.listByProject(ownProject)
+                : reach.organizationIds().stream().flatMap(projectId -> repository.listByProject(projectId).stream()).toList();
     }
 
     // M015-015：项目 scope 只读取值——平台管理员（isPlatformAdmin）为空＝全量，与 requirePlatformScope 的平台管理员桥同口径；
@@ -72,11 +80,11 @@ public class VenueBusinessHoursService {
         // M015-009：场地必须是现存空间（spaces.id），且项目员工只能配置本项目场地。
         String venueProjectId = repository.findVenueProjectId(venueId)
                 .orElseThrow(() -> ApiException.notFound("VENUE_NOT_FOUND", "场地不存在或已被删除"));
-        projectScopeOrAll().ifPresent(scope -> {
-            if (!scope.equals(venueProjectId)) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "场地属于其他综合体项目");
-            }
-        });
+        // 18E（第 19 条 19-R2）：项目员工只能配置 governance.space.manage 可触及项目的场地
+        if (projectScopeOrAll().isPresent() && !authorizationService.projectReach(authorizationService.currentActor(),
+                "governance.space.manage").covers(venueProjectId)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "场地属于其他综合体项目");
+        }
         Integer dayOfWeek = request.dayOfWeek();
         if (dayOfWeek == null || dayOfWeek < 0 || dayOfWeek > 6) {
             throw ApiException.badRequest("VALIDATION_FAILED", "星期取值必须为 0（周日）到 6（周六）");

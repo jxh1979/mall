@@ -5,6 +5,11 @@ public record LeasingBrandRequest(
         String brandName,
         String brandType,
         String businessType,
-        String idempotencyKey
+        String idempotencyKey,
+        // 18E（第 19 条 19-R2）：落地项目（可选）；不带取本人项目
+        String projectId
 ) {
+    public LeasingBrandRequest(String brandName, String brandType, String businessType, String idempotencyKey) {
+        this(brandName, brandType, businessType, idempotencyKey, null);
+    }
 }

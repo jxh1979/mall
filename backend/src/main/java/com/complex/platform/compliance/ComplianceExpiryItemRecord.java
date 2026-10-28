@@ -23,6 +23,9 @@ public record ComplianceExpiryItemRecord(
         boolean humanConfirmed,
         List<String> evidenceAttachmentIds,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        // 第十八批 E 段第 22 条：宽限申请状态（pending_review/approved/rejected，未申请为空）与申请时固化的宽限截止日。
+        String graceStatus,
+        LocalDate graceUntil
 ) {
 }

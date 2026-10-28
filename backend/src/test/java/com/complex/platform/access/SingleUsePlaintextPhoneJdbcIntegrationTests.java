@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -285,7 +285,11 @@ class SingleUsePlaintextPhoneJdbcIntegrationTests {
     // 修复前（main 40453d37）写接口给持码人明文并消耗：第一处「掩码」断言即红。
     @Test
     void theLeadWriteResultsShowTheMaskedPhoneAndDoNotUseUpTheGrant() throws Exception {
-        seedLead(leadId, PLAIN, "org", Instant.now());
+        // 18E（第 19 条 19-R2）：新建线索落本人项目、须是真实项目——本例员工与线索改归专门建的项目（同商户用例）
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) "
+                + "VALUES (?, 'complex', 'M724 线索写接口回归', 'active', now(), now())", merchantProjectId);
+        project = merchantProjectId;
+        seedLead(leadId, PLAIN, project, Instant.now());
         staff(userId, null, "leasing.lead.manage");
         singleUsePhoneGrant();
 

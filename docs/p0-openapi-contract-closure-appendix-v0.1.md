@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.36
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.37
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1179 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 415 | 人工权限矩阵正文未覆盖 314 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2358 | 人工事件矩阵正文未覆盖 2313 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1179 | 人工任务映射正文未逐项覆盖 1173 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 708 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1188 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 416 | 人工权限矩阵正文未覆盖 315 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2376 | 人工事件矩阵正文未覆盖 2331 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1188 | 人工任务映射正文未逐项覆盖 1182 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 714 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -155,8 +155,9 @@
 | `bar.table.view` | staff-token | project-bar | 1 | listBarTables | 已在权限矩阵正文出现 |
 | `compliance.contract_key_date.manage` | staff-token | - | 1 | createContractKeyDate | OpenAPI 补充，以本附录为准 |
 | `compliance.contract_key_date.view` | staff-token | - | 1 | listContractKeyDates | OpenAPI 补充，以本附录为准 |
-| `compliance.expiry_item.manage` | staff-token | - | 1 | createComplianceExpiryItem | OpenAPI 补充，以本附录为准 |
-| `compliance.expiry_item.view` | staff-token | - | 1 | listComplianceExpiryItems | OpenAPI 补充，以本附录为准 |
+| `compliance.expiry_item.manage` | staff-token | -, platform | 3 | createComplianceExpiryItem, saveComplianceItemTypeConfig, renewComplianceExpiryItem | OpenAPI 补充，以本附录为准 |
+| `compliance.expiry_item.view` | staff-token | - | 2 | listComplianceExpiryItems, listComplianceItemTypeConfigs | OpenAPI 补充，以本附录为准 |
+| `compliance.grace_period.request` | staff-token | merchant | 1 | requestComplianceGracePeriod | OpenAPI 补充，以本附录为准 |
 | `compliance.reminder.scan` | staff-token | - | 1 | scanComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `compliance.reminder.view` | staff-token | - | 1 | listComplianceReminders | OpenAPI 补充，以本附录为准 |
 | `contract.approval.flow.manage` | staff-token | platform | 2 | listContractApprovalFlow, saveContractApprovalFlow | OpenAPI 补充，以本附录为准 |
@@ -337,15 +338,15 @@
 | `merchant.billing.dispute.submit` | staff-token | - | 1 | submitMerchantBillDispute | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.dunning.record` | staff-token | - | 1 | recordMerchantBillDunning | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.manage` | staff-token | - | 1 | createMerchantBill | OpenAPI 补充，以本附录为准 |
-| `merchant.billing.view` | staff-token | project-merchant | 1 | listMerchantBills | OpenAPI 补充，以本附录为准 |
+| `merchant.billing.view` | staff-token | merchant, project-merchant | 2 | listMerchantBills, getMerchantPortalFeeStatement | OpenAPI 补充，以本附录为准 |
 | `merchant.penalty.bounds.manage` | staff-token | project | 1 | saveMerchantPenaltyBounds | OpenAPI 补充，以本附录为准 |
 | `merchant.penalty.record` | staff-token | project | 2 | listMerchantPenalties, recordMerchantPenalty | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.card_exit_notice.publish` | staff-token | merchant | 2 | listMyMerchantCardExitNotices, publishMerchantCardExitNotice | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.payee_account.approve` | staff-token | merchant | 1 | approveMerchantPortalPayeeAccountChange | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.dispute` | staff-token | merchant | 2 | submitMerchantPortalSettlementDispute, rejectMerchantPortalSettlementResolution | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.view` | staff-token | merchant | 3 | listMerchantPortalTicketSettlements, listMerchantPortalNotices, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
-| `merchant.profile.manage` | staff-token | project, project-merchant | 5 | createMerchant, updateMerchant, configureMerchantPendingClearAlert, configureMerchantStaffBookingNoShowLimit, configureMerchantPourLossRate | 已在权限矩阵正文出现 |
-| `merchant.profile.view` | staff-token | project-merchant | 4 | listMerchants, getMerchantPendingClearAlert, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate | 已在权限矩阵正文出现 |
+| `merchant.profile.manage` | staff-token | project, project-merchant | 6 | createMerchant, updateMerchant, configureMerchantPendingClearAlert, configureMerchantStaffBookingNoShowLimit, configureMerchantPourLossRate, requestMerchantOperatingProject | 已在权限矩阵正文出现 |
+| `merchant.profile.view` | staff-token | project-merchant | 5 | listMerchants, getMerchantPendingClearAlert, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate, getMerchantOperatingProjects | 已在权限矩阵正文出现 |
 | `merchant.service_work_order.assign` | staff-token | project-merchant | 1 | assignMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.close` | staff-token | project-merchant | 1 | closeMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
@@ -402,7 +403,7 @@
 | `staff.tax_bracket.manage` | staff-token | platform, project | 5 | upsertPayrollTaxBracket, draftPayrollTaxVersion, submitPayrollTaxVersion, draftPayrollTaxAssessment, submitPayrollTaxAssessment | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 5 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks, registerTerminalDeviceSigningKey | 已在权限矩阵正文出现 |
-| `terminal.device.lifecycle` | staff-token | -, project-device | 5 | updateTerminalDeviceMerchant, markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap | OpenAPI 补充，以本附录为准 |
+| `terminal.device.lifecycle` | staff-token | -, project-device | 7 | updateTerminalDeviceMerchant, markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap, registerSecurityXrayDevice, completeTerminalDeviceRepair | OpenAPI 补充，以本附录为准 |
 | `terminal.device.unbind` | staff-token | project-device | 1 | unbindDevice | 已在权限矩阵正文出现 |
 | `terminal.switch.manage` | staff-token | project-device | 4 | upsertTerminalCanaryRollout, addTerminalCanaryTarget, archiveTerminalCanaryTarget, updateCapabilitySwitch | 已在权限矩阵正文出现 |
 | `terminal.switch.view` | staff-token | project-device | 3 | listTerminalCanaryRollouts, listCapabilitySwitches, listTerminalDevices | 已在权限矩阵正文出现 |
@@ -998,6 +999,14 @@
 | `compliance.expiry_item.create_failed` | failure | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | P0-待归类 | `compliance.expiry_item.manage` | 接口级事件，以本附录为准 |
 | `compliance.expiry_item.list` | success | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | P0-待归类 | `compliance.expiry_item.view` | 接口级事件，以本附录为准 |
 | `compliance.expiry_item.list_failed` | failure | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | P0-待归类 | `compliance.expiry_item.view` | 接口级事件，以本附录为准 |
+| `compliance.expiry_item.renew_failed` | failure | `renewComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items/{id}/renewal` | P0-待归类 | `compliance.expiry_item.manage` | 接口级事件，以本附录为准 |
+| `compliance.expiry_item.renewed` | success | `renewComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items/{id}/renewal` | P0-待归类 | `compliance.expiry_item.manage` | 接口级事件，以本附录为准 |
+| `compliance.grace.submit_failed` | failure | `requestComplianceGracePeriod` | `POST` | `/api/v1/compliance/expiry-items/{id}/grace-requests` | P0-待归类 | `compliance.grace_period.request` | 接口级事件，以本附录为准 |
+| `compliance.grace.submitted` | success | `requestComplianceGracePeriod` | `POST` | `/api/v1/compliance/expiry-items/{id}/grace-requests` | P0-待归类 | `compliance.grace_period.request` | 接口级事件，以本附录为准 |
+| `compliance.item_type_config.list` | success | `listComplianceItemTypeConfigs` | `GET` | `/api/v1/compliance/item-type-configs` | P0-待归类 | `compliance.expiry_item.view` | 接口级事件，以本附录为准 |
+| `compliance.item_type_config.list_failed` | failure | `listComplianceItemTypeConfigs` | `GET` | `/api/v1/compliance/item-type-configs` | P0-待归类 | `compliance.expiry_item.view` | 接口级事件，以本附录为准 |
+| `compliance.item_type_config.save_failed` | failure | `saveComplianceItemTypeConfig` | `PUT` | `/api/v1/compliance/item-type-configs/{item_type}` | P0-待归类 | `compliance.expiry_item.manage` | 接口级事件，以本附录为准 |
+| `compliance.item_type_config.saved` | success | `saveComplianceItemTypeConfig` | `PUT` | `/api/v1/compliance/item-type-configs/{item_type}` | P0-待归类 | `compliance.expiry_item.manage` | 接口级事件，以本附录为准 |
 | `compliance.reminder.list` | success | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | P0-待归类 | `compliance.reminder.view` | 接口级事件，以本附录为准 |
 | `compliance.reminder.list_failed` | failure | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | P0-待归类 | `compliance.reminder.view` | 接口级事件，以本附录为准 |
 | `compliance.reminder.scan` | success | `scanComplianceReminders` | `POST` | `/api/v1/compliance/reminders/scan` | P0-待归类 | `compliance.reminder.scan` | 接口级事件，以本附录为准 |
@@ -2028,6 +2037,8 @@
 | `merchant_expense.summary_viewed` | success | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | FIN-财务台账 | `finance.merchant_expense.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.view_failed` | failure | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.contract.viewed` | success | `listMerchantPortalContracts` | `GET` | `/api/v1/merchant-portal/contracts` | P0-待归类 | `contract.view` | 接口级事件，以本附录为准 |
+| `merchant_portal.fee_statement.view_failed` | failure | `getMerchantPortalFeeStatement` | `GET` | `/api/v1/merchant-portal/fee-statement` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
+| `merchant_portal.fee_statement.viewed` | success | `getMerchantPortalFeeStatement` | `GET` | `/api/v1/merchant-portal/fee-statement` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `merchant_portal.payee_account.approve_failed` | failure | `approveMerchantPortalPayeeAccountChange` | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | P0-待归类 | `merchant.portal.payee_account.approve` | 接口级事件，以本附录为准 |
 | `merchant_portal.payee_account.approved` | success | `approveMerchantPortalPayeeAccountChange` | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | P0-待归类 | `merchant.portal.payee_account.approve` | 接口级事件，以本附录为准 |
 | `merchant_portal.settlement.dispute_failed` | failure | `submitMerchantPortalSettlementDispute` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | P0-待归类 | `merchant.portal.settlement.dispute` | 接口级事件，以本附录为准 |
@@ -2054,6 +2065,8 @@
 | `merchant.billing.dispute.submit_failed` | failure | `submitMerchantBillDispute` | `POST` | `/api/v1/merchant-billing/bills/{id}/disputes` | P0-待归类 | `merchant.billing.dispute.submit` | 接口级事件，以本附录为准 |
 | `merchant.billing.dunning.record` | success | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | P0-待归类 | `merchant.billing.dunning.record` | 接口级事件，以本附录为准 |
 | `merchant.billing.dunning.record_failed` | failure | `recordMerchantBillDunning` | `POST` | `/api/v1/merchant-billing/bills/{id}/dunning-records` | P0-待归类 | `merchant.billing.dunning.record` | 接口级事件，以本附录为准 |
+| `merchant.operating_project.request_failed` | failure | `requestMerchantOperatingProject` | `POST` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
+| `merchant.operating_project.requested` | success | `requestMerchantOperatingProject` | `POST` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.penalty_bounds_update_failed` | failure | `saveMerchantPenaltyBounds` | `PUT` | `/api/v1/merchant-penalty-bounds/{project_id}` | ANA-风控分析 | `merchant.penalty.bounds.manage` | 接口级事件，以本附录为准 |
 | `merchant.penalty_bounds_updated` | success | `saveMerchantPenaltyBounds` | `PUT` | `/api/v1/merchant-penalty-bounds/{project_id}` | ANA-风控分析 | `merchant.penalty.bounds.manage` | 接口级事件，以本附录为准 |
 | `merchant.penalty_record_failed` | failure | `recordMerchantPenalty` | `POST` | `/api/v1/merchant-penalties` | ANA-风控分析 | `merchant.penalty.record` | 接口级事件，以本附录为准 |
@@ -2070,10 +2083,12 @@
 | `merchant.update_failed` | failure | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.updated` | success | `createMerchant` | `POST` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.updated` | success | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
+| `merchant.view_failed` | failure | `getMerchantOperatingProjects` | `GET` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.view_failed` | failure | `getMerchantPendingClearAlert` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.view_failed` | failure | `getMerchantPourLossRate` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.view_failed` | failure | `getMerchantStaffBookingNoShowLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.view_failed` | failure | `listMerchants` | `GET` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
+| `merchant.viewed` | success | `getMerchantOperatingProjects` | `GET` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `getMerchantPendingClearAlert` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `getMerchantPourLossRate` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `getMerchantStaffBookingNoShowLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
@@ -2601,6 +2616,8 @@
 | `terminal.device.merchant_change_failed` | failure | `updateTerminalDeviceMerchant` | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.merchant_changed` | success | `updateTerminalDeviceMerchant` | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.repair` | success | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.repair_complete_failed` | failure | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.repair_completed` | success | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.repair_failed` | failure | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.returned` | success | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.returned_failed` | failure | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
@@ -2612,6 +2629,8 @@
 | `terminal.device.unbound` | success | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | TERM-终端设备 | `terminal.device.unbind` | 接口级事件，以本附录为准 |
 | `terminal.device.view_failed` | failure | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
 | `terminal.device.viewed` | success | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
+| `terminal.device.xray_register_failed` | failure | `registerSecurityXrayDevice` | `POST` | `/api/v1/terminals/devices/security-xray` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.xray_registered` | success | `registerSecurityXrayDevice` | `POST` | `/api/v1/terminals/devices/security-xray` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_config_viewed` | success | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_heartbeat` | success | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_heartbeat_failed` | failure | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -3293,6 +3312,7 @@
 | GOV-平台治理 | `createSpace` | `POST` | `/api/v1/platform/spaces` | 创建场馆、区域、点位 | `governance.space.manage` | `space.updated` / `space.update_failed` | web | operation 级补充 |
 | GOV-平台治理 | `createSpaceType` | `POST` | `/api/v1/platform/space-types` | 录入/修改空间类型字典 | `governance.space.manage` | `space_type.updated` / `space_type.update_failed` | web | operation 级补充 |
 | GOV-平台治理 | `evaluateSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/evaluate` | 评估业务动作是否需要主管复核 | `governance.supervisor_review.manage` | `governance.supervisor_review.evaluated` / `governance.supervisor_review.evaluate_failed` | web | operation 级补充 |
+| GOV-平台治理 | `getMerchantOperatingProjects` | `GET` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | 查询商户经营项目与加经营项目申请 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `getMerchantPendingClearAlert` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | 查询酒吧待清台提醒时限 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `getMerchantPourLossRate` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | 查询酒吧损耗率阈值 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `getMerchantStaffBookingNoShowLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | 查询酒吧员工代订爽约率上限 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web | operation 级补充 |
@@ -3305,6 +3325,7 @@
 | GOV-平台治理 | `listSupervisorReviewPolicies` | `GET` | `/api/v1/platform/supervisor-review-policies` | 查询主管复核与违规阻断策略 | `governance.supervisor_review.view` | `governance.supervisor_review.policies_viewed` / `governance.supervisor_review.policies_view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listVenueBusinessHours` | `GET` | `/api/v1/platform/venue-business-hours` | 查询场地营业时间 | `governance.space.view` | `venue_business_hours.viewed` / `venue_business_hours.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `readSupervisorReviewOriginal` | `GET` | `/api/v1/platform/supervisor-review/{review_id}` | 按编号读取有权查看的主管复核原件 | `governance.supervisor_review.view` | `governance.supervisor_review.original_viewed` / `governance.supervisor_review.original_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| GOV-平台治理 | `requestMerchantOperatingProject` | `POST` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | 申请商户加经营项目(须审批生效) | `merchant.profile.manage` | `merchant.operating_project.requested` / `merchant.operating_project.request_failed` | web | operation 级补充 |
 | GOV-平台治理 | `saveVenueBusinessHours` | `POST` | `/api/v1/platform/venue-business-hours` | 配置场地营业时间 | `governance.space.manage` | `venue_business_hours.updated` / `venue_business_hours.update_failed` | web | operation 级补充 |
 | GOV-平台治理 | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | 修改商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
 | INT-第三方集成 | `archiveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | 停用渠道票种映射 | `integration.channel_store_map.manage` | `integration.channel_ticket_type_map.archived` / `integration.channel_ticket_type_map.archive_failed` | web | operation 级补充 |
@@ -3594,6 +3615,7 @@
 | P0-待归类 | `getFloorPlanImportDetails` | `GET` | `/api/v1/floor-plans/{id}/imports/{importId}/candidates` | 查询导入候选和错误 | `floor_plan.import.view` | `floor_plan.import_candidate_viewed` / `floor_plan.import_candidate_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getLeasingLeadContactPhone` | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | 查看某一条招商线索的完整联系人手机号 | `leasing.lead.manage` | `leasing.lead.contact_phone_viewed` / `leasing.lead.contact_phone_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getMediaPerformanceShow` | `GET` | `/api/v1/settlement/media-shows/{id}` | 逐场演出合同详情（含履约事实与三项结算） | `media.performance.view` | `media_show.viewed` / `media_show.view_failed` | web | operation 级补充 |
+| P0-待归类 | `getMerchantPortalFeeStatement` | `GET` | `/api/v1/merchant-portal/fee-statement` | 商户专区·费用总表与当期综合账单(本商户) | `merchant.billing.view` | `merchant_portal.fee_statement.viewed` / `merchant_portal.fee_statement.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | 在场与出场记录及车位占用 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | 查看本项目停车业务参数 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | 公司统一收款码(下单出示用) | `service.order.create` | `service.pay_config.viewed` / `service.pay_config.view_failed` | staff_private_phone, web, tablet | operation 级补充 |
@@ -3605,6 +3627,7 @@
 | P0-待归类 | `issueDealerInvoice` | `POST` | `/api/v1/dealers/invoices/{id}/issue` | 登记发票开具 | `dealer.invoice.manage` | `dealer.invoice.issued` / `dealer.invoice.issue_failed` | web | operation 级补充 |
 | P0-待归类 | `issueWecomCleanupChallenge` | `POST` | `/api/v1/compliance/wecom/cleanup-previews/{id}/challenge` | 申请本次清理的U盘动作挑战 | `wecom.retention.manage` | `wecom.cleanup_challenged` / `wecom.cleanup_challenge_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceExpiryItems` | `GET` | `/api/v1/compliance/expiry-items` | 查询合规到期项列表 | `compliance.expiry_item.view` | `compliance.expiry_item.list` / `compliance.expiry_item.list_failed` | web | operation 级补充 |
+| P0-待归类 | `listComplianceItemTypeConfigs` | `GET` | `/api/v1/compliance/item-type-configs` | 查询按证照类型的宽限期与预警提前量配置 | `compliance.expiry_item.view` | `compliance.item_type_config.list` / `compliance.item_type_config.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listComplianceReminders` | `GET` | `/api/v1/compliance/reminders` | 查询合规提醒列表 | `compliance.reminder.view` | `compliance.reminder.list` / `compliance.reminder.list_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractAmendments` | `GET` | `/api/v1/contracts/{contract_id}/amendments` | 变更子合同追溯清单 | `contract.change.manage` | `contract.amendments_viewed` / `contract.amendments_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractApprovalFlow` | `GET` | `/api/v1/contracts/approval-flow` | 查审批流程模板(新建/到期终止/变更三类；项目覆盖优先，缺 contract_type 返回三类) | `contract.approval.flow.manage` | `contract.approval_flow_viewed` / `contract.approval_flow_view_failed` | web | operation 级补充 |
@@ -3728,8 +3751,10 @@
 | P0-待归类 | `registerParkingMonthlyVehicle` | `POST` | `/api/v1/parking/contracts/{contract_id}/vehicles` | 为合同登记月租车牌 | `parking.vehicle.manage` | `parking.monthly_vehicle_registered` / `parking.monthly_vehicle_register_failed` | web | operation 级补充 |
 | P0-待归类 | `registerParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles` | 所属主体登记员工车辆 | `parking.vehicle.manage` | `parking.staff_vehicle_registered` / `parking.staff_vehicle_register_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `rejectMerchantPortalSettlementResolution` | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/reject-resolution` | 商户专区·不接受主管裁决 | `merchant.portal.settlement.dispute` | `merchant_portal.settlement.resolution_rejected` / `merchant_portal.settlement.resolution_reject_failed` | web, merchant_portal | operation 级补充 |
+| P0-待归类 | `renewComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items/{id}/renewal` | 证照续期登记（更新有效期） | `compliance.expiry_item.manage` | `compliance.expiry_item.renewed` / `compliance.expiry_item.renew_failed` | web | operation 级补充 |
 | P0-待归类 | `replaceEnergyMeter` | `POST` | `/api/v1/energy/meters/{meter_id}/replacement` | 登记旧终值、新初值与实际换表交接 | `energy.meter.manage` | `energy.meter_replaced` / `energy.meter_replaced_failed` | web | operation 级补充 |
 | P0-待归类 | `reportInspectionException` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/report-exception` | 外包对被指派巡检任务上报异常 | `facility.inspection.report_exception_assigned` | `facility.inspection_exception_reported` / `facility.inspection_exception_report_failed` | web | operation 级补充 |
+| P0-待归类 | `requestComplianceGracePeriod` | `POST` | `/api/v1/compliance/expiry-items/{id}/grace-requests` | 商户申请证照宽限期（最高权限审批） | `compliance.grace_period.request` | `compliance.grace.submitted` / `compliance.grace.submit_failed` | web | operation 级补充 |
 | P0-待归类 | `requestContractScopeGrant` | `POST` | `/api/v1/contracts/{contract_id}/scope-requests` | 超范围下单经营申请(拦下后可申请,走统一审批) | `contract.scope_request.raise` | `contract.scope_request_raised` / `contract.scope_request_raise_failed` | web | operation 级补充 |
 | P0-待归类 | `requestDealerDeliveryResolution` | `POST` | `/api/v1/dealers/delivery/discrepancies/{id}/resolutions` | 申请交付差异处理 | `dealer.order.manage` | `dealer.delivery.resolution_requested` / `dealer.delivery.resolution_request_failed` | web | operation 级补充 |
 | P0-待归类 | `requestDealerInvoice` | `POST` | `/api/v1/dealers/orders/{id}/invoices` | 申请电子发票 | `dealer.invoice.manage` | `dealer.invoice.requested` / `dealer.invoice.request_failed` | web | operation 级补充 |
@@ -3750,6 +3775,7 @@
 | P0-待归类 | `revokeParkingMonthlyVehicle` | `POST` | `/api/v1/parking/monthly-vehicles/{vehicle_id}/revoke` | 撤销月租车牌 | `parking.vehicle.manage` | `parking.monthly_vehicle_revoked` / `parking.monthly_vehicle_revoke_failed` | web | operation 级补充 |
 | P0-待归类 | `revokeParkingStaffVehicle` | `POST` | `/api/v1/parking/staff-vehicles/{vehicle_id}/revoke` | 撤销员工车辆 | `parking.vehicle.manage` | `parking.staff_vehicle_revoked` / `parking.staff_vehicle_revoke_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `reworkFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/rework` | 验收或提单确认不通过退回返工 | `facility.work_order.manage` | `facility.work_order_rework_requested` / `facility.work_order_rework_failed` | web, staff_private_phone | operation 级补充 |
+| P0-待归类 | `saveComplianceItemTypeConfig` | `PUT` | `/api/v1/compliance/item-type-configs/{item_type}` | 配置某证照类型的宽限期与预警提前量 | `compliance.expiry_item.manage` | `compliance.item_type_config.saved` / `compliance.item_type_config.save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveContractApprovalFlow` | `POST` | `/api/v1/contracts/approval-flow` | 配置审批流程模板(按合同类型,按综合体覆盖) | `contract.approval.flow.manage` | `contract.approval_flow_saved` / `contract.approval_flow_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveContractDepositMonths` | `POST` | `/api/v1/contracts/deposit-months` | 配置押金收取月数及上下限(全平台统一) | `contract.deposit_months.manage` | `contract.deposit_months_configured` / `contract.deposit_months_config_failed` | web | operation 级补充 |
 | P0-待归类 | `saveContractDepositRefundWait` | `POST` | `/api/v1/contracts/deposit-refund-wait` | 配置押金退还等待期及上下限(按项目) | `contract.deposit_refund_wait.manage` | `contract.deposit_refund_wait_configured` / `contract.deposit_refund_wait_config_failed` | web | operation 级补充 |
@@ -3917,6 +3943,7 @@
 | TERM-终端设备 | `addTerminalCanaryTarget` | `POST` | `/api/v1/terminals/canary-rollouts/{id}/targets` | 加入灰度白名单 | `terminal.switch.manage` | `terminal_canary.target_added` / `terminal_canary.target_add_failed` | web | operation 级补充 |
 | TERM-终端设备 | `archiveTerminalCanaryTarget` | `POST` | `/api/v1/terminals/canary-targets/{id}/archive` | 移出灰度白名单（软删除） | `terminal.switch.manage` | `terminal_canary.target_archived` / `terminal_canary.target_archive_failed` | web | operation 级补充 |
 | TERM-终端设备 | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | 设备绑定 | `terminal.device.bind` | `terminal.device.bound` / `terminal.device.bind_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
+| TERM-终端设备 | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | 安检 X 光设备修复完成 | `terminal.device.lifecycle` | `terminal.device.repair_completed` / `terminal.device.repair_complete_failed` | web | operation 级补充 |
 | TERM-终端设备 | `detectMdmViolations` | `POST` | `/api/v1/terminals/mdm/violations/detect` | 服务端检测设备违规 | `mdm.device.manage` | `mdm.violation.detect` / `mdm.violation.detect_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `enrollMdmDevice` | `POST` | `/api/v1/terminals/mdm/devices/enroll` | MDM 设备纳管/策略同步 | `mdm.device.manage` | `mdm.policy_checked` / `mdm.policy_check_failed` | web | operation 级补充 |
 | TERM-终端设备 | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | 一体机配置，含售票型与非售票型模式 | `not_applicable` | `terminal.kiosk_config_viewed` / `terminal.access_rejected` | kiosk | operation 级补充 |
@@ -3933,6 +3960,7 @@
 | TERM-终端设备 | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | 标记设备挂失 | `terminal.device.lifecycle` | `terminal.device.lost` / `terminal.device.lost_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | 设备送修 | `terminal.device.lifecycle` | `terminal.device.repair` / `terminal.device.repair_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | 设备报废 | `terminal.device.lifecycle` | `terminal.device.scrap` / `terminal.device.scrap_failed` | web, mobile_admin | operation 级补充 |
+| TERM-终端设备 | `registerSecurityXrayDevice` | `POST` | `/api/v1/terminals/devices/security-xray` | 登记安检 X 光设备 | `terminal.device.lifecycle` | `terminal.device.xray_registered` / `terminal.device.xray_register_failed` | web | operation 级补充 |
 | TERM-终端设备 | `registerTerminalDeviceSigningKey` | `POST` | `/api/v1/terminals/devices/{id}/signing-key` | 登记或轮换已绑定设备签名公钥 | `terminal.device.bind` | `terminal.device.signing_key_registered` / `terminal.device.signing_key_register_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
 | TERM-终端设备 | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | 上报 MDM 设备违规 | `mdm.device.manage` | `device.policy_violation` / `device.policy_violation_failed` | web | operation 级补充 |
 | TERM-终端设备 | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | 归还终端设备 | `terminal.device.bind` | `terminal.device.returned` / `terminal.device.returned_failed` | staff_work_phone, tablet, kiosk, web | operation 级补充 |

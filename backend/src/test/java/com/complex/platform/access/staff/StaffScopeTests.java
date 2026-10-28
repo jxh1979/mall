@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,6 +33,8 @@ class StaffScopeTests {
         AuditEventService audit = mock(AuditEventService.class);
         authz = mock(AuthorizationService.class);
         when(authz.currentActor()).thenReturn(new com.complex.platform.access.AccessActor("manager","manager","staff","prj_A",null,"active"));
+        // 第十八批 E 段 19-R1（移植 M738）：入口按权限码算可触及范围；本类的操作人只到本人项目（与原先等价）。
+        when(authz.projectReach(any(), any(String[].class))).thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_A"));
         when(idem.execute(any(), any(), any(), any(), any()))
                 .thenAnswer(i -> ((Supplier<?>) i.getArgument(3)).get());
         StaffService service = new StaffService(repo, access, idem, audit, authz, com.complex.platform.access.AccessCredentialProvisioner.noop());

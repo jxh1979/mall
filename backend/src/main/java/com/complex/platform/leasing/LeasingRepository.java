@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.PageResponse;
 import java.util.List;
@@ -99,5 +99,38 @@ public interface LeasingRepository {
 
     default PageResponse<LeasingFollowUpRecord> listAllFollowUpsPaged(String projectScope, int page, int size) {
         return PageResponse.of(listAllFollowUps(projectScope), page, size);
+    }
+
+    // 18E（第 19 条 19-R2）：可跨项目角色持有人按可触及项目集合取（空集合＝一行不出）。默认内存过滤（测试双子）；Jdbc 覆写为 project_id IN。
+    default PageResponse<LeasingLeadRecord> listLeadsPaged(java.util.Collection<String> projectIds, int page, int size) {
+        return PageResponse.of(listLeads(null).stream().filter(l -> inProjects(l.projectId(), projectIds)).toList(), page, size);
+    }
+
+    default PageResponse<LeasingLeadRecord> listLeadsNeedingFollowUpPaged(
+            java.time.Instant cutoff, java.util.Collection<String> projectIds, int page, int size) {
+        return PageResponse.of(listLeadsNeedingFollowUp(cutoff, null).stream()
+                .filter(l -> inProjects(l.projectId(), projectIds)).toList(), page, size);
+    }
+
+    default PageResponse<LeasingIntentRecord> listIntentsPaged(java.util.Collection<String> projectIds, int page, int size) {
+        return PageResponse.of(listIntents(null).stream().filter(i -> inProjects(i.projectId(), projectIds)).toList(), page, size);
+    }
+
+    default PageResponse<LeasingBrandRecord> listBrandsPaged(java.util.Collection<String> projectIds, int page, int size) {
+        return PageResponse.of(listBrands(null).stream().filter(b -> inProjects(b.projectId(), projectIds)).toList(), page, size);
+    }
+
+    default PageResponse<LeasingFollowUpRecord> listFollowUpsByRefPaged(
+            String refType, String refId, java.util.Collection<String> projectIds, int page, int size) {
+        return PageResponse.of(listFollowUpsByRef(refType, refId, null).stream()
+                .filter(f -> inProjects(f.projectId(), projectIds)).toList(), page, size);
+    }
+
+    default PageResponse<LeasingFollowUpRecord> listAllFollowUpsPaged(java.util.Collection<String> projectIds, int page, int size) {
+        return PageResponse.of(listAllFollowUps(null).stream().filter(f -> inProjects(f.projectId(), projectIds)).toList(), page, size);
+    }
+
+    private static boolean inProjects(String projectId, java.util.Collection<String> projectIds) {
+        return projectId != null && projectIds.contains(projectId);
     }
 }

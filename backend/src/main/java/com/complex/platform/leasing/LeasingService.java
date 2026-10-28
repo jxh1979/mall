@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
@@ -112,7 +112,8 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
     public PageResponse<LeasingLeadRecord> listLeads(int page, int size) {
         authorizationService.requirePlatformScope();
         // 3.2 跨项目读隔离：项目员工只见本项目，平台管理员/全局平台员工全量。
-        PageResponse<LeasingLeadRecord> result = repository.listLeadsPaged(currentProjectScope(), page, size);
+        PageResponse<LeasingLeadRecord> result = scoped("leasing.lead.manage",
+                scope -> repository.listLeadsPaged(scope, page, size), projects -> repository.listLeadsPaged(projects, page, size));
         auditEventService.recordSuccess("leasing.lead.viewed", "leasing.lead.manage", "leasing_lead", "all",
                 null, null, Map.of("count", result.items().size(), "total", result.total()));
         return result;
@@ -128,7 +129,8 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         Instant cutoff = Instant.now().minus(
                 windowConfig.days(FOLLOW_UP_WINDOW_KEY, FOLLOW_UP_REMINDER_DAYS), ChronoUnit.DAYS);
         // 3.6：下沉仓储层 WHERE due，不再拉全表内存过滤。
-        return repository.listLeadsNeedingFollowUpPaged(cutoff, currentProjectScope(), page, size);
+        return scoped("leasing.lead.manage", scope -> repository.listLeadsNeedingFollowUpPaged(cutoff, scope, page, size),
+                projects -> repository.listLeadsNeedingFollowUpPaged(cutoff, projects, page, size));
     }
 
     private Instant reference(LeasingLeadRecord l) {
@@ -145,6 +147,10 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         LeasingLeadRequest actual = requireRequest(request);
         String source = requireEnum(actual.source(), LEAD_SOURCES, "source");
         String brandId = trimToNull(actual.brandId());
+        String spaceId = trimToNull(actual.intendedSpaceId());
+        // 18E（第 19 条 19-R2），待开发清单第 79 条：线索落地项目＝请求 project_id，不带时有意向铺位的取铺位所在项目，否则取本人项目
+        String projectId = landingProject(actual.projectId(), spaceId == null ? null : platformService.spaceProjectId(spaceId),
+                "leasing.lead.manage");
         String leadId = "lead_" + UUID.randomUUID();
         if (findBlacklistedBrand(brandId).isPresent()) {
             String exceptionId = trimToNull(actual.blacklistExceptionId());
@@ -154,13 +160,13 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
             }
             blacklistExceptions.consume(exceptionId, LeasingBlacklistExceptionService.LEAD_CREATE, brandId, leadId, null);
         }
-        requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()));
+        requireSpaceExistsIfPresent(spaceId, projectId);
         Instant now = Instant.now();
         LeasingLeadRecord saved = repository.saveLead(new LeasingLeadRecord(
                 leadId, requireText(actual.contactName(), "contact_name"),
                 trimToNull(actual.contactPhone()), source, trimToNull(actual.intendedBusinessType()),
                 trimToNull(actual.intendedSpaceId()), actual.intendedAreaSqm(), brandId, null,
-                "pending_follow_up", null, null, null, now, now));
+                "pending_follow_up", null, null, projectId, now, now));
         auditEventService.recordSuccess("leasing.lead.created", "leasing.lead.manage", "leasing_lead", saved.id(),
                 null, actual.idempotencyKey(), Map.of("source", source));
         return saved;
@@ -219,13 +225,19 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
     public LeasingLeadContactPhoneRecord viewLeadContactPhone(String leadId) {
         authorizationService.requirePlatformScope();
         LeasingLeadRecord lead = requireLead(leadId);
-        String projectScope = currentProjectScope();
-        if (projectScope != null && !projectScope.equals(lead.projectId())) {
+        // 18E（第 19 条 19-R3）（治理地图第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：线索须在线索码可触及的项目内
+        // （平台管理员不限）；有电话时明文码也须由覆盖该线索项目的来源授予——排在消耗之前，不覆盖同样 403、留失败痕、不扣。
+        var actor = authorizationService.currentActor();
+        if (!authorizationService.canReachProject(actor, lead.projectId(), "leasing.lead.manage")) {
             throw contactPhoneViewDenied(lead.id(),
                     ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "招商线索属于其他综合体项目"));
         }
         if (lead.contactPhone() == null || lead.contactPhone().isBlank()) {
             return new LeasingLeadContactPhoneRecord(lead.id(), lead.contactPhone());
+        }
+        if (!authorizationService.canReachProject(actor, lead.projectId(), PhoneMask.VIEW_PLAINTEXT_PERMISSION)) {
+            throw contactPhoneViewDenied(lead.id(),
+                    ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "招商线索属于其他综合体项目"));
         }
         try {
             authorizationService.requirePermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
@@ -255,7 +267,8 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
 
     public PageResponse<LeasingIntentRecord> listIntents(int page, int size) {
         authorizationService.requirePlatformScope();
-        PageResponse<LeasingIntentRecord> result = repository.listIntentsPaged(currentProjectScope(), page, size);
+        PageResponse<LeasingIntentRecord> result = scoped("leasing.intent.manage",
+                scope -> repository.listIntentsPaged(scope, page, size), projects -> repository.listIntentsPaged(projects, page, size));
         auditEventService.recordSuccess("leasing.intent.viewed", "leasing.intent.manage", "leasing_intent", "all",
                 null, null, Map.of("count", result.items().size(), "total", result.total()));
         return result;
@@ -282,7 +295,7 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
             blacklistExceptions.consume(exceptionId, LeasingBlacklistExceptionService.INTENT_CREATE, lead.brandId(), lead.id(),
                     intentId);
         }
-        requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()));
+        requireSpaceExistsIfPresent(trimToNull(actual.intendedSpaceId()), lead.projectId());
         Instant now = Instant.now();
         LeasingIntentRecord saved = repository.saveIntent(new LeasingIntentRecord(
                 intentId, lead.id(), "initial_contact",
@@ -476,7 +489,7 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
                 contractSubjectId,
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
                 effectiveFrom,
-                "招商签约自动建立四主体权威绑定"));
+                "招商签约自动建立四主体权威绑定"), "leasing.convert");
     }
 
     // ============ 品牌库 ============
@@ -486,7 +499,8 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
 
     public PageResponse<LeasingBrandRecord> listBrands(int page, int size) {
         authorizationService.requirePlatformScope();
-        PageResponse<LeasingBrandRecord> result = repository.listBrandsPaged(currentProjectScope(), page, size);
+        PageResponse<LeasingBrandRecord> result = scoped("leasing.brand.manage",
+                scope -> repository.listBrandsPaged(scope, page, size), projects -> repository.listBrandsPaged(projects, page, size));
         auditEventService.recordSuccess("leasing.brand.viewed", "leasing.brand.manage", "leasing_brand", "all",
                 null, null, Map.of("count", result.items().size(), "total", result.total()));
         return result;
@@ -496,10 +510,12 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         authorizationService.requirePlatformScope();
         LeasingBrandRequest actual = requireRequest(request);
         String type = requireEnum(actual.brandType(), BRAND_TYPES, "brand_type");
+        // 18E（第 19 条 19-R2）：品牌落地项目＝请求 project_id，不带取本人项目（原先落空，本项目员工看不到）
+        String projectId = landingProject(actual.projectId(), null, "leasing.brand.manage");
         Instant now = Instant.now();
         LeasingBrandRecord saved = repository.saveBrand(new LeasingBrandRecord(
                 "brand_" + UUID.randomUUID(), requireText(actual.brandName(), "brand_name"), type,
-                trimToNull(actual.businessType()), null, null, null, null, now, now));
+                trimToNull(actual.businessType()), null, null, null, projectId, now, now));
         auditEventService.recordSuccess("leasing.brand.created", "leasing.brand.manage", "leasing_brand", saved.id(),
                 null, actual.idempotencyKey(), Map.of("brand_type", type));
         return saved;
@@ -538,10 +554,12 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         boolean drillDown = trimToNull(refType) != null || trimToNull(refId) != null;
         if (drillDown) {
             String type = requireEnum(refType, FOLLOW_UP_REF_TYPES, "ref_type");
-            return repository.listFollowUpsByRefPaged(
-                    type, requireText(refId, "ref_id"), currentProjectScope(), page, size);
+            String ref = requireText(refId, "ref_id");
+            return scoped("leasing.lead.manage", scope -> repository.listFollowUpsByRefPaged(type, ref, scope, page, size),
+                    projects -> repository.listFollowUpsByRefPaged(type, ref, projects, page, size));
         }
-        return repository.listAllFollowUpsPaged(currentProjectScope(), page, size);
+        return scoped("leasing.lead.manage", scope -> repository.listAllFollowUpsPaged(scope, page, size),
+                projects -> repository.listAllFollowUpsPaged(projects, page, size));
     }
 
     @Transactional
@@ -573,6 +591,38 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         return authorizationService.currentProjectScopeQuietly().orElse(null);
     }
 
+    /**
+     * 18E（第 19 条 19-R2）（治理地图第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：列表按入口权限码可触及的项目取——
+     * 平台管理员全量（scope 传空）；恰好只到本人项目的走原来的单项目查询；其余按可触及项目集合取。
+     */
+    private <T> PageResponse<T> scoped(String code, java.util.function.Function<String, PageResponse<T>> single,
+            java.util.function.Function<java.util.Collection<String>, PageResponse<T>> reachable) {
+        if (currentProjectScope() == null) {
+            return single.apply(null);
+        }
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), code);
+        return reach.onlyOwnProject().map(single).orElseGet(() -> reachable.apply(reach.organizationIds()));
+    }
+
+    /**
+     * 18E（第 19 条 19-R2）（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：新建线索、品牌的落地项目＝请求 project_id，
+     * 不带时取 fallback（线索的意向铺位所在项目），再不带取本人项目；须是项目且在该码可触及范围内，否则 403。平台管理员可不填（照旧落空）。
+     */
+    private String landingProject(String requested, String fallback, String code) {
+        var actor = authorizationService.currentActor();
+        boolean admin = authorizationService.isPlatformAdmin(actor);
+        String landing = trimToNull(requested) != null ? trimToNull(requested) : fallback != null ? fallback
+                : admin ? null : actor.organizationId();
+        if (landing == null && admin) {
+            return null;
+        }
+        if (landing == null || !platformService.projectExists(landing)
+                || !(admin || authorizationService.canReachProject(actor, landing, code))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "所选项目不在本权限可触及的项目范围内");
+        }
+        return landing;
+    }
+
     private Optional<LeasingBrandRecord> findBlacklistedBrand(String brandId) {
         return brandId == null ? Optional.empty()
                 : repository.findBrandById(brandId).filter(b -> "blacklist".equals(b.brandType()));
@@ -585,9 +635,9 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
                 .orElse(false);
     }
 
-    /** 3.13：意向空间传了就必须真实存在（空间=地产主数据，不允许挂空编号；不传=尚未定位，放行）。 */
-    private void requireSpaceExistsIfPresent(String spaceId) {
-        if (spaceId != null && !platformService.spaceExists(spaceId)) {
+    /** 3.13：意向空间传了就必须真实存在（空间=地产主数据，不允许挂空编号；不传=尚未定位，放行）；18E：且须属线索所在项目。 */
+    private void requireSpaceExistsIfPresent(String spaceId, String projectId) {
+        if (spaceId != null && !platformService.spaceExists(spaceId, projectId)) {
             throw ApiException.badRequest("LEASING_SPACE_NOT_FOUND", "意向铺位不存在：" + spaceId);
         }
     }

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -184,6 +184,12 @@ public class FinanceService implements TerminationSettlementPort {
         return payrollFinance == null ? java.util.Set.of() : payrollFinance.visiblePayableIds(permission);
     }
 
+    /** 第十八批 E 段 20-R3（治理地图第 659 行；XM-M001-D 答复 3 第 10 条「一个商户账号能看到各项目里本商户的数据」）：查看类列表的项目集合——
+     *  平台管理员与商户账号（merchant 非空）为 null＝不按项目过滤（商户账号只按商户）；其余按可触及项目。写入口不走这里。 */
+    private static java.util.Set<String> readProjects(AuthorizationService.ProjectReach reach, String merchant) {
+        return reach.platformAdmin() || merchant != null ? null : reach.organizationIds();
+    }
+
     private final FinanceRepository repository;
     private final AuditedOperationExecutor operations;
     private final AuditEventService auditEventService;
@@ -335,8 +341,9 @@ public class FinanceService implements TerminationSettlementPort {
                     authorizationService.requirePermission("finance.ar_ap.view");
                     var actor = authorizationService.currentActor();
                     var reach = authorizationService.projectReach(actor, "finance.ar_ap.view");
-                    return repository.listArApItemsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
-                            reach.platformAdmin() ? null : reach.organizationIds(), keyword, page, size, payrollVisibleItems(FinancePayrollService.VIEW));
+                    String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
+                    return repository.listArApItemsForProjects(merchant,
+                            readProjects(reach, merchant), keyword, page, size, payrollVisibleItems(FinancePayrollService.VIEW));
                 }
         );
     }
@@ -346,10 +353,11 @@ public class FinanceService implements TerminationSettlementPort {
             authorizationService.requirePermission("finance.ar_ap.export");
             var actor = authorizationService.currentActor();
             var reach = authorizationService.projectReach(actor, "finance.ar_ap.export");
+            String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
             List<ArApItemRecord> items = new java.util.ArrayList<>();
             for (int page=1;;page++) {
-                var result = repository.listArApItemsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
-                        reach.platformAdmin() ? null : reach.organizationIds(), null, page, 200, payrollVisibleItems(FinancePayrollService.EXPORT));
+                var result = repository.listArApItemsForProjects(merchant,
+                        readProjects(reach, merchant), null, page, 200, payrollVisibleItems(FinancePayrollService.EXPORT));
                 items.addAll(result.items());
                 if (result.items().isEmpty() || items.size() >= result.total()) break;
             }
@@ -2113,8 +2121,8 @@ public class FinanceService implements TerminationSettlementPort {
         return readPage("finance_refund.listed", "finance_refund.list_failed", "finance.ar_ap.view", "finance_refund", () -> {
             var actor = authorizationService.currentActor();
             var reach = authorizationService.projectReach(actor, "finance.ar_ap.view");
-            return repository.listRefundsForProjects(reach.platformAdmin() ? null : trimToNull(actor.merchantId()),
-                    reach.platformAdmin() ? null : reach.organizationIds());
+            String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
+            return repository.listRefundsForProjects(merchant, readProjects(reach, merchant));
         });
     }
 
@@ -2319,10 +2327,13 @@ public class FinanceService implements TerminationSettlementPort {
         // FS-021-R6：按该动作权限码的可触及项目办理；商户账号仍只限本商户。
         var actor = authorizationService.currentActor();
         var reach = authorizationService.projectReach(actor, permission);
-        if (!reach.platformAdmin() && trimToNull(actor.merchantId()) != null && !actor.merchantId().equals(refund.merchantId())) {
+        boolean merchantAccount = !reach.platformAdmin() && trimToNull(actor.merchantId()) != null;
+        if (merchantAccount && !actor.merchantId().equals(refund.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
         }
-        if (!reach.covers(refund.projectId())) {
+        // 第十八批 E 段 20-R3：商户账号查看退款详情（不取锁、finance.ar_ap.view）只按商户；取锁回写状态的查询结果与执行照旧只到本人项目
+        boolean merchantRead = merchantAccount && !lock && "finance.ar_ap.view".equals(permission);
+        if (!merchantRead && !reach.covers(refund.projectId())) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处理其他项目或归属未明的退款");
         }
         return refund;
@@ -3282,9 +3293,11 @@ public class FinanceService implements TerminationSettlementPort {
         }
         var actor=authorizationService.currentActor();
         var reach=authorizationService.projectReach(actor,permission);
-        if (!reach.platformAdmin() && trimToNull(actor.merchantId())!=null && !actor.merchantId().equals(item.merchantId()))
+        boolean merchantAccount = !reach.platformAdmin() && trimToNull(actor.merchantId())!=null;
+        if (merchantAccount && !actor.merchantId().equals(item.merchantId()))
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN","无权操作其他商户的数据");
-        if (!reach.covers(item.projectId()))
+        // 第十八批 E 段 20-R3：商户账号查看（finance.ar_ap.view：收付款记录、内部应付执行状态）只按商户；各写码照旧只到本人项目
+        if (!(merchantAccount && "finance.ar_ap.view".equals(permission)) && !reach.covers(item.projectId()))
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN","无权操作其他项目或缺少项目归属的财务数据");
     }
 

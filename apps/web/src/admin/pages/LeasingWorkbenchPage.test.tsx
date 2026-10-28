@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -71,6 +71,66 @@ function renderPage(overrides: Partial<AdminPageProps> = {}, contactPhone?: () =
   };
   render(<LeasingWorkbenchPage {...fullProps} />);
 }
+
+// 第十八批 E 段第 19 条（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
+// 能看到两个以上项目时，新建线索、录入品牌两个弹窗各出现「所属项目」，选了才提交 project_id。
+describe("LeasingWorkbenchPage 新建线索与品牌选所属项目", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/leasing/workbench");
+  });
+
+  const TWO_PROJECTS = [{ id: "p-1", name: "项目一", status: "active" }, { id: "p-2", name: "项目二", status: "active" }];
+
+  function renderWithProjects(projects: unknown[]) {
+    const api = makeApi();
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const fallback = fetchMock.getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).includes("/platform/projects") ? Promise.resolve(envelope(projects)) : fallback(input, init));
+    render(<LeasingWorkbenchPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+  }
+
+  function postBody(path: string): Record<string, unknown> {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const call = fetchMock.mock.calls.find(([url, init]) => (init as RequestInit | undefined)?.method === "POST" && String(url).endsWith(path));
+    return JSON.parse(String((call![1] as RequestInit).body)) as Record<string, unknown>;
+  }
+
+  it("录入品牌：选了「所属项目」按 project_id 提交", async () => {
+    renderWithProjects(TWO_PROJECTS);
+    await waitFor(() => expect(screen.getByTestId("leasing-brand-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-brand-create-open"));
+    await waitFor(() => expect(screen.queryByTestId("leasing-brand-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("leasing-brand-name"), { target: { value: "跨项目品牌" } });
+    fireEvent.change(screen.getByTestId("leasing-brand-project"), { target: { value: "p-2" } });
+    fireEvent.click(screen.getByTestId("leasing-brand-flow-next"));
+    fireEvent.click(screen.getByTestId("leasing-brand-create"));
+    await waitFor(() => expect(postBody("/api/v1/leasing/brands").project_id).toBe("p-2"));
+  });
+
+  it("新建线索：选了「所属项目」按 project_id 提交", async () => {
+    renderWithProjects(TWO_PROJECTS);
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-create-open"));
+    await waitFor(() => expect(screen.queryByTestId("leasing-lead-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("leasing-lead-project"), { target: { value: "p-2" } });
+    fireEvent.click(screen.getByTestId("leasing-lead-flow-next"));
+    fireEvent.click(screen.getByTestId("leasing-lead-create"));
+    await waitFor(() => expect(postBody("/api/v1/leasing/leads").project_id).toBe("p-2"));
+  });
+
+  it("只有一个项目：两个弹窗都不显示「所属项目」", async () => {
+    renderWithProjects([TWO_PROJECTS[0]]);
+    await waitFor(() => expect(screen.getByTestId("leasing-brand-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-brand-create-open"));
+    expect(screen.queryByTestId("leasing-brand-project")).toBeNull();
+    fireEvent.click(screen.getByTestId("leasing-brand-flow-cancel"));
+    fireEvent.click(screen.getByTestId("leasing-lead-create-open"));
+    expect(screen.queryByTestId("leasing-lead-project")).toBeNull();
+  });
+});
 
 describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
   it("已签线索禁止人工回退和再次转意向，仍可正常跟进", async () => {

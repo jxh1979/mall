@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.access.staff.StaffHandoverRepository.text;
 import static com.complex.platform.common.Strings.requireText;
@@ -57,23 +57,24 @@ public class StaffHandoverService {
     }
 
     private Overview readOverview(String profileId) {
-        StaffProfileRecord profile=requireProfile(profileId);
+        StaffProfileRecord profile=requireProfile(profileId,true);
         AccessActor actor=authorization.currentActor();
         var permissions=authorization.effectivePermissions().grants();
         List<Pending> pending=new ArrayList<>();
         for(var source:handovers.pending(profile.userId())) {
             var scope=handovers.scope(source);
             // 未知来源不伪造项目；人事能看待澄清项，但不能交接。已确定的外范围事项不泄露。
-            if(scope.resolved()&&!covers(actor,scope,source.kind().managePermission)) continue;
+            if(scope.resolved()&&!readable(actor,scope,source.kind().managePermission)) continue;
             boolean permitted=permissions.contains(source.kind().managePermission);
             boolean masterNode=source.kind()==StaffHandoverRepository.Kind.approval_node&&"master".equals(text(source.data(),"approver_kind"));
-            boolean assignable=scope.resolved()&&permitted&&(!masterNode||authorization.isMasterAuthority(actor));
-            String reason=!scope.resolved()?"原业务项目或商户归属待核实":!permitted?"需具备该业务的指派权限":masterNode&&!authorization.isMasterAuthority(actor)?"须由最高权限本人逐单交接":null;
+            boolean inScope=covers(actor,scope,source.kind().managePermission);
+            boolean assignable=scope.resolved()&&permitted&&inScope&&(!masterNode||authorization.isMasterAuthority(actor));
+            String reason=!scope.resolved()?"原业务项目或商户归属待核实":!permitted?"需具备该业务的指派权限":!inScope?"原业务不在可指派范围内":masterNode&&!authorization.isMasterAuthority(actor)?"须由最高权限本人逐单交接":null;
             pending.add(new Pending(source.kind().name(),source.id(),source.kind().label,text(source.data(),"status"),
                     scope.projectId(),scope.merchantId(),assignable,reason));
         }
         return new Overview(access.isEmploymentBusinessBlocked(profile.userId(),Instant.now()),handovers.revisions(profileId),
-                pending,handovers.history(profileId).stream().filter(h->covers(actor,
+                pending,handovers.history(profileId).stream().filter(h->readable(actor,
                         new StaffHandoverRepository.Scope(h.projectId(),h.merchantId(),h.projectId()==null,true),
                         StaffHandoverRepository.Kind.parse(h.businessType()).managePermission)).toList());
     }
@@ -165,11 +166,17 @@ public class StaffHandoverService {
     }
 
     private StaffProfileRecord requireProfile(String id) {
+        return requireProfile(id,false);
+    }
+
+    private StaffProfileRecord requireProfile(String id,boolean reading) {
         var profile=staff.findProfileById(id).orElseThrow(()->ApiException.notFound("STAFF_PROFILE_NOT_FOUND","员工档案不存在"));
         if(profile.userId()==null) throw ApiException.conflict("STAFF_ACCOUNT_MISSING","员工尚未关联业务账号");
         var user=access.findUserById(profile.userId()).orElseThrow(()->ApiException.notFound("USER_NOT_FOUND","员工账号不存在"));
         var actor=authorization.currentActor();
-        if(!authorization.isMasterAuthority(actor)&&(!authorization.canReachUser(actor,user,HR_PERMISSION)
+        // 第十八批 E 段 20-R4 扫尾：查看交接总览时商户账号只核员工档案的商户（各经营项目里本商户的员工）；交接仍须可触及该员工
+        boolean merchantRead=reading&&authorization.currentMerchantIdQuietly().isPresent();
+        if(!authorization.isMasterAuthority(actor)&&((!merchantRead&&!authorization.canReachUser(actor,user,HR_PERMISSION))
                 ||(actor.merchantId()!=null&&!actor.merchantId().equals(profile.merchantId()))))
             throw ApiException.forbidden("STAFF_PROFILE_SCOPE_FORBIDDEN","无权处理该员工的交接");
         return profile;
@@ -183,6 +190,13 @@ public class StaffHandoverService {
             catch(RuntimeException auditFailure) { failure.addSuppressed(auditFailure); }
             throw failure;
         }
+    }
+
+    /** 第十八批 E 段 20-R4 扫尾（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：只用于读（交接总览的待交接与已交接）——
+     *  商户账号（非平台管理员）只核商户；指派与交接仍用 covers。 */
+    private boolean readable(AccessActor actor,StaffHandoverRepository.Scope scope,String permission) {
+        String merchant=authorization.currentMerchantIdQuietly().orElse(null);
+        return merchant!=null?scope.resolved()&&merchant.equals(scope.merchantId()):covers(actor,scope,permission);
     }
 
     private boolean covers(AccessActor actor,StaffHandoverRepository.Scope scope,String permission) {

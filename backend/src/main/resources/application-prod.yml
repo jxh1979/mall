@@ -1,4 +1,4 @@
-# 文件版本：V0.06
+# 文件版本：V0.07
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -71,3 +71,4 @@ facility.alarm-escalation.scheduled.enabled: true            # HP-F01 设备告�
 parking.credit-cost.scheduled.enabled: true                 # HP-P01 停车消费抵免成本按月合并为城市项目公司对承担商户的普通内部结算应收(付款时点按付账日规则固化,每日一轮处理已结束月份)
 settlement.merchant-statement-notice.scheduled.enabled: true  # 第十八批第 13 条 BSM「结算金额出账……一律短信通知」:普通内部结算往来到出账日逐笔短信通知对方商户(每日 09:00 一轮,发送日志去重)
 inventory.lending-overdue.scheduled.enabled: true            # 第十八批第 18 条 BSM「超过约定归还时间仍未归还的，系统自动生成一张工单并通知借出方主管」:借用逾期逐单建物业工单并通知借出方主管(同单只建一次,默认 300s 一轮)
+compliance.reminder.scheduled.enabled: true                 # 第十八批 E 段第 22 条 PGM:531「到期预警一律提前发出……宽限期内可继续经营但每日提醒」:每日 08:00 全平台证照预警、到期与宽限提醒扫描(按去重键 upsert,商户专区可查看即送达)

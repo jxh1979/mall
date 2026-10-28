@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -76,7 +76,7 @@ public class FloorPlanService {
         List<FloorPlanRecord> records = merchantScope.isPresent()
                 ? repository.findAllFloorPlansByMerchant(merchantScope.get())
                 : projectScopeOrAll()
-                        .map(repository::findAllFloorPlansByProject)
+                        .map(this::floorPlansInReach)
                         .orElseGet(repository::findAllFloorPlans);
         auditEventService.recordSuccess(
                 "floor_plan.viewed",
@@ -92,7 +92,7 @@ public class FloorPlanService {
 
     public PageResponse<FloorPlanShapeRecord> listShapes(String floorPlanId) {
         String id = requireText(floorPlanId, "floor_plan_id");
-        ensureFloorPlanExists(id);
+        ensureFloorPlanExists(id, "floor_plan.view");
         List<FloorPlanShapeRecord> records = repository.findShapesByFloorPlanId(id);
         auditEventService.recordSuccess(
                 "floor_plan.shape_viewed",
@@ -129,7 +129,7 @@ public class FloorPlanService {
                 "floor_plan.manage",
                 id,
                 () -> {
-                    ensureFloorPlanExists(id);
+                    ensureFloorPlanExists(id, "floor_plan.manage");
                     validateShapeRequest(request);
                 },
                 () -> saveShapeOnce(id, request)
@@ -138,7 +138,7 @@ public class FloorPlanService {
 
     public PageResponse<FloorPlanImportTaskRecord> listImportTasks(String floorPlanId) {
         String id = requireText(floorPlanId, "floor_plan_id");
-        ensureFloorPlanExists(id);
+        ensureFloorPlanExists(id, "floor_plan.import.view");
         List<FloorPlanImportTaskRecord> records = repository.findImportTasksByFloorPlanId(id);
         auditEventService.recordSuccess(
                 "floor_plan.import_viewed",
@@ -155,7 +155,7 @@ public class FloorPlanService {
     public FloorPlanImportDetailsResponse getImportDetails(String floorPlanId, String importTaskId) {
         String planId = requireText(floorPlanId, "floor_plan_id");
         String taskId = requireText(importTaskId, "import_task_id");
-        FloorPlanImportTaskRecord task = ensureImportTaskBelongsToFloorPlan(planId, taskId);
+        FloorPlanImportTaskRecord task = ensureImportTaskBelongsToFloorPlan(planId, taskId, "floor_plan.import.view");
         List<FloorPlanImportCandidateRecord> candidates = repository.findImportCandidatesByTaskId(task.id());
         List<FloorPlanImportErrorRecord> errors = repository.findImportErrorsByTaskId(task.id());
         auditEventService.recordSuccess(
@@ -173,7 +173,7 @@ public class FloorPlanService {
     public FloorPlanImportTaskRecord createImportTask(String floorPlanId, FloorPlanImportCreateRequest request) {
         String id = requireText(floorPlanId, "floor_plan_id");
         try {
-            ensureFloorPlanExists(id);
+            ensureFloorPlanExists(id, "floor_plan.import.manage");
             validateImportCreateRequest(request);
             return idempotencyService.execute(
                     "createFloorPlanImport:" + id,
@@ -204,7 +204,7 @@ public class FloorPlanService {
         String planId = requireText(floorPlanId, "floor_plan_id");
         String taskId = requireText(importTaskId, "import_task_id");
         try {
-            ensureImportTaskBelongsToFloorPlan(planId, taskId);
+            ensureImportTaskBelongsToFloorPlan(planId, taskId, "floor_plan.import.manage");
             validateImportPublishRequest(request);
             return idempotencyService.execute(
                     "publishFloorPlanImport:" + taskId,
@@ -362,7 +362,7 @@ public class FloorPlanService {
             String importTaskId,
             FloorPlanImportPublishRequest request
     ) {
-        FloorPlanImportTaskRecord task = ensureImportTaskBelongsToFloorPlan(floorPlanId, importTaskId);
+        FloorPlanImportTaskRecord task = ensureImportTaskBelongsToFloorPlan(floorPlanId, importTaskId, "floor_plan.import.manage");
         // M015-016：人工复核可分批发布——已发布任务的剩余待处理候选仍可继续发布（PGM-023）；failed/cancelled 仍拒。
         if (!"parsed".equals(task.status()) && !"published".equals(task.status())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "只有解析完成或已发布的导入任务才能继续发布");
@@ -511,12 +511,10 @@ public class FloorPlanService {
         if (!repository.projectExists(projectId)) {
             throw ApiException.notFound("PROJECT_NOT_FOUND", "综合体项目不存在或已被删除");
         }
-        if (authorizationService.currentMerchantIdQuietly().isEmpty()) {
-            projectScopeOrAll().ifPresent(scope -> {
-                if (!scope.equals(projectId)) {
-                    throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能在当前综合体项目下创建平面图");
-                }
-            });
+        // 18E（第 19 条 19-R2）：项目员工只能在 floor_plan.manage 可触及的项目下创建
+        if (authorizationService.currentMerchantIdQuietly().isEmpty() && projectScopeOrAll().isPresent()
+                && !authorizationService.projectReach(authorizationService.currentActor(), "floor_plan.manage").covers(projectId)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能在本权限可触及的综合体项目下创建平面图");
         }
         requireText(request.floorNo(), "floor_no");
         requireField(request.planName(), "平面图名称");
@@ -592,23 +590,32 @@ public class FloorPlanService {
         }
     }
 
-    private FloorPlanRecord ensureFloorPlanExists(String id) {
+    private FloorPlanRecord ensureFloorPlanExists(String id, String code) {
         FloorPlanRecord fp = repository.findFloorPlanById(id)
                 .orElseThrow(() -> ApiException.notFound("FLOOR_PLAN_NOT_FOUND", "平面图不存在或已被删除"));
         checkMerchantOwnership(fp.merchantId());
-        checkProjectOwnership(fp.projectId());
+        checkProjectOwnership(fp.projectId(), code);
         return fp;
     }
 
     // M015-003：项目员工只能访问本项目平面图（BEQR-152）；商户账号走商户闸、平台管理员 scope 为空放行。
-    private void checkProjectOwnership(String resourceProjectId) {
+    // 18E（第 19 条 19-R2）：项目员工按入口权限码可触及的项目判（治理地图第 659 行）。
+    private void checkProjectOwnership(String resourceProjectId, String code) {
         if (authorizationService.currentMerchantIdQuietly().isPresent()) {
             return;
         }
-        Optional<String> scope = projectScopeOrAll();
-        if (scope.isPresent() && !scope.get().equals(resourceProjectId)) {
+        if (projectScopeOrAll().isPresent()
+                && !authorizationService.projectReach(authorizationService.currentActor(), code).covers(resourceProjectId)) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "平面图属于其他综合体项目");
         }
+    }
+
+    // 18E（第 19 条 19-R2）：非商户、非平台管理员按 floor_plan.view 可触及的项目取；恰好只到本人项目的走原来的单项目查询。
+    // ponytail: 逐项目各查一次，可触及项目多到成为负担时改成一条 IN 查询。
+    private List<FloorPlanRecord> floorPlansInReach(String ownProject) {
+        var reach = authorizationService.projectReach(authorizationService.currentActor(), "floor_plan.view");
+        return reach.onlyOwnProject().isPresent() ? repository.findAllFloorPlansByProject(ownProject)
+                : reach.organizationIds().stream().flatMap(projectId -> repository.findAllFloorPlansByProject(projectId).stream()).toList();
     }
 
     // M015-015：项目 scope 只读取值——平台管理员（isPlatformAdmin）为空＝全量，与 requirePlatformScope 的平台管理员桥同口径；
@@ -627,8 +634,8 @@ public class FloorPlanService {
         }
     }
 
-    private FloorPlanImportTaskRecord ensureImportTaskBelongsToFloorPlan(String floorPlanId, String importTaskId) {
-        ensureFloorPlanExists(floorPlanId);
+    private FloorPlanImportTaskRecord ensureImportTaskBelongsToFloorPlan(String floorPlanId, String importTaskId, String code) {
+        ensureFloorPlanExists(floorPlanId, code);
         FloorPlanImportTaskRecord task = repository.findImportTaskById(importTaskId)
                 .orElseThrow(() -> ApiException.notFound("IMPORT_TASK_NOT_FOUND", "导入任务不存在或已被删除"));
         if (!task.floorPlanId().equals(floorPlanId)) {

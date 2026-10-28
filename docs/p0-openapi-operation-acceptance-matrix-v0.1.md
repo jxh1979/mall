@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.36
+# P0 OpenAPI Operation 验收矩阵 V0.37
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1179 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1188 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -274,6 +274,8 @@
 | platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | `configureMerchantStaffBookingNoShowLimit` | 配置酒吧员工代订爽约率上限(值与上下限同配) | `object` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.staff_booking_no_show_limit_configured` | `merchant.staff_booking_no_show_limit_config_failed` |
 | platform | `GET` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | `getMerchantPourLossRate` | 查询酒吧损耗率阈值 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web | 否 | `merchant.viewed` | `merchant.view_failed` |
 | platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | `configureMerchantPourLossRate` | 配置酒吧损耗率阈值(值与上下限同配) | `object` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.pour_loss_rate_configured` | `merchant.pour_loss_rate_config_failed` |
+| platform | `GET` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | `getMerchantOperatingProjects` | 查询商户经营项目与加经营项目申请 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web | 否 | `merchant.viewed` | `merchant.view_failed` |
+| platform | `POST` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | `requestMerchantOperatingProject` | 申请商户加经营项目(须审批生效) | `object` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.operating_project.requested` | `merchant.operating_project.request_failed` |
 | platform | `GET` | `/api/v1/platform/projects` | `listProjects` | 查询综合体项目 | `-` | `governance.project.view` | `staff-token` | `project` | web | 否 | `project.viewed` | `project.view_failed` |
 | platform | `POST` | `/api/v1/platform/projects` | `createProject` | 创建项目 | `ProjectRequest` | `governance.project.manage` | `staff-token` | `project` | web | 是 | `project.created` | `project.create_failed` |
 | platform | `GET` | `/api/v1/platform/spaces` | `listSpaces` | 查询场馆、区域、点位 | `-` | `governance.space.view` | `staff-token` | `project-merchant-space` | web, merchant_portal | 否 | `space.viewed` | `space.view_failed` |
@@ -509,12 +511,18 @@
 | compliance | `POST` | `/api/v1/compliance/expiry-items` | `createComplianceExpiryItem` | 创建合规到期项 | `object` | `compliance.expiry_item.manage` | `staff-token` | `-` | web | 是 | `compliance.expiry_item.create` | `compliance.expiry_item.create_failed` |
 | compliance | `GET` | `/api/v1/compliance/reminders` | `listComplianceReminders` | 查询合规提醒列表 | `-` | `compliance.reminder.view` | `staff-token` | `-` | web | 否 | `compliance.reminder.list` | `compliance.reminder.list_failed` |
 | compliance | `POST` | `/api/v1/compliance/reminders/scan` | `scanComplianceReminders` | 触发合规提醒扫描 | `object` | `compliance.reminder.scan` | `staff-token` | `-` | web | 是 | `compliance.reminder.scan` | `compliance.reminder.scan_failed` |
+| compliance | `GET` | `/api/v1/compliance/item-type-configs` | `listComplianceItemTypeConfigs` | 查询按证照类型的宽限期与预警提前量配置 | `-` | `compliance.expiry_item.view` | `staff-token` | `-` | web | 否 | `compliance.item_type_config.list` | `compliance.item_type_config.list_failed` |
+| compliance | `PUT` | `/api/v1/compliance/item-type-configs/{item_type}` | `saveComplianceItemTypeConfig` | 配置某证照类型的宽限期与预警提前量 | `object` | `compliance.expiry_item.manage` | `staff-token` | `platform` | web | 是 | `compliance.item_type_config.saved` | `compliance.item_type_config.save_failed` |
+| compliance | `POST` | `/api/v1/compliance/expiry-items/{id}/grace-requests` | `requestComplianceGracePeriod` | 商户申请证照宽限期（最高权限审批） | `object` | `compliance.grace_period.request` | `staff-token` | `merchant` | web | 是 | `compliance.grace.submitted` | `compliance.grace.submit_failed` |
+| compliance | `POST` | `/api/v1/compliance/expiry-items/{id}/renewal` | `renewComplianceExpiryItem` | 证照续期登记（更新有效期） | `object` | `compliance.expiry_item.manage` | `staff-token` | `-` | web | 是 | `compliance.expiry_item.renewed` | `compliance.expiry_item.renew_failed` |
 | compliance | `GET` | `/api/v1/compliance/wecom/risk-hits` | `listWecomRiskHits` | 查询企微会话违规命中列表 | `-` | `wecom.risk_hit.view` | `staff-token` | `-` | web | 否 | `wecom.risk_hit.list` | `wecom.risk_hit.list_failed` |
 | compliance | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | `reviewWecomRiskHit` | 复核处置企微违规命中 | `object` | `wecom.risk_hit.review` | `staff-token` | `-` | web | 否 | `wecom.risk_hit.review` | `wecom.risk_hit.review_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/found` | `markTerminalDeviceFound` | 标记设备找回 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.found` | `terminal.device.found_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/lost` | `markTerminalDeviceLost` | 标记设备挂失 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.lost` | `terminal.device.lost_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/repair` | `markTerminalDeviceRepair` | 设备送修 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.repair` | `terminal.device.repair_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/scrap` | `markTerminalDeviceScrap` | 设备报废 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.scrap` | `terminal.device.scrap_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/security-xray` | `registerSecurityXrayDevice` | 登记安检 X 光设备 | `object` | `terminal.device.lifecycle` | `staff-token` | `project-device` | web | 是 | `terminal.device.xray_registered` | `terminal.device.xray_register_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | `completeTerminalDeviceRepair` | 安检 X 光设备修复完成 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web | 是 | `terminal.device.repair_completed` | `terminal.device.repair_complete_failed` |
 | terminals | `POST` | `/api/v1/terminals/mdm/violations/detect` | `detectMdmViolations` | 服务端检测设备违规 | `object` | `mdm.device.manage` | `staff-token` | `-` | web, mobile_admin | 是 | `mdm.violation.detect` | `mdm.violation.detect_failed` |
 | terminals | `POST` | `/api/v1/terminals/mdm/violations/{id}/handle` | `handleMdmViolation` | 违规处置闭环 | `object` | `mdm.violation.handle` | `staff-token` | `-` | web | 是 | `mdm.violation.handle` | `mdm.violation.handle_failed` |
 | merchant-billing | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | `confirmMerchantBill` | 确认商户账单 | `object` | `merchant.billing.confirm` | `staff-token` | `-` | web | 是 | `merchant.billing.confirm` | `merchant.billing.confirm_failed` |
@@ -728,6 +736,7 @@
 | merchant-portal | `GET` | `/api/v1/merchant-portal/ticket-settlements` | `listMerchantPortalTicketSettlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `not_applicable` | `not_applicable` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | `approveMerchantPortalPayeeAccountChange` | 收款方财务负责人审批更换收款账户 | `object` | `merchant.portal.payee_account.approve` | `staff-token` | `merchant` | web, merchant_portal | 是 | `merchant_portal.payee_account.approved` | `merchant_portal.payee_account.approve_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/notices` | `listMerchantPortalNotices` | 商户专区·通告(本商户) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `not_applicable` | `not_applicable` |
+| merchant-portal | `GET` | `/api/v1/merchant-portal/fee-statement` | `getMerchantPortalFeeStatement` | 商户专区·费用总表与当期综合账单(本商户) | `-` | `merchant.billing.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `merchant_portal.fee_statement.viewed` | `merchant_portal.fee_statement.view_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/contracts` | `listMerchantPortalContracts` | 商户专区·我的合同(只读关键信息) | `-` | `contract.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `merchant_portal.contract.viewed` | `merchant_portal.contract.view_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/settlements` | `listMerchantPortalSettlements` | 商户专区·我的对账(结算单只读) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal | 否 | `merchant_portal.settlement.viewed` | `merchant_portal.settlement.view_failed` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | `submitMerchantPortalSettlementDispute` | 商户专区·结算单异议留言 | `object` | `merchant.portal.settlement.dispute` | `staff-token` | `merchant` | web, merchant_portal | 是 | `merchant_portal.settlement.disputed` | `merchant_portal.settlement.dispute_failed` |

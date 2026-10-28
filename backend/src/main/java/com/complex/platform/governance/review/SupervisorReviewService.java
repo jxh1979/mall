@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -83,6 +83,9 @@ public class SupervisorReviewService {
             // 第十八批第 24 条（ENUM:164 高价值判定阈值「全平台统一可配，调整须最高权限审批并留痕」）。
             new SupervisorReviewPolicyRecord("settlement_high_value_threshold", "settlement.high_value_threshold.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
+            // 第十八批 E 段第 22 条（PGM:531「宽限期须经最高权限审批后生效」）：商户申请证照宽限期。
+            new SupervisorReviewPolicyRecord("compliance_grace_period", "compliance.expiry_item.grace", 0, 3, true,
+                    List.of("reason", "before_after"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("inventory_purchase_request", "inventory.purchase_request", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "inventory.purchase.approve"),
             new SupervisorReviewPolicyRecord("inventory_purchase_terminate", "inventory.purchase_terminate", 0, 1, true,
@@ -128,6 +131,10 @@ public class SupervisorReviewService {
                     List.of("reason"), "active", "one_level_up"),
             // 第十八批第 30 条（PGM L502「意向五阶段中进入方案报价、商务谈判须主管确认才能推进」）：恒阻断，同上。
             new SupervisorReviewPolicyRecord("leasing_intent_key_stage", "leasing.intent.key_stage", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批 E 段第 20 条（PGM:659「一个商户要在别的项目经营的，由能管理商户档案的人在商户档案里加经营项目，要经过审批才生效」）：
+            // 恒阻断；发起人沿直接上级链到其指定的最终审批人（PGM:528），申请人不得审批（PGM:529，approve 现有闸）。
+            new SupervisorReviewPolicyRecord("merchant_project_add", "merchant.project.add", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // HP-P01（BSM L1438「免费放行和减免须经物业主管审批」）：恒阻断；最终审批人须经角色持有停车减免审批权限（物业主管）。
             new SupervisorReviewPolicyRecord("parking_release_waive", "parking.release.waive", 0, 1, true,
@@ -684,7 +691,7 @@ public class SupervisorReviewService {
         String id = requireText(reviewId, "review_id");
         SupervisorReviewDecisionRecord record = supervisorReviewRepository.findSupervisorReviewById(id)
                 .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在"));
-        requireVisibleReview(record);
+        requireVisibleReview(record, VIEW_PERMISSION);
         return supervisorReviewRepository.listChainNodes(id);
     }
 
@@ -700,7 +707,7 @@ public class SupervisorReviewService {
                 .findPendingSupervisorReviewById(id)
                 .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在或已不在待复核状态"));
         List<ApprovalChainNode> existing = supervisorReviewRepository.listChainNodes(id);
-        requireVisibleReview(pending);
+        requireVisibleReview(pending, MANAGE_PERMISSION);
         if (!existing.isEmpty()) {
             return existing;
         }
@@ -1113,7 +1120,7 @@ public class SupervisorReviewService {
     public SupervisorReviewDecisionRecord readReview(String reviewId) {
         try {
             authorizationService.requirePermission(VIEW_PERMISSION);
-            SupervisorReviewDecisionRecord record = findReview(reviewId)
+            SupervisorReviewDecisionRecord record = findReview(reviewId, VIEW_PERMISSION)
                     .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在"));
             auditEventService.recordSuccess("governance.supervisor_review.original_viewed", VIEW_PERMISSION,
                     "supervisor_review", record.reviewId(), null, null, Map.of("review_status", record.reviewStatus()));
@@ -1126,9 +1133,19 @@ public class SupervisorReviewService {
         }
     }
 
+    /**
+     * 第十八批 E 段 19-R1：内部按编号读（审批监听、已按本服务的可触及范围核过对象的业务服务），不做用户可见性——
+     * 用户可见性在调用方各自的入口上已核过，再按「发起人须在本人项目」核一遍会把持可跨项目角色的人在别的项目的处理拦成 403。
+     * 面向用户的按编号读取一律用 {@link #findReview(String, String)}。
+     */
     public Optional<SupervisorReviewDecisionRecord> findReview(String reviewId) {
-        Optional<SupervisorReviewDecisionRecord> found = supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
-        found.ifPresent(this::requireVisibleReview);
+        return supervisorReviewRepository.findSupervisorReviewById(requireText(reviewId, "review_id"));
+    }
+
+    /** 第十八批 E 段 19-R1（移植 M738）：用户按编号读复核单，按该入口权限码可触及的项目判发起人归属（当前审批人、被转发人、发起人本人照旧可见；最高权限逐笔放行留痕）。 */
+    public Optional<SupervisorReviewDecisionRecord> findReview(String reviewId, String permissionCode) {
+        Optional<SupervisorReviewDecisionRecord> found = findReview(reviewId);
+        found.ifPresent(review -> requireVisibleReview(review, permissionCode));
         return found;
     }
 
@@ -1146,15 +1163,15 @@ public class SupervisorReviewService {
             auditEventService.recordSuccess("governance.supervisor_review.pending_listed_cross_scope", VIEW_PERMISSION, "supervisor_review", "pending", null, null,
                     Map.of("actor_id", actor.id(), "count", items.size()));
         } else {
-            String projectId = scopeProjectOf(actor);
+            AuthorizationService.ProjectReach reach = scopeOf(actor, VIEW_PERMISSION);
             String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
             // ponytail: filters the <= limit rows already fetched; move the scope join into the query if pending volume grows
-            items = all.stream().filter(item -> visibleTo(actor, projectId, merchantId, item)).toList();
+            items = all.stream().filter(item -> visibleTo(actor, reach, merchantId, item)).toList();
         }
         return new PageResponse<>(items, 1, limit, items.size());
     }
 
-    private boolean visibleTo(AccessActor actor, String projectId, String merchantId, SupervisorReviewRepository.PendingReview item) {
+    private boolean visibleTo(AccessActor actor, AuthorizationService.ProjectReach reach, String merchantId, SupervisorReviewRepository.PendingReview item) {
         String reviewId = item.decision().reviewId();
         boolean currentApprover = ApprovalChainService.currentNodes(supervisorReviewRepository.listChainNodes(reviewId)).stream()
                 .anyMatch(node -> actor.id().equals(node.approverId()) || actor.id().equals(node.forwardedTo()));
@@ -1165,7 +1182,7 @@ public class SupervisorReviewService {
         if (actor.id().equals(initiator)) {
             return true;
         }
-        boolean sameProject = authorizationService.organizationIdOf(initiator).map(projectId::equals).orElse(false);
+        boolean sameProject = authorizationService.organizationIdOf(initiator).map(reach::covers).orElse(false);
         Optional<String> initiatorMerchant = authorizationService.merchantIdOf(initiator);
         boolean sameMerchant = merchantId.isEmpty()
                 ? initiatorMerchant.isEmpty()
@@ -1173,16 +1190,16 @@ public class SupervisorReviewService {
         return sameProject && sameMerchant;
     }
 
-    private void requireVisibleReview(SupervisorReviewDecisionRecord record) {
+    private void requireVisibleReview(SupervisorReviewDecisionRecord record, String permissionCode) {
         AccessActor actor = authorizationService.currentActor();
         if (authorizationService.isPlatformAdmin(actor)) {
             return;
         }
-        String projectId = scopeProjectOf(actor);
+        AuthorizationService.ProjectReach reach = scopeOf(actor, permissionCode);
         String merchantId = actor.merchantId() == null ? "" : actor.merchantId().trim();
         SupervisorReviewRepository.PendingReview item = new SupervisorReviewRepository.PendingReview(
                 record, supervisorReviewRepository.findSupervisorReviewSchedule(record.reviewId()).orElse(null));
-        if (!visibleTo(actor, projectId, merchantId, item)) {
+        if (!visibleTo(actor, reach, merchantId, item)) {
             if (authorizationService.isMasterAuthority(actor)) {
                 // XM-D029-002（红线④「持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕」）：按编号逐笔放行并留痕。
                 auditEventService.recordSuccess("governance.supervisor_review.viewed_cross_scope", VIEW_PERMISSION, "supervisor_review",
@@ -1193,12 +1210,13 @@ public class SupervisorReviewService {
         }
     }
 
-    /** 可见范围的项目：最高权限可无项目号（只见本人为当前节点、被转发人或发起人的单），其余主体无项目号即拒。 */
-    private String scopeProjectOf(AccessActor actor) {
+    /** 可见范围（第十八批 E 段 19-R1，移植 M738：按入口权限码算可触及项目）。最高权限照旧只按本人项目号（可为空串；看不到的按编号逐笔放行并留痕），
+     *  不调 projectReach；其余按 projectReach（无项目号即拒）。 */
+    private AuthorizationService.ProjectReach scopeOf(AccessActor actor, String permissionCode) {
         if (authorizationService.isMasterAuthority(actor)) {
-            return actor.organizationId() == null ? "" : actor.organizationId().trim();
+            return AuthorizationService.ProjectReach.ownOnly(actor.organizationId() == null ? "" : actor.organizationId().trim());
         }
-        return authorizationService.requireProjectScope(actor);
+        return authorizationService.projectReach(actor, permissionCode);
     }
 
     /**

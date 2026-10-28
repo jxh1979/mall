@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -597,7 +597,9 @@ public class EvidenceEventService {
                 if (merchant != null && !merchant.equals(refund.merchantId())) {
                     throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的退款凭证");
                 }
-                if (!authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(), permission, evidencePermission)) {
+                // 第十八批 E 段 20-R4 扫尾：查看凭据与退款详情（FinanceService.scopedRefund）同口径，商户账号只按商户；上传仍须可触及退款所属项目
+                if (!(reading && merchant != null)
+                        && !authorizationService.canReachProject(authorizationService.currentActor(), refund.projectId(), permission, evidencePermission)) {
                     throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "退款凭证不在授权项目范围内");
                 }
                 return Optional.ofNullable(merchant);

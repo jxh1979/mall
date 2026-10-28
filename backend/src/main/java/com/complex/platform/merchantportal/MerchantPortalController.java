@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiRequests;
 import com.complex.platform.common.api.ApiResponse;
@@ -25,10 +25,20 @@ public class MerchantPortalController {
 
     private final MerchantPortalService service;
     private final MerchantZoneNoticeService notices;
+    private final MerchantFeeStatementService feeStatements;
 
-    public MerchantPortalController(MerchantPortalService service, MerchantZoneNoticeService notices) {
+    public MerchantPortalController(MerchantPortalService service, MerchantZoneNoticeService notices,
+            MerchantFeeStatementService feeStatements) {
         this.service = service;
         this.notices = notices;
+        this.feeStatements = feeStatements;
+    }
+
+    /** 18E 第 21 条（BSM:1323）：本商户费用总表与当期（计费自然月）综合账单，只读；month 缺省取当月。 */
+    @GetMapping("/fee-statement")
+    public ApiResponse<MerchantFeeStatementService.FeeStatement> feeStatement(
+            @RequestParam(name = "month", required = false) String month) {
+        return ApiResponse.ok(feeStatements.statement(month));
     }
 
     /** 18B 复核后操作员裁决第 10 条「商户专区显示通告」：本商户的通告，专区可查看即送达。 */

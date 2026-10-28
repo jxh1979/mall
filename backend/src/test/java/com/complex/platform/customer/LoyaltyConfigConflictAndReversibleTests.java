@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,6 +66,8 @@ class LoyaltyConfigConflictAndReversibleTests {
     @Test
     void createCheckInTierWithDuplicateStreakReturnsConflict() {
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("prj_A"));
+        when(authorization.projectReach(any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_A"));
         Instant now = Instant.now();
         when(repository.listCheckInTiersByProject("prj_A")).thenReturn(List.of(
                 new CustomerCheckInTierRecord("check_in_tier_old", "prj_A", 7, 100L, "active", now, now)));

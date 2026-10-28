@@ -1,5 +1,6 @@
 package com.complex.platform.gate;
 
+import com.complex.platform.common.LocalZone;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -46,8 +47,10 @@ public class JdbcAdmissionFactRepository {
         if (merchantId == null || merchantId.isBlank()) {
             return false;
         }
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        // 存在一条 active 的合规资质项已过期（valid_to < today） → 资质异常。
+        // 第十八批 E 段第 22 条：「今天」取北京日历日（LocalZone），与宽限申请校验、商户专区「我的证照」同一口径。
+        LocalDate today = LocalDate.now(LocalZone.ID);
+        // 存在一条 active 的合规资质项已过期（valid_to < today）且不在已批准的宽限期内 → 资质异常
+        // （PGM:531「宽限期内可继续经营……超过宽限期仍未更新的一律阻断」；待审期间照旧阻断）。
         Integer expiredCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(1)
                   FROM compliance_expiry_items
@@ -55,6 +58,7 @@ public class JdbcAdmissionFactRepository {
                    AND subject_type IN ('merchant', 'supplier')
                    AND status = 'active'
                    AND valid_to < :today
+                   AND (grace_status IS DISTINCT FROM 'approved' OR grace_until < :today)
                 """, Map.of("merchant_id", merchantId, "today", today), Integer.class);
         return expiredCount != null && expiredCount > 0;
     }

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -92,9 +92,10 @@ public class PlatformService {
 
     // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 默认 500 保留既有前端一次拉取(下拉源)契约。
     public PageResponse<BusinessEntityRecord> listBusinessEntities(int page, int size) {
-        PageResponse<BusinessEntityRecord> result = platformWide()
-                ? repository.listBusinessEntitiesPaged(page, size)
-                : repository.listBusinessEntitiesPaged(currentProject(), page, size);
+        PageResponse<BusinessEntityRecord> result = scopedPage("entity.binding.view",
+                () -> repository.listBusinessEntitiesPaged(page, size),
+                project -> repository.listBusinessEntitiesPaged(project, page, size),
+                projects -> repository.listBusinessEntitiesPaged(projects, page, size));
         auditEventService.recordSuccess(
                 "entity_binding.viewed",
                 "entity.binding.view",
@@ -123,7 +124,7 @@ public class PlatformService {
                     String entityRole = requireBusinessEntityRole(request == null ? null : request.entityRole());
                     String status = requireSubjectStatus(request.status());
                     Instant now = Instant.now();
-                    String projectId = creationProject(request.projectId(), true);
+                    String projectId = creationProject(request.projectId(), true, "entity.binding.manage");
                     BusinessEntityRecord saved = repository.saveBusinessEntity(new BusinessEntityRecord(
                             "be_" + UUID.randomUUID(),
                             entityName,
@@ -153,10 +154,14 @@ public class PlatformService {
                     "商户业态必须为 酒吧/餐饮/零售/游乐/传媒/其他 之一");
         }
         boolean allProjects = platformWide();
-        String projectId = allProjects ? null : currentProject();
+        // 18E（第 19 条 19-R2）：按 merchant.profile.view 可触及的项目取；恰好只到本人项目的走原来的单项目查询
+        AuthorizationService.ProjectReach reach = allProjects ? null : reachOf("merchant.profile.view");
+        boolean ownOnly = reach != null && reach.onlyOwnProject().isPresent();
+        String projectId = ownOnly ? currentProject() : null;
         PageResponse<MerchantRecord> result = allProjects
                 ? repository.listMerchantsPaged(includeArchived, format, page, size)
-                : repository.listMerchantsPaged(projectId, includeArchived, format, page, size);
+                : ownOnly ? repository.listMerchantsPaged(projectId, includeArchived, format, page, size)
+                : repository.listMerchantsPaged(reach.organizationIds(), includeArchived, format, page, size);
         auditEventService.recordSuccess(
                 "merchant.viewed",
                 "merchant.profile.view",
@@ -167,7 +172,8 @@ public class PlatformService {
                 Map.of("count", result.items().size(), "total", result.total(),
                         "merchantIds", result.items().stream().map(MerchantRecord::id).toList(),
                         "entry", "/api/v1/platform/merchants",
-                        "projectId", projectId == null ? "" : projectId,
+                        "projectId", projectId != null ? projectId
+                                : reach == null || ownOnly ? "" : String.join(",", new java.util.TreeSet<>(reach.organizationIds())),
                         "includeArchived", includeArchived, "businessFormat", format == null ? "" : format,
                         "page", result.page(), "pageSize", result.pageSize())
         );
@@ -181,7 +187,8 @@ public class PlatformService {
                 "mch_" + UUID.randomUUID(),
                 request,
                 false,
-                true
+                true,
+                "merchant.profile.manage"
         );
     }
 
@@ -198,7 +205,8 @@ public class PlatformService {
                 "mch_" + UUID.randomUUID(),
                 request,
                 false,
-                false
+                false,
+                "leasing.convert"
         );
     }
 
@@ -210,7 +218,8 @@ public class PlatformService {
                 requireText(merchantId, "merchant_id"),
                 request,
                 true,
-                true
+                true,
+                "merchant.profile.manage"
         );
     }
 
@@ -241,9 +250,10 @@ public class PlatformService {
                 "merchant.archive_failed",
                 "merchant.profile.manage",
                 "merchant",
+                () -> requireMerchant(id, "merchant.profile.manage"),
                 () -> {
                     String r = requireText(request == null ? null : request.reason(), "reason");
-                    MerchantRecord merchant = requireMerchant(id);
+                    MerchantRecord merchant = findMerchant(id);
                     Instant now = Instant.now();
                     // M009-011：存档＝可逆软下线（BSM-004），不是商户退出；退出缓冲期与停票不在此触发（BEQR-155）。
                     MerchantRecord saved = repository.saveMerchant(merchant.withArchive(now, actorId(), now));
@@ -265,8 +275,9 @@ public class PlatformService {
                 "merchant.unarchive_failed",
                 "merchant.profile.manage",
                 "merchant",
+                () -> requireMerchant(id, "merchant.profile.manage"),
                 () -> {
-                    MerchantRecord merchant = requireMerchant(id);
+                    MerchantRecord merchant = findMerchant(id);
                     Instant now = Instant.now();
                     // 取消存档=保留该商户,顺带撤销待审批删除,避免"生效可见却挂着待删"的迷惑态。
                     MerchantRecord saved = repository.saveMerchant(
@@ -291,7 +302,12 @@ public class PlatformService {
                 "merchant.profile.manage",
                 "merchant",
                 () -> {
-                    MerchantRecord merchant = isMasterAuthority() ? findMerchant(id) : requireMerchant(id);
+                    if (!isMasterAuthority()) {
+                        requireMerchant(id, "merchant.profile.manage");
+                    }
+                },
+                () -> {
+                    MerchantRecord merchant = findMerchant(id);
                     if (merchant.archivedAt() == null) {
                         throw ApiException.badRequest("MERCHANT_NOT_ARCHIVED",
                                 "商户必须先存档才能申请删除");
@@ -342,7 +358,12 @@ public class PlatformService {
                 "merchant.profile.approve",
                 "merchant",
                 () -> {
-                    MerchantRecord merchant = isMasterAuthority() ? findMerchant(id) : requireMerchant(id);
+                    if (!isMasterAuthority()) {
+                        requireMerchant(id, "merchant.profile.approve");
+                    }
+                },
+                () -> {
+                    MerchantRecord merchant = findMerchant(id);
                     if (!"pending".equals(merchant.deleteStatus())) {
                         throw ApiException.badRequest("MERCHANT_DELETE_NOT_PENDING",
                                 "该商户没有待审批的删除申请");
@@ -397,7 +418,7 @@ public class PlatformService {
     public MerchantPendingClearAlertRecord getPendingClearAlert(String merchantId) {
         authorizationService.requirePlatformScope();
         String id = requireText(merchantId, "merchant_id");
-        requireMerchant(id);
+        requireMerchant(id, "merchant.profile.view");
         MerchantPendingClearAlertRecord result = repository.findPendingClearAlert(id);
         auditEventService.recordSuccess("merchant.viewed", "merchant.profile.view", "merchant", id, null, null,
                 Map.of("entry", "/api/v1/platform/merchants/{merchant_id}/pending-clear-alert"));
@@ -414,8 +435,9 @@ public class PlatformService {
         String id = requireText(merchantId, "merchant_id");
         return executeWrite("configurePendingClearAlert:" + id, request == null ? null : request.idempotencyKey(),
                 request, MerchantPendingClearAlertRecord.class, "merchant.pending_clear_alert_configured",
-                "merchant.pending_clear_alert_config_failed", "merchant.profile.manage", "merchant", () -> {
-                    requireMerchant(id);
+                "merchant.pending_clear_alert_config_failed", "merchant.profile.manage", "merchant",
+                () -> requireMerchant(id, "merchant.profile.manage"), () -> {
+                    findMerchant(id);
                     Integer value = request == null ? null : request.valueMinutes();
                     Integer min = request == null ? null : request.minMinutes();
                     Integer max = request == null ? null : request.maxMinutes();
@@ -433,7 +455,7 @@ public class PlatformService {
         try {
             authorizationService.requirePlatformScope();
             String id = requireText(merchantId, "merchant_id");
-            requireMerchant(id);
+            requireMerchant(id, "merchant.profile.view");
             MerchantPercentParamRecord result = repository.findPercentParam(id, param);
             auditEventService.recordSuccess("merchant.viewed", "merchant.profile.view", "merchant", id, null, null,
                     Map.of("entry", "/api/v1/platform/merchants/{merchant_id}/" + param.path()));
@@ -458,8 +480,8 @@ public class PlatformService {
         String event = "merchant." + param.column();
         return executeWrite("configurePercentParam:" + param.column() + ":" + id, request == null ? null : request.idempotencyKey(),
                 request, MerchantPercentParamRecord.class, event + "_configured", event + "_config_failed",
-                "merchant.profile.manage", "merchant", () -> {
-                    requireMerchant(id);
+                "merchant.profile.manage", "merchant", () -> requireMerchant(id, "merchant.profile.manage"), () -> {
+                    findMerchant(id);
                     Integer value = request == null ? null : request.valuePct();
                     Integer min = request == null ? null : request.minPct();
                     Integer max = request == null ? null : request.maxPct();
@@ -508,12 +530,43 @@ public class PlatformService {
                 .orElseThrow(() -> ApiException.notFound("MERCHANT_NOT_FOUND", "商户不存在或已被删除"));
     }
 
-    private MerchantRecord requireMerchant(String id) {
+    /**
+     * 18E（第 19 条 19-R2）（治理地图第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：商户须在该入口权限码可触及的项目里，
+     * 平台管理员不限。写入口在幂等之前调用（范围闸在幂等之前），执行体内只按编号取行。
+     * 18E（第 20 条 20-R2）（同行「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：
+     * 判据为该商户的经营项目（主项目加已批准追加的项目）里任一在可触及范围内。
+     */
+    private MerchantRecord requireMerchant(String id, String code) {
         MerchantRecord merchant = findMerchant(id);
         if (!platformWide()) {
-            requireCurrentProject(merchant.projectId());
+            AuthorizationService.ProjectReach reach = reachOf(code);
+            if (repository.listMerchantOperatingProjectIds(id).stream().noneMatch(reach::covers)) {
+                throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "无权访问该项目的数据");
+            }
         }
         return merchant;
+    }
+
+    /** 18E 组间遗漏（第 20 条连带）：商户的经营项目（主项目加已批准追加的项目），供控制器逐行判联系人手机号明文。 */
+    public List<String> merchantOperatingProjectIds(String merchantId) {
+        return repository.listMerchantOperatingProjectIds(merchantId);
+    }
+
+    /** 18E（第 19 条 19-R2）：入口权限码可触及的项目范围（平台口径闸照旧先过）。 */
+    private AuthorizationService.ProjectReach reachOf(String code) {
+        authorizationService.requirePlatformScope();
+        return authorizationService.projectReach(authorizationService.currentActor(), code);
+    }
+
+    /** 18E（第 19 条 19-R2）：列表按入口权限码可触及的项目取——平台管理员全量；恰好只到本人项目的走原来的单项目查询；其余按可触及项目集合取。 */
+    private <T> PageResponse<T> scopedPage(String code, Supplier<PageResponse<T>> all,
+            java.util.function.Function<String, PageResponse<T>> own,
+            java.util.function.Function<java.util.Collection<String>, PageResponse<T>> reachable) {
+        if (platformWide()) {
+            return all.get();
+        }
+        AuthorizationService.ProjectReach reach = reachOf(code);
+        return reach.onlyOwnProject().isPresent() ? own.apply(currentProject()) : reachable.apply(reach.organizationIds());
     }
 
     /** D-032：平台管理员（项目范围为空＝全量）不受当前项目限定；普通项目岗位按真实项目校验（M009-038）。 */
@@ -542,7 +595,11 @@ public class PlatformService {
         return current;
     }
 
-    private String creationProject(String requested, boolean allowMasterConfiguration) {
+    /**
+     * 新建记录的落地项目。平台管理员与最高权限分支不变；其余按18E（第 19 条 19-R2）（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工
+     * 就能在哪些项目新建记录」）：落地项目＝请求 project_id，不带取本人项目；为空、不是项目或不在该码可触及范围内一律 403。
+     */
+    private String creationProject(String requested, boolean allowMasterConfiguration, String code) {
         String explicit = trimToNull(requested);
         if (allowMasterConfiguration && isMasterAuthority() && explicit != null) {
             if (!repository.projectExists(explicit)) {
@@ -554,13 +611,19 @@ public class PlatformService {
             // 平台管理员新建须显式给出已存在的项目，不按「当前项目」隐式填。
             return requireCurrentProject(requireText(explicit, "project_id"));
         }
-        String current = currentProject();
-        return requireCurrentProject(explicit == null ? current : explicit);
+        String landing = explicit == null ? currentProject() : explicit;
+        if (landing == null || !repository.projectExists(landing) || !reachOf(code).covers(landing)) {
+            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "无权访问该项目的数据");
+        }
+        return landing;
     }
 
     /** M009-028：BSM-004「下线就不能再用」——新项目/空间/绑定只能引用未存档且未审批删除的商户；档案更新、存档/恢复与删除流程仍经 requireMerchant 命中已存档行。 */
-    private MerchantRecord requireActiveMerchant(String id) {
-        MerchantRecord merchant = requireMerchant(id);
+    private MerchantRecord requireActiveMerchant(String id, String code) {
+        return requireActive(requireMerchant(id, code));
+    }
+
+    private static MerchantRecord requireActive(MerchantRecord merchant) {
         if (merchant.archivedAt() != null || "approved".equals(merchant.deleteStatus())) {
             throw ApiException.badRequest("MERCHANT_ARCHIVED", "商户已存档或已删除，不能再用于新的项目、空间或主体绑定");
         }
@@ -572,9 +635,10 @@ public class PlatformService {
     }
 
     public PageResponse<ProjectRecord> listProjects(int page, int size) {
-        PageResponse<ProjectRecord> result = platformWide()
-                ? repository.listProjectsPaged(page, size)
-                : repository.listProjectsPaged(currentProject(), page, size);
+        PageResponse<ProjectRecord> result = scopedPage("governance.project.view",
+                () -> repository.listProjectsPaged(page, size),
+                project -> repository.listProjectsPaged(project, page, size),
+                projects -> repository.listProjectsPaged(projects, page, size));
         auditEventService.recordSuccess(
                 "project.viewed",
                 "governance.project.view",
@@ -603,7 +667,7 @@ public class PlatformService {
                     String venueType = requireText(request == null ? null : request.venueType(), "venue_type");
                     String merchantId = trimToNull(request.merchantId());
                     if (merchantId != null) {
-                        requireActiveMerchant(merchantId);
+                        requireActiveMerchant(merchantId, "governance.project.manage");
                     }
                     String status = requireProjectStatus(request.status());
                     if (request.capacity() != null && request.capacity() < 0) {
@@ -629,14 +693,27 @@ public class PlatformService {
         );
     }
 
-    /** 3.13：空间存在性（招商线索/意向意向空间校验用）。 */
-    public boolean spaceExists(String spaceId) {
-        if (platformWide()) {
-            return spaceId != null && repository.findSpaceById(spaceId).isPresent();
+    /**
+     * 3.13：空间存在性（招商线索/意向的意向铺位校验用）。18E（第 19 条 19-R2）：空间须归属给定项目（招商按线索的落地项目核，项目范围由招商入口按码核过）；
+     * 项目为空时只有平台管理员只核存在。
+     */
+    public boolean spaceExists(String spaceId, String projectId) {
+        if (spaceId == null) {
+            return false;
         }
-        String projectId = currentProject();
-        return spaceId != null && projectId != null && repository.findSpaceById(spaceId)
-                .filter(space -> projectId.equals(space.projectId())).isPresent();
+        java.util.Optional<SpaceRecord> space = repository.findSpaceById(spaceId);
+        return projectId == null ? platformWide() && space.isPresent()
+                : space.filter(found -> projectId.equals(found.projectId())).isPresent();
+    }
+
+    /** 18E（第 19 条 19-R2）：空间所在项目（招商新建线索不带 project_id 时按意向铺位取落地项目）；空间不存在返回空。 */
+    public String spaceProjectId(String spaceId) {
+        return spaceId == null ? null : repository.findSpaceById(spaceId).map(SpaceRecord::projectId).orElse(null);
+    }
+
+    /** 18E（第 19 条 19-R2）：项目是否存在（招商新建线索、品牌核落地项目用）。 */
+    public boolean projectExists(String projectId) {
+        return projectId != null && repository.projectExists(projectId);
     }
 
     public PageResponse<SpaceRecord> listSpaces() {
@@ -644,9 +721,10 @@ public class PlatformService {
     }
 
     public PageResponse<SpaceRecord> listSpaces(int page, int size) {
-        PageResponse<SpaceRecord> result = platformWide()
-                ? repository.listSpacesPaged(page, size)
-                : repository.listSpacesPaged(currentProject(), page, size);
+        PageResponse<SpaceRecord> result = scopedPage("governance.space.view",
+                () -> repository.listSpacesPaged(page, size),
+                project -> repository.listSpacesPaged(project, page, size),
+                projects -> repository.listSpacesPaged(projects, page, size));
         auditEventService.recordSuccess(
                 "space.viewed",
                 "governance.space.view",
@@ -827,16 +905,19 @@ public class PlatformService {
                     if (!repository.projectExists(projectId)) {
                         throw ApiException.notFound("PROJECT_NOT_FOUND", "项目不存在");
                     }
-                    requireCurrentProject(projectId);
+                    // 18E（第 19 条 19-R2）：项目须在 governance.space.manage 可触及范围内（平台管理员不限）
+                    if (!platformWide() && !reachOf("governance.space.manage").covers(projectId)) {
+                        throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "无权访问该项目的数据");
+                    }
                     String merchantId = trimToNull(request.merchantId());
                     if (merchantId != null) {
-                        requireActiveMerchant(merchantId);
+                        requireActiveMerchant(merchantId, "governance.space.manage");
                     }
                     String parentSpaceId = trimToNull(request.parentSpaceId());
                     if (parentSpaceId != null) {
                         SpaceRecord parent = repository.findSpaceById(parentSpaceId)
                                 .orElseThrow(() -> ApiException.notFound("SPACE_NOT_FOUND", "上级空间不存在"));
-                        if (platformWide() ? !projectId.equals(parent.projectId()) : !projectId.equals(requireCurrentProject(parent.projectId()))) {
+                        if (!projectId.equals(parent.projectId())) {
                             throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "上级空间须属于同一项目");
                         }
                     }
@@ -866,10 +947,10 @@ public class PlatformService {
 
     public PageResponse<BusinessEntityBindingRecord> listBusinessEntityBindings(int page, int size) {
         try {
-            PageResponse<BusinessEntityBindingRecord> result =
-                    platformWide()
-                            ? repository.listBusinessEntityBindingsPaged(page, size)
-                            : repository.listBusinessEntityBindingsPaged(currentProject(), page, size);
+            PageResponse<BusinessEntityBindingRecord> result = scopedPage("entity.binding.view",
+                    () -> repository.listBusinessEntityBindingsPaged(page, size),
+                    project -> repository.listBusinessEntityBindingsPaged(project, page, size),
+                    projects -> repository.listBusinessEntityBindingsPaged(projects, page, size));
             auditEventService.recordSuccess(
                     "entity_binding.viewed",
                     "entity.binding.view",
@@ -895,6 +976,11 @@ public class PlatformService {
     }
 
     public BusinessEntityBindingRecord createBusinessEntityBinding(BusinessEntityBindingRequest request) {
+        return createBusinessEntityBinding(request, "entity.binding.manage");
+    }
+
+    /** 18E（第 19 条 19-R2）：scopeCode＝商户范围按哪个入口权限码判（招商签约自动建立绑定按 leasing.convert）。 */
+    public BusinessEntityBindingRecord createBusinessEntityBinding(BusinessEntityBindingRequest request, String scopeCode) {
         authorizationService.requirePlatformScope();
         return executeWrite(
                 "createBusinessEntityBinding",
@@ -910,10 +996,10 @@ public class PlatformService {
                     String merchantId = requireText(actual.merchantId(), "merchant_id");
                     // M009-006：四类主体绑定的经营对象与三个主体都必须真实存在（BEQR-143/PGM-026）；M009-028：且商户未下线。
                     repository.lockMerchant(merchantId);
-                    MerchantRecord merchant = requireActiveMerchant(merchantId);
-                    String operationEntityId = requireBusinessEntity(actual.operationEntityId(), "operation_entity_id");
-                    String contractEntityId = requireBusinessEntity(actual.contractEntityId(), "contract_entity_id");
-                    String settlementEntityId = requireBusinessEntity(actual.settlementEntityId(), "settlement_entity_id");
+                    MerchantRecord merchant = requireActiveMerchant(merchantId, scopeCode);
+                    String operationEntityId = requireBusinessEntity(actual.operationEntityId(), "operation_entity_id", merchant.projectId());
+                    String contractEntityId = requireBusinessEntity(actual.contractEntityId(), "contract_entity_id", merchant.projectId());
+                    String settlementEntityId = requireBusinessEntity(actual.settlementEntityId(), "settlement_entity_id", merchant.projectId());
                     requireUnfinishedBindingSlot(merchantId, null);
                     requireUnchangedFinancialSubjects(merchant, operationEntityId, contractEntityId, settlementEntityId);
                     LocalDate today = LocalDate.now(ZoneOffset.UTC);
@@ -953,6 +1039,9 @@ public class PlatformService {
                 "entity_binding.change_failed",
                 "entity.binding.manage",
                 "business_entity_binding",
+                () -> requireMerchant(repository.findBusinessEntityBindingById(bindingId)
+                        .orElseThrow(() -> ApiException.notFound("BINDING_NOT_FOUND", "主体绑定不存在或已被删除"))
+                        .merchantId(), "entity.binding.manage"),
                 () -> {
                     StatusChangeRequest actual = requireRequest(request);
                     String status = requireText(actual.action(), "action");
@@ -964,7 +1053,7 @@ public class PlatformService {
                             .orElseThrow(() -> ApiException.notFound("BINDING_NOT_FOUND", "主体绑定不存在或已被删除"));
                     repository.lockMerchant(located.merchantId());
                     BusinessEntityBindingRecord existing = repository.findBusinessEntityBindingById(bindingId).orElseThrow();
-                    MerchantRecord merchant = requireMerchant(existing.merchantId());
+                    MerchantRecord merchant = findMerchant(existing.merchantId());
                     LocalDate today = LocalDate.now(ZoneOffset.UTC);
                     if (existing.effectiveTo() != null) {
                         throw ApiException.conflict("BINDING_PERIOD_ENDED", "已结束的主体绑定不能重新打开或改写历史期间");
@@ -977,10 +1066,10 @@ public class PlatformService {
                         throw ApiException.conflict("BINDING_NOT_EFFECTIVE", "主体绑定尚未到生效日期，不能提前启用或结束");
                     }
                     if ("active".equals(status)) {
-                        requireActiveMerchant(existing.merchantId());
-                        requireBusinessEntity(existing.operationEntityId(), "operation_entity_id");
-                        requireBusinessEntity(existing.contractEntityId(), "contract_entity_id");
-                        requireBusinessEntity(existing.settlementEntityId(), "settlement_entity_id");
+                        requireActive(merchant);
+                        requireBusinessEntity(existing.operationEntityId(), "operation_entity_id", merchant.projectId());
+                        requireBusinessEntity(existing.contractEntityId(), "contract_entity_id", merchant.projectId());
+                        requireBusinessEntity(existing.settlementEntityId(), "settlement_entity_id", merchant.projectId());
                         requireUnfinishedBindingSlot(existing.merchantId(), existing.id());
                         requireUnchangedFinancialSubjects(merchant, existing.operationEntityId(),
                                 existing.contractEntityId(), existing.settlementEntityId());
@@ -1017,7 +1106,7 @@ public class PlatformService {
      * 主体不存在／不在用／角色不符 400 MERCHANT_SUPERVISING_COMPANY_INVALID；项目范围操作者填未关联当前项目的主体 403 PROJECT_SCOPE_MISMATCH
      * （与 requireBusinessEntity 同一项目关联闸，M009-006）。
      */
-    private void requireSupervisingCompany(String entityId, String reason) {
+    private void requireSupervisingCompany(String entityId, String reason, String projectId) {
         if (entityId == null || reason == null) {
             throw ApiException.badRequest("MERCHANT_SUPERVISING_COMPANY_REQUIRED",
                     "业态为「其他」的商户必须在商户档案里指定一家主管公司并说明理由");
@@ -1028,8 +1117,8 @@ public class PlatformService {
             throw ApiException.badRequest("MERCHANT_SUPERVISING_COMPANY_INVALID",
                     "主管公司只能从在用的城市项目公司或域主管公司中选择：" + entityId);
         }
-        if (!platformWide() && !repository.businessEntityInProject(entityId, currentProject())) {
-            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该主体未关联当前项目");
+        if (!platformWide() && !repository.businessEntityInProject(entityId, projectId)) {
+            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该主体未关联该商户所在项目");
         }
     }
 
@@ -1093,14 +1182,14 @@ public class PlatformService {
         return value;
     }
 
-    /** M009-006：绑定引用的主体必须存在。 */
-    private String requireBusinessEntity(String raw, String fieldName) {
+    /** M009-006：绑定引用的主体必须存在；18E（第 19 条 19-R2）：项目范围操作者引用的主体须关联该商户所在项目（新建商户按落地项目）。 */
+    private String requireBusinessEntity(String raw, String fieldName, String projectId) {
         String id = requireText(raw, fieldName);
         if (!repository.businessEntityExists(id)) {
             throw ApiException.notFound("BUSINESS_ENTITY_NOT_FOUND", "主体不存在：" + id);
         }
-        if (!platformWide() && !repository.businessEntityInProject(id, currentProject())) {
-            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该主体未关联当前项目");
+        if (!platformWide() && !repository.businessEntityInProject(id, projectId)) {
+            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该主体未关联该商户所在项目");
         }
         return id;
     }
@@ -1147,7 +1236,8 @@ public class PlatformService {
             String merchantId,
             MerchantProfileRequest request,
             boolean update,
-            boolean supervisingCompanyRequired
+            boolean supervisingCompanyRequired,
+            String scopeCode
     ) {
         return executeWrite(
                 operationId,
@@ -1159,14 +1249,19 @@ public class PlatformService {
                 "merchant.profile.manage",
                 "merchant",
                 () -> {
+                    if (update) {
+                        requireMerchant(merchantId, scopeCode);
+                    }
+                },
+                () -> {
                     String merchantName = requireText(request == null ? null : request.merchantName(), "merchant_name");
                     String merchantType = requireBusinessFormat(request == null ? null : request.merchantType());
                     String cooperationForm = requireCooperationForm(request.cooperationForm());
                     String status = requireSubjectStatus(request.status());
                     // M009-001/002：更新须命中已有商户，并保留存档/删除申请状态与 createdAt；
                     // M009-008：三个主体列以生效绑定为准，档案更新不覆盖。
-                    MerchantRecord existing = update ? requireMerchant(merchantId) : null;
-                    String projectId = existing == null ? creationProject(request.projectId(), false) : existing.projectId();
+                    MerchantRecord existing = update ? findMerchant(merchantId) : null;
+                    String projectId = existing == null ? creationProject(request.projectId(), false, scopeCode) : existing.projectId();
                     if (existing != null && trimToNull(request.projectId()) != null
                             && !java.util.Objects.equals(projectId, request.projectId().trim())) {
                         throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "普通档案更新不能变更商户的项目归属");
@@ -1177,16 +1272,16 @@ public class PlatformService {
                     String supervisingCompanyReason = trimToNull(request.supervisingCompanyReason());
                     if ("other".equals(merchantType)) {
                         if (supervisingCompanyRequired || supervisingCompanyId != null || supervisingCompanyReason != null) {
-                            requireSupervisingCompany(supervisingCompanyId, supervisingCompanyReason);
+                            requireSupervisingCompany(supervisingCompanyId, supervisingCompanyReason, projectId);
                         }
                     } else if (supervisingCompanyId != null || supervisingCompanyReason != null) {
                         throw ApiException.badRequest("MERCHANT_SUPERVISING_COMPANY_NOT_ALLOWED",
                                 "只有业态为「其他」的商户才在档案里指定主管公司与理由");
                     }
                     if (existing == null) {
-                        if (trimToNull(request.businessEntityId()) != null) requireBusinessEntity(request.businessEntityId(), "business_entity_id");
-                        if (trimToNull(request.contractEntityId()) != null) requireBusinessEntity(request.contractEntityId(), "contract_entity_id");
-                        if (trimToNull(request.settlementEntityId()) != null) requireBusinessEntity(request.settlementEntityId(), "settlement_entity_id");
+                        if (trimToNull(request.businessEntityId()) != null) requireBusinessEntity(request.businessEntityId(), "business_entity_id", projectId);
+                        if (trimToNull(request.contractEntityId()) != null) requireBusinessEntity(request.contractEntityId(), "contract_entity_id", projectId);
+                        if (trimToNull(request.settlementEntityId()) != null) requireBusinessEntity(request.settlementEntityId(), "settlement_entity_id", projectId);
                     }
                     if (existing != null && "terminated".equals(existing.status()) && trimToNull(request.status()) == null) {
                         status = existing.status();
@@ -1243,6 +1338,29 @@ public class PlatformService {
             String businessType,
             Supplier<T> action
     ) {
+        return executeWrite(operationId, idempotencyKey, request, responseType, successEvent, failureEvent, permissionCode,
+                businessType, () -> { }, action);
+    }
+
+    /** 18E（第 19 条 19-R2）：scopeGate＝既有对象的范围闸，在幂等之前跑（同一幂等键重放也要再过），被拒照旧记失败留痕。 */
+    private <T> T executeWrite(
+            String operationId,
+            String idempotencyKey,
+            Object request,
+            Class<T> responseType,
+            String successEvent,
+            String failureEvent,
+            String permissionCode,
+            String businessType,
+            Runnable scopeGate,
+            Supplier<T> action
+    ) {
+        try {
+            scopeGate.run();
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(failureEvent, permissionCode, businessType, null, null, idempotencyKey, codeOf(exception));
+            throw exception;
+        }
         return operations.executeWrite(
                 operationId,
                 idempotencyKey,

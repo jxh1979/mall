@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -553,6 +553,18 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord createLendingOverdue(String projectId, String lenderMerchantId, String title, String description) {
         return createInternal(new FacilityWorkOrderRequest("other", "normal", title, description, "lending_overdue", null, null,
                 "system", "system", projectId, lenderMerchantId, null), null, null);
+    }
+
+    /**
+     * 第 63 条（BSM:800「安检环节不产生按人记录，仅记设备状态、故障事件与维修工单留痕……留痕与溯源以设备状态、故障事件与维修工单为终点」）：
+     * 安检 X 光设备人工登记故障即开一张维修工单——类型报修、普通优先级、来源平台、提单方为登记故障的员工、记设备所在空间与项目、待派单。
+     * X 光设备在设备管理台账（terminal_devices，PGM:618、PGM:623），不在楼宇机电台账，不填 equipment_id，按普通报修走既有派单与验收。
+     */
+    @Transactional
+    public FacilityWorkOrderRecord createSecurityXrayFault(String projectId, String spaceId, String deviceCode, String reason,
+            String reporterId) {
+        return createInternal(new FacilityWorkOrderRequest("repair", "normal", "安检 X 光设备故障：" + deviceCode, reason,
+                "platform", spaceId, null, reporterId, "staff", projectId, null, null), null, null);
     }
 
     /** 借用物全部归还或实物处置完成：系统结束该逾期工单（已关闭的不动），写处理结论并留痕。 */

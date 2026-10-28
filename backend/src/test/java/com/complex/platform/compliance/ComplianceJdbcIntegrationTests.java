@@ -86,7 +86,9 @@ class ComplianceJdbcIntegrationTests {
                 true,
                 List.of("att-license"),
                 now,
-                now
+                now,
+                null,
+                null
         ));
         repository.saveReminder(new ComplianceReminderRecord(
                 "cr_jdbc",

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.36
+  version: V0.37
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -3835,7 +3835,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。
+      description: 按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。
     post:
       tags:
         - finance
@@ -3908,7 +3908,7 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: ar_ap_payment.listed
       x-audit-event-failure: ar_ap_payment.list_failed
-      description: "读取所选台账原收付款流水；按 finance.ar_ap.view 获批项目范围与商户范围交集核验原台账，项目公司财务无需绑定商户。"
+      description: "读取所选台账原收付款流水；按 finance.ar_ap.view 获批项目范围与商户范围交集核验原台账，项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。"
       responses:
         "200":
           $ref: "#/components/responses/ArApPaymentList"
@@ -4198,7 +4198,7 @@ paths:
       operationId: getInternalPayableExecution
       summary: 查普通内部结算往来的付款时点与执行状态
       description: ENUM L253 内部应付执行状态：pending=待付(含银行在途 in_transit=true)、failed_pending=付款失败待处理(注明 failure_reason 与
-        expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。
+        expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。
       x-permission: finance.ar_ap.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -4465,7 +4465,7 @@ paths:
         - floor-plan
       operationId: listFloorPlans
       summary: 查询 P1/P2 商场平面图
-      description: 返回图片底图、多边形坐标版本和状态，用于 Web 管理端选择平面图。
+      description: 返回图片底图、多边形坐标版本和状态，用于 Web 管理端选择平面图。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-permission: floor_plan.view
       x-data-scope: project-space
       x-terminal-allowed:
@@ -4488,7 +4488,7 @@ paths:
         - floor-plan
       operationId: createFloorPlan
       summary: 创建 P1/P2 商场平面图
-      description: 创建图片底图与多边形坐标承载对象，不自动导入 CAD 或 SVG。
+      description: 创建图片底图与多边形坐标承载对象，不自动导入 CAD 或 SVG。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-permission: floor_plan.manage
       x-data-scope: project-space
       x-terminal-allowed:
@@ -4518,7 +4518,7 @@ paths:
         - floor-plan
       operationId: listFloorPlanImports
       summary: 查询平面图导入任务
-      description: 返回指定平面图的 SVG 或标准 JSON 导入任务列表。
+      description: 返回指定平面图的 SVG 或标准 JSON 导入任务列表。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-permission: floor_plan.import.view
       x-data-scope: project-space
       x-terminal-allowed:
@@ -4549,7 +4549,7 @@ paths:
         - floor-plan
       operationId: createFloorPlanImport
       summary: 创建 SVG 或标准 JSON 导入任务
-      description: 导入任务只生成候选和错误明细，不写入正式区域，发布必须另走人工确认接口。
+      description: 导入任务只生成候选和错误明细，不写入正式区域，发布必须另走人工确认接口。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-permission: floor_plan.import.manage
       x-data-scope: project-space
       x-terminal-allowed:
@@ -4587,7 +4587,7 @@ paths:
         - floor-plan
       operationId: getFloorPlanImportDetails
       summary: 查询导入候选和错误
-      description: 返回导入任务解析出的候选区域和错误明细，供人工复核。
+      description: 返回导入任务解析出的候选区域和错误明细，供人工复核。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-permission: floor_plan.import.view
       x-data-scope: project-space
       x-terminal-allowed:
@@ -4626,7 +4626,7 @@ paths:
         - floor-plan
       operationId: publishFloorPlanImport
       summary: 发布平面图导入候选
-      description: 将人工选择的候选写入正式区域，必须携带幂等键并记录审计留痕。
+      description: 将人工选择的候选写入正式区域，必须携带幂等键并记录审计留痕。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-permission: floor_plan.import.manage
       x-data-scope: project-space
       x-terminal-allowed:
@@ -4671,7 +4671,7 @@ paths:
         - floor-plan
       operationId: listFloorPlanShapes
       summary: 查询平面图正式区域
-      description: 返回已发布的正式多边形区域，供商场平面图和招商运营联动查看。
+      description: 返回已发布的正式多边形区域，供商场平面图和招商运营联动查看。第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-permission: floor_plan.view
       x-data-scope: project-space
       x-terminal-allowed:
@@ -4702,6 +4702,7 @@ paths:
         - floor-plan
       operationId: saveFloorPlanShape
       summary: 保存平面图图形
+      description: 第十八批 E 段（第 19 条）：项目岗位按本入口权限码可触及的项目判（可跨项目角色勾中的项目也算）；商户账号照旧只到本商户。
       x-auth-context: staff-token
       x-permission: floor_plan.manage
       x-terminal-allowed:
@@ -9153,6 +9154,7 @@ paths:
         - platform
       operationId: listBusinessEntities
       summary: 查询经营、运营、合同、结算主体档案
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。主体按与可触及项目的关联出，没关联任何项目的不出。
       x-permission: entity.binding.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9173,6 +9175,7 @@ paths:
         - platform
       operationId: createBusinessEntity
       summary: 创建经营、运营、合同、结算主体档案
+      description: 第十八批 E 段（第 19 条）：新建记录落请求 project_id 所指项目，不带取本人项目；须是项目且在本入口权限码可触及范围内，否则 403。
       x-permission: entity.binding.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9198,6 +9201,7 @@ paths:
         - platform
       operationId: listBusinessEntityBindings
       summary: 查询四类主体绑定
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。按绑定商户所在项目判。第十八批 E 段（第 20 条，PGM:659）：按绑定商户的经营项目（主项目加经审批追加的项目）判，任一在可触及范围内即出该行。
       x-permission: entity.binding.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9218,6 +9222,7 @@ paths:
         - platform
       operationId: createBusinessEntityBinding
       summary: 创建四类主体唯一绑定
+      description: 第十八批 E 段（第 19 条）：商户须在 entity.binding.manage 可触及的项目里，三个主体须关联该商户所在项目。
       x-permission: entity.binding.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9243,6 +9248,7 @@ paths:
         - platform
       operationId: changeBusinessEntityBinding
       summary: 变更四类主体绑定
+      description: 第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。
       x-permission: entity.binding.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9271,6 +9277,7 @@ paths:
         - platform
       operationId: listMerchants
       summary: 查询商户
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。联系人手机号明文逐行判（第十八批 E 段第 19 条）：持 pii.contact_phone.view 且本入口权限码与该码可触及范围的交集覆盖该商户任一经营项目（主项目加经审批追加的项目，第十八批 E 段第 20 条）的行返回明文（本请求刚用掉的单次授权仍计入），其余行掩码；不持该码一律掩码（含平台管理员）；最高权限本人持该码整份明文、不按项目判。第十八批 E 段（第 20 条，PGM:659）：列表含经营项目（主项目加经审批追加的项目）在可触及范围内的商户，各经营项目的员工和主项目的员工一样看到这份主档案。
       x-permission: merchant.profile.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9292,6 +9299,7 @@ paths:
         - platform
       operationId: createMerchant
       summary: 创建商户
+      description: 第十八批 E 段（第 19 条）：新建记录落请求 project_id 所指项目，不带取本人项目；须是项目且在本入口权限码可触及范围内，否则 403。请求体可带 project_id；引用的主体须关联落地项目。联系人手机号明文逐行判（第十八批 E 段第 19 条）：持 pii.contact_phone.view 且本入口权限码与该码可触及范围的交集覆盖该商户任一经营项目（主项目加经审批追加的项目，第十八批 E 段第 20 条）的行返回明文（本请求刚用掉的单次授权仍计入），其余行掩码；不持该码一律掩码（含平台管理员）；最高权限本人持该码整份明文、不按项目判。
       x-permission: merchant.profile.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -9317,6 +9325,7 @@ paths:
         - platform
       operationId: updateMerchant
       summary: 修改商户
+      description: 第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。引用的主体须关联该商户所在项目。联系人手机号明文逐行判（第十八批 E 段第 19 条）：持 pii.contact_phone.view 且本入口权限码与该码可触及范围的交集覆盖该商户任一经营项目（主项目加经审批追加的项目，第十八批 E 段第 20 条）的行返回明文（本请求刚用掉的单次授权仍计入），其余行掩码；不持该码一律掩码（含平台管理员）；最高权限本人持该码整份明文、不按项目判。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。主项目只能经「补商户主项目」设定，档案更新不改。
       x-permission: merchant.profile.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9349,7 +9358,7 @@ paths:
         - platform
       operationId: getMerchantPendingClearAlert
       summary: 查询酒吧待清台提醒时限
-      description: TK-27（BSM L1058「待清台超过后台配置时限（业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限）未恢复空闲的，系统提醒当班主管」）：读酒吧（merchant_type=bar 的商户）待清台提醒时限；未配置时 value_minutes/min_minutes/max_minutes 为空、effective_minutes=15（出厂值）。
+      description: TK-27（BSM L1058「待清台超过后台配置时限（业务参数，按酒吧可配，出厂默认 15 分钟，须同时配置上下限）未恢复空闲的，系统提醒当班主管」）：读酒吧（merchant_type=bar 的商户）待清台提醒时限；未配置时 value_minutes/min_minutes/max_minutes 为空、effective_minutes=15（出厂值）。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算）。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。
       x-permission: merchant.profile.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9374,7 +9383,7 @@ paths:
         - platform
       operationId: configureMerchantPendingClearAlert
       summary: 配置酒吧待清台提醒时限(值与上下限同配)
-      description: TK-27（BSM L1058）：配置酒吧（商户）待清台提醒时限。按仓库「值与上下限同配」范式：value_minutes、min_minutes、max_minutes 三者必填，min_minutes≥0 且 min_minutes≤value_minutes≤max_minutes，否则 400 VALIDATION_FAILED；不另设硬上下限。台位列表据此标记待清台超时。
+      description: TK-27（BSM L1058）：配置酒吧（商户）待清台提醒时限。按仓库「值与上下限同配」范式：value_minutes、min_minutes、max_minutes 三者必填，min_minutes≥0 且 min_minutes≤value_minutes≤max_minutes，否则 400 VALIDATION_FAILED；不另设硬上下限。台位列表据此标记待清台超时。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。
       x-permission: merchant.profile.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9431,7 +9440,7 @@ paths:
         - platform
       operationId: getMerchantStaffBookingNoShowLimit
       summary: 查询酒吧员工代订爽约率上限
-      description: 第十八批 C 段第 15 条（BSM L1468「经手员工的爽约率超过后台配置的上限时（业务参数，按酒吧可配，须同时配置上下限），自动停用其代订权限，由店长复核后恢复」）：读酒吧（merchant_type=bar 的商户）员工代订爽约率上限；HTML 未给出厂值，未配置时 value_pct/min_pct/max_pct/effective_pct 皆为空、不自动停用。
+      description: 第十八批 C 段第 15 条（BSM L1468「经手员工的爽约率超过后台配置的上限时（业务参数，按酒吧可配，须同时配置上下限），自动停用其代订权限，由店长复核后恢复」）：读酒吧（merchant_type=bar 的商户）员工代订爽约率上限；HTML 未给出厂值，未配置时 value_pct/min_pct/max_pct/effective_pct 皆为空、不自动停用。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算）。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。
       x-permission: merchant.profile.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9456,7 +9465,7 @@ paths:
         - platform
       operationId: configureMerchantStaffBookingNoShowLimit
       summary: 配置酒吧员工代订爽约率上限(值与上下限同配)
-      description: 第十八批 C 段第 15 条：配置员工代订爽约率上限。value_pct、min_pct、max_pct 三者必填，0≤min_pct≤value_pct≤max_pct≤100，否则 400 VALIDATION_FAILED。经手员工本自然月（第十八批裁决 3，按营业日归月）爽约笔数÷已到最晚到店时间的代订笔数超过该上限即自动停用其代订权限。
+      description: 第十八批 C 段第 15 条：配置员工代订爽约率上限。value_pct、min_pct、max_pct 三者必填，0≤min_pct≤value_pct≤max_pct≤100，否则 400 VALIDATION_FAILED。经手员工本自然月（第十八批裁决 3，按营业日归月）爽约笔数÷已到最晚到店时间的代订笔数超过该上限即自动停用其代订权限。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。
       x-permission: merchant.profile.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9516,7 +9525,7 @@ paths:
         - platform
       operationId: getMerchantPourLossRate
       summary: 查询酒吧损耗率阈值
-      description: 第十八批 C 段第 17 条（BSM L2015「损耗率（当期损耗量 ÷ 标准出酒量）超过后台配置的阈值……（安全阈值，按酒吧可配，出厂默认 5%，须同时配置上下限）」；第十八批裁决 4「这个阈值一并做出来」）：读酒吧损耗率阈值；未配置时 value_pct/min_pct/max_pct 为空、effective_pct=5（出厂值）。
+      description: 第十八批 C 段第 17 条（BSM L2015「损耗率（当期损耗量 ÷ 标准出酒量）超过后台配置的阈值……（安全阈值，按酒吧可配，出厂默认 5%，须同时配置上下限）」；第十八批裁决 4「这个阈值一并做出来」）：读酒吧损耗率阈值；未配置时 value_pct/min_pct/max_pct 为空、effective_pct=5（出厂值）。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算）。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。
       x-permission: merchant.profile.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9541,7 +9550,7 @@ paths:
         - platform
       operationId: configureMerchantPourLossRate
       summary: 配置酒吧损耗率阈值(值与上下限同配)
-      description: 第十八批 C 段第 17 条：配置酒吧损耗率阈值。value_pct、min_pct、max_pct 三者必填，1≤min_pct≤value_pct≤max_pct≤100（标准损耗＝标准出酒量×该阈值，阈值为 0 即零损耗，违反 BSM L1065「不得按零损耗记账」），否则 400 VALIDATION_FAILED。未配采集设备的吧台按杯出品据此记标准损耗。
+      description: 第十八批 C 段第 17 条：配置酒吧损耗率阈值。value_pct、min_pct、max_pct 三者必填，1≤min_pct≤value_pct≤max_pct≤100（标准损耗＝标准出酒量×该阈值，阈值为 0 即零损耗，违反 BSM L1065「不得按零损耗记账」），否则 400 VALIDATION_FAILED。未配采集设备的吧台按杯出品据此记标准损耗。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。
       x-permission: merchant.profile.manage
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9595,12 +9604,96 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/platform/merchants/{merchant_id}/operating-projects:
+    get:
+      tags:
+        - platform
+      operationId: getMerchantOperatingProjects
+      summary: 查询商户经营项目与加经营项目申请
+      description: 第十八批 E 段第 20 条（PGM:659「一个商户要在别的项目经营的，由能管理商户档案的人在商户档案里加经营项目，要经过审批才生效。」）：返回 merchant_id、主项目（primary_project_id、primary_project_name）、已生效的经营项目（operating_projects，各含 project_id、project_name，不含主项目）、加经营项目申请记录（requests，新的在前；各含 id、project_id、project_name、status、reason、requested_by、requested_at、review_id、decided_by、decided_at；status 为 pending_approval 待审批／approved 已批准／rejected 已驳回）、可申请的项目（project_options，去掉主项目与已生效的经营项目）。该商户的经营项目（主项目加经审批追加的项目）里须有一个在本入口权限码可触及的范围内，否则 403 PROJECT_SCOPE_MISMATCH；平台管理员不限；商户不存在 404 MERCHANT_NOT_FOUND。
+      x-permission: merchant.profile.view
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: merchant.viewed
+      x-audit-event-failure: merchant.view_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - platform
+      operationId: requestMerchantOperatingProject
+      summary: 申请商户加经营项目(须审批生效)
+      description: 第十八批 E 段第 20 条（PGM:659）：能管理商户档案的人给商户申请加经营项目，project_id、reason 必填。申请进统一审批（action_type=merchant.project.add，发起人沿直接上级到 final_approver_id 指定的最终审批人逐级审批，不填即直接上级，PGM:528），申请人本人审批 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN（PGM:529）；批准才写入经营项目并记审批人与时间，驳回不写、可重新申请。范围闸在幂等之前：该商户的经营项目（主项目加经审批追加的项目）里须有一个在本入口权限码可触及的范围内，否则 403 PROJECT_SCOPE_MISMATCH（同一幂等键在失去该项目后重放同样 403）；商户不存在 404 MERCHANT_NOT_FOUND；已存档或已删除 400 MERCHANT_ARCHIVED；项目不存在 404 PROJECT_NOT_FOUND；已在该项目经营（含主项目）409 MERCHANT_PROJECT_ALREADY_OPERATING；同一项目已有待审批的申请 409 MERCHANT_PROJECT_REQUEST_PENDING。返回该申请（status=pending_approval，含 review_id）。
+      x-permission: merchant.profile.manage
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.operating_project.requested
+      x-audit-event-failure: merchant.operating_project.request_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - project_id
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                project_id:
+                  type: string
+                  description: 要加的经营项目。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 申请理由（必填）。
+                  maxLength: 500
+                final_approver_id:
+                  type: string
+                  description: 主线最终审批人（发起人直接上级链上的人）；不填即直接上级审批。
+                  maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/platform/projects:
     get:
       tags:
         - platform
       operationId: listProjects
       summary: 查询综合体项目
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: governance.project.view
       x-data-scope: project
       x-terminal-allowed:
@@ -9647,6 +9740,7 @@ paths:
         - platform
       operationId: listSpaces
       summary: 查询场馆、区域、点位
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: governance.space.view
       x-data-scope: project-merchant-space
       x-terminal-allowed:
@@ -9668,6 +9762,7 @@ paths:
         - platform
       operationId: createSpace
       summary: 创建场馆、区域、点位
+      description: 第十八批 E 段（第 19 条）：project_id 须在 governance.space.manage 可触及范围内，否则 403 PROJECT_SCOPE_MISMATCH；上级空间须属同一项目。
       x-permission: governance.space.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -9693,7 +9788,7 @@ paths:
         - platform
       operationId: listVenueBusinessHours
       summary: 查询场地营业时间
-      description: 按场地和星期几查询开业、歇业时刻。场次按此表自动划分（开业开场、歇业关场），入场资格与当天无限权益的核销都依赖它。
+      description: 按场地和星期几查询开业、歇业时刻。场次按此表自动划分（开业开场、歇业关场），入场资格与当天无限权益的核销都依赖它。第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: governance.space.view
       x-data-scope: project
       x-terminal-allowed:
@@ -9714,7 +9809,7 @@ paths:
         - platform
       operationId: saveVenueBusinessHours
       summary: 配置场地营业时间
-      description: 按场地和星期几配置开业、歇业时刻，保存即刻生效。歇业时刻早于开业时刻表示营业到次日凌晨。停用表示该日不营业，配置行保留可随时恢复。
+      description: 按场地和星期几配置开业、歇业时刻，保存即刻生效。歇业时刻早于开业时刻表示营业到次日凌晨。停用表示该日不营业，配置行保留可随时恢复。第十八批 E 段（第 19 条）：场地须在 governance.space.manage 可触及的项目里，否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: governance.space.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -9987,7 +10082,7 @@ paths:
         - terminals
       operationId: listTerminalDevices
       summary: 终端设备台账
-      description: 平台后台设备台账（K16 改绑工作台数据源）：全量终端设备 + 商户归属列。设备未绑商户时，该设备上赠饮/餐饮类权益核销一律被 K16 fail-closed 拒绝。
+      description: 平台后台设备台账（K16 改绑工作台数据源）：全量终端设备 + 商户归属列。设备未绑商户时，该设备上赠饮/餐饮类权益核销一律被 K16 fail-closed 拒绝。每行带设备型号 device_model 与安检 X 光设备最近一次登记故障时开的维修工单 repair_work_order_id（第 63 条）。
       x-auth-context: staff-token
       x-permission: terminal.switch.view
       x-data-scope: project-device
@@ -11605,6 +11700,7 @@ paths:
       description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与
         reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve
         一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。
+        18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。
       x-permission: governance.supervisor_review.approve
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -12390,6 +12486,7 @@ paths:
       operationId: submitStaffRegistration
       summary: 商户代员工提交注册
       description: 项目和商户编号必填；后端按经营主体公司层级解析对应域公司审批。自营商户员工使用本人注册入口。个人资料加密存放，日常响应脱敏。
+        18E：project_id 可填操作人按 staff.profile.submit 可触及的项目（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_ORG_FORBIDDEN）、不建档案；商户账号照旧只到本人所属项目与本商户。
       x-permission: staff.profile.submit
       x-data-scope: project
       x-terminal-allowed:
@@ -12423,6 +12520,7 @@ paths:
       operationId: reviewStaffRegistration
       summary: 审批员工注册
       description: 所属公司或平台授权管理者审核，提交人不得自审；批准后建立账号、员工自助角色和已选职级，保留其他档案资料。商户本身不能审批员工注册。
+        18E：持可跨项目角色的，登记项目在其 staff.profile.review 可触及的项目内即可审批；本公司的申请只在该权限另有非可跨项目角色来源时可审批；范围外 403（CROSS_ORG_FORBIDDEN），范围在进入幂等之前判；带职级的注册随审批落地职级，沿用本次审批已核过的范围、不另按 access.staff_level.manage 核新账号；商户账号仍不能审批（403 COMPANY_APPROVAL_REQUIRED）。
       x-permission: staff.profile.review
       x-data-scope: project
       x-terminal-allowed:
@@ -12459,6 +12557,7 @@ paths:
       operationId: listStaffProfiles
       summary: 查询员工档案
       description: 隔离列表：平台角色见全量，商户角色仅见本 merchant_id 行（跨商户不可见）。返回注册/审批状态与职级关联。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.profile.view 可触及的项目内列出；该权限另有非可跨项目角色来源时本公司员工照旧列出；不持这类角色的照旧按所属公司。
       x-permission: staff.profile.view
       x-data-scope: project
       x-terminal-allowed:
@@ -12484,6 +12583,7 @@ paths:
       operationId: setStaffSalesPosition
       summary: 设置员工销售岗标识
       description: 在员工档案上设/撤销「销售岗」标识：设了销售岗的员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率（两档费率在结算配置中心维护）。改动必填事由并落审计；只影响此后新开的卡座账单，不回算已开账单的历史提成。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.profile.review 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN）。
       x-permission: staff.profile.review
       x-data-scope: project
       x-terminal-allowed:
@@ -12557,6 +12657,7 @@ paths:
       summary: 审批换机生效
       description: 审批 pending_review 凭证生效：新凭证 active、旧 active(若有 supersedes)置 superseded，保证
         uq_staff_device_credentials_one_active 始终成立。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.device.review 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN）；范围在进入幂等之前判。
       x-permission: staff.device.review
       x-data-scope: project
       x-terminal-allowed:
@@ -12627,6 +12728,7 @@ paths:
       operationId: revokeStaffDeviceCredential
       summary: 解绑/失效设备凭证
       description: 解绑或失效设备凭证（active|pending_review → revoked），记 revoked_reason/revoked_at。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.device.revoke 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN）；范围在进入幂等之前判。
       x-permission: staff.device.revoke
       x-data-scope: project
       x-terminal-allowed:
@@ -13305,7 +13407,7 @@ paths:
         - customer
       operationId: listLoyaltyConfigCheckInTiers
       summary: 连续签到阶梯配置列表（按综合体）
-      description: 连续签到阶梯按综合体维护（第十八批第 12 条只把会员等级与生日加倍规则改为全平台一套）。平台管理员按 project_id 参数查；其他账号一律按本人所属项目查、忽略 project_id 参数，账号未归属项目 403 PROJECT_SCOPE_REQUIRED。返回该项目与全平台缺省（project_id 为空）的启用档位，按 streak_days 升序；平台管理员不带 project_id 时只出全平台缺省档位。data 为分页 items（id、project_id、streak_days、award_points、status、created_at、updated_at）与 page、page_size、total。缺 customer.loyalty.view 时 403 PERMISSION_DENIED。
+      description: 连续签到阶梯按综合体维护（第十八批第 12 条只把会员等级与生日加倍规则改为全平台一套）。平台管理员按 project_id 参数查；其他账号带了 project_id 且该项目在 customer.loyalty.view 可触及范围内的按它查，否则按本人所属项目查（第十八批 E 段第 19 条）；本人项目也不在该码可触及范围内（该码只经逐个勾选别的项目的角色持有）的 403 PROJECT_SCOPE_MISMATCH，不回退本人项目；账号未归属项目 403 PROJECT_SCOPE_REQUIRED。返回该项目与全平台缺省（project_id 为空）的启用档位，按 streak_days 升序；平台管理员不带 project_id 时只出全平台缺省档位。data 为分页 items（id、project_id、streak_days、award_points、status、created_at、updated_at）与 page、page_size、total。缺 customer.loyalty.view 时 403 PERMISSION_DENIED。
       x-permission: customer.loyalty.view
       x-data-scope: project
       x-terminal-allowed:
@@ -13317,7 +13419,7 @@ paths:
         - name: project_id
           in: query
           required: false
-          description: 综合体项目；只对平台管理员生效，其他账号按本人所属项目。
+          description: 综合体项目；平台管理员按它查；其他账号带了且在 customer.loyalty.view 可触及范围内的按它查，否则按本人所属项目。
           schema:
             type: string
       responses:
@@ -13332,12 +13434,13 @@ paths:
       x-auth-context: staff-token
       x-failure-codes:
         - PROJECT_SCOPE_REQUIRED
+        - PROJECT_SCOPE_MISMATCH
     post:
       tags:
         - customer
       operationId: saveLoyaltyConfigCheckInTier
       summary: 新增或更新本项目连续签到阶梯
-      description: 请求体 id 为空即新增，非空即按 id 更新（目标档位须属于解析出的项目，已停用的档位也可按 id 改回 active）。缺 customer.loyalty.manage 403 PERMISSION_DENIED。项目：平台管理员须在请求体给 project_id，否则 400 VALIDATION_FAILED；其他账号一律写入本人所属项目、忽略请求体 project_id，账号未归属项目 403 PROJECT_SCOPE_REQUIRED。streak_days 小于 1、award_points 小于 0、status 不在 active、inactive 之内，400 VALIDATION_FAILED（status 不填按 active）；新增时本项目已有同一 streak_days 的档位（含已停用的）409 LOYALTY_CONFIG_DUPLICATE；更新的 id 在本项目不存在 404 LOYALTY_CONFIG_NOT_FOUND。成功时 data 为保存后的档位（字段同列表项；按 id 更新时 created_at 为本次请求时间，以列表为准），留痕 customer.check_in_tier.saved（含 project_id、streak_days）；权限码通过后的各项拒绝留痕 customer.check_in_tier.save_failed（含错误码）。
+      description: 请求体 id 为空即新增，非空即按 id 更新（目标档位须属于解析出的项目，已停用的档位也可按 id 改回 active）。缺 customer.loyalty.manage 403 PERMISSION_DENIED。项目：平台管理员须在请求体给 project_id，否则 400 VALIDATION_FAILED；其他账号带了 project_id 且该项目在 customer.loyalty.manage 可触及范围内的写到该项目，否则写入本人所属项目（第十八批 E 段第 19 条）；本人项目也不在该码可触及范围内（该码只经逐个勾选别的项目的角色持有）的 403 PROJECT_SCOPE_MISMATCH，不回退本人项目；账号未归属项目 403 PROJECT_SCOPE_REQUIRED。streak_days 小于 1、award_points 小于 0、status 不在 active、inactive 之内，400 VALIDATION_FAILED（status 不填按 active）；新增时本项目已有同一 streak_days 的档位（含已停用的）409 LOYALTY_CONFIG_DUPLICATE；更新的 id 在本项目不存在 404 LOYALTY_CONFIG_NOT_FOUND。成功时 data 为保存后的档位（字段同列表项；按 id 更新时 created_at 为本次请求时间，以列表为准），留痕 customer.check_in_tier.saved（含 project_id、streak_days）；权限码通过后的各项拒绝留痕 customer.check_in_tier.save_failed（含错误码）。
       x-permission: customer.loyalty.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -13364,7 +13467,7 @@ paths:
                   type:
                     - string
                     - "null"
-                  description: 综合体项目；平台管理员必填，其他账号按本人所属项目、忽略本字段。
+                  description: 综合体项目；平台管理员必填；其他账号带了且在 customer.loyalty.manage 可触及范围内的写到该项目，否则写入本人所属项目。
                 streak_days:
                   type: integer
                   minimum: 1
@@ -13397,6 +13500,7 @@ paths:
       x-auth-context: staff-token
       x-failure-codes:
         - PROJECT_SCOPE_REQUIRED
+        - PROJECT_SCOPE_MISMATCH
         - VALIDATION_FAILED
         - LOYALTY_CONFIG_DUPLICATE
         - LOYALTY_CONFIG_NOT_FOUND
@@ -19623,6 +19727,220 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/compliance/item-type-configs:
+    get:
+      tags:
+        - compliance
+      operationId: listComplianceItemTypeConfigs
+      summary: 查询按证照类型的宽限期与预警提前量配置
+      description: "第十八批 E 段第 22 条（PGM:531「到期预警一律提前发出（业务参数，按证照类型可配，出厂默认提前三个月，须同时配置上下限）……宽限期（业务参数，按证照类型可配，须同时配置上下限）」）：返回九类证照（item_type 闭集同 V028）各一行 item_type、grace_days、grace_min_days、grace_max_days、warning_months、warning_min_months、warning_max_months；预警未配置时 warning_months 为出厂 3、上下限为空；宽限未配置三项为空（该类型不能申请宽限）。"
+      x-auth-context: staff-token
+      x-permission: compliance.expiry_item.view
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: compliance.item_type_config.list
+      x-audit-event-failure: compliance.item_type_config.list_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/compliance/item-type-configs/{item_type}:
+    put:
+      tags:
+        - compliance
+      operationId: saveComplianceItemTypeConfig
+      summary: 配置某证照类型的宽限期与预警提前量
+      description: "第十八批 E 段第 22 条（PGM:531）：全平台统一、按证照类型配置。平台范围闸在幂等之前：商户账号（即便持 compliance.expiry_item.manage）403 PLATFORM_SCOPE_REQUIRED。item_type 不在九类、每组三项不同空同填、不满足 0 ≤ 下限 ≤ 值 ≤ 上限、insurance 填了宽限（宽限句只写「证照或资质」）一律 400 VALIDATION_FAILED。"
+      x-auth-context: staff-token
+      x-permission: compliance.expiry_item.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: compliance.item_type_config.saved
+      x-audit-event-failure: compliance.item_type_config.save_failed
+      parameters:
+        - name: item_type
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 证照类型（business_license、food_license、alcohol_license、fire_certificate、special_equipment、insurance、supplier_qualification、inspection_certificate、custom）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                grace_days:
+                  type: integer
+                  minimum: 0
+                  description: 宽限天数（证照或资质到期后可申请的宽限期时长）；与下限、上限同空或同填，0 ≤ 下限 ≤ 值 ≤ 上限；保险不得填写。可为空。
+                grace_min_days:
+                  type: integer
+                  minimum: 0
+                  description: 宽限天数下限。可为空。
+                grace_max_days:
+                  type: integer
+                  minimum: 0
+                  description: 宽限天数上限。可为空。
+                warning_months:
+                  type: integer
+                  minimum: 0
+                  description: 到期预警提前月数；与下限、上限同空或同填，三项皆空＝按出厂提前 3 个月。可为空。
+                warning_min_months:
+                  type: integer
+                  minimum: 0
+                  description: 预警提前月数下限。可为空。
+                warning_max_months:
+                  type: integer
+                  minimum: 0
+                  description: 预警提前月数上限。可为空。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/compliance/expiry-items/{id}/grace-requests:
+    post:
+      tags:
+        - compliance
+      operationId: requestComplianceGracePeriod
+      summary: 商户申请证照宽限期（最高权限审批）
+      description: "第十八批 E 段第 22 条（PGM:531「证照或资质到期后，可申请一个后台可配时长的宽限期……宽限期须经最高权限审批后生效；宽限期内可继续经营但每日提醒，超过宽限期仍未更新的一律阻断，不得再次延长」）：范围闸在幂等之前、fail-closed——无商户归属 403 MERCHANT_SCOPE_REQUIRED，条目不存在 404 COMPLIANCE_EXPIRY_ITEM_NOT_FOUND，别家商户的条目 403 CROSS_MERCHANT_FORBIDDEN。须在有效期止之后（北京日历日）申请，否则 409 GRACE_NOT_EXPIRED；该类型未配置宽限（含保险）409 GRACE_PERIOD_NOT_CONFIGURED；本次到期已获批 409 GRACE_ALREADY_USED；在审 409 GRACE_REQUEST_PENDING；已超过有效期止＋宽限天数 409 GRACE_WINDOW_PASSED；被驳回的可再申请。宽限截止日申请时固化＝有效期止＋宽限天数；提交即进统一审批的最高权限策略（compliance.expiry_item.grace，top_authority），批准后宽限内不再命中到期阻断，驳回则照旧阻断。返回证照条目（含 grace_status、grace_until）。"
+      x-auth-context: staff-token
+      x-permission: compliance.grace_period.request
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: compliance.grace.submitted
+      x-audit-event-failure: compliance.grace.submit_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 合规到期项（证照）ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+                  description: 申请理由（进最高权限审批原件）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/compliance/expiry-items/{id}/renewal:
+    post:
+      tags:
+        - compliance
+      operationId: renewComplianceExpiryItem
+      summary: 证照续期登记（更新有效期）
+      description: "第十八批 E 段第 22 条（PGM:531「超过宽限期仍未更新的一律阻断」）：原条目就地更新有效期止（必须晚于原有效期止，否则 400 VALIDATION_FAILED），未填的证号、有效期起、凭证沿用原值；同时清空宽限申请（grace_status、grace_until 与审批单号），新到期可重新申请，在审的旧申请此后批准或驳回均不回写。范围与新建一致：商户账号只能更新本商户条目（403 CROSS_MERCHANT_FORBIDDEN），闸在幂等之前；条目不存在 404 COMPLIANCE_EXPIRY_ITEM_NOT_FOUND。留痕记原有效期止与新有效期止。"
+      x-auth-context: staff-token
+      x-permission: compliance.expiry_item.manage
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: compliance.expiry_item.renewed
+      x-audit-event-failure: compliance.expiry_item.renew_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 合规到期项（证照）ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+                - valid_to
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                valid_from:
+                  type: string
+                  format: date
+                  description: 新的有效期起（不填沿用原值）。
+                valid_to:
+                  type: string
+                  format: date
+                  description: 新的有效期止，必须晚于原有效期止。
+                document_no:
+                  type: string
+                  maxLength: 120
+                  description: 新的证照编号（不填沿用原值）。
+                evidence_attachment_ids:
+                  type: array
+                  items:
+                    type: string
+                    maxLength: 64
+                  description: 新证凭证附件 ID 列表（不填沿用原值）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/compliance/wecom/risk-hits:
     get:
       tags:
@@ -19847,6 +20165,7 @@ paths:
         - terminals
       operationId: markTerminalDeviceRepair
       summary: 设备送修
+      description: 送修、挂失、找回、报废共用设备生命周期状态机。第 63 条（BSM:800）：安检 X 光设备送修即登记故障，同一事务开一张维修工单（报修类、来源平台、记设备所在空间与项目、待派单），工单号回写设备 repair_work_order_id 并在响应返回；同一幂等键重放不重复开单。
       x-auth-context: staff-token
       x-permission: terminal.device.lifecycle
       x-terminal-allowed:
@@ -19966,6 +20285,134 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/terminals/devices/security-xray:
+    post:
+      tags:
+        - terminals
+      operationId: registerSecurityXrayDevice
+      summary: 登记安检 X 光设备
+      description: 第 63 条（BSM:800、PGM:618、PGM:623）：后台登记安检 X 光设备进设备台账——编号、型号、绑定点位（空间）、责任人（员工档案）四项必填，登记即在用（terminal_type=security_xray、status=bound）。不接设备接口、不发设备凭证、不产生按人记录；当班员工与班次由该点位的排班取得。同编号已登记返回 409 DEVICE_CODE_EXISTS；点位或责任人不在本人能管的项目返回 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN），范围闸先于幂等。员工端领用绑定（/devices/bind）不收该类型。故障走送修（即开维修工单），修好走修复完成，报废走报废。
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-data-scope: project-device
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.xray_registered
+      x-audit-event-failure: terminal.device.xray_register_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - device_code
+                - device_model
+                - bound_space_id
+                - staff_id
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                device_code:
+                  type: string
+                  description: 设备编号；台账内唯一。
+                  maxLength: 128
+                device_model:
+                  type: string
+                  description: 设备型号。
+                  maxLength: 128
+                bound_space_id:
+                  type: string
+                  description: 绑定点位（空间 ID）；决定设备所属项目。
+                  maxLength: 64
+                staff_id:
+                  type: string
+                  description: 责任人（员工档案 ID）。
+                  maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/terminals/devices/{id}/repair-complete:
+    post:
+      tags:
+        - terminals
+      operationId: completeTerminalDeviceRepair
+      summary: 安检 X 光设备修复完成
+      description: 第 63 条：安检 X 光设备修好后恢复在用（repair → bound），原因必填、进设备状态流水；其他类型设备或不在维修中返回 409 INVALID_DEVICE_STATUS。
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.repair_completed
+      x-audit-event-failure: terminal.device.repair_complete_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                staff_id:
+                  type: string
+                  description: 关联员工 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 修复说明；进入留痕事件。
+                  maxLength: 4000
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -21037,7 +21484,7 @@ paths:
         - finance
       operationId: exportArApItems
       summary: 导出应收应付台账快照
-      description: "导出当前权限范围内的应收应付台账 JSON/CSV 快照；该接口只代表平台侧导出留痕，不改变财务数据。资金流水属敏感信息，导出与查看分权：审计角色只直授查看，导出须经临时授权审批（V196）。导出按 finance.ar_ap.export 获批项目范围与商户范围交集获取全部结果，不截断为首个分页；项目公司财务无需绑定商户。"
+      description: "导出当前权限范围内的应收应付台账 JSON/CSV 快照；该接口只代表平台侧导出留痕，不改变财务数据。资金流水属敏感信息，导出与查看分权：审计角色只直授查看，导出须经临时授权审批（V196）。导出按 finance.ar_ap.export 获批项目范围与商户范围交集获取全部结果，不截断为首个分页；项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。"
       x-auth-context: staff-token
       x-permission: finance.ar_ap.export
       x-data-scope: project-entity
@@ -22302,6 +22749,7 @@ paths:
         - leasing
       operationId: listLeasingLeads
       summary: 招商线索清单
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: leasing.lead.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22330,7 +22778,7 @@ paths:
       x-audit-event-success: leasing.lead.created
       x-audit-event-failure: leasing.lead.create_failed
       x-auth-context: staff-token
-      description: V161 重建：来源 4 类(outbound/online_inquiry/referral/exhibition)，同品牌黑名单则拦截（409 LEASING_BRAND_BLACKLISTED）；带本人申请且已批准、未使用、品牌相符的黑名单例外放行单（blacklist_exception_id，target_type=lead_create）时放行并记该单已用（PGM「招商运营细则」），单不可用 409 LEASING_BLACKLIST_EXCEPTION_INVALID。状态默认 pending_follow_up。
+      description: V161 重建：来源 4 类(outbound/online_inquiry/referral/exhibition)，同品牌黑名单则拦截（409 LEASING_BRAND_BLACKLISTED）；带本人申请且已批准、未使用、品牌相符的黑名单例外放行单（blacklist_exception_id，target_type=lead_create）时放行并记该单已用（PGM「招商运营细则」），单不可用 409 LEASING_BLACKLIST_EXCEPTION_INVALID。状态默认 pending_follow_up。第十八批 E 段（第 19 条）：线索落请求 project_id 所指项目；不带时有意向铺位的取铺位所在项目，否则取本人项目（原先落空、本项目员工看不到）；须是项目且在 leasing.lead.manage 可触及范围内，否则 403 CROSS_PROJECT_FORBIDDEN；意向铺位须属该项目。平台管理员可不填。
       requestBody:
         $ref: "#/components/requestBodies/LeasingLeadRequest"
       responses:
@@ -22352,6 +22800,7 @@ paths:
         - leasing
       operationId: listLeasingLeadsFollowUpDue
       summary: 待跟进线索(3 天未跟进)
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: leasing.lead.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22460,7 +22909,7 @@ paths:
       description: M724（治理地图第 871 行）。线索列表和操作结果一律只返回脱敏号码，完整号码只经本接口按条给出，返回 data 只含 lead_id 与 contact_phone 两个字段。除 x-permission
         所列 leasing.lead.manage 外，另需 pii.contact_phone.view（没有该码 403
         PERMISSION_DENIED，不退回掩码）；每调用一次算查看一次并留痕，单次授权看一次即用掉，长期持有不产生消耗。项目员工只能查看本项目的线索（其他项目 403
-        CROSS_PROJECT_FORBIDDEN，单次授权不算用掉）；线索没有电话时返回空号码，不核验也不消耗 pii.contact_phone.view。留痕不含号码。
+        CROSS_PROJECT_FORBIDDEN，单次授权不算用掉）；线索没有电话时返回空号码，不核验也不消耗 pii.contact_phone.view。留痕不含号码。第十八批 E 段（第 19 条）：上句「本项目」改按 leasing.lead.manage 可触及的项目判（可跨项目角色勾中的项目也算，平台管理员不限）；线索有电话时 pii.contact_phone.view 也须由覆盖该线索项目的来源授予，否则同样 403 CROSS_PROJECT_FORBIDDEN、留失败痕、单次授权不算用掉。
       parameters:
         - name: lead_id
           in: path
@@ -22484,6 +22933,7 @@ paths:
         - leasing
       operationId: listLeasingIntents
       summary: 招商意向清单
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: leasing.intent.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22512,7 +22962,7 @@ paths:
       x-audit-event-success: leasing.intent.created
       x-audit-event-failure: leasing.intent.create_failed
       x-auth-context: staff-token
-      description: 由拉黑前既有线索（线索建于品牌本次拉黑之前）新建意向被拦 409 LEASING_BRAND_BLACKLISTED（PGM「招商运营细则」：黑名单品牌拦截同品牌新线索，以及由拉黑前既有线索新建意向）；带本人申请且已批准、未使用、线索与品牌相符的黑名单例外放行单（blacklist_exception_id，target_type=intent_create）时放行并记该单已用，单不可用 409 LEASING_BLACKLIST_EXCEPTION_INVALID；未被拦时该字段忽略。已签约线索 409 LEASING_LEAD_ALREADY_SIGNED。
+      description: 由拉黑前既有线索（线索建于品牌本次拉黑之前）新建意向被拦 409 LEASING_BRAND_BLACKLISTED（PGM「招商运营细则」：黑名单品牌拦截同品牌新线索，以及由拉黑前既有线索新建意向）；带本人申请且已批准、未使用、线索与品牌相符的黑名单例外放行单（blacklist_exception_id，target_type=intent_create）时放行并记该单已用，单不可用 409 LEASING_BLACKLIST_EXCEPTION_INVALID；未被拦时该字段忽略。已签约线索 409 LEASING_LEAD_ALREADY_SIGNED。第十八批 E 段（第 19 条）：意向铺位须属该线索所在项目。
       requestBody:
         $ref: "#/components/requestBodies/LeasingIntentRequest"
       responses:
@@ -22610,6 +23060,7 @@ paths:
         - leasing
       operationId: listLeasingBrands
       summary: 招商品牌/客户库清单
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: leasing.brand.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22630,6 +23081,7 @@ paths:
         - leasing
       operationId: createLeasingBrand
       summary: 新建品牌(4 类)
+      description: 第十八批 E 段（第 19 条）：品牌落请求 project_id 所指项目，不带取本人项目（原先落空）；须是项目且在 leasing.brand.manage 可触及范围内，否则 403 CROSS_PROJECT_FORBIDDEN。平台管理员可不填。
       x-permission: leasing.brand.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22696,7 +23148,7 @@ paths:
         - leasing
       operationId: listLeasingBlacklistExceptions
       summary: 招商黑名单例外放行单清单
-      description: 每单列放行事项（target_type）、品牌、关联线索（lead_id／used_lead_id）与意向（used_intent_id）、理由、申请人（requested_by）与申请时间、审批人（approved_by）与批准时间、状态（pending_approval 待审批／approved 已批准／rejected 已驳回／used 已使用）。项目员工只见本项目，平台管理员全量。
+      description: 每单列放行事项（target_type）、品牌、关联线索（lead_id／used_lead_id）与意向（used_intent_id）、理由、申请人（requested_by）与申请时间、审批人（approved_by）与批准时间、状态（pending_approval 待审批／approved 已批准／rejected 已驳回／used 已使用）。项目员工只见本项目，平台管理员全量。第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。按 leasing.lead.manage 可触及的项目。
       x-permission: leasing.lead.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -22719,7 +23171,7 @@ paths:
         - leasing
       operationId: createLeasingBlacklistException
       summary: 申请招商黑名单例外放行
-      description: PGM「招商运营细则」：黑名单品牌拦截同品牌新线索，以及由拉黑前既有线索新建意向；确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。target_type=lead_create 填 brand_id（新建同品牌线索）；target_type=intent_create 填 lead_id（由该线索新建意向，品牌取该线索的品牌）；reason 必填。申请进统一审批（action_type=leasing.blacklist_exception，发起人沿直接上级到 final_approver_id 指定的最终审批人，不填即直接上级），本人审批 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN；批准后由申请人本人在新建线索（createLeasingLead）或线索转意向（createLeasingIntent）时带 blacklist_exception_id 用一次。线索不存在 404 LEASING_LEAD_NOT_FOUND；品牌不存在 404 LEASING_BRAND_NOT_FOUND。
+      description: PGM「招商运营细则」：黑名单品牌拦截同品牌新线索，以及由拉黑前既有线索新建意向；确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请，并记录操作人、审批人、理由、时间和关联线索或意向。target_type=lead_create 填 brand_id（新建同品牌线索）；target_type=intent_create 填 lead_id（由该线索新建意向，品牌取该线索的品牌）；reason 必填。申请进统一审批（action_type=leasing.blacklist_exception，发起人沿直接上级到 final_approver_id 指定的最终审批人，不填即直接上级），本人审批 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN；批准后由申请人本人在新建线索（createLeasingLead）或线索转意向（createLeasingIntent）时带 blacklist_exception_id 用一次。线索不存在 404 LEASING_LEAD_NOT_FOUND；品牌不存在 404 LEASING_BRAND_NOT_FOUND。第十八批 E 段（第 19 条）：由线索新建意向的申请，线索须在放行权限可触及的项目里，此项目闸在幂等之前，同一幂等键在失去该项目后重放 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: leasing.brand.blacklist_exception
       x-data-scope: platform
       x-terminal-allowed:
@@ -22751,6 +23203,7 @@ paths:
         - leasing
       operationId: listLeasingFollowUps
       summary: 跟进记录(按 ref 查)
+      description: 第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       x-permission: leasing.lead.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -26429,7 +26882,7 @@ paths:
       x-auth-context: staff-token
       operationId: listPartnerOrgs
       summary: 外部协作机构列表
-      description: 平台管理员查看外部协作机构（含下属上限/时效）。
+      description: 平台管理员查看外部协作机构（含下属上限/时效）。第十八批 E 段（第 19 条）：项目岗位按可跨项目角色判——列表出本入口权限码可触及项目的行；平台管理员全量。
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -27666,7 +28119,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
+      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。第十八批 E 段（第 19 条）：平台侧按 facility.site_entry.review 与 facility.site_entry.accept 可触及的项目（可跨项目角色勾中的项目也算）取数与读取；联系电话明文逐行判——持 pii.contact_phone.view 且该码可触及范围覆盖该行所属项目的行返回明文，其余行掩码；一次响应只核验一次明文码。
     post:
       tags:
         - facility
@@ -27729,7 +28182,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。
+      description: 读取权限双轨：外包账号按 facility.site_entry.view_assigned 只见本机构报备；平台侧持 facility.site_entry.review 可全量查看。第十八批 E 段（第 19 条）：平台侧按 facility.site_entry.review 与 facility.site_entry.accept 可触及的项目（可跨项目角色勾中的项目也算）取数与读取；联系电话明文逐行判——持 pii.contact_phone.view 且该码可触及范围覆盖该行所属项目的行返回明文，其余行掩码；一次响应只核验一次明文码。
       parameters:
         - name: report_id
           in: path
@@ -28016,7 +28469,7 @@ paths:
       summary: 商户专区·门票分账(本商户内部结算往来与待付状态)
       description: BSM
         L1597/L1683：本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来(项目范围按付款时点固化的项目判定)，含金额、异议截止日、财务指定付账日、当前付款日与执行状态(待付/付款失败待处理及原因与预计重付时间/已结清)；顺延不逐笔通知，以状态可见代替。无商户归属
-        403 MERCHANT_SCOPE_REQUIRED。
+        403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。
       x-permission: merchant.portal.settlement.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -28114,6 +28567,39 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/fee-statement:
+    get:
+      tags:
+        - merchant-portal
+      operationId: getMerchantPortalFeeStatement
+      summary: 商户专区·费用总表与当期综合账单(本商户)
+      description: 18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、工单用料费(商户承担)、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。
+      x-permission: merchant.billing.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: merchant_portal.fee_statement.viewed
+      x-audit-event-failure: merchant_portal.fee_statement.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+            maxLength: 7
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
         "500":
@@ -28922,6 +29408,7 @@ paths:
       operationId: upsertStaffShift
       summary: 主管排班(双端)
       description: 完整校验后生成整批待审草稿，由主管的上一级批准后统一发布。班次开始前仅原排班负责人可带原因修改，每次重新审批；修改前后时间追加保留。开始后不能改写。响应包含review_id和publication_status=pending_review。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）；范围在进入幂等之前判，用原提交编号重试时已不可触及的照样 403、不返回第一次的结果。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -29037,6 +29524,7 @@ paths:
         - staff
       operationId: listStaffShifts
       summary: 查排班(后台/主管)
+      description: 18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目（不按排班行自己记的项目）是否在 staff.shift.manage 可触及的项目内列出；该权限另有非可跨项目角色来源时本公司员工照旧列出；不持这类角色的照旧按所属公司。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -29135,6 +29623,7 @@ paths:
       operationId: batchUpsertStaffShifts
       summary: 按周批量排班(一次排一周)
       description: 完整校验后生成整批待审草稿，由主管的上一级批准后统一发布。班次开始前仅原排班负责人可带原因修改，每次重新审批；修改前后时间追加保留。开始后不能改写。响应包含review_id和publication_status=pending_review。
+        18E：持可跨项目角色的，凭该角色的部分按请求里每个员工的档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）；范围在进入幂等之前判，用原提交编号重试时已不可触及的照样 403、不返回第一次的结果。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -29438,6 +29927,7 @@ paths:
         - staff
       operationId: listStaffAttendance
       summary: 按日查考勤(后台/主管)
+      description: 18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目（不按考勤行自己记的项目）是否在 staff.attendance.view 可触及的项目内列出；该权限另有非可跨项目角色来源时本公司员工照旧列出；不持这类角色的照旧按所属公司。
       x-permission: staff.attendance.view
       x-data-scope: platform
       x-terminal-allowed:
@@ -29519,6 +30009,7 @@ paths:
       description: F批:奖惩手工录入,事由必填,审计留痕。CG-12（BSM:1487 / ENUM:283「绩效扣分与其他涉及员工的人力操作一样，须经 HR 与该员工直属领导、向上三级复核后生效」）：bonus / penalty
         都只发起复核，返回复核单（object_id 为通过后入账的奖惩记录 id）；全部通过后才计入当月薪资（月结时聚合）。失败码：APPROVAL_LINE_EMPTY。 HR
         不由申请人指定；直属领导计第一级，共取三层组织上级后再回避发起人或受益人，不额外上移补第四层。部门 HR 配置或可用链缺失时保持待处理，补齐后重新生成审批链。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.payroll.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）；范围在进入幂等之前判，用原提交编号重试时已不可触及的照样 403、不返回第一次的结果。
       x-permission: staff.payroll.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -29585,6 +30076,7 @@ paths:
       operationId: listStaffAdjustmentAppeals
       summary: 扣罚申诉清单(本人/人事按员工)
       description: CG-12：员工看本人申诉（staff.payroll.view_mine）；人事按 user_id 查看须 staff.payroll.manage 且员工在范围内。status：pending（裁定中）/ upheld（维持）/ revoked（已撤销，reversal_adjustment_id 为冲回记录）。
+        18E：人事按 user_id 查看时，员工范围按 staff.payroll.manage 可触及的范围判（持可跨项目角色的，凭该角色的部分按员工档案登记项目；该权限另有非可跨项目角色来源时本公司员工照旧），范围外 403（CROSS_ORG_FORBIDDEN；员工没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。
       x-permission: staff.payroll.view_mine
       x-data-scope: self
       x-auth-context: staff-token
@@ -29678,6 +30170,7 @@ paths:
       operationId: addStaffCommission
       summary: 提成入台账(手录/系统写入口)
       description: F批:通用提成台账——酒吧提成月结时自动归集;服务点单等业务后续自动写入;此端点供手录与系统补录。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.payroll.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）；范围在进入幂等之前判，用原提交编号重试时已不可触及的照样 403、不返回第一次的结果。
       x-permission: staff.payroll.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -30115,7 +30608,7 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       description: 返回PageResponse，items保留同月所有monthly/termination/supplemental已定格单；需逐单读取详情了解应发、实际已付和未结项，定格不等于已付。
-        管理列表在分页前按已锁定项目+发薪主体+商户范围过滤并同步total；本人列表只读本人。
+        管理列表在分页前按已锁定项目+发薪主体+商户范围过滤并同步total；本人列表只读本人。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。
   /api/v1/staff/payroll/mine:
     get:
       tags:
@@ -30266,6 +30759,7 @@ paths:
         - staff
       operationId: listStaffLeaves
       summary: 查请假(主管/后台,按状态)
+      description: 18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目（不按请假行自己记的项目）是否在 staff.shift.manage 可触及的项目内列出；该权限另有非可跨项目角色来源时本公司员工照旧列出；不持这类角色的照旧按所属公司。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -30321,6 +30815,7 @@ paths:
       operationId: reviewStaffLeave
       summary: 请假审批(排班主管)
       description: 通过/驳回+批注;通过区间考勤记「请假」;审批留痕。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -30433,6 +30928,7 @@ paths:
       operationId: revokeStaffLeave
       summary: 销假审批(排班主管):批准或驳回员工本人的销假申请
       description: 2026-10-18 裁决：销假=本人申请＋主管批准。只有员工本人已申请销假（revoke_requested）的请假才能办理，未经本人申请的假不得直接销。批准 → 原请假单转「已销假」，审批人与审批意见不变，另记批准人、批准时间与批准说明；事假已计入已定格月份工资的，不回改原单，由工资补差在下一次薪资单冲正并注明来源 leave_revoked（BSM L1481）。驳回 → 回到「已批准」，假仍有效。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。
       x-permission: staff.shift.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -30876,6 +31372,7 @@ paths:
       operationId: createServiceOrder
       summary: 代客下单(指定履约人)
       description: G批口径②③(H批修订):服务员代客点(客人App自点预留 app 终端);下单即指定履约人,价格/名称取目录快照;H批公司代收:下单后向客人出示公司统一收款码,不再要求履约人预录个人收款码。
+        18E：履约人员工档案的项目须在 service.order.create 可触及的项目内（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_PROJECT_FORBIDDEN），在进入幂等之前判；新单项目照旧取履约人档案项目，未选酒吧时生效营业日按履约人档案项目取。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -30939,6 +31436,7 @@ paths:
         - service
       operationId: listServiceOrders
       summary: 服务单列表(后台)
+      description: 18E：平台管理员看全部；其余人只出服务单的项目在 service.catalog.manage 可触及的项目内的单（持可跨项目角色的含该角色可查看的项目；项目为空的不出）。
       x-permission: service.catalog.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -31046,6 +31544,7 @@ paths:
         - service
       operationId: completeServiceOrder
       summary: 完成履约(公司代收:管理费归公司,应得月结进薪资)
+      description: 18E：履约人员工档案的项目须在 service.order.create 可触及的项目内（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_PROJECT_FORBIDDEN），在进入幂等之前判。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -31094,6 +31593,7 @@ paths:
       operationId: cancelServiceOrder
       summary: 取消服务单(履约前;留原因)
       description: G批口径⑤(H批修订):履约完成前可取消;已收款(公司账户)后取消记退款备注,公司线下退、财务留痕;已完成不可退,纠纷线下处理。
+        18E：履约人员工档案的项目须在 service.order.create 可触及的项目内（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_PROJECT_FORBIDDEN）。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -31146,6 +31646,7 @@ paths:
         - service
       operationId: serviceOrderPaymentCode
       summary: 出示公司统一收款码(H批代收;个人码流程已废弃)
+      description: 18E：履约人员工档案的项目须在 service.order.create 可触及的项目内（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_PROJECT_FORBIDDEN）。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -31215,6 +31716,7 @@ paths:
         - MEMBER_NOT_FOUND
       summary: 确认收款到公司账户(服务员现场)
       description: H批(2026-07-02 最终拍板,公司代收):客人扫公司统一收款码支付,服务员目视支付 成功页确认;钱进公司账户,财务可对账——解决个人收款码无支付回调的确认盲区; 未确认收款不可完成履约。
+        18E：履约人员工档案的项目须在 service.order.create 可触及的项目内（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_PROJECT_FORBIDDEN），在进入幂等之前判。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -40717,6 +41219,7 @@ paths:
         HR 节点）、EMPLOYMENT_STATUS_CHANGED（通过落地时状态已被其他已生效复核变更）。 HR 不由申请人指定；直属领导计第一级，共取三层组织上级后再回避发起人或受益人，不额外上移补第四层。部门 HR
         配置或可用链缺失时保持待处理，补齐后重新生成审批链。 独立状态变更须由有权限且在范围内的直属领导发起；本人请假和注册审批不套用此发起限制。
         批准后未到effective_at只登记排期；批准且到时即撤销员工角色、岗位模板、临时及单独增权，旧业务会话和重新登录失效。权限判定同步检查已批准到期状态，不等待定时作业间隔。待办交接、设备和工资结清另行继续；无人接手不保留原权限。恢复在职不会自动复活已撤销授权。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.profile.review 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN）；只改范围判定，发起复核与直属领导前置不变。
       x-permission: staff.profile.review
       x-data-scope: project
       x-auth-context: staff-token
@@ -41001,6 +41504,7 @@ paths:
       operationId: listStaffShiftHistory
       summary: 查看排班修改历史
       description: 当前管理范围内每次修改的前后快照、审批编号、生效时间均追加保留。
+        18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。
       x-permission: staff.shift.manage
       x-data-scope: project
       x-auth-context: staff-token
@@ -41152,6 +41656,7 @@ paths:
       operationId: coverStaffShift
       summary: 记录临时顶班
       description: 记录明确顶班区间及实际交接，生成独立有效cover_shift_id；按实际获安排区间考勤，原班与原缺勤保留，原班范围外或员工冲突时段拒绝。普通排班不能覆盖顶班事实。
+        18E：原班次员工与顶班员工都按 staff.shift.manage 可触及的范围判（持可跨项目角色的，凭该角色的部分按员工档案登记项目；该权限另有非可跨项目角色来源时本公司员工照旧），范围外 403（CROSS_ORG_FORBIDDEN；员工没有员工档案的为 CROSS_PROJECT_FORBIDDEN），在进入幂等之前判。
       x-permission: staff.shift.manage
       x-data-scope: project
       x-auth-context: staff-token
@@ -41270,6 +41775,7 @@ paths:
       operationId: listStaffShiftCovers
       summary: 查看班次顶班记录
       description: 当前管理范围内该班次的顶班记录，按时间追加保留。
+        18E：原班次员工按 staff.shift.manage 可触及的范围判（持可跨项目角色的，凭该角色的部分按员工档案登记项目；该权限另有非可跨项目角色来源时本公司员工照旧），范围外 403（CROSS_ORG_FORBIDDEN；员工没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。
       x-permission: staff.shift.manage
       x-data-scope: project
       x-auth-context: staff-token
@@ -41971,7 +42477,7 @@ paths:
         - staff
       operationId: getStaffBusinessHandover
       summary: 查看停离职状态与真实未结业务
-      description: 需员工档案复核权限且在档案范围内；按原业务范围筛选未结事项与历史。真实全平台事项按原全平台权限判断，未知来源保持待核实，不能伪造项目以放行。 当前提供后台Web页面；员工入口沿既有可信终端及终端总开关执行，无新增终端豁免。
+      description: 需员工档案复核权限且在档案范围内；按原业务范围筛选未结事项与历史。真实全平台事项按原全平台权限判断，未知来源保持待核实，不能伪造项目以放行。 当前提供后台Web页面；员工入口沿既有可信终端及终端总开关执行，无新增终端豁免。 18E（20-R4 扫尾）：商户账号只按商户过滤，看得到各经营项目里本商户员工的总览与事项，不在本人可指派范围内的事项不可指派（交接仍只到本人项目）。
       x-permission: staff.profile.review
       x-data-scope: project
       x-auth-context: staff-token
@@ -45952,7 +46458,7 @@ paths:
       operationId: listPayrollTaxAssessments
       summary: 读取员工月份税务认定历史
       description: 仅使用真实批准税务事实。实际交付客户端为后台 Web；后端沿统一终端总开关，没有新增 web-only 白名单。 读权限为 staff.payroll.manage 或
-        staff.tax_bracket.manage；x-permission 记录现有主读权限。 读取按两种权限各自完整的数据范围校验后取并集，不能把不同权限的员工范围和原件范围拼接；附件仍须原项目证据授权。
+        staff.tax_bracket.manage；x-permission 记录现有主读权限。 读取按两种权限各自完整的数据范围校验后取并集，不能把不同权限的员工范围和原件范围拼接；附件仍须原项目证据授权。 18E（20-R4 扫尾）：商户账号只按商户过滤，看得到各经营项目里本商户员工的税务认定及其附件（写入口仍只到本人项目）。
       x-permission: staff.payroll.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -47333,6 +47839,7 @@ paths:
       summary: 按编号读取有权查看的主管复核原件
       description: 审批依赖逐笔读取的真实原件及状态，不依赖待审列表前200条。复用原件项目和商户范围校验；最高权限按既有逐笔跨范围规则读取时额外留痕，不扩大待审清单。附件另走受控证据读取。 实际交付客户端为后台
         Web；后端沿统一终端总开关，没有新增 web-only 白名单。
+        18E：可见范围按 governance.supervisor_review.view 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；当前审批人、被转发人、发起人本人照旧可见；看不到的 403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）。
       x-permission: governance.supervisor_review.view
       x-data-scope: project-merchant
       x-auth-context: staff-token
@@ -51995,7 +52502,7 @@ paths:
         - parking
       operationId: listParkingStaffVehicles
       summary: 员工车辆清单
-      description: BSM「停车场」L1437 员工车辆：商户账号只看本商户员工车辆。
+      description: BSM「停车场」L1437 员工车辆：商户账号只看本商户员工车辆。 18E（20-R4 扫尾）：商户账号只按商户过滤，看得到各经营项目里本商户的员工车辆，不按 project_id 限项目（登记与撤销仍只到可触及项目）。
       x-permission: parking.vehicle.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -55665,6 +56172,10 @@ components:
           type: string
           description: 指定主管公司的理由（FS-024）；业态为“其他”时必填，说明无对应经营域时由该公司主管的依据。
           maxLength: 1000
+        project_id:
+          type: string
+          description: 所属项目（第十八批 E 段第 19 条，可选）；新建时不带取本人项目，须是项目且在 merchant.profile.manage 可触及范围内；更新不能改归属。
+          maxLength: 64
     SpaceRequest:
       type: object
       description: 请求载荷 `SpaceRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -56337,6 +56848,7 @@ components:
             - staff_work_phone
             - tablet
             - kiosk
+            - security_xray
           maxLength: 64
         device_code:
           type: string
@@ -56398,6 +56910,16 @@ components:
           nullable: true
           description: 仅 terminal_type=kiosk 的新建绑定响应返回明文；不得落库明文、不得放入 metadata、不得通过 config/heartbeat 回显。
           maxLength: 255
+        device_model:
+          type: string
+          nullable: true
+          description: 设备型号（第 63 条；安检 X 光设备登记时必填，其他设备为空）。
+          maxLength: 128
+        repair_work_order_id:
+          type: string
+          nullable: true
+          description: 安检 X 光设备最近一次登记故障时开的维修工单 ID（第 63 条）。
+          maxLength: 64
     CapabilitySwitchRequest:
       type: object
       description: 请求载荷 `CapabilitySwitchRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -62832,6 +63354,10 @@ components:
           type: string
           description: 黑名单例外放行单 id（品牌已拉黑时凭本人已批准的放行单新建线索）。
           maxLength: 64
+        project_id:
+          type: string
+          description: 所属项目（第十八批 E 段第 19 条，可选）；不带时有意向铺位的取铺位所在项目，否则取本人项目；须在 leasing.lead.manage 可触及范围内。
+          maxLength: 64
     LeasingLeadAssignRequest:
       type: object
       description: 请求载荷 LeasingLeadAssignRequest（V161 线索派单）。
@@ -63030,6 +63556,10 @@ components:
         business_type:
           type: string
           description: 业态。
+          maxLength: 64
+        project_id:
+          type: string
+          description: 所属项目（第十八批 E 段第 19 条，可选）；不带取本人项目；须在 leasing.brand.manage 可触及范围内。
           maxLength: 64
     LeasingBrandBlacklistRequest:
       type: object

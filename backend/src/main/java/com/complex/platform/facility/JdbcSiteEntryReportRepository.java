@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -125,6 +125,18 @@ class JdbcSiteEntryReportRepository implements SiteEntryReportRepository {
                  WHERE project_id = :project_id AND deleted_at IS NULL
                  ORDER BY created_at DESC, id
                 """, new MapSqlParameterSource("project_id", projectId), this::map);
+    }
+
+    @Override
+    public List<SiteEntryReportRecord> listByProjects(java.util.Collection<String> projectIds) {
+        if (projectIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("SELECT " + COLS + """
+                 FROM site_entry_reports
+                 WHERE project_id IN (:project_ids) AND deleted_at IS NULL
+                 ORDER BY created_at DESC, id
+                """, new MapSqlParameterSource("project_ids", projectIds), this::map);
     }
 
     @Override

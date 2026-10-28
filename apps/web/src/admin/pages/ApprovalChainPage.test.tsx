@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -51,6 +51,14 @@ function makeApi(): AdminApi {
       object_id: "day-1", evidence_attachment_ids: [], reason: "日切调整\n" + JSON.stringify({
         projectId: "project-1", previousVersions: [{ version: "V0.01", zoneId: "Asia/Shanghai", cutoffHour: 10, status: "approved" }],
         proposedConfig: { zone_id: "Asia/Shanghai", cutoff_hour: 9, min_cutoff_hour: 7, max_cutoff_hour: 12, effective_at: "2099-08-01T00:00:00Z" },
+      }),
+    }));
+    if (url.includes("/review_grace/chain")) return Promise.resolve(raw([{ node_id: "n-grace", review_id: "review_grace", line_code: "main", seq: 1, approver_kind: "master", status: "pending" }]));
+    if (url.endsWith("/review_grace")) return Promise.resolve(raw({
+      review_id: "review_grace", review_status: "pending_review", action_type: "compliance.expiry_item.grace", object_type: "compliance_expiry_item",
+      object_id: "lic-1", evidence_attachment_ids: [], reason: "新证在办，等待发证\n" + JSON.stringify({
+        item_name: "食品经营许可证", item_type: "food_license", document_no: "FD-1", valid_to: "2026-10-20", grace_days: 30,
+        grace_until: "2026-11-19", merchant_id: "mch-1",
       }),
     }));
     if (url.includes("/review_tax/chain")) return Promise.resolve(raw(NODES));
@@ -168,6 +176,15 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(text).toContain("Asia/Shanghai");
     expect(text).toContain("2099-08-01T00:00:00Z");
     expect(text).not.toMatch(/previousVersions|proposedConfig|cutoffHour|approved/);
+  });
+
+  it("证照宽限期原件：有效期止不标成合同结束日期，证照类型显示中文", async () => {
+    renderPage(VIEW_ONLY, "review_grace");
+    await waitFor(() => expect(screen.getByTestId("approval-chain-original").textContent).toContain("有效期止2026-10-20"));
+    const text = screen.getByTestId("approval-chain-original").textContent ?? "";
+    expect(text).toContain("证照类型食品经营许可证");
+    expect(text).not.toContain("合同结束日期");
+    expect(text).not.toContain("food_license");
   });
 
   it("真实审批角色读取完整税档原件和受控附件，不依赖税档维护权限或假证据", async () => {

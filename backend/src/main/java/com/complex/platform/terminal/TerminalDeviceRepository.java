@@ -9,6 +9,14 @@ public interface TerminalDeviceRepository {
     TerminalDeviceRecord save(TerminalDeviceRecord device);
 
     /**
+     * 第 63 条：后台登记安检 X 光设备——只新增、不覆盖（同号已存在由调用方先拒 409；并发撞号由主键／唯一约束拒绝）。
+     * 内存实现没有唯一约束可依，沿用 {@link #save}。
+     */
+    default TerminalDeviceRecord insertSecurityXray(TerminalDeviceRecord device) {
+        return save(device);
+    }
+
+    /**
      * P2 并发缺口①修复：设备状态机条件流转（乐观并发保护）。
      * 仅当当前行 {@code status = expectedFrom} 时，才把整行更新为 {@code updated}，
      * 实现为条件 UPDATE {@code WHERE id=:id AND status=:expectedFrom}。

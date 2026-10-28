@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 export type AdminUser = {
   id: string;
   username: string;
@@ -918,6 +918,20 @@ export type MerchantZoneBillLineRow = {
   description?: string;
   amountCent?: number;
   currency?: string;
+};
+
+// 18E 第 21 条（BSM:1323）：商户专区费用总表与当期（计费自然月）综合账单；amountCent 为空＝该名目没有出账路径（本期未出账）。
+export type MerchantFeeStatement = {
+  month?: string;
+  merchantId?: string;
+  merchantName?: string;
+  feeItems?: { feeName: string; billingBasis?: string | null; bearer?: string | null; amountCent?: number | null }[];
+  bill?: {
+    lines?: { feeName: string; amountCent: number; paidAmountCent: number; unpaidAmountCent: number }[];
+    totalAmountCent?: number;
+    paidAmountCent?: number;
+    unpaidAmountCent?: number;
+  };
 };
 
 export type MerchantZoneBillRow = {

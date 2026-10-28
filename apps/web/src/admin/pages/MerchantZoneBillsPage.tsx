@@ -5,12 +5,12 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
-import type { AdminPageProps, MerchantZoneBillRow } from "../types";
+import type { AdminPageProps, MerchantFeeStatement, MerchantZoneBillRow } from "../types";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 
 const TEXT = {
   title: "我的账单",
-  description: "本商户的租金 / 物业费 / 能源费 / 押金账单与账龄，只读。费用缴纳仍走平台既有收款流程，本页仅展示与提醒。",
+  description: "本商户的费用总表、当期综合账单与各张账单账龄，只读。费用缴纳仍走平台既有收款流程，本页仅展示与提醒。",
   loadFailed: "账单读取失败",
   focusClear: "清除筛选，返回全部",
 };
@@ -44,6 +44,55 @@ function money(cent: number | undefined, currency?: string) {
 function lineSummary(row: MerchantZoneBillRow) {
   if (!row.lines || row.lines.length === 0) return row.sourceType ? (FEE_TYPE_LABELS[row.sourceType] ?? row.sourceType) : "-";
   return row.lines.map((line) => `${FEE_TYPE_LABELS[line.feeType ?? ""] ?? line.feeType ?? "-"} ${money(line.amountCent, line.currency)}`).join("；");
+}
+
+// 18E 第 21 条（BSM:1323「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，
+// 把当期各名目的费用汇总列示」）：放在 AdminDataState 外面，没有账单时也显示；月份不选时由后端取当月（计费自然月）。
+function FeeStatementSection({ api }: Pick<AdminPageProps, "api">) {
+  const [month, setMonth] = React.useState("");
+  const [data, setData] = React.useState<MerchantFeeStatement | null>(null);
+  const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    setError("");
+    api.get<MerchantFeeStatement>(`/api/v1/merchant-portal/fee-statement${month ? `?month=${encodeURIComponent(month)}` : ""}`)
+      .then(setData)
+      .catch((e) => setError(e instanceof Error ? e.message : "费用总表读取失败"));
+  }, [api, month]);
+  const bill = data?.bill;
+  return (
+    <div data-testid="merchant-zone-fee-statement">
+      <label>账期（计费自然月）{" "}
+        <input type="month" data-testid="merchant-zone-fee-month" value={month || data?.month || ""} onChange={(event) => setMonth(event.target.value)} />
+      </label>
+      {error ? <div className="admin-form-error">{error}</div> : null}
+      <h3>费用总表</h3>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="merchant-zone-fee-items">
+          <thead><tr><th>费用名目</th><th>计费基数</th><th>承担方</th><th>本期金额</th></tr></thead>
+          <tbody>{(data?.feeItems ?? []).map((row) => (
+            <tr key={row.feeName}>
+              <td>{row.feeName}</td>
+              <td>{row.billingBasis ?? "-"}</td>
+              <td>{row.bearer ?? "-"}</td>
+              <td>{row.amountCent == null ? "本期未出账" : money(row.amountCent)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <h3>当期综合账单</h3>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="merchant-zone-fee-bill">
+          <thead><tr><th>费用名目</th><th>金额</th><th>已付</th><th>未付</th></tr></thead>
+          <tbody>
+            {(bill?.lines ?? []).map((line) => (
+              <tr key={line.feeName}><td>{line.feeName}</td><td>{money(line.amountCent)}</td><td>{money(line.paidAmountCent)}</td><td>{money(line.unpaidAmountCent)}</td></tr>
+            ))}
+            <tr><td>合计</td><td>{money(bill?.totalAmountCent ?? 0)}</td><td>{money(bill?.paidAmountCent ?? 0)}</td><td>{money(bill?.unpaidAmountCent ?? 0)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染账单表对应子集。
@@ -162,6 +211,7 @@ export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: Admin
     <section data-testid="merchant-zone-bills-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="merchant_billing.bill.viewed" />
+      <FeeStatementSection api={api} />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

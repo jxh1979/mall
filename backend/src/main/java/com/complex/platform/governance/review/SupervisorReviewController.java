@@ -1,5 +1,5 @@
 package com.complex.platform.governance.review;
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AccessService;
@@ -60,7 +60,8 @@ public class SupervisorReviewController {
         }
         // M087-I5-01（PGM-1.10.1「审批通过后方可生效」、PGM-1.7.1「任一节点驳回则整单退回起草人」）：授权申请类复核单的节点裁决一律汇入
         // AccessService.reviewGrant——同一事务内推进节点、归约整单终态、落地或驳回授权申请；审批链页与授权申请页不再分叉。
-        Optional<SupervisorReviewDecisionRecord> grantReview = service.findReview(reviewId)
+        // 第十八批 E 段 19-R1（移植 M738）：通过与驳回前的读取按 governance.supervisor_review.approve 可触及的项目判发起人归属
+        Optional<SupervisorReviewDecisionRecord> grantReview = service.findReview(reviewId, "governance.supervisor_review.approve")
                 .filter(review -> GRANT_REQUEST_OBJECT_TYPE.equals(review.objectType()) && "pending_review".equals(review.reviewStatus()));
         if (grantReview.isPresent()) {
             // M002-F40（治理地图第 655 行「显式拒绝优先级最高」，R-001「显式拒绝仍优先」）：授权申请的审批与授权申请页（AccessController.reviewGrant）
@@ -75,7 +76,7 @@ public class SupervisorReviewController {
             accessService.reviewGrant(grantReview.get().objectId(), new AccessGrantReviewRequest(
                     request.idempotencyKey(), request.operatorNote(), request.evidenceAttachmentIds(),
                     "approved".equals(decision) ? "approve" : "rejected".equals(decision) ? "reject" : decision, request.comment()));
-            return ApiResponse.ok(service.findReview(reviewId)
+            return ApiResponse.ok(service.findReview(reviewId, "governance.supervisor_review.approve")
                     .orElseThrow(() -> ApiException.notFound("SUPERVISOR_REVIEW_NOT_FOUND", "主管复核单不存在")));
         }
         return ApiResponse.ok(service.approve(reviewId, request));

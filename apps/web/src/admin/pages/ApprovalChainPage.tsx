@@ -1,5 +1,6 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { COMPLIANCE_ITEM_TYPE_LABELS } from "../i18n/complianceLabels";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -12,7 +13,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -65,6 +66,8 @@ const STATUS_ZH: Record<string, string> = { pending: "待审", approved: "已通
 const LINE_LABELS: Record<string, string> = { business_review: "业务审核线", hr_review: "人力审核线（人力会签）", finance_review: "财务审核线", tax_review: "税务审核线", legal_review: "法务审核线" };
 
 const TAX_FIELD_LABELS: Record<string, string> = {
+  // 第十八批 E 段第 22 条 证照宽限期申请快照。
+  itemName: "证照名称", itemType: "证照类型", documentNo: "证照编号", graceDays: "宽限天数", graceUntil: "宽限截止日",
   id: "原件编号", category: "专业认定税目", version: "版本", effectiveFrom: "生效日期", applicabilityBasis: "适用依据",
   calculationBasis: "计算依据", roundingRule: "金额舍入规则", brackets: "完整税档", seq: "档次", incomeFloorCent: "收入下限（分）",
   incomeCeilingCent: "收入上限（分，无上限为空）", incomeBaseBps: "收入基数（万分比）", flatDeductionCent: "固定减除（分）",
@@ -105,11 +108,14 @@ const TAX_FIELD_LABELS: Record<string, string> = {
   unitCostCent: "到货单价（分）", payableId: "原应付编号", confirmedBy: "确认人", confirmedAt: "确认时间",
 };
 
-function taxFact(value: unknown): React.ReactNode {
-  if (Array.isArray(value)) return value.length ? <ol>{value.map((item, index) => <li key={index}>{taxFact(item)}</li>)}</ol> : "无";
+// 证照宽限期申请快照：valid_to 是证照有效期止，不是供货合同的「合同结束日期」。
+const COMPLIANCE_FIELD_LABELS: Record<string, string> = { ...TAX_FIELD_LABELS, validTo: "有效期止" };
+
+function taxFact(value: unknown, labels: Record<string, string> = TAX_FIELD_LABELS): React.ReactNode {
+  if (Array.isArray(value)) return value.length ? <ol>{value.map((item, index) => <li key={index}>{taxFact(item, labels)}</li>)}</ol> : "无";
   if (value && typeof value === "object") return <dl>{Object.entries(value).map(([key, item]) => {
     const field = key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
-    return <React.Fragment key={key}><dt>{TAX_FIELD_LABELS[field] ?? key}</dt><dd>{["status", "approvalStatus"].includes(field) && typeof item === "string" ? formatBusinessStatus(item) : taxFact(item)}</dd></React.Fragment>;
+    return <React.Fragment key={key}><dt>{labels[field] ?? key}</dt><dd>{["status", "approvalStatus"].includes(field) && typeof item === "string" ? formatBusinessStatus(item) : taxFact(item, labels)}</dd></React.Fragment>;
   })}</dl>;
   if (value === "truncate_cent_each_step") return "按专业依据逐步截断到分";
   if (value === "draft") return "草案";
@@ -128,10 +134,15 @@ function taxFact(value: unknown): React.ReactNode {
 function ReviewOriginal({ decision }: { decision: PendingRow["decision"] }) {
   const reason = decision.reason ?? "";
   let content: React.ReactNode = <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{reason || "本单未记录原始说明"}</p>;
-  if (["payroll_tax_version", "payroll_tax_assessment", "amusement_business_day_config", "bar_business_day_config", "high_value_threshold", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution"].includes(decision.objectType ?? "")) {
+  if (["payroll_tax_version", "payroll_tax_assessment", "amusement_business_day_config", "bar_business_day_config", "high_value_threshold", "compliance_expiry_item", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution"].includes(decision.objectType ?? "")) {
     const start = reason.indexOf("{");
     if (start >= 0) {
-      try { content = <><p>{reason.slice(0, start)}</p>{taxFact(JSON.parse(reason.slice(start)))}</>; }
+      try {
+        const snapshot = JSON.parse(reason.slice(start));
+        const compliance = decision.objectType === "compliance_expiry_item";
+        if (compliance && typeof snapshot?.item_type === "string") snapshot.item_type = COMPLIANCE_ITEM_TYPE_LABELS[snapshot.item_type] ?? snapshot.item_type;
+        content = <><p>{reason.slice(0, start)}</p>{taxFact(snapshot, compliance ? COMPLIANCE_FIELD_LABELS : TAX_FIELD_LABELS)}</>;
+      }
       catch { /* 原说明完整保留，解析失败不得伪造或省略税务原件。 */ }
     }
   }

@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -227,6 +227,51 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
     expect(body).not.toContain("att-merchant-profile-create");
     expect(body).not.toContain("1F-A");
     expect(body).not.toContain("二期测试商户");
+  });
+});
+
+// 第十八批 E 段第 19 条（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
+// 能看到两个以上项目时，新建商户弹窗出现「所属项目」，选了才提交 project_id；只有一个项目时不显示、不提交。
+describe("OrganizationMerchantPage 新建商户选所属项目", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/organizations");
+  });
+
+  const TWO_PROJECTS = [...PROJECTS, { id: "p-2", name: "项目二", code: "PJ-2", merchant_id: null, venue_type: "bar", floor: "1F", capacity: 80, status: "active" }];
+
+  async function openCreate() {
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-create-open"));
+  }
+
+  async function fillAndSubmit(pickProject?: string) {
+    fireEvent.change(screen.getByTestId("organization-merchant-name"), { target: { value: "跨项目商户" } });
+    fireEvent.change(screen.getByTestId("organization-merchant-type"), { target: { value: "catering" } });
+    if (pickProject) fireEvent.change(screen.getByTestId("organization-merchant-project"), { target: { value: pickProject } });
+    fireEvent.change(screen.getByTestId("organization-merchant-contact-phone"), { target: { value: "13912345678" } });
+    fireEvent.click(screen.getByTestId("organization-merchant-flow-next"));
+    fireEvent.click(screen.getByTestId("organization-merchant-create"));
+    await waitFor(() => expect(screen.queryByTestId("organization-merchant-flow")).toBeNull());
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    return JSON.parse(String((postCall![1] as RequestInit).body)) as Record<string, unknown>;
+  }
+
+  it("可查看两个以上项目：出现「所属项目」，所选项目按 project_id 提交", async () => {
+    renderPage((url, init) => (init?.method ?? "GET") === "GET" && url.includes("/platform/projects") ? envelope(TWO_PROJECTS) : undefined);
+    await openCreate();
+    await waitFor(() => expect(screen.queryByTestId("organization-merchant-project")).not.toBeNull());
+    const body = await fillAndSubmit("p-2");
+    expect(body.project_id).toBe("p-2");
+  });
+
+  it("只有一个项目：不显示「所属项目」，不提交 project_id", async () => {
+    renderPage();
+    await openCreate();
+    expect(screen.queryByTestId("organization-merchant-project")).toBeNull();
+    const body = await fillAndSubmit();
+    expect(body).not.toHaveProperty("project_id");
   });
 });
 
@@ -583,5 +628,60 @@ describe("OrganizationMerchantPage 业态为其他的主管公司（FS-024）", 
     expect(drawer.textContent).toContain("主管公司");
     expect(drawer.textContent).toContain("平台经营主体");
     expect(drawer.textContent).toContain("无对应经营域，由该公司主管");
+  });
+});
+
+// 第十八批 E 段第 20 条（治理地图第 659 行「一个商户要在别的项目经营的，由能管理商户档案的人在商户档案里加经营项目，要经过审批才生效。」）：
+// 商户行「经营项目」看主项目、已生效的经营项目与申请记录；持商户档案管理权限才出申请表单，项目、理由、最终审批人按蛇形键提交，提交后申请显示「待审批」。
+describe("OrganizationMerchantPage 商户加经营项目（第十八批 E 段第 20 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/organizations");
+  });
+
+  const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
+
+  function operatingApi(requests: unknown[]) {
+    return (url: string, init?: RequestInit) => {
+      if (url.includes("/merchants/m-1/operating-projects") && init?.method === "POST") {
+        requests.push({ id: "mpr-1", merchant_id: "m-1", project_id: "p-2", project_name: "项目二", status: "pending_approval", reason: "在项目二开店", requested_at: "2026-10-28T08:00:00Z" });
+        return ok(requests[requests.length - 1]);
+      }
+      if (url.includes("/merchants/m-1/operating-projects")) {
+        return ok({ merchant_id: "m-1", primary_project_id: "p-1", primary_project_name: "项目一", operating_projects: [{ project_id: "p-3", project_name: "项目三" }],
+          requests, project_options: [{ project_id: "p-2", project_name: "项目二" }] });
+      }
+      if (url.includes("/api/v1/access/users")) return envelope([{ id: "usr-boss", username: "总经理", account_type: "staff" }]);
+      return undefined;
+    };
+  }
+
+  it("持商户档案管理权限：看主项目与已生效经营项目，选项目、填理由、指定最终审批人，按蛇形键提交，提交后显示待审批", async () => {
+    const requests: unknown[] = [];
+    renderPage(operatingApi(requests));
+    await waitFor(() => expect(screen.queryByTestId("merchant-operating-projects-m-1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("merchant-operating-projects-m-1"));
+    await waitFor(() => expect(screen.getByTestId("merchant-operating-projects-panel").textContent).toContain("项目一"));
+    expect(screen.getByTestId("merchant-operating-projects-panel").textContent).toContain("项目三");
+    await waitFor(() => expect(screen.getByTestId("merchant-operating-project-approver").textContent).toContain("总经理"));
+    fireEvent.change(screen.getByTestId("merchant-operating-project-select"), { target: { value: "p-2" } });
+    fireEvent.change(screen.getByTestId("merchant-operating-project-reason"), { target: { value: "在项目二开店" } });
+    fireEvent.change(screen.getByTestId("merchant-operating-project-approver"), { target: { value: "usr-boss" } });
+    fireEvent.click(screen.getByTestId("merchant-operating-project-submit"));
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const postCall = () => fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    await waitFor(() => expect(postCall()).toBeTruthy());
+    const [url, init] = postCall()!;
+    expect(String(url)).toContain("/api/v1/platform/merchants/m-1/operating-projects");
+    expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ project_id: "p-2", reason: "在项目二开店", final_approver_id: "usr-boss" });
+    await waitFor(() => expect(screen.getByTestId("merchant-operating-project-request-mpr-1").textContent).toContain("待审批"));
+  });
+
+  it("只有商户档案查看权限：看得到经营项目，不出加经营项目表单", async () => {
+    renderPage(operatingApi([]), { effectivePermissions: { status: "ready", value: { grants: ["merchant.profile.view", "governance.project.view"], denies: [], wildcard: false } } });
+    await waitFor(() => expect(screen.queryByTestId("merchant-operating-projects-m-1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("merchant-operating-projects-m-1"));
+    await waitFor(() => expect(screen.getByTestId("merchant-operating-projects-panel").textContent).toContain("项目一"));
+    expect(screen.queryByTestId("merchant-operating-project-form")).toBeNull();
   });
 });

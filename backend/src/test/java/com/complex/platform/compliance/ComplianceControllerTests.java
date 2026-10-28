@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.compliance;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -247,7 +247,9 @@ class ComplianceControllerTests {
                 true,
                 List.of("att-license"),
                 Instant.parse("2026-06-14T00:00:00Z"),
-                Instant.parse("2026-06-14T00:00:00Z")
+                Instant.parse("2026-06-14T00:00:00Z"),
+                null,
+                null
         );
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -14,6 +14,7 @@ import com.complex.platform.terminal.dto.DeviceMerchantRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
+import com.complex.platform.terminal.dto.SecurityXrayRegisterRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -144,6 +145,27 @@ public class TerminalDeviceController {
         authorizationService.requirePermission("terminal.device.lifecycle");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scrapDevice(id, request));
+    }
+
+    // 第 63 条（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：后台登记安检 X 光设备；故障走 /repair（即开维修工单），
+    // 修好走 /repair-complete，报废走 /scrap。
+    @PostMapping("/devices/security-xray")
+    public ApiResponse<DeviceBindingResponse> registerSecurityXray(
+            @RequestBody @jakarta.validation.Valid SecurityXrayRegisterRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.registerSecurityXray(request));
+    }
+
+    @PostMapping("/devices/{id}/repair-complete")
+    public ApiResponse<DeviceBindingResponse> completeDeviceRepair(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid DeviceLifecycleRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.completeDeviceRepair(id, request));
     }
 
     @GetMapping("/capability-switches")

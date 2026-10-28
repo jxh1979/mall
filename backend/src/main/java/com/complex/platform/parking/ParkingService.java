@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -124,7 +124,7 @@ public class ParkingService {
         }
     }
 
-    /** 停车业务取本项目参数：未配置一律 409 PARKING_POLICY_NOT_CONFIGURED，不回落默认值（出厂默认值实施前补定）。 */
+    /** 停车业务取本项目参数：未配置一律 409 PARKING_POLICY_NOT_CONFIGURED，不回落默认值（不设出厂值，第十八批裁决第 7 条）。 */
     public Policy requirePolicy(String projectId) {
         return jdbc.query("SELECT * FROM parking_policies WHERE project_id=?", (rs, n) -> new Policy(rs.getString("project_id"),
                         rs.getLong("free_minutes"), rs.getLong("hourly_rate_cent"), rs.getLong("daily_cap_cent"),
@@ -229,14 +229,22 @@ public class ParkingService {
 
     // ============ 员工车辆 ============
 
-    /** 商户账号只看本商户员工车辆。 */
+    /**
+     * 商户账号只看本商户员工车辆。第十八批 E 段 20-R4 扫尾（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：
+     * 商户账号（非平台管理员）只按商户，看得到各经营项目里本商户的员工车辆，不按 project_id 限项目；登记、撤销仍只到可触及项目。
+     */
     public PageResponse<Vehicle> listStaffVehicles(String projectId) {
-        String project = reachableProject(projectId, VEHICLE);
         String merchant = auth.currentMerchantIdQuietly().orElse(null);
+        String project = null;
+        if (merchant == null) {
+            project = reachableProject(projectId, VEHICLE);
+        } else {
+            auth.requirePermission(VEHICLE);
+        }
         List<Vehicle> rows = jdbc.query("""
                 SELECT v.*, NULL AS contract_id FROM parking_staff_vehicles v
-                 WHERE v.project_id=? AND (?::text IS NULL OR v.owner_merchant_id=?) ORDER BY v.registered_at DESC, v.id
-                """, this::vehicle, project, merchant, merchant);
+                 WHERE (?::text IS NULL OR v.project_id=?) AND (?::text IS NULL OR v.owner_merchant_id=?) ORDER BY v.registered_at DESC, v.id
+                """, this::vehicle, project, project, merchant, merchant);
         return new PageResponse<>(rows, 1, rows.size(), rows.size());
     }
 

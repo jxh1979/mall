@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -294,6 +294,20 @@ class JdbcServiceOrderRepository {
                  LIMIT 500
                 """, new MapSqlParameterSource().addValue("date", date).addValue("status", status)
                 .addValue("project_scope", projectScope), this::mapOrder);
+    }
+
+    /** 第十八批 E 段 19-R1（移植 M738）：按项目集合取后台服务单；null＝全量（平台管理员），空集合＝一行不出（空 IN () 是语法错误，null 时用占位）。 */
+    public List<ServiceOrderRecord> listOrdersInProjects(LocalDate date, String status, java.util.Collection<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) return List.of();
+        return jdbcTemplate.query(SELECT_ORDER + """
+                 WHERE (:date::date IS NULL OR created_at::date = :date)
+                   AND (:status::text IS NULL OR status = :status)
+                   AND (:all_projects OR project_id IN (:project_ids))
+                 ORDER BY created_at DESC
+                 LIMIT 500
+                """, new MapSqlParameterSource().addValue("date", date).addValue("status", status)
+                .addValue("all_projects", projectIds == null)
+                .addValue("project_ids", projectIds == null ? List.of("") : projectIds), this::mapOrder);
     }
 
     /** TK-23-R2:履约人月度统计与薪资月结同源——按 staff_commission_ledger(user_id, service_order, month) 计数/求和,

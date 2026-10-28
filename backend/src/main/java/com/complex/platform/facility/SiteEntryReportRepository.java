@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.Objects;
@@ -25,6 +25,11 @@ public interface SiteEntryReportRepository {
         return list().stream()
                 .filter(record -> Objects.equals(projectId, record.projectId()))
                 .toList();
+    }
+
+    /** 18E（第 19 条 19-R3）：归属给定项目之一的报备；空集合返回空表。 */
+    default List<SiteEntryReportRecord> listByProjects(java.util.Collection<String> projectIds) {
+        return list().stream().filter(record -> projectIds.contains(record.projectId())).toList();
     }
 
     default List<SiteEntryReportRecord> listAssignedTo(String assigneeId, String projectId) {

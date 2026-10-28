@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -62,7 +62,10 @@ public class SiteEntryReportService {
                 ? repository.listAssignedTo(actor.id(), authorizationService.requireProjectScope(actor))
                 : authorizationService.isPlatformAdmin(actor)
                         ? repository.list()
-                        : repository.listByProject(authorizationService.requireProjectScope(actor));
+                        // 18E（第 19 条 19-R3）（治理地图第 659 行）：按审核码与验收码可触及项目的并集取数，下面逐行过滤保留
+                        : repository.listByProjects(java.util.stream.Stream.of(REVIEW_PERM, ACCEPT_PERM)
+                                .flatMap(code -> authorizationService.projectReach(actor, code).organizationIds().stream())
+                                .collect(java.util.stream.Collectors.toSet()));
         items = items.stream().filter(record -> authorizationService.isOutsourcedVendor(actor)
                 || authorizationService.canReachProject(actor, record.projectId(), readPermission(record.projectId()))).toList();
         return new PageResponse<>(items, 1, 500, items.size());

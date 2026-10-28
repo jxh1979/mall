@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V566**，发现 **260** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V569**，发现 **261** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -213,6 +213,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `merchant_penalty_point_bounds` | `project_id` | direct | V561 | `V561__merchant_penalty_records.sql` |
 | `merchant_penalty_records` | `merchant_id` + `project_id` | direct | V561 | `V561__merchant_penalty_records.sql` |
 | `merchant_points_issuance_fees` | `project_id` | direct | V528 | `V528__merchant_reward_release_refund_and_issuance_fee.sql` |
+| `merchant_project_requests` | `merchant_id` + `project_id` | direct | V567 | `V567__merchant_project_requests.sql` |
 | `merchant_projects` | `merchant_id` + `project_id` | direct | V441 | `V441__m736_role_viewable_projects_and_merchant_projects.sql` |
 | `merchant_revenue_attribution_rules` | `merchant_id` | direct | V221 | `V221__merchant_revenue_attribution_rules.sql` |
 | `merchant_service_work_orders` | `merchant_id` + `space_id` | direct | V022 | `V022__p1_merchant_service_work_orders.sql` |

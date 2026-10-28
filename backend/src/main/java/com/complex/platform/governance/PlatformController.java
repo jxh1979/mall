@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -66,16 +66,16 @@ public class PlatformController {
             @org.springframework.web.bind.annotation.RequestParam(name = "merchantType", required = false) String merchantType,
             @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "1") int page,
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
-        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.view");
+        String plaintextCode = requireMerchantPermission("merchant.profile.view");
         authorizationService.requirePlatformScope();
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.listMerchants(includeArchived, merchantType, page, size), viewPhonePlaintext));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.listMerchants(includeArchived, merchantType, page, size), plaintextCode));
     }
 
     @PostMapping("/merchants")
     public ApiResponse<MerchantRecord> createMerchant(@RequestBody @jakarta.validation.Valid MerchantProfileRequest request) {
-        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
+        String plaintextCode = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.createMerchant(request), viewPhonePlaintext));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.createMerchant(request), plaintextCode));
     }
 
     @PutMapping("/merchants/{merchant_id}")
@@ -83,18 +83,18 @@ public class PlatformController {
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid MerchantProfileRequest request
     ) {
-        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
+        String plaintextCode = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.updateMerchant(merchantId, request), viewPhonePlaintext));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.updateMerchant(merchantId, request), plaintextCode));
     }
 
     @PutMapping("/merchants/{merchant_id}/project")
     public ApiResponse<MerchantRecord> assignMerchantProject(
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid ProjectAssociationRequest request) {
-        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
+        String plaintextCode = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.assignMerchantProject(merchantId, request), viewPhonePlaintext));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.assignMerchantProject(merchantId, request), plaintextCode));
     }
 
     /** 第十批 TK-27（BSM L1058）：酒吧（商户）待清台提醒时限；未配置按出厂 15 分钟。 */
@@ -163,27 +163,27 @@ public class PlatformController {
     public ApiResponse<MerchantRecord> archiveMerchant(
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
-        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
+        String plaintextCode = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.archiveMerchant(merchantId, request), viewPhonePlaintext));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.archiveMerchant(merchantId, request), plaintextCode));
     }
 
     @PostMapping("/merchants/{merchant_id}/unarchive")
     public ApiResponse<MerchantRecord> unarchiveMerchant(
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantArchiveRequest request) {
-        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
+        String plaintextCode = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.unarchiveMerchant(merchantId, request), viewPhonePlaintext));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.unarchiveMerchant(merchantId, request), plaintextCode));
     }
 
     @PostMapping("/merchants/{merchant_id}/delete-request")
     public ApiResponse<MerchantRecord> requestDeleteMerchant(
             @PathVariable("merchant_id") String merchantId,
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.MerchantDeleteRequest request) {
-        boolean viewPhonePlaintext = requireMerchantPermission("merchant.profile.manage");
+        String plaintextCode = requireMerchantPermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhonesForUnauthorized(service.requestDeleteMerchant(merchantId, request), viewPhonePlaintext));
+        return ApiResponse.ok(maskPhonesForUnauthorized(service.requestDeleteMerchant(merchantId, request), plaintextCode));
     }
 
     @PostMapping("/merchants/{merchant_id}/delete-approve")
@@ -332,28 +332,45 @@ public class PlatformController {
     // 脱敏放在 controller（service 外），与 V279 内部结算价同款范式——避免脱敏值污染幂等缓存后
     // 被有权限者重放读到掩码。
 
-    private boolean requireMerchantPermission(String permissionCode) {
+    // 持明文码时把入口码一并核验（单次来源在这里消耗，一次请求只消耗一次），返回入口码供逐行判；不持明文码返回 null。
+    private String requireMerchantPermission(String permissionCode) {
         boolean viewPhonePlaintext = authorizationService.currentActorHasPermission(PhoneMask.VIEW_PLAINTEXT_PERMISSION);
         if (viewPhonePlaintext) {
             authorizationService.requirePermissions(permissionCode, PhoneMask.VIEW_PLAINTEXT_PERMISSION);
         } else {
             authorizationService.requirePermission(permissionCode);
         }
-        return viewPhonePlaintext;
+        return viewPhonePlaintext ? permissionCode : null;
     }
 
     // M723-F06（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）：本请求只是返回第一次的结果、新用掉的单次来源会被回滚（不算用掉）时，
     // 即使核验过明文码也按掩码返回——不扣就不给明文。
-    private MerchantRecord maskPhonesForUnauthorized(MerchantRecord merchant, boolean viewPhonePlaintext) {
-        return (viewPhonePlaintext && !IdempotentReplayContext.replayDiscardsConsumption()) || merchant == null
-                ? merchant : merchant.withMaskedPhones();
+    // 18E（第 19 条 19-R3）（治理地图第 877 行「可以在其获准访问的商户档案列表和档案操作结果中查看完整号码」「平台管理员身份本身不自动取得该查看权限」
+    // 「也不免除项目范围检查」；第 659 行「在所分配的权限内」）：逐行判——入口码与明文码可触及范围的交集覆盖该商户所属项目才给明文
+    // （本请求刚用掉的单次来源仍计入），其余行掩码；不持明文码一律掩码（含平台管理员）；最高权限本人持明文码即整份明文、不按项目判。
+    private java.util.function.Predicate<MerchantRecord> plaintextRows(String plaintextCode) {
+        if (plaintextCode == null || IdempotentReplayContext.replayDiscardsConsumption()) {
+            return merchant -> false;
+        }
+        var actor = authorizationService.currentActor();
+        if (authorizationService.isMasterAuthority(actor)) {
+            return merchant -> true;
+        }
+        var reach = authorizationService.projectReach(actor, plaintextCode, PhoneMask.VIEW_PLAINTEXT_PERMISSION);
+        // 18E 组间遗漏（第 20 条连带；治理地图第 659 行「各经营项目的员工和主项目的员工一样」）：行项目＝该商户的经营项目
+        // （主项目加已批准追加的项目，与列表取数同口径），任一被覆盖即明文。ponytail: 主项目不覆盖的行逐行查一次经营项目，一页至多 size 次。
+        return merchant -> reach.covers(merchant.projectId())
+                || service.merchantOperatingProjectIds(merchant.id()).stream().anyMatch(reach::covers);
     }
 
-    private PageResponse<MerchantRecord> maskPhonesForUnauthorized(PageResponse<MerchantRecord> page, boolean viewPhonePlaintext) {
-        if (viewPhonePlaintext && !IdempotentReplayContext.replayDiscardsConsumption()) {
-            return page;
-        }
-        return new PageResponse<>(page.items().stream().map(MerchantRecord::withMaskedPhones).toList(),
+    private MerchantRecord maskPhonesForUnauthorized(MerchantRecord merchant, String plaintextCode) {
+        return merchant == null || plaintextRows(plaintextCode).test(merchant) ? merchant : merchant.withMaskedPhones();
+    }
+
+    private PageResponse<MerchantRecord> maskPhonesForUnauthorized(PageResponse<MerchantRecord> page, String plaintextCode) {
+        var plaintext = plaintextRows(plaintextCode);
+        return new PageResponse<>(page.items().stream()
+                .map(merchant -> plaintext.test(merchant) ? merchant : merchant.withMaskedPhones()).toList(),
                 page.page(), page.pageSize(), page.total());
     }
 }
