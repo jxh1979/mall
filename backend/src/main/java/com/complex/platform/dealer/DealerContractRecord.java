@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -9,6 +9,7 @@ import java.time.LocalDate;
  * 经销合同：指定销售主体（ENUM:182）与中心仓（BSM:1229），挂独立可版本化的价格目录（BSM:1219）。
  * CG-11b 付款条款（BSM:1227）：creditTerm 是否约定账期；首付款按比例（万分比）或固定金额；首尾付款按合同约定的事件起点或固定截止时间；
  * 审核通过订单保存完整合同快照。运费模板（BSM:1229）：运费、包邮门槛、承担方、版本（变更只影响新订单）。
+ * 第十八批第 31 条（BSM:1247「合同销售主体指定经办人」）：指定经办人只按现行合同读取，不进订单快照语义；改派直接覆盖。
  */
 public record DealerContractRecord(
         String id,
@@ -39,8 +40,23 @@ public record DealerContractRecord(
         String firstPaymentAnchor,
         Instant firstPaymentFixedAt,
         String balanceDueAnchor,
-        Instant balanceDueFixedAt
+        Instant balanceDueFixedAt,
+        String designatedHandlerUserId,
+        String designatedHandlerBy,
+        Instant designatedHandlerAt
 ) {
+    /** 指定经办人之前的完整条款构造。 */
+    public DealerContractRecord(String id, String dealerId, String contractNo, String salesEntityId, String centralWarehouseId,
+            LocalDate validFrom, LocalDate validTo, String status, String createdBy, Instant createdAt, boolean creditTerm, Integer firstPaymentRatioBps,
+            Long firstPaymentAmountCent, Integer firstPaymentDeadlineDays, Integer balanceDueDays, Long freightCent, Long freeShippingThresholdCent,
+            String freightBearer, int freightTemplateVersion, String returnFreightBearer, Boolean firstLegFreightRefundable, int termsVersion,
+            Instant contractSignedAt, String firstPaymentAnchor, Instant firstPaymentFixedAt, String balanceDueAnchor, Instant balanceDueFixedAt) {
+        this(id, dealerId, contractNo, salesEntityId, centralWarehouseId, validFrom, validTo, status, createdBy, createdAt, creditTerm, firstPaymentRatioBps,
+                firstPaymentAmountCent, firstPaymentDeadlineDays, balanceDueDays, freightCent, freeShippingThresholdCent, freightBearer, freightTemplateVersion,
+                returnFreightBearer, firstLegFreightRefundable, termsVersion, contractSignedAt, firstPaymentAnchor, firstPaymentFixedAt, balanceDueAnchor,
+                balanceDueFixedAt, null, null, null);
+    }
+
     public DealerContractRecord(String id, String dealerId, String contractNo, String salesEntityId, String centralWarehouseId,
             LocalDate validFrom, LocalDate validTo, String status, String createdBy, Instant createdAt, boolean creditTerm, Integer firstPaymentRatioBps,
             Long firstPaymentAmountCent, Integer firstPaymentDeadlineDays, Integer balanceDueDays, Long freightCent, Long freeShippingThresholdCent,

@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -11,6 +11,7 @@ import com.complex.platform.dealer.dto.DealerCatalogDraftRequest;
 import com.complex.platform.dealer.dto.DealerContractRequest;
 import com.complex.platform.dealer.dto.DealerCreateRequest;
 import com.complex.platform.dealer.dto.DealerDeactivateRequest;
+import com.complex.platform.dealer.dto.DealerDesignatedHandlerRequest;
 import com.complex.platform.dealer.dto.DealerIdempotentRequest;
 import com.complex.platform.dealer.dto.DealerAdmissionSubmitRequest;
 import com.complex.platform.dealer.dto.DealerInquiryRequest;
@@ -78,6 +79,12 @@ public class DealerController {
     public ApiResponse<DealerContractRecord> createContract(@PathVariable String id, @RequestBody DealerContractRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createContract(id, request));
+    }
+
+    @PostMapping("/contracts/{id}/designated-handler")
+    public ApiResponse<DealerContractRecord> designateHandler(@PathVariable String id, @RequestBody DealerDesignatedHandlerRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.designateHandler(id, request));
     }
 
     @GetMapping("/contracts/{id}/price-catalogs")

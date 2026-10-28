@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.PageResponse;
 import java.util.List;
@@ -40,6 +40,9 @@ public interface LeasingRepository {
     List<LeasingIntentRecord> listIntents(String projectScope);
 
     Optional<LeasingIntentRecord> findIntentById(String id);
+
+    /** 第十八批第 30 条：按待确认复核单锁定意向（关键阶段主管确认结论回写用）。 */
+    Optional<LeasingIntentRecord> findIntentByPendingReviewId(String reviewId);
 
     // ── CG-01 招商线索「已签约」改到合同生效时（PGM「招商运营细则」）：default 以不破坏测试替身。 ──
     /** 签约起草合同时把合同 id 绑到来源意向（leasing_intents.contract_id，V442），供合同生效后反查线索。 */

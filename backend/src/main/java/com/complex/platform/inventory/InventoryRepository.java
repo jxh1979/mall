@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.time.Instant;
 import java.util.List;
@@ -78,6 +78,11 @@ public interface InventoryRepository {
     /** 已核实原出库来源的实物退回；totalCostCent 为本次应恢复的原总成本，NULL 表示原成本未知。 */
     default StockMovementRecord saveSourceReturnMovement(StockMovementRecord movement, String projectId) {
         throw new UnsupportedOperationException();
+    }
+
+    /** 第十八批第 18 条：一条流水已定稿的总成本（分）；无该流水或成本列为空返回空（借用归还按借出原成本分摊用）。 */
+    default Optional<Long> findStockMovementTotalCostCent(String movementId) {
+        return Optional.empty();
     }
 
 

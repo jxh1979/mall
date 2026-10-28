@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -37,9 +37,12 @@ public class DealerReturnFinancialService {
     private final EvidenceEventRepository evidence;
     private final EvidenceAttachmentValidator files;
     private final ObjectMapper mapper;
+    private final DealerCounterpartyConfirmationService confirmations;
     public DealerReturnFinancialService(JdbcDealerReturnRepository returns,JdbcDealerOrderRepository orders,JdbcDealerRepository dealers,JdbcDealerDeliveryRepository delivery,
             JdbcTemplate jdbc,AuthorizationService authorization,IdempotencyService idempotency,AuditEventService audit,
-            SupervisorReviewService reviews,FinanceService finance,EvidenceEventRepository evidence,EvidenceAttachmentValidator files,ObjectMapper mapper) {
+            SupervisorReviewService reviews,FinanceService finance,EvidenceEventRepository evidence,EvidenceAttachmentValidator files,ObjectMapper mapper,
+            DealerCounterpartyConfirmationService confirmations) {
+        this.confirmations=confirmations;
         this.returns=returns;this.orders=orders;this.dealers=dealers;this.delivery=delivery;this.jdbc=jdbc;this.authorization=authorization;this.idempotency=idempotency;
         this.audit=audit;this.reviews=reviews;this.finance=finance;this.evidence=evidence;this.files=files;this.mapper=mapper;
     }
@@ -76,9 +79,12 @@ public class DealerReturnFinancialService {
                 var order=lockOrder(initial.orderId());var ret=requireReturn(returnId);
                 if(Set.of("rejected","pending_approval").contains(ret.status())) throw invalid("退货批准后才可确认运费");
                 var contract=order.contractSnapshot();if(contract==null) throw invalid("原订单锁定合同缺失");
+                String lockedBearer="quality_issue".equals(ret.reasonType())?"sales_entity":contract.returnFreightBearer();
+                // 第十八批第 31 条：合同未约定、须双方确认时，经销商已停用须用掉一条运费类对方确认；已锁定合同规则不要求。
+                if(lockedBearer==null || contract.firstLegFreightRefundable()==null)
+                    confirmations.consumeIfDeactivated(order.id(),order.dealerId(),"freight_confirmation",request==null?null:request.counterpartyConfirmationId());
                 String bearer=requireText(request==null?null:request.returnFreightBearer(),"return_freight_bearer");
                 if(!Set.of("dealer","sales_entity").contains(bearer) || request.firstLegFreightRefundable()==null) throw invalid("请明确退回运费承担方及首程运费是否退回");
-                String lockedBearer="quality_issue".equals(ret.reasonType())?"sales_entity":contract.returnFreightBearer();
                 if(lockedBearer!=null && !"pending_confirmation".equals(lockedBearer) && !lockedBearer.equals(bearer)) throw invalid("不能覆盖原订单锁定的退回运费规则");
                 if(contract.firstLegFreightRefundable()!=null && !contract.firstLegFreightRefundable().equals(request.firstLegFreightRefundable())) throw invalid("不能覆盖原订单锁定的首程运费规则");
                 if(request.firstLegAdjustmentCent()==null || request.firstLegAdjustmentCent()<0) throw invalid("须明确本次首程运费调减金额，不能由退货比例自动推算");

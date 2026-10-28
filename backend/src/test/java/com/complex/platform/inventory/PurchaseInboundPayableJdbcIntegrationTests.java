@@ -1,8 +1,13 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -19,10 +24,16 @@ import java.util.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /** FS-008/009/010：真实合同审批、采购审批、库存、应付与现金记录的交叉验证。 */
@@ -32,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
  "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
 @Transactional
+@AutoConfigureMockMvc
 class PurchaseInboundPayableJdbcIntegrationTests {
  @Autowired PurchaseWorkflowService workflow;
  @Autowired InventoryController inventoryController;
@@ -42,6 +54,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Autowired SupervisorReviewService reviews;
  @Autowired EvidenceEventService evidence;
  @Autowired JdbcTemplate jdbc;
+ @Autowired MockMvc mockMvc;
  @Autowired com.complex.platform.analytics.AnalyticsRepository analytics;
  String suffix,project,merchant,item,supplier,entity,warehouse,location,requestor,manager,finance,business,legal,role;
 
@@ -465,6 +478,111 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThat(auditCount("inventory.purchase_workbench.view_failed")).isEqualTo(1);
  }
  long auditCount(String event){return number("SELECT count(*) FROM audit_events WHERE actor_id=? AND event_name=?",requestor,event);}
+
+ // 第十八批第 33 条（BSM:1211「系统根据安全库存、销量和在途数量生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单，不得自动向供应商下单」；
+ // 第十八批裁决 5「建议量＝安全库存＋近 7 天销量－当前可用库存－在途量，大于 0 才列出」）。
+ @Test void suggestionFollowsRulingFiveAndOnlyApprovedPurchasesCountAsInTransit() throws Exception{
+  jdbc.update("UPDATE inventory_items SET min_quantity=20 WHERE id=?",item);
+  balance(location,merchant,12);
+  movement(location,"outbound","bar_order",30,true,"1 hour");
+  movement(location,"dealer_outbound","dealer_order",8,true,"1 hour");
+  movement(location,"inbound","bar_order_item_void",3,false,"1 hour");
+  movement(location,"return","dealer_return_line",2,false,"1 hour");
+  // 不计入销量：礼物领取消耗、门店要货签收（调拨）、手工出库、7 天窗口外的售出。
+  movement(location,"redeem_consume","bar_gift_redemption",5,true,"1 hour");
+  movement(location,"inbound","inventory_transfer",6,false,"1 hour");
+  movement(location,"outbound","manual",4,true,"1 hour");
+  movement(location,"outbound","bar_order",100,true,"8 days");
+  String placed=ordered("credit_term","each_receipt",30,10),contract=string("SELECT supply_contract_id FROM inventory_purchase_requests WHERE id=?",placed);
+  createPurchase(contract,5);String waiting=createPurchase(contract,7);submit(waiting,contract);
+  long requests=number("SELECT count(*) FROM inventory_purchase_requests"),viewed=auditCount("inventory.purchase_suggestion.viewed");
+  suggestions(project).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+   .andExpect(jsonPath("$.data[0].project_id").value(project)).andExpect(jsonPath("$.data[0].merchant_id").value(merchant))
+   .andExpect(jsonPath("$.data[0].item_id").value(item)).andExpect(jsonPath("$.data[0].item_name").value("采购测试耗材"))
+   .andExpect(jsonPath("$.data[0].safety_stock").value(20)).andExpect(jsonPath("$.data[0].sales_quantity").value(33))
+   .andExpect(jsonPath("$.data[0].available_quantity").value(12)).andExpect(jsonPath("$.data[0].in_transit_quantity").value(10))
+   .andExpect(jsonPath("$.data[0].suggested_quantity").value(31))
+   .andExpect(jsonPath("$.data[0].reason").value("安全库存 20 ＋ 近 7 天销量 33 － 当前可用 12 － 在途 10 ＝ 建议采购 31"));
+  assertThat(number("SELECT count(*) FROM inventory_purchase_requests")).isEqualTo(requests);
+  assertThat(auditCount("inventory.purchase_suggestion.viewed")).isEqualTo(viewed+1);
+  // 采购人员按建议人工改数后用现有建单入口提交（前端蛇形请求体），待批不计在途；批准后计在途，系统不下单。
+  String body="{\"idempotency_key\":\""+key()+"\",\"operator_note\":\"按建议人工调整为 30\",\"supplier_id\":\""+supplier+"\",\"supply_contract_id\":\""+contract
+   +"\",\"items\":[{\"item_id\":\""+item+"\",\"quantity\":30}],\"expected_arrival_date\":\""+today().plusDays(3)+"\"}";
+  String created=com.jayway.jsonpath.JsonPath.read(postJson("/api/v1/inventory/purchase-requests",body).andExpect(status().isOk())
+   .andExpect(jsonPath("$.data.status").value("created")).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8),"$.data.id");
+  suggestions(project).andExpect(jsonPath("$.data[0].suggested_quantity").value(31));
+  submit(created,contract);
+  suggestions(project).andExpect(jsonPath("$.data[0].in_transit_quantity").value(10)).andExpect(jsonPath("$.data[0].suggested_quantity").value(31));
+  approve(string("SELECT review_id FROM inventory_purchase_requests WHERE id=?",created),manager);act(requestor);
+  suggestions(project).andExpect(jsonPath("$.data[0].in_transit_quantity").value(40)).andExpect(jsonPath("$.data[0].suggested_quantity").value(1));
+  assertThat(string("SELECT status FROM inventory_purchase_requests WHERE id=?",created)).isEqualTo("approved");
+  assertThat(jdbc.queryForMap("SELECT ordered_at FROM inventory_purchase_requests WHERE id=?",created).get("ordered_at")).isNull();
+ }
+ @Test void purchaseSuggestionListsOnlyPositiveQuantities() throws Exception{
+  jdbc.update("UPDATE inventory_items SET min_quantity=20 WHERE id=?",item);
+  balance(location,merchant,50);movement(location,"outbound","bar_order",30,true,"1 hour");
+  suggestions(project).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(0));
+ }
+ @Test void purchaseSuggestionsStayWithinOwnerProjectAndPermission() throws Exception{
+  String other="pc_other_merchant_"+suffix,otherProject="pc_other_project_"+suffix;
+  jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,project_id,status,created_at,updated_at) VALUES(?,'同项目另一商户','retail',?,?,'active',now(),now())",other,entity,project);
+  jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'mall','他项目','active',now(),now())",otherProject);
+  jdbc.update("UPDATE inventory_items SET min_quantity=5 WHERE id=?",item);
+  balance(location,merchant,1);
+  balance("pc_loc_other_"+suffix,other,0);movement("pc_loc_other_"+suffix,"outbound","bar_order",9,true,"1 hour");
+  balance("pc_loc_platform_"+suffix,null,0);movement("pc_loc_platform_"+suffix,"dealer_outbound","dealer_order",7,true,"1 hour");
+  suggestions(project).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+   .andExpect(jsonPath("$.data[0].merchant_id").value(merchant)).andExpect(jsonPath("$.data[0].suggested_quantity").value(4));
+  long failed=auditCount("inventory.purchase_suggestion.view_failed");
+  suggestions(otherProject).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+  jdbc.update("DELETE FROM role_permissions WHERE role_id=? AND permission_code='inventory.purchase_request.manage'",role);
+  suggestions(project).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+  assertThat(auditCount("inventory.purchase_suggestion.view_failed")).isEqualTo(failed+2);
+ }
+ // 第十八批第 33 条 33-R4：已有物料的安全库存可改（权限与新建物料同码 inventory.stock.move），改后建议量按新安全库存计算。
+ @Test void safetyStockOfExistingItemIsEditableAndFeedsSuggestion() throws Exception{
+  jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'inventory.stock.move')",role);
+  balance(location,merchant,12);
+  suggestions(project).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(0));
+  long done=auditCount("inventory.item.safety_stock_updated"),failed=auditCount("inventory.item.safety_stock_update_failed");
+  postJson("/api/v1/inventory/items/"+item+"/safety-stock","{\"idempotency_key\":\""+key()+"\",\"min_quantity\":20}")
+   .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(item)).andExpect(jsonPath("$.data.min_quantity").value(20));
+  assertThat(number("SELECT min_quantity FROM inventory_items WHERE id=?",item)).isEqualTo(20);
+  assertThat(auditCount("inventory.item.safety_stock_updated")).isEqualTo(done+1);
+  suggestions(project).andExpect(jsonPath("$.data[0].safety_stock").value(20)).andExpect(jsonPath("$.data[0].suggested_quantity").value(8));
+  postJson("/api/v1/inventory/items/"+item+"/safety-stock","{\"idempotency_key\":\""+key()+"\",\"min_quantity\":-1}")
+   .andExpect(status().isBadRequest());
+  String other="pc_item_merchant_"+suffix,foreign="pc_foreign_item_"+suffix;
+  jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,project_id,status,created_at,updated_at) VALUES(?,'他商户','retail',?,?,'active',now(),now())",other,entity,project);
+  jdbc.update("INSERT INTO inventory_items(id,item_name,item_type,unit,min_quantity,status,merchant_id,created_at,updated_at) VALUES(?,'他商户耗材','consumable','包',0,'active',?,now(),now())",foreign,other);
+  postJson("/api/v1/inventory/items/"+foreign+"/safety-stock","{\"idempotency_key\":\""+key()+"\",\"min_quantity\":9}")
+   .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+  jdbc.update("DELETE FROM role_permissions WHERE role_id=? AND permission_code='inventory.stock.move'",role);
+  postJson("/api/v1/inventory/items/"+item+"/safety-stock","{\"idempotency_key\":\""+key()+"\",\"min_quantity\":30}")
+   .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+  assertThat(number("SELECT min_quantity FROM inventory_items WHERE id=?",item)).isEqualTo(20);
+  assertThat(number("SELECT min_quantity FROM inventory_items WHERE id=?",foreign)).isZero();
+  assertThat(auditCount("inventory.item.safety_stock_update_failed")).isEqualTo(failed+3);
+ }
+ void balance(String loc,String owner,int available){
+  jdbc.update("INSERT INTO inventory_stock_balances(id,item_id,location_id,quantity,reserved_quantity,available_quantity,updated_at,warehouse_id,project_id,merchant_id) VALUES(?,?,?,?,0,?,now(),?,?,?)",
+   "pc_bal_"+loc,item,loc,available,available,warehouse,project,owner);
+ }
+ void movement(String loc,String type,String business,int quantity,boolean outgoing,String age){
+  jdbc.update("INSERT INTO inventory_stock_movements(id,movement_type,item_id,source_location_id,target_location_id,quantity,business_type,business_id,status,created_at,merchant_id,project_id) VALUES(?,?,?,?,?,?,?,?,'completed',now()-CAST(? AS interval),?,?)",
+   "pc_mv_"+key().substring(0,13),type,item,outgoing?loc:null,outgoing?null:loc,quantity,business,"pc_src_"+suffix,age,merchant,project);
+ }
+ RequestPostProcessor asRequestor(){
+  return authentication(new UsernamePasswordAuthenticationToken(new AccessActor(requestor,requestor,"staff",project,merchant,"active"),"test",List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF"))));
+ }
+ ResultActions suggestions(String projectId) throws Exception{
+  var result=mockMvc.perform(get("/api/v1/inventory/purchase-suggestions").param("project_id",projectId).with(asRequestor()).header("X-Terminal-Type","web"));
+  act(requestor);return result;
+ }
+ ResultActions postJson(String path,String body) throws Exception{
+  var result=mockMvc.perform(post(path).with(asRequestor()).header("X-Terminal-Type","web").contentType(MediaType.APPLICATION_JSON).content(body));
+  act(requestor);return result;
+ }
 
  @Test void forwardedApprovalCannotBeSentBackToOriginalApplicant(){
   for(String type:List.of("contract","purchase")){

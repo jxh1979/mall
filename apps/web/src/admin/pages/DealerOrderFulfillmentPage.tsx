@@ -1,6 +1,7 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { DealerDeliveryPanel } from "../../dealer/DealerDeliveryPanel";
+import { CounterpartyConfirmationPanel, CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -13,10 +14,10 @@ import type { AdminPageProps } from "../types";
  * 经销订单与履约（ADM-DLR-002，CG-11b）。BSM:1226-1234：订单先审核合同、价格、库存和交期再通知付款；只支持对公转账与平台线上支付；
  * 财务核验首付款达门槛后才出库；审核 / 到账核验 / 出库不同人；取消审批与到账核验互斥；E-13 首付款截止未达门槛取消并退款；尾款逾期暂停账期订单；超收单独记录。
  */
-type DealerRow = { id: string; dealerName?: string; status?: string; creditSuspended?: boolean };
+type DealerRow = { id: string; dealerName?: string; status?: string; creditSuspended?: boolean; contactName?: string | null };
 type ContractRow = { id: string; contractNo?: string; creditTerm?: boolean; firstPaymentRatioBps?: number | null; firstPaymentAmountCent?: number | null; firstPaymentDeadlineDays?: number | null; balanceDueDays?: number | null; freightCent?: number | null; freeShippingThresholdCent?: number | null; freightBearer?: string; freightTemplateVersion?: number; termsVersion?: number; contractSignedAt?: string | null; firstPaymentAnchor?: string | null; firstPaymentFixedAt?: string | null; balanceDueAnchor?: string | null; balanceDueFixedAt?: string | null };
 type OrderRow = { id: string; orderNo?: string; status?: string; creditTerm?: boolean; goodsAmountCent?: number; freightCent?: number; totalAmountCent?: number; firstPaymentRequiredCent?: number; firstPaymentDeadlineAt?: string | null; balanceDueAt?: string | null; paidAmountCent?: number; overdue?: boolean; reviewedBy?: string | null; shippedBy?: string | null; cancelRequestedBy?: string | null; note?: string | null; returnedAmountCent?: number; deliveryAdjustmentCent?: number; firstLegAdjustmentCent?: number; deliveryCompletedAt?: string | null; contractSnapshot?: ContractRow | null };
-type PaymentRow = { id: string; method?: string; amountCent?: number; status?: string; appliedCent?: number; verifiedBy?: string | null; referenceNo?: string | null };
+type PaymentRow = { id: string; method?: string; amountCent?: number; status?: string; appliedCent?: number; verifiedBy?: string | null; referenceNo?: string | null; receivedAt?: string | null };
 type RefundRow = { id: string; paymentId?: string; amountCent?: number; status?: string; reviewId?: string | null; executedBy?: string | null; financeRefundId?: string | null };
 type OverpaymentRow = { id: string; orderId?: string; amountCent?: number; status?: string; targetOrderId?: string | null; unconfirmedAmountCent?: number; prepaymentBalanceCent?: number; appliedAmountCent?: number; allocations?: { id: string; usage: string; amountCent: number; targetOrderId?: string | null; refundId?: string | null; confirmationAttachmentIds?: string[] }[] };
 
@@ -66,6 +67,10 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
   const [allocationKey, setAllocationKey] = React.useState("");
   const [allocationEvidence, setAllocationEvidence] = React.useState<{ id: string; name: string }[]>([]);
   const [allocationBusy, setAllocationBusy] = React.useState(false);
+  const [allocationConfirmation, setAllocationConfirmation] = React.useState("");
+  const [confirmationVersion, setConfirmationVersion] = React.useState(0);
+  // 第十八批第 31 条（BSM:1247）：经销商已停用后，存量事项须由合同指定经办人取得对方确认并留证；尾款只走销售主体对公账户。
+  const deactivated = dealer?.status === "deactivated";
   const canManageDelivery = useCan(effectivePermissions, ["dealer.order.manage", "evidence.attachment.create"]);
   const canShipDelivery = useCan(effectivePermissions, ["dealer.order.ship", "evidence.attachment.create"]);
   const canReadFinance = useCan(effectivePermissions, ["finance.ar_ap.view"]);
@@ -117,7 +122,7 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
 
   function openAllocation(source: OverpaymentRow, usage: string) {
     setAllocationSource(source); setAllocationUsage(usage); setAllocationAmount(""); setAllocationTarget("");
-    setAllocationNote(""); setAllocationEvidence([]); setAllocationKey(key());
+    setAllocationNote(""); setAllocationEvidence([]); setAllocationKey(key()); setAllocationConfirmation("");
   }
   async function uploadConfirmation(files: FileList | null) {
     if (!allocationSource || !files?.length || !canUploadConfirmation || allocationBusy) return;
@@ -140,11 +145,13 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
         || !allocationNote.trim() || allocationEvidence.length === 0 || (allocationUsage !== "prepayment" && !allocationTarget.trim())) {
       setFormError("须填写正金额、双方确认说明及凭证；抵扣时还须填写目标订单。"); return;
     }
+    if (deactivated && !allocationConfirmation) { setFormError("经销商已停用，请先选择指定经办人登记的对方确认留证"); return; }
     setAllocationBusy(true);
     await run("dealer_order_overpayment_use_confirmed", async () => {
       await api.post("/api/v1/dealers/overpayments/" + allocationSource.id + "/use", {
         idempotencyKey: allocationKey, usage: allocationUsage, amountCent, targetOrderId: allocationUsage === "prepayment" ? undefined : allocationTarget.trim(),
         note: allocationNote.trim(), confirmationAttachmentIds: allocationEvidence.map(item => item.id),
+        ...(deactivated ? { counterpartyConfirmationId: allocationConfirmation } : {}),
       });
       if (dealer) await loadDealer(dealer.id);
       setAllocationSource(null);
@@ -249,7 +256,7 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
     if (!order) throw new Error("请先选择订单");
     const cent = Math.round(Number(payAmount) * 100);
     if (!Number.isFinite(cent) || cent <= 0) throw new Error("到账金额须大于 0");
-    const p = await api.post<PaymentRow>(`/api/v1/dealers/orders/${encodeURIComponent(order.id)}/payments`, { idempotencyKey: key(), method: payMethod, amountCent: cent, referenceNo: payRef.trim() || undefined });
+    const p = await api.post<PaymentRow>(`/api/v1/dealers/orders/${encodeURIComponent(order.id)}/payments`, { idempotencyKey: key(), method: deactivated ? "bank_transfer" : payMethod, amountCent: cent, referenceNo: payRef.trim() || undefined });
     setPayAmount(""); setPayRef("");
     await loadOrder(order.id);
     return { 到账: p?.id, 方式: label(PAYMENT_METHOD, payMethod), 状态: label(PAYMENT_STATUS, p?.status) };
@@ -352,22 +359,25 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
                 ) : null}
               </div>
 
-              {["shipping", "signed", "completed", "returning", "partially_returned", "returned"].includes(order.status ?? "") && <DealerDeliveryPanel key={order.id} api={api} orderId={order.id} status={order.status} canManage={canManageDelivery} canShip={canShipDelivery} onChanged={async () => { await selectOrder(order); await loadDealer(dealer.id); }} />}
+              {["shipping", "signed", "completed", "returning", "partially_returned", "returned"].includes(order.status ?? "") && <DealerDeliveryPanel key={order.id} api={api} orderId={order.id} status={order.status} canManage={canManageDelivery} canShip={canShipDelivery} onChanged={async () => { await selectOrder(order); await loadDealer(dealer.id); }} deactivated={deactivated} confirmationVersion={confirmationVersion} />}
+
+              {deactivated ? <CounterpartyConfirmationPanel key={`confirm-${order.id}`} api={api} orderId={order.id} contactName={dealer.contactName} canManage={canManageDelivery} onChanged={() => setConfirmationVersion(v => v + 1)} /> : null}
 
               <h3>到账登记与核验（只支持对公转账、平台线上支付）</h3>
               <div className="admin-form-grid" data-testid="payment-form">
-                <label>支付方式<select data-testid="pay-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}><option value="bank_transfer">对公转账</option><option value="platform_online">平台线上支付</option></select></label>
+                {deactivated ? <p data-testid="pay-deactivated-hint">经销商已停用：原订单尾款只能通过销售主体对公账户回款，须由合同指定经办人登记，财务核实入账后冲减原应收。财务核验通过的到账记录即收款凭证（订单号、金额、到账时间、核验人），经办人按已核验联系方式交给对方后，在「经办人确认留证」登记一条结果交付并填写到账记录号。</p> : null}
+                <label>支付方式<select data-testid="pay-method" value={deactivated ? "bank_transfer" : payMethod} onChange={(e) => setPayMethod(e.target.value)}><option value="bank_transfer">对公转账</option>{deactivated ? null : <option value="platform_online">平台线上支付</option>}</select></label>
                 <label>金额（元）<input data-testid="pay-amount" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} /></label>
                 <label>流水号<input data-testid="pay-ref" value={payRef} onChange={(e) => setPayRef(e.target.value)} /></label>
                 <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.manage"]} data-testid="pay-register" onClick={() => void registerPayment()}>登记到账</PermissionButton>
               </div>
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="payment-table">
-                  <thead><tr><th>到账</th><th>方式</th><th>金额</th><th>计入订单</th><th>状态</th><th>核验人</th><th>流水号</th><th>操作</th></tr></thead>
+                  <thead><tr><th>到账</th><th>方式</th><th>金额</th><th>到账时间</th><th>计入订单</th><th>状态</th><th>核验人</th><th>流水号</th><th>操作</th></tr></thead>
                   <tbody>
                     {payments.map((p) => (
                       <tr key={p.id} data-testid={`payment-row-${p.id}`}>
-                        <td>{p.id}</td><td>{label(PAYMENT_METHOD, p.method)}</td><td>{money(p.amountCent)}</td><td>{money(p.appliedCent)}</td>
+                        <td>{p.id}</td><td>{label(PAYMENT_METHOD, p.method)}</td><td>{money(p.amountCent)}</td><td>{cnTime(p.receivedAt)}</td><td>{money(p.appliedCent)}</td>
                         <td data-testid={`payment-status-${p.id}`}>{label(PAYMENT_STATUS, p.status)}</td><td>{p.verifiedBy ?? "—"}</td><td>{p.referenceNo ?? "—"}</td>
                         <td>
                           {["pending_verification", "late"].includes(p.status ?? "") ? (
@@ -430,6 +440,7 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
             <label>双方确认说明<input data-testid="allocation-note" value={allocationNote} onChange={event => setAllocationNote(event.target.value)} /></label>
             <label>上传双方确认凭证<input type="file" multiple data-testid="allocation-evidence" disabled={!canUploadConfirmation || allocationBusy} onChange={event => { void uploadConfirmation(event.target.files); event.target.value = ""; }} /></label>
             <ul>{allocationEvidence.map(item => <li key={item.id}>{item.name}</li>)}</ul>
+            {deactivated && allocationSource.orderId ? <CounterpartyConfirmationPick key={`${allocationSource.id}-${confirmationVersion}`} api={api} orderId={allocationSource.orderId} matterType="overpayment_use" value={allocationConfirmation} onChange={setAllocationConfirmation} version={confirmationVersion} /> : null}
             <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.payment.verify"]} data-testid="allocation-save" onClick={() => void saveAllocation()}>确认本次分配</PermissionButton>
             <button type="button" onClick={() => setAllocationSource(null)}>取消填写</button>
           </fieldset> : null}

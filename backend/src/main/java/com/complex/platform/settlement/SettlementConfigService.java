@@ -65,12 +65,12 @@ public class SettlementConfigService {
                 String.valueOf(commissionPointsConfigRepository.findCommissionRateBp(null, null, "non_sales"))));
         defaults.add(new ConfigItem("提成与积分", "points_amount_cent_per_point", "积分累计率(每积1分所需消费·分)",
                 String.valueOf(commissionPointsConfigRepository.findAmountCentPerPoint(null, null))));
-        // V350:全平台「高价值物品」判定阈值(退酒/报损/盘点差异/存酒作废共用一个值,比的是物品进货价)。
+        // 第十八批第 24 条:全平台统一「高价值物品」判定阈值(退酒/报损/盘点差异/存酒作废共用一个值,比的是最近一次实际到货价)。
         // 未配置时不报错、如实显示「未配置」——判定侧此时一律按高价值拦下走审批(业务HTML 口径),
         // 概览页照常打开,运营看得见「现在是未配置状态、所有单子都在被拦」才知道要去补。
-        Long highValueThresholdCent = highValueThresholdRepository.findHighValueThresholdCent(null, null);
+        Long highValueThresholdCent = highValueThresholdRepository.findHighValueThresholdCent();
         defaults.add(new ConfigItem("高价值判定", "high_value_threshold_cent",
-                "高价值判定阈值(物品进货价高于此值即高价值·分)",
+                "高价值判定阈值(最近一次实际到货价大于或等于此值即高价值·分)",
                 highValueThresholdCent == null
                         ? "未配置(一律按高价值拦下走审批)"
                         : String.valueOf(highValueThresholdCent)));

@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1171 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 414 | 人工权限矩阵正文未覆盖 313 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2342 | 人工事件矩阵正文未覆盖 2297 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1171 | 人工任务映射正文未逐项覆盖 1165 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 703 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1179 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 415 | 人工权限矩阵正文未覆盖 314 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2358 | 人工事件矩阵正文未覆盖 2313 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1179 | 人工任务映射正文未逐项覆盖 1173 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 708 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -197,13 +197,13 @@
 | `dealer.inquiry.manage` | staff-token | project | 1 | createDealerInquiry | OpenAPI 补充，以本附录为准 |
 | `dealer.inquiry.quote` | staff-token | project | 2 | quoteDealerInquiry, expireDealerInquiry | OpenAPI 补充，以本附录为准 |
 | `dealer.invoice.manage` | staff-token | project | 4 | reverseDealerInvoice, requestDealerInvoice, issueDealerInvoice, recordDealerInvoiceReversalResult | OpenAPI 补充，以本附录为准 |
-| `dealer.manage` | staff-token | project | 5 | createDealer, submitDealer, deactivateDealer, createDealerContract, updateDealerContractTerms | OpenAPI 补充，以本附录为准 |
-| `dealer.order.manage` | staff-token | project, project-merchant | 6 | createDealerOrderDraft, submitDealerOrder, registerDealerOrderPayment, signDealerOrder, requestDealerOrderCancel, requestDealerDeliveryResolution | OpenAPI 补充，以本附录为准 |
+| `dealer.manage` | staff-token | project | 6 | createDealer, submitDealer, deactivateDealer, createDealerContract, designateDealerContractHandler, updateDealerContractTerms | OpenAPI 补充，以本附录为准 |
+| `dealer.order.manage` | staff-token | project, project-merchant | 7 | createDealerOrderDraft, submitDealerOrder, registerDealerOrderPayment, recordDealerCounterpartyConfirmation, signDealerOrder, requestDealerOrderCancel, requestDealerDeliveryResolution | OpenAPI 补充，以本附录为准 |
 | `dealer.order.payment.verify` | staff-token | project | 3 | verifyDealerOrderPayment, openDealerOrderRefundApproval, confirmDealerOverpaymentUse | OpenAPI 补充，以本附录为准 |
 | `dealer.order.refund.execute` | staff-token | project | 1 | executeDealerOrderRefund | OpenAPI 补充，以本附录为准 |
 | `dealer.order.review` | staff-token | project | 2 | reviewDealerOrder, decideDealerOrderCancel | OpenAPI 补充，以本附录为准 |
 | `dealer.order.ship` | staff-token | project, project-merchant | 3 | shipDealerOrder, completeDealerDeliveryPhysical, shipDealerReplacement | OpenAPI 补充，以本附录为准 |
-| `dealer.order.view` | staff-token | project, project-merchant | 7 | listDealerOrders, listDealerOverpayments, getDealerOrder, listDealerOrderLines, listDealerOrderPayments, listDealerOrderRefunds, getDealerDelivery | OpenAPI 补充，以本附录为准 |
+| `dealer.order.view` | staff-token | project, project-merchant | 8 | listDealerOrders, listDealerOverpayments, getDealerOrder, listDealerOrderLines, listDealerOrderPayments, listDealerCounterpartyConfirmations, listDealerOrderRefunds, getDealerDelivery | OpenAPI 补充，以本附录为准 |
 | `dealer.portal_account.manage` | staff-token | project | 2 | listDealerPortalAccounts, createDealerPortalAccount | OpenAPI 补充，以本附录为准 |
 | `dealer.price_catalog.approve` | staff-token | project | 1 | decideDealerPriceCatalog | OpenAPI 补充，以本附录为准 |
 | `dealer.price_catalog.edit` | staff-token | project | 2 | createDealerPriceCatalogDraft, submitDealerPriceCatalog | OpenAPI 补充，以本附录为准 |
@@ -291,15 +291,15 @@
 | `inventory.cost.view` | staff-token | project-warehouse | 2 | listInventoryCostLedger, getInventoryCostSummary | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.review` | staff-token | project-warehouse-bar | 1 | reviewTraceHandoverException | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.scan` | staff-token | project-warehouse-bar | 4 | scanTraceCodeHandover, createTraceHandover, scanTraceSegment, reportRobotSegment | OpenAPI 补充，以本附录为准 |
-| `inventory.high_value.review` | staff-token | project-bar-customer, project-warehouse-bar | 3 | listHighValueReviews, reviewHighValue, approveSavedBottleRemedy | OpenAPI 补充，以本附录为准 |
-| `inventory.purchase_request.manage` | staff-token | project-merchant | 10 | createPurchaseRequest, approvePurchaseRequest, orderPurchaseRequest, arrivePurchaseRequest, receivePurchaseRequest, resolvePurchaseQuantity, registerPurchaseConsignmentSale, requestPurchaseReturn, handoverPurchaseReturn, requestPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
+| `inventory.high_value.review` | staff-token | project, project-bar-customer, project-warehouse-bar | 4 | markInventoryItemHighValue, listHighValueReviews, reviewHighValue, approveSavedBottleRemedy | OpenAPI 补充，以本附录为准 |
+| `inventory.purchase_request.manage` | staff-token | project-merchant | 11 | createPurchaseRequest, approvePurchaseRequest, orderPurchaseRequest, arrivePurchaseRequest, receivePurchaseRequest, getPurchaseSuggestions, resolvePurchaseQuantity, registerPurchaseConsignmentSale, requestPurchaseReturn, handoverPurchaseReturn, requestPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
 | `inventory.purchase_request.view` | staff-token | project-merchant | 3 | listPurchaseRequests, getPurchaseWorkbenchOptions, getPurchaseWorkflowDetail | 已在权限矩阵正文出现 |
 | `inventory.purchase.approve` | staff-token | project-merchant | 1 | confirmPurchaseConsignmentSale | OpenAPI 补充，以本附录为准 |
 | `inventory.risk_alert.view` | staff-token | warehouse | 1 | listInventoryRiskAlerts | OpenAPI 补充，以本附录为准 |
 | `inventory.risk.scan` | staff-token | warehouse | 1 | scanInventoryRiskAlerts | OpenAPI 补充，以本附录为准 |
 | `inventory.stock.adjust` | staff-token | project-merchant, project-warehouse | 3 | createStockAdjustment, requestQuarantineDisposition, completeQuarantineDisposition | 已在权限矩阵正文出现 |
 | `inventory.stock.batch.manage` | staff-token | warehouse | 1 | createInventoryStockBatch | OpenAPI 补充，以本附录为准 |
-| `inventory.stock.move` | staff-token | project, project-warehouse | 8 | createInventoryItem, createStockIn, createStockMovement, transferStockMovement, createTypedStockMovement, createDamageStockAdjustment, createLossStockAdjustment, createWasteStockAdjustment | 已在权限矩阵正文出现 |
+| `inventory.stock.move` | staff-token | project, project-warehouse | 9 | createInventoryItem, updateInventoryItemSafetyStock, createStockIn, createStockMovement, transferStockMovement, createTypedStockMovement, createDamageStockAdjustment, createLossStockAdjustment, createWasteStockAdjustment | 已在权限矩阵正文出现 |
 | `inventory.stock.view` | staff-token | project, project-merchant, project-warehouse, warehouse | 7 | listInventoryItems, listStockBalances, listStockMovements, listInventoryStockBatches, listQuarantineWarehouses, listInventoryQuarantine, listQuarantineDispositions | 已在权限矩阵正文出现 |
 | `inventory.stocktake.create` | staff-token | project | 1 | createInventoryStocktake | OpenAPI 补充，以本附录为准 |
 | `inventory.stocktake.variance_record` | staff-token | project | 1 | recordInventoryStocktakeVariance | OpenAPI 补充，以本附录为准 |
@@ -318,10 +318,11 @@
 | `inventory.transfer_order.view` | staff-token | project | 1 | getTransferOrderFulfillment | OpenAPI 补充，以本附录为准 |
 | `inventory.warehouse.manage` | staff-token | project-warehouse-bar, warehouse | 3 | listWarehouses, createWarehouse, setWarehousePourDevice | OpenAPI 补充，以本附录为准 |
 | `leasing.brand.blacklist` | staff-token | platform | 1 | blacklistLeasingBrand | OpenAPI 补充，以本附录为准 |
+| `leasing.brand.blacklist_exception` | staff-token | platform | 1 | createLeasingBlacklistException | OpenAPI 补充，以本附录为准 |
 | `leasing.brand.manage` | staff-token | platform | 2 | listLeasingBrands, createLeasingBrand | OpenAPI 补充，以本附录为准 |
 | `leasing.convert` | staff-token | platform | 1 | signLeasingIntent | OpenAPI 补充，以本附录为准 |
 | `leasing.intent.manage` | staff-token | platform | 3 | listLeasingIntents, createLeasingIntent, advanceLeasingIntent | OpenAPI 补充，以本附录为准 |
-| `leasing.lead.manage` | staff-token | platform | 8 | listLeasingLeads, createLeasingLead, listLeasingLeadsFollowUpDue, assignLeasingLead, updateLeasingLeadStatus, getLeasingLeadContactPhone, listLeasingFollowUps, createLeasingFollowUp | OpenAPI 补充，以本附录为准 |
+| `leasing.lead.manage` | staff-token | platform | 9 | listLeasingLeads, createLeasingLead, listLeasingLeadsFollowUpDue, assignLeasingLead, updateLeasingLeadStatus, getLeasingLeadContactPhone, listLeasingBlacklistExceptions, listLeasingFollowUps, createLeasingFollowUp | OpenAPI 补充，以本附录为准 |
 | `mdm.device.manage` | staff-token | -, project-device | 3 | enrollMdmDevice, reportMdmPolicyViolation, detectMdmViolations | OpenAPI 补充，以本附录为准 |
 | `mdm.policy.manage` | staff-token | project-device | 4 | listMdmAppWhitelist, upsertMdmAppWhitelist, listMdmSiteWhitelist, upsertMdmSiteWhitelist | OpenAPI 补充，以本附录为准 |
 | `mdm.violation.handle` | staff-token | - | 1 | handleMdmViolation | OpenAPI 补充，以本附录为准 |
@@ -1201,8 +1202,14 @@
 | `dealer.contract_terms_updated` | success | `updateDealerContractTerms` | `POST` | `/api/v1/dealers/contracts/{id}/terms` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.contract_view_failed` | failure | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.contract_viewed` | success | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
+| `dealer.contract.handler_designate_failed` | failure | `designateDealerContractHandler` | `POST` | `/api/v1/dealers/contracts/{id}/designated-handler` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
+| `dealer.contract.handler_designated` | success | `designateDealerContractHandler` | `POST` | `/api/v1/dealers/contracts/{id}/designated-handler` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.contract.view_failed` | failure | `dealerPortalListContracts` | `GET` | `/api/v1/dealer-portal/contracts` | P0-待归类 | `dealer_portal.profile.view` | 接口级事件，以本附录为准 |
 | `dealer.contract.viewed` | success | `dealerPortalListContracts` | `GET` | `/api/v1/dealer-portal/contracts` | P0-待归类 | `dealer_portal.profile.view` | 接口级事件，以本附录为准 |
+| `dealer.counterparty_confirmation.record_failed` | failure | `recordDealerCounterpartyConfirmation` | `POST` | `/api/v1/dealers/orders/{id}/counterparty-confirmations` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.counterparty_confirmation.recorded` | success | `recordDealerCounterpartyConfirmation` | `POST` | `/api/v1/dealers/orders/{id}/counterparty-confirmations` | P0-待归类 | `dealer.order.manage` | 接口级事件，以本附录为准 |
+| `dealer.counterparty_confirmation.view_failed` | failure | `listDealerCounterpartyConfirmations` | `GET` | `/api/v1/dealers/orders/{id}/counterparty-confirmations` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
+| `dealer.counterparty_confirmation.viewed` | success | `listDealerCounterpartyConfirmations` | `GET` | `/api/v1/dealers/orders/{id}/counterparty-confirmations` | P0-待归类 | `dealer.order.view` | 接口级事件，以本附录为准 |
 | `dealer.create_failed` | failure | `createDealer` | `POST` | `/api/v1/dealers` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.created` | success | `createDealer` | `POST` | `/api/v1/dealers` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
 | `dealer.deactivate_failed` | failure | `deactivateDealer` | `POST` | `/api/v1/dealers/{id}/deactivate` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
@@ -1776,6 +1783,10 @@
 | `inventory.inbound_failed` | failure | `createStockIn` | `POST` | `/api/v1/inventory/stock-in` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.item.created` | success | `createInventoryItem` | `POST` | `/api/v1/inventory/items` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.item.created_failed` | failure | `createInventoryItem` | `POST` | `/api/v1/inventory/items` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
+| `inventory.item.high_value_mark_failed` | failure | `markInventoryItemHighValue` | `POST` | `/api/v1/inventory/items/{id}/high-value-mark` | INV-库存存酒 | `inventory.high_value.review` | 接口级事件，以本附录为准 |
+| `inventory.item.high_value_marked` | success | `markInventoryItemHighValue` | `POST` | `/api/v1/inventory/items/{id}/high-value-mark` | INV-库存存酒 | `inventory.high_value.review` | 接口级事件，以本附录为准 |
+| `inventory.item.safety_stock_update_failed` | failure | `updateInventoryItemSafetyStock` | `POST` | `/api/v1/inventory/items/{id}/safety-stock` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
+| `inventory.item.safety_stock_updated` | success | `updateInventoryItemSafetyStock` | `POST` | `/api/v1/inventory/items/{id}/safety-stock` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.item.viewed` | success | `listInventoryItems` | `GET` | `/api/v1/inventory/items` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
 | `inventory.item.viewed_failed` | failure | `listInventoryItems` | `GET` | `/api/v1/inventory/items` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
 | `inventory.outbound_verified` | success | `createStockMovement` | `POST` | `/api/v1/inventory/stock-movements` | INV-库存存酒 | `inventory.stock.move` | 已在事件矩阵正文出现 |
@@ -1783,6 +1794,8 @@
 | `inventory.purchase_request_view_failed` | failure | `listPurchaseRequests` | `GET` | `/api/v1/inventory/purchase-requests` | INV-库存存酒 | `inventory.purchase_request.view` | 接口级事件，以本附录为准 |
 | `inventory.purchase_request_viewed` | success | `getPurchaseWorkflowDetail` | `GET` | `/api/v1/inventory/purchase-requests/{id}` | INV-库存存酒 | `inventory.purchase_request.view` | 接口级事件，以本附录为准 |
 | `inventory.purchase_request_viewed` | success | `listPurchaseRequests` | `GET` | `/api/v1/inventory/purchase-requests` | INV-库存存酒 | `inventory.purchase_request.view` | 接口级事件，以本附录为准 |
+| `inventory.purchase_suggestion.view_failed` | failure | `getPurchaseSuggestions` | `GET` | `/api/v1/inventory/purchase-suggestions` | INV-库存存酒 | `inventory.purchase_request.manage` | 接口级事件，以本附录为准 |
+| `inventory.purchase_suggestion.viewed` | success | `getPurchaseSuggestions` | `GET` | `/api/v1/inventory/purchase-suggestions` | INV-库存存酒 | `inventory.purchase_request.manage` | 接口级事件，以本附录为准 |
 | `inventory.purchase_workbench.view_failed` | failure | `getPurchaseWorkbenchOptions` | `GET` | `/api/v1/inventory/purchase-workbench-options` | INV-库存存酒 | `inventory.purchase_request.view` | 接口级事件，以本附录为准 |
 | `inventory.purchase_workbench.viewed` | success | `getPurchaseWorkbenchOptions` | `GET` | `/api/v1/inventory/purchase-workbench-options` | INV-库存存酒 | `inventory.purchase_request.view` | 接口级事件，以本附录为准 |
 | `inventory.purchase.completed` | success | `allocatePurchasePrepayment` | `POST` | `/api/v1/inventory/purchase-requests/{id}/prepayment-allocations` | INV-库存存酒 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
@@ -1922,6 +1935,10 @@
 | `inventory.warehouse.list_failed` | failure | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.pour_device_update_failed` | failure | `setWarehousePourDevice` | `PUT` | `/api/v1/inventory/warehouses/{id}/pour-device` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
 | `inventory.warehouse.pour_device_updated` | success | `setWarehousePourDevice` | `PUT` | `/api/v1/inventory/warehouses/{id}/pour-device` | INV-库存存酒 | `inventory.warehouse.manage` | 接口级事件，以本附录为准 |
+| `leasing.blacklist_exception.request_failed` | failure | `createLeasingBlacklistException` | `POST` | `/api/v1/leasing/blacklist-exceptions` | P0-待归类 | `leasing.brand.blacklist_exception` | 接口级事件，以本附录为准 |
+| `leasing.blacklist_exception.requested` | success | `createLeasingBlacklistException` | `POST` | `/api/v1/leasing/blacklist-exceptions` | P0-待归类 | `leasing.brand.blacklist_exception` | 接口级事件，以本附录为准 |
+| `leasing.blacklist_exception.view_failed` | failure | `listLeasingBlacklistExceptions` | `GET` | `/api/v1/leasing/blacklist-exceptions` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
+| `leasing.blacklist_exception.viewed` | success | `listLeasingBlacklistExceptions` | `GET` | `/api/v1/leasing/blacklist-exceptions` | P0-待归类 | `leasing.lead.manage` | 接口级事件，以本附录为准 |
 | `leasing.brand.blacklist_change_failed` | failure | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | P0-待归类 | `leasing.brand.blacklist` | 接口级事件，以本附录为准 |
 | `leasing.brand.blacklist_changed` | success | `blacklistLeasingBrand` | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | P0-待归类 | `leasing.brand.blacklist` | 接口级事件，以本附录为准 |
 | `leasing.brand.create_failed` | failure | `createLeasingBrand` | `POST` | `/api/v1/leasing/brands` | P0-待归类 | `leasing.brand.manage` | 接口级事件，以本附录为准 |
@@ -3373,6 +3390,7 @@
 | INV-库存存酒 | `getInventoryCostSummary` | `GET` | `/api/v1/inventory/cost-summary` | 期间出库成本汇总（分红成本侧取数点） | `inventory.cost.view` | `inventory.cost_summary.viewed` / `inventory.cost_summary.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | INV-库存存酒 | `getInventoryStocktake` | `GET` | `/api/v1/inventory/stocktakes/{id}` | 查询库存盘点单详情（含差异明细） | `inventory.stocktake.view` | `inventory.stocktake.detail_viewed` / `inventory.stocktake.detail_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `getInventoryTraceCode` | `GET` | `/api/v1/inventory/trace-codes/{id}` | 查询溯源码责任链（按 id 或 trace_code） | `inventory.trace_code.view` | `inventory.trace_code.viewed` / `inventory.trace_code.view_failed` | web | operation 级补充 |
+| INV-库存存酒 | `getPurchaseSuggestions` | `GET` | `/api/v1/inventory/purchase-suggestions` | 读取智能采购建议（建议量＝安全库存＋近 7 天销量－当前可用－在途，大于 0 才列出） | `inventory.purchase_request.manage` | `inventory.purchase_suggestion.viewed` / `inventory.purchase_suggestion.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getPurchaseWorkbenchOptions` | `GET` | `/api/v1/inventory/purchase-workbench-options` | 读取采购工作台可用目录（逐项目及货权过滤） | `inventory.purchase_request.view` | `inventory.purchase_workbench.viewed` / `inventory.purchase_workbench.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getPurchaseWorkflowDetail` | `GET` | `/api/v1/inventory/purchase-requests/{id}` | 读取采购数量、逐次验收及独立结算事实 | `inventory.purchase_request.view` | `inventory.purchase_request_viewed` / `inventory.purchase_request_view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getSupplyContractTerms` | `GET` | `/api/v1/inventory/supply-contracts/{id}/terms` | 读取供应合同条款及审批状态 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
@@ -3405,6 +3423,7 @@
 | INV-库存存酒 | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | 查询供应合同列表 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | 查询库房列表 | `inventory.warehouse.manage` | `inventory.warehouse.list` / `inventory.warehouse.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `lookupSavedBottlesByPhone` | `POST` | `/api/v1/inventory/saved-bottles/lookup` | 按手机号检索存酒（检索只能输入手机号，姓名与昵称不得用于检索；手机号走请求体不进 URL） | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
+| INV-库存存酒 | `markInventoryItemHighValue` | `POST` | `/api/v1/inventory/items/{id}/high-value-mark` | 物料手工标记或取消标记高价值 | `inventory.high_value.review` | `inventory.item.high_value_marked` / `inventory.item.high_value_mark_failed` | web | operation 级补充 |
 | INV-库存存酒 | `noticeSavedBottleExit` | `POST` | `/api/v1/inventory/saved-bottles/exit-notice` | 门店退出前清点有效期内未结存酒并逐瓶短信通知客人在原店取回 | `bar.saved_bottle.manage` | `bar.saved_bottle.exit_noticed` / `bar.saved_bottle.exit_notice_failed` | tablet, web | operation 级补充 |
 | INV-库存存酒 | `orderPurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/order` | 采购单下单(approved→ordered) | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `pickTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/pick` | 门店要货拣配完成 | `inventory.transfer_order.manage` | `inventory.transfer_order_picked` / `inventory.transfer_order_pick_failed` | web | operation 级补充 |
@@ -3445,6 +3464,7 @@
 | INV-库存存酒 | `supplierReviewTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/supplier-review` | 供货主体审核门店要货 | `inventory.transfer_order.manage` | `inventory.transfer_order_supplier_reviewed` / `inventory.transfer_order_supplier_review_failed` | web | operation 级补充 |
 | INV-库存存酒 | `transferSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/transfer` | 存酒转让（出让人短信验证码确认，验证成功即换持有人、整瓶转让、原持有人动态取酒码作废） | `bar.saved_bottle.manage` | `bar.saved_bottle_transferred` / `bar.saved_bottle.transfer_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | 调拨库存流水 | `inventory.stock.move` | `inventory.stock_transfer.created` / `inventory.stock_transfer.created_failed` | web | operation 级补充 |
+| INV-库存存酒 | `updateInventoryItemSafetyStock` | `POST` | `/api/v1/inventory/items/{id}/safety-stock` | 修改已有物料的安全库存 | `inventory.stock.move` | `inventory.item.safety_stock_updated` / `inventory.item.safety_stock_update_failed` | web | operation 级补充 |
 | OPEN-开放平台 | `getOpenEventResult` | `GET` | `/api/open/d/{endpoint_key}/events/{event_id}` | 回调处理结果查询 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
 | OPEN-开放平台 | `getOpenParkingConfig` | `GET` | `/api/open/d/{endpoint_key}/parking/config` | 停车系统拉取平台下发配置 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
 | OPEN-开放平台 | `listOpenParkingPayments` | `GET` | `/api/open/d/{endpoint_key}/parking/payments` | 停车系统拉取平台已收停车费 | `not_applicable` | `api_call.logged` / `api_call.rejected` | <br>channel: server-to-server | operation 级补充 |
@@ -3505,6 +3525,7 @@
 | P0-待归类 | `createFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders` | 创建维保/物业工单 | `facility.work_order.manage` | `facility.work_order_created` / `facility.work_order_create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | 创建 P1/P2 商场平面图 | `floor_plan.manage` | `floor_plan.created` / `floor_plan.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createFloorPlanImport` | `POST` | `/api/v1/floor-plans/{id}/imports` | 创建 SVG 或标准 JSON 导入任务 | `floor_plan.import.manage` | `floor_plan.import_created` / `floor_plan.import_create_failed` | web | operation 级补充 |
+| P0-待归类 | `createLeasingBlacklistException` | `POST` | `/api/v1/leasing/blacklist-exceptions` | 申请招商黑名单例外放行 | `leasing.brand.blacklist_exception` | `leasing.blacklist_exception.requested` / `leasing.blacklist_exception.request_failed` | web | operation 级补充 |
 | P0-待归类 | `createLeasingBrand` | `POST` | `/api/v1/leasing/brands` | 新建品牌(4 类) | `leasing.brand.manage` | `leasing.brand.created` / `leasing.brand.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createLeasingFollowUp` | `POST` | `/api/v1/leasing/follow-ups` | 新建跟进记录(回写 last_follow_up_at) | `leasing.lead.manage` | `leasing.follow_up.created` / `leasing.follow_up.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createLeasingIntent` | `POST` | `/api/v1/leasing/intents` | 线索转意向(stage 起始 initial_contact) | `leasing.intent.manage` | `leasing.intent.created` / `leasing.intent.create_failed` | web | operation 级补充 |
@@ -3541,6 +3562,7 @@
 | P0-待归类 | `decideDealerPriceCatalog` | `POST` | `/api/v1/dealers/price-catalogs/{id}/decision` | 审批价格目录 | `dealer.price_catalog.approve` | `dealer.price_catalog.decided` / `dealer.price_catalog.decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideDealerReturn` | `POST` | `/api/v1/dealers/returns/{id}/decision` | 审批经销退货 | `dealer.return.review` | `dealer.return.decided` / `dealer.return.decide_failed` | web | operation 级补充 |
 | P0-待归类 | `decideInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules/{rule_id}/decision` | 审批付账日配置(提交人不得自审) | `settlement.config.manage` | `settlement.internal_pay_day_rule.approved` / `settlement.internal_pay_day_rule.decision_failed` | web | operation 级补充 |
+| P0-待归类 | `designateDealerContractHandler` | `POST` | `/api/v1/dealers/contracts/{id}/designated-handler` | 指定合同销售主体经办人 | `dealer.manage` | `dealer.contract.handler_designated` / `dealer.contract.handler_designate_failed` | web | operation 级补充 |
 | P0-待归类 | `designateFacilityWorkOrderConfirmer` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/confirmer` | 指定提单确认人 | `facility.work_order.manage` | `facility.work_order_confirmer_designated` / `facility.work_order_confirmer_designate_failed` | web | operation 级补充 |
 | P0-待归类 | `disablePartnerSubordinate` | `POST` | `/api/v1/partner/subordinates/{user_id}/disable` | 停用下属账号 | `partner.subordinate.manage` | `partner_subordinate.disabled` / `partner_subordinate.disable_failed` | web | operation 级补充 |
 | P0-待归类 | `disputeMediaPerformanceFulfillment` | `POST` | `/api/v1/settlement/media-shows/{id}/fulfillment/dispute` | 对实际履约提出争议 | `media.performance.fulfillment.confirm` | `media_fulfillment.disputed` / `media_fulfillment.dispute_failed` | web | operation 级补充 |
@@ -3591,6 +3613,7 @@
 | P0-待归类 | `listContracts` | `GET` | `/api/v1/contracts` | 合同清单 | `contract.draft.manage` | `contract.viewed` / `contract.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listContractSettlements` | `GET` | `/api/v1/contracts/{contract_id}/settlements` | 退租结算清单 | `contract.settlement.manage` | `contract.settlements_viewed` / `contract.settlements_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerContracts` | `GET` | `/api/v1/dealers/{id}/contracts` | 经销合同清单 | `dealer.view` | `dealer.contract_viewed` / `dealer.contract_view_failed` | web | operation 级补充 |
+| P0-待归类 | `listDealerCounterpartyConfirmations` | `GET` | `/api/v1/dealers/orders/{id}/counterparty-confirmations` | 经办人确认留证清单 | `dealer.order.view` | `dealer.counterparty_confirmation.viewed` / `dealer.counterparty_confirmation.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerExternalStock` | `GET` | `/api/v1/dealers/contracts/{id}/external-stock` | 经销库存外显 | `dealer.view` | `dealer.external_stock.viewed` / `dealer.external_stock.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerInquiries` | `GET` | `/api/v1/dealers/{id}/inquiries` | 询价清单 | `dealer.view` | `dealer.inquiry_viewed` / `dealer.inquiry_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listDealerInvoices` | `GET` | `/api/v1/dealers/orders/{id}/invoices` | 经销订单电子发票列表 | `dealer.return.view` | `dealer.invoice.viewed` / `dealer.invoice.view_failed` | web | operation 级补充 |
@@ -3627,6 +3650,7 @@
 | P0-待归类 | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | 查询 P1/P2 商场平面图 | `floor_plan.view` | `floor_plan.viewed` / `floor_plan.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | 查询平面图正式区域 | `floor_plan.view` | `floor_plan.shape_viewed` / `floor_plan.shape_view_failed` | web | operation 级补充 |
 | P0-待归类 | `listInternalPayDayRules` | `GET` | `/api/v1/settlement/internal-pay-days/rules` | 查三个付账日与钱路指派规则(含待审与历史版本) | `settlement.config.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `listLeasingBlacklistExceptions` | `GET` | `/api/v1/leasing/blacklist-exceptions` | 招商黑名单例外放行单清单 | `leasing.lead.manage` | `leasing.blacklist_exception.viewed` / `leasing.blacklist_exception.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listLeasingBrands` | `GET` | `/api/v1/leasing/brands` | 招商品牌/客户库清单 | `leasing.brand.manage` | `leasing.brand.viewed` / `leasing.brand.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listLeasingFollowUps` | `GET` | `/api/v1/leasing/follow-ups` | 跟进记录(按 ref 查) | `leasing.lead.manage` | `leasing.follow_up.viewed` / `leasing.follow_up.view_failed` | web | operation 级补充 |
 | P0-待归类 | `listLeasingIntents` | `GET` | `/api/v1/leasing/intents` | 招商意向清单 | `leasing.intent.manage` | `leasing.intent.viewed` / `leasing.intent.view_failed` | web | operation 级补充 |
@@ -3689,6 +3713,7 @@
 | P0-待归类 | `reassignFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/reassign` | 工单转派 | `facility.work_order.manage` | `facility.work_order_reassigned` / `facility.work_order_reassign_failed` | web | operation 级补充 |
 | P0-待归类 | `receiveDealerReturn` | `POST` | `/api/v1/dealers/returns/{id}/receive` | 退货收货 | `dealer.return.inspect` | `dealer.return.received` / `dealer.return.receive_failed` | web | operation 级补充 |
 | P0-待归类 | `recheckFacilityInspectionTask` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/recheck` | 复查整改后的巡检任务 | `facility.inspection.manage` | `facility.inspection_task_rechecked` / `facility.inspection_task_recheck_failed` | web | operation 级补充 |
+| P0-待归类 | `recordDealerCounterpartyConfirmation` | `POST` | `/api/v1/dealers/orders/{id}/counterparty-confirmations` | 登记对方确认留证 | `dealer.order.manage` | `dealer.counterparty_confirmation.recorded` / `dealer.counterparty_confirmation.record_failed` | web | operation 级补充 |
 | P0-待归类 | `recordDealerInvoiceReversalResult` | `POST` | `/api/v1/dealers/invoices/{id}/reversal-result` | 登记发票真实红冲结果 | `dealer.invoice.manage` | `dealer.invoice.reversal_result_recorded` / `dealer.invoice.reversal_result_failed` | web | operation 级补充 |
 | P0-待归类 | `recordDealerReturnRefundResult` | `POST` | `/api/v1/dealers/returns/{id}/refund-result` | 登记退货退款执行结果 | `dealer.return.refund.execute` | `not_applicable` / `dealer.return.refund_execute_failed` | web | operation 级补充 |
 | P0-待归类 | `recordEnergyActualCharge` | `POST` | `/api/v1/energy/actual-charges` | 核对供能单据登记实际费用 | `energy.reading.manage` | `energy.actual_charge_recorded` / `energy.actual_charge_recorded_failed` | web | operation 级补充 |
@@ -3760,7 +3785,7 @@
 | P0-待归类 | `settlementConfigUpsertCommissionRate` | `POST` | `/api/v1/settlement/config/commission-rate` | 维护卡座销售提成费率(草案) | `settlement.config.manage` | `settlement.config.bar_commission_rate_configs.updated` / `settlement.config.bar_commission_rate_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertComprehensiveServiceFee` | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | 维护门票综合服务费(草案) | `settlement.config.manage` | `settlement.config.comprehensive_service_fee_configs.updated` / `settlement.config.comprehensive_service_fee_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertDistributionMethod` | `POST` | `/api/v1/settlement/config/distribution-method` | 维护通票分配方式(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_configs.updated` / `settlement.config.ticket_distribution_configs.update_failed` | web | operation 级补充 |
-| P0-待归类 | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | 维护高价值判定阈值(草案) | `settlement.config.manage` | `settlement.config.high_value_thresholds.updated` / `settlement.config.high_value_thresholds.update_failed` | web | operation 级补充 |
+| P0-待归类 | `settlementConfigUpsertHighValueThreshold` | `POST` | `/api/v1/settlement/config/high-value-threshold` | 提交高价值判定阈值调整(最高权限审批) | `settlement.config.manage` | `settlement.config.high_value_thresholds.updated` / `settlement.config.high_value_thresholds.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertInternalPriceItem` | `POST` | `/api/v1/settlement/config/internal-price-item` | 维护内部结算SKU目录条目(草案) | `settlement.config.manage` | `settlement.config.internal_price_catalog.updated` / `settlement.config.internal_price_catalog.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertMerchantRate` | `POST` | `/api/v1/settlement/config/merchant-rate` | 维护每客单价/固定额(草案) | `settlement.config.manage` | `settlement.config.ticket_distribution_merchant_rates.updated` / `settlement.config.ticket_distribution_merchant_rates.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | 维护赠送权益预估成本预扣规则(草案) | `settlement.config.manage` | `settlement.config.pass_gift_cost_configs.updated` / `settlement.config.pass_gift_cost_configs.update_failed` | web | operation 级补充 |

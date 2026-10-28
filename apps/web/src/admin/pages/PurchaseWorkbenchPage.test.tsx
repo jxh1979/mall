@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PurchaseWorkbenchPage } from "./PurchaseWorkbenchPage";
@@ -30,6 +30,7 @@ function setup(config: { permissions?: string[]; detail?: Record<string, unknown
     else if (path.endsWith("/purchase-requests/pur_1")) data = detail;
     else if (path.endsWith("/supply-contracts/sc_1/terms")) data = { contract: actualContract, terms: config.contractTerms };
     else if (path.endsWith("/payments")) data = { items: [{ id: "cash_1", amount_cent: 5000, payment_reference: "银行流水一" }] };
+    else if (path.includes("/purchase-suggestions?project_id=p_1")) data = [{ project_id: "p_1", merchant_id: null, item_id: "item_A_01", item_name: "瓶装饮品", safety_stock: 20, sales_quantity: 33, available_quantity: 12, in_transit_quantity: 10, suggested_quantity: 31, reason: "安全库存 20 ＋ 近 7 天销量 33 － 当前可用 12 － 在途 10 ＝ 建议采购 31" }];
     else throw new Error(`未约定的请求 ${path}`);
     return new Response(JSON.stringify({ code: "OK", data }), { headers: { "Content-Type": "application/json" } });
   }));
@@ -145,4 +146,20 @@ it("批准预付调整由不同财务人员过账，证据绑定调整方案且�
   const plan = { id: "ppr_1", resolution_type: "refund_unused", amount_cent: 1000, contract_basis: "原条款", reason: "双方确认", status: "approved", requested_by: "other", review_id: "r_ppr" };
   const { posts, uploads } = setup({ detail: { settlement_method: "prepaid", prepayment_resolutions: [plan], prepayment_refund_reserved_cent: 1000 } }); await selectPurchase(); click("登记已批准预付调整"); fill("预付调整复核依据", "已核对原支付及批准方案"); await upload(); click("确认登记已批准预付调整");
   await waitFor(() => expect(posts).toHaveLength(1)); expect(posts[0]!.path).toBe("/api/v1/inventory/purchase-prepayment-resolutions/ppr_1/post"); expect(uploads[0]!.get("business_type")).toBe("purchase_prepayment_resolution"); expect(uploads[0]!.get("business_id")).toBe("ppr_1"); expect(posts[0]!.body).not.toHaveProperty("paid");
+});
+// 第十八批第 33 条（BSM:1211「系统根据安全库存、销量和在途数量生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单，不得自动向供应商下单」）。
+it("采购建议列出建议量与理由，按建议发起采购预填合同商品数量与申请依据，人工改数量后提交", async () => {
+  const reason = "安全库存 20 ＋ 近 7 天销量 33 － 当前可用 12 － 在途 10 ＝ 建议采购 31";
+  const { posts } = setup();
+  await waitFor(() => expect(screen.queryByLabelText("采购建议综合体")).not.toBeNull());
+  await screen.findByText("合同一"); fill("采购建议综合体", "p_1");
+  await waitFor(() => expect(screen.queryByText(reason)).not.toBeNull());
+  expect(screen.getByText(reason).closest("tr")).toHaveTextContent("瓶装饮品平台31");
+  click("按建议发起采购");
+  expect(screen.getByLabelText("已批准供货合同")).toHaveValue("sc_1"); expect(screen.getByLabelText("采购商品")).toHaveValue("item_A_01");
+  expect(screen.getByLabelText("采购数量")).toHaveValue(31); expect(screen.getByLabelText("申请依据")).toHaveValue(reason);
+  fill("采购数量", "30"); fill("预计到货日", "2026-02-01"); click("确认新建采购申请");
+  await waitFor(() => expect(posts).toHaveLength(1)); expect(posts[0]!.path).toBe("/api/v1/inventory/purchase-requests");
+  expect(posts[0]!.body).toMatchObject({ supplier_id: "supplier_1", supply_contract_id: "sc_1", items: [{ item_id: "item_A_01", quantity: 30 }], operator_note: reason });
+  expect(posts.some(p => p.path.endsWith("/order"))).toBe(false);
 });

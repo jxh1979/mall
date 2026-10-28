@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -546,5 +546,85 @@ describe("SettlementConfigPage 付账日与钱路指派", () => {
     fireEvent.click(screen.getByTestId("internal-pay-day-approve-ipdr-1"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/rules/ipdr-1/decision"))).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/rules/ipdr-1/decision"))!.body).toMatchObject({ decision: "approve" });
+  });
+});
+
+// 第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，
+// 须同时配置上下限），大于或等于阈值即高价值」）：高价值判定页签。走真实 AdminApi（键名蛇形转换）的用例 stub fetch。
+describe("SettlementConfigPage 高价值判定阈值（第十八批第 24 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+    { status: 200, headers: { "content-type": "application/json" } });
+  const HVT_DEFAULT = { group: "高价值判定", key: "high_value_threshold_cent",
+    label: "高价值判定阈值(最近一次实际到货价大于或等于此值即高价值·分)", value: "500000" };
+
+  async function renderReal(calls: { url: string; method: string; body: Record<string, unknown> | null }[]) {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST") return Promise.resolve(ok(null));
+      if (url.includes("/overview")) return Promise.resolve(ok({ platform_defaults: [HVT_DEFAULT], pending_draft_count: 0, pending_drafts: [] }));
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+  }
+
+  function fill(value: string, min: string, max: string, reason: string) {
+    fireEvent.change(screen.getByTestId("settlement-config-field-highValueThresholdYuan"), { target: { value } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-highValueThresholdMinYuan"), { target: { value: min } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-highValueThresholdMaxYuan"), { target: { value: max } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-reason"), { target: { value: reason } });
+  }
+
+  it("阈值、下限、上限与理由提交最高权限审批：POST 蛇形体为分值、不带项目与商户", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    await renderReal(calls);
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-edit-high_value_threshold")).not.toBeNull());
+    expect(screen.getByTestId("settlement-config-current-high_value_threshold").textContent).toContain("500000");
+
+    fireEvent.click(screen.getByTestId("settlement-config-edit-high_value_threshold"));
+    fill("6000", "1000", "20000", "进口酒到货价普遍上涨");
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    expect(screen.getByTestId("settlement-config-submit").textContent).toContain("提交最高权限审批");
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/settlement/config/high-value-threshold"))).toBe(true));
+    const body = calls.find((c) => c.method === "POST" && c.url.endsWith("/settlement/config/high-value-threshold"))!.body!;
+    expect(body).toMatchObject({ high_value_threshold_cent: 600000, high_value_threshold_min_cent: 100000,
+      high_value_threshold_max_cent: 2000000, reason: "进口酒到货价普遍上涨" });
+    expect(typeof body.idempotency_key).toBe("string");
+    expect(body).not.toHaveProperty("project_id");
+    expect(body).not.toHaveProperty("merchant_id");
+  });
+
+  it("下限大于阈值时停在填写步、不发请求", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    await renderReal(calls);
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-edit-high_value_threshold")).not.toBeNull());
+
+    fireEvent.click(screen.getByTestId("settlement-config-edit-high_value_threshold"));
+    fill("6000", "7000", "20000", "调整");
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+
+    expect(screen.getByTestId("settlement-config-field-highValueThresholdMinYuan")).toBeTruthy();
+    expect(screen.getByTestId("settlement-config-guided-error").textContent).toContain("下限 ≤ 阈值 ≤ 上限");
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+  });
+
+  it("草案队列里的高价值判定阈值草案不给「复核转正」「下线」，显示最高权限审批中", async () => {
+    renderPage(makeApi(vi.fn().mockResolvedValue({
+      platformDefaults: DEFAULTS,
+      pendingDraftCount: 1,
+      pendingDrafts: [{ id: "hvt_d_1", configGroup: "high_value_threshold", summary: "高价值判定阈值(最近一次实际到货价) 600000 分，上下限 100000～2000000 分" }],
+    })));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-top-authority-hvt_d_1")?.textContent ?? "").toContain("最高权限审批中"));
+    expect(screen.getByTestId("settlement-config-draft-hvt_d_1").textContent).toContain("高价值判定阈值(最近一次实际到货价)");
+    expect(screen.queryByTestId("settlement-config-activate-hvt_d_1")).toBeNull();
+    expect(screen.queryByTestId("settlement-config-archive-hvt_d_1")).toBeNull();
   });
 });

@@ -78,6 +78,8 @@ const TAX_FIELD_LABELS: Record<string, string> = {
   createdBy: "起草人", createdAt: "起草时间", decidedAt: "决定时间", decidedBy: "决定人",
   previousVersions: "变更前适用版本", proposedConfig: "拟变更配置", zoneId: "所在地时区",
   cutoffHour: "日切小时", minCutoffHour: "日切小时下限", maxCutoffHour: "日切小时上限",
+  // 第十八批第 24 条：高价值判定阈值最高权限审批原件。
+  highValueThresholdCent: "高价值判定阈值（分）", highValueThresholdMinCent: "阈值下限（分）", highValueThresholdMaxCent: "阈值上限（分）",
   effectiveAt: "拟生效时间", finalApproverId: "组织链最终审批人", attachmentIds: "依据附件编号", idempotencyKey: "提交编号",
   contract: "供货合同原件", terms: "合同执行条款", contractSnapshot: "采购锁定的合同", purchase: "采购申请原件",
   contractNo: "合同编号", supplierId: "供应商编号", itemId: "商品编号", contractMode: "供货方式",
@@ -126,7 +128,7 @@ function taxFact(value: unknown): React.ReactNode {
 function ReviewOriginal({ decision }: { decision: PendingRow["decision"] }) {
   const reason = decision.reason ?? "";
   let content: React.ReactNode = <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{reason || "本单未记录原始说明"}</p>;
-  if (["payroll_tax_version", "payroll_tax_assessment", "amusement_business_day_config", "bar_business_day_config", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution"].includes(decision.objectType ?? "")) {
+  if (["payroll_tax_version", "payroll_tax_assessment", "amusement_business_day_config", "bar_business_day_config", "high_value_threshold", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution", "purchase_return", "purchase_prepayment_resolution"].includes(decision.objectType ?? "")) {
     const start = reason.indexOf("{");
     if (start >= 0) {
       try { content = <><p>{reason.slice(0, start)}</p>{taxFact(JSON.parse(reason.slice(start)))}</>; }

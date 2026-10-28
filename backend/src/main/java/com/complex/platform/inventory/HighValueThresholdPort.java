@@ -12,18 +12,15 @@ package com.complex.platform.inventory;
 public interface HighValueThresholdPort {
 
     /**
-     * 取高价值判定阈值（单位：分）。物品**进货价**严格大于本值即为高价值。
-     *
-     * <p>作用域按「越具体越优先」解析：项目公司 × 商户 →（缺则）项目公司 × 通用商户 →（缺则）全局默认。
+     * 取全平台统一的高价值判定阈值（单位：分）。物品<b>最近一次实际到货价</b>大于或等于本值即为高价值
+     * （第十八批第 24 条，ENUM:164「全平台统一可配」「大于或等于阈值即高价值」）。
      *
      * <p><b>返回 null = 阈值未配置</b>。调用方（{@link HighValueDecisionService}）此时一律按高价值处理、
      * 拦下走审批——业务HTML 明写「阈值未配置时一律按高价值处理，不得静默放行」。这里不抛错，
      * 是因为「拦下走审批」本身就是安全侧，比「整个退酒/报损入口不可用」更贴业务：
      * 主管仍能逐单放行，运营补配置后自动恢复分流。
      *
-     * @param projectId  项目公司 id；null = 全局默认作用域
-     * @param merchantId 商户 id；null = 不按商户细分
      * @return 阈值（分，≥0）；未配置返回 null
      */
-    Long findHighValueThresholdCent(String projectId, String merchantId);
+    Long findHighValueThresholdCent();
 }

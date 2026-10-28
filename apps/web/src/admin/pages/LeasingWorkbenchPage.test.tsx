@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -75,9 +75,9 @@ function renderPage(overrides: Partial<AdminPageProps> = {}, contactPhone?: () =
 describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
   it("已签线索禁止人工回退和再次转意向，仍可正常跟进", async () => {
     renderPage();
-    await screen.findByTestId("leasing-lead-select-l-2");
+    // 列表到达后默认选中首行 l-1 在被动 effect 里补做：先等它落定再点 l-2，否则补跑的 effect 会把刚做的选择改回 l-1（全量负载下偶发）。
+    await waitFor(() => expect((screen.getByTestId("leasing-lead-select-l-1") as HTMLInputElement).checked).toBe(true));
     fireEvent.click(screen.getByTestId("leasing-lead-select-l-2"));
-    // 点选后状态驱动的按钮可用性要等渲染稳定（全量负载下偶发晚一拍），用 waitFor 而不是同步断言。
     await waitFor(() => expect((screen.getByTestId("leasing-intent-create") as HTMLButtonElement).disabled).toBe(true));
     expect((screen.getByTestId("leasing-lead-status-update") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId("leasing-follow-add") as HTMLButtonElement).disabled).toBe(false);
@@ -371,6 +371,7 @@ describe("LeasingWorkbenchPage 纯提成签约押金", () => {
       setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
     await waitFor(() => expect(screen.queryByTestId("leasing-intent-select-in-tov")).not.toBeNull());
     expect(screen.queryByTestId("leasing-sign-deposit")).toBeNull();
+    await waitFor(() => expect((screen.getByTestId("leasing-intent-select-in-fix") as HTMLInputElement).checked).toBe(true));
     fireEvent.click(screen.getByTestId("leasing-intent-select-in-tov"));
     await waitFor(() => expect(screen.queryByTestId("leasing-sign-deposit")).not.toBeNull());
     await waitFor(() => expect(screen.getByRole("option", { name: /测试商户/ })).toBeTruthy());

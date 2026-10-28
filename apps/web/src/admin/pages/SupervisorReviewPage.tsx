@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -30,6 +30,8 @@ const REVIEW_LABELS: Record<string, string> = {
   contract: "合同", bar_bill: "酒吧账单", access_grant_request: "权限授权申请",
   "facility.equipment.scrap": "楼宇设备报废", facility_equipment_scrap: "楼宇设备报废单",
   "parking.release.waive": "停车免费放行与减免", parking_manual_release: "停车人工放行",
+  "leasing.blacklist_exception": "黑名单例外放行", leasing_blacklist_exception: "黑名单例外放行单",
+  "leasing.intent.key_stage": "招商意向关键阶段确认", leasing_intent: "招商意向",
 };
 
 function formatReviewValue(value?: string | null) {

@@ -1,8 +1,9 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiResponse;
+import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,6 +14,8 @@ public class PurchaseWorkflowController {
     private final PurchasePrepaymentService prepayments;
     public PurchaseWorkflowController(PurchaseWorkflowService service,PurchasePrepaymentService prepayments){this.service=service;this.prepayments=prepayments;}
     @GetMapping("/purchase-workbench-options") public ApiResponse<Map<String,Object>> options(){return ApiResponse.ok(service.options());}
+    /** 第十八批第 33 条：智能采购建议（只读即时计算，不建单、不下单）。 */
+    @GetMapping("/purchase-suggestions") public ApiResponse<List<Map<String,Object>>> suggestions(@RequestParam("project_id") String projectId){return ApiResponse.ok(service.suggestions(projectId));}
     @GetMapping("/purchase-requests/{id}") public ApiResponse<Map<String,Object>> detail(@PathVariable String id){return ApiResponse.ok(service.detail(id));}
     @PostMapping("/supply-contracts/{id}/terms") public ApiResponse<Map<String,Object>> terms(@PathVariable String id,@RequestBody PurchaseWorkflowRequests.Terms request){return ApiResponse.ok(service.terms(id,request));}
     @GetMapping("/supply-contracts/{id}/terms") public ApiResponse<Map<String,Object>> terms(@PathVariable String id){return ApiResponse.ok(service.contractDetail(id));}

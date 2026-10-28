@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -175,7 +175,14 @@ public class JdbcDealerRepository {
                 longOrNull(rs, "freight_cent"), longOrNull(rs, "free_shipping_threshold_cent"), rs.getString("freight_bearer"), rs.getInt("freight_template_version"),
                 rs.getString("return_freight_bearer"), (Boolean) rs.getObject("first_leg_freight_refundable"), rs.getInt("terms_version"),
                 nullableInstant(rs, "contract_signed_at"), rs.getString("first_payment_anchor"), nullableInstant(rs, "first_payment_fixed_at"),
-                rs.getString("balance_due_anchor"), nullableInstant(rs, "balance_due_fixed_at"));
+                rs.getString("balance_due_anchor"), nullableInstant(rs, "balance_due_fixed_at"), rs.getString("designated_handler_user_id"),
+                rs.getString("designated_handler_by"), nullableInstant(rs, "designated_handler_at"));
+    }
+
+    /** 第十八批第 31 条：合同销售主体指定经办人，改派直接覆盖。 */
+    public void designateHandler(String contractId, String handlerUserId, String by, Instant at) {
+        jdbc.update("UPDATE dealer_contracts SET designated_handler_user_id = :handler, designated_handler_by = :by, designated_handler_at = :at WHERE id = :id",
+                new MapSqlParameterSource().addValue("handler", handlerUserId).addValue("by", by).addValue("at", ts(at)).addValue("id", contractId));
     }
 
     static Integer intOrNull(ResultSet rs, String column) throws SQLException {

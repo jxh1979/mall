@@ -1,5 +1,6 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
+import { CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
 import { DealerReturnFinancialPanel, DealerInvoiceActions, ReturnEvidenceUpload } from "./DealerReturnFinancialPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -59,6 +60,9 @@ export function DealerReturnInvoicePage(props: AdminPageProps) {
   const [reason, setReason] = React.useState("unopened_resalable");
   const [reqLines, setReqLines] = React.useState("");
   const [reqNote, setReqNote] = React.useState("");
+  const [reqConfirmation, setReqConfirmation] = React.useState("");
+  // 第十八批第 31 条（BSM:1247）：经销商已停用后，退货申请须选指定经办人登记的对方确认留证。
+  const deactivated = dealer?.status === "deactivated";
   // 验收
   const [inspLines, setInspLines] = React.useState("");
   // 运费确认
@@ -137,8 +141,9 @@ export function DealerReturnInvoicePage(props: AdminPageProps) {
     if (!order) throw new Error("请先选择订单");
     const parsed = parseLines(reqLines, 3, "退货明细").map(([itemId, spec, qty, sourceReceiptLineId]) => ({ itemId, spec: spec || "", quantity: Number(qty), ...(sourceReceiptLineId ? {sourceReceiptLineId} : {}) }));
     if (parsed.length === 0) throw new Error("请填写退货明细");
-    const r = await api.post<ReturnRow>(`/api/v1/dealers/orders/${encodeURIComponent(order.id)}/returns`, { idempotencyKey: key(), reasonType: reason, lines: parsed, note: reqNote.trim() || undefined });
-    setReqLines(""); setReqNote("");
+    if (deactivated && !reqConfirmation) throw new Error("经销商已停用，请先选择指定经办人登记的对方确认留证");
+    const r = await api.post<ReturnRow>(`/api/v1/dealers/orders/${encodeURIComponent(order.id)}/returns`, { idempotencyKey: key(), reasonType: reason, lines: parsed, note: reqNote.trim() || undefined, ...(deactivated ? { counterpartyConfirmationId: reqConfirmation } : {}) });
+    setReqLines(""); setReqNote(""); setReqConfirmation("");
     await loadOrder(order.id);
     return { 退货单: r?.returnNo, 原因: label(REASON, reason), 退回运费承担方: label(FREIGHT_BEARER, r?.returnFreightBearer) };
   });
@@ -220,6 +225,7 @@ export function DealerReturnInvoicePage(props: AdminPageProps) {
             })}</div>
             <label>退货明细（每行：商品id,规格,数量,签收来源）<textarea data-testid="return-lines-input" rows={3} value={reqLines} onChange={(e) => setReqLines(e.target.value)} /></label>
             <label>说明<input data-testid="return-note" value={reqNote} onChange={(e) => setReqNote(e.target.value)} /></label>
+            {deactivated ? <CounterpartyConfirmationPick key={order.id} api={api} orderId={order.id} matterType="return_request" value={reqConfirmation} onChange={setReqConfirmation} /> : null}
             <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.manage"]} data-testid="return-request" onClick={() => void requestReturn()}>提交退货申请</PermissionButton>
           </div>
 
@@ -262,7 +268,7 @@ export function DealerReturnInvoicePage(props: AdminPageProps) {
                 </div>
               ) : null}
 
-              <DealerReturnFinancialPanel key={`${ret.id}-${ret.status}`} {...props} returnId={ret.id} status={ret.status} refundApproved={ret.refundApproved} bearer={ret.returnFreightBearer} refundable={ret.firstLegFreightRefundable} reasonType={ret.reasonType} contract={order?.contractSnapshot} onChanged={() => {void loadReturn(ret.id);}} />
+              <DealerReturnFinancialPanel key={`${ret.id}-${ret.status}`} {...props} returnId={ret.id} status={ret.status} refundApproved={ret.refundApproved} bearer={ret.returnFreightBearer} refundable={ret.firstLegFreightRefundable} reasonType={ret.reasonType} contract={order?.contractSnapshot} orderId={order?.id} deactivated={deactivated} onChanged={() => {void loadReturn(ret.id);}} />
 
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="return-line-table">

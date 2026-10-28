@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -82,12 +82,15 @@ public class DealerOrderService {
     private final com.complex.platform.finance.FinanceService financeService;
     private final com.complex.platform.evidence.EvidenceEventRepository evidence;
     private final com.complex.platform.evidence.EvidenceAttachmentValidator attachmentValidator;
+    private final DealerCounterpartyConfirmationService confirmations;
 
     public DealerOrderService(JdbcDealerOrderRepository orders, JdbcDealerRepository dealers, AuthorizationService authorization,
             IdempotencyService idempotency, AuditEventService audit, FinanceRepository finance, SupervisorReviewService reviews,
             com.complex.platform.finance.FinanceService financeService,
             com.complex.platform.evidence.EvidenceEventRepository evidence,
-            com.complex.platform.evidence.EvidenceAttachmentValidator attachmentValidator, JdbcDealerDeliveryRepository delivery) {
+            com.complex.platform.evidence.EvidenceAttachmentValidator attachmentValidator, JdbcDealerDeliveryRepository delivery,
+            DealerCounterpartyConfirmationService confirmations) {
+        this.confirmations = confirmations;
         this.orders = orders;
         this.delivery = delivery;
         this.dealers = dealers;
@@ -140,7 +143,8 @@ public class DealerOrderService {
                         request.returnFreightBearer() == null ? c.returnFreightBearer() : trim(request.returnFreightBearer()),
                         request.firstLegFreightRefundable() == null ? c.firstLegFreightRefundable() : request.firstLegFreightRefundable(),
                         c.termsVersion() + 1, request.contractSignedAt(), request.firstPaymentAnchor(), request.firstPaymentFixedAt(),
-                        credit ? request.balanceDueAnchor() : null, credit ? request.balanceDueFixedAt() : null);
+                        credit ? request.balanceDueAnchor() : null, credit ? request.balanceDueFixedAt() : null,
+                        c.designatedHandlerUserId(), c.designatedHandlerBy(), c.designatedHandlerAt());
                 dealers.saveContract(saved);
                 audit.recordSuccess("dealer.contract_terms_updated", DealerService.MANAGE, "dealer_contract", contractId, null, request.idempotencyKey(),
                         meta("credit_term", credit, "freight_template_version", saved.freightTemplateVersion(), "terms_version", saved.termsVersion()));
@@ -403,13 +407,21 @@ public class DealerOrderService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerOrderPaymentRecord registerPayment(String orderId, DealerPaymentRequest request, String permission) {
         try {
-            requireOrder(orderId);
+            DealerOrderRecord current = requireOrder(orderId);
             String method = requireText(request == null ? null : request.method(), "method").trim().toLowerCase(Locale.ROOT);
             if (!PAYMENT_METHODS.contains(method)) {
                 throw ApiException.badRequest("PAYMENT_METHOD_FORBIDDEN", "经销货款只支持对公转账和平台线上支付，禁止现金和个人账户收款");
             }
             if (request.amountCent() == null || request.amountCent() <= 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "到账金额须大于 0");
+            }
+            // 第十八批第 31 条（BSM:1247）：停用后原订单尾款由合同销售主体指定经办人登记，只能经订单固化的销售主体对公账户回款。
+            boolean deactivated = MANAGE.equals(permission) && confirmations.deactivated(current.dealerId());
+            if (deactivated) {
+                confirmations.requireHandler(current);
+                if (!"bank_transfer".equals(method)) {
+                    throw ApiException.conflict("DEALER_DEACTIVATED_BANK_TRANSFER_ONLY", "经销商已停用，尾款只能通过销售主体对公账户回款");
+                }
             }
             return idempotency.execute("dealerOrderPayment:" + orderId, request.idempotencyKey(), request, () -> {
                 DealerOrderRecord order = orders.lockOrder(orderId).orElseThrow();
@@ -431,7 +443,8 @@ public class DealerOrderService {
                     orders.saveOrder(withStatus(order, "payment_verifying"));
                 }
                 audit.recordSuccess("dealer.order.payment_registered", permission, "dealer_order_payment", payment.id(), null, request.idempotencyKey(),
-                        meta("order_id", orderId, "method", method, "amount_cent", request.amountCent(), "late", late));
+                        meta("order_id", orderId, "method", method, "amount_cent", request.amountCent(), "late", late,
+                                "handler_user_id", deactivated ? nz(actorId()) : ""));
                 return payment;
             }, DealerOrderPaymentRecord.class);
         } catch (RuntimeException e) {
@@ -1022,6 +1035,7 @@ public class DealerOrderService {
             orderIds.forEach(id -> orders.lockOrder(id).orElseThrow());
             requireOverpaymentConfirmation(original.id(), request.confirmationAttachmentIds());
             return idempotency.execute("dealerOverpaymentUse:" + overpaymentId, request.idempotencyKey(), request, () -> {
+                confirmations.consumeIfDeactivated(original.orderId(), original.dealerId(), "overpayment_use", request.counterpartyConfirmationId());
                 DealerOrderOverpaymentRecord over = orders.lockOverpayment(original.id()).orElseThrow();
                 long amount = request.amountCent();
                 long available = "prepayment_offset".equals(usage) ? over.prepaymentBalanceCent() : over.unconfirmedAmountCent();

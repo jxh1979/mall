@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -90,6 +90,7 @@ describe("MerchantZoneSettlementsPage 留言提异议（M023-006）", () => {
     const calls: Call[] = [];
     const props = renderPage({}, calls);
     await waitFor(() => expect(screen.getByTestId("merchant-zone-settlement-pick-st-2")).toBeTruthy());
+    await waitFor(() => expect((screen.getByTestId("merchant-zone-settlement-pick-st-1") as HTMLInputElement).checked).toBe(true));
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-2"));
     fireEvent.change(screen.getByTestId("merchant-zone-settlement-dispute-reason"), { target: { value: "  违约金多算一期  " } });
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-dispute-submit"));
@@ -252,6 +253,7 @@ describe("MerchantZoneSettlementsPage 处理结论与「不接受裁决」（HP-
     const calls: Call[] = [];
     const props = renderPage({}, calls, RULED);
     await waitFor(() => expect(screen.queryByTestId("merchant-zone-settlement-reject-submit")).toBeTruthy());
+    await waitFor(() => expect((screen.getByTestId("merchant-zone-settlement-pick-st-r1") as HTMLInputElement).checked).toBe(true));
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-r3"));
     expect((screen.getByTestId("merchant-zone-settlement-reject-submit") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-r2"));
@@ -272,6 +274,7 @@ describe("MerchantZoneSettlementsPage 处理结论与「不接受裁决」（HP-
     const calls: Call[] = [];
     renderPage({}, calls, RULED);
     await waitFor(() => expect(screen.queryByTestId("merchant-zone-settlement-pick-st-r4")).toBeTruthy());
+    await waitFor(() => expect((screen.getByTestId("merchant-zone-settlement-pick-st-r1") as HTMLInputElement).checked).toBe(true));
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-r4"));
     expect(screen.queryByTestId("merchant-zone-settlement-reject-submit")).toBeNull();
     fireEvent.click(screen.getByTestId("merchant-zone-settlement-pick-st-r5"));

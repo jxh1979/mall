@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 export type AdminUser = {
   id: string;
   username: string;
@@ -643,6 +643,8 @@ export type InventoryItemRow = {
   unit?: string;
   status?: string;
   minQuantity?: number;
+  // 第十八批第 24 条：库房主管手工标记的高价值（标记与取消须填理由留痕）。
+  manualHighValue?: boolean;
 };
 
 export type StockBalanceRow = {

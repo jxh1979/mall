@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -25,7 +25,7 @@ class DealerCreditLockOrderingTests {
     private final AuthorizationService auth=mock(AuthorizationService.class);
     private final IdempotencyService idem=mock(IdempotencyService.class);
     private final AuditEventService audit=mock(AuditEventService.class);
-    private final DealerOrderService money=new DealerOrderService(orders,dealers,auth,idem,audit,null,null,null,null,null,delivery);
+    private final DealerOrderService money=new DealerOrderService(orders,dealers,auth,idem,audit,null,null,null,null,null,delivery,null);
 
     private DealerOrderRecord order(String id,String dealerId) {
         var order=mock(DealerOrderRecord.class);when(order.id()).thenReturn(id);when(order.dealerId()).thenReturn(dealerId);
@@ -64,7 +64,7 @@ class DealerCreditLockOrderingTests {
         when(resolution.id()).thenReturn("plan");when(resolution.discrepancyId()).thenReturn("diff");when(resolution.physicalCompletedAt()).thenReturn(Instant.now());
         when(difference.orderId()).thenReturn("order");when(delivery.resolution("plan")).thenReturn(Optional.of(resolution));when(delivery.discrepancy("diff")).thenReturn(Optional.of(difference));
         when(idem.execute(anyString(),anyString(),any(),any(),eq(DealerDeliveryRecord.Resolution.class))).thenAnswer(c->((Supplier<?>)c.getArgument(3)).get());
-        var service=new DealerDeliveryService(orders,delivery,money,auth,idem,null,null,null,null,audit);
+        var service=new DealerDeliveryService(orders,delivery,money,auth,idem,null,null,null,null,audit,null);
         assertThatThrownBy(()->service.completePhysical("plan",new DealerDeliveryPhysicalRequest("key",Instant.now(),List.of())))
                 .isInstanceOfSatisfying(ApiException.class,e->org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("DEALER_DELIVERY_PHYSICAL_RECORDED"));
         var sequence=inOrder(dealers,orders);sequence.verify(dealers).lockDealerCredit("dealer");sequence.verify(orders).lockOrder("order");
@@ -77,7 +77,7 @@ class DealerCreditLockOrderingTests {
         var after=mock(DealerReturnRecord.class);when(after.orderId()).thenReturn("order");when(after.dealerId()).thenReturn("dealer");when(after.status()).thenReturn("completed");
         when(returns.findReturn("return")).thenReturn(Optional.of(before));
         when(dealers.lockDealerCredit("dealer")).thenAnswer(c->{when(returns.findReturn("return")).thenReturn(Optional.of(after));return Optional.of(mock(DealerRecord.class));});
-        var service=new DealerReturnService(returns,orders,dealers,auth,idem,audit,null,delivery,null,null);
+        var service=new DealerReturnService(returns,orders,dealers,auth,idem,audit,null,delivery,null,null,null);
         assertThatThrownBy(()->service.inspectReturn("return",new DealerReturnInspectionRequest("key",List.of(new DealerReturnInspectionLineRequest("item","",1,1,0,"实际验收")),"复核")))
                 .isInstanceOfSatisfying(ApiException.class,e->org.assertj.core.api.Assertions.assertThat(e.code()).isEqualTo("DEALER_RETURN_STATUS_INVALID"));
         var sequence=inOrder(dealers,orders);sequence.verify(dealers).lockDealerCredit("dealer");sequence.verify(orders).lockOrder("order");

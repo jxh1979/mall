@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -71,6 +71,61 @@ public class PurchaseWorkflowService {
                 .filter(c->"approved".equals(c.approvalStatus())||auth.currentActorHasPermission(CONTRACT)&&visible(c.projectId(),c.merchantId(),CONTRACT))
                 .map(this::maskContract).toList());
         return result;
+        });
+    }
+    /**
+     * 第十八批第 33 条 智能采购建议（BSM:1211「系统根据安全库存、销量和在途数量生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单，
+     * 不得自动向供应商下单」；第十八批裁决 5「建议量＝安全库存＋近 7 天销量－当前可用库存－在途量，大于 0 才列出」）。
+     * 按（项目，货权，物料）即时计算：安全库存取物料 min_quantity；近 7 天为滚动 7×24 小时；销量只计酒吧售出（减退酒回补、加退酒驳回重扣）
+     * 与经销出库（减经销退货及交付差异退回的实物回库），门店要货（调拨）、赠饮、积分兑换、手工出库不计，货权取流水库位所在库存行；
+     * 在途＝已批准未收完的采购（approved/ordered/expected/arrived 的 数量－合格接收－批准终止）。只读：不存表、不建单、不下单，人工调整走现有建单与审批。
+     */
+    public List<Map<String,Object>> suggestions(String projectId) {
+        return read("inventory.purchase_suggestion.viewed","inventory.purchase_suggestion.view_failed",MANAGE,"inventory_purchase_suggestion",projectId,()->{
+        String project=requireText(projectId,"project_id");
+        String owner=merchantScope().orElse(null);
+        requireScope(project,owner,MANAGE);
+        Instant to=Instant.now(),from=to.minus(Duration.ofDays(7));
+        var sales=new HashMap<List<Object>,Integer>();
+        jdbc.queryForList("""
+                SELECT b.merchant_id,m.item_id,SUM(CASE WHEN m.movement_type IN('inbound','return') THEN -m.quantity ELSE m.quantity END) AS quantity
+                  FROM inventory_stock_movements m
+                  JOIN inventory_stock_balances b ON b.item_id=m.item_id AND b.location_id=COALESCE(m.source_location_id,m.target_location_id)
+                 WHERE b.project_id=? AND (?::text IS NULL OR b.merchant_id=?) AND m.status='completed' AND m.created_at>=? AND m.created_at<?
+                   AND ((m.movement_type='outbound' AND m.business_type IN('bar_order','bar_order_item_void_reject'))
+                     OR (m.movement_type='inbound' AND m.business_type='bar_order_item_void')
+                     OR m.movement_type='dealer_outbound'
+                     OR (m.movement_type='return' AND m.business_type IN('dealer_return_line','dealer_delivery_resolution')))
+                 GROUP BY b.merchant_id,m.item_id
+                """,project,owner,owner,Timestamp.from(from),Timestamp.from(to))
+                .forEach(r->sales.put(Arrays.asList(r.get("merchant_id"),r.get("item_id")),number(r,"quantity")));
+        var transit=new HashMap<List<Object>,Integer>();
+        jdbc.queryForList("""
+                SELECT merchant_id,item_id,SUM(quantity-accepted_quantity-terminated_quantity) AS quantity FROM inventory_purchase_requests
+                 WHERE project_id=? AND (?::text IS NULL OR merchant_id=?) AND status IN('approved','ordered','expected','arrived')
+                 GROUP BY merchant_id,item_id
+                """,project,owner,owner)
+                .forEach(r->transit.put(Arrays.asList(r.get("merchant_id"),r.get("item_id")),number(r,"quantity")));
+        var rows=new ArrayList<Map<String,Object>>();
+        for(var r:jdbc.queryForList("""
+                SELECT b.merchant_id,b.item_id,i.item_name,i.min_quantity,SUM(b.available_quantity) AS available_quantity
+                  FROM inventory_stock_balances b JOIN inventory_items i ON i.id=b.item_id AND i.status='active'
+                 WHERE b.project_id=? AND (?::text IS NULL OR b.merchant_id=?)
+                 GROUP BY b.merchant_id,b.item_id,i.item_name,i.min_quantity
+                 ORDER BY i.item_name,b.merchant_id NULLS FIRST,b.item_id
+                """,project,owner,owner)){
+            var key=Arrays.asList(r.get("merchant_id"),r.get("item_id"));
+            int safety=number(r,"min_quantity"),sold=sales.getOrDefault(key,0),available=number(r,"available_quantity"),inTransit=transit.getOrDefault(key,0);
+            int suggested=safety+sold-available-inTransit;
+            if(suggested<=0)continue;
+            var row=new LinkedHashMap<String,Object>();
+            row.put("project_id",project);row.put("merchant_id",r.get("merchant_id"));row.put("item_id",r.get("item_id"));row.put("item_name",r.get("item_name"));
+            row.put("safety_stock",safety);row.put("sales_quantity",sold);row.put("available_quantity",available);row.put("in_transit_quantity",inTransit);
+            row.put("suggested_quantity",suggested);
+            row.put("reason","安全库存 "+safety+" ＋ 近 7 天销量 "+sold+" － 当前可用 "+available+" － 在途 "+inTransit+" ＝ 建议采购 "+suggested);
+            rows.add(row);
+        }
+        return rows;
         });
     }
     private boolean optionVisible(String project,String owner){

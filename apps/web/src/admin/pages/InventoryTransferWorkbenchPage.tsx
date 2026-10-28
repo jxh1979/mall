@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -92,7 +92,7 @@ type Disposition = {
 type TransferReturn = { id: string; lineId?: string; returnedQuantity?: number; traceCodes?: string[]; receivedBy?: string; receivedAt?: string };
 type Fulfillment = { payableItemId?: string | null; lines?: FulfillmentLine[]; dispositions?: Disposition[]; returns?: TransferReturn[] };
 type MerchantLite = { id: string; displayName?: string; merchantName?: string; companyName?: string };
-type ItemLite = { id: string; itemName?: string; itemCode?: string; unit?: string };
+type ItemLite = { id: string; itemName?: string; itemCode?: string; unit?: string; merchantId?: string };
 type ArApLite = {
   id: string;
   itemNo?: string;
@@ -185,6 +185,11 @@ function isBillable(order: TransferOrder): boolean {
 
 function isBorrowOrder(order?: TransferOrder | null): boolean {
   return order?.transferType === "lending" && order.lendingMode === "borrow";
+}
+
+/** 第十八批第 18 条：借调买断收货须入接收方本商户物品、本商户仓库库位（BSM:1201「「调」是买断，成交时所有权转移给接收方」）。 */
+function isLendingPurchase(order?: TransferOrder | null): boolean {
+  return order?.transferType === "lending" && order.lendingMode !== "borrow";
 }
 
 /** 借用单当前保管方：收货后在借入方，归还/处置完成后回到借出方；所有权始终是借出方（BSM L1201）。 */
@@ -290,6 +295,8 @@ export function InventoryTransferWorkbenchPage({
   const [createOpen, setCreateOpen] = React.useState(false);
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [scannedCodes, setScannedCodes] = React.useState("");
+  // 第十八批第 18 条：借调买断收货逐行选本商户物品（明细行 → 物品）。
+  const [purchaseItems, setPurchaseItems] = React.useState<Record<string, string>>({});
   // FS-019：借用单借出方交货扫码、借出方收货按行扫码归还、无法归还登记。
   const [shipOpen, setShipOpen] = React.useState(false);
   const [shipCodes, setShipCodes] = React.useState("");
@@ -324,6 +331,8 @@ export function InventoryTransferWorkbenchPage({
   const [unitPriceYuan, setUnitPriceYuan] = React.useState("0");
   const [traceCodes, setTraceCodes] = React.useState("");
   const [operatorNote, setOperatorNote] = React.useState("");
+  // 第十八批第 18 条：借调交货扣出让方这个库位的库存。
+  const [fromLocationId, setFromLocationId] = React.useState("");
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -501,6 +510,7 @@ export function InventoryTransferWorkbenchPage({
     if (!editingId && transferType === "lending" && fromOwnerId === toOwnerId) return "借调的出让方与接收方不能是同一个商户。";
     // BSM L1201「不可消费物品（设备、器具等）的借用必须约定归还时间」。
     if (!editingId && transferType === "lending" && lendingMode === "borrow" && !returnDueAt) return "请填写约定归还时间。";
+    if (!editingId && transferType === "lending" && !fromLocationId.trim()) return "请填写出货库位。";
     if (!itemId) return "请选择物料。";
     const qty = Number(quantity);
     if (!Number.isFinite(qty) || qty <= 0) return "数量必须大于 0。";
@@ -545,6 +555,7 @@ export function InventoryTransferWorkbenchPage({
         fromOwnerId,
         toOwnerType: "merchant",
         toOwnerId,
+        fromLocationId: transferType === "lending" ? fromLocationId.trim() : null,
         operatorNote: operatorNote || null,
         lines: [formLine()],
         returnDueAt: transferType === "lending" && lendingMode === "borrow" ? new Date(returnDueAt).toISOString() : null,
@@ -557,6 +568,11 @@ export function InventoryTransferWorkbenchPage({
 
   function receiveValidation(): string | null {
     if (!selected) return "请先选中一张流转单。";
+    if (isLendingPurchase(selected)) {
+      if (!receiptWarehouse.trim()) return "请选择收货仓库。";
+      if (!receiptLocation.trim()) return "请填写收货库位。";
+      if ((selected.lines ?? []).some((line) => !purchaseItems[line.id])) return "请为每一行选择本商户物品。";
+    }
     if (selectedCodes.length === 0) return null;
     const scanned = splitCodes(scannedCodes);
     if (scanned.length === 0) return `本单随货 ${selectedCodes.length} 个溯源码，收货必须逐码扫齐后再提交。`;
@@ -676,6 +692,9 @@ export function InventoryTransferWorkbenchPage({
     setFormError("");
     if (selected?.status !== "pending_receipt") {
       setScannedCodes("");
+      setReceiptWarehouse(storeWarehouses[0]?.id ?? "");
+      setReceiptLocation("");
+      setPurchaseItems({});
       setReceiveOpen(true);
       return;
     }
@@ -1105,6 +1124,11 @@ export function InventoryTransferWorkbenchPage({
               ).map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
             </select>
           </label>
+          {transferType === "lending" ? (
+            <label>出货库位（出让方本商户库位，交货时从这里扣库存）
+              <input data-testid="inventory-transfer-create-from-location" value={fromLocationId} onChange={(event) => setFromLocationId(event.target.value)} />
+            </label>
+          ) : null}
           <label>接收方（商户）
             <select data-testid="inventory-transfer-create-to" value={toOwnerId} onChange={(event) => setToOwnerId(event.target.value)}>
               <option value="">请选择</option>
@@ -1247,10 +1271,39 @@ export function InventoryTransferWorkbenchPage({
           onSubmit={() => selected && void runAction(
             "inventory_transfer_order_received",
             `/api/v1/inventory/transfer-orders/${selected.id}/receive`,
-            { scannedTraceCodes: splitCodes(scannedCodes) },
+            isLendingPurchase(selected)
+              ? {
+                  scannedTraceCodes: splitCodes(scannedCodes),
+                  warehouseId: receiptWarehouse.trim(),
+                  locationId: receiptLocation.trim(),
+                  lines: (selected.lines ?? []).map((line) => ({ lineId: line.id, itemId: purchaseItems[line.id] })),
+                }
+              : { scannedTraceCodes: splitCodes(scannedCodes) },
             "收货",
           )}
         >
+          {isLendingPurchase(selected) ? (
+            <>
+              <label>收货仓库（本商户在用仓库）
+                {storeWarehouses.length > 0 ? (
+                  <select data-testid="inventory-transfer-receive-warehouse" value={receiptWarehouse} onChange={(event) => setReceiptWarehouse(event.target.value)}>
+                    {storeWarehouses.map((row) => <option key={row.id} value={row.id}>{row.name ?? row.id}</option>)}
+                  </select>
+                ) : (
+                  <input data-testid="inventory-transfer-receive-warehouse" placeholder="本商户仓库编号" value={receiptWarehouse} onChange={(event) => setReceiptWarehouse(event.target.value)} />
+                )}
+              </label>
+              <label>收货库位<input data-testid="inventory-transfer-receive-location" value={receiptLocation} onChange={(event) => setReceiptLocation(event.target.value)} /></label>
+              {(selected?.lines ?? []).map((line) => (
+                <label key={line.id}>{itemName(line.itemId)} × {line.quantity ?? 0} 入本商户物品
+                  <select data-testid={`inventory-transfer-receive-item-${line.id}`} value={purchaseItems[line.id] ?? ""} onChange={(event) => setPurchaseItems((current) => ({ ...current, [line.id]: event.target.value }))}>
+                    <option value="">请选择</option>
+                    {items.filter((row) => row.merchantId === selected?.toOwnerId).map((row) => <option key={row.id} value={row.id}>{itemName(row.id)}</option>)}
+                  </select>
+                </label>
+              ))}
+            </>
+          ) : null}
           <label>扫描到的溯源码（多个用空格或逗号分隔）
             <input data-testid="inventory-transfer-receive-codes" value={scannedCodes} onChange={(event) => setScannedCodes(event.target.value)} />
           </label>

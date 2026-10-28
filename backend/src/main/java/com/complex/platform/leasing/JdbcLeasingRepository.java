@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -112,14 +112,17 @@ class JdbcLeasingRepository implements LeasingRepository {
     public LeasingIntentRecord saveIntent(LeasingIntentRecord intent) {
         jdbcTemplate.update("""
                 INSERT INTO leasing_intents (id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms,
-                        last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at)
+                        last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at,
+                        pending_stage, pending_review_id)
                 VALUES (:id, :lead_id, :stage, :intended_space_id, :intended_area_sqm, CAST(:rent_terms AS jsonb),
-                        :last_stage_change_at, :last_stage_change_by, :project_id, :created_at, :updated_at)
+                        :last_stage_change_at, :last_stage_change_by, :project_id, :created_at, :updated_at,
+                        :pending_stage, :pending_review_id)
                 ON CONFLICT (id) DO UPDATE SET
                     stage = EXCLUDED.stage, intended_space_id = EXCLUDED.intended_space_id,
                     intended_area_sqm = EXCLUDED.intended_area_sqm, rent_terms = EXCLUDED.rent_terms,
                     last_stage_change_at = EXCLUDED.last_stage_change_at,
-                    last_stage_change_by = EXCLUDED.last_stage_change_by, updated_at = EXCLUDED.updated_at
+                    last_stage_change_by = EXCLUDED.last_stage_change_by, updated_at = EXCLUDED.updated_at,
+                    pending_stage = EXCLUDED.pending_stage, pending_review_id = EXCLUDED.pending_review_id
                 """, new MapSqlParameterSource()
                 .addValue("id", intent.id())
                 .addValue("lead_id", intent.leadId())
@@ -131,7 +134,9 @@ class JdbcLeasingRepository implements LeasingRepository {
                 .addValue("last_stage_change_by", intent.lastStageChangeBy())
                 .addValue("project_id", intent.projectId())
                 .addValue("created_at", timestampWithTimeZone(intent.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(intent.updatedAt())));
+                .addValue("updated_at", timestampWithTimeZone(intent.updatedAt()))
+                .addValue("pending_stage", intent.pendingStage())
+                .addValue("pending_review_id", intent.pendingReviewId()));
         return intent;
     }
 
@@ -139,7 +144,8 @@ class JdbcLeasingRepository implements LeasingRepository {
     public List<LeasingIntentRecord> listIntents(String projectScope) {
         return jdbcTemplate.query("""
                 SELECT id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms,
-                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at
+                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at,
+                       pending_stage, pending_review_id
                   FROM leasing_intents
                 """
                 + (projectScope != null ? " WHERE project_id = :project_id" : "")
@@ -151,9 +157,20 @@ class JdbcLeasingRepository implements LeasingRepository {
     public Optional<LeasingIntentRecord> findIntentById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms,
-                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at
+                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at,
+                       pending_stage, pending_review_id
                   FROM leasing_intents WHERE id = :id
                 """, Map.of("id", id), this::mapIntent).stream().findFirst();
+    }
+
+    @Override
+    public Optional<LeasingIntentRecord> findIntentByPendingReviewId(String reviewId) {
+        return jdbcTemplate.query("""
+                SELECT id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms,
+                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at,
+                       pending_stage, pending_review_id
+                  FROM leasing_intents WHERE pending_review_id = :review_id FOR UPDATE
+                """, Map.of("review_id", reviewId), this::mapIntent).stream().findFirst();
     }
 
     // ---------- CG-01：合同 ↔ 意向 ↔ 线索（合同生效后置已签约） ----------
@@ -168,7 +185,8 @@ class JdbcLeasingRepository implements LeasingRepository {
     public Optional<LeasingIntentRecord> findIntentByContractId(String contractId) {
         return jdbcTemplate.query("""
                 SELECT id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms,
-                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at
+                       last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at,
+                       pending_stage, pending_review_id
                   FROM leasing_intents WHERE contract_id = :contract_id
                  ORDER BY updated_at DESC, id
                  LIMIT 1
@@ -310,7 +328,7 @@ class JdbcLeasingRepository implements LeasingRepository {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 500 : Math.min(size, 500);
         String cols = "id, lead_id, stage, intended_space_id, intended_area_sqm, rent_terms::text AS rent_terms, "
-                + "last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at";
+                + "last_stage_change_at, last_stage_change_by, project_id, created_at, updated_at, pending_stage, pending_review_id";
         String where = projectScope != null ? " WHERE project_id = :project_id" : "";
         MapSqlParameterSource params = new MapSqlParameterSource("project_id", projectScope);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM leasing_intents" + where, params, Long.class);
@@ -388,7 +406,8 @@ class JdbcLeasingRepository implements LeasingRepository {
                 rs.getString("id"), rs.getString("lead_id"), rs.getString("stage"), rs.getString("intended_space_id"),
                 rs.getBigDecimal("intended_area_sqm"), readMap(rs.getString("rent_terms")),
                 nullableInstant(rs, "last_stage_change_at"), rs.getString("last_stage_change_by"),
-                rs.getString("project_id"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"));
+                rs.getString("project_id"), nullableInstant(rs, "created_at"), nullableInstant(rs, "updated_at"),
+                rs.getString("pending_stage"), rs.getString("pending_review_id"));
     }
 
     private LeasingBrandRecord mapBrand(ResultSet rs, int n) throws SQLException {

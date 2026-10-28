@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -79,7 +79,8 @@ function getResolver(overrides: { arapFails?: boolean } = {}) {
     if (path === "/api/v1/inventory/transfer-orders") return Promise.resolve(ORDERS);
     if (path.includes("/inventory/supply-entities")) return Promise.resolve([{ id: "supply_1", name: "平台酒水供货公司" }]);
     if (path.includes("/platform/merchants")) return Promise.resolve([{ id: "merchant-1", displayName: "一号商户" }, { id: "merchant-A", displayName: "A 商户" }, { id: "merchant-B", displayName: "B 商户" }]);
-    if (path.includes("/inventory/items")) return Promise.resolve([{ id: "item-1", itemName: "威士忌" }]);
+    // 第十八批第 18 条：物品按商户归属——item-1 属出让方 A 商户，item-9 属接收方一号商户（买断收货只列接收方本商户物品）。
+    if (path.includes("/inventory/items")) return Promise.resolve([{ id: "item-1", itemName: "威士忌", merchantId: "merchant-A" }, { id: "item-9", itemName: "一号店威士忌", merchantId: "merchant-1" }]);
     if (path.includes("/finance/ar-ap-items")) {
       return overrides.arapFails ? Promise.reject(new Error("无权限")) : Promise.resolve(ARAP);
     }
@@ -110,6 +111,11 @@ function renderPage(api: AdminApiClient = makeApi(), extra: Partial<AdminPagePro
     ...extra,
   };
   render(<InventoryTransferWorkbenchPage {...props} />);
+}
+
+/** 列表到达后 useSelectedRow 默认选中首行、TablePager 复位第 1 页都在被动 effect 里补做；首行单选框被勾上＝这批 effect 已执行，再点选才不会被改回。 */
+async function waitDefaultSelection() {
+  await waitFor(() => expect((screen.getAllByTestId(/^inventory-transfer-select-/)[0] as HTMLInputElement).checked).toBe(true));
 }
 
 afterEach(() => {
@@ -170,11 +176,33 @@ describe("跨主体调拨与借调工作台：货与账一眼可查", () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-select-trf_lend_ship")).toBeInTheDocument());
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_lend_ship"));
     fireEvent.click(screen.getByTestId("inventory-transfer-receive-open"));
-    fireEvent.change(await screen.findByTestId("inventory-transfer-receive-codes"), { target: { value: "TRACE-A" } });
+    fireEvent.change(await screen.findByTestId("inventory-transfer-receive-location"), { target: { value: "loc-1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-receive-item-l1s"), { target: { value: "item-9" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-receive-codes"), { target: { value: "TRACE-A" } });
     fireEvent.click(screen.getByTestId("inventory-transfer-receive-submit"));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-receive")).toHaveTextContent("与本单应扫的 2 个不一致"));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  // 第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货入接收方本商户物品与仓库库位，未选物品被前端拦下不发请求。
+  it("借调买断收货须选收货仓库、库位与本商户物品：未选物品被拦下，不发请求", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-select-trf_lend_ship")).toBeInTheDocument());
+    await waitDefaultSelection();
+    fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_lend_ship"));
+    fireEvent.click(screen.getByTestId("inventory-transfer-receive-open"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-receive-item-l1s")).not.toBeNull());
+    expect(screen.getByTestId("inventory-transfer-receive-warehouse")).toHaveValue("wh-1");
+    const options = Array.from(screen.getByTestId("inventory-transfer-receive-item-l1s").querySelectorAll("option")).map((option) => option.getAttribute("value"));
+    expect(options).toEqual(["", "item-9"]);
+    fireEvent.change(screen.getByTestId("inventory-transfer-receive-location"), { target: { value: "loc-1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-receive-codes"), { target: { value: "TRACE-A TRACE-B" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-receive-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-receive")).toHaveTextContent("请为每一行选择本商户物品"));
     expect(post).not.toHaveBeenCalled();
   });
 
@@ -182,13 +210,16 @@ describe("跨主体调拨与借调工作台：货与账一眼可查", () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-select-trf_lend_ship")).toBeInTheDocument());
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_lend_ship"));
     fireEvent.click(screen.getByTestId("inventory-transfer-receive-open"));
-    fireEvent.change(await screen.findByTestId("inventory-transfer-receive-codes"), { target: { value: "TRACE-A TRACE-B" } });
+    fireEvent.change(await screen.findByTestId("inventory-transfer-receive-location"), { target: { value: "loc-1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-receive-item-l1s"), { target: { value: "item-9" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-receive-codes"), { target: { value: "TRACE-A TRACE-B" } });
     fireEvent.click(screen.getByTestId("inventory-transfer-receive-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/inventory/transfer-orders/trf_lend_ship/receive",
-      { scannedTraceCodes: ["TRACE-A", "TRACE-B"] },
+      { scannedTraceCodes: ["TRACE-A", "TRACE-B"], warehouseId: "wh-1", locationId: "loc-1", lines: [{ lineId: "l1s", itemId: "item-9" }] },
     ));
   });
 
@@ -204,6 +235,7 @@ describe("跨主体调拨与借调工作台：货与账一眼可查", () => {
   it("单据状态决定动作可用：在途单可收货不可发货，借用已收货单可归还", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-select-trf_lend_ship")).toBeInTheDocument());
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_lend_ship"));
     expect(screen.getByTestId("inventory-transfer-ship")).toBeDisabled();
     expect(screen.getByTestId("inventory-transfer-receive-open")).toBeEnabled();
@@ -221,6 +253,7 @@ describe("门店要货九态：按状态提交、审核、拣配、出库、送�
     renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-row-trf_draft")).toHaveTextContent("草稿"));
     expect(screen.getByTestId("inventory-transfer-posting-trf_draft")).not.toHaveTextContent("账未挂");
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_draft"));
     fireEvent.click(screen.getByTestId("inventory-transfer-edit-open"));
     fireEvent.change(await screen.findByTestId("inventory-transfer-create-quantity"), { target: { value: "3" } });
@@ -238,6 +271,7 @@ describe("门店要货九态：按状态提交、审核、拣配、出库、送�
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-row-trf_pending_supplier_review")).toHaveTextContent("待供货主体审核"));
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_pending_supplier_review"));
     fireEvent.click(screen.getByTestId("inventory-transfer-review-open"));
     fireEvent.change(await screen.findByTestId("inventory-transfer-review-decision"), { target: { value: "rejected" } });
@@ -256,6 +290,7 @@ describe("门店要货九态：按状态提交、审核、拣配、出库、送�
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-row-trf_pending_picking")).toHaveTextContent("待拣配"));
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_pending_picking"));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-pick")).toBeEnabled());
     expect(screen.getByTestId("inventory-transfer-ship")).toBeDisabled();
@@ -285,6 +320,7 @@ describe("门店要货签收与差异处理：按行签收、出库后不可直�
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-row-trf_pending_receipt")).toHaveTextContent("待签收"));
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_pending_receipt"));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-receive-open")).toBeEnabled());
     fireEvent.click(screen.getByTestId("inventory-transfer-receive-open"));
@@ -308,6 +344,7 @@ describe("门店要货签收与差异处理：按行签收、出库后不可直�
   it("已出库在途的单不能直接取消", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-select-trf_lend_ship")).toBeInTheDocument());
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_lend_ship"));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-cancel")).toBeDisabled());
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_discrepancy"));
@@ -320,6 +357,7 @@ describe("门店要货签收与差异处理：按行签收、出库后不可直�
     const postForm = vi.fn().mockResolvedValue({ id: "att-1" });
     renderPage({ ...makeApi(getResolver(), post), postForm });
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-row-trf_discrepancy")).toHaveTextContent("差异处理中"));
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_discrepancy"));
     await waitFor(() => expect(screen.queryByTestId("inventory-transfer-disposition-open")).not.toBeNull());
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-disposition-open")).toBeEnabled());
@@ -351,6 +389,7 @@ describe("门店要货签收与差异处理：按行签收、出库后不可直�
     const post = vi.fn().mockResolvedValue({ id: "trd_1", status: "approved" });
     renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-row-trf_discrepancy")).toHaveTextContent("差异处理中"));
+    await waitDefaultSelection();
     fireEvent.click(screen.getByTestId("inventory-transfer-select-trf_discrepancy"));
     await waitFor(() => expect(screen.queryByTestId("inventory-transfer-disposition-open")).not.toBeNull());
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-disposition-open")).toBeEnabled());
@@ -371,6 +410,7 @@ describe("门店要货签收与差异处理：按行签收、出库后不可直�
 describe("借用只转保管责任：约定归还时间、交货与收货扫码归还、无法归还双方确认与处置", () => {
   /** 借用单夹具在列表第 2 页：翻页后选中。 */
   async function selectOnPageTwo(id: string) {
+    await waitDefaultSelection();
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-pager-next")).toBeEnabled());
     fireEvent.click(screen.getByTestId("inventory-transfer-pager-next"));
     await waitFor(() => expect(screen.queryByTestId(`inventory-transfer-select-${id}`)).not.toBeNull());
@@ -386,6 +426,26 @@ describe("借用只转保管责任：约定归还时间、交货与收货扫码�
     fireEvent.change(screen.getByTestId("inventory-transfer-create-item"), { target: { value: "item-1" } });
   }
 
+  // 第十八批第 18 条（ENUM:162「借出」）：借调交货扣出让方库位库存，建单须填出货库位。
+  it("借调建单必须填出货库位：缺填被前端拦下不发请求，填了按后端契约提交 fromLocationId", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(getResolver(), post));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create-open")).toBeEnabled());
+    await openCreateAsBorrow();
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-create-from-location")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-return-due"), { target: { value: "2026-12-31T10:00" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create")).toHaveTextContent("请填写出货库位。"));
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-from-location"), { target: { value: "loc-A" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/inventory/transfer-orders", expect.objectContaining({
+      transferType: "lending",
+      fromOwnerId: "merchant-A",
+      fromLocationId: "loc-A",
+    })));
+  });
+
   it("借用建单必须填约定归还时间：缺填被前端拦下不发请求，填了按后端契约提交 returnDueAt", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(getResolver(), post));
@@ -396,6 +456,7 @@ describe("借用只转保管责任：约定归还时间、交货与收货扫码�
     await waitFor(() => expect(screen.getByTestId("inventory-transfer-create")).toHaveTextContent("请填写约定归还时间"));
     expect(post).not.toHaveBeenCalled();
     fireEvent.change(screen.getByTestId("inventory-transfer-create-return-due"), { target: { value: "2026-12-31T10:00" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-from-location"), { target: { value: "loc-A" } });
     fireEvent.click(screen.getByTestId("inventory-transfer-create-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/inventory/transfer-orders", expect.objectContaining({
       transferType: "lending",

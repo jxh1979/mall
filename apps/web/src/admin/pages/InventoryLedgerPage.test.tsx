@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -223,5 +223,80 @@ describe("InventoryLedgerPage 成本台账（V296 移动加权）", () => {
     const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
     expect(drawer).toContain("¥5.00");
     expect(drawer).toContain("¥15.00");
+  });
+});
+
+// 第十八批第 24 条 24-R5（ENUM:164「或由库房主管以上岗位手工标记为高价值，标记与取消标记都必须填写理由并留痕，一线库管无此权限」）。
+describe("InventoryLedgerPage 手工标记高价值（第十八批第 24 条）", () => {
+  it("点「标记高价值」理由为空不发请求；填理由提交 POST {idempotency_key, manual_high_value: true, reason}", async () => {
+    const api = makeApi();
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("inventory-item-high-value-mark-i-1")?.textContent ?? "").toContain("标记高价值"));
+
+    fireEvent.click(screen.getByTestId("inventory-item-high-value-mark-i-1"));
+    fireEvent.click(screen.getByTestId("inventory-high-value-mark-submit"));
+    expect(screen.getByTestId("inventory-high-value-mark-error").textContent).toContain("请填写理由");
+    expect(api.post).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId("inventory-high-value-mark-reason"), { target: { value: "进口名酒按高价值管" } });
+    fireEvent.click(screen.getByTestId("inventory-high-value-mark-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/inventory/items/i-1/high-value-mark",
+      expect.objectContaining({ manual_high_value: true, reason: "进口名酒按高价值管", idempotency_key: expect.any(String) })));
+  });
+
+  it("已标记的物料给「取消标记」并提交 manual_high_value: false；不持库房主管复核码的账号按钮不可用", async () => {
+    const marked = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/inventory/items")) return Promise.resolve([{ ...ITEMS[0], manualHighValue: true }]);
+      return getResolver()(path);
+    });
+    const api = makeApi(marked);
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("inventory-item-high-value-mark-i-1")?.textContent ?? "").toContain("取消标记"));
+    fireEvent.click(screen.getByTestId("inventory-item-high-value-mark-i-1"));
+    fireEvent.change(screen.getByTestId("inventory-high-value-mark-reason"), { target: { value: "已降为普通酒水" } });
+    fireEvent.click(screen.getByTestId("inventory-high-value-mark-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/inventory/items/i-1/high-value-mark",
+      expect.objectContaining({ manual_high_value: false, reason: "已降为普通酒水" })));
+  });
+
+  it("只持库存移动权限的一线库管看得到标记状态，但「标记高价值」按钮不可用", async () => {
+    render(<InventoryLedgerPage api={makeApi()} user={{ id: "u2", username: "库管", accountType: "staff" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()}
+      effectivePermissions={{ status: "ready", value: { grants: ["inventory.stock.move"], denies: [], wildcard: false } }} />);
+    await waitFor(() => expect(screen.queryByTestId("inventory-item-high-value-mark-i-1")).not.toBeNull());
+    expect((screen.getByTestId("inventory-item-high-value-mark-i-1") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+// 第十八批第 33 条 33-R4：已有物料的安全库存在物料表修改（权限与新建物料同码 inventory.stock.move），采购建议量按它计算。
+describe("InventoryLedgerPage 修改物料安全库存（第十八批第 33 条）", () => {
+  const withSafetyStock = () => vi.fn().mockImplementation((path: string) => {
+    if (path.includes("/inventory/items")) return Promise.resolve([{ ...ITEMS[0], minQuantity: 8 }]);
+    return getResolver()(path);
+  });
+
+  it("物料表显示安全库存；改为负数不发请求，改为 20 提交 POST {idempotency_key, min_quantity: 20}", async () => {
+    const api = makeApi(withSafetyStock());
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("inventory-item-safety-stock-i-1")).not.toBeNull());
+    expect(screen.getByTestId("inventory-item-min-quantity-i-1").textContent).toBe("8");
+    fireEvent.click(screen.getByTestId("inventory-item-safety-stock-i-1"));
+    expect((screen.getByTestId("inventory-safety-stock-input") as HTMLInputElement).value).toBe("8");
+    fireEvent.change(screen.getByTestId("inventory-safety-stock-input"), { target: { value: "-1" } });
+    fireEvent.click(screen.getByTestId("inventory-safety-stock-submit"));
+    expect(screen.getByTestId("inventory-safety-stock-error").textContent).toContain("安全库存须为不小于 0 的整数");
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("inventory-safety-stock-input"), { target: { value: "20" } });
+    fireEvent.click(screen.getByTestId("inventory-safety-stock-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/inventory/items/i-1/safety-stock",
+      expect.objectContaining({ min_quantity: 20, idempotency_key: expect.any(String) })));
+  });
+
+  it("不持库存移动权限（与新建物料同码）的账号看得到安全库存，但修改按钮不可用", async () => {
+    render(<InventoryLedgerPage api={makeApi(withSafetyStock())} user={{ id: "u3", username: "查看", accountType: "staff" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()}
+      effectivePermissions={{ status: "ready", value: { grants: ["inventory.stock.view"], denies: [], wildcard: false } }} />);
+    await waitFor(() => expect(screen.queryByTestId("inventory-item-safety-stock-i-1")).not.toBeNull());
+    expect((screen.getByTestId("inventory-item-safety-stock-i-1") as HTMLButtonElement).disabled).toBe(true);
   });
 });

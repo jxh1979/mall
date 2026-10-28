@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -18,7 +18,9 @@ import com.complex.platform.evidence.TraceabilityService;
 import com.complex.platform.evidence.TraceabilityStepRecord;
 import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import com.complex.platform.gate.TerminalSwitchGuard;
+import com.complex.platform.inventory.dto.InventoryItemHighValueMarkRequest;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
+import com.complex.platform.inventory.dto.InventoryItemSafetyStockRequest;
 import com.complex.platform.inventory.dto.InventorySupplierRequest;
 import com.complex.platform.inventory.dto.InventoryRiskScanRequest;
 import com.complex.platform.inventory.dto.InventoryStockBatchRequest;
@@ -213,7 +215,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         // 这正是业务口径的从严侧——「没接线」绝不能被伪装成「低价值放行」。
         this.highValueDecisionService = highValueDecisionService != null
                 ? highValueDecisionService
-                : new HighValueDecisionService(repository, authorizationService);
+                : new HighValueDecisionService(repository);
         this.highValueReviewService = new InventoryHighValueReviewService(
                 repository, idempotencyService, auditEventService, authorizationService,
                 evidenceAttachmentValidator);
@@ -265,12 +267,100 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             now,
                             now,
                             merchantId,
-                            Boolean.TRUE.equals(actual.manualHighValue()),
+                            // 第十八批第 24 条：手工标记高价值限库房主管，走 markInventoryItemHighValue，建物料一律不标。
+                            false,
                             Boolean.TRUE.equals(actual.nonConsumable())
                     );
                     return repository.saveInventoryItem(item);
                 }
         );
+    }
+
+    /**
+     * 第十八批第 24 条 24-R5：物料手工标记或取消标记高价值（ENUM:164「或由库房主管以上岗位手工标记为高价值，标记与取消标记都必须
+     * 填写理由并留痕，一线库管无此权限」；BSM:1196「限库房主管及以上岗位」）。权限复用库房主管复核码 inventory.high_value.review
+     * （与主管复核同一人群，一线库管不持）；理由必填；物料须存在且属本商户；值未变 409；成功审计留前后值与理由。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.high_value.review")
+    @Transactional
+    public InventoryItemRecord markInventoryItemHighValue(String itemId, InventoryItemHighValueMarkRequest request) {
+        String id = requireText(itemId, "item_id");
+        String idempotencyKey = request == null ? null : request.idempotencyKey();
+        try {
+            return idempotencyService.execute("markInventoryItemHighValue:" + id, idempotencyKey, request, () -> {
+                InventoryItemHighValueMarkRequest actual = requireRequest(request);
+                if (actual.manualHighValue() == null) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "manual_high_value is required");
+                }
+                String reason = requireText(actual.reason(), "reason");
+                InventoryItemRecord item = repository.findInventoryItemById(id)
+                        .orElseThrow(() -> ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
+                authorizationService.currentMerchantScope().ifPresent(scope -> {
+                    if (!scope.equals(item.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该库存商品不属于当前商户");
+                    }
+                });
+                boolean after = actual.manualHighValue();
+                if (item.manualHighValue() == after) {
+                    throw ApiException.conflict("INVENTORY_ITEM_HIGH_VALUE_MARK_UNCHANGED",
+                            after ? "该物料已手工标记为高价值" : "该物料没有手工标记高价值，无需取消");
+                }
+                InventoryItemRecord saved = repository.saveInventoryItem(new InventoryItemRecord(
+                        item.id(), item.skuCode(), item.itemName(), item.itemType(), item.unit(), item.barcode(),
+                        item.traceRequired(), item.minQuantity(), item.status(), item.createdAt(), Instant.now(),
+                        item.merchantId(), after, item.nonConsumable()));
+                auditEventService.recordSuccess("inventory.item.high_value_marked", "inventory.high_value.review",
+                        "inventory_item", id, null, idempotencyKey,
+                        Map.of("manual_high_value_before", item.manualHighValue(), "manual_high_value_after", after,
+                                "reason", reason));
+                return saved;
+            }, InventoryItemRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("inventory.item.high_value_mark_failed", "inventory.high_value.review",
+                    "inventory_item", id, null, idempotencyKey, codeOf(exception));
+            throw exception;
+        }
+    }
+
+    /**
+     * 第十八批第 33 条 33-R4：修改已有物料的安全库存（inventory_items.min_quantity）。物料原只能在新建时写安全库存，
+     * 第十八批裁决 5 的采购建议量要用它，故补修改入口：权限与新建物料同码 inventory.stock.move；物料须存在且属本商户；
+     * 安全库存必填、不得为负；成功审计留修改前后值，失败（含无权限）记失败事件。只改安全库存，不开放别的物料字段。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stock.move")
+    @Transactional
+    public InventoryItemRecord updateInventoryItemSafetyStock(String itemId, InventoryItemSafetyStockRequest request) {
+        String id = requireText(itemId, "item_id");
+        String idempotencyKey = request == null ? null : request.idempotencyKey();
+        try {
+            authorizationService.requirePermission("inventory.stock.move");
+            return idempotencyService.execute("updateInventoryItemSafetyStock:" + id, idempotencyKey, request, () -> {
+                InventoryItemSafetyStockRequest actual = requireRequest(request);
+                if (actual.minQuantity() == null) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "min_quantity is required");
+                }
+                int minQuantity = nonNegativeOrDefault(actual.minQuantity(), 0, "min_quantity");
+                InventoryItemRecord item = repository.findInventoryItemById(id)
+                        .orElseThrow(() -> ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
+                authorizationService.currentMerchantScope().ifPresent(scope -> {
+                    if (!scope.equals(item.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该库存商品不属于当前商户");
+                    }
+                });
+                InventoryItemRecord saved = repository.saveInventoryItem(new InventoryItemRecord(
+                        item.id(), item.skuCode(), item.itemName(), item.itemType(), item.unit(), item.barcode(),
+                        item.traceRequired(), minQuantity, item.status(), item.createdAt(), Instant.now(),
+                        item.merchantId(), item.manualHighValue(), item.nonConsumable()));
+                auditEventService.recordSuccess("inventory.item.safety_stock_updated", "inventory.stock.move",
+                        "inventory_item", id, null, idempotencyKey,
+                        Map.of("min_quantity_before", item.minQuantity(), "min_quantity_after", minQuantity));
+                return saved;
+            }, InventoryItemRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("inventory.item.safety_stock_update_failed", "inventory.stock.move",
+                    "inventory_item", id, null, idempotencyKey, codeOf(exception));
+            throw exception;
+        }
     }
 
     public PageResponse<PurchaseRequestRecord> listPurchaseRequests() {
@@ -2310,6 +2400,14 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     // variance_amount_cent：显式传入优先；缺省按 variance_qty × unitCostCents 估算（成本估算，带符号）。
                     long varianceAmountCent = resolveVarianceAmountCent(
                             actual.varianceAmountCent(), varianceQty, actual.unitCostCents());
+                    List<String> photos = actual.photoAttachmentIds() == null ? List.of() : actual.photoAttachmentIds();
+                    List<String> videos = actual.videoAttachmentIds() == null ? List.of() : actual.videoAttachmentIds();
+                    // 第十八批第 24 条 24-R4（ENUM:164「报损/盘点差异/存酒作废须照片+视频双证据+主管复核」；任务书 18D 裁决补充第 14 条
+                    // 「只高价值的要」）：高价值物品差异不为 0 须照片＋视频，缺即 400；低价值维持现状。主管复核即本差异的复核环节。
+                    if (varianceQty.signum() != 0
+                            && highValueDecisionService.decide(itemId, stocktake.merchantId()).highValue()) {
+                        highValueReviewService.requireEvidence(photos, videos);
+                    }
                     Instant now = Instant.now();
                     return repository.saveInventoryVariance(new InventoryVarianceRecord(
                             "variance_" + slug(actual.idempotencyKey()),
@@ -2328,7 +2426,10 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             null,
                             stocktake.merchantId(),
                             now,
-                            now));
+                            now,
+                            authorizationService.currentActor().id(),
+                            photos,
+                            videos));
                 }
         );
     }
@@ -2369,6 +2470,15 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                 "该库存差异不在待审核状态");
                     }
                     String reviewer = authorizationService.currentActor().id();
+                    // 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」）：录差异的人不得复核。
+                    if (reviewer.equals(variance.recordedBy())) {
+                        throw ApiException.conflict("INVENTORY_VARIANCE_SELF_REVIEW", "复核人不得是录入该差异的人");
+                    }
+                    // 第十八批第 24 条 24-R4：带照片＋视频的（高价值）差异批准前复核证据文件仍真实存在且类型对得上。
+                    if ("approved".equals(decision) && !variance.photoAttachmentIds().isEmpty()
+                            && !variance.videoAttachmentIds().isEmpty()) {
+                        highValueReviewService.requireEvidence(variance.photoAttachmentIds(), variance.videoAttachmentIds());
+                    }
                     Instant now = Instant.now();
                     // 条件 UPDATE WHERE review_status='pending'，受影响行数==1 才成功（防并发重复复核）。
                     int affected = repository.reviewInventoryVarianceIfPending(vId, decision, reviewer, now);
@@ -2460,7 +2570,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             variance.bookQty(), variance.countedQty(), variance.varianceQty(),
                             variance.varianceAmountCent(), variance.reason(), variance.supplierId(),
                             decision, reviewer, now, variance.postedArApItemId(),
-                            variance.merchantId(), variance.createdAt(), now);
+                            variance.merchantId(), variance.createdAt(), now, variance.recordedBy(),
+                            variance.photoAttachmentIds(), variance.videoAttachmentIds());
                 }
         );
     }
@@ -2953,6 +3064,10 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     if ("lending".equals(transferType) && !"merchant".equals(fromType)) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "借调必须发生在商户之间");
                     }
+                    if ("lending".equals(transferType)) {
+                        // 第十八批第 18 条（ENUM:162「借出」「调拨」）：借调交货扣出让方本商户库位库存，建单须带出货库位。
+                        requireText(actual.fromLocationId(), "from_location_id");
+                    }
                     if (actual.lines() == null || actual.lines().isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "调拨单至少需要一行明细");
                     }
@@ -2997,6 +3112,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     /**
      * 发货。FS-019（BSM L1201「借出时间取借出方交货扫码的时刻」「每一步都必须扫码」）：借用单有随货溯源码时，借出方交货须逐码扫齐
      * （扫描集与本单码集一致），每码记一行保管台账（借出时间）；提交编号仍为单号（M724-F06）。
+     * 第十八批第 18 条：借调交货由出让方本商户账号办理（平台管理员除外），按出货库位扣出让方库存——借用写借出（lend_out），买断写调拨（transfer）。
      */
     public InventoryTransferOrderRecord shipTransferOrder(String orderId, com.complex.platform.inventory.dto.ReceiveTransferRequest request) {
         String id = requireText(orderId, "order_id");
@@ -3013,18 +3129,55 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     if (!"created".equals(o.status())) {
                         throw ApiException.conflict("TRANSFER_ORDER_NOT_CREATED", "只有新建状态的调拨单才能发货");
                     }
+                    // 第十八批第 18 条（BSM:1201「借出时间取借出方交货扫码的时刻」）：本步起扣出让方库存，交货须由出让方办理。
+                    String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
+                    if (merchant == null ? !authorizationService.isPlatformAdmin(authorizationService.currentActor()) : !merchant.equals(o.fromOwnerId())) {
+                        throw ApiException.forbidden("LENDER_SHIP_ONLY", "交货须由借出方扫码办理");
+                    }
+                    Instant now = Instant.now();
                     if (isBorrow(o)) {
-                        Instant now = Instant.now();
                         java.util.LinkedHashSet<String> orderCodes = requireScannedAll(o, request == null ? null : request.scannedTraceCodes());
+                        shipOutLender(o, "lend_out", now);
                         int seq = 0;
                         for (String code : orderCodes) {
                             repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(
                                     o.id() + "_s" + (seq++), code, o.fromOwnerType(), o.fromOwnerId(),
                                     o.fromOwnerType(), o.fromOwnerId(), o.id(), now, InventoryTraceOwnershipHistoryRecord.CUSTODY));
                         }
+                    } else {
+                        shipOutLender(o, "transfer", now);
                     }
                     return repository.saveTransferOrder(withTransferStatus(o, "shipped"));
                 });
+    }
+
+    /**
+     * 第十八批第 18 条（ENUM:162 库存流水「调拨」「借出（跨主体借调中不可消费物品交付给借入方）」；DEC-R7-04）：借调交货按行扣出让方
+     * 出货库位库存并写流水——借用写借出（lend_out），不消耗批次（货要回来，批次只是追溯辅助层、余额权威）；买断写调拨（transfer），
+     * 按 FEFO 消耗批次、成本按移动加权转出。扣减带出让方商户谓词：可用不足或库位不属出让方 409 STOCK_INSUFFICIENT，整单回滚。
+     */
+    private void shipOutLender(InventoryTransferOrderRecord o, String movementType, Instant now) {
+        List<InventoryTransferLineRecord> lines = repository.listTransferLinesByOrder(o.id());
+        if (lines.isEmpty()) {
+            return;
+        }
+        String locationId = o.fromLocationId();
+        if (locationId != null && repository.hasActiveStocktakeForWarehouse(locationId)) {
+            throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED", "仓库正在盘点中，盘点结束前库存变动已冻结");
+        }
+        String projectId = repository.findBarProjectId(o.fromOwnerId()).orElse(null);
+        String actor = currentActorId();
+        for (InventoryTransferLineRecord line : lines) {
+            if (locationId == null || repository.atomicDecreaseStockBalance(line.itemId(), locationId, line.quantity(), o.fromOwnerId()) == 0) {
+                throw ApiException.conflict("STOCK_INSUFFICIENT", "出货库位可用库存不足或不属借出方");
+            }
+            if ("transfer".equals(movementType)) {
+                consumeBatchesFefo(line.itemId(), locationId, line.quantity());
+            }
+            repository.saveStockMovement(new StockMovementRecord("movement_" + slug(o.id() + ":" + line.id() + ":" + movementType),
+                    movementType, line.itemId(), locationId, null, line.quantity(), null, null, "inventory_transfer", o.id(), null,
+                    actor, List.of(), "completed", now, o.fromOwnerId()), projectId);
+        }
     }
 
     private static boolean isBorrow(InventoryTransferOrderRecord o) {
@@ -3069,6 +3222,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     // 防调包:本单有随货溯源码时,收货必须逐码扫齐(空扫/漏扫拒绝),扫描集须与本单集完全一致。
                     java.util.LinkedHashSet<String> orderCodes = requireScannedAll(o, request == null ? null : request.scannedTraceCodes());
                     boolean borrow = isBorrow(o);
+                    if (!borrow) {
+                        // 第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货由接收方办理，入接收方本商户物品并写调拨流水；
+                        // 办理人、仓库与逐行物品的校验先于翻码与挂账，同一事务失败整单回滚。
+                        transferFlow.purchaseStockIn(o, request, now);
+                    }
                     int seq = 0;
                     for (String code : orderCodes) {
                         // 防调包(原子):CAS 只在归属=出让方或无主时翻转;命中0行且码已存在=归属第三方(或并发被改走)→拒并回滚。
@@ -3087,7 +3245,6 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                 o.toOwnerType(), o.toOwnerId(), o.id(), now,
                                 borrow ? InventoryTraceOwnershipHistoryRecord.CUSTODY : InventoryTraceOwnershipHistoryRecord.OWNERSHIP));
                     }
-                    // ponytail: 借调两侧库存流水未接（门店要货的合格入库见 InventoryTransferFlowService.receive）。
                     recordLendingSettlementOnReceipt(o, now);
                     return repository.saveTransferOrder(withTransferStatus(o, "received"));
                 });
@@ -3099,6 +3256,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
      * 只由借出方商户账号（平台管理员除外）在收货扫码时按行登记归还数量与码，可分多次；有码行逐件扫码且只能是本行借出、尚未归还、
      * 未登记无法归还的码；每码保管主体翻回借出方、在借单置空并记一行保管台账（changedAt 即实际归还时间）；
      * 全部数量都已归还或实物处置完成才置 returned，否则保持 received。所有权始终不动。
+     * 第十八批第 18 条（ENUM:162「归还（借入方将借用物品归还借出方）」）：每次归还按本次数量回借出方出货库位并写归还流水（lend_return），见 {@link #lendReturn}。
      */
     public InventoryTransferOrderRecord returnTransferOrder(String orderId,
             com.complex.platform.inventory.dto.ReturnTransferRequest request) {
@@ -3135,6 +3293,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     String actor = authorizationService.currentActor().id();
                     String returnNo = "trt_" + com.complex.platform.common.Hashing.idempotencyCode(
                             o.id() + ":" + requireText(actual.idempotencyKey(), "idempotency_key"));
+                    String backTo = o.fromLocationId();
+                    if (backTo != null && repository.hasActiveStocktakeForWarehouse(backTo)) {
+                        throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED", "仓库正在盘点中，盘点结束前库存变动已冻结");
+                    }
+                    String lenderProject = repository.findBarProjectId(o.fromOwnerId()).orElse(null);
                     Map<String, Integer> returnedNow = new java.util.HashMap<>();
                     int seq = 0;
                     for (com.complex.platform.inventory.dto.ReturnTransferRequest.ReturnTransferLineRequest in : lines) {
@@ -3170,6 +3333,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                         }
                         repository.saveTransferReturn(new InventoryTransferReturnRecord(returnNo + "_" + line.id(), returnNo, o.id(),
                                 line.id(), qty, codes, actor, now));
+                        lendReturn(o, line, qty, facts.returned(line.id()) + returnedNow.getOrDefault(line.id(), 0), backTo, lenderProject,
+                                returnNo, actor, now);
                         returnedNow.merge(line.id(), qty, Integer::sum);
                     }
                     boolean complete = byId.values().stream().allMatch(line ->
@@ -3179,6 +3344,24 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     }
                     return repository.saveTransferOrder(withTransferStatus(o, complete ? "returned" : "received"));
                 });
+    }
+
+    /**
+     * 第十八批第 18 条 归还流水：本次归还数量回借出方出货库位；成本按该行借出（lend_out）原出库总成本累计分摊——本次＝分摊(原成本, 已还＋本次)
+     * − 分摊(原成本, 已还)，各次之和恰为原成本（InventoryCostMath.sourceReturn「退回恢复原出库总成本；不能用已舍入单价乘数量，也不能以当前
+     * 其他批次均价代替」）。原成本未知（借出时无成本基准）按空传，沿用 sourceReturn 既有语义。无法归还的件处置完成不回库，不写本流水。
+     */
+    private void lendReturn(InventoryTransferOrderRecord o, InventoryTransferLineRecord line, int qty, int returnedBefore,
+            String locationId, String projectId, String returnNo, String actor, Instant now) {
+        repository.atomicIncreaseStockBalance(line.itemId(), locationId, qty, "balance_" + slug(line.itemId() + ":" + locationId),
+                o.fromOwnerId(), null, projectId);
+        Long cost = repository.findStockMovementTotalCostCent("movement_" + slug(o.id() + ":" + line.id() + ":lend_out"))
+                .map(total -> com.complex.platform.common.money.MoneyRounding.prorate(total, returnedBefore + qty, line.quantity())
+                        - com.complex.platform.common.money.MoneyRounding.prorate(total, returnedBefore, line.quantity()))
+                .orElse(null);
+        repository.saveSourceReturnMovement(new StockMovementRecord("movement_" + slug(returnNo + ":" + line.id() + ":lend_return"),
+                "lend_return", line.itemId(), null, locationId, qty, null, cost, "inventory_transfer", o.id(), null, actor, List.of(),
+                "completed", now, o.fromOwnerId()), projectId);
     }
 
     /**

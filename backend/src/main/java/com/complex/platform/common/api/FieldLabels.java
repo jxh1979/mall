@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -113,6 +113,11 @@ public final class FieldLabels {
         p("supervising_company_reason", "主管公司指定理由");
         p("subject_id", "主体");
         p("subject_type", "主体类型");
+        // 第十八批第 24 条 高价值判定阈值上下限、物料手工标记高价值、后台高价值复核页复核对象摘要。
+        p("high_value_threshold_min_cent", "高价值阈值下限");
+        p("high_value_threshold_max_cent", "高价值阈值上限");
+        p("manual_high_value", "人工认定高价值");
+        p("subject_summary", "复核对象摘要");
         p("partner_id", "合作方");
         p("partner_kind", "合作方类别");
         p("counterparty_id", "往来单位");
@@ -123,6 +128,12 @@ public final class FieldLabels {
         p("brand_id", "品牌");
         p("brand_name", "品牌名称");
         p("brand_type", "品牌类型");
+        // 第十八批第 30 条 招商黑名单例外放行与意向关键阶段主管确认。
+        p("blacklist_exception_id", "黑名单例外放行单");
+        p("pending_stage", "待确认阶段");
+        p("pending_review_id", "待确认复核单");
+        p("used_lead_id", "放行关联线索");
+        p("used_intent_id", "放行所建意向");
         p("bar_id", "酒吧");
         p("venue_id", "场地");
         p("venue_type", "场地类型");
@@ -180,6 +191,15 @@ public final class FieldLabels {
         p("visitor_name", "访客姓名");
         p("contact_name", "联系人");
         p("contact_phone", "联系电话");
+        // 第十八批第 31 条 经销合同指定经办人与停用后对方确认留证。
+        p("counterparty_confirmation_id", "对方确认留证记录");
+        p("designated_handler_at", "经办人指定时间");
+        p("designated_handler_by", "经办人指定人");
+        p("designated_handler_user_id", "指定经办人");
+        p("handler_user_id", "经办人");
+        p("matter_type", "确认事项");
+        p("related_object_id", "关联单号");
+        p("used_by_id", "使用人");
         p("phone", "手机号");
         p("receiver_phone", "接收人手机号");
         p("recipient", "接收人");
@@ -270,6 +290,8 @@ public final class FieldLabels {
         p("line.amount_cent", "明细行金额");
         p("delivered_items", "交付明细");
         p("quantity", "数量");
+        // 第十八批第 33 条：物料安全库存（采购建议量算式用）。
+        p("min_quantity", "安全库存");
         p("unit", "单位");
         p("variant_type", "人群/渠道");
         p("tip_amount_cent", "小费金额");

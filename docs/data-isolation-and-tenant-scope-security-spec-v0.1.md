@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V562**，发现 **258** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V566**，发现 **260** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -148,6 +148,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `customer_redemption_catalog_items` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |
 | `customer_restriction_settings` | `project_id` | direct | V537 | `V537__customer_identity_and_member_status.sql` |
 | `customer_stored_value_accounts` | `merchant_id` + `project_id` | direct | V090, V175 | `V090__member_stored_value_paid_membership_transfer.sql`<br>`V175__stored_value_merchant_scoped_cards.sql` |
+| `dealer_counterparty_confirmations` | `project_id` | direct | V565 | `V565__dealer_handler_counterparty_confirmations.sql` |
 | `dealers` | `project_id` | direct | V451 | `V451__dealer_admission_price_catalog.sql` |
 | `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
 | `dividend_legal_confirmations` | `merchant_id` | direct | V507 | `V507__dividend_legal_distributable_and_ticket_settled.sql` |
@@ -195,6 +196,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `inventory_trace_handovers` | `merchant_id` | direct | V139 | `V139__inventory_trace_handover_merchant_id.sql` |
 | `invoice_subject_rules` | `project_id` | direct | V362 | `V362__settlement_invoice_list.sql` |
 | `issued_entitlements` | `merchant_id` + `venue_id` | direct | V006 | `V006__p0_ticketing_verification.sql` |
+| `leasing_blacklist_exceptions` | `project_id` | direct | V563 | `V563__leasing_blacklist_exception_and_intent_key_stage_review.sql` |
 | `leasing_brands` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `leasing_follow_ups` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `leasing_intents` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |

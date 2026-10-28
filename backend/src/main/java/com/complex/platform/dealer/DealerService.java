@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -15,6 +15,7 @@ import com.complex.platform.dealer.dto.DealerCatalogLineRequest;
 import com.complex.platform.dealer.dto.DealerContractRequest;
 import com.complex.platform.dealer.dto.DealerCreateRequest;
 import com.complex.platform.dealer.dto.DealerDeactivateRequest;
+import com.complex.platform.dealer.dto.DealerDesignatedHandlerRequest;
 import com.complex.platform.dealer.dto.DealerInquiryRequest;
 import com.complex.platform.dealer.dto.DealerQuoteDecisionRequest;
 import com.complex.platform.dealer.dto.DealerQuoteRequest;
@@ -302,6 +303,29 @@ public class DealerService {
             }, DealerContractRecord.class);
         } catch (RuntimeException e) {
             audit.recordFailure("dealer.contract_create_failed", MANAGE, "dealer_contract", dealerId, null, request == null ? null : request.idempotencyKey(), codeOf(e));
+            throw e;
+        }
+    }
+
+    /**
+     * 第十八批第 31 条（BSM:1247「合同销售主体指定经办人」）：改派直接覆盖。不在此校验经办人权限——登记对方确认与停用后到账登记
+     * 各自要求 dealer.order.manage 与项目范围，指定了无权限的人只会在其办理时被拒。
+     */
+    @Transactional
+    public DealerContractRecord designateHandler(String contractId, DealerDesignatedHandlerRequest request) {
+        authorization.requirePermission(MANAGE);
+        try {
+            DealerContractRecord contract = requireContract(contractId);
+            String handler = requireText(request == null ? null : request.handlerUserId(), "handler_user_id");
+            return idempotency.execute("dealerContractHandler:" + contractId, request.idempotencyKey(), request, () -> {
+                repository.designateHandler(contractId, handler, actorId(), Instant.now());
+                audit.recordSuccess("dealer.contract.handler_designated", MANAGE, "dealer_contract", contractId, null, request.idempotencyKey(),
+                        meta("from", nz(contract.designatedHandlerUserId()), "to", handler));
+                return repository.findContract(contractId).orElseThrow();
+            }, DealerContractRecord.class);
+        } catch (RuntimeException e) {
+            audit.recordFailure("dealer.contract.handler_designate_failed", MANAGE, "dealer_contract", contractId, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(e));
             throw e;
         }
     }

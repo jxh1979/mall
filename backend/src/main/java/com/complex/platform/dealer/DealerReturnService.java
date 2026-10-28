@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -72,9 +72,12 @@ public class DealerReturnService {
     private final SupervisorReviewService reviews;
     private final DealerReturnFinancialService financial;
     private final com.complex.platform.inventory.InventoryQuarantineService quarantine;
+    private final DealerCounterpartyConfirmationService confirmations;
 
     public DealerReturnService(JdbcDealerReturnRepository returns, JdbcDealerOrderRepository orders, JdbcDealerRepository dealers,
-            AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit, SupervisorReviewService reviews, JdbcDealerDeliveryRepository delivery, DealerReturnFinancialService financial, com.complex.platform.inventory.InventoryQuarantineService quarantine) {
+            AuthorizationService authorization, IdempotencyService idempotency, AuditEventService audit, SupervisorReviewService reviews, JdbcDealerDeliveryRepository delivery, DealerReturnFinancialService financial, com.complex.platform.inventory.InventoryQuarantineService quarantine,
+            DealerCounterpartyConfirmationService confirmations) {
+        this.confirmations = confirmations;
         this.returns = returns;
         this.orders = orders;
         this.delivery = delivery;
@@ -141,6 +144,8 @@ public class DealerReturnService {
             }
             return idempotency.execute("dealerReturnRequest:" + orderId, request == null ? null : request.idempotencyKey(), request, () -> {
                 DealerOrderRecord order=orders.lockOrder(orderId).orElseThrow();
+                // 第十八批第 31 条：经销商已停用时退货申请须用掉一条退货类对方确认（门户在停用后已拒绝，不会走到这里）。
+                confirmations.consumeIfDeactivated(orderId, order.dealerId(), "return_request", request == null ? null : request.counterpartyConfirmationId());
                 if (!RETURNABLE_ORDER_STATUSES.contains(order.status())) {
                     throw ApiException.conflict("DEALER_ORDER_STATUS_INVALID", "订单签收后才可申请退货：" + order.status());
                 }

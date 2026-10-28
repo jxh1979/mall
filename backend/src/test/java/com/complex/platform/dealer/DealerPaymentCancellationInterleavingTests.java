@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -26,7 +26,7 @@ class DealerPaymentCancellationInterleavingTests {
     private final AuthorizationService authorization = mock(AuthorizationService.class);
     private final IdempotencyService idempotency = mock(IdempotencyService.class);
     private final DealerOrderService service = new DealerOrderService(repository, dealers, authorization,
-            idempotency, mock(AuditEventService.class), null, null, null, null, null, mock(JdbcDealerDeliveryRepository.class));
+            idempotency, mock(AuditEventService.class), null, null, null, null, null, mock(JdbcDealerDeliveryRepository.class), mock(DealerCounterpartyConfirmationService.class));
 
     @BeforeEach
     void scope() {
