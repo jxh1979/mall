@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -940,6 +940,15 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.warehouse.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(warehouseService.createWarehouse(request));
+    }
+
+    /** 第十八批 C 段第 17 条（BSM 第 1065 行）：登记吧台是否配有出酒量采集设备。 */
+    @PutMapping("/warehouses/{id}/pour-device")
+    public ApiResponse<WarehouseRecord> setWarehousePourDevice(@PathVariable String id,
+            @RequestBody(required = false) com.complex.platform.inventory.dto.WarehousePourDeviceRequest request) {
+        authorizationService.requirePermission("inventory.warehouse.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(warehouseService.setPourDevice(id, request));
     }
 
     // ── P1#18：供应商资质（进货查验） ─────────────────────────────────────────────

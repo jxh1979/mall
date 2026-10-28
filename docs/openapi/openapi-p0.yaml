@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.35
+  version: V0.36
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -1575,6 +1575,174 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/merchant-penalties:
+    get:
+      tags:
+        - analytics
+      operationId: listMerchantPenalties
+      summary: 查询本项目商户处罚记录与单次扣分上下限
+      description: 第十八批 C 段第 62 条（BSM 第 1838 行「由城市项目公司的运营人员填写处罚记录，处罚即扣减健康分，扣分规则由后台配置（业务参数，按项目可配，须同时配置上下限）」；第十八批裁决 8「只配单次扣分上下限（按项目可配），运营登记处罚时自己填扣分」）：返回 project_id、min_penalty_points、max_penalty_points（本项目未配置时为 null）与 records（id、merchant_id、penalty_points、reason、recorded_by、recorded_at，按 recorded_at 倒序）；带 merchant_id 时只出该商户。商户账号 403 CROSS_MERCHANT_FORBIDDEN；按入口权限码触及不到该项目 403 CROSS_PROJECT_FORBIDDEN。
+      x-permission: merchant.penalty.record
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          description: 综合体项目。
+          schema:
+            type: string
+            maxLength: 64
+        - name: merchant_id
+          in: query
+          required: false
+          description: 只看该商户的处罚记录（选填）。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - CROSS_MERCHANT_FORBIDDEN
+        - CROSS_PROJECT_FORBIDDEN
+    post:
+      tags:
+        - analytics
+      operationId: recordMerchantPenalty
+      summary: 登记商户处罚（扣分由登记人填写）
+      description: 第十八批 C 段第 62 条（BSM 第 1838 行「由城市项目公司的运营人员填写处罚记录，处罚即扣减健康分，扣分规则由后台配置（业务参数，按项目可配，须同时配置上下限）」；第十八批裁决 8「只配单次扣分上下限（按项目可配），运营登记处罚时自己填扣分」）：每条处罚记录的扣分即对该商户健康分的一次扣减；健康分总分、计分周期与优惠映射按同句「具体计分与优惠规则……另定」不做，也不联动商户暂停或拉黑（同句「不作为处置依据」）。闸依次：商户账号 403 CROSS_MERCHANT_FORBIDDEN；按入口权限码触及不到该项目 403 CROSS_PROJECT_FORBIDDEN；商户不在本项目经营（主项目或追加经营项目）403 MERCHANT_NOT_IN_PROJECT；本项目未配置单次扣分上下限 409 MERCHANT_PENALTY_BOUNDS_NOT_CONFIGURED；扣分不在本项目上下限内 400 MERCHANT_PENALTY_POINTS_OUT_OF_BOUNDS；违规说明为空 400 VALIDATION_FAILED。登记后不提供修改与删除；成功留痕含商户、扣分、违规说明与登记当时的上下限。
+      x-permission: merchant.penalty.record
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.penalty_recorded
+      x-audit-event-failure: merchant.penalty_record_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - project_id
+                - merchant_id
+                - penalty_points
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。
+                project_id:
+                  type: string
+                  maxLength: 64
+                  description: 综合体项目。
+                merchant_id:
+                  type: string
+                  maxLength: 64
+                  description: 被处罚商户，须在本项目经营。
+                penalty_points:
+                  type: integer
+                  minimum: 1
+                  description: 本次扣分，须在本项目单次扣分上下限之内。
+                reason:
+                  type: string
+                  minLength: 1
+                  description: 违规说明：违反了哪条运营规则。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - CROSS_MERCHANT_FORBIDDEN
+        - CROSS_PROJECT_FORBIDDEN
+        - MERCHANT_NOT_IN_PROJECT
+        - MERCHANT_PENALTY_BOUNDS_NOT_CONFIGURED
+        - MERCHANT_PENALTY_POINTS_OUT_OF_BOUNDS
+        - VALIDATION_FAILED
+  /api/v1/merchant-penalty-bounds/{project_id}:
+    put:
+      tags:
+        - analytics
+      operationId: saveMerchantPenaltyBounds
+      summary: 配置本项目单次扣分上下限
+      description: 第十八批 C 段第 62 条（BSM 第 1838 行「由城市项目公司的运营人员填写处罚记录，处罚即扣减健康分，扣分规则由后台配置（业务参数，按项目可配，须同时配置上下限）」；第十八批裁决 8「只配单次扣分上下限（按项目可配），运营登记处罚时自己填扣分」）：下限与上限须同时填写，1 ≤ 下限 ≤ 上限，否则 400 VALIDATION_FAILED；HTML 未给出厂值，不预置，项目配置前不能登记处罚。商户账号 403 CROSS_MERCHANT_FORBIDDEN；按入口权限码触及不到该项目 403 CROSS_PROJECT_FORBIDDEN。留痕含改前、改后的上下限。
+      x-permission: merchant.penalty.bounds.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.penalty_bounds_updated
+      x-audit-event-failure: merchant.penalty_bounds_update_failed
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 综合体项目。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - min_penalty_points
+                - max_penalty_points
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。
+                min_penalty_points:
+                  type: integer
+                  minimum: 1
+                  description: 单次扣分下限。
+                max_penalty_points:
+                  type: integer
+                  minimum: 1
+                  description: 单次扣分上限，不小于下限。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - CROSS_MERCHANT_FORBIDDEN
+        - CROSS_PROJECT_FORBIDDEN
+        - VALIDATION_FAILED
   /api/v1/analytics/merchants:
     get:
       tags:
@@ -2260,7 +2428,7 @@ paths:
         - bar
       operationId: deliverBarOrder
       summary: 出酒或送达确认
-      description: 按明细登记送达：delivered_items 只含本次实际送达的未撤单明细；非撤单明细全部送达后整单与出品票据才置已送达，部分明细送达不置整单已送达、出品票据只追加 partial_deliver 事件（BSM L1025 分别标注已上菜与未上菜；ENUM L112）。
+      description: 按明细登记送达：delivered_items 只含本次实际送达的未撤单明细；非撤单明细全部送达后整单与出品票据才置已送达，部分明细送达不置整单已送达、出品票据只追加 partial_deliver 事件（BSM L1025 分别标注已上菜与未上菜；ENUM L112）。第十八批 C 段第 17 条（BSM L1065 / ENUM L106；第十八批裁决 4）：按杯出品项按出酒吧台（该商品扣库库存行所挂吧台库存）有无出酒量采集设备二分——配有设备的缺 actual_pour_volume 拒单 400 POUR_VOLUME_REQUIRED，超出标准出酒量×杯数记损耗；未配设备的按标准出酒量配酒，actual_pour_volume 记标准×杯数（不取请求量），loss_volume 记标准损耗＝标准出酒量×杯数×本酒吧损耗率阈值（未配置按出厂 5%，四舍五入、至少 1）。已删除全局 bar.pour-cost.strict-mode 开关。
       x-permission: bar.order.create
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -2424,10 +2592,11 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号核对后去掉空格与横线加密留存，只作订台短信收件人、不回显）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。第十四批 OBS-13-03（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：提交成功即给录入的手机号发订台成功确认短信，并知会代订人（员工档案姓名）。
+      description: 员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号核对后去掉空格与横线加密留存，只作订台短信收件人、不回显）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。第十四批 OBS-13-03（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：提交成功即给录入的手机号发订台成功确认短信，并知会代订人（员工档案姓名）。第十八批 C 段第 15 条：员工代订一律免收定金（BSM L1062「员工代客订台不收定金……没有支付动作的，支付时间就空着」），deposit_status=staff_waived（免收（员工代订），ENUM L103）、deposit_amount_cent=0、无付款意向，不看定金规则；经手员工＝salesperson_user_id，不填即本人代订；经手员工的代订权限因本自然月爽约率超过本酒吧上限已停用（BSM L1468）时 403 BAR_STAFF_BOOKING_SUSPENDED，整笔不落库。超过最晚到店时间未到店、由系统自动释放的员工代订记一笔爽约到经手员工名下（no_show_at），客人自助订台不记。
       x-failure-codes:
         - BAR_TABLE_ALREADY_RESERVED
         - CUSTOMER_RESTRICTED
+        - BAR_STAFF_BOOKING_SUSPENDED
     get:
       tags:
         - bar
@@ -9133,6 +9302,176 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit:
+    get:
+      tags:
+        - platform
+      operationId: getMerchantStaffBookingNoShowLimit
+      summary: 查询酒吧员工代订爽约率上限
+      description: 第十八批 C 段第 15 条（BSM L1468「经手员工的爽约率超过后台配置的上限时（业务参数，按酒吧可配，须同时配置上下限），自动停用其代订权限，由店长复核后恢复」）：读酒吧（merchant_type=bar 的商户）员工代订爽约率上限；HTML 未给出厂值，未配置时 value_pct/min_pct/max_pct/effective_pct 皆为空、不自动停用。
+      x-permission: merchant.profile.view
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: merchant.viewed
+      x-audit-event-failure: merchant.view_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    put:
+      tags:
+        - platform
+      operationId: configureMerchantStaffBookingNoShowLimit
+      summary: 配置酒吧员工代订爽约率上限(值与上下限同配)
+      description: 第十八批 C 段第 15 条：配置员工代订爽约率上限。value_pct、min_pct、max_pct 三者必填，0≤min_pct≤value_pct≤max_pct≤100，否则 400 VALIDATION_FAILED。经手员工本自然月（第十八批裁决 3，按营业日归月）爽约笔数÷已到最晚到店时间的代订笔数超过该上限即自动停用其代订权限。
+      x-permission: merchant.profile.manage
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.staff_booking_no_show_limit_configured
+      x-audit-event-failure: merchant.staff_booking_no_show_limit_config_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - value_pct
+                - min_pct
+                - max_pct
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                value_pct:
+                  type: integer
+                  description: 爽约率上限（整数 %），须在 min_pct 与 max_pct 闭区间内。
+                  minimum: 0
+                  maximum: 100
+                min_pct:
+                  type: integer
+                  description: 已配置下限（整数 %），与值、上限同时配置。
+                  minimum: 0
+                  maximum: 100
+                max_pct:
+                  type: integer
+                  description: 已配置上限（整数 %，不大于 100），与值、下限同时配置。
+                  minimum: 0
+                  maximum: 100
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/platform/merchants/{merchant_id}/pour-loss-rate:
+    get:
+      tags:
+        - platform
+      operationId: getMerchantPourLossRate
+      summary: 查询酒吧损耗率阈值
+      description: 第十八批 C 段第 17 条（BSM L2015「损耗率（当期损耗量 ÷ 标准出酒量）超过后台配置的阈值……（安全阈值，按酒吧可配，出厂默认 5%，须同时配置上下限）」；第十八批裁决 4「这个阈值一并做出来」）：读酒吧损耗率阈值；未配置时 value_pct/min_pct/max_pct 为空、effective_pct=5（出厂值）。
+      x-permission: merchant.profile.view
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: merchant.viewed
+      x-audit-event-failure: merchant.view_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    put:
+      tags:
+        - platform
+      operationId: configureMerchantPourLossRate
+      summary: 配置酒吧损耗率阈值(值与上下限同配)
+      description: 第十八批 C 段第 17 条：配置酒吧损耗率阈值。value_pct、min_pct、max_pct 三者必填，1≤min_pct≤value_pct≤max_pct≤100（标准损耗＝标准出酒量×该阈值，阈值为 0 即零损耗，违反 BSM L1065「不得按零损耗记账」），否则 400 VALIDATION_FAILED。未配采集设备的吧台按杯出品据此记标准损耗。
+      x-permission: merchant.profile.manage
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: merchant.pour_loss_rate_configured
+      x-audit-event-failure: merchant.pour_loss_rate_config_failed
+      parameters:
+        - $ref: "#/components/parameters/MerchantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - value_pct
+                - min_pct
+                - max_pct
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                value_pct:
+                  type: integer
+                  description: 损耗率阈值（整数 %），须在 min_pct 与 max_pct 闭区间内。
+                  minimum: 1
+                  maximum: 100
+                min_pct:
+                  type: integer
+                  description: 已配置下限（整数 %），与值、上限同时配置。
+                  minimum: 1
+                  maximum: 100
+                max_pct:
+                  type: integer
+                  description: 已配置上限（整数 %，不大于 100），与值、下限同时配置。
+                  minimum: 1
+                  maximum: 100
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/platform/projects:
     get:
       tags:
@@ -11474,6 +11813,76 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/bar/staff-booking-suspensions:
+    get:
+      tags:
+        - bar
+      operationId: listBarStaffBookingSuspensions
+      summary: 查询代订权限停用中的经手员工
+      description: 第十八批 C 段第 15 条（BSM L1468「客人超过最晚到店时间未到店的，系统自动释放该台位，并记一笔爽约到经手员工名下……经手员工的爽约率超过后台配置的上限时……自动停用其代订权限，由店长复核后恢复」）：列出代订权限停用中（status=suspended）的记录，按商户范围过滤；含统计月份 stat_month（第十八批裁决 3 按自然月，按营业日归月）、爽约笔数 no_show_count、代订笔数 booking_count、上限 limit_pct。
+      x-permission: bar.staff_booking.restore
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.staff_booking_suspension.viewed
+      x-audit-event-failure: bar.staff_booking_suspension.view_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/bar/staff-booking-suspensions/{id}/restore:
+    post:
+      tags:
+        - bar
+      operationId: restoreBarStaffBookingSuspension
+      summary: 店长复核恢复员工代订权限
+      description: 第十八批 C 段第 15 条（BSM L1468「由店长复核后恢复」）：恢复经手员工的代订权限，置 status=restored 并记恢复人与时间；只限本商户的记录，他商户 403 CROSS_MERCHANT_FORBIDDEN；已恢复的 409 BAR_STAFF_BOOKING_NOT_SUSPENDED。恢复后同月再爽约仍按本月口径重算，超上限再次停用。
+      x-permission: bar.staff_booking.restore
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.staff_booking_restored
+      x-audit-event-failure: bar.staff_booking_restore_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 代订权限停用记录唯一标识。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - CROSS_MERCHANT_FORBIDDEN
+        - BAR_STAFF_BOOKING_NOT_SUSPENDED
   /api/v1/bar/deposit-rules:
     post:
       tags:
@@ -11800,6 +12209,57 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/inventory/warehouses/{id}/pour-device:
+    put:
+      tags:
+        - inventory
+      operationId: setWarehousePourDevice
+      summary: 登记吧台是否配有出酒量采集设备
+      description: 第十八批 C 段第 17 条（BSM L1065 / ENUM L106「配有出酒量采集设备的吧台，实际出酒量必须由设备采集；未配备采集设备的吧台，必须按标准出酒量配酒，也按该标准计算扣减与标准损耗，不得按零损耗记账」）：登记吧台库存（warehouse_type=bar_counter）是否配有出酒量采集设备（物理事实，默认未配）；按商户范围，他商户 403 CROSS_MERCHANT_FORBIDDEN；非吧台库存 409 WAREHOUSE_NOT_BAR_COUNTER。返回库房记录（含 pour_device_equipped）。
+      x-permission: inventory.warehouse.manage
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: inventory.warehouse.pour_device_updated
+      x-audit-event-failure: inventory.warehouse.pour_device_update_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 库房唯一标识。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - pour_device_equipped
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+                  maxLength: 128
+                pour_device_equipped:
+                  type: boolean
+                  description: 该吧台是否配有出酒量采集设备。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - WAREHOUSE_NOT_BAR_COUNTER
   /api/v1/staff/registrations:
     post:
       tags:
@@ -12597,7 +13057,7 @@ paths:
       operationId: listMemberLevels
       summary: 会员等级配置列表
       x-permission: customer.loyalty.view
-      x-data-scope: project
+      x-data-scope: platform
       x-terminal-allowed:
         - web
       x-idempotency-required: false
@@ -12613,6 +13073,304 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/loyalty/config/member-levels:
+    get:
+      tags:
+        - customer
+      operationId: listLoyaltyConfigMemberLevels
+      summary: 会员等级档位配置列表（全平台）
+      description: 第十八批第 12 条（BSM 第 820 行「客人在全国任一项目的消费均计入该周期内的成长值计算」；第 821 行「积分获取倍率按等级递增（全国平台统一规定，门票积分不适用等级倍率）」）：会员等级档位全平台一套，不带 project_id。只列启用（status 为 active）的档位，按 level_rank 升序；data 为分页 items（id、level_code、level_name、level_rank、upgrade_threshold、point_multiplier_basis_points、status、created_at、updated_at）与 page、page_size、total。缺 customer.loyalty.view 时 403 PERMISSION_DENIED。
+      x-permission: customer.loyalty.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.member_level.listed
+      x-audit-event-failure: not_applicable
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - customer
+      operationId: saveLoyaltyConfigMemberLevel
+      summary: 新增或更新会员等级档位（全平台，仅全国范围账号）
+      description: 第十八批第 12 条（BSM 第 820、821 行，同列表接口）：请求体 id 为空即新增，非空即按 id 更新（已停用、已归档的档位也可按 id 改回 active）。先校验权限与范围：缺 customer.loyalty.manage 403 PERMISSION_DENIED；账号没有全国范围授权（平台管理员或勾了「可以查看全部项目」的角色才有）403 FORBIDDEN。再校验请求内容：level_code 或 level_name 为空、level_rank 小于 0、upgrade_threshold 小于 0、point_multiplier_basis_points 小于 1、status 不在 active、inactive、archived 之内，400 VALIDATION_FAILED（status 不填按 active）；新增时 level_code 已存在（含已停用、已归档的档位）409 LOYALTY_CONFIG_DUPLICATE；更新的 id 不存在 404 LOYALTY_CONFIG_NOT_FOUND。成功时 data 为保存后的档位（字段同列表项；按 id 更新时 created_at 为本次请求时间，以列表为准），留痕 customer.member_level.saved（含 level_code）；权限码通过后的各项拒绝留痕 customer.member_level.save_failed（含错误码）。
+      x-permission: customer.loyalty.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.member_level.saved
+      x-audit-event-failure: customer.member_level.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - level_code
+                - level_name
+                - level_rank
+                - upgrade_threshold
+                - point_multiplier_basis_points
+              properties:
+                id:
+                  type:
+                    - string
+                    - "null"
+                  description: 为空即新增；非空即按 id 更新已有档位。
+                level_code:
+                  type: string
+                  minLength: 1
+                  description: 等级编码，全平台唯一。
+                level_name:
+                  type: string
+                  minLength: 1
+                  description: 等级名称。
+                level_rank:
+                  type: integer
+                  minimum: 0
+                  description: 层级（列表按此升序）。
+                upgrade_threshold:
+                  type: integer
+                  minimum: 0
+                  description: 升级门槛，即滚动统计周期内的成长值。
+                point_multiplier_basis_points:
+                  type: integer
+                  minimum: 1
+                  description: 该等级积分倍率（万分比，10000 即 1.0 倍）。
+                status:
+                  type: string
+                  enum:
+                    - active
+                    - inactive
+                    - archived
+                  description: 不填按 active。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - FORBIDDEN
+        - VALIDATION_FAILED
+        - LOYALTY_CONFIG_DUPLICATE
+        - LOYALTY_CONFIG_NOT_FOUND
+  /api/v1/loyalty/config/check-in-tiers:
+    get:
+      tags:
+        - customer
+      operationId: listLoyaltyConfigCheckInTiers
+      summary: 连续签到阶梯配置列表（按综合体）
+      description: 连续签到阶梯按综合体维护（第十八批第 12 条只把会员等级与生日加倍规则改为全平台一套）。平台管理员按 project_id 参数查；其他账号一律按本人所属项目查、忽略 project_id 参数，账号未归属项目 403 PROJECT_SCOPE_REQUIRED。返回该项目与全平台缺省（project_id 为空）的启用档位，按 streak_days 升序；平台管理员不带 project_id 时只出全平台缺省档位。data 为分页 items（id、project_id、streak_days、award_points、status、created_at、updated_at）与 page、page_size、total。缺 customer.loyalty.view 时 403 PERMISSION_DENIED。
+      x-permission: customer.loyalty.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.check_in_tier.listed
+      x-audit-event-failure: not_applicable
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          description: 综合体项目；只对平台管理员生效，其他账号按本人所属项目。
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - PROJECT_SCOPE_REQUIRED
+    post:
+      tags:
+        - customer
+      operationId: saveLoyaltyConfigCheckInTier
+      summary: 新增或更新本项目连续签到阶梯
+      description: 请求体 id 为空即新增，非空即按 id 更新（目标档位须属于解析出的项目，已停用的档位也可按 id 改回 active）。缺 customer.loyalty.manage 403 PERMISSION_DENIED。项目：平台管理员须在请求体给 project_id，否则 400 VALIDATION_FAILED；其他账号一律写入本人所属项目、忽略请求体 project_id，账号未归属项目 403 PROJECT_SCOPE_REQUIRED。streak_days 小于 1、award_points 小于 0、status 不在 active、inactive 之内，400 VALIDATION_FAILED（status 不填按 active）；新增时本项目已有同一 streak_days 的档位（含已停用的）409 LOYALTY_CONFIG_DUPLICATE；更新的 id 在本项目不存在 404 LOYALTY_CONFIG_NOT_FOUND。成功时 data 为保存后的档位（字段同列表项；按 id 更新时 created_at 为本次请求时间，以列表为准），留痕 customer.check_in_tier.saved（含 project_id、streak_days）；权限码通过后的各项拒绝留痕 customer.check_in_tier.save_failed（含错误码）。
+      x-permission: customer.loyalty.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.check_in_tier.saved
+      x-audit-event-failure: customer.check_in_tier.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - streak_days
+                - award_points
+              properties:
+                id:
+                  type:
+                    - string
+                    - "null"
+                  description: 为空即新增；非空即按 id 更新本项目已有档位。
+                project_id:
+                  type:
+                    - string
+                    - "null"
+                  description: 综合体项目；平台管理员必填，其他账号按本人所属项目、忽略本字段。
+                streak_days:
+                  type: integer
+                  minimum: 1
+                  description: 连续签到天数，同一项目内唯一。
+                award_points:
+                  type: integer
+                  minimum: 0
+                  description: 达到该连续天数时奖励的积分。
+                status:
+                  type: string
+                  enum:
+                    - active
+                    - inactive
+                  description: 不填按 active。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - PROJECT_SCOPE_REQUIRED
+        - VALIDATION_FAILED
+        - LOYALTY_CONFIG_DUPLICATE
+        - LOYALTY_CONFIG_NOT_FOUND
+  /api/v1/loyalty/config/birthday-rules:
+    get:
+      tags:
+        - customer
+      operationId: listLoyaltyConfigBirthdayRules
+      summary: 生日加倍规则配置列表（全平台）
+      description: 第十八批第 12 条同根（BSM 第 831 行与 ENUM 第 87 行「生日倍率与生日窗口全国平台统一规定，不按项目分别配置」）：生日加倍规则全平台一套，不带 project_id。只列启用（status 为 active）的规则，按 multiplier_basis_points 降序；data 为分页 items（id、rule_name、window_type、multiplier_basis_points、status、created_at、updated_at）与 page、page_size、total。缺 customer.loyalty.view 时 403 PERMISSION_DENIED。
+      x-permission: customer.loyalty.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.birthday_rule.listed
+      x-audit-event-failure: not_applicable
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    post:
+      tags:
+        - customer
+      operationId: saveLoyaltyConfigBirthdayRule
+      summary: 新增或更新生日加倍规则（全平台，仅全国范围账号）
+      description: 第十八批第 12 条同根（BSM 第 831 行与 ENUM 第 87 行，同列表接口）：请求体 id 为空即新增，非空即按 id 更新（已停用的规则也可按 id 改回 active）。先校验权限与范围：缺 customer.loyalty.manage 403 PERMISSION_DENIED；账号没有全国范围授权（平台管理员或勾了「可以查看全部项目」的角色才有）403 FORBIDDEN。再校验请求内容：rule_name 为空、window_type 不在 birthday_day（仅生日当天）、birthday_month（生日当月）之内、multiplier_basis_points 小于 10001、status 不在 active、inactive 之内，400 VALIDATION_FAILED（status 不填按 active）；新增时 rule_name 已存在（含已停用的规则）409 LOYALTY_CONFIG_DUPLICATE；更新的 id 不存在 404 LOYALTY_CONFIG_NOT_FOUND。成功时 data 为保存后的规则（字段同列表项；按 id 更新时 created_at 为本次请求时间，以列表为准），留痕 customer.birthday_rule.saved（含 window_type）；权限码通过后的各项拒绝留痕 customer.birthday_rule.save_failed（含错误码）。
+      x-permission: customer.loyalty.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: customer.birthday_rule.saved
+      x-audit-event-failure: customer.birthday_rule.save_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - rule_name
+                - window_type
+                - multiplier_basis_points
+              properties:
+                id:
+                  type:
+                    - string
+                    - "null"
+                  description: 为空即新增；非空即按 id 更新已有规则。
+                rule_name:
+                  type: string
+                  minLength: 1
+                  description: 规则名称，全平台唯一。
+                window_type:
+                  type: string
+                  enum:
+                    - birthday_day
+                    - birthday_month
+                  description: 生日窗口：birthday_day 仅生日当天，birthday_month 生日当月。
+                multiplier_basis_points:
+                  type: integer
+                  minimum: 10001
+                  description: 生日倍率（万分比，须大于 10000，如 20000 即 2.0 倍）。
+                status:
+                  type: string
+                  enum:
+                    - active
+                    - inactive
+                  description: 不填按 active。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      x-failure-codes:
+        - FORBIDDEN
+        - VALIDATION_FAILED
+        - LOYALTY_CONFIG_DUPLICATE
+        - LOYALTY_CONFIG_NOT_FOUND
   /api/v1/loyalty/points-accounts/{customer_id}/freeze:
     post:
       tags:
@@ -12908,7 +13666,7 @@ paths:
         - customer
       operationId: getCustomerStoredValueTopupRules
       summary: 充值前规则告知（扣款顺序、赠送金性质、退卡口径）
-      description: ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，bonus_bps＝项目赠送比例，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取该商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
+      description: ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。bonus_bps 取此刻已审批、已生效的赠送比例版本（通用卡按项目 stored_value_bonus，商户级卡按发卡商户 merchant_card_bonus，第十八批第 11 条 V558），无生效版本为 0。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取该商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -25276,76 +26034,6 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-  /api/v1/loyalty/stored-value/bonus-policies:
-    post:
-      tags:
-        - customer
-      operationId: configureStoredValueBonusPolicy
-      summary: 配置综合体通用卡充值赠送比例（仅平台，按项目，须同时配置上下限）
-      description: CG-06a（ENUM「储值卡类型与收款主体」：「每笔充值拆为本金与赠送金两段分别记账，赠送比例可配（业务参数，按项目可配，须同时配置上下限）」）：值与上下限同在、取值须落在闭区间内，否则 400 VALIDATION_FAILED；仅对综合体通用卡充值生效，商户级卡赠送口径待裁决（赠送金 0）。
-      x-permission: customer.stored_value.refund
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: stored_value.bonus_policy_configured
-      x-audit-event-failure: stored_value.bonus_policy_config_failed
-      requestBody:
-        $ref: "#/components/requestBodies/StoredValueBonusPolicyRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-  /api/v1/loyalty/stored-value/bonus-policies/{project_id}:
-    get:
-      tags:
-        - customer
-      operationId: getStoredValueBonusPolicy
-      summary: 查询综合体通用卡充值赠送比例（仅平台）
-      description: CG-06a：返回该项目当前赠送比例及上下限；未配置返回比例 0（不赠送）。project_id 传 __global__ 查询无项目范围的通用卡。
-      x-permission: customer.stored_value.refund
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: stored_value.bonus_policy_viewed
-      x-audit-event-failure: stored_value.bonus_policy_view_failed
-      parameters:
-        - name: project_id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-          description: 综合体项目 id；__global__＝无项目范围的通用卡。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "401":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/audit/operation-events:
     get:
       tags:
@@ -37472,7 +38160,7 @@ paths:
         - settlement
       operationId: settlementConfigUpsertDistributionMethod
       summary: 维护通票分配方式(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
+      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。第 75 条(ENUM:52「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」):短期经营激励单次有效期上限=special_approval_term_value+special_approval_term_unit(day/month),连同该参数的下限 special_approval_term_min_value、上限 special_approval_term_max_value(同一单位)四项同时必填,1≤下限≤数值≤上限,否则 400 VALIDATION_FAILED;项目特例优先、否则全局默认(出厂 3 个月)。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -37493,9 +38181,27 @@ paths:
                   type: string
                 method_type:
                   type: string
+                special_approval_term_value:
+                  type: integer
+                  minimum: 1
+                special_approval_term_unit:
+                  type: string
+                  enum:
+                    - day
+                    - month
+                special_approval_term_min_value:
+                  type: integer
+                  minimum: 1
+                special_approval_term_max_value:
+                  type: integer
+                  minimum: 1
               required:
                 - idempotency_key
                 - method_type
+                - special_approval_term_value
+                - special_approval_term_unit
+                - special_approval_term_min_value
+                - special_approval_term_max_value
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -37926,7 +38632,7 @@ paths:
         - settlement
       operationId: settlementConfigDistributionScheme
       summary: 通票分账方案:版本、通告期与缺档位行待办
-      description: 第十八批第 2 条(ENUM:52):通票分账方案各版本(状态 draft/pending/effective/superseded、通告日、生效日、参与家数档位表 tiers、第一段名单 first_segment)、通告期 notice_period,以及按(项目,第二段参与家数)聚合的缺档位行暂挂待办 missing_rows(份数 units、暂挂金额 amount_cent)。
+      description: 第十八批第 2 条(ENUM:52):通票分账方案各版本(状态 draft/pending/effective/superseded/incentive_expired、通告日、生效日、参与家数档位表 tiers、第一段名单 first_segment)、通告期 notice_period,以及按(项目,第二段参与家数)聚合的缺档位行暂挂待办 missing_rows(份数 units、暂挂金额 amount_cent)。第 75 条:另带短期经营激励申请 incentive_applications(版本、类型 initial/renewal、状态 pending/approved/rejected、理由、期限、最大超出额 max_excess_cent、逐票种试算 trial_result、提交与审批人及时间、审批意见、有效期 valid_from/valid_until)。18C 核对后操作员裁决补充第 12 条:state=incentive_expired 为凭短期经营激励转正、最后一笔已批准激励已到期(当前营业日不早于到期营业日)的版本,到期营业日起新售出的票改按此前在用的方案(本项目上一版,没有就用全平台版),已售出的票照售票时固化的结果结算,此类版本不再算现行版。
       x-auth-context: staff-token
       x-permission: settlement.config.view
       x-data-scope: platform
@@ -38023,7 +38729,7 @@ paths:
         - settlement
       operationId: settlementConfigActivateDistributionScheme
       summary: 复核转正:通票分账方案草案通告
-      description: 差人复核(执行人≠起草人否则 403 SELF_ACTIVATION_FORBIDDEN)+转正前复校每行合计 10000。操作员裁决第十八批第 1 条:复核转正当日系统在受影响酒吧的商户专区逐家挂出通告即视为送达(18B 复核后裁决第 10 条;短信只是提醒,发不发、成不成功都不影响送达与生效),生效日=转正日+通告期;已售出的票按售出时生效的方案结算。
+      description: 差人复核(执行人≠起草人否则 403 SELF_ACTIVATION_FORBIDDEN)+转正前复校每行合计 10000。操作员裁决第十八批第 1 条:复核转正当日系统在受影响酒吧的商户专区逐家挂出通告即视为送达(18B 复核后裁决第 10 条;短信只是提醒,发不发、成不成功都不影响送达与生效),生效日=转正日+通告期;已售出的票按售出时生效的方案结算。第 75 条(ENUM:52「第一段的固定金额或固定单价在配置生效之前，必须先按该票种在当前各项配置下的最低可能可分配池金额试算……试算不通过的配置无效、不得生效」):转正前对本版第一段名单覆盖的每个可售通票按最不利的一张票试算(当前最低实付价、费率最高的支付通路、扣点最高的第三方销售渠道、综合服务费足额不套封顶、当前赠送权益预估成本),第一段每份应分合计超过最不利一份可分配池且本版没有已批准的首次短期经营激励申请 → 409 POOL_TRIAL_FAILED(消息逐票种写最低实付价、最不利一份池、第一段合计与超出额),状态不变、不发通告;凭已批准激励放行的,该申请有效期自本版生效营业日起算,转正当天挂进商户专区的通告一并写明激励到期日与「到期未重新获批的，自该日起新售出的票改按此前在用的方案」(18C 核对后操作员裁决补充第 12 条,不另发通告与短信)。
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -38049,6 +38755,155 @@ paths:
           required: true
           schema:
             type: string
+  /api/v1/settlement/config/distribution-scheme/{id}/incentive-applications:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigSubmitPassIncentive
+      summary: 提交短期经营激励申请(首次或到期重审)
+      description: 第 75 条(ENUM:52「娱乐平台公司确需让第一段合计高于池金额的，须在配置生效前提交短期经营激励申请并经项目之上的平台权限审批，超出部分由娱乐平台公司承担，初始有效期不超过后台配置的上限……到期重审」;BSM:752「期限届满须重新提交审批，不得自动续期」):草案版本提交首次申请(kind=initial);已凭激励放行转正的版本提交重审(kind=renewal),否则 409 INCENTIVE_RENEWAL_NOT_APPLICABLE;最后一笔已批准激励已到期(当前营业日不早于到期营业日)的不再受理重审,409 INCENTIVE_EXPIRED——到期营业日起该版已改回此前在用的方案,要继续须起草新版走试算、申请与通告期(18C 核对后操作员裁决补充第 12、13 条)。提交时按转正同一口径重跑试算,留存逐票种结果与最大超出额;期限换成同一参照日的到期日后不得超过本版项目的短期经营激励单次有效期上限(项目特例优先、否则全局默认),超出 400 VALIDATION_FAILED。由结算配置管理人员代娱乐平台公司提交;同一幂等键重放返回原申请。
+      x-auth-context: staff-token
+      x-permission: settlement.config.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.pass_incentive.submitted
+      x-audit-event-failure: settlement.config.pass_incentive.submit_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                reason:
+                  type: string
+                term_value:
+                  type: integer
+                  minimum: 1
+                term_unit:
+                  type: string
+                  enum:
+                    - day
+                    - month
+              required:
+                - idempotency_key
+                - reason
+                - term_value
+                - term_unit
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/incentive-applications/{id}/approve:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigApprovePassIncentive
+      summary: 批准短期经营激励申请(项目之上的平台权限)
+      description: 第 75 条(DEC-R3-2026-08-04-13 审批人为项目之上的平台权限):须 settlement.bill.special_approve 且平台域、能看全部项目(只管单个项目的 403 PLATFORM_SCOPE_REQUIRED);只审待审申请(否则 409 INCENTIVE_APPLICATION_NOT_PENDING);审批人不得是提交人(403 SELF_ACTIVATION_FORBIDDEN)。重审须在上一笔已批准激励到期前获批,从其到期日接续一个新期限,到期后才审批的 409 INCENTIVE_EXPIRED(18C 核对后操作员裁决补充第 12、13 条,已改回此前方案);首次申请的有效期在该版转正时定。没有任何自动续期。
+      x-auth-context: staff-token
+      x-permission: settlement.bill.special_approve
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.pass_incentive.approved
+      x-audit-event-failure: settlement.config.pass_incentive.approve_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+              required:
+                - idempotency_key
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/config/incentive-applications/{id}/reject:
+    post:
+      tags:
+        - settlement
+      operationId: settlementConfigRejectPassIncentive
+      summary: 驳回短期经营激励申请(项目之上的平台权限)
+      description: 第 75 条:权限、范围与差人规则同批准;驳回后该版转正仍按试算 409 POOL_TRIAL_FAILED。
+      x-auth-context: staff-token
+      x-permission: settlement.bill.special_approve
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: settlement.config.pass_incentive.rejected
+      x-audit-event-failure: settlement.config.pass_incentive.reject_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotency_key:
+                  type: string
+                note:
+                  type: string
+              required:
+                - idempotency_key
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/settlement/config/distribution-scheme/notice-period:
     post:
       tags:
@@ -38225,7 +39080,7 @@ paths:
         - settlement
       operationId: settlementPostBill
       summary: 结算单过账(挂应付台账)
-      description: 把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);超池 draft 单特批 confirmed 后由此人工过账。返回本次过账明细笔数。FS-013：同时把本单覆盖的项目×月份(平台单＝全部项目)的单一酒吧门票综合服务费计费月，按 min(Σ未退票逐票费, 该月首张票锁定的月度封顶) 各挂一笔酒吧应收(source_type=single_bar_service_fee，项目取计费月锁定的售票项目，0 元不挂、已挂不重复)，与票款应付分别收付、不轧差。FS-021：负额明细(向酒吧追回，含原月已结付后撤销核销的单列追收明细)过账为该酒吧的单独追收应收(source_type=ticket_distribution_recovery)，不与应付轧差；各笔往来到期日按该钱路财务指定付账日、次月出账日起的异议期与已审批银行工作日推算并固化(规则取过账时刻已生效的已批版本；付款时点的项目取往来对方所属项目，平台单取明细商户项目)，过账时缺已生效的付账日规则 409 PAY_DAY_NOT_CONFIGURED、缺日历 400 WORKING_CALENDAR_MISSING，账单保持已确认。
+      description: 把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);第 75 条起结算环节不设超池待审批,超池单同样 confirmed 即可过账,超出部分记 platform_incentive_subsidy 由娱乐平台公司承担。返回本次过账明细笔数。FS-013：同时把本单覆盖的项目×月份(平台单＝全部项目)的单一酒吧门票综合服务费计费月，按 min(Σ未退票逐票费, 该月首张票锁定的月度封顶) 各挂一笔酒吧应收(source_type=single_bar_service_fee，项目取计费月锁定的售票项目，0 元不挂、已挂不重复)，与票款应付分别收付、不轧差。FS-021：负额明细(向酒吧追回，含原月已结付后撤销核销的单列追收明细)过账为该酒吧的单独追收应收(source_type=ticket_distribution_recovery)，不与应付轧差；各笔往来到期日按该钱路财务指定付账日、次月出账日起的异议期与已审批银行工作日推算并固化(规则取过账时刻已生效的已批版本；付款时点的项目取往来对方所属项目，平台单取明细商户项目)，过账时缺已生效的付账日规则 409 PAY_DAY_NOT_CONFIGURED、缺日历 400 WORKING_CALENDAR_MISSING，账单保持已确认。
       x-auth-context: staff-token
       x-permission: settlement.bill.post
       x-data-scope: platform
@@ -38240,54 +39095,6 @@ paths:
           required: true
           schema:
             type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-  /api/v1/settlement/bills/{id}/special-approval:
-    post:
-      tags:
-        - settlement
-      operationId: settlementSpecialApproveBill
-      summary: 超池结算单特批(平台负责人短期激励)
-      description: 把某「超池 draft」结算单填特批引用并置 confirmed(之后可走既有过账端点)。业务口径:各酒吧分得总额不得超过可分配池,突破上限仅限平台负责人特批的短期激励活动(期限后台可配,出厂默认不超过 3
-        个月),到期自动失效须重新特批。仅超池 draft 单可批:非超池/已 confirmed/settled 拒 409 BILL_NOT_OVERPOOL_DRAFT;特批引用留空拒 400
-        SPECIAL_APPROVAL_REF_REQUIRED(审计留痕必填)。响应 data 含 special_approval_ref 与 valid_until(本次特批的到期日)。
-      x-auth-context: staff-token
-      x-permission: settlement.bill.special_approve
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: false
-      x-audit-event-success: settlement.bill.special_approved
-      x-audit-event-failure: settlement.bill.special_approve_failed
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                special_approval_ref:
-                  type: string
-                  maxLength: 128
-                  description: 特批引用:平台负责人特批短期激励的凭据/理由,审计留痕必填。
-              required:
-                - special_approval_ref
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -53410,12 +54217,6 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StoredValueMerchantCardConfigRequest"
-    StoredValueBonusPolicyRequest:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/StoredValueBonusPolicyRequest"
     SpaceTypeRequest:
       required: true
       content:
@@ -56303,8 +57104,7 @@ components:
                 minimum: 1
               actual_pour_volume:
                 type: integer
-                description: 按杯出品实际出酒量（毫升）；按杯出品项（配置了 standard_pour_volume）在严格模式（bar.pour-cost.strict-mode=true，默认）下必填，缺失拒单
-                  POUR_VOLUME_REQUIRED；实际量>标准量记损耗，超阈值落 inventory.loss_exception 核查留痕。非按杯出品项忽略。
+                description: 按杯出品实际出酒量（毫升），由出酒吧台的出酒量采集设备采集：吧台配有采集设备的按杯出品项必填，缺失拒单 POUR_VOLUME_REQUIRED，实际量>标准量记损耗，超商品级阈值落 inventory.loss_exception 核查留痕；吧台未配采集设备的按标准出酒量配酒并记标准损耗，本字段不取用。非按杯出品项忽略。
                 minimum: 0
           maxItems: 200
         delivered_by_user_id:
@@ -63293,7 +64093,7 @@ components:
           description: 退款比例（基点 0..10000，可退回客户的份额，余下商户留存）；空=默认 10000（全额）。
     StoredValueMerchantCardConfigRequest:
       type: object
-      description: 请求载荷 `StoredValueMerchantCardConfigRequest`；AUD-061 商户储值卡平台配置（仅平台）：发卡资格 + 资金模式（预收/代收），只影响之后新开的卡。
+      description: 请求载荷 `StoredValueMerchantCardConfigRequest`；AUD-061 商户储值卡平台配置（仅平台）：发卡资格 + 资金模式（只可商户预收，平台不代收）+ 扣款顺序。
       additionalProperties: false
       required:
         - merchant_id
@@ -63307,48 +64107,15 @@ components:
           description: 发卡资格：开通后客人才能给该商户卡充值；空＝关。
         fund_ownership:
           type: string
-          description: 资金模式：merchant_prepaid=商户预收；platform_collect=平台代收；空＝商户预收。
+          description: 资金模式：只可为 merchant_prepaid（商户预收，平台不代收；第十八批第 11 条，BSM L833、DEC-CFG-2026-08-03-11）；空＝商户预收；传 platform_collect 返回 400 VALIDATION_FAILED。
           enum:
             - merchant_prepaid
-            - platform_collect
         consume_order:
           type: string
           description: CG-06a 商户级卡消费扣款顺序（由发卡商户自定、由平台运营代为录入；BSM「支付方式」）：principal_first=先本金后赠送金（缺省）；bonus_first=先赠送金后本金；空＝保留现值。通用卡写死先本金后赠送金，不在此配置。
           enum:
             - principal_first
             - bonus_first
-    StoredValueBonusPolicyRequest:
-      type: object
-      description: 请求载荷 `StoredValueBonusPolicyRequest`；CG-06a 综合体通用卡充值赠送比例（业务参数，按项目可配，须同时配置上下限；ENUM「储值卡类型与收款主体」）。赠送金＝实付本金×bonus_bps/10000，仅对综合体通用卡充值生效；未配置的项目不赠送。
-      additionalProperties: false
-      required:
-        - bonus_bps
-        - min_bps
-        - max_bps
-      properties:
-        project_id:
-          type: string
-          description: 综合体项目 id；空＝无项目范围的通用卡（存为 __global__）。
-          maxLength: 64
-        bonus_bps:
-          type: integer
-          minimum: 0
-          maximum: 10000
-          description: 赠送比例（万分比）；须落在 [min_bps, max_bps] 闭区间内。
-        min_bps:
-          type: integer
-          minimum: 0
-          maximum: 10000
-          description: 已配置下限（万分比）。
-        max_bps:
-          type: integer
-          minimum: 0
-          maximum: 10000
-          description: 已配置上限（万分比）。
-        reason:
-          type: string
-          description: 配置缘由（审计留痕）。
-          maxLength: 255
     SpaceTypeRequest:
       type: object
       description: 空间类型字典录入/修改请求；type_code 为唯一键，存在则更新名称/排序/状态。
@@ -66891,6 +67658,11 @@ components:
               null
             ]
           description: 商户业态；仅 merchant_points（每产生 1 积分所需有效消费，分）与 merchant_growth（每记 1 成长值所需有效消费，分）必填，按业态全国生效。
+        merchant_id:
+          type:
+            - string
+            - "null"
+          description: 第十八批第 11 条：发卡商户；仅 merchant_card_bonus（商户级卡充值赠送比例，ENUM L86「赠送比例由发卡商户提出、由平台运营代为录入后台」）必填，其余类型为空。
         version:
           type: string
         values:
@@ -67038,9 +67810,11 @@ components:
               "merchant_growth",
               "level_rolling_months",
               "level_protection_months",
-              "level_notice_days"
+              "level_notice_days",
+              "merchant_card_bonus",
+              "stored_value_bonus"
             ]
-          description: level_rolling_months（会员等级滚动统计周期，月）、level_protection_months（保护期，月）、level_notice_days（降级提前通知天数）为 OBS-13-01（BSM 第 820 行「业务参数，全平台统一可配……须同时配置上下限」「上述三项参数的变更须经审批、只对后续周期生效」）的三项会员等级参数：不可限定项目、票种、业态，values 须同填 fixed_value 与 minimum_value（不小于 1）、maximum_value，最终审批人须属顶层平台主体，审批通过到生效时间即用于此后起算的保护期与此后的等级变化（不在保护期的会员按最近一次定级时点生效的版本，第十四批第 5 条），无需公告；出厂值 12 个月、12 个月、30 天。
+          description: level_rolling_months（会员等级滚动统计周期，月）、level_protection_months（保护期，月）、level_notice_days（降级提前通知天数）为 OBS-13-01（BSM 第 820 行「业务参数，全平台统一可配……须同时配置上下限」「上述三项参数的变更须经审批、只对后续周期生效」）的三项会员等级参数：不可限定项目、票种、业态，values 须同填 fixed_value 与 minimum_value（不小于 1）、maximum_value，最终审批人须属顶层平台主体，审批通过到生效时间即用于此后起算的保护期与此后的等级变化（不在保护期的会员按最近一次定级时点生效的版本，第十四批第 5 条），无需公告；出厂值 12 个月、12 个月、30 天；merchant_card_bonus（商户级卡充值赠送比例，商户提出、平台运营代录，赠送金由发卡商户承担）与 stored_value_bonus（综合体通用卡充值赠送比例，project_id 可空＝无项目通用卡）为第十八批第 11 条（ENUM L86；BSM L521 涉钱配置版本化审批；cg-pending-decisions 第 11、13 条）：不可限定票种、业态，merchant_card_bonus 须填 merchant_id 且不可限定项目；values 同填 fixed_value（赠送比例，万分比）与 minimum_value、maximum_value，值须落在上下限内；仅平台（非商户、外包账号）可提交，审批人由复核策略 ticket.reward.rule.approve 把关；审批通过到生效时间即用于此后的充值拆赠送金，充值流水记下所用版本；无需公告。
         ticket_type_id:
           type:
             - string
@@ -67064,6 +67838,11 @@ components:
               null
             ]
           description: 商户业态；仅 merchant_points（每产生 1 积分所需有效消费，分）与 merchant_growth（每记 1 成长值所需有效消费，分）必填，按业态全国生效。
+        merchant_id:
+          type:
+            - string
+            - "null"
+          description: 第十八批第 11 条：发卡商户；仅 merchant_card_bonus（商户级卡充值赠送比例，ENUM L86「赠送比例由发卡商户提出、由平台运营代为录入后台」）必填，其余类型为空。
         values:
           $ref: "#/components/schemas/TicketRewardConfigValues"
         effective_at:

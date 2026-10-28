@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -48,6 +48,10 @@ public class TicketOrderService {
      * 结算月结与到期作业据此跳过销售渠道费；财务日结据此区分官方售票源与渠道售票源（OBS-13-07）。
      */
     public static final Set<String> OFFICIAL_SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web");
+    /** 第 75 条：第三方销售渠道（SALES_CHANNELS 去掉官方渠道），扣销售渠道费；第一段试算按其中扣点最高的一个算最不利的一张票。 */
+    public static final Set<String> THIRD_PARTY_SALES_CHANNELS = SALES_CHANNELS.stream()
+            .filter(channel -> !OFFICIAL_SALES_CHANNELS.contains(channel))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
     // ROOT-03-R29 一体机辅助购票的客人手机号短信核验（实现在客人域，@Lazy 断开客人域→票务域的构造环）。未注入即不能一体机售票（fail-closed）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -796,9 +800,11 @@ public class TicketOrderService {
      * 于是餐厅既拿到一份营收份额、又按内部结算价被兑付一次，同一份东西付两遍钱；
      * 而且这个错不会报警——账面上每一分都「分掉了」，只是分错了人。所以宁可当场拒绝出票让运营去把价配上。
      *
+     * <p>第 75 条：结算域第一段试算按同一算法把最低实付价拆到各权益（{@code PassPoolTrialService}），故公开为静态方法。
+     *
      * @return 与发券顺序一致的每张权益分配收入数组；不拆分时返回 null。
      */
-    private long[] allocateRevenue(List<TicketTypeEntitlementRecord> bindings, Long orderAmount) {
+    public static long[] allocateRevenue(List<TicketTypeEntitlementRecord> bindings, Long orderAmount) {
         if (orderAmount == null) {
             return null;
         }
@@ -862,7 +868,7 @@ public class TicketOrderService {
         return allocations;
     }
 
-    private long[] allocateEvenly(long orderAmount, int totalUnits) {
+    public static long[] allocateEvenly(long orderAmount, int totalUnits) {
         long[] allocations = new long[totalUnits];
         long base = orderAmount / totalUnits;
         long remainder = orderAmount - base * totalUnits;
@@ -881,7 +887,7 @@ public class TicketOrderService {
      *
      * @return 每张权益满额份额（分）；整票票面原价合计为 0 时返回 null（=无折扣）。
      */
-    private long[] componentFullPrices(List<TicketTypeEntitlementRecord> bindings) {
+    public static long[] componentFullPrices(List<TicketTypeEntitlementRecord> bindings) {
         boolean anyComponentPrice = bindings.stream()
                 .anyMatch(b -> b.componentPriceCent() != null && b.componentPriceCent() > 0L);
         if (!anyComponentPrice) {

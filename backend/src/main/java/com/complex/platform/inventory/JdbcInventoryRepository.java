@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -2130,10 +2130,10 @@ class JdbcInventoryRepository implements InventoryRepository {
     public WarehouseRecord saveWarehouse(WarehouseRecord warehouse) {
         jdbcTemplate.update("""
                 INSERT INTO warehouses (
-                    id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                    id, project_id, merchant_id, warehouse_type, name, status, pour_device_equipped, created_at, updated_at
                 )
                 VALUES (
-                    :id, :project_id, :merchant_id, :warehouse_type, :name, :status, :created_at, :updated_at
+                    :id, :project_id, :merchant_id, :warehouse_type, :name, :status, :pour_device_equipped, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
@@ -2141,15 +2141,25 @@ class JdbcInventoryRepository implements InventoryRepository {
                     warehouse_type = EXCLUDED.warehouse_type,
                     name = EXCLUDED.name,
                     status = EXCLUDED.status,
+                    pour_device_equipped = EXCLUDED.pour_device_equipped,
                     updated_at = EXCLUDED.updated_at
                 """, warehouseParameters(warehouse));
         return warehouse;
     }
 
     @Override
+    public Optional<WarehouseRecord> findWarehouseById(String warehouseId) {
+        return jdbcTemplate.query("""
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, pour_device_equipped, created_at, updated_at
+                  FROM warehouses
+                 WHERE id = :id
+                """, Map.of("id", warehouseId), rowMapper::mapWarehouse).stream().findFirst();
+    }
+
+    @Override
     public List<WarehouseRecord> listWarehouses() {
         return jdbcTemplate.query("""
-                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, pour_device_equipped, created_at, updated_at
                   FROM warehouses
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapWarehouse);
@@ -2158,7 +2168,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<WarehouseRecord> listWarehousesByMerchant(String merchantId) {
         return jdbcTemplate.query("""
-                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, pour_device_equipped, created_at, updated_at
                   FROM warehouses
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -2168,7 +2178,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<WarehouseRecord> listActiveSavedBottleWarehouses(String projectId, String merchantId) {
         return jdbcTemplate.query("""
-                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, pour_device_equipped, created_at, updated_at
                   FROM warehouses
                  WHERE project_id = :project_id
                    AND merchant_id IS NOT DISTINCT FROM CAST(:merchant_id AS VARCHAR)
@@ -2189,7 +2199,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
     public List<WarehouseRecord> listWarehousesByProject(String projectId) {
         return jdbcTemplate.query("""
-                SELECT id, project_id, merchant_id, warehouse_type, name, status, created_at, updated_at
+                SELECT id, project_id, merchant_id, warehouse_type, name, status, pour_device_equipped, created_at, updated_at
                   FROM warehouses
                  WHERE project_id = :project_id
                  ORDER BY created_at DESC, id
@@ -2204,6 +2214,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("warehouse_type", warehouse.warehouseType())
                 .addValue("name", warehouse.name())
                 .addValue("status", warehouse.status())
+                .addValue("pour_device_equipped", warehouse.pourDeviceEquipped())
                 .addValue("created_at", offset(warehouse.createdAt()))
                 .addValue("updated_at", offset(warehouse.updatedAt()));
     }

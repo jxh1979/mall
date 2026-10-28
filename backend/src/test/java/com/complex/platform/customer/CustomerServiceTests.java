@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1098,7 +1098,7 @@ class CustomerServiceTests {
         }
 
         @Override
-        public List<CustomerMemberLevelRecord> listMemberLevels(String projectId) {
+        public List<CustomerMemberLevelRecord> listMemberLevels() {
             return memberLevels.values().stream()
                     .filter(l -> "active".equals(l.status()))
                     .sorted((a, b) -> Integer.compare(a.levelRank(), b.levelRank()))
@@ -1126,7 +1126,7 @@ class CustomerServiceTests {
         }
 
         @Override
-        public List<CustomerBirthdayRuleRecord> listActiveBirthdayRules(String projectId) {
+        public List<CustomerBirthdayRuleRecord> listActiveBirthdayRules() {
             return birthdayRules.values().stream()
                     .filter(r -> "active".equals(r.status()))
                     .toList();

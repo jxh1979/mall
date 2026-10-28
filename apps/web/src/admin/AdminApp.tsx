@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -118,6 +118,7 @@ const AiThresholdsPage = React.lazy(() => import("./pages/AiThresholdsPage").the
 const NotificationWindowsPage = React.lazy(() => import("./pages/NotificationWindowsPage").then((m) => ({ default: m.NotificationWindowsPage })));
 const SpaceTypesPage = React.lazy(() => import("./pages/SpaceTypesPage").then((m) => ({ default: m.SpaceTypesPage })));
 const VenueBusinessHoursPage = React.lazy(() => import("./pages/VenueBusinessHoursPage").then((m) => ({ default: m.VenueBusinessHoursPage })));
+const MerchantPenaltyPage = React.lazy(() => import("./pages/MerchantPenaltyPage").then((m) => ({ default: m.MerchantPenaltyPage })));
 const VendorSubordinatesPage = React.lazy(() => import("./pages/VendorSubordinatesPage").then((m) => ({ default: m.VendorSubordinatesPage })));
 const SmsNotificationSwitchesPage = React.lazy(() => import("./pages/SmsNotificationSwitchesPage").then((m) => ({ default: m.SmsNotificationSwitchesPage })));
 const LeasingRentalStatusPage = React.lazy(() => import("./pages/LeasingRentalStatusPage").then((m) => ({ default: m.LeasingRentalStatusPage })));
@@ -379,6 +380,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <SpaceTypesPage {...props} />;
     case "ADM-GOV-008":
       return <VenueBusinessHoursPage {...props} />;
+    case "ADM-GOV-010":
+      return <MerchantPenaltyPage {...props} />;
     case "ADM-VND-004":
       return <VendorSubordinatesPage {...props} />;
     case "ADM-INT-004":

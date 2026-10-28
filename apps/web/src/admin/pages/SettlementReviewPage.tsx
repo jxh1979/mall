@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -9,17 +9,12 @@ import type { PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
-import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { useCan } from "../security/Can";
 
 // 平台侧结算审阅(审计断层②):列出通票核销产生的结算流水与月度结算单,供平台操作员查看。
 // 流水只读(确认/入账由月度 Job 负责);后端 /api/v1/settlement/transactions,权限 finance.settlement.view。
-// 唯一写动作:超池结算单特批(POST /api/v1/settlement/bills/{id}/special-approval,
-// 权限 settlement.bill.special_approve 仅授平台负责人;无权限者看得到超池状态但没有按钮)。
+// 第 75 条(ENUM 第 52 行「超池的判定与审批一律在事前完成，结算环节不再设“超池待审批”」「超出部分由娱乐平台公司承担」):
+// 本页全只读,超池额单列,过账时由娱乐平台公司承担,不设结算期审批。
 const PAGE_SIZE = 20;
-
-/** 超池特批专属权限点(V357·高敏,仅授 role_platform_admin 平台负责人)。 */
-const SPECIAL_APPROVE_PERMISSION = "settlement.bill.special_approve";
 
 export type SettlementRow = {
   id: string;
@@ -57,9 +52,7 @@ export type SettlementBillRow = {
   roundingResidualCent: number;
   distributionMethod: string | null;
   status: string | null;
-  // 超池特批入口(S9 遗留补齐):池分配合计 > 可分配池 = 超池;draft 超池单待平台负责人特批。
-  specialApprovalRef: string | null;
-  specialApprovalValidUntil: string | null;
+  // 池分配合计 > 可分配池 = 超池;超出部分过账时由娱乐平台公司承担(第 75 条)。
   pooledDistributedCent: number;
   // 第十八批第 2 条（ENUM 第 52 行「三者即使同归一个主体，也必须分三栏分别列示」）：未分配池余额、通票未核销减除额（归属主体）与
   //   分账尾差分三栏；缺档位行暂挂的第二段金额另列。
@@ -79,12 +72,7 @@ function centToYuan(cent: number | undefined | null): string {
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
 }
 
-/** 本地日(非 UTC):特批有效期是"到期日含当日",按操作员本地日历判定是否已到期。 */
-function localToday(): string {
-  return new Intl.DateTimeFormat("en-CA").format(new Date());
-}
-
-export function SettlementReviewPage({ api, setGlobalError, setActionResult, navigateTo, effectivePermissions }: AdminPageProps) {
+export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
   const [projectDraft, setProjectDraft] = React.useState("");
   const [merchantDraft, setMerchantDraft] = React.useState("");
   const [projectFilter, setProjectFilter] = React.useState("");
@@ -115,74 +103,11 @@ export function SettlementReviewPage({ api, setGlobalError, setActionResult, nav
   }, [api]);
   React.useEffect(() => { loadBills(); }, [loadBills]);
 
-  // 超池特批(S9 遗留补齐):仅超池 draft 单可批;无权限者看得到状态但没有按钮(整块入口按权限隐藏)。
-  const canSpecialApprove = useCan(effectivePermissions, [SPECIAL_APPROVE_PERMISSION]);
-  const [approvingBill, setApprovingBill] = React.useState<SettlementBillRow | null>(null);
-  const [approveRef, setApproveRef] = React.useState("");
-  const [approveError, setApproveError] = React.useState("");
-  const [approveBusy, setApproveBusy] = React.useState(false);
-
   function isOverPool(bill: SettlementBillRow): boolean {
     return bill.pooledDistributedCent > bill.availablePoolCent;
   }
-  function isOverPoolDraft(bill: SettlementBillRow): boolean {
-    return bill.status === "draft" && isOverPool(bill);
-  }
   function overPoolCent(bill: SettlementBillRow): number {
     return bill.pooledDistributedCent - bill.availablePoolCent;
-  }
-
-  function openApproval(bill: SettlementBillRow) {
-    setApprovingBill(bill);
-    setApproveRef("");
-    setApproveError("");
-  }
-
-  async function submitSpecialApproval() {
-    if (!approvingBill) return;
-    setApproveBusy(true);
-    setApproveError("");
-    try {
-      const result = await api.post<{ specialApprovalRef: string; validUntil: string }>(
-        `/api/v1/settlement/bills/${approvingBill.id}/special-approval`,
-        { specialApprovalRef: approveRef.trim() },
-      );
-      setActionResult(
-        `超池特批已生效:结算月 ${approvingBill.periodStart?.slice(0, 7) ?? "—"} 结算单转「已确认」,特批引用 ${result.specialApprovalRef},有效期至 ${result.validUntil}(到期自动失效,须重新特批)。`,
-      );
-      setApprovingBill(null);
-      setApproveRef("");
-      loadBills();
-    } catch (error) {
-      setApproveError(error instanceof Error && error.message ? error.message : "超池特批失败,请稍后重试");
-    } finally {
-      setApproveBusy(false);
-    }
-  }
-
-  /** 特批列:业务人员一眼看到该单是否超池待批、批过的有效到哪天、过期要重批。 */
-  function specialApprovalCell(bill: SettlementBillRow): React.ReactNode {
-    const expired = bill.specialApprovalValidUntil !== null && bill.specialApprovalValidUntil < localToday();
-    if (isOverPoolDraft(bill)) {
-      return (
-        <span data-testid={`settlement-bill-overpool-${bill.id}`}>
-          {bill.specialApprovalRef ? `特批已到期(原引用 ${bill.specialApprovalRef}),须重新特批` : "超池待特批"}
-          {canSpecialApprove ? (
-            <button
-              type="button"
-              className="admin-secondary-button"
-              data-testid={`settlement-bill-approve-${bill.id}`}
-              disabled={approveBusy}
-              onClick={() => openApproval(bill)}
-            >超池特批</button>
-          ) : null}
-        </span>
-      );
-    }
-    if (bill.specialApprovalRef) {
-      return `已特批 ${bill.specialApprovalRef}·${expired ? `已于 ${bill.specialApprovalValidUntil} 到期` : `有效至 ${bill.specialApprovalValidUntil ?? "—"}`}`;
-    }
-    return "—";
   }
 
   function submitSearch() {
@@ -227,7 +152,7 @@ export function SettlementReviewPage({ api, setGlobalError, setActionResult, nav
 
   return (
     <section data-testid="settlement-review-page">
-      <AdminPageHeader title="通票结算审阅" description="查看通票核销结算流水与月度结算单。流水只读，确认与入账由月度结算负责；超池停在「草稿」的结算单由平台负责人在此特批（短期激励，到期自动失效）。" />
+      <AdminPageHeader title="通票结算审阅" description="查看通票核销结算流水与月度结算单。流水只读，确认与入账由月度结算负责；第一段合计超过份池的部分由娱乐平台公司承担，结算不设超池待审批。" />
       <AdminDataState loading={rows.loading} error={rows.error} empty={empty} onRetry={rows.reload}>
         <div className="admin-kpi-grid" data-testid="settlement-review-summary">
           <div className="admin-kpi-card"><span>结算笔数</span><strong className="admin-kpi-value--text" data-testid="settlement-review-kpi-count">{countDisplay}</strong><small>{noFilter ? "平台全量" : "当前筛选"}{noFilter && countKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="settlement.transaction_count" testid="settlement-review-metric-detail-count" /> : null}</small></div>
@@ -275,12 +200,12 @@ export function SettlementReviewPage({ api, setGlobalError, setActionResult, nav
             <h3>月度结算单（近 {bills.length} 单）</h3>
             <p className="admin-muted-action">
               门票综合服务费＝娱乐平台公司留存／项目管理费，同一项只扣一次，分「池链」「专属」两支：池链支从可分配池前扣、专属支从专属商户直付前扣。可分配池＝酒吧份额扣完通路费、销售渠道费与池链服务费后的剩余，仅用于各酒吧分配，池内不再二次扣留存。金额为负＝该月冲正多于新核销，属向对方追回。
-              各酒吧分得总额不得超过可分配池：超池的结算单停在「草稿」，仅限平台负责人特批的短期激励活动放行（有效期按后台配置，默认不超过 3 个月，到期自动失效须重新特批）。
+              第一段合计超过份池的部分由娱乐平台公司承担（过账时单列为娱乐平台公司承担的补贴），结算不设超池待审批——超池在第一段配置生效前就已试算、确需超池须事先经短期经营激励审批。
               赠付差额＝赠付预扣（分账时按票种规则预扣的赠送权益预估成本）减去赠付实付（客人核销后娱乐平台公司按内部结算价付给提供方商户的钱），核销一件付一件、没核销就不付；差额留在娱乐平台公司，逐期在差额台账留痕。
             </p>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="settlement-review-bills-table">
-                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>通路费（元）</th><th>销售渠道费（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>赠付预扣（元）</th><th>赠付实付（元）</th><th>赠付差额（元）</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>未分配池余额（元）</th><th>通票未核销减除额（归属主体）</th><th>暂挂（元）</th><th>状态</th><th>超池（元）</th><th>超池特批</th></tr></thead>
+                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>通路费（元）</th><th>销售渠道费（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>赠付预扣（元）</th><th>赠付实付（元）</th><th>赠付差额（元）</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>未分配池余额（元）</th><th>通票未核销减除额（归属主体）</th><th>暂挂（元）</th><th>状态</th><th>超池（元，娱乐平台公司承担）</th></tr></thead>
                 <tbody>{bills.map((bill) => (
                   <tr key={bill.id} data-testid={`settlement-review-bill-${bill.id}`}>
                     <td>{bill.periodStart?.slice(0, 7) ?? "—"}</td>
@@ -304,50 +229,10 @@ export function SettlementReviewPage({ api, setGlobalError, setActionResult, nav
                     <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-suspended-${bill.id}`}>{centToYuan(bill.poolSuspendedCent)}</td>
                     <td>{formatBusinessStatus(bill.status ?? "—")}</td>
                     <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-overpool-amount-${bill.id}`}>{isOverPool(bill) ? centToYuan(overPoolCent(bill)) : "—"}</td>
-                    <td>{specialApprovalCell(bill)}</td>
                   </tr>
                 ))}</tbody>
               </table>
             </div>
-            {approvingBill ? (
-              <div data-testid="settlement-special-approval-form">
-                <h4>超池特批 · {approvingBill.periodStart?.slice(0, 7) ?? "—"} · {approvingBill.projectId ?? "平台默认"}</h4>
-                <p className="admin-muted-action">
-                  可分配池 {centToYuan(approvingBill.availablePoolCent)} 元，各酒吧分得合计 {centToYuan(approvingBill.pooledDistributedCent)} 元，超池 {centToYuan(overPoolCent(approvingBill))} 元。
-                  特批仅限平台负责人核准的短期激励活动：特批后该单转「已确认」、超池分账获准过账；有效期自今日按后台配置期限起算（默认不超过 3 个月），到期自动失效须重新特批。
-                </p>
-                <div className="admin-form-grid">
-                  <label>特批引用（审批凭据／理由，必填留痕）
-                    <input
-                      data-testid="settlement-special-approval-ref"
-                      value={approveRef}
-                      onChange={(event) => { setApproveRef(event.target.value); setApproveError(""); }}
-                      placeholder="例：某月超池激励活动批件号及理由"
-                    />
-                  </label>
-                </div>
-                <div className="admin-form-row">
-                  <HighRiskConfirm
-                    label="确认超池特批"
-                    impact={`结算月 ${approvingBill.periodStart?.slice(0, 7) ?? "—"} 结算单将转「已确认」,超池 ${centToYuan(overPoolCent(approvingBill))} 元的分账获准过账;有效期自今日按后台配置期限起算,到期自动失效。`}
-                    precheck={() => {
-                      if (!approveRef.trim()) {
-                        setApproveError("特批引用必填（审计留痕），不能为空");
-                        return false;
-                      }
-                      return true;
-                    }}
-                    disabled={approveBusy}
-                    onConfirm={() => void submitSpecialApproval()}
-                    permissionsState={effectivePermissions}
-                    permissions={[SPECIAL_APPROVE_PERMISSION]}
-                    data-testid="settlement-special-approval-submit"
-                  />
-                  <button type="button" data-testid="settlement-special-approval-cancel" onClick={() => { setApprovingBill(null); setApproveError(""); }}>取消</button>
-                </div>
-                {approveError ? <div className="admin-inline-error" data-testid="settlement-special-approval-error">{approveError}</div> : null}
-              </div>
-            ) : null}
           </div>
         ) : null}
       </AdminDataState>

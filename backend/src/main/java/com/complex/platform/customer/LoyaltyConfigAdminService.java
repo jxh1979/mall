@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -24,14 +24,17 @@ import static com.complex.platform.common.Strings.requireText;
  * 查看需 customer.loyalty.view，维护需 customer.loyalty.manage（high, V089）。
  * 底层库/仓储已就绪（{@link CustomerRepository#saveMemberLevel} 等 + V089 表与 CHECK 约束）；本服务只补齐配置写路径。
  *
- * <p>租户隔离与 {@link CustomerPointsRuleAdminService} 同口径：项目级管理员一律绑定其 token scope（覆盖请求体 project_id，
- * 写路径不信任请求体）；平台管理员须显式给 project_id。更新时校验目标记录 project_id 与解析出的 project_id 完全一致，
- * 防跨租户篡改（借 id 改他项目）。写路径 project_id 恒非空（token scope 或必填请求参数），故按 project 严格过滤成立。</p>
+ * <p>第十八批第 12 条：会员等级档位（BSM L820「客人在全国任一项目的消费均计入」、L821「全国平台统一规定」，ENUM L70/L72，
+ * DEC-R3-2026-08-04-35）与生日加倍规则（BSM L831 / ENUM L87「全国平台统一规定，不按项目分别配置」，DEC-R8-97-13）全平台一套：
+ * 不带 project_id，写入须有全国范围授权（平台管理员或勾了「可以查看全部项目」的角色，{@link AuthorizationService#allowsPlatformScope}）。</p>
  *
- * <p>GET 列表仍仅 status='active'（+ 项目匹配/平台缺省），停用/归档项从列表隐去；但更新路径（POST 带 id）
- * 用状态无关的 list*ByProject 定位，故停用/归档项仍可按 id 恢复为 active（停用可逆，非单向门）。新增同键
- * （同 project 重复 level_code/streak_days/rule_name，含已停用/归档项）在服务层预检返回 409，兜底再由全局
- * DuplicateKeyException 处理器归一 409，杜绝裸 uq_* 约束违例落 500。</p>
+ * <p>连续签到阶梯仍按综合体：与 {@link CustomerPointsRuleAdminService} 同口径，项目级管理员一律绑定其 token scope（覆盖请求体 project_id，
+ * 写路径不信任请求体）；平台管理员须显式给 project_id。更新时校验目标记录 project_id 与解析出的 project_id 完全一致，
+ * 防跨租户篡改（借 id 改他项目）。</p>
+ *
+ * <p>GET 列表仍仅 status='active'，停用/归档项从列表隐去；但更新路径（POST 带 id）用状态无关的列表定位，
+ * 故停用/归档项仍可按 id 恢复为 active（停用可逆，非单向门）。新增同键（重复 level_code / rule_name，同 project 重复 streak_days，
+ * 含已停用/归档项）在服务层预检返回 409，兜底再由全局 DuplicateKeyException 处理器归一 409，杜绝裸 uq_* 约束违例落 500。</p>
  */
 @Service
 public class LoyaltyConfigAdminService {
@@ -63,9 +66,9 @@ public class LoyaltyConfigAdminService {
 
     // ---- 会员等级 ----
 
-    public PageResponse<CustomerMemberLevelRecord> listMemberLevels(String requestedProjectId) {
+    public PageResponse<CustomerMemberLevelRecord> listMemberLevels() {
         authorizationService.requirePermission(VIEW);
-        List<CustomerMemberLevelRecord> items = repository.listMemberLevels(resolveReadProjectId(requestedProjectId));
+        List<CustomerMemberLevelRecord> items = repository.listMemberLevels();
         auditEventService.recordSuccess("customer.member_level.listed", VIEW, BT_LEVEL, "list",
                 null, null, Map.of("count", items.size()));
         return page(items);
@@ -75,20 +78,17 @@ public class LoyaltyConfigAdminService {
     public CustomerMemberLevelRecord saveMemberLevel(MemberLevelConfigRequest request) {
         authorizationService.requirePermission(MANAGE);
         try {
+            requireNationwide("会员等级全平台统一，须有全国范围授权");
             MemberLevelConfigRequest r = require(request);
-            String projectId = resolveWriteProjectId(r.projectId());
             String levelCode = requireText(r.levelCode(), "level_code");
-            if (isCreate(r.id())
-                    && repository.listMemberLevelsByProject(projectId).stream()
-                            .anyMatch(x -> levelCode.equals(x.levelCode()))) {
-                throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
-                        "该会员等级编码在本项目已存在");
+            List<CustomerMemberLevelRecord> all = repository.listAllMemberLevels();
+            if (isCreate(r.id()) && all.stream().anyMatch(x -> levelCode.equals(x.levelCode()))) {
+                throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE", "该会员等级编码已存在");
             }
             Instant now = Instant.now();
-            String id = resolveId(r.id(), "member_level_", projectId, this::findLevelInProject);
+            String id = resolveId(r.id(), "member_level_", x -> all.stream().anyMatch(level -> x.equals(level.id())));
             CustomerMemberLevelRecord saved = repository.saveMemberLevel(new CustomerMemberLevelRecord(
                     id,
-                    projectId,
                     levelCode,
                     requireText(r.levelName(), "level_name"),
                     (int) requireMin(r.levelRank(), 0, "level_rank"),
@@ -98,7 +98,7 @@ public class LoyaltyConfigAdminService {
                     now,
                     now));
             auditEventService.recordSuccess("customer.member_level.saved", MANAGE, BT_LEVEL, saved.id(),
-                    null, null, Map.of("project_id", projectId, "level_code", saved.levelCode()));
+                    null, null, Map.of("level_code", saved.levelCode()));
             return saved;
         } catch (ApiException e) {
             auditEventService.recordFailure("customer.member_level.save_failed", MANAGE, BT_LEVEL,
@@ -131,7 +131,7 @@ public class LoyaltyConfigAdminService {
                         "该连续签到档位在本项目已存在");
             }
             Instant now = Instant.now();
-            String id = resolveId(r.id(), "check_in_tier_", projectId, this::findTierInProject);
+            String id = resolveId(r.id(), "check_in_tier_", x -> findTierInProject(x, projectId));
             CustomerCheckInTierRecord saved = repository.saveCheckInTier(new CustomerCheckInTierRecord(
                     id,
                     projectId,
@@ -152,9 +152,9 @@ public class LoyaltyConfigAdminService {
 
     // ---- 生日加倍规则 ----
 
-    public PageResponse<CustomerBirthdayRuleRecord> listBirthdayRules(String requestedProjectId) {
+    public PageResponse<CustomerBirthdayRuleRecord> listBirthdayRules() {
         authorizationService.requirePermission(VIEW);
-        List<CustomerBirthdayRuleRecord> items = repository.listActiveBirthdayRules(resolveReadProjectId(requestedProjectId));
+        List<CustomerBirthdayRuleRecord> items = repository.listActiveBirthdayRules();
         auditEventService.recordSuccess("customer.birthday_rule.listed", VIEW, BT_BIRTHDAY, "list",
                 null, null, Map.of("count", items.size()));
         return page(items);
@@ -164,20 +164,17 @@ public class LoyaltyConfigAdminService {
     public CustomerBirthdayRuleRecord saveBirthdayRule(BirthdayRuleConfigRequest request) {
         authorizationService.requirePermission(MANAGE);
         try {
+            requireNationwide("生日加倍规则全平台统一，须有全国范围授权");
             BirthdayRuleConfigRequest r = require(request);
-            String projectId = resolveWriteProjectId(r.projectId());
             String ruleName = requireText(r.ruleName(), "rule_name");
-            if (isCreate(r.id())
-                    && repository.listBirthdayRulesByProject(projectId).stream()
-                            .anyMatch(x -> ruleName.equals(x.ruleName()))) {
-                throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE",
-                        "该生日规则名称在本项目已存在");
+            List<CustomerBirthdayRuleRecord> all = repository.listAllBirthdayRules();
+            if (isCreate(r.id()) && all.stream().anyMatch(x -> ruleName.equals(x.ruleName()))) {
+                throw ApiException.conflict("LOYALTY_CONFIG_DUPLICATE", "该生日规则名称已存在");
             }
             Instant now = Instant.now();
-            String id = resolveId(r.id(), "birthday_rule_", projectId, this::findBirthdayInProject);
+            String id = resolveId(r.id(), "birthday_rule_", x -> all.stream().anyMatch(rule -> x.equals(rule.id())));
             CustomerBirthdayRuleRecord saved = repository.saveBirthdayRule(new CustomerBirthdayRuleRecord(
                     id,
-                    projectId,
                     ruleName,
                     requireEnum(r.windowType(), BIRTHDAY_WINDOWS, "window_type"),
                     (int) requireMin(r.multiplierBasisPoints(), 10001, "multiplier_basis_points"),
@@ -185,7 +182,7 @@ public class LoyaltyConfigAdminService {
                     now,
                     now));
             auditEventService.recordSuccess("customer.birthday_rule.saved", MANAGE, BT_BIRTHDAY, saved.id(),
-                    null, null, Map.of("project_id", projectId, "window_type", saved.windowType()));
+                    null, null, Map.of("window_type", saved.windowType()));
             return saved;
         } catch (ApiException e) {
             auditEventService.recordFailure("customer.birthday_rule.save_failed", MANAGE, BT_BIRTHDAY,
@@ -201,6 +198,13 @@ public class LoyaltyConfigAdminService {
         return authorizationService.currentProjectScopeQuietly().orElse(requestedProjectId);
     }
 
+    /** 全平台一套的配置（会员等级、生日加倍规则）：须有全国范围授权；只到本人项目或逐个勾选项目的账号不能写。 */
+    private void requireNationwide(String message) {
+        if (!authorizationService.allowsPlatformScope(authorizationService.currentActor(), MANAGE)) {
+            throw ApiException.forbidden("FORBIDDEN", message);
+        }
+    }
+
     /** 写路径 project_id：项目级管理员强制绑定 token scope（覆盖请求体）；平台管理员须显式给。 */
     private String resolveWriteProjectId(String requestedProjectId) {
         Optional<String> scope = authorizationService.currentProjectScopeQuietly();
@@ -213,33 +217,22 @@ public class LoyaltyConfigAdminService {
     }
 
     /**
-     * 解析写入 id：空=新增（生成）；非空=更新，须目标记录存在且归属同一 project_id（防借 id 篡改他项目）。
-     * 用状态无关的 list*ByProject 定位，故 inactive/archived 记录仍可被更新（改回 active），停用不再是单向门。
+     * 解析写入 id：空=新增（生成）；非空=更新，须目标记录在当前范围内存在（签到阶梯须归属同一 project_id，防借 id 篡改他项目）。
+     * 用状态无关的列表定位，故 inactive/archived 记录仍可被更新（改回 active），停用不再是单向门。
      */
-    private String resolveId(String requestedId, String prefix, String projectId,
-                             java.util.function.BiPredicate<String, String> existsInProject) {
+    private String resolveId(String requestedId, String prefix, java.util.function.Predicate<String> exists) {
         if (requestedId == null || requestedId.isBlank()) {
             return prefix + UUID.randomUUID();
         }
         String id = requestedId.trim();
-        if (!existsInProject.test(id, projectId)) {
+        if (!exists.test(id)) {
             throw ApiException.notFound("LOYALTY_CONFIG_NOT_FOUND", "当前范围内未找到该配置记录");
         }
         return id;
     }
 
-    private boolean findLevelInProject(String id, String projectId) {
-        return repository.listMemberLevelsByProject(projectId).stream()
-                .anyMatch(x -> id.equals(x.id()) && projectId.equals(x.projectId()));
-    }
-
     private boolean findTierInProject(String id, String projectId) {
         return repository.listCheckInTiersByProject(projectId).stream()
-                .anyMatch(x -> id.equals(x.id()) && projectId.equals(x.projectId()));
-    }
-
-    private boolean findBirthdayInProject(String id, String projectId) {
-        return repository.listBirthdayRulesByProject(projectId).stream()
                 .anyMatch(x -> id.equals(x.id()) && projectId.equals(x.projectId()));
     }
 

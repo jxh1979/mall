@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -355,6 +355,19 @@ class BarReservationHoldJdbcIntegrationTests {
         assertThat(bars.findReservationCustomerPhone(reservation)).contains(phone);
         assertThat(jdbc.queryForObject("SELECT customer_phone FROM bar_reservations WHERE id = ?", String.class, reservation))
                 .startsWith("enc:v1:").isNotEqualTo(phone);
+    }
+
+    @Test
+    void staffReservationIsDepositWaivedEvenWhenDepositRuleConfigured() throws Exception {
+        // 第十八批 C 段第 15 条：BSM 第 1062 行「员工代客订台不收定金……员工代客订台不收定金、没有支付动作的，支付时间就空着」；
+        // ENUM 第 103 行订台定金状态「免收（员工代订）」。本酒吧已配固定 200 元定金规则（seed），员工代订仍免收。
+        String reservation = CustomerTicketPaymentFixture.read(staffReserve("staff-waived", "13900000007")
+                .andExpect(status().isOk()), "$.data.id");
+        assertThat(jdbc.queryForMap("SELECT deposit_status, deposit_amount_cent, deposit_intent_id, deposit_paid_at, hold_status"
+                + " FROM bar_reservations WHERE id = ?", reservation))
+                .containsEntry("deposit_status", "staff_waived").containsEntry("deposit_amount_cent", 0L)
+                .containsEntry("deposit_intent_id", null).containsEntry("deposit_paid_at", null)
+                .containsEntry("hold_status", "held");
     }
 
     // ---------- helpers ----------

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // docs:data-isolation-spec / verify:data-isolation-spec
 // 以 Flyway 迁移目录为事实源，生成数据隔离规格中的自动迁移隔离基线，避免 R1-FINDING-A 的静态计数漂移。
 
@@ -68,6 +68,14 @@ function parseSchema() {
         if (SCOPE_COLUMNS.includes(column.toLowerCase())) {
           addColumn(tables, table, column, version, file);
         }
+      }
+      // DROP COLUMN — 删掉的 scope 列移出基线，表上一个 scope 列都不剩即移出（第十八批 V558：会员等级与生日加倍规则改全平台一套）。
+      const dropColRe = /DROP COLUMN\s+(?:IF EXISTS\s+)?"?([a-zA-Z_][\w]*)"?/gi;
+      while ((colMatch = dropColRe.exec(stmt)) !== null) {
+        const row = tables.get(table.toLowerCase());
+        if (!row) continue;
+        row.columns.delete(colMatch[1].toLowerCase());
+        if (row.columns.size === 0) tables.delete(table.toLowerCase());
       }
     }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -86,6 +86,10 @@ const STATUS_LABELS: Record<string, string> = {
   not_required: "无需定金",
   // ENUM 第 103 行订台定金状态「已超时释放」（超时释放时未付定金直接作废）
   timeout_released: "已超时释放",
+  // ENUM 第 103 行订台定金状态「免收（员工代订）」（第十八批 C 段第 15 条，BSM 第 1062 行员工代客订台不收定金）
+  staff_waived: "免收（员工代订）",
+  // 第十八批 C 段第 15 条：员工代订权限停用记录「由店长复核后恢复」（BSM 第 1468 行）
+  restored: "已恢复",
   // 员工账号类型 / 账号状态
   staff: "普通员工",
   sales: "销售人员",

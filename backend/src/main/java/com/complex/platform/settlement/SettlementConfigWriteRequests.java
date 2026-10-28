@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.util.List;
 
@@ -18,14 +18,15 @@ public final class SettlementConfigWriteRequests {
     }
 
     /**
-     * ticket_distribution_configs:分配方式 ∈{by_venue_per_guest,by_rank_tier,by_fixed_amount} + S9 超池特批有效期。
+     * ticket_distribution_configs:分配方式(只收 by_rank_tier) + 短期经营激励单次有效期上限。
      *
-     * <p>V368(用户 2026-07-28 纠正「不是指校验大于等于一个月,也可以三天」):有效期 = 数值 + 单位,
-     * specialApprovalTermUnit ∈{day,month};两项都留空 = 出厂默认 3 个月(业务口径「期限可配,默认不超过 3 个月」)。
-     * 下限只到「1 个单位」(1 天/1 个月),没有上限。
+     * <p>第 75 条(ENUM L52「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」):
+     * 上限 = 数值 + 单位(specialApprovalTermUnit ∈{day,month},V368「也可以三天」),连同该参数的下限、上限(同一单位)四项同时必填,
+     * 1 ≤ 下限 ≤ 数值 ≤ 上限。
      */
     public record DistributionMethodRequest(String idempotencyKey, String projectId, String methodType,
-                                            Integer specialApprovalTermValue, String specialApprovalTermUnit) {
+                                            Integer specialApprovalTermValue, String specialApprovalTermUnit,
+                                            Integer specialApprovalTermMinValue, Integer specialApprovalTermMaxValue) {
     }
 
     /** ticket_distribution_merchant_rates:某商户每客单价/固定额(分),两额至少配一、各≥0。 */
@@ -142,6 +143,14 @@ public final class SettlementConfigWriteRequests {
     }
 
     public record FirstSegmentInput(String merchantId, Long perGuestCent, Long fixedAmountCent) {
+    }
+
+    /** 第 75 条:短期经营激励申请(首次或到期重审)——理由与期限(termUnit ∈ {day, month})。 */
+    public record IncentiveApplicationRequest(String idempotencyKey, String reason, Integer termValue, String termUnit) {
+    }
+
+    /** 第 75 条:短期经营激励审批意见(批准或驳回)。 */
+    public record IncentiveDecisionRequest(String idempotencyKey, String note) {
     }
 
     /** 第十八批第 2 条:档位表与第一段变更共用的通告期(periodUnit ∈ {day, month}),数值与上下限同时必填。 */

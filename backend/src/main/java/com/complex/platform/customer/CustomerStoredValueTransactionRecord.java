@@ -23,8 +23,30 @@ public record CustomerStoredValueTransactionRecord(
         Instant paidAt,
         // CG-06a：本笔变动中的本金 / 赠送金部分（带方向）；amountCent = principalCent + bonusCent。
         long principalCent,
-        long bonusCent
+        long bonusCent,
+        // 第十八批第 11 条（BSM L521「每一笔单据在生成时就把所用配置版本固化在单上」）：充值所用赠送比例版本；无生效版本或非充值流水为 null。
+        String bonusConfigVersionId
 ) {
+    /** 兼容构造（13 参，无赠送比例版本）。 */
+    public CustomerStoredValueTransactionRecord(
+            String id,
+            String accountId,
+            String customerId,
+            String txnType,
+            long amountCent,
+            long balanceAfterCent,
+            String paymentIntentId,
+            String reason,
+            String idempotencyKey,
+            Instant createdAt,
+            Instant paidAt,
+            long principalCent,
+            long bonusCent
+    ) {
+        this(id, accountId, customerId, txnType, amountCent, balanceAfterCent, paymentIntentId, reason, idempotencyKey,
+                createdAt, paidAt, principalCent, bonusCent, null);
+    }
+
     /** 兼容构造（11 参，无两段）：本金 = 全额、赠送金 = 0——仅供旧替身，生产路径一律用全参构造。 */
     public CustomerStoredValueTransactionRecord(
             String id,

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -190,10 +190,10 @@ class MerchantConsumptionRewardJdbcIntegrationTests {
     void birthdayLockedAtPaymentTimeAndLevelMultiplierApplied() {
         rules(base.minus(1, ChronoUnit.DAYS), 1_000L, 100L);
         LocalDate birthday = LocalDate.ofInstant(base, com.complex.platform.common.LocalZone.ID);
-        jdbc.update("INSERT INTO customer_birthday_rules(id,project_id,rule_name,window_type,multiplier_basis_points,status) VALUES(?,NULL,?,'birthday_day',20000,'active')",
+        jdbc.update("INSERT INTO customer_birthday_rules(id,rule_name,window_type,multiplier_basis_points,status) VALUES(?,?,'birthday_day',20000,'active')",
                 "cbr_" + s, "生日加倍_" + s);
         String level = "lvl_mcr_" + s;
-        jdbc.update("INSERT INTO customer_member_levels(id,project_id,level_code,level_name,level_rank,point_multiplier_basis_points,status) VALUES(?,NULL,?,'测试等级',900,15000,'active')",
+        jdbc.update("INSERT INTO customer_member_levels(id,level_code,level_name,level_rank,point_multiplier_basis_points,status) VALUES(?,?,'测试等级',900,15000,'active')",
                 level, level);
         String member = customer("133" + digits(), birthday.withYear(1990));
         jdbc.update("INSERT INTO customer_points_accounts(id,customer_id,balance,level,recent_summary,frozen_points,account_status,keep_threshold_progress,check_in_streak,created_at,updated_at) VALUES(?,?,0,?,'{}',0,'active',0,0,now(),now())",

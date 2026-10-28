@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.settlement;
 
 import static org.mockito.Mockito.doThrow;
@@ -35,7 +35,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * <p>集成测试(批2-4/2-5)已直调 {@link SettlementPostingService#postBill} 覆盖真实过账副作用
  * (ar_ap 落地 + bill→settled + 幂等);端点仅是「鉴权 + 平台域 + 转发 postBill 返回笔数」的薄委托,
  * 本 @WebMvcTest 补齐该薄层:高敏权限 settlement.bill.post + 平台域门、返回笔数透传、缺权限/非平台域一律 403、
- * postBill 抛业务冲突(超池 draft 单)→ 409 SETTLEMENT_BILL_NOT_CONFIRMED 透传前端(与既有 config controller 鉴权测试同范式)。
+ * postBill 抛业务冲突(未确认单)→ 409 SETTLEMENT_BILL_NOT_CONFIRMED 透传前端(与既有 config controller 鉴权测试同范式)。
  */
 @WebMvcTest(controllers = SettlementController.class)
 @Import({com.complex.platform.support.AuthAccessTestConfiguration.class, GlobalExceptionHandler.class, SecurityConfig.class, SettlementControllerPostBillTests.TestBeans.class})
@@ -100,47 +100,7 @@ class SettlementControllerPostBillTests {
         verifyNoInteractions(postingService);
     }
 
-    /**
-     * v7 审计 R-2(V357):超池特批走<b>专属权限点</b> settlement.bill.special_approve(非过账权限),
-     * 平台域;回执带到期日(S9 短期激励期限)。
-     */
-    @Test
-    void specialApproveRequiresDedicatedPermissionAndReturnsValidUntil() throws Exception {
-        java.time.LocalDate validUntil = java.time.LocalDate.now().plusMonths(3);
-        when(postingService.specialApprove("bill_1", "SA-1"))
-                .thenReturn(new SettlementPostingService.SpecialApprovalResult("SA-1", validUntil));
-
-        mockMvc.perform(post("/api/v1/settlement/bills/bill_1/special-approval")
-                        .with(user("admin").roles("P0_SMOKE"))
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        // 请求体同样 SNAKE_CASE：special_approval_ref。
-                        .content("{\"special_approval_ref\":\"SA-1\"}"))
-                .andExpect(status().isOk())
-                // 全局 SNAKE_CASE 序列化：specialApprovalRef ↔ special_approval_ref。
-                .andExpect(jsonPath("$.data.special_approval_ref").value("SA-1"))
-                .andExpect(jsonPath("$.data.valid_until").value(validUntil.toString()));
-
-        verify(authorizationService).requirePermission("settlement.bill.special_approve");
-        verify(authorizationService).requirePlatformScope();
-    }
-
-    /** 只有过账权限、没有特批专属权限 → 403,不触达特批(分权:过账可下放,超池特批只归平台负责人)。 */
-    @Test
-    void specialApproveForbiddenWithoutDedicatedPermission() throws Exception {
-        doThrow(ApiException.forbidden("PERMISSION_DENIED", "missing settlement.bill.special_approve"))
-                .when(authorizationService).requirePermission("settlement.bill.special_approve");
-
-        mockMvc.perform(post("/api/v1/settlement/bills/bill_1/special-approval")
-                        .with(user("admin").roles("P0_SMOKE"))
-                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        // 请求体同样 SNAKE_CASE：special_approval_ref。
-                        .content("{\"special_approval_ref\":\"SA-1\"}"))
-                .andExpect(status().isForbidden());
-
-        verifyNoInteractions(postingService);
-    }
-
-    /** 超池 draft 单调过账 → postBill 抛冲突 → 409 SETTLEMENT_BILL_NOT_CONFIRMED 透传。 */
+    /** 未确认单调过账 → postBill 抛冲突 → 409 SETTLEMENT_BILL_NOT_CONFIRMED 透传。 */
     @Test
     void postBillConflictWhenNotConfirmed() throws Exception {
         when(postingService.postBill("draft_bill")).thenThrow(ApiException.conflict(

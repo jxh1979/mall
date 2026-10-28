@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { readFileSync } from "node:fs";
 
 const matrixPath = "docs/full-admin-page-permission-field-matrix-v0.1.csv";
@@ -47,6 +47,7 @@ const bespokePages = new Set([
   "ADM-CUS-002",
   "ADM-ACC-004",
   "ADM-GOV-009",
+  "ADM-GOV-010",
   // ADM-CUS-003「积分规则配置」已停用下线（2026-07-28 用户拍板，V352）：该页四个配置维度全被活表接管，
   // 改任何字段都不影响任何计算。矩阵行/路由/页面/端点同批移除，故不再登记为专属页。
   "ADM-CUS-004",

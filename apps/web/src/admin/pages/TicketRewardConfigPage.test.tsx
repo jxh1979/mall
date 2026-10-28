@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TicketRewardConfigPage } from "./TicketRewardConfigPage";
@@ -87,4 +87,45 @@ it("会员等级保护期全平台统一，值与上下限同配提交审批",as
   await waitFor(()=>expect(bodies).toHaveLength(1));
   expect(bodies[0]).toMatchObject({kind:"level_protection_months",project_id:null,ticket_type_id:null,final_approver_id:"u_platform",values:{fixed_value:6,minimum_value:1,maximum_value:24}});
   expect(bodies[0]).not.toHaveProperty("business_format");
+});
+
+// 第十八批第 11 条（ENUM L86「商户级卡同样可以设赠送……赠送比例由发卡商户提出、由平台运营代为录入后台」「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」；
+// BSM L521 涉钱配置版本化、经审批按指定日期生效）：商户级卡填发卡商户、不选综合体；通用卡只选综合体（可空）、不选票种；值与上下限同配提交审批，无需公告。
+it("储值充值赠送比例两类分别提交审批",async()=>{
+  const bodies:Record<string,unknown>[]=[];
+  vi.stubGlobal("fetch",vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    const url=String(input);if(init?.method==="POST")bodies.push(JSON.parse(String(init.body)));let data:unknown=[];
+    if(url.includes("/platform/projects"))data=[{id:"p1",name:"长沙项目"}];
+    if(url.includes("/ticket-reward-configs")&&init?.method!=="POST")data=[{id:"r5",kind:"merchant_card_bonus",merchant_id:"m1",version:"V0.01",status:"approved",effective_at:"2099-01-01T00:00:00Z",values:{fixed_value:1000}}];
+    if(init?.method==="POST")data={id:"r6",kind:"merchant_card_bonus",version:"V0.02",status:"pending_review",effective_at:"2099-01-01T00:00:00Z",values:{}};
+    return new Response(JSON.stringify({success:true,code:"OK",data}),{headers:{"Content-Type":"application/json"}});
+  }));
+  const props:AdminPageProps={api:new AdminApi("test"),user:{id:"u",username:"admin",accountType:"platform_admin"},setActionResult:vi.fn(),setGlobalError:vi.fn(),effectivePermissions:{status:"ready",value:{grants:["ticket.reward.config.view","ticket.reward.config.manage"],denies:[],wildcard:false}}};
+  render(<TicketRewardConfigPage {...props}/>);
+  await waitFor(()=>expect(screen.queryByRole("option",{name:"商户级卡充值赠送比例（商户提出、平台代录）"})).not.toBeNull());
+  fireEvent.change(screen.getByLabelText("配置类型"),{target:{value:"merchant_card_bonus"}});
+  expect(screen.queryByLabelText("综合体")).not.toBeInTheDocument();
+  await waitFor(()=>expect(screen.queryByText("无需公告")).not.toBeNull());
+  fireEvent.change(screen.getByLabelText("发卡商户 id"),{target:{value:"m1"}});
+  fireEvent.change(screen.getByLabelText("赠送比例（万分比）"),{target:{value:"1000"}});
+  fireEvent.change(screen.getByLabelText("赠送比例下限（万分比）"),{target:{value:"0"}});
+  fireEvent.change(screen.getByLabelText("赠送比例上限（万分比）"),{target:{value:"2000"}});
+  fireEvent.change(screen.getByLabelText("生效时间"),{target:{value:"2099-01-01T08:00"}});
+  fireEvent.change(screen.getByLabelText("变更原因"),{target:{value:"商户提出的赠送比例"}});
+  fireEvent.change(screen.getByLabelText("最终审批人账号"),{target:{value:"u_platform"}});
+  fireEvent.click(screen.getByText("提交审批"));
+  await waitFor(()=>expect(bodies).toHaveLength(1));
+  expect(bodies[0]).toMatchObject({kind:"merchant_card_bonus",merchant_id:"m1",project_id:null,ticket_type_id:null,values:{fixed_value:1000,minimum_value:0,maximum_value:2000}});
+
+  fireEvent.change(screen.getByLabelText("配置类型"),{target:{value:"stored_value_bonus"}});
+  expect(screen.queryByLabelText("票种")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("发卡商户 id")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("综合体"),{target:{value:"p1"}});
+  fireEvent.change(screen.getByLabelText("赠送比例（万分比）"),{target:{value:"500"}});
+  fireEvent.change(screen.getByLabelText("赠送比例下限（万分比）"),{target:{value:"0"}});
+  fireEvent.change(screen.getByLabelText("赠送比例上限（万分比）"),{target:{value:"1000"}});
+  fireEvent.click(screen.getByText("提交审批"));
+  await waitFor(()=>expect(bodies).toHaveLength(2));
+  expect(bodies[1]).toMatchObject({kind:"stored_value_bonus",project_id:"p1",ticket_type_id:null,values:{fixed_value:500,minimum_value:0,maximum_value:1000}});
+  expect(bodies[1]).not.toHaveProperty("merchant_id");
 });

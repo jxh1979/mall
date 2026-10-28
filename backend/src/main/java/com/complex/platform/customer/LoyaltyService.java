@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -377,7 +377,7 @@ public class LoyaltyService {
     public CustomerPointsAccountRecord evaluateLevel(String customerId, Instant now) {
         CustomerPointsAccountRecord account = repository.findPointsByCustomerIdForUpdate(customerId)
                 .orElseThrow(() -> ApiException.notFound("POINTS_ACCOUNT_NOT_FOUND", "积分账户不存在或已被删除"));
-        return evaluateAccount(account, repository.listMemberLevels(null), now, false);
+        return evaluateAccount(account, repository.listMemberLevels(), now, false);
     }
 
     /** 全量等级评估（每日作业逻辑本体，可单测直调；系统作业不过权限闸）。
@@ -386,7 +386,7 @@ public class LoyaltyService {
     public int evaluateLevels(Instant now) {
         LoyaltyService self = applicationContext != null
                 ? applicationContext.getBean(LoyaltyService.class) : this;
-        List<CustomerMemberLevelRecord> levels = repository.listMemberLevels(null);
+        List<CustomerMemberLevelRecord> levels = repository.listMemberLevels();
         if (levels.isEmpty()) {
             return 0;
         }
@@ -419,7 +419,7 @@ public class LoyaltyService {
     /** 成长值入账或冲回后在同一事务内即时重算（门票核销、商户消费完成即记成长值；退款、核销冲正冲回成长值）。 */
     void regrade(String customerId, Instant at, boolean reversal) {
         repository.findPointsByCustomerIdForUpdate(customerId)
-                .ifPresent(account -> evaluateAccount(account, repository.listMemberLevels(null), at, reversal));
+                .ifPresent(account -> evaluateAccount(account, repository.listMemberLevels(), at, reversal));
     }
 
     private CustomerPointsAccountRecord evaluateAccount(CustomerPointsAccountRecord account,
@@ -531,7 +531,7 @@ public class LoyaltyService {
     /** 本人未读等级通知，新到旧。 */
     public List<LevelNotice> listLevelNotices(String customerId) {
         Map<String, String> names = new java.util.HashMap<>();
-        for (CustomerMemberLevelRecord level : repository.listMemberLevels(null)) {
+        for (CustomerMemberLevelRecord level : repository.listMemberLevels()) {
             names.putIfAbsent(level.levelCode(), level.levelName());
         }
         return jdbc.query("SELECT * FROM customer_level_notices WHERE customer_id = ? AND read_at IS NULL ORDER BY created_at DESC, id",
@@ -744,7 +744,7 @@ public class LoyaltyService {
 
     /** 包内复用：商户消费奖励（MerchantConsumptionRewardService）按同一等级倍率计算。 */
     long levelMultiplierBasisPoints(String levelCode) {
-        for (CustomerMemberLevelRecord level : repository.listMemberLevels(null)) {
+        for (CustomerMemberLevelRecord level : repository.listMemberLevels()) {
             if (level.levelCode().equals(levelCode)) {
                 return level.pointMultiplierBasisPoints();
             }
@@ -760,7 +760,7 @@ public class LoyaltyService {
         LocalDate today = LocalDate.ofInstant(now, LocalZone.ID);
         LocalDate birth = customer.birthDate();
         long best = BASIS_POINTS_DENOMINATOR;
-        for (CustomerBirthdayRuleRecord rule : repository.listActiveBirthdayRules(null)) {
+        for (CustomerBirthdayRuleRecord rule : repository.listActiveBirthdayRules()) {
             boolean hit = switch (rule.windowType()) {
                 case "birthday_day" -> birth.getMonthValue() == today.getMonthValue()
                         && birth.getDayOfMonth() == today.getDayOfMonth();

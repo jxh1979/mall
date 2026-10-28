@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -58,7 +58,9 @@ enum BarWriteOperation implements AuditedOperation {
     REQUEST_DELETE_BAR_COMBO("bar.combo.delete_requested", "bar.combo.delete_request_failed", "bar.combo.manage", "bar_combo"),
     APPROVE_DELETE_BAR_COMBO("bar.combo.delete_approved", "bar.combo.delete_approve_failed", "bar.combo.approve", "bar_combo"),
     REQUEST_DELETE_BAR_RESERVATION("bar.reservation.delete_requested", "bar.reservation.delete_request_failed", "bar.reservation.manage", "bar_reservation"),
-    APPROVE_DELETE_BAR_RESERVATION("bar.reservation.delete_approved", "bar.reservation.delete_approve_failed", "bar.reservation.approve", "bar_reservation");
+    APPROVE_DELETE_BAR_RESERVATION("bar.reservation.delete_approved", "bar.reservation.delete_approve_failed", "bar.reservation.approve", "bar_reservation"),
+    // 第十八批 C 段第 15 条：店长复核恢复员工代订权限（BSM 第 1468 行）。
+    RESTORE_STAFF_BOOKING("bar.staff_booking_restored", "bar.staff_booking_restore_failed", "bar.staff_booking.restore", "bar_staff_booking_suspension");
 
     private final String successEvent;
     private final String failureEvent;

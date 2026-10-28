@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -223,7 +223,7 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
-        service.configureMerchantCard("m1", true, "platform_collect");
+        platformCollectRule(repo, "m1");
         PaymentIntentRecord m = service.topup("c1", null, "m1", 5_000L, "wechat", "tp-m1r");
         finance.markPaymentIntentSucceeded(m.id());
         service.settleTopup("c1", null, "m1", m.id());
@@ -395,7 +395,10 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService platform = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
-        platform.configureMerchantCard("mX", true, "platform_collect");
+        // 第十八批第 11 条（BSM L833；DEC-CFG-2026-08-03-11 关闭平台代收开关）：平台也不能再设平台代收。
+        assertThatThrownBy(() -> platform.configureMerchantCard("mX", true, "platform_collect"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        platformCollectRule(repo, "mX");
         PaymentIntentRecord m = platform.topup("c1", null, "mX", 5_000L, "wechat", "tp-frz");
         finance.markPaymentIntentSucceeded(m.id());
         platform.settleTopup("c1", null, "mX", m.id());
@@ -412,7 +415,7 @@ class MemberWalletServiceTests {
         StoredValueService merchantSvc = new StoredValueService(repo, finance, audit(),
                 gatewayRouter(true), merchantAuth, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
-        assertThatThrownBy(() -> merchantSvc.configureMerchantCard("mX", true, "platform_collect"))
+        assertThatThrownBy(() -> merchantSvc.configureMerchantCard("mX", true, "merchant_prepaid"))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
     }
@@ -423,7 +426,7 @@ class MemberWalletServiceTests {
         FakeFinance finance = new FakeFinance();
         StoredValueService service = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
-        service.configureMerchantCard("mPC", true, "platform_collect");
+        platformCollectRule(repo, "mPC");
         PaymentIntentRecord m = service.topup("c1", null, "mPC", 5_000L, "wechat", "tp-pc");
         finance.markPaymentIntentSucceeded(m.id());
         service.settleTopup("c1", null, "mPC", m.id());
@@ -453,7 +456,7 @@ class MemberWalletServiceTests {
                         e -> assertThat(e.code()).isEqualTo("STORED_VALUE_MERCHANT_PREPAID_REFUND_IN_STORE"));
         assertThat(repo.storedValue.get("c1|null|mPP").balanceCent()).isEqualTo(5_000L);
 
-        service.configureMerchantCard("mPC", true, "platform_collect");
+        platformCollectRule(repo, "mPC");
         PaymentIntentRecord m2 = service.topup("c1", null, "mPC", 5_000L, "wechat", "tp-pcref");
         finance.markPaymentIntentSucceeded(m2.id());
         service.settleTopup("c1", null, "mPC", m2.id());
@@ -467,6 +470,11 @@ class MemberWalletServiceTests {
     // ============================================================
     // helpers
     // ============================================================
+
+    /** 已定格为平台代收的商户卡规则（第十八批第 11 条关闭入口后只剩此前定格的旧卡），直写规则行以覆盖下游分支。 */
+    private static void platformCollectRule(InMemoryRepo repo, String merchantId) {
+        repo.saveStoredValueMerchantRefundRule(new StoredValueMerchantRefundRuleRecord(merchantId, true, 10000, true, "platform_collect", T0, T0));
+    }
 
     private InMemoryRepo seeded() {
         InMemoryRepo repo = new InMemoryRepo();

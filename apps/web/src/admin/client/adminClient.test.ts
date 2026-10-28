@@ -1143,7 +1143,6 @@ describe("AdminApi 同一次操作的请求编号", () => {
   const PAGE_WRITES: Array<[string, string, Record<string, unknown>, Record<string, unknown>]> = [
     ["票务订单页确认拨付", "/api/v1/ticketing/refunds/rf_1/confirm-payout", { reason: "原路退回 TX001" }, { reason: "原路退回 TX001" }],
     ["酒吧订单页生成账单", "/api/v1/bar/orders/ord_9/bill", { operatorNote: "完整后台验收账单" }, { operatorNote: "完整后台验收账单" }],
-    ["结算复核页超池特批", "/api/v1/settlement/bills/bill_1/special-approval", { specialApprovalRef: "SA-2026-04-001" }, { specialApprovalRef: "SA-2026-04-001" }],
     ["分红页审批通过", "/api/v1/finance/dividends/statements/divs_2/approve", { idempotencyKey: "dividend-approve-1000" }, { idempotencyKey: "dividend-approve-2000" }],
     ["分红页标记发放", "/api/v1/finance/dividends/statements/divs_2/mark-paid", { idempotencyKey: "dividend-mark_paid-1000" }, { idempotencyKey: "dividend-mark_paid-2000" }],
     [

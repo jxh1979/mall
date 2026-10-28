@@ -6,7 +6,6 @@ import com.complex.platform.common.api.PageResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>批1 补过账触发缺口②:{@code POST /bills/{id}/post} 网关端点——把 confirmed 结算单的各酒吧分账
  * 挂 finance 应付台账(委托 {@link SettlementPostingService#postBill},幂等·@Transactional·仅 confirmed 单)。
- * 供超池特批 confirmed 后人工过账;常规单由 {@link SettlementMonthlyJob} 自动过账。
+ * 供人工过账;常规单由 {@link SettlementMonthlyJob} 自动过账。第 75 条起结算环节不设超池审批(ENUM L52),超池单同样 confirmed 即可过账。
  * 🔴 落码≠上线:本端点是运营激活手段之一,生产首次真过账须另行拍板,非部署默认动作。
  */
 @RestController
@@ -66,26 +65,5 @@ public class SettlementController {
         authorizationService.requirePermission("settlement.bill.post");
         authorizationService.requirePlatformScope();
         return ApiResponse.ok(postingService.postBill(billId));
-    }
-
-    /**
-     * D7 超池特批出口:把某<b>超池 draft</b> 结算单填特批引用并置 confirmed(可再走 postBill 过账)。
-     * 仅超池 draft 单可特批(非超池 draft/已 confirmed/settled 由服务层 409 BILL_NOT_OVERPOOL_DRAFT 拒)。
-     *
-     * <p>v7 审计 R-2(V357):改用<b>专属权限点</b> settlement.bill.special_approve(高敏·仅授平台负责人)
-     * + 平台域——与常规过账 settlement.bill.post 分权:过账可下放财务运营,超池特批只能平台负责人本人批。
-     * 返回特批引用 + 本次特批的到期日(S9 短期激励期限,到期自动失效)。
-     */
-    @PostMapping("/bills/{id}/special-approval")
-    public ApiResponse<SettlementPostingService.SpecialApprovalResult> specialApprove(
-            @PathVariable("id") String billId, @RequestBody SpecialApprovalRequest request) {
-        authorizationService.requirePermission("settlement.bill.special_approve");
-        authorizationService.requirePlatformScope();
-        return ApiResponse.ok(postingService.specialApprove(billId,
-                request == null ? null : request.specialApprovalRef()));
-    }
-
-    /** 特批请求体：平台负责人特批短期激励的凭据引用。 */
-    public record SpecialApprovalRequest(String specialApprovalRef) {
     }
 }

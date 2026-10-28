@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -355,6 +355,150 @@ describe("SettlementConfigPage 通票分账方案（参与家数档位表＋第�
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/distribution-scheme/notice-period"))).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/distribution-scheme/notice-period"))!.body)
       .toMatchObject({ period_value: 10, period_unit: "day", min_value: 7, max_value: 30 });
+  });
+});
+
+// 第 75 条（ENUM 第 52 行「第一段的固定金额或固定单价在配置生效之前，必须先按该票种……最低可能可分配池金额试算……试算不通过的配置无效、
+// 不得生效……娱乐平台公司确需让第一段合计高于池金额的，须在配置生效前提交短期经营激励申请并经项目之上的平台权限审批……初始有效期不超过
+// 后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）、到期重审」）。走真实 AdminApi（键名蛇形转换）的用例 stub fetch。
+describe("SettlementConfigPage 短期经营激励（第 75 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+    { status: 200, headers: { "content-type": "application/json" } });
+  const snakeDraft = {
+    notice_period: { period_value: 1, period_unit: "month", min_value: 1, max_value: 3 },
+    versions: [{ id: "tdsv_d9", project_id: "p1", status: "draft", state: "draft", drafted_by: "u2", approved_by: null,
+      notified_at: null, effective_at: null,
+      tiers: [{ participant_count: 1, rank_no: 1, share_bps: 10000, min_bps: 9000, max_bps: 10000 }],
+      first_segment: [{ merchant_id: "m_bar_1", rule_type: "fixed", per_guest_cent: null, fixed_amount_cent: 5000 }] }],
+    missing_rows: [],
+    incentive_applications: [],
+  };
+
+  it("「改」分配方式：短期经营激励有效期上限须同时填下限与上限，缺一不放行；齐全时 POST 蛇形体带上下限", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST") return Promise.resolve(ok(null));
+      if (url.endsWith("/distribution-scheme")) return Promise.resolve(ok(snakeDraft));
+      if (url.includes("/overview")) return Promise.resolve(ok({ platform_defaults: [], pending_draft_count: 0, pending_drafts: [] }));
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-edit-distribution_method")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("settlement-config-edit-distribution_method"));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-field-specialApprovalTermMinValue")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("settlement-config-field-specialApprovalTermValue"), { target: { value: "2" } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-specialApprovalTermMaxValue"), { target: { value: "6" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    expect(screen.getByTestId("settlement-config-field-specialApprovalTermMinValue")).toBeTruthy(); // 缺下限：仍停在填写步
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    fireEvent.change(screen.getByTestId("settlement-config-field-specialApprovalTermMinValue"), { target: { value: "1" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/settlement/config/distribution-method"))).toBe(true));
+    expect(calls.find((c) => c.url.endsWith("/settlement/config/distribution-method"))!.body).toMatchObject({
+      special_approval_term_value: 2, special_approval_term_unit: "month",
+      special_approval_term_min_value: 1, special_approval_term_max_value: 6,
+    });
+  });
+
+  it("转正报试算不通过后出现短期经营激励申请入口，提交 POST 体为蛇形 {idempotency_key, reason, term_value, term_unit}", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST" && url.endsWith("/activate")) {
+        return Promise.resolve(new Response(JSON.stringify({ success: false, code: "STATE_CONFLICT", detail_code: "POOL_TRIAL_FAILED",
+          message: "第一段试算不通过，配置不得生效：票种「试算通票」：最低实付价 75.00 元，最不利一份可分配池 44.73 元，第一段应分合计 50.00 元，超出 5.27 元" }),
+        { status: 409, headers: { "content-type": "application/json" } }));
+      }
+      if (method === "POST") return Promise.resolve(ok({ id: "pia_1", status: "pending" }));
+      if (url.endsWith("/distribution-scheme")) return Promise.resolve(ok(snakeDraft));
+      if (url.includes("/overview")) return Promise.resolve(ok({ platform_defaults: [], pending_draft_count: 0, pending_drafts: [] }));
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("distribution-scheme-activate-tdsv_d9")).not.toBeNull());
+    expect(screen.queryByTestId("distribution-scheme-incentive-tdsv_d9")).toBeNull();
+    fireEvent.click(screen.getByTestId("distribution-scheme-activate-tdsv_d9"));
+    await waitFor(() => expect(screen.queryByTestId("distribution-scheme-incentive-tdsv_d9")).not.toBeNull());
+    expect(screen.getByTestId("distribution-scheme-error").textContent).toContain("超出 5.27 元");
+
+    fireEvent.click(screen.getByTestId("distribution-scheme-incentive-tdsv_d9"));
+    fireEvent.change(screen.getByTestId("distribution-scheme-incentive-reason"), { target: { value: "开业季保底" } });
+    fireEvent.change(screen.getByTestId("distribution-scheme-incentive-term"), { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId("distribution-scheme-incentive-submit"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/distribution-scheme/tdsv_d9/incentive-applications"))).toBe(true));
+    const body = calls.find((c) => c.url.endsWith("/distribution-scheme/tdsv_d9/incentive-applications"))!.body!;
+    expect(body).toMatchObject({ reason: "开业季保底", term_value: 2, term_unit: "month" });
+    expect(typeof body.idempotency_key).toBe("string");
+  });
+
+  const SCHEME_WITH_APPLICATION = {
+    noticePeriod: { periodValue: 1, periodUnit: "month", minValue: 1, maxValue: 3 },
+    versions: [{ id: "tdsv_d9", projectId: "p1", status: "draft", state: "draft", draftedBy: "u2", approvedBy: null,
+      notifiedAt: null, effectiveAt: null, tiers: [{ participantCount: 1, rankNo: 1, shareBps: 10000, minBps: 9000, maxBps: 10000 }],
+      firstSegment: [] }],
+    missingRows: [],
+    incentiveApplications: [{ id: "pia_1", schemeVersionId: "tdsv_d9", kind: "initial", status: "pending", reason: "开业季保底",
+      termValue: 2, termUnit: "month", maxExcessCent: 527,
+      trialResult: [{ ticketTypeId: "tt1", ticketName: "试算通票", lowestPriceCent: 7500, lowestUnitPoolCent: 4473, firstSegmentCent: 5000, excessCent: 527 }],
+      submittedBy: "u2", submittedAt: "2026-10-27T02:00:00Z", decidedBy: null, decidedAt: null, decisionNote: null, validFrom: null, validUntil: null }],
+  };
+
+  it("待审申请：没有审批权限的人看不到「批准」", async () => {
+    const get = vi.fn().mockImplementation(async (url: string) => (url.endsWith("/distribution-scheme") ? SCHEME_WITH_APPLICATION : OVERVIEW_NO_DRAFT));
+    render(<SettlementConfigPage api={makeApi(get)} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()}
+      effectivePermissions={{ status: "ready", value: { grants: ["settlement.config.view", "settlement.config.manage"], denies: [], wildcard: false } }} />);
+
+    await waitFor(() => expect(screen.queryByTestId("distribution-scheme-incentive-row-pia_1")).not.toBeNull());
+    expect(screen.getByTestId("distribution-scheme-incentive-row-pia_1").textContent).toContain("超出 5.27 元");
+    expect(screen.queryByTestId("distribution-scheme-incentive-approve-pia_1")).toBeNull();
+    expect(screen.getByTestId("distribution-scheme-incentive-row-pia_1").textContent).toContain("待平台审批");
+  });
+
+  it("待审申请：有审批权限的平台负责人可批准，POST 批准端点带幂等键与意见", async () => {
+    const get = vi.fn().mockImplementation(async (url: string) => (url.endsWith("/distribution-scheme") ? SCHEME_WITH_APPLICATION : OVERVIEW_NO_DRAFT));
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(get, post));
+
+    await waitFor(() => expect(screen.queryByTestId("distribution-scheme-incentive-approve-pia_1")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("distribution-scheme-incentive-note-pia_1"), { target: { value: "同意" } });
+    fireEvent.click(screen.getByTestId("distribution-scheme-incentive-approve-pia_1"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/settlement/config/incentive-applications/pia_1/approve",
+      expect.objectContaining({ idempotencyKey: expect.any(String), note: "同意" })));
+  });
+
+  // 18C 核对后操作员裁决补充第 12、13 条：激励到期未重新获批，到期那天起新卖的票改按此前在用的方案；已到期的版本不再受理重审。
+  it("激励到期的版本显示「激励到期，已改回此前方案」，不再给「提交重审」", async () => {
+    const expired = {
+      ...SCHEME_WITH_APPLICATION,
+      versions: [{ id: "tdsv_e1", projectId: "p1", status: "notified", state: "incentive_expired", draftedBy: "u2", approvedBy: "u3",
+        notifiedAt: "2026-06-01T02:00:00Z", effectiveAt: "2026-07-01T02:00:00Z",
+        tiers: [{ participantCount: 1, rankNo: 1, shareBps: 10000, minBps: 9000, maxBps: 10000 }], firstSegment: [] }],
+      incentiveApplications: [{ ...SCHEME_WITH_APPLICATION.incentiveApplications[0], id: "pia_e1", schemeVersionId: "tdsv_e1",
+        status: "approved", decidedBy: "u3", decidedAt: "2026-06-01T01:00:00Z",
+        validFrom: "2026-07-01T02:00:00Z", validUntil: "2026-10-01T02:00:00Z" }],
+    };
+    const get = vi.fn().mockImplementation(async (url: string) => (url.endsWith("/distribution-scheme") ? expired : OVERVIEW_NO_DRAFT));
+    renderPage(makeApi(get));
+
+    await waitFor(() => expect(screen.queryByTestId("distribution-scheme-version-tdsv_e1")?.textContent ?? "").toContain("激励到期，已改回此前方案"));
+    expect(screen.queryByTestId("distribution-scheme-incentive-tdsv_e1")).toBeNull();
   });
 });
 

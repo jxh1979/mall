@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,9 +33,9 @@ class LoyaltyServiceTests {
         repo.saveCustomer(new CustomerRecord("c1", "13800000000", "138****0000", "active", null, T0, T0, T0));
         // 等级：base(rank0) / silver(rank1,升级1000,倍率1.5x)
         repo.saveMemberLevel(new CustomerMemberLevelRecord(
-                "lv_base", null, "base", "基础", 0, 0, 10000, "active", T0, T0));
+                "lv_base", "base", "基础", 0, 0, 10000, "active", T0, T0));
         repo.saveMemberLevel(new CustomerMemberLevelRecord(
-                "lv_silver", null, "silver", "白银", 1, 1000, 15000, "active", T0, T0));
+                "lv_silver", "silver", "白银", 1, 1000, 15000, "active", T0, T0));
         return repo;
     }
 
@@ -99,7 +99,7 @@ class LoyaltyServiceTests {
         repo.saveCustomer(new CustomerRecord("c1", "138", "138", "active",
                 LocalDate.of(1990, 1, 2), T0, T0, T0));
         repo.saveBirthdayRule(new CustomerBirthdayRuleRecord(
-                "br", null, "生日双倍", "birthday_day", 20000, "active", T0, T0));
+                "br", "生日双倍", "birthday_day", 20000, "active", T0, T0));
         AuditEventService audit = new AuditEventService(new RecordingAudit());
         // 北京 2026-01-02 01:00 = 会员生日当天凌晨消费 → 100 * 2.0 = 200。
         // 锚 UTC 时还算 1/1,生日当天最热闹的那几小时反而拿不到生日倍率。
@@ -115,7 +115,7 @@ class LoyaltyServiceTests {
         repo.saveCustomer(new CustomerRecord("c1", "138", "138", "active",
                 LocalDate.of(1990, 1, 1), T0, T0, T0));
         repo.saveBirthdayRule(new CustomerBirthdayRuleRecord(
-                "br", null, "生日双倍", "birthday_day", 20000, "active", T0, T0));
+                "br", "生日双倍", "birthday_day", 20000, "active", T0, T0));
         AuditEventService audit = new AuditEventService(new RecordingAudit());
         // T0 = 2026-01-01 == birthday day -> 100 * 2.0 = 200 (no level multiplier configured -> 1.0x)
         long awarded = serviceAt(repo, audit, T0).earnPoints("c1", 100, "consume_amount", "order1", "buy", 365);
@@ -129,7 +129,7 @@ class LoyaltyServiceTests {
         repo.saveCustomer(new CustomerRecord("c1", "138", "138", "active",
                 LocalDate.of(1990, 7, 1), T0, T0, T0));
         repo.saveBirthdayRule(new CustomerBirthdayRuleRecord(
-                "br", null, "生日双倍", "birthday_day", 20000, "active", T0, T0));
+                "br", "生日双倍", "birthday_day", 20000, "active", T0, T0));
         AuditEventService audit = new AuditEventService(new RecordingAudit());
         long awarded = serviceAt(repo, audit, T0).earnPoints("c1", 100, "consume_amount", "order1", "buy", null);
         assertThat(awarded).isEqualTo(100);
@@ -608,7 +608,7 @@ class LoyaltyServiceTests {
         }
 
         @Override
-        public List<CustomerMemberLevelRecord> listMemberLevels(String projectId) {
+        public List<CustomerMemberLevelRecord> listMemberLevels() {
             return levels.values().stream()
                     .filter(l -> "active".equals(l.status()))
                     .sorted((a, b) -> Integer.compare(a.levelRank(), b.levelRank()))
@@ -636,7 +636,7 @@ class LoyaltyServiceTests {
         }
 
         @Override
-        public List<CustomerBirthdayRuleRecord> listActiveBirthdayRules(String projectId) {
+        public List<CustomerBirthdayRuleRecord> listActiveBirthdayRules() {
             return birthdayRules.values().stream().filter(r -> "active".equals(r.status())).toList();
         }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -209,6 +209,13 @@ function classify(table, definition) {
   };
   const overridden = ANALYTICS_SCOPE_OVERRIDES.get(table);
   if (overridden) return overridden;
+  // 第十八批第 12 条：V558 删了 project_id（建表定义里仍有该列文字），按全平台一套的参考表登记。
+  if (["customer_member_levels", "customer_birthday_rules"].includes(table)) return {
+    scope_type: "global_reference",
+    scope_source: "global_reference",
+    scope_path: "global reference/configuration table",
+    multi_complex_note: "safe as global reference; tenant-specific overrides require separate scoped table",
+  };
   const direct = findColumn(definition, directColumns);
   if (direct) {
     return {

@@ -1,12 +1,11 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
-import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.entry.FaceVerificationPort;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.ticketing.dto.VerificationRequest;
@@ -51,6 +50,8 @@ public class BarEntryService {
      * 员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」），台位已被占或已开台 409 BAR_TABLE_ALREADY_RESERVED，整笔不落库。
      * 裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」：手机号核对受限会员并加密留存，
      * 供 BSM 第 1596 行订台短信（员工代订没有会员编号，这是唯一收件人来源；第十四批 OBS-13-03）。
+     * 第十八批 C 段第 15 条（BSM 第 1062 行「员工代客订台不收定金……没有支付动作的，支付时间就空着」；ENUM 第 103 行「免收（员工代订）」）：
+     * 员工代订一律免收定金，不看定金规则。
      */
     BarReservationRecord createReservation(BarReservationRequest request, String customerId, String orderSource, String terminal) {
         BarReservationRequest actual = requireRequest(request);
@@ -69,20 +70,16 @@ public class BarEntryService {
         if (merchantId != null && !merchantId.equals(table.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该台位属于其他商户");
         }
-        Instant now = Instant.now();
-        // T16：按 bar_deposit_rules（table_type/time_slot 优先于 bar）解析定金。无匹配规则保持向后兼容（0/not_required）。
-        BarDepositRuleRecord rule = resolveDepositRule(table);
-        long depositAmountCent = rule == null ? 0L : computeDepositAmount(rule, table);
-        String depositStatus;
-        String depositIntentId;
-        if (rule == null || depositAmountCent <= 0L) {
-            depositAmountCent = 0L;
-            depositStatus = "not_required";
-            depositIntentId = null;
-        } else {
-            depositStatus = "pending";
-            depositIntentId = "bar_deposit_intent_" + slug(actual.idempotencyKey());
+        // 第十八批 C 段第 15 条（BSM 第 1468 行「业绩记名人与销售提成归属人始终是同一人——都是帮该客人预订的那个人；代录订台等经手操作只留痕」）：
+        // 经手员工＝填写的销售员，不填即本人代订；其代订权限因爽约率超限停用中的，整笔不落库，须店长复核恢复。
+        String salesStaffId = trimToNull(actual.salespersonUserId());
+        if (salesStaffId == null) {
+            salesStaffId = authorizationService.currentActor().id();
         }
+        if (repository.hasActiveStaffBookingSuspension(barId, salesStaffId)) {
+            throw ApiException.forbidden("BAR_STAFF_BOOKING_SUSPENDED", "经手员工的代订权限因爽约率超限已停用，须店长复核恢复");
+        }
+        Instant now = Instant.now();
         String reservationId = "reservation_" + slug(actual.idempotencyKey());
         BarReservationRecord saved = repository.saveReservation(new BarReservationRecord(
                 reservationId,
@@ -93,10 +90,10 @@ public class BarEntryService {
                 requireInstant(actual.reservationTime(), "reservation_time"),
                 nonNegative(actual.guestCount(), "guest_count"),
                 table.allowedPassFreeGuestCount(),
-                depositAmountCent,
-                depositStatus,
+                0L,
+                "staff_waived",
                 trimToDefault(orderSource, "staff"),
-                trimToNull(actual.salespersonUserId()),
+                salesStaffId,
                 "reserved",
                 trimToDefault(terminal, "web"),
                 null,
@@ -104,7 +101,7 @@ public class BarEntryService {
                 now,
                 now,
                 trimToNull(actual.depositRule()),
-                depositIntentId,
+                null,
                 null,
                 null
         ).withLatestArrivalAt(latestArrivalAt));
@@ -115,12 +112,6 @@ public class BarEntryService {
         repository.saveReservationCustomerPhone(saved.id(), customerPhone.replaceAll("[\\s-]", ""));
         if (notifier != null) {
             notifier.notifyStaffBooked(saved);
-        }
-        if ("pending".equals(depositStatus)) {
-            auditEventService.recordSuccess("bar.reservation_deposit_required", "bar.reservation.create",
-                    "bar_reservation", saved.id(), null, actual.idempotencyKey(),
-                    Map.of("deposit_amount_cent", depositAmountCent, "deposit_mode", rule.mode(),
-                            "deposit_intent_id", String.valueOf(depositIntentId)));
         }
         return repository.findReservationById(saved.id()).orElse(saved);
     }
@@ -167,34 +158,6 @@ public class BarEntryService {
     /** ROOT-03-R19：台位已被有效预留占着或正在使用（已开台、待清台、停用）。 */
     public static ApiException tableAlreadyReserved() {
         return ApiException.conflict("BAR_TABLE_ALREADY_RESERVED", "该台位已被预订或正在使用，请选择其他台位");
-    }
-
-    /** T16：scope 优先级 table_type/time_slot > bar；listDepositRules 已按 scope_type 倒序返回。 */
-    private BarDepositRuleRecord resolveDepositRule(BarTableRecord table) {
-        List<BarDepositRuleRecord> rules = repository.listDepositRules(table.barId());
-        BarDepositRuleRecord barScoped = null;
-        for (BarDepositRuleRecord rule : rules) {
-            if ("table_type".equals(rule.scopeType()) && rule.scopeId() != null
-                    && rule.scopeId().equals(table.tableType())) {
-                return rule;
-            }
-            if ("bar".equals(rule.scopeType()) && barScoped == null) {
-                barScoped = rule;
-            }
-        }
-        return barScoped;
-    }
-
-    private long computeDepositAmount(BarDepositRuleRecord rule, BarTableRecord table) {
-        if ("fixed".equals(rule.mode())) {
-            return rule.fixedAmountCent() == null ? 0L : Math.max(0L, rule.fixedAmountCent());
-        }
-        if ("min_consumption_ratio".equals(rule.mode())) {
-            int ratioBps = rule.ratioBps() == null ? 0 : rule.ratioBps();
-            // R-7:定金按低消比例取额四舍五入到分(旧整除截断,定金恒少收;与 CustomerService 同口径)。
-            return Math.max(0L, MoneyRounding.bpsOf(table.minConsumptionCent(), ratioBps));
-        }
-        return 0L;
     }
 
     BarReservationRecord payDeposit(String reservationId, BarReservationDepositActionRequest request) {
@@ -265,7 +228,46 @@ public class BarEntryService {
         if ("held".equals(reservation.holdStatus())) {
             sms(released, "timeout_released");
         }
+        // 第十八批 C 段第 15 条（BSM 第 1468 行「客人超过最晚到店时间未到店的，系统自动释放该台位，并记一笔爽约到经手员工名下」；BSM 第 819 行
+        // 客人自助订台超时只按规则没收定金、不记客人爽约）：员工代订记爽约，再按本自然月爽约率判是否停用经手员工的代订权限。
+        if ("staff".equals(reservation.orderSource()) && reservation.salesStaffId() != null) {
+            repository.markReservationNoShow(reservation.id(), now);
+            suspendIfNoShowRateOverLimit(reservation, now);
+        }
         return true;
+    }
+
+    // 第十八批第 1 条（ENUM:187）营业日；手工构造的单测按出厂起点。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+
+    /**
+     * BSM 第 1468 行「经手员工的爽约率超过后台配置的上限时（业务参数，按酒吧可配，须同时配置上下限），自动停用其代订权限，由店长复核后恢复」；
+     * 第十八批裁决 3「按自然月：每个自然月单独统计」，爽约按发生当日所属营业日归月（BSM 第 1062 行；先例 DEC-R3-2026-08-04-27）。
+     * 爽约率＝本月已到最晚到店时间的该员工代订中爽约笔数 ÷ 笔数；未配置上限不停用；已停用中的不重复停用，停用不随月份自动解除。
+     */
+    private void suspendIfNoShowRateOverLimit(BarReservationRecord reservation, Instant now) {
+        String barId = reservation.barId();
+        String staffId = reservation.salesStaffId();
+        Integer limitPct = repository.staffBookingNoShowLimitPct(barId);
+        if (limitPct == null || repository.hasActiveStaffBookingSuspension(barId, staffId)) {
+            return;
+        }
+        java.time.YearMonth month = java.time.YearMonth.from(businessDays.businessDate(null, barId, reservation.latestArrivalAt()));
+        int[] stats = repository.staffBookingNoShowStats(barId, staffId, businessDays.start(null, barId, month.atDay(1)),
+                businessDays.end(null, barId, month.atEndOfMonth()), now);
+        int bookings = stats[0];
+        int noShows = stats[1];
+        if ((long) noShows * 100 <= (long) limitPct * bookings) {
+            return;
+        }
+        BarStaffBookingSuspensionRecord suspension = repository.saveStaffBookingSuspension(new BarStaffBookingSuspensionRecord(
+                "bar_sbs_" + java.util.UUID.randomUUID().toString().replace("-", ""), barId, staffId, "suspended", month.toString(),
+                noShows, bookings, limitPct, reservation.id(), now, null, null));
+        auditEventService.recordSuccess("bar.staff_booking_suspended", "bar.reservation.manage",
+                "bar_staff_booking_suspension", suspension.id(), null, "staff-booking-suspend:" + reservation.id(),
+                Map.of("staff_user_id", staffId, "stat_month", suspension.statMonth(), "no_show_count", noShows,
+                        "booking_count", bookings, "limit_pct", limitPct, "reservation_id", reservation.id()));
     }
 
     /** timedOut＝超时释放作业（BSM 第 1062 行「未付定金的直接作废」→ ENUM 第 103 行定金状态「已超时释放」）。 */

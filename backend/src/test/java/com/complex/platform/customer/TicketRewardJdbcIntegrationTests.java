@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -557,7 +557,7 @@ class TicketRewardJdbcIntegrationTests {
     // 操作员裁决补充（第十四批）第 2 条「冲回后立即按当前滚动周期成长值重新定级，低于现级就降并通知」——保护期内也照降。
     @Test void ticketGrowthUpgradesAtOnceAndReversalRegradesAtOnce() throws Exception {
         String k=UUID.randomUUID().toString().replace("-","");
-        jdbc.update("INSERT INTO customer_member_levels(id,project_id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) VALUES(?,NULL,'base','新乐会员',0,0,10000,'active',now(),now()),(?,NULL,'silver','银卡',1,7,10000,'active',now(),now())","lv_b_"+k,"lv_s_"+k);
+        jdbc.update("INSERT INTO customer_member_levels(id,level_code,level_name,level_rank,upgrade_threshold,point_multiplier_basis_points,status,created_at,updated_at) VALUES(?,'base','新乐会员',0,0,10000,'active',now(),now()),(?,'silver','银卡',1,7,10000,'active',now(),now())","lv_b_"+k,"lv_s_"+k);
         Fixture f=seed();Use u=use(f,1,1,"ticket",f.member());
         rewards.used(new TicketRewardFacts.Used(u.verification(),u.credential()));
         assertThat(customers.findPointsByCustomerId(f.member()).orElseThrow().level()).isEqualTo("silver");

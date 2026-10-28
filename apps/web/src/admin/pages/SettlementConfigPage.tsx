@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -40,7 +40,7 @@ type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: strin
 
 // 各块：标题 + 当前生效值取自 overview.platformDefaults 的哪个 key（无则块内提示按域/按商户维护）。
 const BLOCKS: BlockDef[] = [
-  { key: "distribution_method", title: "各酒吧分配方式（第二段）", defaultKey: "distribution_method", endpoint: "distribution-method", note: "两段分配：第一段名单内的酒吧每份票按固定金额或固定单价先拿（不再参与第二段）；其余覆盖酒吧按下方通票分账方案的参与家数档位表分第二段。此处配分配方式与超池特批有效期。" },
+  { key: "distribution_method", title: "各酒吧分配方式（第二段）", defaultKey: "distribution_method", endpoint: "distribution-method", note: "两段分配：第一段名单内的酒吧每份票按固定金额或固定单价先拿（不再参与第二段）；其余覆盖酒吧按下方通票分账方案的参与家数档位表分第二段。此处配分配方式与短期经营激励单次有效期上限（按项目可配，出厂 3 个月，须同时配置上下限）。" },
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
   { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后生效。" },
   { key: "combo_discount", title: "套票折扣归属 + 通票凑整允许误差", defaultKey: "combo_discount_bearer", endpoint: "combo-discount", note: "套票整体打折时，折扣由项目公司还是商户承担；同处再配「通票凑整允许误差」——运营给通票填的售价与系统按各业态价格×折扣算出的售价，差额超过这个数的票一律不许开卖（凑整多出/少收的那点钱走的正是上面这条折扣承担口径）。" },
@@ -77,7 +77,7 @@ const ROLE_TYPE_OPTIONS: [string, string][] = [
 const METHOD_OPTIONS: [string, string][] = [
   ["by_rank_tier", "按销售排名档位（第二段余额分尽）"],
 ];
-// V368：超池特批有效期的单位。运营配「三天的短期激励」和「三个月的短期激励」是同一个动作——
+// V368：短期经营激励有效期的单位。运营配「三天的短期激励」和「三个月的短期激励」是同一个动作——
 //   同一个输入框填数值，旁边选单位，不用心算 90 天。
 const TERM_UNIT_OPTIONS: [string, string][] = [
   ["day", "天"],
@@ -173,6 +173,9 @@ type Form = {
   methodType: string;
   specialApprovalTermValue: string;
   specialApprovalTermUnit: string;
+  // 第 75 条：有效期上限这一参数的下限、上限（同一单位），与数值、单位四项同时必填。
+  specialApprovalTermMinValue: string;
+  specialApprovalTermMaxValue: string;
   merchantId: string;
   perGuestCent: string;
   fixedAmountCent: string;
@@ -198,7 +201,8 @@ type Form = {
 };
 const EMPTY_FORM: Form = {
   projectId: "", methodType: "by_rank_tier",
-  specialApprovalTermValue: "3", specialApprovalTermUnit: "month", merchantId: "",
+  specialApprovalTermValue: "3", specialApprovalTermUnit: "month", specialApprovalTermMinValue: "", specialApprovalTermMaxValue: "",
+  merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeLayer: "route", channel: "", feeBps: "",
   discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
@@ -537,9 +541,17 @@ function editSteps(
             {METHOD_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
-        <label>超池特批有效期（默认 3 个月；短期激励可配到天，如 3 天）
+        <label>短期经营激励单次有效期上限（出厂 3 个月；可配到天，如 3 天）
           <input data-testid="settlement-config-field-specialApprovalTermValue" type="number" min={1}
                  value={form.specialApprovalTermValue} onChange={setField("specialApprovalTermValue")} />
+        </label>
+        <label>上限参数的下限
+          <input data-testid="settlement-config-field-specialApprovalTermMinValue" type="number" min={1}
+                 value={form.specialApprovalTermMinValue} onChange={setField("specialApprovalTermMinValue")} />
+        </label>
+        <label>上限参数的上限
+          <input data-testid="settlement-config-field-specialApprovalTermMaxValue" type="number" min={1}
+                 value={form.specialApprovalTermMaxValue} onChange={setField("specialApprovalTermMaxValue")} />
         </label>
         <label>有效期单位
           <select data-testid="settlement-config-field-specialApprovalTermUnit"
@@ -697,7 +709,7 @@ function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]):
     return ticketTypes.find((x) => x.id === t)?.ticketName ?? t;
   };
   switch (key) {
-    case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "超池特批有效期", value: `${form.specialApprovalTermValue || "3"} ${form.specialApprovalTermUnit === "day" ? "天" : "个月"}` }];
+    case "distribution_method": return [scope, { label: "分配方式", value: METHOD_OPTIONS.find(([v]) => v === form.methodType)?.[1] ?? form.methodType }, { label: "短期经营激励单次有效期上限", value: `${form.specialApprovalTermValue} ${form.specialApprovalTermUnit === "day" ? "天" : "个月"}（下限 ${form.specialApprovalTermMinValue}，上限 ${form.specialApprovalTermMaxValue}）` }];
     case "comprehensive_service_fee": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) }, { label: "费率万分比", value: form.feeBps || "0" }, { label: "固定额（分）", value: form.fixedAmountCent.trim() || "—" }, { label: "月度封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" }];
     case "pass_gift_cost": return [scope, { label: "票种", value: ticketTypeLabel(form.ticketTypeId) },
       { label: "预扣模式", value: PREDEDUCT_MODE_OPTIONS.find(([v]) => v === form.predeductMode)?.[1] ?? form.predeductMode },
@@ -719,10 +731,12 @@ function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]):
 function validate(key: EditKey, form: Form): string | null {
   switch (key) {
     case "distribution_method":
-      // S9/V368：超池特批有效期 = 数值 + 单位（天/月）。业务口径「期限可配，默认不超过 3 个月」，
-      //   留空按 3 个月落库；配 3 天这种短期激励是合法的，下限只到 1（个单位），没有上限。
-      return isIntInRange(form.specialApprovalTermValue || "3", 1, Number.MAX_SAFE_INTEGER)
-        ? null : "超池特批有效期需为不小于 1 的整数（按所选单位计，天或月）。";
+      // 第 75 条（ENUM 第 52 行「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」）：
+      //   数值、单位、下限、上限四项同时必填，1 ≤ 下限 ≤ 数值 ≤ 上限（按所选单位计，天或月）。
+      return isIntInRange(form.specialApprovalTermMinValue, 1, Number.MAX_SAFE_INTEGER)
+        && isIntInRange(form.specialApprovalTermMaxValue, 1, Number.MAX_SAFE_INTEGER)
+        && isIntInRange(form.specialApprovalTermValue, Number(form.specialApprovalTermMinValue), Number(form.specialApprovalTermMaxValue))
+        ? null : "短期经营激励单次有效期上限须同时填写数值、下限与上限（不小于 1 的整数），且下限 ≤ 数值 ≤ 上限。";
     case "comprehensive_service_fee": {
       const feeStr = form.feeBps.trim() === "" ? "0" : form.feeBps;
       if (!isIntInRange(feeStr, 0, 10000)) return "费率万分比需为 0~10000 的整数。";
@@ -779,8 +793,10 @@ function buildBody(key: EditKey, form: Form, idempotencyKey: string): Record<str
     case "distribution_method":
       return {
         idempotencyKey, projectId: project, methodType: form.methodType,
-        specialApprovalTermValue: Number(form.specialApprovalTermValue || "3"),
+        specialApprovalTermValue: Number(form.specialApprovalTermValue),
         specialApprovalTermUnit: form.specialApprovalTermUnit || "month",
+        specialApprovalTermMinValue: Number(form.specialApprovalTermMinValue),
+        specialApprovalTermMaxValue: Number(form.specialApprovalTermMaxValue),
       };
     case "comprehensive_service_fee":
       return {

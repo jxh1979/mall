@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.LocalZone;
@@ -95,22 +95,28 @@ public class JdbcSettlementConfigWriteRepository {
 
     public String upsertDistributionMethodDraft(String id, String projectId, String methodType,
                                                 int specialApprovalTermValue, String specialApprovalTermUnit,
+                                                int specialApprovalTermMinValue, int specialApprovalTermMaxValue,
                                                 String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO ticket_distribution_configs
                     (id, project_id, method_type, special_approval_term_value, special_approval_term_unit,
+                     special_approval_term_min_value, special_approval_term_max_value,
                      status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :method_type, :term_value, :term_unit, 'active', TRUE, :updated_by, now())
+                VALUES (:id, :project_id, :method_type, :term_value, :term_unit, :term_min, :term_max,
+                        'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     method_type = EXCLUDED.method_type,
                     special_approval_term_value = EXCLUDED.special_approval_term_value,
                     special_approval_term_unit = EXCLUDED.special_approval_term_unit,
+                    special_approval_term_min_value = EXCLUDED.special_approval_term_min_value,
+                    special_approval_term_max_value = EXCLUDED.special_approval_term_max_value,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("method_type", methodType)
                 .addValue("term_value", specialApprovalTermValue).addValue("term_unit", specialApprovalTermUnit)
+                .addValue("term_min", specialApprovalTermMinValue).addValue("term_max", specialApprovalTermMaxValue)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -683,8 +689,10 @@ public class JdbcSettlementConfigWriteRepository {
                 SELECT id, config_group, summary FROM (
                     SELECT id, 'distribution_method' AS config_group,
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 分配方式 ' || method_type
-                               || ' 超池特批有效期 ' || special_approval_term_value
-                               || CASE special_approval_term_unit WHEN 'day' THEN ' 天' ELSE ' 个月' END AS summary,
+                               || ' 短期经营激励有效期上限 ' || special_approval_term_value
+                               || CASE special_approval_term_unit WHEN 'day' THEN ' 天' ELSE ' 个月' END
+                               || '（下限 ' || special_approval_term_min_value || '，上限 ' || special_approval_term_max_value || '）'
+                               AS summary,
                            updated_at
                       FROM ticket_distribution_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL

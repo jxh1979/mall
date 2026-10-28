@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.15
+// 文件版本：V0.16
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1355,6 +1355,22 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        pending_clear_alert_max_minutes = :hi, updated_at = now()
                  WHERE id = :id
                 """, Map.of("id", merchantId, "v", valueMinutes, "lo", minMinutes, "hi", maxMinutes));
+    }
+
+    // 列名前缀取自枚举常量（非请求输入）。
+    @Override
+    public MerchantPercentParamRecord findPercentParam(String merchantId, MerchantPercentParamRecord.Param param) {
+        String c = param.column();
+        return jdbcTemplate.queryForObject("SELECT " + c + "_pct, " + c + "_min_pct, " + c + "_max_pct FROM merchants WHERE id = :id",
+                Map.of("id", merchantId), (rs, n) -> MerchantPercentParamRecord.of(merchantId, param,
+                        (Integer) rs.getObject(1), (Integer) rs.getObject(2), (Integer) rs.getObject(3)));
+    }
+
+    @Override
+    public void savePercentParam(String merchantId, MerchantPercentParamRecord.Param param, int valuePct, int minPct, int maxPct) {
+        String c = param.column();
+        jdbcTemplate.update("UPDATE merchants SET " + c + "_pct = :v, " + c + "_min_pct = :lo, " + c + "_max_pct = :hi, updated_at = now()"
+                + " WHERE id = :id", Map.of("id", merchantId, "v", valuePct, "lo", minPct, "hi", maxPct));
     }
 
     @Override

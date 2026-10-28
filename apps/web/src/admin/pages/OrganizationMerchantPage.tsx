@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -337,6 +337,37 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
     }
   }
 
+  // 第十八批 C 段：酒吧商户两项按酒吧可配的百分比参数（值与上下限同配，整数 %）——第 15 条员工代订爽约率上限（BSM:1468，未配置不自动停用）、
+  // 第 17 条损耗率阈值（BSM:2015，出厂 5%；第十八批裁决 4 标准损耗＝标准出酒量×该阈值）。先读当前值，再三者同填提交（后端校验闭区间）。
+  async function configureMerchantPercentParam(id: string, path: "staff-booking-no-show-limit" | "pour-loss-rate", label: string, unconfiguredHint: string) {
+    setGlobalError(null);
+    try {
+      const current = await api.get<{ valuePct?: number | null; minPct?: number | null; maxPct?: number | null; effectivePct?: number | null }>(
+        `/api/v1/platform/merchants/${id}/${path}`);
+      const configured = current.valuePct != null;
+      const value = window.prompt(`${label}（%）；${configured ? "当前已配置" : unconfiguredHint}：`, current.effectivePct != null ? String(current.effectivePct) : "");
+      if (value === null) return;
+      const min = window.prompt(`${label}下限（%，须与值、上限同时配置）：`, configured ? String(current.minPct) : "");
+      if (min === null) return;
+      const max = window.prompt(`${label}上限（%，须与值、下限同时配置）：`, configured ? String(current.maxPct) : "");
+      if (max === null) return;
+      const v = Number(value.trim()), lo = Number(min.trim()), hi = Number(max.trim());
+      if (![v, lo, hi].every((n) => Number.isInteger(n) && n >= 0 && n <= 100) || lo > v || v > hi) {
+        setGlobalError(`须同时填写${label}及其上下限（0～100 的整数 %），值须在上下限内`);
+        return;
+      }
+      await api.put(`/api/v1/platform/merchants/${id}/${path}`, {
+        idempotencyKey: `merchant-${path}-${id}-${Date.now()}`,
+        valuePct: v,
+        minPct: lo,
+        maxPct: hi,
+      });
+      setActionResult({ action: path === "pour-loss-rate" ? "merchant_pour_loss_rate_configured" : "merchant_staff_booking_no_show_limit_configured", id });
+    } catch (actionError) {
+      reportWriteFailure(actionError, `${label}保存失败`);
+    }
+  }
+
   // 状态子集 KPI（正常商户）聚焦时对商户表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
   const merchantStatusFilter = kpiFocus?.table === "merchants" ? kpiFocus.status : null;
   const visibleMerchants = merchantStatusFilter ? merchants.filter((row) => row.status === merchantStatusFilter) : merchants;
@@ -422,7 +453,11 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         ]
       : [
           ...(row.merchantType === "bar"
-            ? [{ key: "pending-clear-alert", label: "待清台提醒时限", permissions: ["merchant.profile.manage"], onClick: () => void configurePendingClearAlert(row.id), testId: `merchant-pending-clear-alert-${row.id}` }]
+            ? [
+                { key: "pending-clear-alert", label: "待清台提醒时限", permissions: ["merchant.profile.manage"], onClick: () => void configurePendingClearAlert(row.id), testId: `merchant-pending-clear-alert-${row.id}` },
+                { key: "no-show-limit", label: "代订爽约率上限", permissions: ["merchant.profile.manage"], onClick: () => void configureMerchantPercentParam(row.id, "staff-booking-no-show-limit", "代订爽约率上限", "未配置，不自动停用"), testId: `merchant-no-show-limit-${row.id}` },
+                { key: "pour-loss-rate", label: "损耗率阈值", permissions: ["merchant.profile.manage"], onClick: () => void configureMerchantPercentParam(row.id, "pour-loss-rate", "损耗率阈值", "未配置，按出厂 5%"), testId: `merchant-pour-loss-rate-${row.id}` },
+              ]
             : []),
           { key: "archive", label: "存档", permissions: ["merchant.profile.manage"], onClick: () => void archiveMerchant(row.id, true), testId: `merchant-archive-${row.id}` },
         ];

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.time.Instant;
 import java.util.List;
@@ -399,6 +399,11 @@ public interface InventoryRepository {
     List<WarehouseRecord> listWarehouses();
 
     List<WarehouseRecord> listWarehousesByMerchant(String merchantId);
+
+    /** 第十八批 C 段第 17 条：按 id 读库房。无库替身返回空。 */
+    default Optional<WarehouseRecord> findWarehouseById(String warehouseId) {
+        return Optional.empty();
+    }
 
     /** OBS-13-02：项目内归属该商户（merchantId 为空＝平台方）的在用存酒库房。 */
     default List<WarehouseRecord> listActiveSavedBottleWarehouses(String projectId, String merchantId) {

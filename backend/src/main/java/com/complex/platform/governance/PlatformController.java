@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -112,6 +112,40 @@ public class PlatformController {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.configurePendingClearAlert(merchantId, request));
+    }
+
+    /** 第十八批 C 段第 15 条（BSM:1468）：酒吧员工代订爽约率上限；未配置不自动停用代订权限。 */
+    @GetMapping("/merchants/{merchant_id}/staff-booking-no-show-limit")
+    public ApiResponse<MerchantPercentParamRecord> getStaffBookingNoShowLimit(@PathVariable("merchant_id") String merchantId) {
+        authorizationService.requirePermission("merchant.profile.view");
+        return ApiResponse.ok(service.getPercentParam(merchantId, MerchantPercentParamRecord.Param.STAFF_BOOKING_NO_SHOW_LIMIT));
+    }
+
+    /** 第十八批 C 段第 15 条：配置员工代订爽约率上限（值、下限、上限同填，整数百分比；权限同商户资料写口）。 */
+    @PutMapping("/merchants/{merchant_id}/staff-booking-no-show-limit")
+    public ApiResponse<MerchantPercentParamRecord> configureStaffBookingNoShowLimit(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody com.complex.platform.governance.dto.MerchantPercentParamRequest request) {
+        authorizationService.requirePermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configurePercentParam(merchantId, MerchantPercentParamRecord.Param.STAFF_BOOKING_NO_SHOW_LIMIT, request));
+    }
+
+    /** 第十八批 C 段第 17 条（BSM:2015；第十八批裁决 4）：酒吧损耗率阈值；未配置按出厂 5%。 */
+    @GetMapping("/merchants/{merchant_id}/pour-loss-rate")
+    public ApiResponse<MerchantPercentParamRecord> getPourLossRate(@PathVariable("merchant_id") String merchantId) {
+        authorizationService.requirePermission("merchant.profile.view");
+        return ApiResponse.ok(service.getPercentParam(merchantId, MerchantPercentParamRecord.Param.POUR_LOSS_RATE));
+    }
+
+    /** 第十八批 C 段第 17 条：配置酒吧损耗率阈值（值、下限、上限同填，下限不小于 1；权限同商户资料写口）。 */
+    @PutMapping("/merchants/{merchant_id}/pour-loss-rate")
+    public ApiResponse<MerchantPercentParamRecord> configurePourLossRate(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody com.complex.platform.governance.dto.MerchantPercentParamRequest request) {
+        authorizationService.requirePermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configurePercentParam(merchantId, MerchantPercentParamRecord.Param.POUR_LOSS_RATE, request));
     }
 
     @PostMapping("/business-entities/{entity_id}/projects")

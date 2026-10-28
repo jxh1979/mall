@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,9 +24,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <ul>
  *   <li><b>未越池月 → confirmed → 自动过账</b>:结算单落 settled、各酒吧分账挂 ar_ap_items
  *       (direction=payable、source_type='ticket_distribution')、明细回填 status=posted;</li>
- *   <li><b>超池月 → draft(待特批)→ 不过账</b>:结算单保持 draft、明细保持 draft、<b>无 ar_ap</b>
- *       (job 的 {@code if status==confirmed} 门天然拦住,超池 draft 单只能走网关端点特批后人工过);</li>
- *   <li><b>重跑幂等</b>:已 settled 月被 job 状态预检跳过(不重结/不双过),ar_ap 不翻倍;draft 月重算仍 draft、仍不过。</li>
+ *   <li><b>超池月 → 同样 confirmed → 自动过账</b>(第 75 条 ENUM L52「结算环节不再设“超池待审批”」「超出部分由娱乐平台公司承担」):
+ *       池内额过 ticket_distribution、超出额过 platform_incentive_subsidy;</li>
+ *   <li><b>重跑幂等</b>:已 settled 月被 job 状态预检跳过(不重结/不双过),ar_ap 不翻倍。</li>
  * </ul>
  *
  * <p>作业口径固定用 {@code settleMonth(null, month)}=平台默认口径,读<b>全局</b>分配配置。
@@ -56,14 +56,14 @@ class SettlementMonthlyJobPostingTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // 未越池(confirmed)月 = 作业 lastMonth;超池(draft)月 = 其上一月;两月均落在默认 6 月回看窗口 [2009-03,2009-08] 内。
+    // 未越池月 = 作业 lastMonth;超池月 = 其上一月;两月均落在默认 6 月回看窗口 [2009-03,2009-08] 内。
     private static final YearMonth CONFIRMED_MONTH = YearMonth.of(2009, 8);
     private static final YearMonth DRAFT_MONTH = YearMonth.of(2009, 7);
 
     // 唯一商户 + 唯一造数项目(便于清理;null 口径聚合忽略 project_id,仅用于清理定位)。
     private final String suffix = Long.toHexString(System.nanoTime() & 0xFFFFFL);
     private final String mcMerchant = "jc" + suffix; // 未越池:固定额 < 总池 → confirmed
-    private final String mdMerchant = "jd" + suffix; // 超池:固定额 >> 总池 → draft
+    private final String mdMerchant = "jd" + suffix; // 超池:固定额 >> 总池 → 照常 confirmed,超出部分娱乐平台公司承担
     private final String seedProject = "jobtst_" + suffix;
 
     @BeforeEach
@@ -90,10 +90,10 @@ class SettlementMonthlyJobPostingTests {
     }
 
     @Test
-    void scheduledSettleAutoPostsConfirmedBillAndSkipsDraftOverPool() {
+    void scheduledSettleAutoPostsConfirmedBillIncludingOverPool() {
         // 未越池月:池 80000;第一段固定额 5000 ≤ 80000 → confirmed。
         seedVerified(mcMerchant, 8, 4, 100000L, CONFIRMED_MONTH, pooledFirstSegment(mcMerchant, 80000L, 5000L));
-        // 超池月:池 800;第一段固定额 500000 >> 800 → draft(待特批)。
+        // 超池月:池 800;第一段固定额 500000 >> 800 → 同样 confirmed(结算环节不设超池待审批)。
         seedVerified(mdMerchant, 3, 2, 1000L, DRAFT_MONTH, pooledFirstSegment(mdMerchant, 800L, 500000L));
 
         // 固定 Clock:now=2009-09 → lastMonth=2009-08=CONFIRMED_MONTH;默认回看 6 月覆盖 DRAFT_MONTH。
@@ -115,19 +115,19 @@ class SettlementMonthlyJobPostingTests {
         assertThat(((Number) arap.get("amount_cent")).longValue()).isEqualTo(5000L);
         assertThat(arApCount(mcItem)).isEqualTo(1);
 
-        // ---- ② 超池月 draft → 不过账:单 draft、明细 draft、无 ar_ap ----
-        String draftBill = "sb_default_" + DRAFT_MONTH; // sb_default_2009-07
-        assertThat(billStatus(draftBill)).isEqualTo("draft");
-        String mdItem = itemId(draftBill, mdMerchant);
-        assertThat(itemStatus(mdItem)).isEqualTo("draft");
-        assertThat(arApCount(mdItem)).isZero();
+        // ---- ② 超池月同样自动过账:池内 800 过 ticket_distribution,超出 499200 过 platform_incentive_subsidy(娱乐平台公司承担)----
+        String overPoolBill = "sb_default_" + DRAFT_MONTH; // sb_default_2009-07
+        assertThat(billStatus(overPoolBill)).isEqualTo("settled");
+        String mdItem = itemId(overPoolBill, mdMerchant);
+        assertThat(itemStatus(mdItem)).isEqualTo("posted");
+        assertThat(amountBySource(mdItem, "ticket_distribution")).isEqualTo(800L);
+        assertThat(amountBySource(mdItem, "platform_incentive_subsidy")).isEqualTo(499_200L);
 
-        // ---- ③ 重跑幂等:已 settled 月被状态预检跳过(不双过),ar_ap 仍 1;draft 月重算仍 draft、仍无 ar_ap ----
+        // ---- ③ 重跑幂等:已 settled 月被状态预检跳过(不双过),ar_ap 不翻倍 ----
         job.scheduledSettle();
         assertThat(arApCount(mcItem)).isEqualTo(1);
         assertThat(billStatus(confirmedBill)).isEqualTo("settled");
-        assertThat(billStatus(draftBill)).isEqualTo("draft");
-        assertThat(arApCount(mdItem)).isZero();
+        assertThat(amountBySource(mdItem, "platform_incentive_subsidy")).isEqualTo(499_200L);
     }
 
     /**
@@ -222,5 +222,10 @@ class SettlementMonthlyJobPostingTests {
         return jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM ar_ap_items WHERE source_type = 'ticket_distribution' AND source_id = ?",
                 Integer.class, itemId);
+    }
+
+    private long amountBySource(String itemId, String sourceType) {
+        return jdbcTemplate.queryForObject("SELECT amount_cent FROM ar_ap_items WHERE source_type = ? AND source_id = ?",
+                Long.class, sourceType, itemId);
     }
 }

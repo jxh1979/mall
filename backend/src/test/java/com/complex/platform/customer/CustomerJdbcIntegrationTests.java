@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -418,9 +418,9 @@ class CustomerJdbcIntegrationTests {
         // ⑤签到500根因回归：这四个"全局口径"查询都以 projectId=null 调用（LoyaltyService 全链），
         // 旧实现用 Map.of 传参，null 值直接 NPE → 客人签到/积分入账/等级评估真实环境 500。
         org.assertj.core.api.Assertions.assertThatCode(() -> {
-            repository.listMemberLevels(null);
+            repository.listMemberLevels();
             repository.listCheckInTiers(null);
-            repository.listActiveBirthdayRules(null);
+            repository.listActiveBirthdayRules();
         }).doesNotThrowAnyException();
     }
 

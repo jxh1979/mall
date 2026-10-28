@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -10,6 +10,7 @@ import com.complex.platform.ticketing.TicketOrderService;
 import com.complex.platform.ticketing.TicketRewardFacts;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,6 +50,7 @@ class PassPoolSnapshotJdbcIntegrationTests {
     @Autowired private RouteFeeShares routeFeeShares;
     @Autowired private TicketOrderService orderService;
     @Autowired private TicketDistributionSettlementService settlement;
+    @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
 
     private final String key = Long.toHexString(System.nanoTime());
     private final String project = "prj_pps_" + key;
@@ -98,6 +100,7 @@ class PassPoolSnapshotJdbcIntegrationTests {
         jdbc.update("DELETE FROM single_bar_service_fee_months WHERE project_id = ?", project);
         jdbc.update("DELETE FROM ticket_type_entitlements WHERE ticket_type_id = ?", type);
         jdbc.update("DELETE FROM pass_pool_snapshots WHERE project_id = ?", project);
+        jdbc.update("DELETE FROM pass_incentive_applications WHERE project_id = ?", project);
         jdbc.update("DELETE FROM ticket_distribution_scheme_versions WHERE project_id = ?", project);
         for (String order : orders) {
             AppendOnlyTestBypass.updateOnTable(jdbc, "ticket_refund_lines", "trg_append_only_d",
@@ -186,6 +189,42 @@ class PassPoolSnapshotJdbcIntegrationTests {
                 String.class, t2)).isEqualTo(v2);
         assertThat(jdbc.queryForList("SELECT merchant_id || ':' || rule_type || ':' || amount_cent FROM pass_pool_snapshot_first_segment"
                 + " WHERE ticket_instance_id = ?", String.class, t2)).containsExactly(barB + ":per_guest:900");
+    }
+
+    /**
+     * 18C 核对后操作员裁决补充第 12 条「整版回到此前方案（推荐）：到期那天起新卖的票改按此前在用的方案（本项目上一版，没有就用全平台版）；
+     * 已卖的票照售票时固化的结果结算，不追溯」：本项目版 v2 凭短期经营激励转正、激励到期日 2016-06-01——到期日前售出的票
+     * （含 6 月 1 日 10:00 前、营业日仍属 5 月 31 日的）按 v2 固化，到期营业日起售出的票改按此前在用的本项目上一版 v1；
+     * 到期后才跑的 5 月月结，到期前售出的票仍按售票时固化的 v2 第一段结算。走出票事实链。
+     */
+    @Test
+    void incentiveVersionStopsTakingNewSalesFromItsExpiryBusinessDay() {
+        String v1 = version(Instant.parse("2016-01-01T00:00:00Z"), barA, "fixed", 1_200L);
+        String v2 = version(Instant.parse("2016-04-01T02:00:00Z"), barB, "per_guest", 900L);
+        approvedIncentive(v2, LocalDate.of(2016, 6, 1));
+        String early = order("app", SOLD);
+        String beforeCut = order("app", Instant.parse("2016-06-01T01:00:00Z"));
+        String afterCut = order("app", Instant.parse("2016-06-01T02:30:00Z"));
+        String t1 = ticketWithBarsAndPark(early);
+        String t2 = ticketWithBarsAndPark(beforeCut);
+        String t3 = ticketWithBarsAndPark(afterCut);
+        for (String order : List.of(early, beforeCut, afterCut)) {
+            events.publishEvent(new TicketRewardFacts.Issued(order));
+        }
+
+        assertThat(schemeOf(t1)).as("到期日前售出").isEqualTo(v2);
+        assertThat(schemeOf(t2)).as("6 月 1 日 09:00 售出，营业日仍属 5 月 31 日").isEqualTo(v2);
+        assertThat(schemeOf(t3)).as("到期营业日起售出，改按此前在用的本项目上一版").isEqualTo(v1);
+        assertThat(jdbc.queryForList("SELECT merchant_id || ':' || rule_type || ':' || amount_cent FROM pass_pool_snapshot_first_segment"
+                + " WHERE ticket_instance_id = ?", String.class, t3)).containsExactly(barA + ":fixed:1200");
+
+        verify(early, t1, barB, "entry", 3_000L);
+        String bill = settlement.settleMonth(project, YearMonth.of(2016, 5));
+
+        assertThat(jdbc.queryForList("""
+                SELECT merchant_id || ':' || amount_cent || ':' || scheme_version_id FROM pass_pool_unit_results
+                 WHERE bill_id = ? AND ticket_instance_id = ? AND segment = 1""", String.class, bill, t1))
+                .as("到期后月结，已售票照售票时固化的 v2 第一段结算，不追溯").containsExactly(barB + ":900:" + v2);
     }
 
     /** 单一酒吧门票（订单挂酒吧）按 FS-013 售出月逐票计费，不进通票可分配池。 */
@@ -424,6 +463,21 @@ class PassPoolSnapshotJdbcIntegrationTests {
                 VALUES (?, ?, ?, ?, ?)""", id, firstSegmentBar, ruleType,
                 "per_guest".equals(ruleType) ? amount : null, "fixed".equals(ruleType) ? amount : null);
         return id;
+    }
+
+    /** 该版凭短期经营激励转正：一笔已批准的首次激励，到期日＝expiry 那一营业日的起点。 */
+    private void approvedIncentive(String version, LocalDate expiry) {
+        jdbc.update("""
+                INSERT INTO pass_incentive_applications (id, scheme_version_id, project_id, kind, status, reason, term_value, term_unit,
+                    trial_result, max_excess_cent, submitted_by, decided_by, decided_at, valid_from, valid_until)
+                SELECT ?, v.id, v.project_id, 'initial', 'approved', '开业季保底', 2, 'month', '[]'::jsonb, 100, 'tester_a', 'tester_b',
+                       now(), v.effective_at, ?
+                  FROM ticket_distribution_scheme_versions v WHERE v.id = ?""",
+                "pia_" + version, Timestamp.from(businessDays.start(project, null, expiry)), version);
+    }
+
+    private String schemeOf(String ticket) {
+        return jdbc.queryForObject("SELECT scheme_version_id FROM pass_pool_snapshots WHERE ticket_instance_id = ?", String.class, ticket);
     }
 
     private void verify(String order, String ticket, String merchant, String entitlementType, long allocated) {

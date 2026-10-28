@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SettlementReviewPage } from "./SettlementReviewPage";
@@ -12,7 +12,7 @@ const BILL = {
   feeBeneficiaryEntityId: null, feeBeneficiaryEntityName: null,
   availablePoolCent: 9940, distributedCent: 9940, comboDiscountCent: 0, roundingResidualCent: 0,
   distributionMethod: "by_rank_tier", status: "confirmed",
-  specialApprovalRef: null, specialApprovalValidUntil: null, pooledDistributedCent: 9940,
+  pooledDistributedCent: 9940,
 };
 const TRANSACTION_ROW = {
   id: "s1", transactionNo: "ST-1", projectId: "p1", merchantId: "m1", exclusiveMerchantId: null,

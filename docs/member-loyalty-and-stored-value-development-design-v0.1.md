@@ -1,4 +1,4 @@
-# 会员忠诚度 · 储值开发设计 V0.04（付费会员已废止）
+# 会员忠诚度 · 储值开发设计 V0.05（付费会员已废止）
 
 > 生成日期：2026-06-24。性质：**据当前实现回填（source-driven）**——`LoyaltyService` 与 `StoredValueService` 已有部分后端能力，但与现行 HTML 仍有明确差距；`MembershipService` 已不存在，付费会员表已由 V290 删除。本文只记录当前代码事实和待改造差距，业务口径以三份 HTML 和现行会员、积分、储值 PRD 为准。
 
@@ -27,6 +27,8 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 > **实现现状（2026-10-25 第十四批 OBS-13-01，V543）**：本节以下 2026-08 前的「保级门槛＋考核周期＋宽限期」描述已不再是代码事实。现行实现见 `member-and-tier-product-prd-v1.0.md` §8 实现现状：三项等级参数（滚动统计周期、保护期、提前通知天数）落 `ticket_reward_config_versions` 版本化审批；成长值入账即时升级、升级起保护期；每日作业发降级预警、「已保级」并在保护期结束当日定级、补发降级通知；成长值冲回即时重定；通知落 `customer_level_notices` 由客人端弹出。`customer_member_levels` 的 `keep_threshold`／`keep_period_days`／`grace_days` 三列保留默认值、不再读写；对应单测已删，判级由 `LoyaltyLevelProtectionJdbcIntegrationTests` 守。
 
 落 `customer_member_levels`（V089）：`level_code`/`level_rank`/`upgrade_threshold`（升级门槛）/`keep_threshold`（保级门槛）/`keep_period_days`（保级周期）/`grace_days`（宽限）/`point_multiplier_basis_points`（积分倍率，10000=1x）。
+
+> **实现现状（2026-10-27 第十八批第 12 条，V558）**：`customer_member_levels` 去掉 `project_id`、`level_code` 全局唯一，等级档位全平台一套（BSM L820/L821，DEC-R3-2026-08-04-35）；后台 `POST /api/v1/loyalty/config/member-levels` 仅全国范围账号（平台管理员或勾了「可以查看全部项目」的角色）可写，录入即用于全国定级与倍率。
 
 `LoyaltyService.evaluateLevels(now)`（`LoyaltyScheduledJob` 定时调）逐账户评估：
 1. **升级**：保级进度 `keep_threshold_progress` 达更高等级 `upgrade_threshold` 即时升级（不等周期末）。
@@ -88,6 +90,9 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 ## 5. 生日加倍
 
 落 `customers.birth_date`（V089）+ `customer_birthday_rules`（当前代码仍允许窗口 `birthday_day`/`birthday_month` + `multiplier_basis_points`）：
+
+> **实现现状（2026-10-27 第十八批第 12 条同根，V558）**：`customer_birthday_rules` 去掉 `project_id`、`rule_name` 全局唯一，生日加倍规则全平台一套（BSM L831「不按项目分别配置」）；后台仅全国范围账号可写。
+
 - 获取积分时 `birthdayMultiplier` 命中当前窗口后取最高倍率并乘算。`birthday_month` 与 HTML 只限生日当天冲突；支付时点、适用时点和规则版本快照也未落地，均见 §2.1 待办。
 
 ## 6. 储值预付卡
@@ -155,15 +160,15 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 
 **已落地（2026-10-17 CG-06a，V444 `stored_value_principal_bonus_split`）**：
 - `customer_stored_value_accounts.principal_cent / bonus_cent`、`customer_stored_value_transactions.principal_cent / bonus_cent` 两段记账，`balance_cent`＝两段之和（服务层维护，不加等式约束，存量行两段为 0 不回填）；
-- `stored_value_bonus_policies(project_id, bonus_bps, min_bps, max_bps)`：通用卡充值赠送比例按项目配置，值与上下限同在（`__global__`＝无项目范围的通用卡），`POST/GET /api/v1/loyalty/stored-value/bonus-policies`（仅平台，`customer.stored_value.refund`）；
+- 充值赠送比例（第十八批第 11 条 V558 起取代原 `stored_value_bonus_policies` 存即生效表与 `bonus-policies` 端点）：通用卡 `stored_value_bonus`（按项目，项目可空＝无项目通用卡）与商户级卡 `merchant_card_bonus`（按发卡商户）并入 `ticket_reward_config_versions`，经 `POST /api/v1/loyalty/ticket-reward-configs` 提交审批（值与上下限同配，`ticket.reward.config.manage` 提交、`ticket.reward.rule.approve` 复核），审批通过到生效时间生效；充值流水 `bonus_config_version_id` 记下所用版本；
 - `StoredValueService.settleTopupInternal` 拆两段入账；`consumeBalance` 通用卡先本金后赠送金、商户级卡按 `stored_value_merchant_refund_rules.consume_order`（`configureMerchantCard` 代录）；`doRefund` 只退本金（409 `STORED_VALUE_PRINCIPAL_INSUFFICIENT`），销户时赠送金作废（`adjust` 流水）；
-- 客人端钱包账户与逐笔记录分列本金/赠送金；后台储值规则页配置扣款顺序与赠送比例。
+- 客人端钱包账户与逐笔记录分列本金/赠送金；后台储值规则页配置扣款顺序，赠送比例在「门票积分、成长值与销售责任」页提交审批。
 
 实现缺口（相对 MAIN，不在本文假装已落地）：
-- 活动来源引用与赠送规则版本化、审批记录；
+- 活动来源引用（赠送比例的版本化与审批已于第十八批第 11 条 V558 落地）；
 - 消费退款回冲到卡的路径（先回冲赠送金、后回冲本金）：当前无任何路径把消费退回卡余额，仅流水留存两段扣减额；
 - 每笔充值支付成功时须固化收款主体、发行主体、实际支付通路费率和退款规则版本；合同换期不得改写已充值余额的费率；
-- 移除商户级卡 `platform_collect` 平台代收路径，资金归属只能由发卡商户承担；
+- 下游 `platform_collect` 分支（只对已定格旧卡）未删；平台代收入口已于第十八批第 11 条关闭，资金归属只能由发卡商户承担；
 - 补齐客人端本金/赠送金和卡类型分列、充值/扣款/退款明细、不可关闭的储值金额短信、运营端三维储值台账与公共大屏隐私边界；
 - 禁止账户间迁移 API/后台入口。
 

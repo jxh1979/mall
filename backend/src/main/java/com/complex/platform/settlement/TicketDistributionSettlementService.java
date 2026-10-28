@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.money.MoneyRounding;
 import java.math.BigDecimal;
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 结算重构批2-3：月度通票分账<b>计算引擎</b>（§5.0 全流程）。
  *
- * <p>按业态拆份额 → 扣渠道费 → 扣门票综合服务费(池链支) → 可分配池各酒吧分配 → 校验 → 写 draft 结算单/明细。
+ * <p>按业态拆份额 → 扣渠道费 → 扣门票综合服务费(池链支) → 可分配池各酒吧分配 → 校验 → 写结算单(confirmed)/明细(draft)。
  * <b>不过账 ar_ap_items</b>（批2-4）；只落 settlement_bills / settlement_items（status=draft）。
  *
  * <p><b>S4(合并留存,2026-07-28)</b>:原「池内 20% 项目留存」与门票综合服务费是<b>同一项、只扣一次</b>
@@ -53,7 +53,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <b>第一段</b>：售票时固化的第一段名单里的覆盖酒吧按每份固定金额 / 固定单价取，未核销的同额一次减除；
  * <b>第二段</b>：其余覆盖酒吧（参与家数 n，与是否核销无关）按售票所用方案的 n 家行、当期入场人数在 n 家内部排名（并列均分）取比例，
  * 已核销的拿、未核销的减除（单列「通票未核销减除额」，酒吧域归娱乐平台公司）；n=0 余额单列未分配；缺 n 家行暂挂待补配。
- * 边界：第一段合计超过单元池 → 不削第一段、第二段为 0，超出额记 pool_overflow_cent，落既有超池特批路径。
+ * 边界：第一段合计超过单元池 → 不削第一段、第二段为 0，超出额记 pool_overflow_cent，过账时由娱乐平台公司承担；
+ * 第 75 条（ENUM L52「超池的判定与审批一律在事前完成，结算环节不再设“超池待审批”」）：结算单一律 confirmed，不设结算期审批。
  * 覆盖酒吧的通票出票即固化池快照（{@link PassPoolSnapshotService}）；单一酒吧门票（订单挂酒吧）不建快照，其核销按专属直付结付订单酒吧
  * （ENUM L32，见 {@link SettlementSettledConsumer}）；不含酒吧入场的票不建快照，其酒吧业态净额按 ENUM L52 末句并入未分配池余额；
  * 研发阶段无存量（UD-07），不留无快照兼容分支。
@@ -76,7 +77,6 @@ public class TicketDistributionSettlementService {
     // 第十八批第 2 条（ENUM L52「补配生效后，因缺该行而暂挂的票按该行续算结算」）：续算明细另列，原月结算单不回改。
     static final String METHOD_POOLED_RESUME = "pooled_resume";
 
-    private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_CONFIRMED = "confirmed";
     private static final String ITEM_STATUS_DRAFT = "draft";
 
@@ -140,14 +140,6 @@ public class TicketDistributionSettlementService {
         if (existingStatus != null && !"draft".equals(existingStatus) && !"confirmed".equals(existingStatus)) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_ALREADY_POSTED",
                     "该月份结算单已过账/结算/冲正(状态=" + existingStatus + "),不可重结;如需重算请先对已过账明细做冲正");
-        }
-        // D7(对抗复核 risk2):已超池特批的 confirmed 单视同冻结——special_approval_ref 是对「该次超池特定金额」的批准,
-        //   重跑会改分配/超额额、使批准额与实际过账额脱钩且无二次审批门。故命中已特批单直接返回现有 id、不重算(保住批准快照);
-        //   如需重算须先撤批(清 ref)。月度作业据此天然跳过(不抛异常、不 crash 批次),迟到核销并入须走人工撤批重算。
-        // S9 到期回收:冻结只认【仍在有效期内】的特批;到期后本单回到普通单待遇——照常重算,仍超池即打回 draft。
-        if ("confirmed".equals(existingStatus)
-                && repository.findActiveSpecialApprovalRefByPeriod(projectId, periodStart, periodEnd) != null) {
-            return repository.findBillId(projectId, periodStart, periodEnd);
         }
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
@@ -442,11 +434,9 @@ public class TicketDistributionSettlementService {
         // 逐份守恒（份池 + 超池 = 实分 + 未核销减除 + 未分配 + 暂挂 + 尾差）已在 settleUnit 逐份自检；这里核拆份额链。
         verifyFormatSplit(formatShares.values(), ticketRevenue, channelFee, channelFeeResidual,
                 pooledRouteFee, pooledServiceFee, pooledGiftCost);
-        // ⑧ 越池:某份第一段合计超过该份池(超出额单列 pool_overflow_cent)→ status 保持 draft 待人工特批(既有路径);
-        //    尾差、未核销减除、暂挂都不触发特批。
-        boolean overPool = units.overflowCent() > 0L;
-        String status = overPool ? STATUS_DRAFT : STATUS_CONFIRMED;
-        String specialApprovalRef = null; // 越池时留 null 待人工填;未越池时也 null(无需特批)
+        // ⑧ 越池:某份第一段合计超过该份池 → 超出额单列 pool_overflow_cent,过账时由娱乐平台公司承担(platform_incentive_subsidy)。
+        //    第 75 条(ENUM L52「超池的判定与审批一律在事前完成，结算环节不再设“超池待审批”」):结算单一律 confirmed。
+        String status = STATUS_CONFIRMED;
 
         // 六业态收入归属:通票收入归属的 L3 管理公司(娱乐平台公司),按 (项目, all_pass_ticket) 可配置解析;
         //   项目特例优先→全局默认→未配置返 null(仅记归属,不改任何金额)。
@@ -486,7 +476,7 @@ public class TicketDistributionSettlementService {
                 ticketRevenue, channelFee, pooledRouteFee, availablePool, distributed,
                 pooledServiceFee, exclusiveServiceFee, feeBeneficiaryEntityId,
                 pooledGiftCost, giftBeneficiaryEntityId,
-                method, specialApprovalRef, status, attributedEntityId, comboDiscountCent,
+                method, status, attributedEntityId, comboDiscountCent,
                 totalRoundingResidual, roundingResidualEntityId,
                 poolUndistributed, poolUndistributedEntityId,
                 units.deductionCent(), unverifiedDeductionEntityId, units.suspendedCent(), units.overflowCent());

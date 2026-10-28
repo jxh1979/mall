@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -116,6 +116,12 @@ class FinanceServiceTests {
     }
 
     // ─── existing functional tests (preserved) ────────────────────────────────
+
+    /** 第 75 条下线结算环节超池特批（ENUM L52「结算环节不再设“超池待审批”」）：平台激励补贴来源名不再带「超池特批」，与前端一致。 */
+    @Test
+    void platformIncentiveSubsidySourceLabelNoLongerMentionsSpecialApproval() {
+        assertThat(FinanceService.sourceTypeLabel("platform_incentive_subsidy")).isEqualTo("平台激励补贴");
+    }
 
     @Test
     void createReceivableItemComputesUnpaidAmountAndWritesFinanceArApCreated() {
