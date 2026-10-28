@@ -137,6 +137,23 @@ class AuthCookieCsrfTests {
     }
 
     @Test
+    void loginWithStaleAccessCookieAndNoCsrfHeaderSucceeds() throws Exception {
+        // #549：停服/会话过期后浏览器仍留着 HttpOnly 旧令牌 Cookie（JS 清不掉），登录不能被 CSRF 拦成 403。
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .cookie(new Cookie(AuthCookies.ACCESS_COOKIE, "stale-token"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "login_name": "p0_admin",
+                                  "password": "secret",
+                                  "device_id": "web-1",
+                                  "terminal_type": "web"
+                                }
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void deviceBearerWriteBypassesCsrf() throws Exception {
         // 设备端（安卓/一体机）：Authorization: Bearer 头 + 无 Cookie + 无 CSRF 头，写请求照常通过（双通道兼容）。
         JsonNode login = objectMapper.readTree(loginResult().getResponse().getContentAsString());
