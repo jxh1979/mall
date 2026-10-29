@@ -1,10 +1,13 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.access.staff.EmployeeNoticeRecord;
+import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -18,6 +21,7 @@ import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
 import com.complex.platform.governance.PlatformService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.LinkedHashMap;
@@ -59,6 +63,9 @@ public class FacilityWorkOrderService {
     private static final String BUSINESS_TYPE = "facility_work_order";
     private static final String INSPECTION_PERM = "facility.inspection.manage";
     private static final String INSPECTION_TASK_BUSINESS_TYPE = "facility_inspection_task";
+    /** 第 77 条 77-R1 超时通知里的类型中文（ENUM:260「物业工单类型」）。 */
+    private static final Map<String, String> TYPE_LABELS = Map.of("repair", "报修", "cleaning", "保洁", "complaint", "投诉",
+            "rectification", "整改", "inspection", "巡检", "internal_collaboration", "内部协作工单", "other", "其他");
 
     private final FacilityWorkOrderRepository repository;
     private final FacilityRepository facilityRepository;
@@ -69,6 +76,9 @@ public class FacilityWorkOrderService {
     private final AccessRepository accessRepository;
     private final IdempotencyService idempotencyService;
     private final PlatformService platformService;
+    /** 第 77 条 77-R1：超时升级通知主管的员工站内通知。字段注入，不改既有构造（单测直接 new，为空时只升级不通知）。 */
+    @Autowired(required = false)
+    JdbcStaffRepository staffRepository;
 
     @Autowired
     public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
@@ -481,23 +491,102 @@ public class FacilityWorkOrderService {
         return resumed;
     }
 
+    /**
+     * 第 77 条 77-R1（BSM:1382「按响应时限和处理时限统计时效，超时自动升级通知主管。」；BSM:1385「超时自动升级通知主管；楼宇设备告警的接警响应及
+     * 休息期间例外，按本文件「楼宇运营」告警条执行」「维修处理与验收未完成的，继续按原工单时效升级跟进」；ENUM:265；BSM:1201 借用逾期工单「按与其他
+     * 工单相同的超时升级路径继续催办」）：系统作业入口（{@link FacilityWorkOrderEscalationJob}），没有登录人，不走员工范围闸。响应超时（待派单、
+     * 已派单且未开始处理；设备告警来源除外，接警升级见 {@link FacilityAlarmService}）与处理超时（在办六态）各升级一次：置超时标记，给可触及该单
+     * 项目的物业主管各发一条员工系统通知，逐单留痕。不改优先级、不自动转派、不周期性重复催办。返回本轮升级的工单数。
+     */
+    public int escalateOverdue(Instant now) {
+        return escalate(repository.listResponseEscalationDue(now), repository.listHandleEscalationDue(now), now, null);
+    }
+
+    /** 手动「标记逾期」：可触及项目内已到期的工单走与定时作业同一升级（条件写入、通知主管、逐单留痕），另记汇总留痕；返回本次升级的工单数。 */
     @Transactional
     public int markOverdue(String idempotencyKey) {
         authorizationService.requirePlatformScope();
         Instant now = Instant.now();
-        List<FacilityWorkOrderRecord> overdue = inReach(repository.listOverdue(now));
-        for (FacilityWorkOrderRecord cur : overdue) {
-            repository.updateWorkOrder(new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
-                    cur.priority(), cur.status(), cur.title(), cur.description(), cur.source(), cur.spaceId(),
-                    cur.equipmentId(), cur.reporterId(), cur.reporterType(), cur.assigneeId(), cur.responseDueAt(),
-                    cur.handleDueAt(), cur.assignedAt(), cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
-                    cur.verifierId(), cur.satisfaction(), true, cur.resolution(), cur.projectId(), cur.merchantId(),
-                    cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
-                cur.reporterConfirmedBy()));
-        }
+        int count = escalate(inReach(repository.listResponseEscalationDue(now)), inReach(repository.listHandleEscalationDue(now)),
+                now, idempotencyKey);
         auditEventService.recordSuccess("facility.work_order_overdue_marked", PERM, BUSINESS_TYPE, "all",
-                null, idempotencyKey, Map.of("count", overdue.size()));
-        return overdue.size();
+                null, idempotencyKey, Map.of("count", count));
+        return count;
+    }
+
+    private int escalate(List<FacilityWorkOrderRecord> responseDue, List<FacilityWorkOrderRecord> handleDue, Instant now,
+            String idempotencyKey) {
+        if (responseDue.isEmpty() && handleDue.isEmpty()) {
+            return 0;
+        }
+        Map<String, AuthorizationService.ProjectReach> supervisors = supervisors();
+        Set<String> escalated = new HashSet<>();
+        for (FacilityWorkOrderRecord wo : responseDue) {
+            if (escalateOne(wo, "response", supervisors, now, idempotencyKey)) {
+                escalated.add(wo.id());
+            }
+        }
+        for (FacilityWorkOrderRecord wo : handleDue) {
+            if (escalateOne(wo, "handle", supervisors, now, idempotencyKey)) {
+                escalated.add(wo.id());
+            }
+        }
+        return escalated.size();
+    }
+
+    /** 该类升级只赢一次（条件写入）；赢了才通知可触及该单项目的主管并留痕。 */
+    private boolean escalateOne(FacilityWorkOrderRecord wo, String kind, Map<String, AuthorizationService.ProjectReach> supervisors,
+            Instant now, String idempotencyKey) {
+        if (!repository.markEscalated(wo.id(), kind, now)) {
+            return false;
+        }
+        String head = wo.title() + "（" + TYPE_LABELS.getOrDefault(wo.workOrderType(), wo.workOrderType()) + "/"
+                + FacilityAlarmService.PRIORITY_LABELS.getOrDefault(wo.priority(), wo.priority()) + "）";
+        String body = "response".equals(kind)
+                ? head + "已超过响应时限（" + FacilityAlarmService.DUE_FORMAT.format(wo.responseDueAt()) + "）仍未开始处理"
+                : head + "已超过处理时限（" + FacilityAlarmService.DUE_FORMAT.format(wo.handleDueAt()) + "）仍未完成，当前状态"
+                        + CustomerComplaintService.STATUS_LABELS.getOrDefault(wo.status(), wo.status()) + "，处理人"
+                        + (wo.assigneeId() == null ? "未派单" : wo.assigneeId());
+        int notified = 0;
+        for (Map.Entry<String, AuthorizationService.ProjectReach> supervisor : supervisors.entrySet()) {
+            if (supervisor.getValue().covers(wo.projectId())) {
+                staffRepository.saveNotice(new EmployeeNoticeRecord("notice_" + UUID.randomUUID().toString().replace("-", ""),
+                        supervisor.getKey(), "system_notice", "工单超时：" + wo.code(), body, false, "pending", null, "system", now, now));
+                notified++;
+            }
+        }
+        auditEventService.recordSuccess("facility.work_order_escalated", PERM, BUSINESS_TYPE, wo.id(), null, idempotencyKey,
+                Map.of("kind", kind, "project_id", Objects.toString(wo.projectId(), ""), "notified", notified));
+        return true;
+    }
+
+    /**
+     * 物业主管（决策台账第十二批裁决第 9 条落地「物业主管……持 facility.work_order.manage」）：在用、不带商户归属、不是外包账号（与入口
+     * requirePlatformScope 同口径，PGM:528④）、有员工档案、有效持该码的账号——员工档案编号对应其按该码可触及的项目；没有项目归属的不收。
+     * ponytail: 有到期单的一轮逐个账号核权限；账号多到成为负担时改成按权限码一次查出持有人。
+     */
+    private Map<String, AuthorizationService.ProjectReach> supervisors() {
+        Map<String, AuthorizationService.ProjectReach> result = new LinkedHashMap<>();
+        if (staffRepository == null || accessRepository == null) {
+            return result;
+        }
+        for (AccessUser user : accessRepository.listUsers()) {
+            AccessActor actor = new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(),
+                    user.merchantId(), user.status());
+            if (!"active".equals(user.status()) || !isBlank(user.merchantId()) || authorizationService.isOutsourcedVendor(actor)) {
+                continue;
+            }
+            String profileId = staffRepository.findProfileByUserId(user.id()).map(profile -> profile.id()).orElse(null);
+            if (profileId == null || !authorizationService.hasEffectivePermission(actor, PERM)) {
+                continue;
+            }
+            try {
+                result.put(profileId, authorizationService.projectReach(actor, PERM));
+            } catch (ApiException noProject) {
+                // 没有项目归属（PROJECT_SCOPE_REQUIRED）：哪个项目都不覆盖，不收
+            }
+        }
+        return result;
     }
 
     @Transactional
@@ -571,7 +660,7 @@ public class FacilityWorkOrderService {
     /**
      * 第十八批第 18 条（BSM:1201「超过约定归还时间仍未归还的，系统自动生成一张工单并通知借出方主管，按与其他工单相同的超时升级路径继续催办」；
      * BSM:1372「都进统一工单」；BSM:1385「工单由客户关怀部负责处理」）：借用逾期系统建单——类型其他、普通优先级（时限按「其他×普通」策略）、
-     * 来源 lending_overdue、提单方系统、待派单，记借出方与其项目。系统作业没有登录人，不走员工范围闸；超时由现有超时清单与标记处理。
+     * 来源 lending_overdue、提单方系统、待派单，记借出方与其项目。系统作业没有登录人，不走员工范围闸；超时升级与通知主管走 {@link #escalateOverdue}（第 77 条）。
      */
     @Transactional
     public FacilityWorkOrderRecord createLendingOverdue(String projectId, String lenderMerchantId, String title, String description) {

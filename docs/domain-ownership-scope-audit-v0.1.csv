@@ -315,6 +315,7 @@ merchant_project_requests,direct,project_id,project_id column on merchant_projec
 merchant_projects,direct,project_id,project_id column on merchant_projects,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_revenue_attribution_rules,direct,merchant_id,merchant_id column on merchant_revenue_attribution_rules,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_service_work_order_actions,inherited,work_order_id,work_order_id -> merchant_service_work_orders -> merchant_id/space_id,must join through scope path before multi-complex rollout,V0.07,covered
+merchant_service_work_order_policies,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 merchant_service_work_orders,direct,merchant_id,merchant_id column on merchant_service_work_orders,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_zone_notices,direct,merchant_id,merchant_id column on merchant_zone_notices,ready for project/merchant scoped query enforcement,V0.07,covered
 merchants,direct,project_id,project_id column on merchants,ready for project/merchant scoped query enforcement,V0.07,covered

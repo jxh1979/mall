@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -734,6 +734,11 @@ public class BarBillingService {
         java.util.Optional<BarCommissionCalculationRecord> existingCommission = repository.findCommissionByBillId(bill.id());
         if (existingCommission.isPresent()) {
             return existingCommission.get();
+        }
+        // 第十八批 I 段 86-R4（BSM 第 1070 行「一张账单的提成只计一次、只归帮该客人预订的那个人；自来客不产生销售提成」；DEC-R8-95）：
+        // 账单没有销售归属（自来客等）即不产生销售提成，不落提成行。
+        if (trimToNull(bill.salesStaffId()) == null) {
+            throw ApiException.conflict("BAR_COMMISSION_NO_SALES", "该账单没有帮客人预订的销售人员（自来客等），不产生销售提成");
         }
         // G/V349：角色档读账单上开单时快照的 sales_role_type（该列此前建了却没人读，判档逻辑与 createBill 重复了一遍）。
         // 改前是【反的】：按「挂没挂 salesStaffId」判——挂了人就 sales 拿 15%、没挂人才 10%；

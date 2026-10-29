@@ -45,8 +45,14 @@ describe("commissionRateLabel（计提比例只显示台账真实落库值）", 
 
 describe("salesRoleLabel（销售角色展示名）", () => {
   it("sales → 销售人员；non_sales → 非销售人员；缺角色档 → 占位符", () => {
-    expect(salesRoleLabel({ bills: [{ id: "b", salesRoleType: "sales" }] })).toBe("销售人员");
-    expect(salesRoleLabel({ bills: [{ id: "b", salesRoleType: "non_sales" }] })).toBe("非销售人员");
-    expect(salesRoleLabel({ bills: [{ id: "b" }] })).toBe("—");
+    expect(salesRoleLabel({ salesStaffId: "staff_1", bills: [{ id: "b", salesRoleType: "sales" }] })).toBe("销售人员");
+    expect(salesRoleLabel({ salesStaffId: "staff_1", bills: [{ id: "b", salesRoleType: "non_sales" }] })).toBe("非销售人员");
+    expect(salesRoleLabel({ salesStaffId: "staff_1", bills: [{ id: "b" }] })).toBe("—");
+  });
+
+  it("第十八批 I 段 86-R4：订单没有销售归属（自来客等）→ 无销售（不计提成），不看账单角色档", () => {
+    // BSM 第 1070 行「自来客不产生销售提成」：账单开单时无归属按非销售档快照，但这单不计提成。
+    expect(salesRoleLabel({ bills: [{ id: "b", salesRoleType: "non_sales" }] })).toBe("无销售（不计提成）");
+    expect(salesRoleLabel({})).toBe("无销售（不计提成）");
   });
 });

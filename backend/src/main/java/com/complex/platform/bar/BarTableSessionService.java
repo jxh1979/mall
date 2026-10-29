@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -127,6 +127,19 @@ public class BarTableSessionService {
         if (!"active".equals(table.status()) && !"opened".equals(table.status())) {
             throw ApiException.conflict("BAR_TABLE_NOT_OPENABLE", "该台位当前不可开台");
         }
+        Instant now = Instant.now();
+        // 第十八批 I 段 86-R3（BSM 第 1077 行「主责服务提供人按当日该场次排班指派到该卡座，同一卡座在不同场次可以更换」；DEC-R4-2026-08-04-25）：
+        // 卡座与 VIP 包坐的主责服务人须为该卡座点位此刻已发布排班或真实顶班人员；不填时当班恰好一人即指派该人，多人或无人留空
+        // （由开台人在当班人员里指定，或之后经服务交接、服务责任补录补上）。散台、吧台位照旧取请求值。
+        String serviceStaffId = trimToNull(actual.serviceStaffId());
+        if (serviceResponsibilities != null && java.util.Set.of("card_seat", "vip").contains(table.tableType())) {
+            List<String> scheduled = serviceResponsibilities.scheduledServiceStaff(table.id(), now);
+            if (serviceStaffId == null) {
+                serviceStaffId = scheduled.size() == 1 ? scheduled.getFirst() : null;
+            } else if (!scheduled.contains(serviceStaffId)) {
+                throw ApiException.conflict("BAR_SERVICE_STAFF_NOT_SCHEDULED", "主责服务人须为该卡座点位当日该场次已发布排班或真实顶班人员");
+            }
+        }
         BarReservationRecord reservation = null;
         String reservationId = trimToNull(actual.reservationId());
         requireNotHeldByOther(table.id(), reservationId);
@@ -139,7 +152,6 @@ public class BarTableSessionService {
             // ROOT-03-R19：到店开台即退出占台（ENUM 第 100 行三条退出路径之一）。
             repository.releaseHold(reservation.id());
         }
-        Instant now = Instant.now();
         repository.saveTable(tableWithStatus(table, "opened", now));
         BarTableSessionRecord created = repository.saveTableSession(new BarTableSessionRecord(
                 "session_" + slug(actual.idempotencyKey()),
@@ -152,8 +164,10 @@ public class BarTableSessionService {
                 nonNegative(actual.guestCount(), "guest_count"),
                 table.minConsumptionCent(),
                 table.allowedPassFreeGuestCount(),
-                trimToNull(actual.salesStaffId()),
-                trimToNull(actual.serviceStaffId()),
+                // 第十八批 I 段 86-R2（BSM 第 1021 行「由有销售归属的订台开台的，自动记营销带客并带出该销售人员；……直接到店开台默认记自来客——此时现场可
+                // 人工补选营销带客并选定销售人员」）：带订台一律取该订台的销售（员工代订＝经手员工，客人自助订台为空），请求销售只在直接到店时作现场补选。
+                reservation != null ? reservation.salesStaffId() : trimToNull(actual.salesStaffId()),
+                serviceStaffId,
                 "open",
                 now,
                 null,

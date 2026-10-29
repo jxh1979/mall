@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -224,12 +224,14 @@ class FacilityWorkOrderServiceTests {
         workOrders.insertWorkOrder(overdue);
         workOrders.insertWorkOrder(closed);
         workOrders.insertWorkOrder(alreadyMarked);
+        workOrders.escalated.put("wo_marked:handle", now); // 第 77 条：处理超时已升级过的不再升级
 
         assertThat(service.markOverdue("k_overdue")).isEqualTo(1);
 
         assertThat(workOrders.store.get("wo_overdue").overtime()).isTrue();
         assertThat(workOrders.store.get("wo_closed").overtime()).isFalse();
         assertThat(workOrders.store.get("wo_marked").overtime()).isTrue();
+        assertThat(service.markOverdue("k_overdue2")).isZero();
     }
 
     @Test
@@ -768,6 +770,41 @@ class FacilityWorkOrderServiceTests {
                     .filter(r -> FacilityWorkOrderService.ACTIVE_STATUSES.contains(r.status()))
                     .sorted(Comparator.comparing(FacilityWorkOrderRecord::handleDueAt))
                     .toList();
+        }
+
+        /** 已升级的「工单编号:类别」。 */
+        final Map<String, Instant> escalated = new LinkedHashMap<>();
+
+        @Override
+        public List<FacilityWorkOrderRecord> listResponseEscalationDue(Instant now) {
+            return store.values().stream()
+                    .filter(r -> List.of("pending_assign", "assigned").contains(r.status()) && r.respondedAt() == null)
+                    .filter(r -> r.responseDueAt() != null && r.responseDueAt().isBefore(now))
+                    .filter(r -> !"equipment_alarm".equals(r.source()) && !escalated.containsKey(r.id() + ":response"))
+                    .toList();
+        }
+
+        @Override
+        public List<FacilityWorkOrderRecord> listHandleEscalationDue(Instant now) {
+            return store.values().stream()
+                    .filter(r -> FacilityWorkOrderService.ACTIVE_STATUSES.contains(r.status()))
+                    .filter(r -> r.handleDueAt() != null && r.handleDueAt().isBefore(now))
+                    .filter(r -> !escalated.containsKey(r.id() + ":handle"))
+                    .toList();
+        }
+
+        @Override
+        public boolean markEscalated(String id, String kind, Instant now) {
+            if (escalated.putIfAbsent(id + ":" + kind, now) != null) {
+                return false;
+            }
+            FacilityWorkOrderRecord r = store.get(id);
+            store.put(id, new FacilityWorkOrderRecord(r.id(), r.code(), r.workOrderType(), r.priority(), r.status(), r.title(),
+                    r.description(), r.source(), r.spaceId(), r.equipmentId(), r.reporterId(), r.reporterType(), r.assigneeId(),
+                    r.responseDueAt(), r.handleDueAt(), r.assignedAt(), r.respondedAt(), r.completedAt(), r.verifiedAt(),
+                    r.verifierId(), r.satisfaction(), true, r.resolution(), r.projectId(), r.merchantId(), r.createdAt(), now,
+                    r.confirmerId(), r.reporterConfirmedAt(), r.reporterConfirmedBy()));
+            return true;
         }
     }
 

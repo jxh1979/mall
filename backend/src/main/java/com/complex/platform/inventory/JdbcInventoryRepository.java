@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -47,14 +47,16 @@ class JdbcInventoryRepository implements InventoryRepository {
 
     @Override
     public InventoryItemRecord saveInventoryItem(InventoryItemRecord item) {
+        // 第十八批 I 段第 76 条：规格容量只随新建物料落库；更新段不带 spec_volume_ml——手工标记高价值、改安全库存用不带容量的
+        // 写法重建记录再 upsert，带上会把容量清空。
         jdbcTemplate.update("""
                 INSERT INTO inventory_items (
                     id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                    min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable
+                    min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable, spec_volume_ml
                 )
                 VALUES (
                     :id, :sku_code, :item_name, :item_type, :unit, :barcode, :trace_required,
-                    :min_quantity, :status, :created_at, :updated_at, :merchant_id, :manual_high_value, :non_consumable
+                    :min_quantity, :status, :created_at, :updated_at, :merchant_id, :manual_high_value, :non_consumable, :spec_volume_ml
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     sku_code = EXCLUDED.sku_code,
@@ -76,7 +78,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryItemRecord> listInventoryItems() {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable
+                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable, spec_volume_ml
                   FROM inventory_items
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapInventoryItem);
@@ -86,7 +88,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<InventoryItemRecord> findInventoryItemById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable
+                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable, spec_volume_ml
                   FROM inventory_items
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapInventoryItem).stream().findFirst();
@@ -202,7 +204,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public Optional<StockBalanceRecord> findStockBalance(String itemId, String locationId) {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id,
+                       opened_volume_ml
                   FROM inventory_stock_balances
                  WHERE item_id = :item_id
                    AND location_id = :location_id
@@ -243,7 +246,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<StockBalanceRecord> listStockBalances() {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id,
+                       opened_volume_ml
                   FROM inventory_stock_balances
                  ORDER BY updated_at DESC, id
                 """, rowMapper::mapStockBalance);
@@ -447,12 +451,12 @@ class JdbcInventoryRepository implements InventoryRepository {
                 INSERT INTO inventory_stock_movements (
                     id, movement_type, item_id, source_location_id, target_location_id, quantity,
                     business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                    status, created_at, merchant_id, project_id, unit_cost_cent, total_cost_cent
+                    status, created_at, merchant_id, project_id, unit_cost_cent, total_cost_cent, volume_ml, loss_volume_ml
                 )
                 VALUES (
                     :id, :movement_type, :item_id, :source_location_id, :target_location_id, :quantity,
                     :business_type, :business_id, :trace_code, :operator_id, CAST(:evidence_attachment_ids AS jsonb),
-                    :status, :created_at, :merchant_id, :project_id, :unit_cost_cent, :total_cost_cent
+                    :status, :created_at, :merchant_id, :project_id, :unit_cost_cent, :total_cost_cent, :volume_ml, :loss_volume_ml
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, stockMovementParameters(stamped).addValue("project_id", projectId));
@@ -517,7 +521,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 movement.id(), movement.movementType(), movement.itemId(), movement.sourceLocationId(),
                 movement.targetLocationId(), movement.quantity(), unitCostCent, totalCostCent,
                 movement.businessType(), movement.businessId(), movement.traceCode(), movement.operatorId(),
-                movement.evidenceAttachmentIds(), movement.status(), movement.createdAt(), movement.merchantId());
+                movement.evidenceAttachmentIds(), movement.status(), movement.createdAt(), movement.merchantId(),
+                movement.volumeMl(), movement.lossVolumeMl());
     }
 
     @Override
@@ -633,7 +638,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         List<StockMovementRecord> items = jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent, volume_ml, loss_volume_ml
                   FROM inventory_stock_movements
                 """ + where + """
                  ORDER BY created_at DESC, id
@@ -677,7 +682,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent, volume_ml, loss_volume_ml
                   FROM inventory_stock_movements
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapStockMovement);
@@ -703,7 +708,7 @@ class JdbcInventoryRepository implements InventoryRepository {
         List<StockMovementRecord> items = jdbcTemplate.query("""
                 SELECT id, movement_type, item_id, source_location_id, target_location_id, quantity,
                        business_type, business_id, trace_code, operator_id, evidence_attachment_ids,
-                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent
+                       status, created_at, merchant_id, unit_cost_cent, total_cost_cent, volume_ml, loss_volume_ml
                   FROM inventory_stock_movements
                 """ + where + """
                  ORDER BY created_at DESC, id
@@ -1141,7 +1146,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryItemRecord> listInventoryItemsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, sku_code, item_name, item_type, unit, barcode, trace_required,
-                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable
+                       min_quantity, status, created_at, updated_at, merchant_id, manual_high_value, non_consumable, spec_volume_ml
                   FROM inventory_items
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -1174,7 +1179,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<StockBalanceRecord> listStockBalancesByMerchant(String merchantId) {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id,
+                       opened_volume_ml
                   FROM inventory_stock_balances
                  WHERE merchant_id = :merchant_id
                  ORDER BY updated_at DESC, id
@@ -1185,7 +1191,8 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<StockBalanceRecord> listStockBalancesByProject(String projectId) {
         return jdbcTemplate.query("""
-                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id
+                SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id,
+                       opened_volume_ml
                   FROM inventory_stock_balances
                  WHERE project_id = :project_id
                  ORDER BY updated_at DESC, id
@@ -1618,7 +1625,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("updated_at", offset(item.updatedAt()))
                 .addValue("merchant_id", item.merchantId())
                 .addValue("manual_high_value", item.manualHighValue())
-                .addValue("non_consumable", item.nonConsumable());
+                .addValue("non_consumable", item.nonConsumable())
+                .addValue("spec_volume_ml", item.specVolumeMl());
     }
 
     private MapSqlParameterSource supplierParameters(InventorySupplierRecord supplier) {
@@ -1737,7 +1745,10 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("merchant_id", movement.merchantId())
                 // V296：成本列（可空=无成本基准）。
                 .addValue("unit_cost_cent", movement.unitCostCent())
-                .addValue("total_cost_cent", movement.totalCostCent());
+                .addValue("total_cost_cent", movement.totalCostCent())
+                // 第十八批 I 段第 76 条：按杯按容量扣减的出酒量与损耗量（毫升）；按瓶为空。
+                .addValue("volume_ml", movement.volumeMl())
+                .addValue("loss_volume_ml", movement.lossVolumeMl());
     }
 
     private MapSqlParameterSource stockAdjustmentParameters(StockAdjustmentRecord adjustment) {

@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.UUID
 
@@ -384,7 +384,6 @@ class TerminalWorkflow(
     paymentMode: String? = null,
   ): BarOrderRecord {
     requireOnline()
-    val session = store.session
     val order = api.createBarOrder(
       BarOrderRequest(
         idempotencyKey = newClientTaskId("bar-order"),
@@ -393,7 +392,6 @@ class TerminalWorkflow(
         tableId = tableId,
         reservationId = reservationId,
         items = items,
-        salespersonUserId = session?.staffId,
         paymentMode = paymentMode,
       ),
     )

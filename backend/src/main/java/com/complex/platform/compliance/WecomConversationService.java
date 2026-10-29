@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.compliance;
 
 import com.complex.platform.access.AuthorizationService;
@@ -556,6 +556,13 @@ public class WecomConversationService {
                     "状态必须为 open/reviewing/confirmed/dismissed 之一");
         }
         List<WecomRiskHitRecord> hits = repository.findRiskHits(resolvedStatus, trimToNull(conversationId));
+        // 第十八批 I 段 88-R1（PGM 第 659 行「普通岗位没有跨项目查看权」「逐个勾选的只能查看被选中的项目」）：非平台管理员只列
+        // wecom.risk_hit.view 可触及项目内的命中，含可跨项目角色勾选的项目；平台管理员全量（同 viewMessages）。
+        if (authorizationService.currentProjectScopeQuietly().isPresent()) {
+            AuthorizationService.ProjectReach reach =
+                    authorizationService.projectReach(authorizationService.currentActor(), "wecom.risk_hit.view");
+            hits = hits.stream().filter(hit -> reach.covers(hit.projectId())).toList();
+        }
         return new PageResponse<>(hits, 1, hits.size(), hits.size());
     }
 
@@ -576,6 +583,11 @@ public class WecomConversationService {
         String resolvedReviewer = requireText(reviewerId, "reviewer_id");
         WecomRiskHitRecord existing = repository.findRiskHitById(resolvedHitId)
                 .orElseThrow(() -> ApiException.notFound("WECOM_RISK_HIT_NOT_FOUND", "风险命中记录不存在或已被删除"));
+        // 第十八批 I 段 88-R1：非平台管理员只能复核 wecom.risk_hit.review 可触及项目内的命中，先于终态判断与写库。
+        if (authorizationService.currentProjectScopeQuietly().isPresent() && !authorizationService.canReachProject(
+                authorizationService.currentActor(), existing.projectId(), "wecom.risk_hit.review")) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该违规命中不在本权限可触及的项目范围内");
+        }
         // 终态（confirmed/dismissed）不可再流转，避免复核覆盖既有处置结论。
         if ("confirmed".equals(existing.status()) || "dismissed".equals(existing.status())) {
             throw ApiException.conflict("WECOM_RISK_HIT_ALREADY_RESOLVED",

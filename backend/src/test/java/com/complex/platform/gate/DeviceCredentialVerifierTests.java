@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +32,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.mock.web.MockMultipartHttpServletRequest;
 
 /** AUD-010 设备凭证验签 + 分级强制单测(真实 EC 密钥签/验,mock 仓储)。 */
 class DeviceCredentialVerifierTests {
@@ -478,6 +480,17 @@ class DeviceCredentialVerifierTests {
         TerminalIdentityHolder.VerifiedTerminal vt = verifier("grace").verify(deviceIdOnly("web"));
         assertThat(vt.terminalType()).isEqualTo("kiosk");
         assertThat(vt.verified()).isFalse();
+    }
+
+    /** 84-R1 交叉向量：与终端 DeviceRequestHeadersTest 同一组输入（business_type=manual_backfill；file 字段 a.jpg、字节 abc）摘要逐字相同。 */
+    @Test
+    void multipartDigestMatchesTheTerminalCrossVector() {
+        MockMultipartHttpServletRequest request = new MockMultipartHttpServletRequest();
+        request.addParameter("business_type", "manual_backfill");
+        request.addFile(new MockMultipartFile("file", "a.jpg", "application/octet-stream", "abc".getBytes(StandardCharsets.UTF_8)));
+
+        assertThat(DeviceCredentialVerifier.multipartDigest(request))
+                .isEqualTo("bd6fee8fd9f720c2809af688010ac65c38b4be2562ca42ddfa4656a5d11d99d3");
     }
 
     private static MockHttpServletRequest deviceIdOnly(String claimedType) {

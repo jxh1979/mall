@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.ManualBackfillService;
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @Component
 class TraceHandoverStepBackfillTarget implements ManualBackfillTarget {
 
-    private static final Map<String, String> SEGMENT_NAMES = Map.of(
+    static final Map<String, String> SEGMENT_NAMES = Map.of(
             "out_verify", "库管出库", "kitchen_receive", "后厨接收", "staff_pickup", "服务员取走", "deliver_customer", "送达客人或卡座");
 
     private final InventoryService inventory;

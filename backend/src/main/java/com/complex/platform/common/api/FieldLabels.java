@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -566,6 +566,8 @@ public final class FieldLabels {
         // 第十八批 F 段第 14 条 14-R3：销售归属补录的拟归属人（与前端 fieldLabels.ts 同名）。
         p("sales_staff_id", "销售员工");
         p("pour_device_equipped", "是否配有出酒量采集设备");
+        // 第十八批 I 段第 76 条 76-R1：物料规格容量（与前端 fieldLabels.ts 同名）。
+        p("spec_volume_ml", "规格容量（毫升）");
         p("suspension_id", "代订权限停用记录");
         p("penalty_points", "扣分");
         p("min_penalty_points", "单次扣分下限");

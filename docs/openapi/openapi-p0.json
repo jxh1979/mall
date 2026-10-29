@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.40",
+    "version": "V0.41",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -3115,7 +3115,7 @@
         ],
         "operationId": "calculateBarTableCommission",
         "summary": "卡座销售提成计算",
-        "description": "第十七批（操作员裁决补充第 1 条「作废时……冲回已发积分、成长值和提成（工资单不再挂待定）」）：账单已作废（payment_status=void，含异常处置「作废并冲正」）的不再计提成，返回 409 BAR_BILL_VOIDED；同一账单已计提的返回已有提成、不重复计提。",
+        "description": "第十七批（操作员裁决补充第 1 条「作废时……冲回已发积分、成长值和提成（工资单不再挂待定）」）：账单已作废（payment_status=void，含异常处置「作废并冲正」）的不再计提成，返回 409 BAR_BILL_VOIDED；同一账单已计提的返回已有提成、不重复计提。账单没有销售归属（自来客等）的不产生销售提成，返回 409 BAR_COMMISSION_NO_SALES、不落提成行（第十八批 I 段第 86 条，BSM 第 1070 行「自来客不产生销售提成」）。",
         "x-permission": "bar.table_commission.calculate",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
@@ -3256,6 +3256,7 @@
           "CONTRACT_SCOPE_VIOLATION"
         ],
         "summary": "点单",
+        "description": "订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。",
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -3366,7 +3367,7 @@
         ],
         "operationId": "deliverBarOrder",
         "summary": "出酒或送达确认",
-        "description": "按明细登记送达：delivered_items 只含本次实际送达的未撤单明细；非撤单明细全部送达后整单与出品票据才置已送达，部分明细送达不置整单已送达、出品票据只追加 partial_deliver 事件（BSM L1025 分别标注已上菜与未上菜；ENUM L112）。第十八批 C 段第 17 条（BSM L1065 / ENUM L106；第十八批裁决 4）：按杯出品项按出酒吧台（该商品扣库库存行所挂吧台库存）有无出酒量采集设备二分——配有设备的缺 actual_pour_volume 拒单 400 POUR_VOLUME_REQUIRED，超出标准出酒量×杯数记损耗；未配设备的按标准出酒量配酒，actual_pour_volume 记标准×杯数（不取请求量），loss_volume 记标准损耗＝标准出酒量×杯数×本酒吧损耗率阈值（未配置按出厂 5%，四舍五入、至少 1）。已删除全局 bar.pour-cost.strict-mode 开关。",
+        "description": "按明细登记送达：delivered_items 只含本次实际送达的未撤单明细；非撤单明细全部送达后整单与出品票据才置已送达，部分明细送达不置整单已送达、出品票据只追加 partial_deliver 事件（BSM L1025 分别标注已上菜与未上菜；ENUM L112）。第十八批 C 段第 17 条（BSM L1065 / ENUM L106；第十八批裁决 4）：按杯出品项按出酒吧台（该商品扣库库存行所挂吧台库存）有无出酒量采集设备二分——配有设备的缺 actual_pour_volume 拒单 400 POUR_VOLUME_REQUIRED，超出标准出酒量×杯数记损耗；未配设备的按标准出酒量配酒，actual_pour_volume 记标准×杯数（不取请求量），loss_volume 记标准损耗＝标准出酒量×杯数×本酒吧损耗率阈值（未配置按出厂 5%，四舍五入、至少 1）。已删除全局 bar.pour-cost.strict-mode 开关。第十八批 I 段第 76 条（BSM L1065「按杯按标准出酒量扣库存、超出记损耗」；BSM L1168）：按杯且需扣库存的出品项按容量扣库存，扣减量＝标准出酒量×杯数＋损耗（配设备为实采超出标准的部分，实采少于标准仍按标准扣；未配设备为标准损耗），先用该库存行已开瓶余量、不够再开新瓶（瓶数与可用各减开瓶数），整瓶不够开 409 STOCK_INSUFFICIENT；库存流水记开瓶数（只动余量的为 0）、出酒量 volume_ml 与损耗量 loss_volume_ml（毫升）。按瓶商品仍按件数扣。",
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -3520,7 +3521,7 @@
         ],
         "operationId": "createBarProduct",
         "summary": "创建酒吧商品",
-        "description": "用于创建酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于创建酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：stock_deduction_required=true 且填了 standard_pour_volume（按杯，毫升）的商品，所挂库存物料须已登记规格容量 spec_volume_ml，否则 400 VALIDATION_FAILED；出品按标准出酒量连同损耗按容量扣库存。",
         "x-permission": "bar.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -7806,7 +7807,7 @@
         ],
         "operationId": "createInventoryItem",
         "summary": "创建库存物品",
-        "description": "用于创建库存物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于创建库存物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：spec_volume_ml 规格容量（毫升，大于 0，如 700 毫升瓶装填 700），按杯按标准出酒量扣库存的物料须登记；手工标记高价值、改安全库存不改该值。",
         "x-permission": "inventory.stock.move",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -9336,7 +9337,7 @@
         ],
         "operationId": "listStockBalances",
         "summary": "查询库存余额",
-        "description": "用于查询库存余额。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询库存余额。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：每行带 opened_volume_ml 已开瓶余量（毫升）——按杯出品先用已开瓶余量、不够再开新瓶，开新瓶才减瓶数 quantity。",
         "x-permission": "inventory.stock.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -9466,7 +9467,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+        "description": "用于查询库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：按杯出品、按杯退品回库与驳回重扣的流水带 volume_ml 出酒量与 loss_volume_ml 损耗量（毫升），只动已开瓶余量、没开新瓶的流水 quantity 为 0；按瓶流水两列为空。"
       }
     },
     "/api/v1/inventory/stock-movements/transfer": {
@@ -11374,6 +11375,7 @@
         "x-permission": "inventory.handover.scan",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
+          "staff_work_phone",
           "web"
         ],
         "x-idempotency-required": false,
@@ -11419,6 +11421,7 @@
         "x-permission": "inventory.handover.scan",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
+          "staff_work_phone",
           "web"
         ],
         "x-idempotency-required": false,
@@ -11463,6 +11466,7 @@
         "x-permission": "inventory.handover.scan",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
+          "staff_work_phone",
           "web"
         ],
         "x-idempotency-required": true,
@@ -11617,7 +11621,14 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
-            "$ref": "#/components/responses/Error"
+            "description": "状态冲突；含 `detail_code=HANDOVER_PREVIOUS_SEGMENT_INCOMPLETE`（四个人工扫码段按库管出库 out_verify、后厨接收 kitchen_receive、服务员取走 staff_pickup、送达客人或卡座 deliver_customer 顺序放行：排在本段前面的人工段尚未扫码、或其补录未经主管复核通过，不得扫本段；机器人配送段 dispatch 被动留痕、不计入整链完成）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "500": {
             "$ref": "#/components/responses/Error"
@@ -11807,6 +11818,79 @@
         "x-auth-context": "staff-token",
         "requestBody": {
           "$ref": "#/components/requestBodies/MerchantWorkOrderCreateRequest"
+        }
+      }
+    },
+    "/api/v1/merchant-service/work-order-policies": {
+      "get": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "listMerchantServiceWorkOrderPolicies",
+        "summary": "商户服务工单处理时限列表（工单类型×优先级）",
+        "description": "第 77 条 77-R3：列出已配置的处理时限（分钟）。BSM:1385「响应/处理时限按「工单类型×优先级」矩阵后台配置」「商户服务工单不设首次响应环节」——只有处理时限；未配置的组合建单时不设截止时间、不超时升级。",
+        "x-permission": "merchant.service_work_order.assign",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "merchant_service.listMerchantServiceWorkOrderPolicies.succeeded",
+        "x-audit-event-failure": "merchant_service.listMerchantServiceWorkOrderPolicies.failed",
+        "x-auth-context": "staff-token",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "saveMerchantServiceWorkOrderPolicy",
+        "summary": "保存商户服务工单处理时限（工单类型×优先级一格）",
+        "description": "第 77 条 77-R3：按工单类型×优先级保存处理时限（分钟，大于 0；已有则改），只影响此后新建的工单——建单时截止时间＝建单时刻＋处理时限，超过即由定时作业升级并标记、通知主管（ENUM:264、ENUM:265）。商户账号与外包账号 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-permission": "merchant.service_work_order.assign",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.work_order_policy_saved",
+        "x-audit-event-failure": "merchant_service.work_order_policy_save_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MerchantWorkOrderPolicyRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
@@ -21617,7 +21701,7 @@
         ],
         "operationId": "createBarTableSession",
         "summary": "创建酒水台位会话（开台）",
-        "description": "ROOT-03-R19（ENUM 第 100 行「排他锁，不是展示标记」）：台位正被有效预留占着时，只有带上占台的那笔订台号（reservation_id）才能开台，散客开台或带别的订台号 409 BAR_TABLE_ALREADY_RESERVED；带了即到店开台，该订台退出占台（含定金未付的订台），超时作业不再按爽约处理、已付定金不被没收。",
+        "description": "ROOT-03-R19（ENUM 第 100 行「排他锁，不是展示标记」）：台位正被有效预留占着时，只有带上占台的那笔订台号（reservation_id）才能开台，散客开台或带别的订台号 409 BAR_TABLE_ALREADY_RESERVED；带了即到店开台，该订台退出占台（含定金未付的订台），超时作业不再按爽约处理、已付定金不被没收。第十八批 I 段第 86 条（BSM 第 1021、1077 行）：带订台开台的会话销售取该订台的销售归属，sales_staff_id 只作直接到店开台的现场补选；卡座与 VIP 包坐的主责服务人按该卡座点位当日该场次排班指派——带了不在此刻已发布排班或真实顶班里的人 409 BAR_SERVICE_STAFF_NOT_SCHEDULED、不开台，不填时当班恰好一人即指派该人，多人或无人留空。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.create",
         "x-data-scope": "project-bar-table",
@@ -21688,12 +21772,12 @@
                   },
                   "sales_staff_id": {
                     "type": "string",
-                    "description": "销售员 ID。",
+                    "description": "仅直接到店开台的现场补选营销带客；带 reservation_id 时取该订台的销售归属，本字段不采用（第十八批 I 段第 86 条，BSM 第 1021 行）。",
                     "maxLength": 64
                   },
                   "service_staff_id": {
                     "type": "string",
-                    "description": "服务员 ID。",
+                    "description": "主责服务人。卡座与 VIP 包坐须为该卡座点位此刻已发布排班或真实顶班人员，否则 409 BAR_SERVICE_STAFF_NOT_SCHEDULED；不填时当班恰好一人即指派该人，多人或无人留空（BSM 第 1077 行）。散台、吧台位照旧取本字段。",
                     "maxLength": 64
                   },
                   "opened_by_user_id": {
@@ -26589,6 +26673,7 @@
         ],
         "operationId": "listWecomRiskHits",
         "summary": "查询企微会话违规命中列表",
+        "description": "第十八批 I 段 88-R1：非平台管理员只列 wecom.risk_hit.view 可触及项目（含可跨项目角色勾选的项目）内的命中；平台管理员全量。",
         "x-auth-context": "staff-token",
         "x-permission": "wecom.risk_hit.view",
         "x-terminal-allowed": [
@@ -26639,6 +26724,7 @@
         ],
         "operationId": "reviewWecomRiskHit",
         "summary": "复核处置企微违规命中",
+        "description": "第十八批 I 段 88-R1：非平台管理员只能复核 wecom.risk_hit.review 可触及项目（含可跨项目角色勾选的项目）内的命中，越范围 403 CROSS_PROJECT_FORBIDDEN，不改命中。",
         "x-auth-context": "staff-token",
         "x-permission": "wecom.risk_hit.review",
         "x-terminal-allowed": [
@@ -26715,6 +26801,7 @@
         ],
         "operationId": "markTerminalDeviceFound",
         "summary": "标记设备找回",
+        "description": "第 89 条 89-R2（第十八批裁决 20「回待领用」）：挂失→找回，与修复完成同一去路：工作手机、平板、一体机、扫码设备回待领用（returned），之后经 /devices/bind 领用；入场三道环节设备与其他现场设备回在用（bound），责任人沿用；原因必填、进设备状态流水（事件 terminal.device.found）；不在挂失返回 409 INVALID_DEVICE_STATUS。",
         "x-auth-context": "staff-token",
         "x-permission": "terminal.device.lifecycle",
         "x-terminal-allowed": [
@@ -27079,8 +27166,8 @@
           "terminals"
         ],
         "operationId": "registerEntryDevice",
-        "summary": "登记入场三道环节设备（安检 X 光、人脸扫描、检票闸机）",
-        "description": "第 63 条、第 82 条 82c-R1（BSM:800、PGM:618、PGM:623）：后台登记综合体入场三道环节设备（安检环节的 X 光设备 security_xray、年龄核验环节的人脸扫描设备 face_scanner、检票环节的检票闸机 ticket_gate）进设备台账——类型、编号、型号、绑定点位（空间）、责任人（员工档案）五项必填，登记即在用（status=bound）；类型不在这三类返回 400 VALIDATION_FAILED。不接设备接口、不发设备凭证、不产生按人记录；当班员工与班次由该点位的排班取得。同编号已登记返回 409 DEVICE_CODE_EXISTS；点位或责任人不在本人能管的项目返回 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN），范围闸先于幂等。员工端领用绑定（/devices/bind）不收这三类。故障走送修（只有安检 X 光设备送修即开维修工单），修好走修复完成，报废走报废。",
+        "summary": "后台登记设备进台账（入场三道环节设备、扫码设备、其他现场设备）",
+        "description": "第 63 条、第 82 条 82c-R1（BSM:800、PGM:618、PGM:623）：后台登记综合体入场三道环节设备（安检环节的 X 光设备 security_xray、年龄核验环节的人脸扫描设备 face_scanner、检票环节的检票闸机 ticket_gate）进设备台账——类型、编号、型号、绑定点位（空间）、责任人（员工档案）五项必填，登记即在用（status=bound）；第 89 条 89-R3（PGM:618、PGM:379）另收扫码设备 scanner（登记后经 /devices/return 归还、/devices/bind 领用）与其他现场设备 other_site_device（按点位与责任人管，换责任人走 /devices/{id}/responsible-staff）；类型不在这五类返回 400 VALIDATION_FAILED。不接设备接口、不发设备凭证、不产生按人记录；当班员工与班次由该点位的排班取得。同编号已登记返回 409 DEVICE_CODE_EXISTS；点位或责任人不在本人能管的项目返回 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN），范围闸先于幂等。员工端领用绑定（/devices/bind）不收入场三道环节设备与其他现场设备。故障走送修（只有安检 X 光设备送修即开维修工单），修好走修复完成，报废走报废。",
         "x-auth-context": "staff-token",
         "x-permission": "terminal.device.lifecycle",
         "x-data-scope": "project-device",
@@ -27113,11 +27200,13 @@
                   },
                   "terminal_type": {
                     "type": "string",
-                    "description": "设备类型：security_xray 安检 X 光设备、face_scanner 人脸扫描设备、ticket_gate 检票闸机。",
+                    "description": "设备类型：security_xray 安检 X 光设备、face_scanner 人脸扫描设备、ticket_gate 检票闸机、scanner 扫码设备、other_site_device 其他现场设备。",
                     "enum": [
                       "security_xray",
                       "face_scanner",
-                      "ticket_gate"
+                      "ticket_gate",
+                      "scanner",
+                      "other_site_device"
                     ],
                     "maxLength": 64
                   },
@@ -27172,7 +27261,7 @@
         ],
         "operationId": "completeTerminalDeviceRepair",
         "summary": "设备修复完成",
-        "description": "第 63 条、第 82 条 82c-R1、82c-R2：设备修好后登记修复完成，原因必填、进设备状态流水：入场三道环节设备（安检 X 光、人脸扫描、检票闸机）恢复在用（repair → bound）；工作手机、平板、一体机回待领用（repair → returned），之后照常经 /devices/bind 领用。不在维修中返回 409 INVALID_DEVICE_STATUS。",
+        "description": "第 63 条、第 82 条 82c-R1、82c-R2、第 89 条 89-R3：设备修好后登记修复完成，原因必填、进设备状态流水：入场三道环节设备（安检 X 光、人脸扫描、检票闸机）与其他现场设备恢复在用（repair → bound）；工作手机、平板、一体机、扫码设备回待领用（repair → returned），之后照常经 /devices/bind 领用。不在维修中返回 409 INVALID_DEVICE_STATUS。",
         "x-auth-context": "staff-token",
         "x-permission": "terminal.device.lifecycle",
         "x-terminal-allowed": [
@@ -27266,8 +27355,8 @@
           "terminals"
         ],
         "operationId": "changeTerminalDeviceResponsibleStaff",
-        "summary": "入场三道环节设备更换责任人",
-        "description": "第 82 条 82c-R3（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：入场三道环节设备（安检 X 光、人脸扫描、检票闸机）更换责任人（员工档案），只换责任人、设备状态不变，原因必填、进设备状态流水。范围闸先于幂等：设备须在本人能管的范围内，不带商户归属的员工填的新责任人所在项目须在 terminal.device.lifecycle 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN）。设备不存在 404 DEVICE_NOT_FOUND；终态设备 409 DEVICE_TERMINAL_STATUS；工作手机、平板、一体机（持有人随归还、领用更换）409 INVALID_DEVICE_STATUS；与原责任人相同 409 DEVICE_STAFF_UNCHANGED；并发变更 409 DEVICE_TRANSITION_CONFLICT。",
+        "summary": "入场三道环节设备与其他现场设备更换责任人",
+        "description": "第 82 条 82c-R3（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：入场三道环节设备（安检 X 光、人脸扫描、检票闸机）与其他现场设备（第 89 条 89-R3）更换责任人（员工档案），只换责任人、设备状态不变，原因必填、进设备状态流水。范围闸先于幂等：设备须在本人能管的范围内，不带商户归属的员工填的新责任人所在项目须在 terminal.device.lifecycle 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN）。设备不存在 404 DEVICE_NOT_FOUND；终态设备 409 DEVICE_TERMINAL_STATUS；工作手机、平板、一体机、扫码设备（持有人随归还、领用更换）409 INVALID_DEVICE_STATUS；与原责任人相同 409 DEVICE_STAFF_UNCHANGED；并发变更 409 DEVICE_TRANSITION_CONFLICT。",
         "x-auth-context": "staff-token",
         "x-permission": "terminal.device.lifecycle",
         "x-data-scope": "project-device",
@@ -29672,6 +29761,7 @@
           "CONTRACT_SCOPE_VIOLATION"
         ],
         "summary": "扫码点单（绑桌台会话）",
+        "description": "订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。",
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -33165,7 +33255,7 @@
         ],
         "operationId": "listFacilityOverdueWorkOrders",
         "summary": "逾期工单列表",
-        "description": "非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "description": "列出在办（待派单至已验收）且已过处理时限，或（设备告警来源除外）未开始处理且已过响应时限的工单；已升级（已标记超时）的仍列出（第 77 条 77-R1）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -33818,7 +33908,7 @@
         ],
         "operationId": "markFacilityWorkOrdersOverdue",
         "summary": "批量标记逾期工单",
-        "description": "非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "description": "对可触及项目内已过响应时限（待派单、已派单且未开始处理，设备告警来源除外）或处理时限（在办六态）、该类还没升级过的工单走与定时作业 FacilityWorkOrderEscalationJob 同一升级：置超时标记、给可触及该单项目的物业主管（持 facility.work_order.manage、不带商户归属、有员工档案）各发一条员工系统通知、逐单留痕 facility.work_order_escalated；同类不重复升级；返回本次升级的工单数（第 77 条 77-R1）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -54271,7 +54361,7 @@
         ],
         "operationId": "uploadEvidenceAttachment",
         "summary": "上传证据照片/视频",
-        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。 本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。 18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。",
+        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。 本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。 18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。 18I：工作手机（staff_work_phone）签名上传时，签名量第 6 行取部件规范串的 SHA-256——参数按名排序逐行 p:<名>=<值>，再文件按字段名排序逐行 f:<名>:<原文件名>:<文件字节 SHA-256>，换行连接；文件名用 ASCII；体积上限同不签名上传（Spring multipart 上限），不受 JSON 签名体 1MB 限制。",
         "x-permission": "evidence.attachment.create",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -76050,7 +76140,6 @@
                   "unit_price_cent": 128800
                 }
               ],
-              "salesperson_user_id": "staff_sales_001",
               "service_user_ids": [
                 "staff_service_001"
               ],
@@ -76730,6 +76819,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/MerchantWorkOrderCreateRequest"
+            }
+          }
+        }
+      },
+      "MerchantWorkOrderPolicyRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MerchantWorkOrderPolicyRequest"
             }
           }
         }
@@ -80195,11 +80294,12 @@
           },
           "terminal_type": {
             "type": "string",
-            "description": "设备终端类型，取 D5 终端码；一体机统一使用 kiosk",
+            "description": "设备终端类型，取 D5 终端码；一体机统一使用 kiosk；扫码设备 scanner 由后台登记进台账后经本接口领用（第 89 条 89-R3）",
             "enum": [
               "staff_work_phone",
               "tablet",
-              "kiosk"
+              "kiosk",
+              "scanner"
             ],
             "maxLength": 64
           },
@@ -80265,7 +80365,9 @@
               "kiosk",
               "security_xray",
               "face_scanner",
-              "ticket_gate"
+              "ticket_gate",
+              "scanner",
+              "other_site_device"
             ],
             "maxLength": 64
           },
@@ -81668,11 +81770,6 @@
             },
             "maxItems": 200
           },
-          "salesperson_user_id": {
-            "type": "string",
-            "description": "销售归属员工 ID；卡座销售提成按岗位快照计算。",
-            "maxLength": 64
-          },
           "service_user_ids": {
             "type": "array",
             "description": "`service_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。",
@@ -81745,7 +81842,7 @@
                 },
                 "actual_pour_volume": {
                   "type": "integer",
-                  "description": "按杯出品实际出酒量（毫升），由出酒吧台的出酒量采集设备采集：吧台配有采集设备的按杯出品项必填，缺失拒单 POUR_VOLUME_REQUIRED，实际量>标准量记损耗，超商品级阈值落 inventory.loss_exception 核查留痕；吧台未配采集设备的按标准出酒量配酒并记标准损耗，本字段不取用。非按杯出品项忽略。",
+                  "description": "按杯出品实际出酒量（毫升），由出酒吧台的出酒量采集设备采集：吧台配有采集设备的按杯出品项必填，缺失拒单 POUR_VOLUME_REQUIRED，实际量>标准量记损耗，超商品级阈值落 inventory.loss_exception 核查留痕；吧台未配采集设备的按标准出酒量配酒并记标准损耗，本字段不取用。非按杯出品项忽略。第十八批 I 段第 76 条起，配设备吧台的按杯出品按标准出酒量×杯数连同超出标准的部分（损耗）按容量扣库存。",
                   "minimum": 0
                 }
               }
@@ -84034,6 +84131,25 @@
               "disabled"
             ],
             "description": "酒吧商品.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+          },
+          "inventory_item_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "酒吧商品.inventory_item_id 字段：出品扣库存所挂的库存物料 ID。"
+          },
+          "stock_location_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "酒吧商品.stock_location_id 字段：出品扣库存的库位 ID（该物料在此库位的库存行）。"
+          },
+          "stock_deduction_required": {
+            "type": "boolean",
+            "description": "酒吧商品.stock_deduction_required 字段：出品是否扣库存。"
+          },
+          "standard_pour_volume": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "酒吧商品.standard_pour_volume 字段：按杯每杯标准出酒量（毫升），填了即按杯商品；需扣库存的按杯商品出品按标准出酒量连同损耗按容量扣减，所挂库存物料须已登记规格容量 spec_volume_ml（第十八批 I 段第 76 条，BSM:1065、ENUM:79）。"
           }
         }
       },
@@ -84108,6 +84224,11 @@
           "non_consumable": {
             "type": "boolean",
             "description": "库存物品.non_consumable 字段：不可消费物品（设备、器具等），FS-019 只有不可消费物品才能借用（BSM L1201）。"
+          },
+          "spec_volume_ml": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "库存物品.spec_volume_ml 字段：规格容量（毫升），如 700 毫升瓶装填 700；第十八批 I 段第 76 条按杯按标准出酒量扣库存的物料须登记（BSM:1065、ENUM:79），不按容量扣的留空。"
           }
         }
       },
@@ -85271,14 +85392,52 @@
             ],
             "maxLength": 64,
             "description": "Reporting channel."
-          },
-          "due_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Expected due time."
           }
         },
         "description": "MerchantWorkOrderCreateRequest payload."
+      },
+      "MerchantWorkOrderPolicyRequest": {
+        "type": "object",
+        "description": "商户服务工单处理时限一格（工单类型×优先级，第 77 条 77-R3）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "work_order_type",
+          "priority",
+          "handle_minutes"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "work_order_type": {
+            "type": "string",
+            "description": "工单类型（报修/投诉/整改/服务）。",
+            "enum": [
+              "repair",
+              "complaint",
+              "rectification",
+              "service"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "description": "优先级（低/中/高/紧急）。",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "handle_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "处理时限（分钟）；建单时截止时间＝建单时刻＋处理时限。"
+          }
+        }
       },
       "MerchantWorkOrderAssignRequest": {
         "type": "object",
@@ -88144,11 +88303,6 @@
               "type": "object"
             },
             "maxItems": 200
-          },
-          "salesperson_user_id": {
-            "type": "string",
-            "description": "销售归属员工 ID；卡座销售提成按岗位快照计算。",
-            "maxLength": 64
           },
           "service_user_ids": {
             "type": "array",

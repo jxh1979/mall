@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -390,8 +390,8 @@ class TerminalDeviceServiceTests {
         service.markDeviceLost(bound.id(), lifecycleRequest("lost-found-1", "lost"));
         DeviceBindingResponse found = service.markDeviceFound(bound.id(), lifecycleRequest("found-1", "recovered"));
 
-        assertThat(found.status()).isEqualTo("found");
-        // found 不是 NON_OPERATIONAL，可重新领用。
+        // 第 89 条 89-R2（第十八批裁决 20）：找回回待领用（returned），可重新领用。
+        assertThat(found.status()).isEqualTo("returned");
         DeviceBindingResponse rebound = service.bindDevice(bindRequest("rebind-found", "P0-FOUND-1"));
         assertThat(rebound.status()).isEqualTo("bound");
     }

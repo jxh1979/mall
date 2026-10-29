@@ -340,6 +340,42 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
     }
 
     @Override
+    public Optional<Integer> findHandleMinutes(String workOrderType, String priority) {
+        return jdbcTemplate.queryForList("""
+                SELECT handle_minutes FROM merchant_service_work_order_policies
+                 WHERE work_order_type = :type AND priority = :priority
+                """, Map.of("type", workOrderType, "priority", priority), Integer.class).stream().findFirst();
+    }
+
+    @Override
+    public List<MerchantWorkOrderPolicyRecord> listPolicies() {
+        return jdbcTemplate.query("""
+                SELECT work_order_type, priority, handle_minutes, updated_by, updated_at
+                  FROM merchant_service_work_order_policies
+                 ORDER BY work_order_type, priority
+                """, (rs, n) -> new MerchantWorkOrderPolicyRecord(rs.getString("work_order_type"), rs.getString("priority"),
+                rs.getInt("handle_minutes"), rs.getString("updated_by"), rs.getTimestamp("updated_at").toInstant()));
+    }
+
+    @Override
+    public MerchantWorkOrderPolicyRecord savePolicy(MerchantWorkOrderPolicyRecord policy) {
+        jdbcTemplate.update("""
+                INSERT INTO merchant_service_work_order_policies (work_order_type, priority, handle_minutes, updated_by, updated_at)
+                VALUES (:type, :priority, :handle_minutes, :updated_by, :updated_at)
+                ON CONFLICT (work_order_type, priority) DO UPDATE SET
+                    handle_minutes = EXCLUDED.handle_minutes,
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("type", policy.workOrderType())
+                .addValue("priority", policy.priority())
+                .addValue("handle_minutes", policy.handleMinutes())
+                .addValue("updated_by", policy.updatedBy())
+                .addValue("updated_at", timestampWithTimeZone(policy.updatedAt())));
+        return policy;
+    }
+
+    @Override
     public void setWorkOrderArchiveReason(String id, String reason) {
         jdbcTemplate.update("UPDATE merchant_service_work_orders SET archive_reason = :reason WHERE id = :id",
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));

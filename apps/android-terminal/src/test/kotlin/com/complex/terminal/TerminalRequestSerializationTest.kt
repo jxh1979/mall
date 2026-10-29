@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -173,7 +173,6 @@ class TerminalRequestSerializationTest {
           barId = "bar_1",
           tableId = "table_1",
           items = listOf(mapOf("sku" to "beer", "qty" to "2")),
-          salespersonUserId = "staff_1",
           serviceUserIds = listOf("staff_2"),
           paymentMode = "postpaid",
         ),
@@ -183,7 +182,8 @@ class TerminalRequestSerializationTest {
     assertTrue("operator_note" in order)
     assertTrue("bar_id" in order)
     assertTrue("table_id" in order)
-    assertTrue("salesperson_user_id" in order)
+    // 第十八批 I 段 86-R1：订单销售由服务端取开台会话的销售，点单请求不含 salesperson_user_id。
+    assertTrue("salesperson_user_id" !in order)
     assertTrue("service_user_ids" in order)
     assertTrue("payment_mode" in order)
     assertEquals(2, order["items"]!!.jsonArray.size.let { 2 })

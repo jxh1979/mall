@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -140,6 +140,8 @@ class TerminalFieldWorkflowTest {
         "/api/v1/bar/orders" -> {
           assertTrue("\"bar_id\":\"bar-1\"" in req.body)
           assertTrue("\"items\"" in req.body)
+          // 第十八批 I 段 86-R1（BSM 第 1070 行「加单、送达等其他经手人只留责任痕迹、不产生销售提成」）：订单销售由服务端取开台会话的销售，终端不发下单人。
+          assertTrue("salesperson_user_id" !in req.body)
           okJson("""{"id":"order-1","bar_id":"bar-1","status":"open","total_amount_cent":9900}""")
         }
         "/api/v1/bar/bills/bill-1/pay-intents" -> {

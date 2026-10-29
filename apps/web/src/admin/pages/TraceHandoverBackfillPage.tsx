@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -11,7 +11,9 @@ import type { AdminPageProps } from "../types";
 
 // 第十八批 F 段第 14 条 14-R4（BSM:1201「补录记录与原始扫码记录并列展示、互不覆盖」；BSM:1642「补录记录与原始记录并列展示，标明“人工补录”」；
 // BSM:1320「查看与本商户相关的异常、补录和复核记录。」）：交接链与补录（ADM-INV-005）。按溯源码查交接单，原扫码五段原样显示，旁边并列该交接单
-// 全部人工补录单，异常只读；四个人工扫码段里仍待扫码、又没有待复核或已通过补录的段可发起补录（机器人配送段不补，后端同样拒绝）。
+// 全部人工补录单；四个人工扫码段里仍待扫码、又没有待复核或已通过补录的段可发起补录（机器人配送段不补，后端同样拒绝）。
+// 第十八批 I 段第 85 条 85-R2（BSM:1581「缺口、重复或差异时进入留痕与异常复核」；BSM:1871 管理后台「配置、查询、复核」）：
+// 待处理的交接异常可复核（通过或驳回，原因必填），复核后重新读取交接链。
 const BASE = "/api/v1/inventory/trace-handovers";
 const SEGMENTS: Record<string, string> = {
   out_verify: "库管出库", dispatch: "机器人配送", kitchen_receive: "后厨接收", staff_pickup: "服务员取走", deliver_customer: "送达客人或卡座",
@@ -50,6 +52,8 @@ export function TraceHandoverBackfillPage({ api, setActionResult, effectivePermi
   const [busy, setBusy] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [formError, setFormError] = React.useState("");
+  const [review, setReview] = React.useState<{ id: string; decision: string; reason: string; key: string } | null>(null);
+  const [reviewError, setReviewError] = React.useState("");
 
   async function search() {
     setError(""); setChain(null);
@@ -92,6 +96,22 @@ export function TraceHandoverBackfillPage({ api, setActionResult, effectivePermi
     } catch (e) { setFormError(failure(e, "补录提交失败")); } finally { setBusy(false); }
   }
 
+  function startReview(id: string) {
+    setReviewError("");
+    setReview({ id, decision: "", reason: "", key: `admin-thx-${id}-${Date.now()}` });
+  }
+  async function submitReview() {
+    if (!chain || !review) return;
+    const requestBody = { idempotency_key: review.key, decision: review.decision, reason: review.reason.trim() };
+    setBusy(true); setReviewError("");
+    try {
+      const result = await api.post(`${BASE}/exceptions/${encodeURIComponent(review.id)}/review`, requestBody);
+      setActionResult({ action: "inventory_trace_exception_reviewed", requestBody, result });
+      setReview(null);
+      await open(chain.handover.id);
+    } catch (e) { setReviewError(failure(e, "交接异常复核失败")); } finally { setBusy(false); }
+  }
+
   // 仍待扫码、又没有待复核或已通过补录的人工扫码段才可补录。
   const canBackfill = (step: Step) => step.segment !== "dispatch" && step.stepStatus === "pending"
     && !chain?.backfills.some((row) => row.targetPart === step.segment && row.status !== "rejected");
@@ -100,7 +120,7 @@ export function TraceHandoverBackfillPage({ api, setActionResult, effectivePermi
     <section data-testid="inventory-trace-handover-page">
       <AdminPageHeader
         title="交接链与补录"
-        description="按溯源码查交接单：原扫码五段原样显示，人工补录单并列标「人工补录」、互不覆盖；缺扫码的人工段可附证据发起补录，经主管复核通过后才算该段完成。"
+        description="按溯源码查交接单：原扫码五段原样显示，人工补录单并列标「人工补录」、互不覆盖；缺扫码的人工段可附证据发起补录，经主管复核通过后才算该段完成；待处理的交接异常可在此复核。"
       />
       <div className="admin-form-row">
         <label>溯源码<input data-testid="thb-trace-code" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
@@ -162,14 +182,18 @@ export function TraceHandoverBackfillPage({ api, setActionResult, effectivePermi
               </table>
             </div>
           </div>
-          <h3>交接异常（只读）</h3>
+          <h3>交接异常</h3>
           <table className="admin-table" data-testid="thb-exceptions">
-            <thead><tr><th>环节</th><th>异常类型</th><th>复核状态</th><th>原因</th><th>发现时间</th></tr></thead>
+            <thead><tr><th>环节</th><th>异常类型</th><th>复核状态</th><th>原因</th><th>发现时间</th><th>复核</th></tr></thead>
             <tbody>
-              {chain.exceptions.length === 0 ? <tr><td colSpan={5}>暂无异常</td></tr> : chain.exceptions.map((row) => (
+              {chain.exceptions.length === 0 ? <tr><td colSpan={6}>暂无异常</td></tr> : chain.exceptions.map((row) => (
                 <tr key={row.id}>
                   <td>{SEGMENTS[row.segment] ?? row.segment}</td><td>{formatBusinessStatus(row.exceptionType)}</td><td>{formatBusinessStatus(row.reviewStatus)}</td>
                   <td>{row.reason ?? "—"}</td><td>{time(row.createdAt)}</td>
+                  <td>{row.reviewStatus === "pending" ? (
+                    <PermissionButton permissionsState={effectivePermissions} permissions={["inventory.handover.review"]}
+                      data-testid={`thb-exception-review-${row.id}`} onClick={() => startReview(row.id)}>复核</PermissionButton>
+                  ) : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -198,6 +222,29 @@ export function TraceHandoverBackfillPage({ api, setActionResult, effectivePermi
           <input data-testid="thb-evidence" type="file" multiple accept="image/*,audio/*,video/*" disabled={busy || uploading} onChange={(event) => void upload(event.target.files)} />
         </label>
         <ul>{proofs.map((proof) => <li key={proof.id}>{proof.name}（已上传）</li>)}</ul>
+      </FormModal>
+      <FormModal
+        open={review !== null}
+        title="复核交接异常"
+        description="选择复核结论并填写原因，提交后重新读取交接链。"
+        submitLabel="提交复核"
+        submitTestId="thb-exception-submit"
+        submitting={busy}
+        error={reviewError}
+        validate={() => (!review?.decision ? "请选择复核结论" : !review.reason.trim() ? "请填写复核原因" : null)}
+        onSubmit={() => void submitReview()}
+        onClose={() => setReview(null)}
+        testId="thb-exception-form"
+      >
+        <fieldset>
+          <legend>复核结论</legend>
+          <label><input type="radio" name="thb-exception-decision" data-testid="thb-exception-decision-approved" checked={review?.decision === "approved"}
+            onChange={() => review && setReview({ ...review, decision: "approved" })} />通过</label>
+          <label><input type="radio" name="thb-exception-decision" data-testid="thb-exception-decision-rejected" checked={review?.decision === "rejected"}
+            onChange={() => review && setReview({ ...review, decision: "rejected" })} />驳回</label>
+        </fieldset>
+        <label>复核原因<input data-testid="thb-exception-reason" value={review?.reason ?? ""}
+          onChange={(event) => review && setReview({ ...review, reason: event.target.value })} /></label>
       </FormModal>
     </section>
   );

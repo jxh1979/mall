@@ -98,7 +98,7 @@ class ContractScopeEnforcementJdbcIntegrationTests {
         // 越界品类 → 整单拒（CONTRACT_SCOPE_VIOLATION），bar_orders 零落库。
         assertThatThrownBy(() -> barService.createOrder(new BarOrderRequest(
                 "scope-jdbc-x", null, List.of(), "bar_scope_jdbc", "table_scope_jdbc", null,
-                List.of(Map.of("product_id", "product_scope_spirit", "quantity", 1)), null, List.of(), "offline")))
+                List.of(Map.of("product_id", "product_scope_spirit", "quantity", 1)), List.of(), "offline")))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION");
                     assertThat(e.getMessage()).contains("烈酒");
@@ -109,7 +109,7 @@ class ContractScopeEnforcementJdbcIntegrationTests {
         // 范围内品类照常成单（真 JSONB 读回 → 拦截器不误伤）。
         BarOrderRecord ok = barService.createOrder(new BarOrderRequest(
                 "scope-jdbc-ok", null, List.of(), "bar_scope_jdbc", "table_scope_jdbc", null,
-                List.of(Map.of("product_id", "product_scope_beer", "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", "product_scope_beer", "quantity", 2)), List.of(), "offline"));
         assertThat(ok.totalAmountCent()).isEqualTo(7600L);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM bar_orders WHERE id = ?", Long.class, ok.id())).isEqualTo(1L);

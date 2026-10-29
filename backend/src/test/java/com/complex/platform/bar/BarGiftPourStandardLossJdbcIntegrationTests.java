@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -19,6 +19,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,9 +76,9 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"gpour-loss-" + s + "\",\"value_pct\":10,\"min_pct\":5,\"max_pct\":20}"))
                 .andExpect(status().isOk());
-        // 赠饮按 1 件扣 default 库位；该库存行挂在本酒吧的一号吧台（吧台库存）。
+        // 赠饮扣 default 库位；该库存行挂在本酒吧的一号吧台（吧台库存）。第十八批 I 段第 76 条：按杯按容量扣，物料为 700 毫升瓶装、库存 5 瓶。
         jdbc.update("INSERT INTO warehouses (id, project_id, merchant_id, warehouse_type, name) VALUES (?, ?, ?, 'bar_counter', '一号吧台')", counter, project, bar);
-        jdbc.update("INSERT INTO inventory_items (id, item_name, item_type, unit, status, created_at, updated_at) VALUES (?, '威士忌', 'liquor', 'ml', 'active', now(), now())", item);
+        jdbc.update("INSERT INTO inventory_items (id, item_name, item_type, unit, status, spec_volume_ml, created_at, updated_at) VALUES (?, '威士忌', 'liquor', '瓶', 'active', 700, now(), now())", item);
         jdbc.update("INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id)"
                 + " VALUES (?, ?, 'default', 5, 0, 5, now(), ?, ?)", "gpour_bal_" + s, item, bar, counter);
         Instant now = Instant.now();
@@ -123,7 +124,7 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
                 .containsEntry("delivery_status", "delivered").containsEntry("actual_pour_volume", 25)
                 .containsEntry("loss_volume", 3).containsEntry("is_gift", true));
 
-        // 钱不变：赠饮单仍 0 元、不开账单；平台向酒吧挂的赠饮应付仍按内部结算价一笔；库存仍按 1 件扣。
+        // 钱不变：赠饮单仍 0 元、不开账单；平台向酒吧挂的赠饮应付仍按内部结算价一笔；库存按容量扣（开一瓶 5→4，第十八批 I 段第 76 条）。
         assertThat(jdbc.queryForObject("SELECT total_amount_cent FROM bar_orders WHERE id = ?", Long.class, order)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_bills WHERE order_id = ?", Integer.class, order)).isZero();
         assertThat(jdbc.queryForList("SELECT amount_cent FROM ar_ap_items WHERE source_type = 'pass_drink_settlement' AND source_id = ? AND direction = 'payable'",
@@ -144,7 +145,9 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT status FROM bar_gift_redemptions WHERE verification_id = ?", String.class, verificationId))
                 .isEqualTo("delivered");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_order_items WHERE order_id = ?", Integer.class, order)).isZero();
-        assertThat(stock()).isEqualTo(4);
+        // 第十八批 I 段第 76 条：配设备吧台的赠饮没有设备实采来源，只按标准 25ml 扣、不记损耗（开一瓶 5→4、余 675ml）。
+        assertThat(balance()).containsEntry("quantity", 4).containsEntry("opened_volume_ml", 675);
+        assertThat(giftMovement(order)).containsEntry("quantity", 1).containsEntry("volume_ml", 25).containsEntry("loss_volume_ml", null);
     }
 
     @Test
@@ -152,7 +155,7 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
         String verificationId = verifyGift();
         String order = giftOrder(verificationId);
 
-        // 走真实冲正入口（终端冲正请求形状，蛇形键）：库存退回 1 件；本次核销记下的那行赠送明细照点单退酒写法置撤单，
+        // 走真实冲正入口（终端冲正请求形状，蛇形键）：按杯赠饮只把标准量加回已开瓶余量、瓶数不变（第十八批 I 段第 76 条）；本次核销记下的那行赠送明细照点单退酒写法置撤单，
         // 出酒量与损耗原值保留——冲正后权益可再核销、另起新单新明细，被冲正的这行不能仍算已出酒。
         mockMvc.perform(post("/api/v1/ticketing/verifications/" + verificationId + "/reverse").with(platformStaff())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -170,7 +173,32 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
                 .containsEntry("void_reason", "赠饮核销冲正").containsEntry("voided_at_set", true)
                 .containsEntry("return_to_stock", true)
                 .containsEntry("actual_pour_volume", 25).containsEntry("loss_volume", 3));
-        assertThat(stock()).isEqualTo(5);
+        assertThat(stock()).isEqualTo(4);
+    }
+
+    /**
+     * 第十八批 I 段第 76 条 76-R4（BSM 第 1065 行「按杯按标准出酒量扣库存、超出记损耗」；BSM 第 1049 行「扣减吧台售卖消耗、赠饮消耗和报损」）：
+     * 未配设备吧台按杯赠饮按标准 25ml＋标准损耗 3ml 按容量扣（开一瓶 5→4、余 672ml），redeem_consume 流水记开瓶数、出酒量与损耗量；
+     * 冲正只把标准量 25ml 加回已开瓶余量（损耗不退）、瓶数不变，冲正流水瓶数 0、带出酒量。
+     */
+    @Test
+    void byGlassGiftDeductsStandardPlusStandardLossByVolumeAndReversalReturnsStandardToOpenedVolume() throws Exception {
+        String verificationId = verifyGift();
+        String order = giftOrder(verificationId);
+        assertThat(balance()).containsEntry("quantity", 4).containsEntry("available_quantity", 4).containsEntry("opened_volume_ml", 672);
+        assertThat(giftMovement(order)).containsEntry("movement_type", "redeem_consume").containsEntry("quantity", 1)
+                .containsEntry("volume_ml", 25).containsEntry("loss_volume_ml", 3);
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications/" + verificationId + "/reverse").with(platformStaff())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"gpour-reverse-volume-" + s + "\",\"reason\":\"客人未取酒\"}"))
+                .andExpect(status().isOk());
+        assertThat(balance()).containsEntry("quantity", 4).containsEntry("available_quantity", 4).containsEntry("opened_volume_ml", 697);
+        assertThat(jdbc.queryForMap("SELECT movement_type, source_location_id, target_location_id, quantity, volume_ml, loss_volume_ml"
+                        + " FROM inventory_stock_movements WHERE business_type = 'bar_gift_redemption_reverse' AND business_id = ?", order))
+                .containsEntry("movement_type", "redeem_consume").containsEntry("source_location_id", null)
+                .containsEntry("target_location_id", "default").containsEntry("quantity", 0)
+                .containsEntry("volume_ml", 25).containsEntry("loss_volume_ml", null);
     }
 
     // ---------- helpers ----------
@@ -195,6 +223,16 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
     private Integer stock() {
         return jdbc.queryForObject("SELECT available_quantity FROM inventory_stock_balances WHERE item_id = ? AND location_id = 'default'",
                 Integer.class, item);
+    }
+
+    private Map<String, Object> balance() {
+        return jdbc.queryForMap("SELECT quantity, available_quantity, opened_volume_ml FROM inventory_stock_balances WHERE item_id = ? AND location_id = 'default'",
+                item);
+    }
+
+    private Map<String, Object> giftMovement(String order) {
+        return jdbc.queryForMap("SELECT movement_type, quantity, volume_ml, loss_volume_ml FROM inventory_stock_movements"
+                + " WHERE business_type = 'bar_gift_redemption' AND business_id = ?", order);
     }
 
     /** 通票赠饮权益：模板绑本吧按杯商品（bar_item_ref＝商品 id），提供方＝本吧，可核 1 次。 */

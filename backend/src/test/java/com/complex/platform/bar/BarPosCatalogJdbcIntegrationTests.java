@@ -156,7 +156,7 @@ class BarPosCatalogJdbcIntegrationTests {
         BarOrderRecord order = barOrderService.createOrder(new BarOrderRequest(
                 "combo-order-1", null, List.of(), bar, "bartable_combo", null,
                 List.of(java.util.Map.of("combo_id", "barcombo_gt", "quantity", "2")),
-                null, List.of(), null));
+                List.of(), null));
 
         assertThat(order.totalAmountCent()).isEqualTo(20000L);
         List<BarOrderItemRecord> items = barRepository.listOrderItems(order.id());
@@ -193,7 +193,7 @@ class BarPosCatalogJdbcIntegrationTests {
         BarOrderRecord order = barOrderService.createOrder(new BarOrderRequest(
                 "combo-order-rem", null, List.of(), bar, "bartable_rem", null,
                 List.of(java.util.Map.of("combo_id", "barcombo_rem", "quantity", "1")),
-                null, List.of(), null));
+                List.of(), null));
 
         assertThat(order.totalAmountCent()).isEqualTo(10001L);
         List<BarOrderItemRecord> items = barRepository.listOrderItems(order.id());
@@ -532,7 +532,7 @@ class BarPosCatalogJdbcIntegrationTests {
             assertThatThrownBy(() -> barOrderService.createOrder(new BarOrderRequest(
                     "ns-order-1", null, List.of(), "bar_ns", "bartable_ns", null,
                     List.of(java.util.Map.of("product_id", "product_ns", "quantity", "1")),
-                    null, List.of(), null)))
+                    List.of(), null)))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                     .hasFieldOrPropertyWithValue("code", "BAR_PRODUCT_NOT_SELLABLE");
         } finally {
@@ -557,7 +557,7 @@ class BarPosCatalogJdbcIntegrationTests {
             assertThatThrownBy(() -> barOrderService.createOrder(new BarOrderRequest(
                     "cns-order-1", null, List.of(), "bar_cns", "bartable_cns", null,
                     List.of(java.util.Map.of("combo_id", "barcombo_ns", "quantity", "1")),
-                    null, List.of(), null)))
+                    List.of(), null)))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                     .hasFieldOrPropertyWithValue("code", "BAR_COMBO_NOT_SELLABLE");
         } finally {

@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.40
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.41
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1204 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1206 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 419 | 人工权限矩阵正文未覆盖 318 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2408 | 人工事件矩阵正文未覆盖 2363 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1204 | 人工任务映射正文未逐项覆盖 1198 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 723 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2412 | 人工事件矩阵正文未覆盖 2367 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1206 | 人工任务映射正文未逐项覆盖 1200 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 724 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -348,7 +348,7 @@
 | `merchant.portal.settlement.view` | staff-token | merchant | 3 | listMerchantPortalTicketSettlements, listMerchantPortalNotices, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.manage` | staff-token | project, project-merchant | 6 | createMerchant, updateMerchant, configureMerchantPendingClearAlert, configureMerchantStaffBookingNoShowLimit, configureMerchantPourLossRate, requestMerchantOperatingProject | 已在权限矩阵正文出现 |
 | `merchant.profile.view` | staff-token | project-merchant | 5 | listMerchants, getMerchantPendingClearAlert, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate, getMerchantOperatingProjects | 已在权限矩阵正文出现 |
-| `merchant.service_work_order.assign` | staff-token | project-merchant | 1 | assignMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
+| `merchant.service_work_order.assign` | staff-token | platform, project-merchant | 3 | listMerchantServiceWorkOrderPolicies, saveMerchantServiceWorkOrderPolicy, assignMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.close` | staff-token | project-merchant | 1 | closeMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
@@ -2066,8 +2066,12 @@
 | `merchant_service.closeMerchantServiceWorkOrder.succeeded` | success | `closeMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | P0-待归类 | `merchant.service_work_order.close` | 接口级事件，以本附录为准 |
 | `merchant_service.createMerchantServiceWorkOrder.failed` | failure | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.create` | 接口级事件，以本附录为准 |
 | `merchant_service.createMerchantServiceWorkOrder.succeeded` | success | `createMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.create` | 接口级事件，以本附录为准 |
+| `merchant_service.listMerchantServiceWorkOrderPolicies.failed` | failure | `listMerchantServiceWorkOrderPolicies` | `GET` | `/api/v1/merchant-service/work-order-policies` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
+| `merchant_service.listMerchantServiceWorkOrderPolicies.succeeded` | success | `listMerchantServiceWorkOrderPolicies` | `GET` | `/api/v1/merchant-service/work-order-policies` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
 | `merchant_service.listMerchantServiceWorkOrders.failed` | failure | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
 | `merchant_service.listMerchantServiceWorkOrders.succeeded` | success | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
+| `merchant_service.work_order_policy_save_failed` | failure | `saveMerchantServiceWorkOrderPolicy` | `PUT` | `/api/v1/merchant-service/work-order-policies` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
+| `merchant_service.work_order_policy_saved` | success | `saveMerchantServiceWorkOrderPolicy` | `PUT` | `/api/v1/merchant-service/work-order-policies` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
 | `merchant.billing.confirm` | success | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | P0-待归类 | `merchant.billing.confirm` | 接口级事件，以本附录为准 |
 | `merchant.billing.confirm_failed` | failure | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | P0-待归类 | `merchant.billing.confirm` | 接口级事件，以本附录为准 |
 | `merchant.billing.create` | success | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
@@ -3419,7 +3423,7 @@
 | INV-库存存酒 | `approveSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts/{id}/approve` | 提交供应合同主线及业务财务法务并行审批 | `inventory.supply_contract.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `arrivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/arrive` | 采购单到货(ordered/expected→arrived) | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `assignSavedBottleRemedyStaffLiability` | `POST` | `/api/v1/inventory/saved-bottles/remedies/{id}/staff-liability` | 复核认定责任员工照价赔偿登记（金额由服务端按内部结算价×数量计，不收前端金额；不改对客状态） | `bar.saved_bottle.manage` | `bar.saved_bottle.remedy_staff_liability_assigned` / `bar.saved_bottle.remedy_staff_liability_assign_failed` | tablet, web | operation 级补充 |
-| INV-库存存酒 | `backfillTraceHandoverSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | 交接缺段人工补录（附证据、进主管复核，通过后才生效） | `inventory.handover.scan` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | web | operation 级补充 |
+| INV-库存存酒 | `backfillTraceHandoverSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | 交接缺段人工补录（附证据、进主管复核，通过后才生效） | `inventory.handover.scan` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | staff_work_phone, web | operation 级补充 |
 | INV-库存存酒 | `cancelSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废) | `bar.saved_bottle.manage` | `bar.saved_bottle.cancelled` / `bar.saved_bottle.cancel_failed` | tablet, web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | 取消调拨／要货单 | `inventory.transfer_order.manage` | `inventory.transfer_order_cancelled` / `inventory.transfer_order_cancel_failed` | web | operation 级补充 |
 | INV-库存存酒 | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | 存酒领取 | `bar.saved_bottle.manage` | `bar.saved_bottle_picked_up` / `bar.saved_bottle.pickup_failed` | tablet, staff_work_phone | operation 级补充 |
@@ -3462,7 +3466,7 @@
 | INV-库存存酒 | `getPurchaseWorkbenchOptions` | `GET` | `/api/v1/inventory/purchase-workbench-options` | 读取采购工作台可用目录（逐项目及货权过滤） | `inventory.purchase_request.view` | `inventory.purchase_workbench.viewed` / `inventory.purchase_workbench.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getPurchaseWorkflowDetail` | `GET` | `/api/v1/inventory/purchase-requests/{id}` | 读取采购数量、逐次验收及独立结算事实 | `inventory.purchase_request.view` | `inventory.purchase_request_viewed` / `inventory.purchase_request_view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getSupplyContractTerms` | `GET` | `/api/v1/inventory/supply-contracts/{id}/terms` | 读取供应合同条款及审批状态 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
-| INV-库存存酒 | `getTraceHandover` | `GET` | `/api/v1/inventory/trace-handovers/{id}` | 查交接链（原扫码五段、异常与人工补录并列） | `inventory.handover.scan` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| INV-库存存酒 | `getTraceHandover` | `GET` | `/api/v1/inventory/trace-handovers/{id}` | 查交接链（原扫码五段、异常与人工补录并列） | `inventory.handover.scan` | `not_applicable` / `not_applicable` | staff_work_phone, web | operation 级补充 |
 | INV-库存存酒 | `getTransferOrderFulfillment` | `GET` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | 门店要货签收结果与差异处理 | `inventory.transfer_order.view` | `inventory.transfer_fulfillment_viewed` / `inventory.transfer_fulfillment_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `handoverPurchaseReturn` | `POST` | `/api/v1/inventory/purchase-returns/{id}/handover` | 登记批准退供的实际交接并出库 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `handoverSavedBottlesToPlatform` | `POST` | `/api/v1/inventory/saved-bottles/handover` | 门店退出存酒交所属娱乐平台公司（平台操作者办理；该门店有效期内未结存酒须全部清点；指定领取地点、原有效期与原取酒规则不变；毁损与实收为 0 的短少走作废路径，部分短少按差额） | `bar.saved_bottle.manage` | `bar.saved_bottle.handed_over` / `bar.saved_bottle.handover_failed` | tablet, web | operation 级补充 |
@@ -3490,7 +3494,7 @@
 | INV-库存存酒 | `listSupplierReconciliations` | `GET` | `/api/v1/inventory/supplier-reconciliations` | 查询供应商对账列表 | `inventory.supplier.reconcile` | `inventory.supplier_reconciliation.list` / `inventory.supplier_reconciliation.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSupplierSettlementMethods` | `GET` | `/api/v1/inventory/supplier-settlement-methods` | 查询供应商结算档列表 | `inventory.supplier.settlement.manage` | `inventory.supplier_settlement_method.list` / `inventory.supplier_settlement_method.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | 查询供应合同列表 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | web | operation 级补充 |
-| INV-库存存酒 | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | 按溯源码查交接单 | `inventory.handover.scan` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| INV-库存存酒 | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | 按溯源码查交接单 | `inventory.handover.scan` | `not_applicable` / `not_applicable` | staff_work_phone, web | operation 级补充 |
 | INV-库存存酒 | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | 查询库房列表 | `inventory.warehouse.manage` | `inventory.warehouse.list` / `inventory.warehouse.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `lookupSavedBottlesByPhone` | `POST` | `/api/v1/inventory/saved-bottles/lookup` | 按手机号检索存酒（检索只能输入手机号，姓名与昵称不得用于检索；手机号走请求体不进 URL） | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `markInventoryItemHighValue` | `POST` | `/api/v1/inventory/items/{id}/high-value-mark` | 物料手工标记或取消标记高价值 | `inventory.high_value.review` | `inventory.item.high_value_marked` / `inventory.item.high_value_mark_failed` | web | operation 级补充 |
@@ -3735,6 +3739,7 @@
 | P0-待归类 | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | 商户专区·通告(本商户) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalSettlements` | `GET` | `/api/v1/merchant-portal/settlements` | 商户专区·我的对账(结算单只读) | `merchant.portal.settlement.view` | `merchant_portal.settlement.viewed` / `merchant_portal.settlement.view_failed` | web, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
+| P0-待归类 | `listMerchantServiceWorkOrderPolicies` | `GET` | `/api/v1/merchant-service/work-order-policies` | 商户服务工单处理时限列表（工单类型×优先级） | `merchant.service_work_order.assign` | `merchant_service.listMerchantServiceWorkOrderPolicies.succeeded` / `merchant_service.listMerchantServiceWorkOrderPolicies.failed` | web | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal | operation 级补充 |
 | P0-待归类 | `listMyFacilityAlarms` | `GET` | `/api/v1/facility/alarms/mine` | 我的接警 | `facility.alarm.take_over` | `facility.alarm_mine.viewed` / `facility.alarm_mine.view_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
 | P0-待归类 | `listMyMerchantCardExitNotices` | `GET` | `/api/v1/merchant-portal/card-exit-notices` | 商户专区·本商户储值卡退出公告 | `merchant.portal.card_exit_notice.publish` | `not_applicable` / `not_applicable` | web, merchant_portal | operation 级补充 |
@@ -3832,6 +3837,7 @@
 | P0-待归类 | `saveFacilityAlarmResponsePolicy` | `POST` | `/api/v1/facility/alarms/policies` | 保存设备告警响应时限（告警类型×优先级一格） | `facility.alarm.manage` | `facility.alarm_policy_saved` / `facility.alarm_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFacilityWorkOrderPolicy` | `POST` | `/api/v1/facility/work-orders/policies` | 保存工单 SLA/验收策略 | `facility.work_order.manage` | `facility.work_order_policy_saved` / `facility.work_order_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | 保存平面图图形 | `floor_plan.manage` | `floor_plan.shape.save` / `floor_plan.shape.save_failed` | web | operation 级补充 |
+| P0-待归类 | `saveMerchantServiceWorkOrderPolicy` | `PUT` | `/api/v1/merchant-service/work-order-policies` | 保存商户服务工单处理时限（工单类型×优先级一格） | `merchant.service_work_order.assign` | `merchant_service.work_order_policy_saved` / `merchant_service.work_order_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveParkingPolicy` | `PUT` | `/api/v1/parking/policies/{project_id}` | 配置本项目停车业务参数（值与上下限同配） | `parking.config.manage` | `parking.policy_saved` / `parking.policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveSettlementObjectionPeriod` | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | 配置非积分商户账单异议期及上下限(按项目) | `settlement.config.manage` | `settlement.objection_period.configured` / `settlement.objection_period.config_failed` | web | operation 级补充 |
 | P0-待归类 | `saveSpaceExpiryColorRule` | `POST` | `/api/v1/contracts/expiry-color-rules` | 配置到期着色分类(颜色+提前天数) | `contract.space.color.manage` | `contract.color_rule_saved` / `contract.color_rule_save_failed` | web | operation 级补充 |
@@ -3993,7 +3999,7 @@
 | TERM-终端设备 | `addTerminalCanaryTarget` | `POST` | `/api/v1/terminals/canary-rollouts/{id}/targets` | 加入灰度白名单 | `terminal.switch.manage` | `terminal_canary.target_added` / `terminal_canary.target_add_failed` | web | operation 级补充 |
 | TERM-终端设备 | `archiveTerminalCanaryTarget` | `POST` | `/api/v1/terminals/canary-targets/{id}/archive` | 移出灰度白名单（软删除） | `terminal.switch.manage` | `terminal_canary.target_archived` / `terminal_canary.target_archive_failed` | web | operation 级补充 |
 | TERM-终端设备 | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | 设备绑定 | `terminal.device.bind` | `terminal.device.bound` / `terminal.device.bind_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
-| TERM-终端设备 | `changeTerminalDeviceResponsibleStaff` | `POST` | `/api/v1/terminals/devices/{id}/responsible-staff` | 入场三道环节设备更换责任人 | `terminal.device.lifecycle` | `terminal.device.responsible_staff_changed` / `terminal.device.responsible_staff_change_failed` | web | operation 级补充 |
+| TERM-终端设备 | `changeTerminalDeviceResponsibleStaff` | `POST` | `/api/v1/terminals/devices/{id}/responsible-staff` | 入场三道环节设备与其他现场设备更换责任人 | `terminal.device.lifecycle` | `terminal.device.responsible_staff_changed` / `terminal.device.responsible_staff_change_failed` | web | operation 级补充 |
 | TERM-终端设备 | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | 设备修复完成 | `terminal.device.lifecycle` | `terminal.device.repair_completed` / `terminal.device.repair_complete_failed` | web | operation 级补充 |
 | TERM-终端设备 | `detectMdmViolations` | `POST` | `/api/v1/terminals/mdm/violations/detect` | 服务端检测设备违规 | `mdm.device.manage` | `mdm.violation.detect` / `mdm.violation.detect_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `enrollMdmDevice` | `POST` | `/api/v1/terminals/mdm/devices/enroll` | MDM 设备纳管/策略同步 | `mdm.device.manage` | `mdm.policy_checked` / `mdm.policy_check_failed` | web | operation 级补充 |
@@ -4011,7 +4017,7 @@
 | TERM-终端设备 | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | 标记设备挂失 | `terminal.device.lifecycle` | `terminal.device.lost` / `terminal.device.lost_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | 设备送修 | `terminal.device.lifecycle` | `terminal.device.repaired` / `terminal.device.repair_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | 设备报废 | `terminal.device.lifecycle` | `terminal.device.scrapped` / `terminal.device.scrap_failed` | web, mobile_admin | operation 级补充 |
-| TERM-终端设备 | `registerEntryDevice` | `POST` | `/api/v1/terminals/devices/entry-devices` | 登记入场三道环节设备（安检 X 光、人脸扫描、检票闸机） | `terminal.device.lifecycle` | `terminal.device.entry_device_registered` / `terminal.device.entry_device_register_failed` | web | operation 级补充 |
+| TERM-终端设备 | `registerEntryDevice` | `POST` | `/api/v1/terminals/devices/entry-devices` | 后台登记设备进台账（入场三道环节设备、扫码设备、其他现场设备） | `terminal.device.lifecycle` | `terminal.device.entry_device_registered` / `terminal.device.entry_device_register_failed` | web | operation 级补充 |
 | TERM-终端设备 | `registerTerminalDeviceSigningKey` | `POST` | `/api/v1/terminals/devices/{id}/signing-key` | 登记或轮换已绑定设备签名公钥 | `terminal.device.bind` | `terminal.device.signing_key_registered` / `terminal.device.signing_key_register_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
 | TERM-终端设备 | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | 上报 MDM 设备违规 | `mdm.device.manage` | `device.policy_violation` / `device.policy_violation_failed` | web | operation 级补充 |
 | TERM-终端设备 | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | 归还终端设备 | `terminal.device.bind` | `terminal.device.returned` / `terminal.device.returned_failed` | staff_work_phone, tablet, kiosk, web | operation 级补充 |

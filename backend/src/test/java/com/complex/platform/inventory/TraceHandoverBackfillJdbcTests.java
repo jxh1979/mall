@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -40,8 +40,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 第十八批 F 段第 14 条 14-R2 交接链缺段人工补录真库回归（BSM 第 1201 行「酒水与可追责物品的交接，每一步都必须扫码——库管出库、后厨接收、
  * 服务员取走、送达客人或卡座，缺任何一步即视为该环节工作未完成……扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）并经主管复核后
- * 方生效，补录记录与原始扫码记录并列展示、互不覆盖。」）。建链、扫码、机器人上报、凭证上传、补录、查链与复核都按前端蛇形键走真实入口与
- * 真实授权链；复核走真实组织层级（同商户的录入员 → 主管 → 经理）。机器人段开关出厂关，测试事务内打开（回滚即复原）。
+ * 方生效，补录记录与原始扫码记录并列展示、互不覆盖。」）。建链、扫码、凭证上传、补录、查链与复核都按前端蛇形键走真实入口与
+ * 真实授权链；复核走真实组织层级（同商户的录入员 → 主管 → 经理）。机器人配送段不计入完成（第十八批 I 段 85-R1），本类不打开机器人开关。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -83,17 +83,20 @@ class TraceHandoverBackfillJdbcTests {
         outsider = account("out", otherMerchant, role);
         jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", user("clerk"), user("mid"));
         jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", user("mid"), user("boss"));
-        jdbc.update("UPDATE terminal_capability_switches SET enabled = TRUE WHERE capability_code = 'integration.robot.sync'");
     }
 
     /**
-     * 跳过后厨接收扫码，整链不完成；按前端蛇形键补录后厨接收段 → 待复核、链仍未完成、链视图并列一条待复核补录；主管批准 → 整链完成，
-     * 后厨接收原段行（待扫码、无扫码人、无扫码时间）不变、补录单已通过、过程步骤记责任人与人工录入；该段再补 409；按溯源码查得到。
+     * 跳过后厨接收扫码，整链不完成、直接扫服务员取走 409（85-R1）；按前端蛇形键补录后厨接收段 → 待复核、链仍未完成、链视图并列一条待复核补录；主管批准 → 放行服务员取走
+     * （85-R1），扫完服务员取走、送达客人后整链完成，后厨接收原段行（待扫码、无扫码人、无扫码时间）不变、补录单已通过、过程步骤记责任人与人工录入；
+     * 该段再补 409；按溯源码查得到。
      */
     @Test
     void backfillOfTheSkippedSegmentCompletesTheChainOnlyAfterApprovalAndKeepsTheOriginalScan() throws Exception {
         String id = chainSkippingKitchen();
         assertThat(read(view(clerk, id), "$.data.handover.overall_status")).isEqualTo("in_progress");
+        send(clerk, post("/api/v1/inventory/trace-handovers/" + id + "/scan-segment"), "{\"idempotency_key\":\"ths-early-" + suffix
+                + "\",\"segment\":\"staff_pickup\"}").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("HANDOVER_PREVIOUS_SEGMENT_INCOMPLETE"));
 
         String photo = upload("wechat.png");
         String submitted = backfill(clerk, id, "kitchen_receive", "k1", Instant.now(), user("clerk"), photo)
@@ -113,6 +116,12 @@ class TraceHandoverBackfillJdbcTests {
         assertThat(read(pending, "$.data.backfills[0].status")).isEqualTo("pending");
 
         approve(mid, review, "approved").andExpect(status().isOk());
+
+        String released = view(clerk, id);
+        assertThat(read(released, "$.data.handover.overall_status")).isEqualTo("in_progress");
+        assertThat(read(released, "$.data.handover.current_segment")).isEqualTo("staff_pickup");
+        scan(id, "staff_pickup");
+        scan(id, "deliver_customer");
 
         String done = view(clerk, id);
         assertThat(read(done, "$.data.handover.overall_status")).isEqualTo("completed");
@@ -193,17 +202,13 @@ class TraceHandoverBackfillJdbcTests {
 
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
-    /** 建链 → 扫库管出库 → 机器人送达 → 跳过后厨接收，扫服务员取走、送达客人。 */
+    /** 建链 → 扫库管出库，跳过后厨接收（链停在后厨接收）。 */
     private String chainSkippingKitchen() throws Exception {
         String body = send(clerk, post("/api/v1/inventory/trace-handovers"), "{\"idempotency_key\":\"thc-" + suffix
                 + "\",\"trace_code\":\"TRC-" + suffix + "\",\"device_id\":\"dev_thb_" + suffix + "\"}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String id = JsonPath.read(body, "$.data.handover.id");
         scan(id, "out_verify");
-        send(clerk, post("/api/v1/inventory/trace-handovers/" + id + "/robot-report"), "{\"idempotency_key\":\"thr-" + suffix
-                + "\",\"robot_task_ref\":\"robot_" + suffix + "\",\"status\":\"delivered\"}").andExpect(status().isOk());
-        scan(id, "staff_pickup");
-        scan(id, "deliver_customer");
         return id;
     }
 

@@ -1,7 +1,7 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { withBase } from "../../basePath";
-import { formatBusinessStatus } from "../i18n/statusLabels";
+import { formatReviewValue } from "../i18n/reviewLabels";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -13,40 +13,6 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, SupervisorReviewPolicyRow } from "../types";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { ManualBackfillPolicySection } from "./ManualBackfillPolicySection";
-
-const REVIEW_LABELS: Record<string, string> = {
-  "staff.shift.publish": "发布排班", "staff.payroll.penalty_cap.adjust": "调整工资扣罚上限",
-  bill_waiver: "免单", "bar.bill_waiver": "免单", refund: "退款", ar_ap_adjustment: "调账",
-  permission_grant_l1: "一级权限授权", permission_grant_l2: "二级权限授权", permission_grant_l3: "三级权限授权",
-  "finance.tax_rule.adjust": "调整税费规则",
-  reason: "原因说明", before_after: "变更前后资料", operator_note: "操作说明",
-  evidence_attachment: "证据附件", violation_summary: "违规说明",
-  contract_snapshot: "合同快照", definition_snapshot: "基础定义快照",
-  one_level_up: "一级上级审批", two_levels_up: "两级上级审批",
-  top_authority: "最高权限审批", specific_role: "指定岗位审批",
-  hr_three_levels_up: "人力会签＋直属领导向上三级复核",
-  "staff.profile.employment_status.change": "员工状态变更", "staff.payroll.adjustment.add": "员工奖惩入账",
-  "staff.payroll.adjustment.appeal": "员工扣罚申诉", staff_profile: "员工档案", staff_payroll_adjustment: "员工奖惩记录",
-  staff_payroll_adjustment_appeal: "员工扣罚申诉单",
-  contract: "合同", bar_bill: "酒吧账单", access_grant_request: "权限授权申请",
-  "facility.equipment.scrap": "楼宇设备报废", facility_equipment_scrap: "楼宇设备报废单",
-  "parking.release.waive": "停车免费放行与减免", parking_manual_release: "停车人工放行",
-  "leasing.blacklist_exception": "黑名单例外放行", leasing_blacklist_exception: "黑名单例外放行单",
-  "leasing.intent.key_stage": "招商意向关键阶段确认", leasing_intent: "招商意向",
-  "merchant.project.add": "商户加经营项目", merchant_project_request: "加经营项目申请",
-  "compliance.expiry_item.grace": "证照宽限期申请", compliance_expiry_item: "证照",
-  // 第十八批 H 段第 23 条 23-R4（PGM:687）：导出文件可编辑版申请。
-  "security.export.editable_copy": "可编辑版导出申请", export_file: "导出文件",
-  // 第十八批 F 段第 14 条 14-R8（BSM 第 1642 行「补录一律进入主管复核队列」）：人工补录三类复核动作与补录单。
-  "inventory.trace.scan_backfill": "交接扫码补录", "bar.sales.backfill": "销售归属补录", "bar.service.backfill": "服务责任补录",
-  manual_backfill: "人工补录单",
-};
-
-function formatReviewValue(value?: string | null) {
-  if (!value) return "-";
-  const label = REVIEW_LABELS[value] ?? formatBusinessStatus(value);
-  return /[a-zA-Z]/.test(label) ? "未识别类型" : label;
-}
 
 const TEXT = {
   title: "主管复核与违规阻断",

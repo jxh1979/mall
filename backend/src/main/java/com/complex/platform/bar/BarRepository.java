@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -291,6 +291,20 @@ public interface BarRepository {
     StockBalanceSnapshot saveStockBalance(StockBalanceSnapshot balance);
 
     StockMovementSnapshot saveStockMovement(StockMovementSnapshot movement);
+
+    // ── 第十八批 I 段第 76 条（BSM:1065「按杯按标准出酒量扣库存、超出记损耗」；ENUM:79 库存按商品规格逐项进行）：按杯按容量扣库。
+
+    /**
+     * 按容量扣库存行：先用已开瓶余量，不够再开新瓶（开瓶数见 {@link BarPourLoss#bottlesToOpen}）——瓶数与可用各减开瓶数，
+     * 余量＝余量＋开瓶数×规格容量−需量。返回开的新瓶数；瓶数不够开、库存行不存在或物料没登记规格容量返回空，库存不动。
+     */
+    Optional<Integer> decreaseStockByVolume(String itemId, String locationId, int volumeMl);
+
+    /** 按杯退品回库：只把毫升加回已开瓶余量，瓶数不变；库存行不存在返回 false。 */
+    boolean increaseOpenedVolume(String itemId, String locationId, int volumeMl);
+
+    /** 库存物料的规格容量（毫升），没登记为空。 */
+    Optional<Integer> findInventoryItemSpecVolumeMl(String itemId);
 
     default PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent) {
         return paymentIntent;

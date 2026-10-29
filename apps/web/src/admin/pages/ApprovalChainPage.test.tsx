@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -185,6 +185,9 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(text).toContain("证照类型食品经营许可证");
     expect(text).not.toContain("合同结束日期");
     expect(text).not.toContain("food_license");
+    // 第十八批 I 段第 87 条 87-R4（PGM:287 零英文；PGM:529「最高权限本人」）：最高权限节点审批人不显示「USB」。
+    await waitFor(() => expect(screen.getByTestId("approval-chain-node-main-1").textContent).toContain("最高权限本人"));
+    expect(screen.getByTestId("approval-chain-node-main-1").textContent).not.toContain("USB");
   });
 
   it("真实审批角色读取完整税档原件和受控附件，不依赖税档维护权限或假证据", async () => {
@@ -250,6 +253,66 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} focusObjectId="review_final" reportViewedObjects={reportViewedObjects} />);
 
     await waitFor(() => expect(reportViewedObjects).toHaveBeenCalledWith("supervisor_review", [{ id: "review_final" }]));
+  });
+
+  // 第十八批 I 段第 87 条 87-R1～R3（PGM:287「状态、枚举取值……必须全部为中文」「不得以“这是标识”为由保留英文」）：待审表「动作类型」「对象」「档位」
+  // 三列覆盖会建复核单的全部码，显示中文，与主管复核页同名（两页共用 reviewLabels.ts）。码闭集按三路建单调用处逐个核对：
+  // ① evaluate：SupervisorReviewService.java:70-191 策略表（permission_grant_l1、l2 在 :830-832 被拒，不列）；
+  // ② 准入闸：V068:65-66、V099:37-59、V541:94 中 outcome=block 且有 @GuardedAction(admissionAction) 的行（amusement.manual_override 无注解，不列）；
+  // ③ AccessService 直接建单：:76（经 :723）、:1010、:1175、:1310、:1551。对象码取三路调用处传入的 objectType。
+  it("待审表动作类型、对象、档位三列覆盖全部复核码，显示中文，与主管复核页同名", async () => {
+    const evaluateActions = ["staff.payroll.scheme.change", "staff.payroll.period.confirm", "staff.performance.points.deduct", "staff.performance.points.appeal",
+      "staff.payroll.calendar.publish", "staff.performance.rule.publish", "bar.payroll_rule.adjust", "amusement.business_day.configure", "bar.business_day.configure",
+      "settlement.high_value_threshold.configure", "compliance.expiry_item.grace", "security.export.editable_copy", "inventory.purchase_request",
+      "inventory.purchase_terminate", "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution", "contract.new",
+      "contract.expiry_termination", "contract.change", "energy.reading_anomaly_confirm", "energy.review_settings", "dealer.delivery_resolution",
+      "inventory.quarantine_disposition", "inventory.transfer_order.cancel", "inventory.transfer_order.unreturnable", "facility.equipment.scrap",
+      "leasing.blacklist_exception", "leasing.intent.key_stage", "merchant.project.add", "inventory.trace.scan_backfill", "bar.sales.backfill", "bar.service.backfill",
+      "parking.release.waive", "ticket.reward.rule", "ticket.reward.national", "ticket.reward.sales_contract", "staff.shift.publish", "staff.attendance.receipt.review",
+      "staff.payroll.penalty_cap.adjust", "manual_release", "bill_waiver", "refund", "ar_ap_adjustment", "contract_violation", "base_definition_violation",
+      "permission_grant_l3", "finance.tax_rule.adjust", "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal"];
+    const admissionActions = ["bar.bill_waiver", "amusement.reopen", "bar.bill_reopen", "amusement.incident_close", "amusement.group_booking_approve",
+      "bar.order_item_void", "bar.shift_close", "ticketing.refund_approve", "ticketing.dynamic_pricing_publish", "ticketing.verification_reverse",
+      "inventory.stock_adjust", "inventory.purchase_receive", "inventory.saved_bottle_claim", "finance.refund", "finance.offline_payment_confirm",
+      "finance.locked_backfill_approve", "customer.home_content.publish"];
+    const accessActions = ["access.role_viewable_projects.reduce", "access.position_role_template.delete", "access.scope_change", "access.scope_change.money",
+      "access.grant_request", "access.grant_request.money"];
+    const objectTypes = ["staff_profile", "staff_payroll_adjustment", "staff_payroll_adjustment_appeal", "contract", "bar_bill", "access_grant_request",
+      "facility_equipment_scrap", "parking_manual_release", "leasing_blacklist_exception", "leasing_intent", "merchant_project_request", "compliance_expiry_item",
+      "export_file", "manual_backfill", "ar_ap_adjustment", "role_viewable_projects", "contract_change", "contract_settlement", "ticket_reward_config",
+      "ticket_points_billing_rule", "ticket_points_calendar", "ticket_points_portal_outage", "ticket_points_objection_resolution", "purchase_prepayment_resolution",
+      "inventory_transfer_order", "inventory_quarantine_disposition", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution",
+      "purchase_return", "amusement_business_day_config", "energy_reading_verification", "energy_review_settings", "high_value_threshold",
+      "dealer_return_freight", "dealer_return", "dealer_order_refund", "dealer_delivery_resolution", "staff_performance_score", "staff_payroll_scheme",
+      "staff_payroll_calendar", "staff_payroll_period", "staff_performance_rule", "staff_attendance_receipt_review", "payroll_tax_version",
+      "payroll_tax_assessment", "staff_shift_batch", "staff_penalty_cap", "bar_payroll_rule", "bar_business_day_config", "inspection",
+      "amusement_maintenance_record", "amusement_incident", "amusement_group_booking", "bar_order_item", "bar_shift", "ticket_refund",
+      "ticket_dynamic_pricing_rule", "verification", "inventory_stock_adjustment", "saved_bottle", "finance_refund", "finance_offline_payment_confirmation",
+      "customer_home_content", "position_role_template"];
+    const levels = ["one_level_up", "two_levels_up", "top_authority", "specific_role", "hr_three_levels_up"];
+    const actions = [...evaluateActions, ...admissionActions, ...accessActions];
+    const rows = actions.map((action, i) => ({ decision: { review_id: `rv87_${i}`, action_type: action, object_type: objectTypes[i % objectTypes.length],
+      object_id: `obj_${i}`, initiated_by: "usr_l1", approval_level: levels[i % levels.length], review_status: "pending_review" }, schedule: null }));
+    renderPage(ADMIN_PERMS, undefined, rows);
+    await waitFor(() => expect(screen.queryByTestId(`approval-chain-pending-rv87_${actions.length - 1}`)).toBeTruthy());
+    const cells = (id: string) => Array.from(screen.getByTestId(`approval-chain-pending-${id}`).children).map((cell) => cell.textContent ?? "");
+    rows.forEach(({ decision }, i) => {
+      const [, action = "", object = "", , level = ""] = cells(decision.review_id);
+      const [objectLabel, objectId] = object.split(" / ");
+      for (const label of [action, objectLabel, level]) {
+        expect(label, `${decision.action_type} / ${decision.object_type} / ${decision.approval_level}`).not.toMatch(/[A-Za-z]/);
+        expect(label, `${decision.action_type} / ${decision.object_type} / ${decision.approval_level}`).not.toBe("未识别类型");
+      }
+      expect(objectId).toBe(`obj_${i}`);
+    });
+    expect(cells(`rv87_${actions.indexOf("staff.shift.publish")}`)[1]).toBe("发布排班");
+    expect(cells(`rv87_${actions.indexOf("bar.bill_waiver")}`)[1]).toBe("免单");
+    expect(cells(`rv87_${actions.indexOf("merchant.project.add")}`)[1]).toBe("商户加经营项目");
+    const licence = objectTypes.indexOf("compliance_expiry_item");
+    expect(cells(`rv87_${licence}`)[2]).toBe(`证照 / obj_${licence}`);
+    expect(cells("review_c1")[2]).toBe("合同 / c1");
+    expect(cells("review_c1")[4]).toBe("两级上级审批");
+    expect(cells(`rv87_${levels.indexOf("hr_three_levels_up")}`)[4]).toBe("人力会签＋直属领导向上三级复核");
   });
 
   it("逐笔原件已经终结时仍可查看但不能再次裁决", async () => {

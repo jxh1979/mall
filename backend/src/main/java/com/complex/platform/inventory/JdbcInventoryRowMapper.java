@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -40,7 +40,8 @@ final class JdbcInventoryRowMapper {
                 instant(resultSet, "updated_at"),
                 resultSet.getString("merchant_id"),
                 resultSet.getBoolean("manual_high_value"),
-                resultSet.getBoolean("non_consumable")
+                resultSet.getBoolean("non_consumable"),
+                resultSet.getObject("spec_volume_ml", Integer.class)
         );
     }
 
@@ -119,7 +120,8 @@ final class JdbcInventoryRowMapper {
                 resultSet.getInt("available_quantity"),
                 instant(resultSet, "updated_at"),
                 resultSet.getString("merchant_id"),
-                resultSet.getString("warehouse_id")
+                resultSet.getString("warehouse_id"),
+                resultSet.getInt("opened_volume_ml")
         );
     }
 
@@ -262,7 +264,9 @@ final class JdbcInventoryRowMapper {
                 readList(resultSet.getString("evidence_attachment_ids")),
                 resultSet.getString("status"),
                 instant(resultSet, "created_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                resultSet.getObject("volume_ml", Integer.class),
+                resultSet.getObject("loss_volume_ml", Integer.class)
         );
     }
 

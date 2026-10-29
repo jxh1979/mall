@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -53,6 +53,7 @@ class BarScanOrderCustomerJdbcIntegrationTests {
     @Autowired private ObjectMapper json;
     @Autowired private CustomerRepository customers;
     @Autowired private BarRepository bars;
+    @Autowired private BarBillingService billing;
     @Autowired private com.complex.platform.finance.CustomerOnlinePaymentSettlementJob settlementJob;
     @MockitoBean private PaymentGatewayRouter gateway;
 
@@ -249,6 +250,35 @@ class BarScanOrderCustomerJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items.length()").value(0))
                 .andExpect(jsonPath("$.data.total_cent").value(0));
+    }
+
+    /**
+     * 第十八批 I 段 86-R1（BSM 第 1070 行「一张账单的提成只计一次、只归帮该客人预订的那个人」；第 1468 行「业绩记名人与销售提成归属人始终是同一人」）：
+     * 员工代订开台的散台（会话销售为代订员工），客人扫码付款成单——已结账单的销售取开台会话的销售、岗位档按其员工档案定，可计提归该员工。
+     */
+    @Test
+    void paidScanOrderBillCarriesTheSessionSalesForCommission() throws Exception {
+        String sales = "usr_scan_sales_" + f.suffix;
+        jdbc.update("INSERT INTO staff_profiles(id,project_id,merchant_id,user_id,name,registration_status,status,employment_status,is_sales_position,"
+                + "created_at,updated_at) VALUES(?,?,?,?,'订台销售','approved','active','employed',TRUE,now(),now())",
+                "pro_scan_sales_" + f.suffix, "prj_scan_" + f.suffix, merchant, sales);
+        jdbc.update("UPDATE bar_table_sessions SET sales_staff_id = ? WHERE id = ?", sales, sessionId);
+        ResultActions created = scanOrder(null, List.of(Map.of("product_id", beer, "quantity", 1))).andExpect(status().isOk());
+        f.markPaid(CustomerTicketPaymentFixture.read(created, "$.data.payment_intent_id"));
+        String orderId = CustomerTicketPaymentFixture.read(confirm(CustomerTicketPaymentFixture.read(created, "$.data.scan_order_id"))
+                .andExpect(status().isOk()), "$.data.bar_order_id");
+        assertThat(jdbc.queryForMap("SELECT sales_staff_id, sales_role_type FROM bar_bills WHERE order_id = ?", orderId))
+                .containsEntry("sales_staff_id", sales).containsEntry("sales_role_type", "sales");
+        String bill = jdbc.queryForObject("SELECT id FROM bar_bills WHERE order_id = ?", String.class, orderId);
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
+        try {
+            BarCommissionCalculationRecord commission = billing.calculateCommission(bill,
+                    new CommissionCalculateRequest("scan-cm-" + f.suffix, bill, true, false));
+            assertThat(commission.salesStaffId()).isEqualTo(sales);
+            assertThat(commission.salesRoleType()).isEqualTo("sales");
+        } finally {
+            com.complex.platform.support.TestSecurityActors.clear();
+        }
     }
 
     // ---------- helpers ----------

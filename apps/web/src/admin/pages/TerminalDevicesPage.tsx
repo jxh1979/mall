@@ -34,6 +34,8 @@ const TERMINAL_TYPE_LABELS: Record<string, string> = {
   security_xray: "安检 X 光设备",
   face_scanner: "人脸扫描设备",
   ticket_gate: "检票闸机",
+  scanner: "扫码设备",
+  other_site_device: "其他现场设备",
 };
 
 // 第 63 条（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」；BSM:800「仅记设备状态、故障事件与维修工单留痕」）：
@@ -42,14 +44,23 @@ const SECURITY_XRAY = "security_xray";
 // 第 82 条 82c-R1（PGM:618「综合体入场三道环节设备（安检环节的 X 光设备、年龄核验环节的人脸扫描设备、检票环节的检票闸机）」）：
 // 人脸扫描设备、检票闸机与 X 光设备同在本页登记、固定在点位、不挂商户；只有 X 光设备登记故障即开维修工单。
 const FIXED_ENTRY_TYPES = new Set([SECURITY_XRAY, "face_scanner", "ticket_gate"]);
+// 第 89 条 89-R3（PGM:618「……扫码设备……和其他现场设备」；PGM:379 扫码设备领还）：其他现场设备与入场设备一样按点位、责任人管
+// （更换责任人、修好回在用），可挂商户；扫码设备在本页登记后走归还、领用。
+const SCANNER = "scanner";
+const POINT_FIXED_TYPES = new Set([...FIXED_ENTRY_TYPES, "other_site_device"]);
+const REGISTERABLE_TYPES = [...FIXED_ENTRY_TYPES, SCANNER, "other_site_device"];
 // 第 82 条 82c-R2（PGM:624「记录设备领用、归还、维修、挂失和报废」）：所有非终态设备行都可送修、修复完成、报废（原因必填）；
 // 工作手机、平板、一体机修好后回待领用再走领用。82c-R3（PGM:623「记录编号、型号、点位、责任人和状态」）：入场设备更换责任人。
-type LifecycleAction = "repair" | "repair-complete" | "scrap" | "responsible-staff";
+// 第 89 条 89-R1（PGM:624）：入场三道环节设备与在用工作手机以外的设备在本页挂失（BSM:1478 在用手机班中不可用走换机）。
+// 89-R2（第十八批裁决 20「回待领用」）：挂失的设备在本页找回，原因必填，与修好同一去路（其他现场设备回在用，其余回待领用）。
+type LifecycleAction = "repair" | "repair-complete" | "scrap" | "responsible-staff" | "lost" | "found";
 const XRAY_ACTION_CODES: Record<LifecycleAction, string> = {
   repair: "terminal_device_xray_fault_reported",
   "repair-complete": "terminal_device_xray_repair_completed",
   scrap: "terminal_device_xray_scrapped",
   "responsible-staff": "terminal_device_responsible_staff_changed",
+  lost: "terminal_device_lost_reported",
+  found: "terminal_device_found",
 };
 // 其他设备的送修、修复完成、报废用通用结果码（不开维修工单）
 const DEVICE_ACTION_CODES: Record<LifecycleAction, string> = {
@@ -57,12 +68,16 @@ const DEVICE_ACTION_CODES: Record<LifecycleAction, string> = {
   "repair-complete": "terminal_device_repair_completed",
   scrap: "terminal_device_scrapped",
   "responsible-staff": "terminal_device_responsible_staff_changed",
+  lost: "terminal_device_lost_reported",
+  found: "terminal_device_found",
 };
+// 89-R1：markDeviceLost 的前态
+const LOSABLE_STATUSES = new Set(["bound", "returned", "repair", "unbound"]);
 const EMPTY_XRAY = { terminalType: SECURITY_XRAY, deviceCode: "", deviceModel: "", boundSpaceId: "", staffId: "" };
 
 const STATUS_LABELS: Record<string, string> = {
   bound: "已绑定（在用）",
-  returned: "已归还",
+  returned: "待领用",
   unbound: "已解绑",
   repair: "维修中",
   lost: "已挂失",
@@ -184,7 +199,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
       setXray(EMPTY_XRAY);
       await reload();
     } catch (registerError) {
-      setGlobalError(registerError instanceof Error ? registerError.message : "入场环节设备登记失败");
+      setGlobalError(registerError instanceof Error ? registerError.message : "设备登记失败");
     } finally {
       setSubmitting(false);
     }
@@ -198,10 +213,27 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
 
   async function runLifecycleAction(row: DeviceRow, action: LifecycleAction, extra: Record<string, string> = {}) {
     if (!hasReason(row)) return;
+    await postRowAction(row, `/api/v1/terminals/devices/${row.id}/${action}`, { ...extra, reason: (reasons[row.id] ?? "").trim() },
+      (row.terminalType === SECURITY_XRAY ? XRAY_ACTION_CODES : DEVICE_ACTION_CODES)[action]);
+  }
+
+  // 89-R3：扫码设备归还（原因不强制）、领用（领用人必填；登记入口固定按点位绑定）
+  function checkoutScanner(row: DeviceRow) {
+    const staffId = (newStaff[row.id] ?? "").trim();
+    if (!staffId) {
+      setGlobalError("请填写领用人（员工档案编号）");
+      return;
+    }
+    void postRowAction(row, "/api/v1/terminals/devices/bind",
+      { deviceId: row.deviceId, terminalType: SCANNER, bindingScope: "space", boundSpaceId: row.boundSpaceId, staffId },
+      "terminal_device_checked_out");
+  }
+
+  async function postRowAction(row: DeviceRow, path: string, body: Record<string, unknown>, resultAction: string) {
     setSubmitting(true);
     try {
-      await api.post(`/api/v1/terminals/devices/${row.id}/${action}`, { ...extra, reason: (reasons[row.id] ?? "").trim() });
-      setActionResult({ action: (row.terminalType === SECURITY_XRAY ? XRAY_ACTION_CODES : DEVICE_ACTION_CODES)[action], id: row.id });
+      await api.post(path, body);
+      setActionResult({ action: resultAction, id: row.id });
       setReasons((current) => ({ ...current, [row.id]: "" }));
       setNewStaff((current) => ({ ...current, [row.id]: "" }));
       await reload();
@@ -221,9 +253,10 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
     void runLifecycleAction(row, "responsible-staff", { staffId });
   }
 
-  // 非终态设备行的生命周期操作。在用的工作手机不给送修、报废（PGM:624 班中故障走换机，旧机归还形成下班记录后再处理）。
+  // 非终态设备行的生命周期操作。在用的工作手机不给送修、报废、挂失（PGM:624 班中故障走换机，旧机归还形成下班记录后再处理）。
   function lifecycleActions(row: DeviceRow) {
-    const fixed = FIXED_ENTRY_TYPES.has(row.terminalType);
+    const entry = FIXED_ENTRY_TYPES.has(row.terminalType);
+    const fixed = POINT_FIXED_TYPES.has(row.terminalType);
     if (row.terminalType === "staff_work_phone" && row.status === "bound") return null;
     return (
       <div className="admin-form-row">
@@ -251,7 +284,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
             data-testid={`terminal-xray-fault-${row.id}`}
             onClick={() => void runLifecycleAction(row, "repair")}
           >
-            {fixed ? "登记故障" : "送修"}
+            {entry ? "登记故障" : "送修"}
           </button>
         ) : null}
         <HighRiskConfirm
@@ -264,6 +297,28 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
           data-testid={`terminal-xray-scrap-${row.id}`}
           onConfirm={() => void runLifecycleAction(row, "scrap")}
         />
+        {!entry && LOSABLE_STATUSES.has(row.status) ? (
+          <button
+            type="button"
+            className="admin-secondary-button"
+            disabled={submitting}
+            data-testid={`terminal-device-lost-${row.id}`}
+            onClick={() => void runLifecycleAction(row, "lost")}
+          >
+            挂失
+          </button>
+        ) : null}
+        {row.status === "lost" ? (
+          <button
+            type="button"
+            className="admin-secondary-button"
+            disabled={submitting}
+            data-testid={`terminal-device-found-${row.id}`}
+            onClick={() => void runLifecycleAction(row, "found")}
+          >
+            找回
+          </button>
+        ) : null}
         {fixed ? (
           <>
             <input
@@ -280,6 +335,39 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
               onClick={() => submitResponsibleStaff(row)}
             >
               更换责任人
+            </button>
+          </>
+        ) : null}
+        {row.terminalType === SCANNER && row.status === "bound" ? (
+          <button
+            type="button"
+            className="admin-secondary-button"
+            disabled={submitting}
+            data-testid={`terminal-device-return-${row.id}`}
+            onClick={() =>
+              void postRowAction(row, "/api/v1/terminals/devices/return",
+                { deviceCode: row.deviceCode, reason: (reasons[row.id] ?? "").trim() }, "terminal_device_returned")
+            }
+          >
+            归还
+          </button>
+        ) : null}
+        {row.terminalType === SCANNER && row.status === "returned" ? (
+          <>
+            <input
+              value={newStaff[row.id] ?? ""}
+              placeholder="领用人（员工档案编号）"
+              data-testid={`terminal-device-staff-${row.id}`}
+              onChange={(event) => setNewStaff((current) => ({ ...current, [row.id]: event.target.value }))}
+            />
+            <button
+              type="button"
+              className="admin-secondary-button"
+              disabled={submitting}
+              data-testid={`terminal-device-checkout-${row.id}`}
+              onClick={() => checkoutScanner(row)}
+            >
+              领用
             </button>
           </>
         ) : null}
@@ -304,10 +392,10 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
     <section data-testid="terminal-devices-page">
       <AdminPageHeader
         title="终端设备"
-        description="终端设备台账与商户归属管理。核销发生在哪家商户，以核销设备绑定的商户为准：设备没绑商户时，赠饮、餐饮类权益在该设备上一律无法核销。设备挪店、商户退场时在本页改绑或解除归属，理由必填并全程留痕。入场三道环节设备（安检 X 光、人脸扫描、检票闸机）在本页登记、更换责任人，安检 X 光设备故障登记即开维修工单；工作手机、平板、一体机可在本页送修、报废，修好后回待领用。"
+        description="终端设备台账与商户归属管理。核销发生在哪家商户，以核销设备绑定的商户为准：设备没绑商户时，赠饮、餐饮类权益在该设备上一律无法核销。设备挪店、商户退场时在本页改绑或解除归属，理由必填并全程留痕。入场三道环节设备（安检 X 光、人脸扫描、检票闸机）、扫码设备和其他现场设备在本页登记进台账；入场三道环节设备与其他现场设备在本页更换责任人，安检 X 光设备故障登记即开维修工单；扫码设备在本页归还、领用；工作手机、平板、一体机可在本页送修、报废，修好后回待领用。除入场三道环节设备外，设备可在本页挂失，找回后其他现场设备回在用、其余回待领用；在用工作手机班中丢失走换机。"
       />
       <div className="admin-form-row" data-testid="terminal-xray-register">
-        <strong>登记入场三道环节设备</strong>
+        <strong>登记设备进台账</strong>
         <label>
           设备类型
           <select
@@ -315,7 +403,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
             data-testid="terminal-entry-type"
             onChange={(event) => setXray({ ...xray, terminalType: event.target.value })}
           >
-            {[...FIXED_ENTRY_TYPES].map((type) => (
+            {REGISTERABLE_TYPES.map((type) => (
               <option key={type} value={type}>
                 {TERMINAL_TYPE_LABELS[type]}
               </option>

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { TechDetails } from "../components/TechDetails";
@@ -58,6 +58,11 @@ const TEXT = {
   noCostBasis: "无成本基准",
   monthlyCost: "本月出库成本",
   costPending: "暂无数据",
+  // 第十八批 I 段第 76 条：按杯按标准出酒量（按容量）扣库存的规格容量、已开瓶余量与流水出酒量、损耗量。
+  specVolume: "规格容量（毫升）",
+  openedVolume: "已开瓶余量（毫升）",
+  pourVolume: "出酒量（毫升）",
+  lossVolume: "损耗量（毫升）",
 };
 
 // V296：成本金额展示（整数分 → 元）；null/缺省 = 无成本基准（存量库存未录进货价，不编造数字）。
@@ -287,6 +292,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         { label: TEXT.itemName, value: item.itemName ?? "-" },
         { label: TEXT.category, value: item.category ?? "-" },
         { label: TEXT.unit, value: item.unit ?? "-" },
+        { label: TEXT.specVolume, value: item.specVolumeMl ?? "-" },
         { label: TEXT.status, value: formatBusinessStatus(item.status) },
         { label: TEXT.itemId, value: item.id },
       ],
@@ -300,6 +306,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         { label: TEXT.itemId, value: row.itemId ?? "-" },
         { label: TEXT.location, value: formatLocation(row.locationType ?? row.locationId) },
         { label: TEXT.quantity, value: row.quantity ?? "-" },
+        { label: TEXT.openedVolume, value: row.openedVolumeMl ?? "-" },
         { label: TEXT.status, value: formatBusinessStatus(row.status ?? "normal") },
       ],
     });
@@ -311,6 +318,8 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       fields: [
         { label: TEXT.itemId, value: row.itemId ?? "-" },
         { label: TEXT.quantity, value: row.quantity ?? "-" },
+        { label: TEXT.pourVolume, value: row.volumeMl ?? "-" },
+        { label: TEXT.lossVolume, value: row.lossVolumeMl ?? "-" },
         { label: TEXT.unitCost, value: fmtCostCent(row.unitCostCent) },
         { label: TEXT.cost, value: fmtCostCent(row.totalCostCent) },
         { label: TEXT.status, value: formatBusinessStatus(row.status) },

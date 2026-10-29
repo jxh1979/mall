@@ -70,8 +70,7 @@ class MerchantServiceServiceTests {
                 " ",
                 "Shop ceiling is leaking",
                 "staff_reporter",
-                "web",
-                Instant.parse("2026-06-15T08:00:00Z")
+                "web"
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
 
@@ -361,8 +360,7 @@ class MerchantServiceServiceTests {
                 "Noise complaint",
                 "Different body",
                 "staff_reporter",
-                "web",
-                Instant.parse("2026-06-15T08:00:00Z")
+                "web"
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
     }
@@ -382,8 +380,7 @@ class MerchantServiceServiceTests {
                 " ",
                 "Shop ceiling is leaking",
                 "staff_reporter",
-                "web",
-                Instant.parse("2026-06-15T08:00:00Z")
+                "web"
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
 
@@ -703,8 +700,7 @@ class MerchantServiceServiceTests {
                 "Water leak",
                 "Shop ceiling is leaking",
                 "staff_reporter",
-                "web",
-                Instant.parse("2026-06-15T08:00:00Z")
+                "web"
         );
     }
 

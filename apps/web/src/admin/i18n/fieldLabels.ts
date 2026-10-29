@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -467,6 +467,11 @@ export const FIELD_LABELS: Record<string, string> = {
   restored_by: "复核恢复人",
   restored_at: "复核恢复时间",
   pour_device_equipped: "是否配有出酒量采集设备",
+  // 第十八批 I 段第 76 条：按杯按容量扣库存（物料规格容量、库存行已开瓶余量、流水出酒量与损耗量）。
+  spec_volume_ml: "规格容量（毫升）",
+  opened_volume_ml: "已开瓶余量（毫升）",
+  volume_ml: "出酒量（毫升）",
+  loss_volume_ml: "损耗量（毫升）",
   suspension_id: "代订权限停用记录",
   // 第十八批 C 段第 62 条：商户处罚记录与按项目单次扣分上下限（第十八批裁决 8）。
   penalty_points: "扣分",
@@ -2867,6 +2872,7 @@ export const VALUE_LABELS: Record<string, string> = {
   inventory_item_safety_stock_updated: "安全库存已修改",
   inventory_high_value_review_decided: "高价值复核已处理",
   inventory_trace_backfill_submitted: "交接缺扫码补录已提交，待主管复核",
+  inventory_trace_exception_reviewed: "交接异常已复核",
   inventory_transfer_order_draft_edited: "调拨单草稿已修改",
   inventory_transfer_order_created: "调拨单已创建",
   inventory_transfer_order_returned: "调拨单已退回",
@@ -2908,6 +2914,7 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_work_order_assigned: "商户工单已分派",
   merchant_work_order_processed: "商户工单已处理",
   merchant_work_order_closed: "商户工单已关闭",
+  merchant_work_order_policy_saved: "处理时限已保存",
   merchant_zone_fee_recipient_saved: "收费接收人已保存",
   merchant_zone_fee_recipient_deactivated: "收费接收人已停用",
   merchant_zone_payee_account_approved: "收款账户已批准",
@@ -2987,7 +2994,7 @@ export const VALUE_LABELS: Record<string, string> = {
   supervisor_review_approved: "主管复核已通过",
   supervisor_review_rejected: "主管复核已驳回",
   terminal_device_merchant_changed: "终端设备所属商户已变更",
-  terminal_device_entry_registered: "入场环节设备已登记",
+  terminal_device_entry_registered: "设备已登记进台账",
   terminal_device_xray_fault_reported: "安检 X 光设备故障已登记并开维修工单",
   terminal_device_xray_repair_completed: "安检 X 光设备已修复、恢复在用",
   terminal_device_xray_scrapped: "安检 X 光设备已报废",
@@ -2995,6 +3002,10 @@ export const VALUE_LABELS: Record<string, string> = {
   terminal_device_repair_completed: "设备已修复",
   terminal_device_scrapped: "设备已报废",
   terminal_device_responsible_staff_changed: "设备责任人已更换",
+  terminal_device_lost_reported: "设备已挂失",
+  terminal_device_found: "设备已找回",
+  terminal_device_returned: "设备已归还",
+  terminal_device_checked_out: "设备已领用",
   terminal_switch_toggled: "终端开关已切换",
   terminal_canary_rollout_saved: "终端灰度发布已保存",
   terminal_canary_target_added: "灰度对象已添加",

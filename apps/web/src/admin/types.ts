@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 export type AdminUser = {
   id: string;
   username: string;
@@ -659,6 +659,8 @@ export type InventoryItemRow = {
   minQuantity?: number;
   // 第十八批第 24 条：库房主管手工标记的高价值（标记与取消须填理由留痕）。
   manualHighValue?: boolean;
+  /** 第十八批 I 段第 76 条：规格容量（毫升），按杯按容量扣库存的物料登记；不按容量扣的为空。 */
+  specVolumeMl?: number | null;
 };
 
 export type StockBalanceRow = {
@@ -667,6 +669,8 @@ export type StockBalanceRow = {
   locationId?: string;
   locationType?: string;
   quantity?: number;
+  /** 第十八批 I 段第 76 条：已开瓶余量（毫升）；已开瓶的酒不计入瓶数。 */
+  openedVolumeMl?: number;
   status?: string;
 };
 
@@ -680,6 +684,9 @@ export type StockMovementRow = {
   /** V296 成本台账（移动加权，整数分）；null=无成本基准（存量未录进货价，不编造）。 */
   unitCostCent?: number | null;
   totalCostCent?: number | null;
+  /** 第十八批 I 段第 76 条：按杯出品、退品与驳回的出酒量与损耗量（毫升）；按瓶为空。 */
+  volumeMl?: number | null;
+  lossVolumeMl?: number | null;
 };
 
 export type FinanceLedgerRow = {

@@ -29,4 +29,12 @@ public final class BarPourLoss {
     public static long standardLoss(int standardPourVolumeTotal, int lossRatePct) {
         return Math.max(1L, ((long) standardPourVolumeTotal * lossRatePct + 50) / 100);
     }
+
+    /**
+     * 第十八批 I 段第 76 条（ENUM:79 库存按商品规格记瓶数；BSM:1065「按杯按标准出酒量扣库存」）：按容量扣库要开的新瓶数＝
+     * max(0, ceil((需量−已开瓶余量)/规格容量))——先用已开瓶余量，不够再开新瓶。JdbcBarRepository.decreaseStockByVolume 的 SQL 内同式。
+     */
+    public static int bottlesToOpen(int neededVolumeMl, int openedVolumeMl, int specVolumeMl) {
+        return Math.max(0, Math.ceilDiv(neededVolumeMl - openedVolumeMl, specVolumeMl));
+    }
 }

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -39,8 +39,9 @@ function makeApi() {
   return api;
 }
 
-async function openChain(api: AdminApiClient) {
-  const effectivePermissions: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
+const ALL: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
+
+async function openChain(api: AdminApiClient, effectivePermissions: EffectivePermissionsState = ALL) {
   render(<TraceHandoverBackfillPage api={api} user={{ id: "u-clerk", username: "库管", accountType: "staff" }}
     setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={effectivePermissions} />);
   await waitFor(() => expect(screen.queryByTestId("thb-trace-code")).not.toBeNull());
@@ -95,5 +96,40 @@ describe("TraceHandoverBackfillPage 交接链与补录（第十八批 F 段第 1
       idempotency_key: expect.any(String), occurred_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/), reason: "服务员取酒时扫码枪没电",
       responsible_staff_id: "u-runner", evidence_attachment_ids: ["att-1"],
     })));
+  });
+
+  // 第十八批 I 段第 85 条 85-R2（BSM:1581「重复或差异时进入留痕与异常复核」；BSM:1871 管理后台「配置、查询、复核」）：交接异常复核入口。
+  const withExceptions = (api: AdminApiClient) => {
+    const chain = { ...CHAIN, exceptions: [
+      { id: "exc_1", handoverId: "th-1", segment: "out_verify", exceptionType: "duplicate", reviewStatus: "pending", reason: "同段重复扫码：库管出库", createdAt: "2026-10-28T01:06:00Z" },
+      { id: "exc_2", handoverId: "th-1", segment: "out_verify", exceptionType: "duplicate", reviewStatus: "approved", reason: "同段重复扫码：库管出库", createdAt: "2026-10-28T01:04:00Z" },
+    ] };
+    vi.mocked(api.get).mockImplementation((async (path: string) => (path.startsWith(`${BASE}?`) ? [HANDOVER] : chain)) as AdminApiClient["get"]);
+    vi.mocked(api.post).mockResolvedValue({ id: "exc_1", reviewStatus: "approved" });
+  };
+
+  it("待处理的交接异常有「复核」按钮、已复核的没有；选结论填原因后提交到复核接口，成功后重新读取交接链", async () => {
+    const api = makeApi();
+    withExceptions(api);
+    await openChain(api);
+    await waitFor(() => expect(screen.queryByTestId("thb-exception-review-exc_1")).not.toBeNull());
+    expect(screen.queryByTestId("thb-exception-review-exc_2")).toBeNull();
+    expect(screen.getByTestId("thb-exceptions").textContent).toContain("重复");
+    fireEvent.click(screen.getByTestId("thb-exception-review-exc_1"));
+    fireEvent.click(screen.getByTestId("thb-exception-decision-approved"));
+    fireEvent.change(screen.getByTestId("thb-exception-reason"), { target: { value: "误扫" } });
+    fireEvent.click(screen.getByTestId("thb-exception-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/exceptions/exc_1/review`, {
+      idempotency_key: expect.any(String), decision: "approved", reason: "误扫",
+    }));
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([path]) => path === `${BASE}/th-1`)).toHaveLength(2));
+  });
+
+  it("没有 inventory.handover.review 权限时复核按钮禁用", async () => {
+    const api = makeApi();
+    withExceptions(api);
+    await openChain(api, { status: "ready", value: { grants: ["inventory.handover.scan", "evidence.attachment.create"], denies: [], wildcard: false } });
+    await waitFor(() => expect(screen.queryByTestId("thb-exception-review-exc_1")).not.toBeNull());
+    expect((screen.getByTestId("thb-exception-review-exc_1") as HTMLButtonElement).disabled).toBe(true);
   });
 });

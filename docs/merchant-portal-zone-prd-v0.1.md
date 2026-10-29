@@ -1,6 +1,6 @@
-# 商户侧与商户专区产品口径 PRD V0.19
+# 商户侧与商户专区产品口径 PRD V0.20
 
-> 版本：V0.19 ｜ 最后更新：2026-10-29 ｜ 状态：现行 PRD
+> 版本：V0.20 ｜ 最后更新：2026-10-29 ｜ 状态：现行 PRD
 > 业务最终解释权：三份业务 HTML。本文同时记录当前实现；当前页面、接口或终端不足时，标为实现差距，不能据此缩小 HTML 的商户侧能力。
 
 ## 1. 定位与终端
@@ -72,7 +72,7 @@ HTML 明列两类商户终端：
 
 商户服务工单与设施/物业工单分表承载，两句 HTML 同时适用：
 
-- 商户服务工单：V022 `merchant_service_work_orders`。商户可自助发起报修 `repair`、投诉 `complaint`、整改 `rectification` 和其他服务 `service`，并查看进度。HTML 七态为已提交、已派单、处理中、待商户确认、已处理待关闭、已关闭、已取消；当前代码值为 `created/assigned/processing/pending_merchant/resolved/closed/cancelled`，专区页面把第五态 `resolved` 显示为“已解决”，与 HTML“已处理待关闭”尚未对齐。超时自动升级并标记。
+- 商户服务工单：V022 `merchant_service_work_orders`。商户可自助发起报修 `repair`、投诉 `complaint`、整改 `rectification` 和其他服务 `service`，并查看进度。HTML 七态为已提交、已派单、处理中、待商户确认、已处理待关闭、已关闭、已取消；当前代码值为 `created/assigned/processing/pending_merchant/resolved/closed/cancelled`，专区页面把第五态 `resolved` 显示为“已解决”，与 HTML“已处理待关闭”尚未对齐。超时自动升级并标记。实现现状（第十八批 I 段第 77 条）：处理时限按「工单类型×优先级」在后台 ADM-MER-001「处理时限」配置（`GET/PUT /api/v1/merchant-service/work-order-policies`，持 `merchant.service_work_order.assign`、平台口径，商户与外包账号 403；V577 `merchant_service_work_order_policies` 只有处理时限、不预置出厂值），建单时截止时间＝建单时刻＋处理时限，请求体不再给截止时间，未配置的组合不设截止时间、不升级（77-R3）；定时作业升级标记的同时，给持派单权限 `merchant.service_work_order.assign`、有员工档案、派单码可触及该商户任一经营项目（主项目或追加的经营项目，裁决 M737-iter7）的平台员工各发一条系统通知，商户账号与外包账号不收（77-R2）。
 - 设施/物业工单：V166 `facility_work_orders`。商户自助提出的物业报修、保洁、投诉和其他服务请求应进入设施/物业工单；当前商户专区没有创建 V166 工单的入口，保洁缺口在此，不通过给 V022 增加 `cleaning` 枚举解决。巡检异常、设备告警或平台治理发起的设施整改同样落设施工单，按设施工单状态和验收分支处理。
 
 两类工单不合并主表、不互相映射状态；看板分行对照。商户专区自助条款中的商户服务整改按 V022 承载；物业服务运营细则中的设施整改和巡检类工单仍由平台发起。商户自助整改不等于商户可以替平台发起设施巡检整改。设施/物业工单的响应时限与处理时限须对商户公开；商户服务工单没有“首次响应”环节，不显示响应指标，也不拿别的数字冒充，超时仍自动升级并标记。

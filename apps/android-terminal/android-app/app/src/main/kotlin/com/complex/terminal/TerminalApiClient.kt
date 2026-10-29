@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -8,6 +8,7 @@ import java.net.URI
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
@@ -320,6 +321,42 @@ class TerminalApiClient(
   fun reverseVerification(verificationId: String, request: VerificationReverseRequest): VerificationResponse =
     post("/api/v1/ticketing/verifications/${urlEncode(verificationId)}/reverse", request)
 
+  // ── 第十八批 I 段第 84 条 84-R2：酒水与物品交接扫码（PGM 第 633 行「记录出库、后厨接收、服务员取走和送达」；BSM 第 1201 行）──
+
+  /** 按扫到的溯源码查交接单（新建在前）。 */
+  fun listTraceHandovers(traceCode: String): List<TraceHandoverRecord> =
+    get("/api/v1/inventory/trace-handovers?trace_code=${urlEncode(traceCode)}")
+
+  /** 交接链：表头、五段原扫码记录与人工补录单并列。 */
+  fun getTraceHandover(id: String): TraceHandoverChain = get("/api/v1/inventory/trace-handovers/${urlEncode(id)}")
+
+  /** 库管出库前建交接单（device_id＝本机登记设备号）。 */
+  fun createTraceHandover(request: TraceHandoverCreateRequest): TraceHandoverChain =
+    post("/api/v1/inventory/trace-handovers", request)
+
+  /** 逐段扫码确认一个人工段。 */
+  fun scanTraceSegment(id: String, request: TraceScanSegmentRequest): TraceHandoverChain =
+    post("/api/v1/inventory/trace-handovers/${urlEncode(id)}/scan-segment", request)
+
+  /** 缺段人工补录（附证据，进主管复核）。 */
+  fun submitTraceStepBackfill(id: String, segment: String, request: TraceStepBackfillRequest): TraceHandoverBackfillRow =
+    post("/api/v1/inventory/trace-handovers/${urlEncode(id)}/segments/${urlEncode(segment)}/backfill", request)
+
+  /** 第 84 条 84-R1（BSM 第 1201 行「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）」）：工作手机签名上传交接补录证据。
+   *  business_type 固定 manual_backfill；签名摘要取部件规范串（[multipartBodyDigest]）。
+   *  ponytail: 整个文件读进内存，上限就是服务端 50MB，以后要更大再改流式。 */
+  fun uploadEvidence(fileName: String, bytes: ByteArray): EvidenceAttachmentRecord {
+    val path = "/api/v1/evidence/attachments/upload"
+    val fields = listOf("business_type" to "manual_backfill")
+    val files = listOf(Triple("file", fileName, bytes))
+    val boundary = "complex" + UUID.randomUUID().toString().replace("-", "")
+    val connection = open(path, "POST")
+    connection.setRequestProperty("content-type", "multipart/form-data; boundary=$boundary")
+    connection.doOutput = true
+    return send(path, connection, body = null, multipart = multipartFormBody(boundary, fields, files),
+      bodyDigest = multipartBodyDigest(fields, files))
+  }
+
   // --------------------------------------------------------------------------
   // 传输层（HttpURLConnection）
   // --------------------------------------------------------------------------
@@ -349,16 +386,19 @@ class TerminalApiClient(
   }
 
   @PublishedApi
-  internal inline fun <reified T> send(path: String, connection: HttpURLConnection, body: String?): T {
+  internal inline fun <reified T> send(path: String, connection: HttpURLConnection, body: String?,
+      multipart: ByteArray? = null, bodyDigest: String? = null): T {
     try {
       val id = deviceId
       val signer = deviceSigner
       if (id != null && signer != null && path != "/api/v1/auth/login") {
-        deviceRequestHeaders(id, connection.requestMethod, path, body ?: "", signer)
+        (if (bodyDigest != null) deviceRequestHeadersWithDigest(id, connection.requestMethod, path, bodyDigest, signer)
+          else deviceRequestHeaders(id, connection.requestMethod, path, body ?: "", signer))
           .forEach { (name, value) -> connection.setRequestProperty(name, value) }
       }
-      if (body != null) {
-        connection.outputStream.use { it.write(body.toByteArray(StandardCharsets.UTF_8)) }
+      val bytes = multipart ?: body?.toByteArray(StandardCharsets.UTF_8)
+      if (bytes != null) {
+        connection.outputStream.use { it.write(bytes) }
       }
       val status = connection.responseCode
       val responseBody = readBody(connection, status)

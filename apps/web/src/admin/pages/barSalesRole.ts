@@ -21,8 +21,12 @@ export function isSalesOrder(order: Pick<BarOrderRow, "bills"> | undefined): boo
   return latestBill(order)?.salesRoleType === "sales";
 }
 
-/** 销售角色展示名；账单未落角色档时显示占位符，不猜。 */
-export function salesRoleLabel(order: Pick<BarOrderRow, "bills"> | undefined): string {
+/**
+ * 销售角色展示名；账单未落角色档时显示占位符，不猜。
+ * 第十八批 I 段 86-R4（BSM 第 1070 行「自来客不产生销售提成」）：订单没有销售归属的不计提成——账单行没有销售人字段，读订单的销售归属。
+ */
+export function salesRoleLabel(order: Pick<BarOrderRow, "bills" | "salesStaffId"> | undefined): string {
+  if (!order?.salesStaffId) return "无销售（不计提成）";
   const roleType = latestBill(order)?.salesRoleType;
   if (roleType === "sales") return "销售人员";
   if (roleType === "non_sales") return "非销售人员";

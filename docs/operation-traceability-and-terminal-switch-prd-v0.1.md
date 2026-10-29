@@ -1,4 +1,4 @@
-# 全链路操作留痕与终端开关 PRD V0.05
+# 全链路操作留痕与终端开关 PRD V0.06
 
 > **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
 
@@ -23,6 +23,7 @@
 >     - ①`TerminalMasterSwitchInterceptor` 原先读自报 `X-Terminal-Type`、为空即 `return true` 放行——`checkTerminalEnabled()` 全仓仅此一个生产调用点，客户端删掉一个请求头就跳过整条 `terminal.enabled` 闸（含 fail-closed 兜底）。现改读 `TerminalIdentityHolder`，且按PGM「开关拉取失败时按“兜底关闭”处理，写操作一律拒绝」条（同条另有「前端隐藏只是辅助，后端接口必须独立校验」一句），**解析不出终端身份的非 GET/HEAD/OPTIONS 请求一律 403 `TERMINAL_NOT_ALLOWED`**；读请求维持放行（端停用开关不是鉴权边界）。
 >     - ②`DeviceCredentialVerifier` 原先以自报头判断是否进设备绑定型验签闸，自报为空或改报 `web` 即早退，**把 enforce 翻开也没用**。现在带 `X-Device-Id` 时一律先反查 `terminal_devices.terminal_type` 顶上，登记类型压过自报值，再做 `DEVICE_BOUND_TYPES` 与 `modeFor()` 判定；该次查询下传验签复用，不新增查库次数。自报头仍报设备绑定型却与登记类型不符 → 保持 `type_mismatch` 拒。
 >     - 连带：`DeviceCredentialBodyCachingFilter` 去掉「自报头属设备绑定型」前置条件（过滤器早于拦截器，拿不到派生结果；不去掉则不发头的签名请求拿不到缓存 body、必然摘要不符），改为「写 + 带 `X-Device-Signature`」；`GET /terminals/capability-switches/effective`（前端菜单 gating 数据源）与 `GateRequestContext` 的 device scope 一并改读可信身份，避免「菜单按自报类型显示、接口按真实类型拒绝」的错位。
+>     - **（2026-10-29 第十八批 I 段第 84 条 84-R1）multipart 签名请求**：`DeviceCredentialBodyCachingFilter` 不再包 `multipart/form-data`（包装器会读空原输入流，下游解析不出文件部件），multipart 签名请求按部件规范串取摘要（参数按名排序逐行 `p:<名>=<值>`，再文件按字段名排序逐行 `f:<名>:<原文件名>:<文件字节 SHA-256>`，换行连接后取 SHA-256），体积按 Spring multipart 上限（与不签名上传同一套）；JSON 签名体的 1MB 上限与 413 不变。工作手机据此签名上传交接补录证据（`POST /api/v1/evidence/attachments/upload`，`business_type=manual_backfill`）。
 >     - **豁免前缀随之登记两条非终端通道**：`/api/open/`（第三方开放平台回调，自带签名，不是受管终端）与 `/api/v1/terminals/kiosks/`（一体机自助端点，`X-Device-Token` 认证，本就豁免于 `DeviceCredentialInterceptor`、拿不到可信身份）——不登记则第三方回调与一体机心跳会被新增的写请求 fail-closed 误杀。
 >     - **enforcement 取值不动**（仍全类型 `grace`）：本次只让 enforce 翻开时真的有效，何时翻仍是部署决策。
 >   - **（2026-07-20 补 · enforce 前置全套已做完）**：①web enforce 拒 Bearer 自报 web（合法后台 Cookie 会话，无客户端依赖可先翻）+ app enforce 拒 app 写（app 资金要客人侧证明属业务口径，待用户定）；②kiosk/tablet 设备级签名公钥 `terminal_device_signing_keys`（V325）+ 登记端点 `POST /devices/{id}/signing-key`，kiosk 自助端点豁免；③nonce 落库 `terminal_device_nonces`（V325）防重放；④body SHA-256 纳入签名量（`DeviceCredentialBodyCachingFilter` 仅包裹设备绑定型+写+带签名请求）；⑤deviceId↔密钥归属交叉校验。**服务端 ready-to-enforce；真正翻 enforce 仍依赖客户端实现签名+登记密钥（客户端侧，本 PR 不含）**，默认保持 grace。
@@ -837,6 +838,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-29 | 改 | 版本、顶部横幅 AUD-010 | V0.06：第十八批 I 段第 84 条 84-R1——multipart 签名请求不再被 1MB 体缓存包装，摘要取部件规范串、体积按 Spring multipart 上限；工作手机可签名上传照片、录音、录像证据 | BSM 第 1201 行「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）」；BSM 第 1891 行工作手机「补录……库房和酒水交接扫码」 |
 | 2026-10-26 | 改 | 版本、顶部横幅、§5.7 实现现状 | V0.05：第十八批第 6 条——能力开关缺行默认关闭（opt-in）落地：`TerminalSwitchGuard` 缺行即拒绝（`reason=not_configured`）；短信域/事件开关、MDM 自有侧、一体机售票设备开关、渠道售票状态缺行即关；V554 给 113 个 `@GuardedAction` 在用能力、13 个已接触发点的短信域/事件与跨端 `'*'` 终端总开关补 `'*'`/global `enabled=TRUE` 显式行，短信开关页同步可见 | PGM「开关默认取值」（L742）；BSM 已拍板规则（L2030）；DEC-R6-07 |
 | 2026-10-21 | 改 | 版本、能力开关消费形态 | V0.04：第十三批 ROOT-03-R33——退役 V097 `customer.native_client.enabled`（无消费点、关着不拒任何请求），客人两端开关以 V197 `terminal.enabled`（app、miniapp）为唯一口径；同批客人两端改为以已验证客人会话作终端证明、会话锁定登录端、生产翻强制校验，客人端可匿名读本端已关闭开关行（`GET /api/v1/customer/terminal-switches/effective`） | PGM「受控的十类终端」；PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」 |
 | 2026-10-17 | 增 | §6.3 终端能力开关 | terminal_type 取值集加受控第十一端 `dealer_portal`（独立经销商 Web 门户）：V454 重建 `chk_tcs_terminal_type` / `chk_tccr_terminal_type` 并插入总开关行，门户按统一终端开关逐请求强制、拒绝留痕 `terminal.access_rejected`、识别不出终端的写请求兜底关闭 | CG-11d；ENUM:233；BSM:1218 |

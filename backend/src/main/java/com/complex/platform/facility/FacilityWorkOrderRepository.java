@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.util.List;
@@ -54,6 +54,15 @@ public interface FacilityWorkOrderRepository {
     }
 
     List<FacilityWorkOrderRecord> listOverdue(Instant now);
+
+    /** 第 77 条 77-R1：响应超时待升级——待派单／已派单、未开始处理、已过响应时限、不是设备告警来源（接警升级按告警条）、响应还没升级过。 */
+    List<FacilityWorkOrderRecord> listResponseEscalationDue(Instant now);
+
+    /** 第 77 条 77-R1：处理超时待升级——在办六态、已过处理时限、处理还没升级过。 */
+    List<FacilityWorkOrderRecord> listHandleEscalationDue(Instant now);
+
+    /** 第 77 条 77-R1：置超时标记并记该类（response｜handle）升级时刻；只在该类还没升级过时写入，返回本次是否赢得升级。 */
+    boolean markEscalated(String id, String kind, Instant now);
 
     /** ROOT-03 clients-R8：本人客人投诉（来源 customer、提单方＝本人），新到旧。默认按内存全量过滤（供 InMemory 测试双子），Jdbc 覆盖。 */
     default List<FacilityWorkOrderRecord> listCustomerComplaints(String customerId) {

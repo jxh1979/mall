@@ -1,6 +1,6 @@
 package com.complex.platform.leasing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -66,7 +66,8 @@ class LeasingIntentGateJdbcIntegrationTests {
         String plain = "b24l_role_plain_" + suffix;
         role(full, "'leasing.lead.manage','leasing.intent.manage','leasing.brand.manage','leasing.brand.blacklist',"
                 + "'leasing.brand.blacklist_exception','governance.supervisor_review.view','governance.supervisor_review.approve'");
-        role(plain, "'leasing.lead.manage','leasing.intent.manage'");
+        // 第十八批 I 段第 90 条：clerk 也满足招商工作台页面门槛（三个 manage 码），但没有拉黑与例外放行权限
+        role(plain, "'leasing.lead.manage','leasing.intent.manage','leasing.brand.manage'");
         mgr = account("mgr", full);
         boss = account("boss", full);
         peer = account("peer", full);
@@ -87,8 +88,10 @@ class LeasingIntentGateJdbcIntegrationTests {
         String lead = lead(brand);
         blacklist(brand);
 
-        intent(mgr, lead, null).andExpect(status().isConflict())
+        String blockedKey = "li_" + UUID.randomUUID();
+        intent(mgr, lead, null, blockedKey).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("LEASING_BRAND_BLACKLISTED"));
+        assertThat(failureCodes("leasing.intent.create_failed", blockedKey)).containsExactly("LEASING_BRAND_BLACKLISTED");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM leasing_intents WHERE lead_id=?", Integer.class, lead)).isZero();
         assertThat(leadStatus(lead)).isEqualTo("pending_follow_up");
 
@@ -111,8 +114,10 @@ class LeasingIntentGateJdbcIntegrationTests {
 
         intent(peer, lead, exceptionId).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("LEASING_BLACKLIST_EXCEPTION_INVALID"));
-        String intentId = idOf(intent(mgr, lead, exceptionId).andExpect(status().isOk())
+        String okKey = "li_" + UUID.randomUUID();
+        String intentId = idOf(intent(mgr, lead, exceptionId, okKey).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.stage").value("initial_contact")));
+        assertThat(failureCount(okKey)).isZero();
 
         Map<String, Object> row = jdbc.queryForMap("""
                 SELECT status, requested_by, approved_by, approved_at, used_at, used_lead_id, used_intent_id, reason
@@ -160,8 +165,10 @@ class LeasingIntentGateJdbcIntegrationTests {
     void blacklistedBrandNewLeadNeedsApprovedException() throws Exception {
         String brand = brand();
         blacklist(brand);
-        createLead(mgr, brand, null).andExpect(status().isConflict())
+        String blockedKey = "ll_" + UUID.randomUUID();
+        createLead(mgr, brand, null, blockedKey).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("LEASING_BRAND_BLACKLISTED"));
+        assertThat(failureCodes("leasing.lead.create_failed", blockedKey)).containsExactly("LEASING_BRAND_BLACKLISTED");
 
         String exceptionId = idOf(send(mgr, "/api/v1/leasing/blacklist-exceptions",
                 "{\"target_type\":\"lead_create\",\"brand_id\":\"" + brand + "\",\"reason\":\"品牌整改完毕，经营方确需继续洽谈\","
@@ -170,8 +177,10 @@ class LeasingIntentGateJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.target_type").value("lead_create")));
         approve(boss, exceptionReview(exceptionId), "approved").andExpect(status().isOk());
 
-        String leadId = idOf(createLead(mgr, brand, exceptionId).andExpect(status().isOk())
+        String okKey = "ll_" + UUID.randomUUID();
+        String leadId = idOf(createLead(mgr, brand, exceptionId, okKey).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.brand_id").value(brand)));
+        assertThat(failureCount(okKey)).isZero();
         Map<String, Object> row = jdbc.queryForMap(
                 "SELECT status, used_lead_id, used_intent_id FROM leasing_blacklist_exceptions WHERE id=?", exceptionId);
         assertThat(row.get("status")).isEqualTo("used");
@@ -186,8 +195,10 @@ class LeasingIntentGateJdbcIntegrationTests {
     void intentCannotSkipStagesForward() throws Exception {
         String intentId = intentAt("initial_contact");
 
-        advance(mgr, intentId, "pending_signing").andExpect(status().isConflict())
+        String skipKey = "la_" + UUID.randomUUID();
+        advance(mgr, intentId, "pending_signing", skipKey).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("LEASING_INTENT_STAGE_SKIP"));
+        assertThat(failureCodes("leasing.intent.advance_failed", skipKey)).containsExactly("LEASING_INTENT_STAGE_SKIP");
 
         assertThat(stage(intentId)).isEqualTo("initial_contact");
     }
@@ -226,16 +237,99 @@ class LeasingIntentGateJdbcIntegrationTests {
         assertThat(rejected.get("pending_review_id")).isNull();
     }
 
+    /**
+     * 第十八批 I 段第 90 条 90-R1（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」、L899；openapi-p0
+     * x-audit-event-failure）：页面进得来（三个 manage 码齐）却没有签约码、拉黑码的人签约、拉黑被拒，各落一条失败事件，错误码同响应；
+     * 签约阶段不对 409、拉黑原因清空 400 同样留痕。失败事件独立事务、不随测试回滚，一律按本次请求的幂等键查。
+     */
+    @Test
+    void signAndBlacklistFailuresLeaveFailureEvents() throws Exception {
+        String deniedSign = "ls_" + UUID.randomUUID();
+        sign(mgr, intentAt("pending_signing"), deniedSign).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertThat(failureCodes("leasing.intent.sign_failed", deniedSign)).containsExactly("PERMISSION_DENIED");
+
+        String brand = brand();
+        String deniedBlacklist = "bl_" + UUID.randomUUID();
+        blacklist(clerk, brand, "多次违约", deniedBlacklist).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertThat(failureCodes("leasing.brand.blacklist_change_failed", deniedBlacklist)).containsExactly("PERMISSION_DENIED");
+
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'leasing.convert')", "b24l_role_" + suffix);
+        String wrongStage = "ls_" + UUID.randomUUID();
+        sign(mgr, intentAt("negotiation"), wrongStage).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("LEASING_INTENT_NOT_PENDING_SIGNING"));
+        assertThat(failureCodes("leasing.intent.sign_failed", wrongStage)).containsExactly("LEASING_INTENT_NOT_PENDING_SIGNING");
+
+        String noReason = "bl_" + UUID.randomUUID();
+        blacklist(mgr, brand, "", noReason).andExpect(status().isBadRequest());
+        assertThat(failureCodes("leasing.brand.blacklist_change_failed", noReason)).containsExactly("VALIDATION_FAILED");
+    }
+
+    /** 90-R2：指派时负责人留空、已签约的线索在旧页面改状态、跟进内容清空，被拒各落一条失败事件。 */
+    @Test
+    void leadAndFollowUpWriteFailuresLeaveFailureEvents() throws Exception {
+        String lead = lead(null);
+        String assignKey = "lla_" + UUID.randomUUID();
+        send(mgr, "/api/v1/leasing/leads/" + lead + "/assign", "{\"owner_user_id\":\"\",\"idempotency_key\":\"" + assignKey + "\"}")
+                .andExpect(status().isBadRequest());
+        assertThat(failureCodes("leasing.lead.assign_failed", assignKey)).containsExactly("VALIDATION_FAILED");
+
+        jdbc.update("UPDATE leasing_leads SET status='signed' WHERE id=?", lead);
+        String statusKey = "lls_" + UUID.randomUUID();
+        send(mgr, "/api/v1/leasing/leads/" + lead + "/status", "{\"status\":\"negotiating\",\"reason\":\"完整后台推进线索状态\","
+                + "\"idempotency_key\":\"" + statusKey + "\"}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("LEASING_LEAD_ALREADY_SIGNED"));
+        assertThat(failureCodes("leasing.lead.status_change_failed", statusKey)).containsExactly("LEASING_LEAD_ALREADY_SIGNED");
+
+        String followUpKey = "lfu_" + UUID.randomUUID();
+        send(mgr, "/api/v1/leasing/follow-ups", "{\"ref_type\":\"lead\",\"ref_id\":\"" + lead + "\",\"method\":\"phone\","
+                + "\"content\":\"\",\"idempotency_key\":\"" + followUpKey + "\"}")
+                .andExpect(status().isBadRequest());
+        assertThat(failureCodes("leasing.follow_up.create_failed", followUpKey)).containsExactly("VALIDATION_FAILED");
+    }
+
+    /** 90-R3（PGM L738、L502「须由具备单独授予的黑名单例外放行权限人员操作」）：没有放行权限的人申请被拒，落 request_failed，不新增放行单。 */
+    @Test
+    void blacklistExceptionRequestWithoutTheGrantLeavesFailureEvent() throws Exception {
+        String brand = brand();
+        blacklist(brand);
+        String key = "lbe_" + UUID.randomUUID();
+        send(clerk, "/api/v1/leasing/blacklist-exceptions", "{\"target_type\":\"lead_create\",\"brand_id\":\"" + brand
+                + "\",\"reason\":\"品牌整改完毕\",\"idempotency_key\":\"" + key + "\"}")
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertThat(failureCodes("leasing.blacklist_exception.request_failed", key)).containsExactly("PERMISSION_DENIED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM leasing_blacklist_exceptions WHERE brand_id=?", Integer.class, brand))
+                .isZero();
+    }
+
     private ResultActions intent(RequestPostProcessor who, String lead, String exceptionId) throws Exception {
+        return intent(who, lead, exceptionId, "li_" + UUID.randomUUID());
+    }
+
+    private ResultActions intent(RequestPostProcessor who, String lead, String exceptionId, String key) throws Exception {
         return send(who, "/api/v1/leasing/intents", "{\"lead_id\":\"" + lead + "\","
                 + (exceptionId == null ? "" : "\"blacklist_exception_id\":\"" + exceptionId + "\",")
-                + "\"idempotency_key\":\"li_" + UUID.randomUUID() + "\"}");
+                + "\"idempotency_key\":\"" + key + "\"}");
     }
 
     private ResultActions createLead(RequestPostProcessor who, String brand, String exceptionId) throws Exception {
+        return createLead(who, brand, exceptionId, "ll_" + UUID.randomUUID());
+    }
+
+    private ResultActions createLead(RequestPostProcessor who, String brand, String exceptionId, String key) throws Exception {
         return send(who, "/api/v1/leasing/leads", "{\"contact_name\":\"王经理\",\"source\":\"outbound\",\"brand_id\":\"" + brand + "\","
                 + (exceptionId == null ? "" : "\"blacklist_exception_id\":\"" + exceptionId + "\",")
-                + "\"idempotency_key\":\"ll_" + UUID.randomUUID() + "\"}");
+                + "\"idempotency_key\":\"" + key + "\"}");
+    }
+
+    /** 与招商工作台签约表单同形（必选商户与合同主体）。 */
+    private ResultActions sign(RequestPostProcessor who, String intentId, String key) throws Exception {
+        String entity = "b24l_be_" + suffix;
+        return send(who, "/api/v1/leasing/intents/" + intentId + "/sign", "{\"merchant_id\":\"b24l_mch_" + suffix
+                + "\",\"contract_subject_id\":\"" + entity + "\",\"operation_subject_id\":\"" + entity
+                + "\",\"settlement_subject_id\":\"" + entity + "\",\"effective_date\":\"2026-08-01\",\"expiry_date\":\"2027-07-31\","
+                + "\"idempotency_key\":\"" + key + "\"}");
     }
 
     private ResultActions applyIntentException(RequestPostProcessor who, String lead) throws Exception {
@@ -244,8 +338,12 @@ class LeasingIntentGateJdbcIntegrationTests {
     }
 
     private ResultActions advance(RequestPostProcessor who, String intentId, String target) throws Exception {
+        return advance(who, intentId, target, "la_" + UUID.randomUUID());
+    }
+
+    private ResultActions advance(RequestPostProcessor who, String intentId, String target, String key) throws Exception {
         return send(who, "/api/v1/leasing/intents/" + intentId + "/advance",
-                "{\"target_stage\":\"" + target + "\",\"idempotency_key\":\"la_" + UUID.randomUUID() + "\"}");
+                "{\"target_stage\":\"" + target + "\",\"idempotency_key\":\"" + key + "\"}");
     }
 
     private ResultActions approve(RequestPostProcessor who, String review, String decision) throws Exception {
@@ -254,9 +352,23 @@ class LeasingIntentGateJdbcIntegrationTests {
     }
 
     private void blacklist(String brand) throws Exception {
-        send(mgr, "/api/v1/leasing/brands/" + brand + "/blacklist",
-                "{\"blacklist\":true,\"reason\":\"多次违约\",\"idempotency_key\":\"bl_" + UUID.randomUUID() + "\"}")
-                .andExpect(status().isOk());
+        blacklist(mgr, brand, "多次违约", "bl_" + UUID.randomUUID()).andExpect(status().isOk());
+    }
+
+    private ResultActions blacklist(RequestPostProcessor who, String brand, String reason, String key) throws Exception {
+        return send(who, "/api/v1/leasing/brands/" + brand + "/blacklist",
+                "{\"blacklist\":true,\"reason\":\"" + reason + "\",\"idempotency_key\":\"" + key + "\"}");
+    }
+
+    /** 失败事件是独立事务写入（AuditEventService.recordFailure）、不随测试回滚：一律按本次请求唯一的幂等键查。 */
+    private List<String> failureCodes(String event, String key) {
+        return jdbc.queryForList("SELECT metadata->>'error_code' FROM audit_events WHERE event_name=? AND event_result='failure'"
+                + " AND idempotency_key=?", String.class, event, key);
+    }
+
+    private int failureCount(String key) {
+        return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_result='failure' AND idempotency_key=?",
+                Integer.class, key);
     }
 
     private ResultActions send(RequestPostProcessor who, String path, String body) throws Exception {
