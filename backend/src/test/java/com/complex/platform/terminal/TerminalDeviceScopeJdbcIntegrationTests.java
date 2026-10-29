@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -40,7 +40,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * M723-F21（治理地图第 653 行「所有业务数据默认按项目隔离……数据的项目与商户隔离不提供关闭开关」；操作员 2026-10-06 裁决，
  * 见 decisions/20260924T114205Z-M723-terminal-device-management-scope.md）：真实库、真实接口回归。终端设备管理的入口按设备归属
  * 范围放行——平台管理员全部设备都能管；带商户归属的员工只能管本商户的设备；不带商户归属的项目员工能管本项目内的全部设备
- * （含本项目内各商户的设备和不挂商户的设备）。设备属于哪个项目：先看所属商户的项目，没有商户的看绑定空间的项目，再没有的看
+ * （含本项目内各商户的设备和不挂商户的设备）。设备属于哪个项目：先看绑定空间的项目（第十八批裁决 18 改为空间在前），没绑空间的看所属商户的项目，再没有的看
  * 持有员工的项目；认不出项目的设备只有平台管理员能管。设备列表只显示本人能管的设备；登记新设备、改设备归属时目标归属也要在
  * 本人能管的范围内。
  * 本类覆盖九个入口：绑定、设备列表、改归属、归还、解绑、送修、挂失、找回、报废；第十个入口（登记签名公钥）的回归在
@@ -217,11 +217,12 @@ class TerminalDeviceScopeJdbcIntegrationTests {
                 merchantJson(key("move-in"), merchantA), "CROSS_MERCHANT_FORBIDDEN", theirs);
     }
 
-    // 项目员工改完后仍须认定为本项目：项目甲的项目员工把本项目公区设备（不挂商户、绑在本项目空间）改到项目乙的商户丙 → 403
+    // 项目员工改完后仍须认定为本项目：项目甲的项目员工把本项目员工持有的设备（不挂商户、不绑空间）改到项目乙的商户丙 → 403
     // CROSS_PROJECT_FORBIDDEN，设备行原样；改到本项目的商户乙 → 200。修复前：第一处 403 即红（200，设备已改到另一项目的商户）。
+    // 第十八批裁决 18：绑了空间的设备按空间所在项目，挂哪个商户都仍在空间的项目，所以本用例的设备不绑空间。
     @Test
     void aProjectEmployeeCanOnlyMoveADeviceToAMerchantOfTheirOwnProject() throws Exception {
-        String id = device("pmove", "bound", null, spaceA, null);
+        String id = device("pmove", "bound", null, null, holderA);
         expectRejectedWithoutWrite(projectStaff, "PUT", DEVICES + "/" + id + "/merchant", key("pmove-out"),
                 merchantJson(key("pmove-out"), merchantC), "CROSS_PROJECT_FORBIDDEN", id);
 
@@ -384,6 +385,51 @@ class TerminalDeviceScopeJdbcIntegrationTests {
         send(projectStaff, "POST", DEVICES + "/" + ofHolder + "/lost", reasonJson(key("oh")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("lost"));
+    }
+
+    // 第 82 条 82c-R2（PGM:618「设备要绑定员工、班次、点位和状态」；PGM:624「记录设备领用、归还、维修、挂失和报废」；
+    // ENUM:241 维修中不是终态）：项目员工把本项目的平板送修，修好后回待领用（returned），再走领用绑定回到在用。
+    // 修复前非入场设备修复完成 409（200 的断言即红）。送修成功留痕事件名为 terminal.device.repaired。
+    // 82c-R4：送修、报废成功审计事件名钉住 OpenAPI markTerminalDeviceRepair / markTerminalDeviceScrap 的 x-audit-event-success。
+    @Test
+    void tabletRepairCompleteThenRebind() throws Exception {
+        String id = device("rc", "bound", null, spaceA, holderA);
+        send(projectStaff, "POST", DEVICES + "/" + id + "/repair", """
+                {"idempotency_key": "%s", "reason": "屏幕碎裂"}
+                """.formatted(key("rc-repair")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("repair"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = 'terminal.device.repaired' "
+                        + "AND event_result = 'success' AND idempotency_key = ?", Integer.class, key("rc-repair"))).isEqualTo(1);
+
+        send(projectStaff, "POST", DEVICES + "/" + id + "/repair-complete", """
+                {"idempotency_key": "%s", "reason": "已换屏"}
+                """.formatted(key("rc-done")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("returned"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM terminal_device_status_events WHERE device_id = ? "
+                        + "AND event_type = 'terminal.device.repair_completed' AND status = 'returned'", Integer.class, id))
+                .isEqualTo(1);
+
+        send(projectStaff, "POST", DEVICES + "/bind", """
+                {"idempotency_key": "%s", "device_id": "%s", "terminal_type": "tablet", "binding_scope": "space",
+                 "bound_space_id": "%s"}
+                """.formatted(key("rc-bind"), deviceId("rc"), spaceA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("bound"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM terminal_devices WHERE id = ?", String.class, id))
+                .isEqualTo("bound");
+
+        send(projectStaff, "POST", DEVICES + "/" + id + "/scrap", """
+                {"idempotency_key": "%s", "reason": "主板老化"}
+                """.formatted(key("rc-scrap")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("scrapped"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = 'terminal.device.scrapped' "
+                        + "AND event_result = 'success' AND idempotency_key = ?", Integer.class, key("rc-scrap"))).isEqualTo(1);
     }
 
     // ── 带商户归属的员工：范围内成功的代表用例 ─────────────────────────────────────────

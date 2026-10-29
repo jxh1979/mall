@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -52,6 +52,10 @@ type TransferOrder = {
 };
 
 type SupplyEntity = { id: string; name?: string; entityType?: string; status?: string };
+// 后端 MerchantOperatingProjectService.ProjectOption(project_id, project_name)，经 adminClient 转驼峰。
+type ProjectOption = { projectId: string; projectName?: string | null };
+// GET /api/v1/platform/merchants/{merchant_id}/operating-projects：主项目与已生效的经营项目。
+type OperatingProjects = { primaryProjectId?: string | null; primaryProjectName?: string | null; operatingProjects?: ProjectOption[] };
 type Warehouse = { id: string; merchantId?: string; name?: string; status?: string };
 // FS-011 签收后逐行结果与差异处理（GET .../dispositions）。
 type FulfillmentLine = {
@@ -110,7 +114,7 @@ const TEXT = {
   description:
     "平台供货公司送货给商户（调拨）、商户之间借/调（借调）的流转单在这里建单、发货、扫码收货、归还与取消；每一单的货值与应付挂账凭证同屏可查，可直接下钻应收应付台账。",
   evidence:
-    "接口证据：读取 /api/v1/inventory/transfer-orders、/api/v1/inventory/transfer-orders/{order_id}、/api/v1/inventory/transfer-orders/{order_id}/dispositions、/api/v1/inventory/supply-entities、/api/v1/inventory/items、/api/v1/inventory/warehouses、/api/v1/platform/merchants、/api/v1/finance/ar-ap-items；写入 POST /api/v1/inventory/transfer-orders 及其 /submit、/lines、/supplier-review、/pick、/ship、/deliver、/receive、/dispositions、/dispositions/{disposition_id}/review、/return、/unreturnable、/dispositions/{disposition_id}/confirm、/dispositions/{disposition_id}/disposal-completed、/cancel，上传 /api/v1/evidence/attachments/upload。",
+    "接口证据：读取 /api/v1/inventory/transfer-orders、/api/v1/inventory/transfer-orders/{order_id}、/api/v1/inventory/transfer-orders/{order_id}/dispositions、/api/v1/inventory/supply-entities、/api/v1/inventory/items、/api/v1/inventory/warehouses、/api/v1/platform/merchants、/api/v1/platform/merchants/{merchant_id}/operating-projects、/api/v1/finance/ar-ap-items；写入 POST /api/v1/inventory/transfer-orders 及其 /submit、/lines、/supplier-review、/pick、/ship、/deliver、/receive、/dispositions、/dispositions/{disposition_id}/review、/return、/unreturnable、/dispositions/{disposition_id}/confirm、/dispositions/{disposition_id}/disposal-completed、/cancel，上传 /api/v1/evidence/attachments/upload。",
   loadFailed: "跨主体流转单读取失败",
 };
 
@@ -333,6 +337,31 @@ export function InventoryTransferWorkbenchPage({
   const [operatorNote, setOperatorNote] = React.useState("");
   // 第十八批第 18 条：借调交货扣出让方这个库位的库存。
   const [fromLocationId, setFromLocationId] = React.useState("");
+  // 第十八批 G 段 82-R18a（第十八批裁决 18「要货单、借用单建单时记所属项目（在 m 的经营项目里选，只有一个时自动带）」）。
+  const [projectId, setProjectId] = React.useState("");
+  const [projectOptions, setProjectOptions] = React.useState<ProjectOption[]>([]);
+
+  React.useEffect(() => {
+    let live = true;
+    setProjectOptions([]);
+    setProjectId("");
+    if (!toOwnerId) return;
+    api
+      .get<OperatingProjects>(`/api/v1/platform/merchants/${toOwnerId}/operating-projects`)
+      .then((view) => {
+        if (!live) return;
+        const options = [
+          ...(view.primaryProjectId ? [{ projectId: view.primaryProjectId, projectName: view.primaryProjectName }] : []),
+          ...(view.operatingProjects ?? []),
+        ];
+        setProjectOptions(options);
+        if (options.length === 1) setProjectId(options[0]?.projectId ?? "");
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [api, toOwnerId]);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -507,6 +536,7 @@ export function InventoryTransferWorkbenchPage({
   function createValidation(): string | null {
     if (!editingId && !fromOwnerId) return "请选择出让方。";
     if (!editingId && !toOwnerId) return "请选择接收方（商户）。";
+    if (!editingId && projectOptions.length > 1 && !projectId) return "请选择所属项目。";
     if (!editingId && transferType === "lending" && fromOwnerId === toOwnerId) return "借调的出让方与接收方不能是同一个商户。";
     // BSM L1201「不可消费物品（设备、器具等）的借用必须约定归还时间」。
     if (!editingId && transferType === "lending" && lendingMode === "borrow" && !returnDueAt) return "请填写约定归还时间。";
@@ -555,6 +585,7 @@ export function InventoryTransferWorkbenchPage({
         fromOwnerId,
         toOwnerType: "merchant",
         toOwnerId,
+        projectId: projectId || null,
         fromLocationId: transferType === "lending" ? fromLocationId.trim() : null,
         operatorNote: operatorNote || null,
         lines: [formLine()],
@@ -1135,6 +1166,14 @@ export function InventoryTransferWorkbenchPage({
               {merchants.map((row) => <option key={row.id} value={row.id}>{merchantName(row.id)}</option>)}
             </select>
           </label>
+          {projectOptions.length > 0 ? (
+            <label>所属项目（接收方商户的经营项目，只有一个时自动带）
+              <select data-testid="inventory-transfer-create-project" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+                <option value="">请选择</option>
+                {projectOptions.map((row) => <option key={row.projectId} value={row.projectId}>{row.projectName ?? row.projectId}</option>)}
+              </select>
+            </label>
+          ) : null}
           </>
           )}
           <label>物料

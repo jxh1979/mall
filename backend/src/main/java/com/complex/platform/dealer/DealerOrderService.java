@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -111,7 +111,7 @@ public class DealerOrderService {
     public DealerContractRecord updateContractTerms(String contractId, DealerContractTermsRequest request) {
         authorization.requirePermission(DealerService.MANAGE);
         try {
-            requireContract(contractId);
+            requireContract(contractId, DealerService.MANAGE);
             DealerContractRecord c = dealers.lockContract(contractId).orElseThrow();
             if (request == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "条款必填");
@@ -166,7 +166,7 @@ public class DealerOrderService {
 
     /** 门户已核验所属经销商；内部列表另按锁定订单项目过滤。 */
     PageResponse<DealerOrderRecord> listOrders(String dealerId, String permission) {
-        requireDealer(dealerId);
+        requireDealer(dealerId, permission);
         List<DealerOrderRecord> items = orders.listOrders(dealerId);
         if (VIEW.equals(permission)) {
             items = items.stream().filter(order -> canAccessOrderProject(order.id(), VIEW)).toList();
@@ -184,45 +184,45 @@ public class DealerOrderService {
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerOrderRecord getOrder(String orderId, String permission) {
-        return requireOrder(orderId);
+        return requireOrder(orderId, permission);
     }
 
     public PageResponse<DealerOrderLineRecord> listLines(String orderId) {
         authorization.requirePermission(VIEW);
-        requireOrder(orderId);
+        requireOrder(orderId, VIEW);
         requireOrderProject(orderId, VIEW);
         return listLines(orderId, VIEW);
     }
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     PageResponse<DealerOrderLineRecord> listLines(String orderId, String permission) {
-        requireOrder(orderId);
+        requireOrder(orderId, permission);
         return page(orders.listLines(orderId));
     }
 
     public PageResponse<DealerOrderPaymentRecord> listPayments(String orderId) {
         authorization.requirePermission(VIEW);
-        requireOrder(orderId);
+        requireOrder(orderId, VIEW);
         requireOrderProject(orderId, VIEW);
         return listPayments(orderId, VIEW);
     }
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     PageResponse<DealerOrderPaymentRecord> listPayments(String orderId, String permission) {
-        requireOrder(orderId);
+        requireOrder(orderId, permission);
         return page(orders.listPayments(orderId));
     }
 
     public PageResponse<DealerOrderRefundRecord> listRefunds(String orderId) {
         authorization.requirePermission(VIEW);
-        requireOrder(orderId);
+        requireOrder(orderId, VIEW);
         requireOrderProject(orderId, VIEW);
         return page(orders.listRefunds(orderId));
     }
 
     public PageResponse<DealerOrderOverpaymentRecord> listOverpayments(String dealerId) {
         authorization.requirePermission(VIEW);
-        requireDealer(dealerId);
+        requireDealer(dealerId, VIEW);
         return page(orders.listOverpayments(dealerId).stream()
                 .filter(overpayment -> canAccessOrderProject(overpayment.orderId(), VIEW)).toList());
     }
@@ -238,8 +238,8 @@ public class DealerOrderService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerOrderRecord createOrderDraft(String dealerId, DealerOrderDraftRequest request, String permission) {
         try {
-            DealerRecord dealer = requireActiveDealer(dealerId);
-            DealerContractRecord contract = requireContract(requireText(request == null ? null : request.dealerContractId(), "dealer_contract_id"));
+            DealerRecord dealer = requireActiveDealer(dealerId, permission);
+            DealerContractRecord contract = requireContract(requireText(request == null ? null : request.dealerContractId(), "dealer_contract_id"), permission);
             if (!contract.dealerId().equals(dealerId)) {
                 throw ApiException.badRequest("CONTRACT_DEALER_MISMATCH", "合同不属于该经销商");
             }
@@ -291,9 +291,9 @@ public class DealerOrderService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerOrderRecord submitOrder(String orderId, String idempotencyKey, String permission) {
         try {
-            DealerOrderRecord order = requireOrder(orderId);
+            DealerOrderRecord order = requireOrder(orderId, permission);
             requireStatus(order, "draft", "rejected");
-            DealerRecord dealer = requireActiveDealer(order.dealerId());
+            DealerRecord dealer = requireActiveDealer(order.dealerId(), permission);
             if (order.creditTerm() && dealer.creditSuspended()) {
                 throw ApiException.conflict("DEALER_CREDIT_SUSPENDED", "该经销商有逾期货款未结清，暂停新增账期订单（全款到账后发货的订单仍可提交）");
             }
@@ -317,7 +317,7 @@ public class DealerOrderService {
     public DealerOrderRecord reviewOrder(String orderId, DealerOrderDecisionRequest request) {
         authorization.requirePermission(REVIEW);
         try {
-            requireOrder(orderId);
+            requireOrder(orderId, REVIEW);
             DealerOrderRecord order = orders.lockOrder(orderId).orElseThrow();
             requireStatus(order, "pending_review");
             String decision = requireDecision(request == null ? null : request.decision());
@@ -334,7 +334,7 @@ public class DealerOrderService {
                     return saved;
                 }
                 DealerContractRecord contract = dealers.lockContract(order.dealerContractId()).orElseThrow();
-                requireActiveDealer(order.dealerId());
+                requireActiveDealer(order.dealerId(), REVIEW);
                 if (contract.validTo().isBefore(LocalDate.now()) || !"active".equals(contract.status())) {
                     throw ApiException.conflict("DEALER_CONTRACT_INVALID", "经销合同已到期或不可用");
                 }
@@ -399,7 +399,7 @@ public class DealerOrderService {
     @Transactional
     public DealerOrderPaymentRecord registerPayment(String orderId, DealerPaymentRequest request) {
         authorization.requirePermission(MANAGE);
-        requireOrder(orderId);
+        requireOrder(orderId, MANAGE);
         requireOrderProject(orderId, MANAGE);
         return registerPayment(orderId, request, MANAGE);
     }
@@ -407,7 +407,7 @@ public class DealerOrderService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerOrderPaymentRecord registerPayment(String orderId, DealerPaymentRequest request, String permission) {
         try {
-            DealerOrderRecord current = requireOrder(orderId);
+            DealerOrderRecord current = requireOrder(orderId, permission);
             String method = requireText(request == null ? null : request.method(), "method").trim().toLowerCase(Locale.ROOT);
             if (!PAYMENT_METHODS.contains(method)) {
                 throw ApiException.badRequest("PAYMENT_METHOD_FORBIDDEN", "经销货款只支持对公转账和平台线上支付，禁止现金和个人账户收款");
@@ -461,9 +461,9 @@ public class DealerOrderService {
     public DealerOrderPaymentRecord verifyPayment(String paymentId, DealerPaymentVerifyRequest request) {
         authorization.requirePermission(PAYMENT_VERIFY);
         try {
-            DealerOrderPaymentRecord payment = requirePayment(paymentId);
+            DealerOrderPaymentRecord payment = requirePayment(paymentId, PAYMENT_VERIFY);
             requireOrderProject(payment.orderId(), PAYMENT_VERIFY);
-            lockDealerForOrder(payment.orderId());
+            lockDealerForOrder(payment.orderId(), PAYMENT_VERIFY);
             DealerOrderRecord order = orders.lockOrder(payment.orderId()).orElseThrow();
             orders.lockPayment(payment.id());
             payment = orders.findPayment(payment.id()).orElseThrow();
@@ -627,7 +627,7 @@ public class DealerOrderService {
     /** 门户 / 内部共用实现：调用方已完成权限与归属核验，permission 只用于审计留痕；内部另按锁定订单项目过滤。 */
     DealerOrderRecord requestCancel(String orderId, DealerCancelRequest request, String permission) {
         try {
-            requireOrder(orderId);
+            requireOrder(orderId, permission);
             if (MANAGE.equals(permission)) {
                 requireOrderProject(orderId, MANAGE);
             }
@@ -834,14 +834,14 @@ public class DealerOrderService {
     public DealerOrderRefundRecord openRefundApproval(String refundId, DealerRefundApprovalRequest request) {
         authorization.requirePermission(PAYMENT_VERIFY);
         try {
-            DealerOrderRefundRecord found = requireRefund(refundId);
+            DealerOrderRefundRecord found = requireRefund(refundId, PAYMENT_VERIFY);
             requireOrderProject(found.orderId(), PAYMENT_VERIFY);
             return idempotency.execute("dealerRefundApproval:" + refundId, request == null ? null : request.idempotencyKey(), request, () -> {
                 DealerOrderRefundRecord refund = orders.lockRefund(refundId).orElseThrow();
                 if (!"pending_request".equals(refund.status()) && !"rejected".equals(refund.status())) {
                     throw ApiException.conflict("DEALER_REFUND_STATUS_INVALID", "只有待发起或已驳回的退款可以开启审批");
                 }
-                DealerOrderRecord order = requireOrder(refund.orderId());
+                DealerOrderRecord order = requireOrder(refund.orderId(), PAYMENT_VERIFY);
                 SupervisorReviewDecisionRecord review = reviews.evaluate(new SupervisorReviewEvaluateRequest(request.idempotencyKey() + ":review", refund.reason(),
                         List.of(), REFUND_ACTION, REFUND_OBJECT, refundId, refund.amountCent(), "经销订单 " + order.orderNo() + " 退款 " + refund.amountCent() + " 分：" + refund.reason(),
                         trim(request.finalApproverId()), List.of(), null));
@@ -885,7 +885,7 @@ public class DealerOrderService {
     public DealerOrderRefundRecord executeRefund(String refundId, DealerRefundExecuteRequest request) {
         authorization.requirePermission(REFUND_EXECUTE);
         try {
-            DealerOrderRefundRecord found = requireRefund(refundId);
+            DealerOrderRefundRecord found = requireRefund(refundId, REFUND_EXECUTE);
             requireOrderProject(found.orderId(), REFUND_EXECUTE);
             return idempotency.execute("dealerRefundExecute:" + refundId, request == null ? null : request.idempotencyKey(), request, () -> {
                 DealerOrderRefundRecord refund = orders.lockRefund(found.id()).orElseThrow();
@@ -893,7 +893,7 @@ public class DealerOrderService {
                 if (!"approved".equals(refund.status())) {
                     throw ApiException.conflict("DEALER_REFUND_NOT_APPROVED", "退款须经既有退款审批通过后才能办理");
                 }
-                DealerOrderPaymentRecord payment = requirePayment(refund.paymentId());
+                DealerOrderPaymentRecord payment = requirePayment(refund.paymentId(), REFUND_EXECUTE);
                 if (!"verified".equals(payment.status())) {
                     throw ApiException.conflict("DEALER_RECEIPT_UNVERIFIED", "须先核实原收款实际到账，待退款记录不代表已收款");
                 }
@@ -901,7 +901,7 @@ public class DealerOrderService {
                 if (Objects.equals(payment.verifiedBy(), actorId())) {
                     throw ApiException.forbidden("DEALER_SOD_SAME_PERSON", "退款办理人与到账核验人不得为同一人");
                 }
-                DealerOrderRecord order = requireOrder(refund.orderId());
+                DealerOrderRecord order = requireOrder(refund.orderId(), REFUND_EXECUTE);
                 requireOrderProject(payment.orderId(), REFUND_EXECUTE);
                 String projectId = requireOrderProject(order.id(), REFUND_EXECUTE);
                 String financeId = financeService.recordDealerOrderRefund(refund.id(), refund.amountCent(), payment.method(),
@@ -1009,7 +1009,7 @@ public class DealerOrderService {
         try {
             DealerOrderOverpaymentRecord original = orders.findOverpayment(requireText(overpaymentId, "overpayment_id"))
                     .orElseThrow(() -> ApiException.notFound("OVERPAYMENT_NOT_FOUND", "超收记录不存在"));
-            requireDealer(original.dealerId());
+            requireDealer(original.dealerId(), PAYMENT_VERIFY);
             String usage = requireText(request == null ? null : request.usage(), "usage");
             if (!Set.of("prepayment", "offset_order", "prepayment_offset").contains(usage)) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "用途须为转预付款、未分配款抵订单或预付款抵订单");
@@ -1025,7 +1025,7 @@ public class DealerOrderService {
             // 先核实同一经销商及销售主体，再锁共同经销商、编号排序的订单，最后沿原流程锁超收。
             List<String> orderIds = java.util.stream.Stream.of(original.orderId(), targetId).filter(Objects::nonNull).sorted().distinct().toList();
             orderIds.forEach(id -> {
-                DealerOrderRecord candidate = requireOrder(id);
+                DealerOrderRecord candidate = requireOrder(id, PAYMENT_VERIFY);
                 requireOrderProject(id, PAYMENT_VERIFY);
                 if (!candidate.dealerId().equals(original.dealerId()) || !candidate.salesEntityId().equals(original.salesEntityId())) {
                     throw ApiException.conflict("OVERPAYMENT_TARGET_MISMATCH", "只能抵扣该经销商向同一销售法律主体采购的订单");
@@ -1156,17 +1156,14 @@ public class DealerOrderService {
 
     // ── helpers ──
 
-    private DealerRecord requireDealer(String id) {
+    private DealerRecord requireDealer(String id, String permission) {
         DealerRecord dealer = dealers.findDealer(requireText(id, "dealer_id")).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        String scope = DealerPortalAccountService.projectScopeOf(authorization);
-        if (scope != null && dealer.projectId() != null && !scope.equals(dealer.projectId())) {
-            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权访问其他项目的经销商");
-        }
+        DealerPortalAccountService.requireDealerInReach(authorization, dealer, permission);
         return dealer;
     }
 
-    private DealerRecord requireActiveDealer(String id) {
-        DealerRecord dealer = requireDealer(id);
+    private DealerRecord requireActiveDealer(String id, String permission) {
+        DealerRecord dealer = requireDealer(id, permission);
         if (DealerService.DEACTIVATED.equals(dealer.status())) {
             throw ApiException.conflict("DEALER_DEACTIVATED", "经销商已停用，禁止新订单与门户内付款");
         }
@@ -1176,34 +1173,34 @@ public class DealerOrderService {
         return dealer;
     }
 
-    private DealerContractRecord requireContract(String id) {
+    private DealerContractRecord requireContract(String id, String permission) {
         DealerContractRecord contract = dealers.findContract(requireText(id, "dealer_contract_id"))
                 .orElseThrow(() -> ApiException.notFound("DEALER_CONTRACT_NOT_FOUND", "经销合同不存在"));
-        requireDealer(contract.dealerId());
+        requireDealer(contract.dealerId(), permission);
         return contract;
     }
 
     /** 调用入口先完成真实权限范围校验；所有信用状态写入须先持共同经销商锁，再锁订单并重读。 */
-    void lockDealerForOrder(String orderId) {
-        DealerOrderRecord candidate = requireOrder(orderId);
+    void lockDealerForOrder(String orderId, String permission) {
+        DealerOrderRecord candidate = requireOrder(orderId, permission);
         dealers.lockDealerCredit(candidate.dealerId()).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
     }
 
-    private DealerOrderRecord requireOrder(String id) {
+    private DealerOrderRecord requireOrder(String id, String permission) {
         DealerOrderRecord order = orders.findOrder(requireText(id, "order_id")).orElseThrow(() -> ApiException.notFound("DEALER_ORDER_NOT_FOUND", "经销订单不存在"));
-        requireDealer(order.dealerId());
+        requireDealer(order.dealerId(), permission);
         return order;
     }
 
-    private DealerOrderPaymentRecord requirePayment(String id) {
+    private DealerOrderPaymentRecord requirePayment(String id, String permission) {
         DealerOrderPaymentRecord payment = orders.findPayment(requireText(id, "payment_id")).orElseThrow(() -> ApiException.notFound("DEALER_PAYMENT_NOT_FOUND", "到账记录不存在"));
-        requireOrder(payment.orderId());
+        requireOrder(payment.orderId(), permission);
         return payment;
     }
 
-    private DealerOrderRefundRecord requireRefund(String id) {
+    private DealerOrderRefundRecord requireRefund(String id, String permission) {
         DealerOrderRefundRecord refund = orders.findRefund(requireText(id, "refund_id")).orElseThrow(() -> ApiException.notFound("DEALER_REFUND_NOT_FOUND", "退款记录不存在"));
-        requireOrder(refund.orderId());
+        requireOrder(refund.orderId(), permission);
         return refund;
     }
 

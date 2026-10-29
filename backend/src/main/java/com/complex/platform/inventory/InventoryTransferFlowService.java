@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -491,7 +491,8 @@ public class InventoryTransferFlowService {
                             payable = postPayable(o, dispositionId, amount, projectOf(o.id()), now);
                         } else if ("unreturnable".equals(type)) {
                             // FS-019：赔偿（登记时已保证≥数量×锁定内部结算价）形成借入方（to）对借出方（from）的应付，之后由应收应付台账独立跟进直到清偿。
-                            payable = postPayable(o, dispositionId, amount, projectOfMerchant(o.toOwnerId()), now);
+                            // 第十八批 G 段 82-R18a（第十八批裁决 18「赔偿应付……按单上的项目」）：记单上的所属项目。
+                            payable = postPayable(o, dispositionId, amount, o.projectId(), now);
                         } else if ("reship".equals(type)) {
                             reship = openReship(o, d, now);
                         } else if ("payment_adjustment".equals(type)) {
@@ -690,7 +691,7 @@ public class InventoryTransferFlowService {
         return "lending".equals(o.transferType()) && "borrow".equals(o.lendingMode());
     }
 
-    /** 借用单双方：商户账号须为借出方或借入方；非商户账号须能触及借入方所属项目（平台管理员恒可）。 */
+    /** 借用单双方：商户账号须为借出方或借入方；非商户账号须能触及单上的所属项目（平台管理员恒可）。 */
     private void requireParty(InventoryTransferOrderRecord o, String permission) {
         String merchant = auth.currentMerchantIdQuietly().orElse(null);
         if (merchant != null) {
@@ -704,10 +705,6 @@ public class InventoryTransferFlowService {
 
     private String merchantOf(String userId) {
         return jdbc.queryForList("SELECT merchant_id FROM access_users WHERE id=?", String.class, userId).stream().findFirst().orElse(null);
-    }
-
-    private String projectOfMerchant(String merchantId) {
-        return jdbc.queryForList("SELECT project_id FROM merchants WHERE id=?", String.class, merchantId).stream().findFirst().orElse(null);
     }
 
     /** 建单与草稿改单共用的明细写入：至少一行，数量大于 0，单价不为负。 */
@@ -775,7 +772,8 @@ public class InventoryTransferFlowService {
 
     /**
      * 单张借用单：加锁复核仍为已收货、已到期、未建过逾期工单，且还有尚未归还也未登记无法归还的数量（全部数量都已登记无法归还＝双方已在另行处理，
-     * 不建）。工单进统一物业工单（BSM:1372），类型其他、普通优先级、时限按「其他×普通」策略、待派单由客户关怀部派单（BSM:1385），记借出方与其项目；
+     * 不建）。工单进统一物业工单（BSM:1372），类型其他、普通优先级、时限按「其他×普通」策略、待派单由客户关怀部派单（BSM:1385），记借出方与单上的所属项目
+     * （第十八批 G 段 82-R18a，第十八批裁决 18「逾期工单都按单上的项目」）；
      * 单上回写工单号（防重、归还后结束催办）；同事务通知借出方主管（库存域「门店主管」口径：持 inventory.high_value.review 的借出方在用账号）。
      */
     @Transactional
@@ -805,7 +803,7 @@ public class InventoryTransferFlowService {
         String title = "借用逾期未归还：" + o.id();
         String description = "借入方：" + borrowerName + "；约定归还时间：" + DUE_TEXT.format(o.returnDueAt()) + "（北京时间）；未还："
                 + String.join("、", open) + "。";
-        FacilityWorkOrderRecord workOrder = workOrders.createLendingOverdue(projectOfMerchant(o.fromOwnerId()), o.fromOwnerId(), title, description);
+        FacilityWorkOrderRecord workOrder = workOrders.createLendingOverdue(o.projectId(), o.fromOwnerId(), title, description);
         jdbc.update("UPDATE inventory_transfer_orders SET overdue_work_order_id=? WHERE id=?", workOrder.id(), o.id());
         notifyLenderSupervisors(o, title, description + "已生成工单 " + workOrder.code() + "，请督促借入方归还或与对方另行处理。", now);
         audit.recordSuccess("inventory.transfer_order_overdue_work_order_created", "not_applicable", OBJECT_TYPE, o.id(), null, null,
@@ -894,7 +892,7 @@ public class InventoryTransferFlowService {
         return reload(o.id());
     }
 
-    /** 门店侧：商户账号只能办本商户的单；非商户账号须按该入口权限码能触及门店所属项目（平台管理员恒可）。 */
+    /** 门店侧：商户账号只能办本商户的单；非商户账号须按该入口权限码能触及单上的所属项目（平台管理员恒可）。 */
     private void requireStoreSide(InventoryTransferOrderRecord o, String permission) {
         String merchant = auth.currentMerchantIdQuietly().orElse(null);
         if (merchant != null) {
@@ -914,7 +912,7 @@ public class InventoryTransferFlowService {
         }
     }
 
-    /** 差异复核由财务办理：商户账号（含门店本店同事）不能复核；非商户财务须能触及门店所属项目。 */
+    /** 差异复核由财务办理：商户账号（含门店本店同事）不能复核；非商户财务须能触及单上的所属项目。 */
     private void requireFinanceReviewer(InventoryTransferOrderRecord o) {
         if (auth.currentMerchantIdQuietly().isPresent()) {
             throw ApiException.forbidden("FINANCE_REVIEW_ONLY", "差异处理须由财务复核，商户账号不能复核");
@@ -922,10 +920,9 @@ public class InventoryTransferFlowService {
         requireStoreProject(o, FINANCE_REVIEW);
     }
 
+    /** 第十八批 G 段 82-R18a（第十八批裁决 18「之后办理……都按单上的项目」）：按单上的所属项目判，不再取商户主项目。 */
     private void requireStoreProject(InventoryTransferOrderRecord o, String permission) {
-        String project = jdbc.queryForList("SELECT project_id FROM merchants WHERE id=?", String.class, o.toOwnerId()).stream()
-                .findFirst().orElse(null);
-        if (!auth.canReachProject(auth.currentActor(), project, permission)) {
+        if (!auth.canReachProject(auth.currentActor(), o.projectId(), permission)) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权办理其他项目门店的要货单");
         }
     }
@@ -1011,7 +1008,8 @@ public class InventoryTransferFlowService {
             throw new IllegalStateException(exception);
         }
         repository.saveTransferOrder(new InventoryTransferOrderRecord(id, "supply", null, o.fromOwnerType(), o.fromOwnerId(), o.toOwnerType(),
-                o.toOwnerId(), o.fromLocationId(), o.toLocationId(), "pending_picking", "补发：要货单 " + o.id(), null, now, now, List.of()));
+                o.toOwnerId(), o.fromLocationId(), o.toLocationId(), "pending_picking", "补发：要货单 " + o.id(), null, now, now, null,
+                o.projectId(), List.of()));
         repository.saveTransferLine(new InventoryTransferLineRecord(id + "_l0", id, line.itemId(), number(d, "quantity"), codes,
                 line.unitPriceCent(), now));
         recordEvent(id, null, "pending_picking", "补发自要货单 " + o.id() + " 差异处理 " + d.get("id"));
@@ -1113,7 +1111,7 @@ public class InventoryTransferFlowService {
     private InventoryTransferOrderRecord withLines(InventoryTransferOrderRecord o) {
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
-                o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), repository.listTransferLinesByOrder(o.id()));
+                o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), o.projectId(), repository.listTransferLinesByOrder(o.id()));
     }
 
     private static ApiException statusConflict() {

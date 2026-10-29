@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -6,7 +6,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
 import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
-import type { AdminPageProps, BusinessEntityRow } from "../types";
+import type { AdminPageProps, BusinessEntityRow, GovernanceProjectRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -141,7 +141,7 @@ const DEFAULT_LINES = ["business_review", "finance_review", "legal_review"];
  * 合同生命周期工作台（ADM-CONT-001，V162 重建）：起草 → 分组并行审批 → 生效固化 → 退租结算 + 审批链/到期着色配置。
  * 覆盖验收 ADM-CONT-001..008：起草/四级并行审批/固化快照/铺位着色配置/变更入口/退租结算/审批链配置。
  */
-export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
+export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
   const [flow, setFlow] = React.useState<FlowTemplate[]>([]);
   const [colorRules, setColorRules] = React.useState<ColorRule[]>([]);
@@ -153,7 +153,11 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
     commissionMode: "fixed_ratio", energyFeeBasis: "none",
     businessScope: "", allowedCategories: [] as string[],
     depositYuan: "",   // 第三轮裁决第 1 条：纯提成合同录入的合同约定押金（元）
+    projectId: "",   // 第十八批 G 段 82b-R3：所属项目（不选＝后端按意向铺位所在项目或本人所在项目落）
   });
+  // 第十八批 G 段 82b-R3（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
+  // 起草可选所属项目；能看到本人项目以外的项目就显示（复核：角色只勾了 B、只看得到 B 一个时也显示）。
+  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   const [spaceId, setSpaceId] = React.useState("");
   const [billPeriod, setBillPeriod] = React.useState("");
   const [colorForm, setColorForm] = React.useState({ categoryName: "", color: "#F59E0B", thresholdDays: "30" });
@@ -249,6 +253,10 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
       } catch {
         /* 无权限或接口失败 → 保持空字典 */
       }
+      try {
+        setProjects(hasPermissions(effectivePermissions, ["governance.project.view"])
+          ? (await api.get<GovernanceProjectRow[]>("/api/v1/platform/projects")) ?? [] : []);
+      } catch { setProjects([]); }
     },
     { onError: setGlobalError, fallbackMessage: "合同数据读取失败", onStart: () => setGlobalError(null) },
   );
@@ -286,6 +294,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
         allowedCategories: draft.allowedCategories.length ? draft.allowedCategories : undefined,
         // 第三轮裁决第 1 条：纯提成合同押金按合同约定金额录入；其余收租方式不传，押金由后端按「收取月数×签约月租」计算。
         depositCent: draft.rentBillingMode === "turnover_only" ? Math.round(Number(draft.depositYuan) * 100) : undefined,
+        ...(draft.projectId ? { projectId: draft.projectId } : {}),
       });
       setActionResult({ action: "contract_drafted", merchantId: draft.merchantId.trim() });
       setDraft({ ...draft, merchantId: "", baseRentYuan: "", perSqmYuan: "", parkingMonthlyYuan: "", businessScope: "", allowedCategories: [], depositYuan: "" });
@@ -798,6 +807,7 @@ export function ContractWorkbenchPage({ api, setActionResult, setGlobalError, ef
                     <option value="">缺省 = 合同主体</option>
                     {entities.map((en) => <option key={en.id} value={en.id}>{(en.entityName ?? en.id)}（{shortId(en.id)}）</option>)}
                   </select></label>
+                  {projects.some((x) => x.id !== user?.organizationId) ? <label>所属项目<select data-testid="contract-draft-project" aria-label="所属项目" value={draft.projectId} onChange={(e) => setDraft({ ...draft, projectId: e.target.value })}><option value="">本人所在项目</option>{projects.map((x) => <option key={x.id} value={x.id}>{x.name ?? x.id}</option>)}</select></label> : null}
                 </>
               ),
             },

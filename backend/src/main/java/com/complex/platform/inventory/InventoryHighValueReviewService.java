@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -365,6 +365,9 @@ public class InventoryHighValueReviewService {
             // 补写一条 inventory_stock_movements，否则此前 pending_review 阶段未写、approve 落账亦无流水，
             // "按流水重建库存"将缺这笔核减、内部人高价值报损无痕迹。
             // movement_type 忠实取 adjustment_type（报损族 loss/damage/waste、盘点差异 count_correction，均为减少 → 源库位出）。
+            // 第十八批 G 段 82b-R6（第十八批裁决 18「按业务发生地」）：流水记到该库存行（物品＋库位）所在项目，不是复核人本人项目。
+            String bookProject = repository.findStockBalanceProjectId(adjustment.itemId(), adjustment.locationId())
+                    .orElseGet(() -> authorizationService.currentProjectScopeQuietly().orElse(null));
             repository.saveStockMovement(new StockMovementRecord(
                     "movement_" + slug(adjustment.id() + ":hv_approve"),
                     adjustment.adjustmentType(),
@@ -383,7 +386,7 @@ public class InventoryHighValueReviewService {
                     "completed",
                     Instant.now(),
                     adjustment.merchantId()
-            ), authorizationService.currentProjectScopeQuietly().orElse(null));
+            ), bookProject);
             repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "completed"));
         }
     }

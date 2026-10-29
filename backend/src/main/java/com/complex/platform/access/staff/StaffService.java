@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -1448,7 +1448,9 @@ public class StaffService {
             if (request == null || request.month() == null || !request.month().matches("\\d{4}-\\d{2}")) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
             }
-            int created = doCloseCommissionSettlement(request.month());
+            var reach = reachOf("staff.payroll.manage");
+            int created = doCloseCommissionSettlement(request.month(), staffMerchantScope(), staffOwnCompany(reach),
+                    staffProjectIds(reach));
             auditEventService.recordSuccess("staff.commission_settlement.closed", "staff.payroll.manage",
                     "bar_commission_settlement", request.month(), null, request.idempotencyKey(),
                     Map.of("month", request.month(), "settlements", created));
@@ -1465,8 +1467,11 @@ public class StaffService {
      * 每组（酒吧, 所属主体）：先写月结记录（同键已存在则跳过，重复月结不重复挂账），再向台账追加一条
      * direction=payable、source_type=dispatch_commission_transfer 的应付：counterparty=人员所属主体，merchant=酒吧，
      * 金额=该月派驻人员提成合计（总额收付、不轧差），到期=月末后的下一个付账日，会计期间=该月。
+     * 第十八批 G 段 82a-R3（cg-pending-decisions 第 20 条「由持有有效工资管理权限且在授权范围内的人员人工触发月结」）：
+     * 只结本人范围内的组（{@link #settlementInScope}，与清单同口径）；范围外的组留给有权的人结。
      */
-    private int doCloseCommissionSettlement(String month) {
+    private int doCloseCommissionSettlement(String month, String merchantScope, String ownCompany,
+                                            java.util.Set<String> projectIds) {
         if (financeRepository == null) {
             throw ApiException.conflict("FINANCE_LEDGER_UNAVAILABLE", "应收应付台账未接入，不得月结");
         }
@@ -1479,6 +1484,9 @@ public class StaffService {
             String merchantId = (String) row.get("merchant_id");
             String companyId = (String) row.get("company_id");
             String projectId = (String) row.get("project_id");
+            if (!settlementInScope(merchantScope, ownCompany, projectIds, merchantId, companyId, projectId)) {
+                continue;
+            }
             long amountCent = ((Number) row.get("amount_cent")).longValue();
             if (amountCent <= 0L) {
                 continue;
@@ -1526,10 +1534,33 @@ public class StaffService {
         if (month == null || !month.matches("\\d{4}-\\d{2}")) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写月份，格式 YYYY-MM");
         }
-        java.util.List<BarCommissionSettlementRecord> items = repository.listCommissionSettlements(month, projectScope());
+        var reach = reachOf("staff.payroll.manage");
+        String merchantScope = staffMerchantScope();
+        String ownCompany = staffOwnCompany(reach);
+        java.util.Set<String> projectIds = staffProjectIds(reach);
+        // ponytail: 取当月全部行后内存过滤（每月行数＝有派驻提成的（酒吧, 主体）组数）；组数多到成负担时下推 SQL
+        java.util.List<BarCommissionSettlementRecord> items = repository.listCommissionSettlements(month).stream()
+                .filter(row -> settlementInScope(merchantScope, ownCompany, projectIds, row.merchantId(), row.companyId(),
+                        row.projectId()))
+                .toList();
         auditEventService.recordSuccess("staff.commission_settlement.viewed", "staff.payroll.manage",
                 "bar_commission_settlement", month, null, null, Map.of("count", items.size()));
         return page(items);
+    }
+
+    /**
+     * 第十八批 G 段第 82 条（82a-R2、R3；治理地图第 659 行「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」「在所分配的权限内
+     * 可以查看、处理该角色可查看项目的数据」；M738-iter1 人事两套口径；XM-M001-D 答复 3 第 10 条商户账号只按商户；cg-pending-decisions
+     * 第 20 条「在授权范围内的人员人工触发月结」）：提成月结拨付的一组（酒吧, 收款主体, 派驻项目）在不在本人范围内，清单与月结同用。
+     * 平台管理员三个范围皆空＝全部；商户账号只本商户（含各经营项目）；其余人员本人那一份按收款主体＝本公司，
+     * 经可跨项目角色的那一份按派驻项目在可触及项目内；两者都没有的一组也不在范围内。
+     */
+    private static boolean settlementInScope(String merchantScope, String ownCompany, java.util.Set<String> projectIds,
+                                             String merchantId, String companyId, String projectId) {
+        return (merchantScope == null || merchantScope.equals(merchantId))
+                && ((ownCompany == null && projectIds == null)
+                || (ownCompany != null && ownCompany.equals(companyId))
+                || (projectIds != null && projectId != null && projectIds.contains(projectId)));
     }
 
     private static java.time.LocalDate parseDate(String value, String label) {

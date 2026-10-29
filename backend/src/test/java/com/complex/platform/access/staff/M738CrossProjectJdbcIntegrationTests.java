@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -678,6 +678,115 @@ class M738CrossProjectJdbcIntegrationTests {
         assertThat(pendingReviews(viewerA)).doesNotContain(review);
         denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + review).with(viewerA)), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
         assertThat(pendingReviews(approverB)).contains(review);
+    }
+
+    // 82a-R2（第十八批 G 段第 82 条；治理地图第 659 行「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」「在所分配的权限内可以查看、
+    // 处理该角色可查看项目的数据」；2026-09-24 M738-iter1 所选选项原文一；XM-M001-D 答复 3 第 10 条「要把财务、员工排班等列表对商户账号改为
+    // 只按商户过滤」）：提成月结拨付清单按本公司（收款主体）、可触及项目（派驻项目）、本商户（酒吧）过滤。夹具直插 2099-03 的四行月结记录：
+    // r1（本商户 ma1→A，项目 A）、r2（别家酒吧→P，项目 A）、r3（B 的酒吧→B，项目 B）、r4（B 的酒吧→A，项目 B）。
+    // 修复前本公司人事拿到四行（第一处断言即红）。
+    @Test
+    void commissionSettlementsFollowOwnCompanyReachableProjectAndOwnMerchant() throws Exception {
+        String code = "staff.payroll.manage";
+        String mA1 = merchant("ma1", entityA);
+        String r1 = settlementRow("r1", mA1, entityA, entityA);
+        String r2 = settlementRow("r2", "mch_m738_ma2_" + suffix, entityP, entityA);
+        String r3 = settlementRow("r3", "mch_m738_mb_" + suffix, entityB, entityB);
+        String r4 = settlementRow("r4", "mch_m738_mb_" + suffix, entityA, entityB);
+
+        // 修复前红：本公司人事看到 r1～r4
+        assertThat(settlements(staffOfA("hr", plainRole("hr", code)))).containsExactlyInAnyOrder(r1, r4);
+        // 只勾 B 的持有人：派驻项目在 B 的
+        assertThat(settlements(staffOfA("tb", tickedBRole("tb", code)))).containsExactlyInAnyOrder(r3, r4);
+        // 商户账号：只本商户（修复前 r1、r2）
+        assertThat(settlements(account("ma", "staff", entityA, mA1, plainRole("ma", code)))).containsExactly(r1);
+        // 平台管理员：全部（守护）
+        assertThat(settlements(account("pa", "platform_admin", entityA, null, plainRole("pa", code))))
+                .containsExactlyInAnyOrder(r1, r2, r3, r4);
+    }
+
+    // 82a-R3（docs/decisions/2026-10-18-cg-pending-decisions.md 第 20 条「由持有有效工资管理权限且在授权范围内的人员人工触发月结」；
+    // 治理地图第 659 行同上）：提成月结拨付只结本人范围内的（酒吧, 主体）组，与清单同一口径；范围外的组留给有权的人结，同组不重复挂账。
+    // 夹具：A 公司员工 ea 派驻到 B 项目的酒吧 mb（组 G1＝mb→A）、B 公司员工 eb 派驻到 B 项目的酒吧 mb2（组 G2＝mb2→B），2099-04 各一笔已结账计提。
+    // 请求体按前端（{month}，客户端补 idempotency_key、转蛇形）。修复前 A 公司人事一次结了两组（第一处断言即红）。
+    @Test
+    void commissionCloseSettlesOnlyGroupsInOwnScope() throws Exception {
+        String ea = employee("ea", entityA);
+        String eb = employee("eb", entityB);
+        String mb = merchant("mb", entityB);
+        String mb2 = merchant("mb2", entityB);
+        dispatchedCommission("g1", ea, entityA, mb, entityB);
+        dispatchedCommission("g2", eb, entityB, mb2, entityB);
+        RequestPostProcessor hr = staffOfA("hr", plainRole("hr", "staff.payroll.manage"));
+
+        // 修复前红：settlements=2
+        closeCommissions(hr).andExpect(status().isOk()).andExpect(jsonPath("$.data.settlements").value(1));
+        assertThat(settledGroups(mb, mb2)).containsExactly(mb + "/" + entityA);
+        assertThat(transferPayees(mb, mb2)).containsExactly(entityA);
+        // 只勾 B 的持有人：G1、G2 都在范围内，G1 已结不重复
+        closeCommissions(staffOfA("tb", tickedBRole("tb", "staff.payroll.manage")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.settlements").value(1));
+        assertThat(settledGroups(mb, mb2)).containsExactlyInAnyOrder(mb + "/" + entityA, mb2 + "/" + entityB);
+        // 再结一次：0 组、行数不变
+        closeCommissions(hr).andExpect(status().isOk()).andExpect(jsonPath("$.data.settlements").value(0));
+        assertThat(settledGroups(mb, mb2)).hasSize(2);
+        assertThat(transferPayees(mb, mb2)).containsExactlyInAnyOrder(entityA, entityB);
+    }
+
+    /** 82a-R2：一条 2099-03 的提成月结记录（酒吧、收款主体、派驻项目按用例给定），返回编号。 */
+    private String settlementRow(String tag, String merchantId, String companyId, String projectId) {
+        String id = "bcs_m738_" + tag + "_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO bar_commission_settlements (id, month, merchant_id, company_id, project_id, amount_cent, calculation_count,
+                        staff_count, due_date, created_by, created_at)
+                VALUES (?, '2099-03', ?, ?, ?, 1000, 1, 1, DATE '2099-04-05', 'usr_m738', now())
+                """, id, merchantId, companyId, projectId);
+        return id;
+    }
+
+    private List<String> settlements(RequestPostProcessor session) throws Exception {
+        return mine(session, "/api/v1/staff/commission-settlements?month=2099-03", "$.data.items[*].id");
+    }
+
+    /** 82a-R3：员工（所属主体 companyId）派驻到酒吧（派驻项目 projectId），2099-04-10 在该酒吧一笔已结账、已计提的提成 3000 分。 */
+    private void dispatchedCommission(String tag, String userId, String companyId, String merchantId, String projectId) {
+        String table = "tbl_m738_" + tag + "_" + suffix;
+        String order = "ord_m738_" + tag + "_" + suffix;
+        String bill = "bill_m738_" + tag + "_" + suffix;
+        jdbcTemplate.update("INSERT INTO bar_tables (id, bar_id, table_code, table_name, table_type, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, 'M738 卡座', 'booth', 'available', now(), now())", table, merchantId, table);
+        jdbcTemplate.update("INSERT INTO bar_orders (id, bar_id, table_id, order_source, status, total_amount_cent, currency,"
+                + " created_at, updated_at, order_type) VALUES (?, ?, ?, 'staff', 'settled', 100000, 'CNY',"
+                + " TIMESTAMPTZ '2099-04-10 12:00:00+00', now(), 'standard')", order, merchantId, table);
+        jdbcTemplate.update("INSERT INTO bar_bills (id, bill_no, order_id, bar_id, table_id, subtotal_amount_cent, payable_amount_cent,"
+                + " paid_amount_cent, currency, payment_status, settlement_status, created_at, updated_at, merchant_id, sales_staff_id)"
+                + " VALUES (?, ?, ?, ?, ?, 100000, 100000, 100000, 'CNY', 'paid', 'settled', now(), now(), ?, ?)",
+                bill, bill, order, merchantId, table, merchantId, userId);
+        jdbcTemplate.update("INSERT INTO bar_commission_calculations (id, bill_id, sales_staff_id, sales_role_type, commission_base_cent,"
+                + " commission_rate_bp, commission_amount_cent, status, created_at)"
+                + " VALUES (?, ?, ?, 'staff_sales', 100000, 300, 3000, 'calculated', TIMESTAMPTZ '2099-04-10 12:00:00+00')",
+                "cm_m738_" + tag + "_" + suffix, bill, userId);
+        jdbcTemplate.update("INSERT INTO staff_dispatch_records (id, user_id, company_id, merchant_id, project_id, start_date, status, created_at)"
+                + " VALUES (?, ?, ?, ?, ?, DATE '2099-04-01', 'active', now())",
+                "dsp_m738_" + tag + "_" + suffix, userId, companyId, merchantId, projectId);
+    }
+
+    private ResultActions closeCommissions(RequestPostProcessor session) throws Exception {
+        return postJson(session, "/api/v1/staff/commission-settlements/close", """
+                {"idempotency_key": "%s", "month": "2099-04"}
+                """.formatted(key()));
+    }
+
+    /** 两家夹具酒吧 2099-04 已落的月结组（酒吧/收款主体）。 */
+    private List<String> settledGroups(String bar1, String bar2) {
+        return jdbcTemplate.queryForList("SELECT merchant_id || '/' || company_id FROM bar_commission_settlements"
+                + " WHERE month = '2099-04' AND merchant_id IN (?, ?)", String.class, bar1, bar2);
+    }
+
+    /** 两家夹具酒吧的拨付应付的收款主体。 */
+    private List<String> transferPayees(String bar1, String bar2) {
+        return jdbcTemplate.queryForList("SELECT counterparty_id FROM ar_ap_items WHERE source_type = 'dispatch_commission_transfer'"
+                + " AND merchant_id IN (?, ?)", String.class, bar1, bar2);
     }
 
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-# T1 员工三表 可编码开发规格 V0.17（2026-06-18）
+# T1 员工三表 可编码开发规格 V0.18（2026-06-18）
 
 > **任务**：R5 backlog **T1（员工档案/设备凭证/通知三表）**，W0 底座，**解锁 T9（Android 设备凭证）**。
 > **裁决依据**：R5 裁决⑨——员工三表 + Android 端凭证本期 P0；MDM 自有侧字段暂缓。
@@ -162,8 +162,8 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | POST | /api/v1/staff/dispatches | staff.profile.review | 仅平台侧获授权人员登记派驻，校验员工、目标商户及项目组织范围，不允许商户账号自行登记；员工 → 派驻酒吧，所属主体取自档案所属公司；同员工同酒吧只允许一条进行中，幂等键必填；不因平台管理员称谓自动获得授权、不限定顶层公司独占 |
 | POST | /api/v1/staff/dispatches/{dispatch_id}/end | staff.profile.review | CG-07 结束派驻（结束日期缺省当日，事由必填，幂等键必填）|
 | GET | /api/v1/staff/dispatches | staff.profile.view | CG-07 派驻记录列表（商户角色只见本商户）|
-| POST | /api/v1/staff/commission-settlements/close | staff.payroll.manage | CG-07 提成月结拨付：按（酒吧 → 所属主体 → 月）汇总派驻人员提成，生成 `dispatch_commission_transfer` 应付；同组不重复挂账 |
-| GET | /api/v1/staff/commission-settlements | staff.payroll.manage | CG-07 该月拨付记录（金额、笔数、人数、到期付账日、应付台账项）|
+| POST | /api/v1/staff/commission-settlements/close | staff.payroll.manage | CG-07 提成月结拨付：按（酒吧 → 所属主体 → 月）汇总派驻人员提成，生成 `dispatch_commission_transfer` 应付；同组不重复挂账；只结本人授权范围内的组（本公司／可触及项目／本商户） |
+| GET | /api/v1/staff/commission-settlements | staff.payroll.manage | CG-07 该月拨付记录（金额、笔数、人数、到期付账日、应付台账项），只见本人授权范围内的行（本公司／可触及项目／本商户）|
 
 > **本轮批准口径及待实现边界（2026-10-17，PGM V0.41「员工和手机」「提成发放和人员服务治理」）**：人力操作及申诉的主线是员工直属领导起的三个组织层级（如领班、主管、部门经理），HR 另走平行线。不可自审、权限及组织范围校验不得改成剔除人员后向更高层另凑三人；配置缺失或不合法时保持待处理，按既有审批规则补齐。HR 持有 `staff.hr.review` 只是资格之一，须同时匹配员工所属部门和合法组织范围。已发工资月份的扣罚获准撤销后，按原月锁定计薪规则及原扣罚上限复算真实少发额，保留原工资单与付款，另记关联补差，在下一次应发工资单列补发，不机械补名义处罚全额，不延误法定支付时限及离职结清。以上为目标要求；旧实现的随单 HR 指定、派驻/状态发起校验和仅冲回原调整不能视为已经满足，须另行实现与验证。本次文档同步不修改代码或迁移。
 
@@ -228,3 +228,4 @@ CG-12：`staff.profile.employment_status_change_requested`（发起）→ `staff
 | 2026-08-06 | 增 §4 跨月／跨周／跨年班次归属口径：工时、考勤、请假与年假额度/全勤等年度指标一律归**班次结束时点**所在月份与年度；法定节假日加班同按班次结束时点所在自然日整班认定、不拆半程；明确这是营业日归口清单里「考勤日期」一项的唯一例外，`work_date` 不构成归属月份 | 第四批草案 §F 落点 9/25/27（矛盾12 ＋ 矛盾11 联动）；用户 2026-08-06 裁决 |
 | 2026-10-18 | 第六批复核修复：V492 `staff_leave_requests` 增 status=revoked（已销假）与 `revoked_by`/`revoked_at`/`revoke_reason`（销假留痕；`reviewed_by`/`review_note` 保留原审批），销假前取 staff-payroll:<user> 员工锁再判已定格月份 | BSM L1481「销假或撤销发生在已月结定格月份之后的，在当期薪资单冲正并注明来源，不回改已定格月份。只有主管批准的请假才参与扣薪」 |
 | 2026-10-18 | 版本升 V0.17；第六批第二轮（取代上一行「主管直接销」）：V492 就地改为 V0.03——`staff_leave_requests` status 集增 `revoke_requested`（待销假审批）/`revoked`（已销假）；申请留痕三列 `revoke_requested_by`/`revoke_requested_at`/`revoke_request_reason`（员工本人；驳回后保留为最近一次申请痕迹，再次申请时覆盖），批准留痕 `revoked_by`/`revoked_at`/`revoke_reason`；`reviewed_by`/`review_note` 原审批留痕不覆盖。入口：`POST /api/v1/staff/leaves/{id}/revoke-request`（员工本人对自己已批准的假申请销假，理由必填，`staff.leave.submit`）与 `POST /api/v1/staff/leaves/{id}/revoke`（排班主管 decision=approve/reject，`staff.shift.manage`，仅对 revoke_requested 办理）；批准即生效：取 staff-payroll:<user> 员工锁后转 revoked，事假已计入定格月份的发 `leave_revoked` 补差在当期薪资单冲正并注明来源；驳回回到 approved、假仍有效 | 2026-10-18 操作员裁决补充第 1 条「销假：本人申请＋主管批准……原审批留痕不覆盖」；BSM L1481「只有主管批准的请假才参与扣薪」 |
+| 2026-10-29 | 版本升 V0.18；第十八批 G 段第 82 条（82a-R2、82a-R3）：提成月结拨付清单与月结按码 `staff.payroll.manage` 同一范围——平台管理员全部；商户账号只本商户（酒吧）；其余人员本公司人事按收款主体（company_id）为本公司、经可跨项目角色持有本码的按派驻项目（project_id）在可触及项目内；月结只结范围内的组，范围外的组留给有权的人结；`JdbcStaffRepository.listCommissionSettlements` 去掉项目参数、只按月取，由服务层过滤 | `decisions/2026-10-18-cg-pending-decisions.md` 第 20 条；M738-iter1 所选选项原文一；XM-M001-D 答复 3 第 10 条；PGM L659；BSM L1143 |

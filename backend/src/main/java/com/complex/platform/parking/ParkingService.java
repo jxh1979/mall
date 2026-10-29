@@ -1,11 +1,12 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -17,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -249,7 +249,8 @@ public class ParkingService {
     }
 
     /**
-     * 所属主体登记：商户账号只能登记本商户员工；非商户账号只能登记同一归属（organization）下、不属任何商户的员工，平台管理员不受限。
+     * 所属主体登记：商户账号只能登记本商户员工；非商户账号只能登记按 parking.vehicle.manage 可触及的（含可跨项目角色勾选的项目，
+     * 第十八批 G 段 82b-R5）、不属任何商户的员工，平台管理员不受限。
      * 员工账号须在职（active）；同项目同车牌只有一条有效。
      */
     @Transactional
@@ -260,7 +261,7 @@ public class ParkingService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请填写员工与车牌");
             }
             String project = reachableProject(requireText(r.projectId(), "project_id"), VEHICLE);
-            Map<String, Object> staff = jdbc.queryForList("SELECT organization_id, merchant_id, status FROM access_users WHERE id=?",
+            Map<String, Object> staff = jdbc.queryForList("SELECT id, username, account_type, organization_id, merchant_id, status FROM access_users WHERE id=?",
                     requireText(r.userId(), "user_id")).stream().findFirst()
                     .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "员工账号不存在"));
             AccessActor actor = actor();
@@ -268,7 +269,9 @@ public class ParkingService {
             String staffMerchant = (String) staff.get("merchant_id");
             boolean owned = merchant != null ? merchant.equals(staffMerchant)
                     : auth.currentProjectScopeQuietly().isEmpty()
-                            || (staffMerchant == null && java.util.Objects.equals(actor.organizationId(), staff.get("organization_id")));
+                            || (staffMerchant == null && auth.canReachUser(actor, new AccessUser((String) staff.get("id"),
+                                    (String) staff.get("username"), (String) staff.get("account_type"),
+                                    (String) staff.get("organization_id"), null, (String) staff.get("status"), null), VEHICLE));
             if (!owned) {
                 throw ApiException.forbidden("PARKING_STAFF_NOT_OWNED", "只能登记本主体的员工车辆");
             }
@@ -320,18 +323,9 @@ public class ParkingService {
 
     // ============ 内部 ============
 
-    /** 项目：未指定取本人项目（平台管理员须指定）；须在该权限的可达范围内。 */
+    /** 项目：未指定取本人项目（平台管理员须指定）；须在该权限的可达范围内（见 {@link AuthorizationService#requireReachableProject}）。 */
     public String reachableProject(String requested, String permission) {
-        auth.requirePermission(permission);
-        String project = trimToNull(requested);
-        if (project == null) {
-            Optional<String> scope = auth.currentProjectScopeQuietly();
-            project = scope.orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目"));
-        }
-        if (!auth.canReachProject(auth.currentActor(), project, permission)) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "停车场不在授权项目范围内");
-        }
-        return project;
+        return auth.requireReachableProject(requested, permission, "停车场不在授权项目范围内");
     }
 
     static String plate(String raw) {

@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -167,6 +167,11 @@ public class FacilityAlarmService {
     public FacilityAlarmDutyRecord assignDuty(FacilityAlarmDutyRequest request) {
         try {
             authorizationService.requirePlatformScope();
+            // 第十八批 G 段 82b-R1：范围闸在幂等之前（先无锁读班次所属项目）。
+            String requestedShift = request == null ? null : trimToNull(request.shiftId());
+            if (requestedShift != null) {
+                repository.findShift(requestedShift).ifPresent(shift -> requireReach(shift.projectId(), MANAGE));
+            }
             return idempotencyService.execute("facilityAlarmDutyAssign", request == null ? null : request.idempotencyKey(),
                     request, () -> {
                         String shiftId = requireText(request.shiftId(), "shift_id");
@@ -204,6 +209,7 @@ public class FacilityAlarmService {
     public FacilityAlarmDutyRecord cancelDuty(String dutyId, FacilityAlarmDutyCancelRequest request) {
         try {
             authorizationService.requirePlatformScope();
+            repository.findDuty(dutyId, false).ifPresent(duty -> requireReach(duty.projectId(), MANAGE)); // 82b-R1：在幂等之前
             return idempotencyService.execute("facilityAlarmDutyCancel:" + dutyId,
                     request == null ? null : request.idempotencyKey(), request, () -> {
                         FacilityAlarmDutyRecord duty = repository.findDuty(dutyId, true)
@@ -226,7 +232,7 @@ public class FacilityAlarmService {
 
     public PageResponse<FacilityAlarmDutyRecord> listDuties(String projectId) {
         authorizationService.requirePlatformScope();
-        List<FacilityAlarmDutyRecord> items = repository.listDuties(trimToNull(projectId));
+        List<FacilityAlarmDutyRecord> items = repository.listDuties(reachable(trimToNull(projectId), MANAGE));
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -396,7 +402,7 @@ public class FacilityAlarmService {
     /** 后台接警记录：接警单带逐次联系与接手明细。 */
     public PageResponse<FacilityAlarmRecord.Detail> listAlarms() {
         authorizationService.requirePlatformScope();
-        List<FacilityAlarmRecord> alarms = repository.listAlarms();
+        List<FacilityAlarmRecord> alarms = repository.listAlarms(reachable(null, MANAGE));
         List<String> ids = alarms.stream().map(FacilityAlarmRecord::id).toList();
         Map<String, List<FacilityAlarmRecord.Attempt>> attempts = repository.listAttempts(ids).stream()
                 .collect(Collectors.groupingBy(FacilityAlarmRecord.Attempt::alarmId));
@@ -483,12 +489,46 @@ public class FacilityAlarmService {
                 .orElse(alarm.equipmentId());
     }
 
+    /**
+     * 第十八批 G 段 82b-R1（治理地图第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」；
+     * 裁决 M737-iter7「行本身没有项目的不出」）：值守安排、故障处置规则所属项目须在入口权限码可触及范围内（平台管理员不限），
+     * 项目为空的只给平台管理员；否则 403 CROSS_PROJECT_FORBIDDEN。
+     */
+    private void requireReach(String projectId, String code) {
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), projectId, code)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该记录不在本权限可触及的项目范围内");
+        }
+    }
+
+    /**
+     * 82b-R1：列表在库里按项目集合查（null＝不限，只给平台管理员），范围外的行不占 500 条名额。请求带项目的须在可触及范围内，
+     * 否则 403 CROSS_PROJECT_FORBIDDEN；不带的取全部可触及项目。
+     */
+    private Collection<String> reachable(String project, String code) {
+        AuthorizationService.ProjectReach reach = authorizationService.projectReach(authorizationService.currentActor(), code);
+        if (project != null) {
+            if (!reach.covers(project)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
+            }
+            return List.of(project);
+        }
+        return reach.platformAdmin() ? null : reach.organizationIds();
+    }
+
     // ================================================================ R7 故障处置规则
 
     /** 建档：按设备登记时项目与分类取设备台账；建档即待两方确认，确认前不覆盖任何告警。 */
     public FacilityAlarmRecord.FaultRule createFaultRule(FacilityFaultRuleRequest request) {
         try {
             authorizationService.requirePlatformScope();
+            if (request != null) { // 82b-R1：范围闸在幂等之前（带设备的取设备项目，否则请求项目；缺项目由执行体照旧 400）
+                String equipment = trimToNull(request.equipmentId());
+                String project = equipment == null ? trimToNull(request.projectId())
+                        : repository.findEquipment(equipment).map(JdbcFacilityAlarmRepository.EquipmentRow::projectId).orElse(null);
+                if (project != null) {
+                    requireReach(project, MANAGE);
+                }
+            }
             return idempotencyService.execute("facilityFaultRuleCreate", request == null ? null : request.idempotencyKey(),
                     request, () -> {
                         String equipmentId = trimToNull(request.equipmentId());
@@ -530,6 +570,7 @@ public class FacilityAlarmService {
             boolean vendor = authorizationService.isOutsourcedVendor(actor);
             if (!vendor) {
                 authorizationService.requirePlatformScope();
+                repository.findFaultRule(ruleId, false).ifPresent(rule -> requireReach(rule.projectId(), CONFIRM_RULE)); // 82b-R1
             }
             return idempotencyService.execute("facilityFaultRuleConfirm:" + ruleId,
                     request == null ? null : request.idempotencyKey(), request, () -> {
@@ -562,6 +603,7 @@ public class FacilityAlarmService {
     public FacilityAlarmRecord.FaultRule retireFaultRule(String ruleId, FacilityFaultRuleActionRequest request) {
         try {
             authorizationService.requirePlatformScope();
+            repository.findFaultRule(ruleId, false).ifPresent(rule -> requireReach(rule.projectId(), MANAGE)); // 82b-R1：在幂等之前
             return idempotencyService.execute("facilityFaultRuleRetire:" + ruleId,
                     request == null ? null : request.idempotencyKey(), request, () -> {
                         FacilityAlarmRecord.FaultRule rule = repository.findFaultRule(ruleId, true)
@@ -584,13 +626,14 @@ public class FacilityAlarmService {
     /** 维保单位只看本项目规则；平台侧可按项目筛。 */
     public PageResponse<FacilityAlarmRecord.FaultRule> listFaultRules(String projectId) {
         AccessActor actor = authorizationService.currentActor();
-        String project = trimToNull(projectId);
+        Collection<String> projects;
         if (authorizationService.isOutsourcedVendor(actor)) {
-            project = authorizationService.requireProjectScope(actor);
+            projects = List.of(authorizationService.requireProjectScope(actor));
         } else {
             authorizationService.requirePlatformScope();
+            projects = reachable(trimToNull(projectId), MANAGE);
         }
-        List<FacilityAlarmRecord.FaultRule> items = repository.listFaultRules(project);
+        List<FacilityAlarmRecord.FaultRule> items = repository.listFaultRules(projects);
         return new PageResponse<>(items, 1, 500, items.size());
     }
 

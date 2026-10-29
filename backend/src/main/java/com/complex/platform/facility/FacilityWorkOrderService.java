@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -15,6 +15,7 @@ import com.complex.platform.facility.dto.FacilityWorkOrderConfirmerRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderPolicyRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderReassignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
+import com.complex.platform.governance.PlatformService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -67,12 +68,13 @@ public class FacilityWorkOrderService {
     private final FacilityAlarmService alarmService;
     private final AccessRepository accessRepository;
     private final IdempotencyService idempotencyService;
+    private final PlatformService platformService;
 
     @Autowired
     public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
             AuditEventService auditEventService, AuthorizationService authorizationService,
             FacilityInspectionRepository inspectionRepository, FacilityAlarmService alarmService,
-            AccessRepository accessRepository, IdempotencyService idempotencyService) {
+            AccessRepository accessRepository, IdempotencyService idempotencyService, PlatformService platformService) {
         this.repository = repository;
         this.facilityRepository = facilityRepository;
         this.inspectionRepository = inspectionRepository;
@@ -81,6 +83,16 @@ public class FacilityWorkOrderService {
         this.alarmService = alarmService;
         this.accessRepository = accessRepository;
         this.idempotencyService = idempotencyService;
+        this.platformService = platformService;
+    }
+
+    /** 测试与内部装配用：不带平台服务（人工新建工单照旧取请求里的项目，见 {@link #landingProject}）。 */
+    public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
+            AuditEventService auditEventService, AuthorizationService authorizationService,
+            FacilityInspectionRepository inspectionRepository, FacilityAlarmService alarmService,
+            AccessRepository accessRepository, IdempotencyService idempotencyService) {
+        this(repository, facilityRepository, auditEventService, authorizationService, inspectionRepository, alarmService,
+                accessRepository, idempotencyService, null);
     }
 
     public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
@@ -107,7 +119,7 @@ public class FacilityWorkOrderService {
         AccessActor actor = requireScopeActor();
         List<FacilityWorkOrderRecord> items = authorizationService.isOutsourcedVendor(actor)
                 ? repository.listAssignedTo(actor.id(), authorizationService.requireProjectScope(actor))
-                : repository.list();
+                : inReach(repository.list());
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -124,7 +136,7 @@ public class FacilityWorkOrderService {
 
     public PageResponse<FacilityWorkOrderRecord> listOverdue() {
         authorizationService.requirePlatformScope();
-        List<FacilityWorkOrderRecord> items = repository.listOverdue(Instant.now());
+        List<FacilityWorkOrderRecord> items = inReach(repository.listOverdue(Instant.now()));
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -146,11 +158,10 @@ public class FacilityWorkOrderService {
             throw ApiException.badRequest("VALIDATION_FAILED", "借用逾期工单由系统自动生成，不能人工新建");
         }
         // 第十二批操作员裁决第 15 条「提单员工就是承接人」：员工建单的提单员工＝在后台点「新建工单」的当前登录员工，不取客户端传的 reporter_id。
-        if ("staff".equals(trimToNull(r.reporterType()))) {
-            r = new FacilityWorkOrderRequest(r.workOrderType(), r.priority(), r.title(), r.description(), r.source(), r.spaceId(),
-                    r.equipmentId(), authorizationService.currentActor().id(), r.reporterType(), r.projectId(), r.merchantId(),
-                    r.idempotencyKey());
-        }
+        String reporterId = "staff".equals(trimToNull(r.reporterType())) ? authorizationService.currentActor().id() : r.reporterId();
+        // 第十八批 G 段 82b-R2：落地项目在建单之前算好（见 landingProject）。
+        r = new FacilityWorkOrderRequest(r.workOrderType(), r.priority(), r.title(), r.description(), r.source(), r.spaceId(),
+                r.equipmentId(), reporterId, r.reporterType(), landingProject(r), r.merchantId(), r.idempotencyKey());
         return createInternal(r, r.idempotencyKey(), null);
     }
 
@@ -162,6 +173,7 @@ public class FacilityWorkOrderService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
             }
             FacilityWorkOrderRecord cur = load(id);
+            requireReach(cur.projectId());
             requireStatus(cur, "pending_assign", "只有待派单的工单才能派单");
             if ("equipment_alarm".equals(cur.source()) && alarmService != null) {
                 alarmService.requireTakenOverBeforeDispatch(cur.id());
@@ -195,6 +207,7 @@ public class FacilityWorkOrderService {
             if (request == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
             }
+            requireReach(load(id).projectId()); // 82b-R1：范围闸在幂等之前
             return idempotencyService.execute("facilityWorkOrderReassign:" + id, request.idempotencyKey(), request, () -> {
                 String assignee = requireText(request.assigneeId(), "assignee_id");
                 String reason = requireText(request.reason(), "reason");
@@ -282,6 +295,7 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderActionRequest r = requireAction(request);
         validateSatisfaction(r.satisfaction());
         FacilityWorkOrderRecord cur = loadForUpdate(id);
+        requireReach(cur.projectId());
         requireStatus(cur, "pending_acceptance", "只有待验收的工单才能验收");
         Instant now = Instant.now();
         // 双闸：主管验收只记验收事实（不评满意度，满意度由提单方评）；提单方已确认才关闭，否则为「已验收」待提单确认。
@@ -305,6 +319,7 @@ public class FacilityWorkOrderService {
             FacilityWorkOrderRecord cur = loadForUpdate(id);
             if (!confirmerSelf(cur)) {
                 authorizationService.requirePermission(PERM);
+                requireReach(cur.projectId());
             }
             FacilityWorkOrderRecord closed;
             if (dual(cur)) {
@@ -347,6 +362,11 @@ public class FacilityWorkOrderService {
         try {
             authorizationService.requirePlatformScope();
             FacilityWorkOrderActionRequest r = requireAction(request);
+            FacilityWorkOrderRecord before = load(id); // 复核：凭管理权那一支的范围闸在幂等之前（体内按锁重读后照旧核）
+            if (!confirmerSelf(before) && !("accepted".equals(before.status()) && confirmerBound(before))) {
+                authorizationService.requirePermission(PERM);
+                requireReach(before.projectId());
+            }
             return idempotencyService.execute("facilityWorkOrderRework:" + id, r.idempotencyKey(), r, () -> {
                 String reason = trimToNull(r.note());
                 if (reason == null) {
@@ -357,6 +377,7 @@ public class FacilityWorkOrderService {
                     requireConfirmer(cur);
                 } else {
                     authorizationService.requirePermission(PERM);
+                    requireReach(cur.projectId());
                 }
                 if (!DUAL_PENDING_STATUSES.contains(cur.status()) || !dual(cur)) {
                     throw ApiException.badRequest("INVALID_STATE", "只有待验收或已验收的大型维修工单才能退回返工");
@@ -386,6 +407,7 @@ public class FacilityWorkOrderService {
             if (request == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
             }
+            requireReach(load(id).projectId()); // 82b-R1：范围闸在幂等之前
             return idempotencyService.execute("facilityWorkOrderConfirmer:" + id, request.idempotencyKey(), request, () -> {
                 FacilityWorkOrderRecord cur = loadForUpdate(id);
                 if (!confirmerBound(cur) || "closed".equals(cur.status()) || cur.reporterConfirmedAt() != null) {
@@ -434,6 +456,7 @@ public class FacilityWorkOrderService {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = loadForUpdate(id);
+        requireReach(cur.projectId());
         if (!ACTIVE_STATUSES.contains(cur.status())) {
             throw ApiException.badRequest("INVALID_STATE", "只有进行中的工单才能挂起");
         }
@@ -448,6 +471,7 @@ public class FacilityWorkOrderService {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
         FacilityWorkOrderRecord cur = loadForUpdate(id);
+        requireReach(cur.projectId());
         requireStatus(cur, "suspended", "只有已挂起的工单才能恢复");
         // 待派单时挂起的（没有处理人）恢复回待派单：派单仍只走 assign 及其告警接手闸（BSM L1417「接手后派相应维修人员」），
         // 不会出现没有处理人的处理中工单。
@@ -461,7 +485,7 @@ public class FacilityWorkOrderService {
     public int markOverdue(String idempotencyKey) {
         authorizationService.requirePlatformScope();
         Instant now = Instant.now();
-        List<FacilityWorkOrderRecord> overdue = repository.listOverdue(now);
+        List<FacilityWorkOrderRecord> overdue = inReach(repository.listOverdue(now));
         for (FacilityWorkOrderRecord cur : overdue) {
             repository.updateWorkOrder(new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
                     cur.priority(), cur.status(), cur.title(), cur.description(), cur.source(), cur.spaceId(),
@@ -767,6 +791,54 @@ public class FacilityWorkOrderService {
                         e.projectId(), e.merchantId(), e.createdAt(), Instant.now())));
     }
 
+    /**
+     * 第十八批 G 段 82b-R1（治理地图第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」；
+     * 裁决 M737-iter7「行本身没有项目的不出」）：工单项目须在 facility.work_order.manage 可触及范围内（平台管理员不限），
+     * 项目为空的只给平台管理员；否则 403 CROSS_PROJECT_FORBIDDEN。外包维保账号照旧走 {@link #enforceAssignedScope}。
+     */
+    private void requireReach(String projectId) {
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), projectId, PERM)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该记录不在本权限可触及的项目范围内");
+        }
+    }
+
+    /** 82b-R1：列表只留可触及项目内的工单（同上口径）。 */
+    private List<FacilityWorkOrderRecord> inReach(List<FacilityWorkOrderRecord> items) {
+        AuthorizationService.ProjectReach reach = authorizationService.projectReach(authorizationService.currentActor(), PERM);
+        return items.stream().filter(item -> reach.covers(item.projectId())).toList();
+    }
+
+    /**
+     * 第十八批 G 段 82b-R2（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」；第 413 行「所有基础对象都要带
+     * “综合体项目归属”」）：人工新建工单的落地项目＝请求 project_id → 关联设备所在项目 → 空间所在项目 → 本人项目；须是项目且在
+     * facility.work_order.manage 可触及范围内，否则 403 CROSS_PROJECT_FORBIDDEN。平台管理员不带任何锚点时照旧落空。
+     * 系统事件入口（设备告警、巡检异常、客人投诉、借用逾期、安检设备故障）照旧用调用方给的项目。不带平台服务的测试装配照旧取请求里的项目。
+     */
+    private String landingProject(FacilityWorkOrderRequest r) {
+        String landing = trimToNull(r.projectId());
+        if (platformService == null) {
+            return landing;
+        }
+        String equipmentId = trimToNull(r.equipmentId());
+        if (landing == null && equipmentId != null) {
+            landing = facilityRepository.findEquipmentById(equipmentId).map(FacilityEquipmentRecord::projectId).orElse(null);
+        }
+        if (landing == null) {
+            landing = platformService.spaceProjectId(trimToNull(r.spaceId()));
+        }
+        AccessActor actor = authorizationService.currentActor();
+        if (landing == null) {
+            if (authorizationService.isPlatformAdmin(actor)) {
+                return null;
+            }
+            landing = actor.organizationId();
+        }
+        if (!platformService.projectExists(landing) || !authorizationService.canReachProject(actor, landing, PERM)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
+        }
+        return landing;
+    }
+
     private FacilityWorkOrderRecord load(String id) {
         return repository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "设施工单不存在或已被删除"));
@@ -787,6 +859,9 @@ public class FacilityWorkOrderService {
 
     private void enforceAssignedScope(AccessActor actor, FacilityWorkOrderRecord record) {
         authorizationService.enforceOutsourcedAssigneeScope(actor, record.assigneeId(), record.projectId());
+        if (!authorizationService.isOutsourcedVendor(actor)) {
+            requireReach(record.projectId());
+        }
     }
 
     private FacilityWorkOrderPolicyRecord policy(String type, String priority) {

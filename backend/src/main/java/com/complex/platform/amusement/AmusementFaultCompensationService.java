@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.amusement.AmusementParkWideFaultService.roleLabel;
 
@@ -79,14 +79,14 @@ public class AmusementFaultCompensationService {
 
     public AmusementCompensationPolicyRecord getPolicy(String projectId) {
         authorizationService.requirePermission(AmusementParkWideFaultService.PERMISSION_VIEW);
-        return resolvePolicy(requireProject(projectId));
+        return resolvePolicy(requireProject(projectId, AmusementParkWideFaultService.PERMISSION_VIEW));
     }
 
     @Transactional
     public AmusementCompensationPolicyRecord configurePolicy(String projectId, CompensationPolicyRequest request) {
         try {
             authorizationService.requirePermission(PERMISSION_POLICY_MANAGE);
-            String project = requireProject(projectId);
+            String project = requireProject(projectId, PERMISSION_POLICY_MANAGE);
             if (request == null || request.validityDays() == null || request.minDays() == null || request.maxDays() == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "补偿有效期须同时填写天数、下限与上限");
             }
@@ -128,8 +128,9 @@ public class AmusementFaultCompensationService {
             if (!repository.isActiveBusinessEntity(bearer)) {
                 throw ApiException.badRequest("COMPENSATION_BEARER_ENTITY_INVALID", "承担主体须为主体主数据中在用的法律主体");
             }
+            AuthorizationService.ProjectReach reach = reach(permission);
+            AmusementParkWideFaultRecord fault = requireFault(faultId, reach); // 复核：范围闸在幂等之前（同号重放也先过它）
             return idempotencyService.execute("initiateFaultCompensationBatch", request.idempotencyKey(), request, () -> {
-                AmusementParkWideFaultRecord fault = requireFault(faultId);
                 if (fault.activatedAt() == null) {
                     throw ApiException.conflict("PARK_WIDE_FAULT_NOT_ACTIVATED", "该全园故障状态尚未生效，不构成补偿事件");
                 }
@@ -172,10 +173,13 @@ public class AmusementFaultCompensationService {
                 : AmusementParkWideFaultService.permissionFor(trimToNull(request.role()));
         try {
             String role = faultService.requireRoleWithPermission(request == null ? null : request.role());
+            AuthorizationService.ProjectReach reach = reach(permission);
+            // 复核：范围闸在幂等之前（同号重放也先过它）；体内照旧重读批次再核
+            repository.findBatchById(batchId).ifPresent(batch -> requireProjectInScope(batch.projectId(), reach));
             return idempotencyService.execute("confirmFaultCompensationBatch", request.idempotencyKey(), request, () -> {
                 AmusementFaultCompensationBatchRecord batch = repository.findBatchById(batchId)
                         .orElseThrow(() -> ApiException.notFound("COMPENSATION_BATCH_NOT_FOUND", "补偿批次不存在"));
-                requireProjectInScope(batch.projectId());
+                requireProjectInScope(batch.projectId(), reach);
                 if (!STATUS_PENDING.equals(batch.status())) {
                     throw ApiException.conflict("COMPENSATION_BATCH_NOT_PENDING", "该补偿批次不在待确认阶段");
                 }
@@ -212,19 +216,21 @@ public class AmusementFaultCompensationService {
 
     public PageResponse<AmusementFaultCompensationBatchRecord> listBatches(String faultId) {
         authorizationService.requirePermission(AmusementParkWideFaultService.PERMISSION_VIEW);
-        AmusementParkWideFaultRecord fault = requireFault(faultId);
+        AmusementParkWideFaultRecord fault = requireFault(faultId, reach(AmusementParkWideFaultService.PERMISSION_VIEW));
         List<AmusementFaultCompensationBatchRecord> items = repository.listBatches(fault.id());
         auditEventService.recordSuccess("amusement.fault_compensation.viewed", AmusementParkWideFaultService.PERMISSION_VIEW,
                 TARGET_TYPE, fault.id(), null, null, Map.of("count", items.size()));
         return new PageResponse<>(items, 1, Math.max(1, items.size()), items.size());
     }
 
-    /** TK-18：按事件类型列出批次（场次提前结束批次无全园故障，不能按故障查）；有项目范围的账号只见本综合体。 */
+    /**
+     * TK-18：按事件类型列出批次（场次提前结束批次无全园故障，不能按故障查）；第十八批 G 段 82b-R5：按 amusement.park_fault.view
+     * 可触及的项目取（同全园故障列表，见 {@link AmusementParkWideFaultService#listInReach}）。
+     */
     public PageResponse<AmusementFaultCompensationBatchRecord> listBatchesByEvent(String eventType, String projectId) {
         authorizationService.requirePermission(AmusementParkWideFaultService.PERMISSION_VIEW);
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        List<AmusementFaultCompensationBatchRecord> items = repository.listBatchesByEvent(trimToNull(eventType),
-                scope != null ? scope : trimToNull(projectId));
+        List<AmusementFaultCompensationBatchRecord> items = faultService.listInReach(projectId,
+                project -> repository.listBatchesByEvent(trimToNull(eventType), project));
         auditEventService.recordSuccess("amusement.fault_compensation.viewed", AmusementParkWideFaultService.PERMISSION_VIEW,
                 TARGET_TYPE, "list", null, null, Map.of("count", items.size()));
         return new PageResponse<>(items, 1, Math.max(1, items.size()), items.size());
@@ -294,7 +300,7 @@ public class AmusementFaultCompensationService {
         authorizationService.requirePermission(AmusementParkWideFaultService.PERMISSION_VIEW);
         AmusementFaultCompensationBatchRecord batch = repository.findBatchById(batchId)
                 .orElseThrow(() -> ApiException.notFound("COMPENSATION_BATCH_NOT_FOUND", "补偿批次不存在"));
-        requireProjectInScope(batch.projectId());
+        requireProjectInScope(batch.projectId(), reach(AmusementParkWideFaultService.PERMISSION_VIEW));
         List<AmusementFaultCompensationItemRecord> items = repository.listItems(batch.id());
         return new PageResponse<>(items, 1, Math.max(1, items.size()), items.size());
     }
@@ -408,33 +414,35 @@ public class AmusementFaultCompensationService {
 
     // ---------- helpers ----------
 
-    private AmusementParkWideFaultRecord requireFault(String faultId) {
+    private AmusementParkWideFaultRecord requireFault(String faultId, AuthorizationService.ProjectReach reach) {
         AmusementParkWideFaultRecord fault = faultRepository.findById(faultId)
                 .orElseThrow(() -> ApiException.notFound("PARK_WIDE_FAULT_NOT_FOUND", "全园故障状态记录不存在"));
-        requireProjectInScope(fault.projectId());
+        requireProjectInScope(fault.projectId(), reach);
         return fault;
     }
 
-    private void requireProjectInScope(String projectId) {
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        if (scope != null && !scope.equals(projectId)) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能操作当前综合体项目的全园故障补偿");
+    /** 第十八批 G 段 82b-R5：入口权限码可触及的项目范围（含可跨项目角色勾选的项目），在幂等执行体之前算好。 */
+    private AuthorizationService.ProjectReach reach(String permission) {
+        return authorizationService.projectReach(authorizationService.currentActor(), permission);
+    }
+
+    /** 第十八批 G 段 82b-R5：批次或故障所在项目须在入口权限码可触及的范围内（平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN。 */
+    private static void requireProjectInScope(String projectId, AuthorizationService.ProjectReach reach) {
+        if (!reach.covers(projectId)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该全园故障补偿不在本权限可触及的项目范围内");
         }
     }
 
-    private String requireProject(String projectId) {
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
+    /**
+     * 项目：出厂回落行照旧；不带取本人项目（平台管理员须指定）；项目须在入口权限码可触及的范围内（含可跨项目角色勾选的项目），
+     * 否则 403 CROSS_PROJECT_FORBIDDEN（第十八批 G 段 82b-R4）。
+     */
+    private String requireProject(String projectId, String permission) {
         String requested = trimToNull(projectId);
-        if (scope != null) {
-            if (requested != null && !requested.equals(scope) && !AmusementCompensationPolicyRecord.GLOBAL_SCOPE.equals(requested)) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能操作当前综合体项目的补偿参数");
-            }
-            return requested == null ? scope : requested;
+        if (AmusementCompensationPolicyRecord.GLOBAL_SCOPE.equals(requested)) {
+            return requested;
         }
-        if (requested == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目");
-        }
-        return requested;
+        return authorizationService.requireReachableProject(requested, permission, AuthorizationService.PROJECT_OUT_OF_REACH);
     }
 
     private static String requireText(String value, String message) {

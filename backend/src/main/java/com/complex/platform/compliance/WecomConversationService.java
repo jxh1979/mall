@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.compliance;
 
 import com.complex.platform.access.AuthorizationService;
@@ -297,9 +297,10 @@ public class WecomConversationService {
         WecomConversationRecord conversation = repository.findConversationById(resolvedConversationId)
                 .orElseThrow(() -> ApiException.notFound("WECOM_CONVERSATION_NOT_FOUND", "会话记录不存在或已被删除"));
         // M723-F14（治理地图第 653 行「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」）：脱敏与原文调阅都只能看
-        // 本人项目的会话，平台管理员全量（D-032）；先于读消息与写调阅留痕，拒绝时请求事务回滚、单次来源不算用掉。
-        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
-        if (projectScope.isPresent() && !projectScope.get().equals(conversation.projectId())) {
+        // 可触及项目的会话，平台管理员全量（D-032）；先于读消息与写调阅留痕，拒绝时请求事务回滚、单次来源不算用掉。
+        // 第十八批 G 段 82b-R5（PGM 第 659 行）：按入口权限码（脱敏 wecom.view、原文 wecom.view_raw）可触及的项目判，含可跨项目角色勾选的项目。
+        if (authorizationService.currentProjectScopeQuietly().isPresent() && !authorizationService.canReachProject(
+                authorizationService.currentActor(), conversation.projectId(), raw ? "wecom.view_raw" : "wecom.view")) {
             ApiException denied = ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "企微会话属于其他综合体项目");
             if (raw) {
                 auditEventService.recordFailure(

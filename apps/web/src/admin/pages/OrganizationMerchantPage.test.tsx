@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -231,7 +231,8 @@ describe("OrganizationMerchantPage KPI 聚焦视图（带参重进本页）", ()
 });
 
 // 第十八批 E 段第 19 条（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
-// 能看到两个以上项目时，新建商户弹窗出现「所属项目」，选了才提交 project_id；只有一个项目时不显示、不提交。
+// 能看到本人项目以外的项目时，新建商户弹窗出现「所属项目」，选了才提交 project_id；只看得到本人项目时不显示、不提交。
+// 18G 同根补扫：角色只勾了 B、只看得到 B 一个（不是本人项目 A）时也显示（修复前不显示、落本人项目 A 被 403）。
 describe("OrganizationMerchantPage 新建商户选所属项目", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -266,8 +267,17 @@ describe("OrganizationMerchantPage 新建商户选所属项目", () => {
     expect(body.project_id).toBe("p-2");
   });
 
-  it("只有一个项目：不显示「所属项目」，不提交 project_id", async () => {
-    renderPage();
+  it("只看得到一个且不是本人项目：出现「所属项目」，选 B 按 project_id 提交", async () => {
+    renderPage((url, init) => (init?.method ?? "GET") === "GET" && url.includes("/platform/projects") ? envelope([TWO_PROJECTS[1]]) : undefined,
+      { user: { id: "u2", username: "staff", accountType: "staff", organizationId: "p-1" } });
+    await openCreate();
+    await waitFor(() => expect(screen.queryByTestId("organization-merchant-project")).not.toBeNull());
+    const body = await fillAndSubmit("p-2");
+    expect(body.project_id).toBe("p-2");
+  });
+
+  it("只看得到本人项目：不显示「所属项目」，不提交 project_id", async () => {
+    renderPage(undefined, { user: { id: "u2", username: "staff", accountType: "staff", organizationId: "p-1" } });
     await openCreate();
     expect(screen.queryByTestId("organization-merchant-project")).toBeNull();
     const body = await fillAndSubmit();

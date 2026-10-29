@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -265,7 +265,7 @@ public class InternalPayDayService {
 
     public ObjectionPolicy getObjectionPolicy(String projectId) {
         auth.requirePermission(VIEW);
-        return objectionPolicy(requireProject(projectId));
+        return objectionPolicy(requireProject(projectId, VIEW));
     }
 
     /** 项目无自有行即用出厂 10 个工作日。 */
@@ -285,7 +285,7 @@ public class InternalPayDayService {
         try {
             auth.requirePermission(MANAGE);
             ObjectionPolicyRequest r = requireRequest(request);
-            String project = requireProject(r.projectId());
+            String project = requireProject(r.projectId(), MANAGE);
             Integer days = r.workingDays();
             Integer min = r.minDays();
             Integer max = r.maxDays();
@@ -368,15 +368,13 @@ public class InternalPayDayService {
                 Integer.class);
     }
 
-    /** 异议期按项目：项目账号缺省取本项目、不得指定别的项目；无项目范围的账号须指定项目。 */
-    private String requireProject(String projectId) {
-        String scope = auth.currentProjectScopeQuietly().orElse(null);
-        String requested = trimToNull(projectId);
-        if (scope != null && requested != null && !scope.equals(requested)) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能配置当前综合体项目的异议期");
-        }
-        String project = requested != null ? requested : scope;
-        if (project == null || GLOBAL.equals(project)) {
+    /**
+     * 异议期按项目：不带取本人项目（无项目范围的账号须指定）；项目须在入口权限码可触及的范围内（含可跨项目角色勾选的项目），
+     * 否则 403 CROSS_PROJECT_FORBIDDEN（第十八批 G 段 82b-R4）；出厂行不能当项目指定。
+     */
+    private String requireProject(String projectId, String permission) {
+        String project = auth.requireReachableProject(projectId, permission, AuthorizationService.PROJECT_OUT_OF_REACH);
+        if (GLOBAL.equals(project)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目");
         }
         return project;

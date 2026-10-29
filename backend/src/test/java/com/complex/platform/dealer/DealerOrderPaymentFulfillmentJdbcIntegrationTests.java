@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -352,7 +352,7 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
                 try {
                     paymentPid.set(jdbc.queryForObject("SELECT pg_backend_pid()",Integer.class));
                     // 使用付款入口自身的真实共同锁，暂停在 dealer 已锁而 order 未锁的合法交错点。
-                    orders.lockDealerForOrder(order.id());
+                    orders.lockDealerForOrder(order.id(), DealerOrderService.PAYMENT_VERIFY);
                     dealerLocked.countDown();
                     if(!releasePayment.await(15,java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("付款事务未获放行");
                     orders.verifyPayment(payment.id(),paymentRequest);

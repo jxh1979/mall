@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -63,7 +63,7 @@ public class FacilityEquipmentService {
                     .filter(e -> java.util.Objects.equals(project, e.projectId()))
                     .toList();
         } else {
-            items = repository.listEquipment(includeArchived);
+            items = inReach(repository.listEquipment(includeArchived));
         }
         return new PageResponse<>(items, 1, 500, items.size());
     }
@@ -83,6 +83,7 @@ public class FacilityEquipmentService {
     public FacilityEquipmentRecord archive(String id, boolean archive, String reason) {
         authorizationService.requirePlatformScope();
         FacilityEquipmentRecord cur = load(id);
+        requireReach(cur.projectId());
         String r = archive ? requireText(reason, "reason") : null;
         Instant now = Instant.now();
         FacilityEquipmentRecord updated = archive
@@ -100,6 +101,9 @@ public class FacilityEquipmentService {
             com.complex.platform.facility.dto.FacilityEquipmentDeleteRequest request) {
         authorizationService.requirePlatformScope();
         FacilityEquipmentRecord cur = load(id);
+        if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            requireReach(cur.projectId()); // 最高权限本人发起的删除同删除审批，不按项目（BSM 第 577 行，见 approveDelete）
+        }
         if (cur.archivedAt() == null) {
             throw ApiException.badRequest("FACILITY_EQUIPMENT_NOT_ARCHIVED", "设备必须先存档才能申请删除");
         }
@@ -160,7 +164,7 @@ public class FacilityEquipmentService {
         LocalDate today = LocalDate.now();
         List<FacilityEquipmentRecord> items = authorizationService.isOutsourcedVendor(actor)
                 ? repository.listMaintenanceDueByProject(today, authorizationService.requireProjectScope(actor))
-                : repository.listMaintenanceDue(today);
+                : inReach(repository.listMaintenanceDue(today));
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -174,6 +178,7 @@ public class FacilityEquipmentService {
         }
         // 第 8 条（PGM:413「所有基础对象都要带“综合体项目归属”」）：新建设备必须带所属综合体项目——告警按设备项目解析当班接警人（BSM:1417）。
         String projectId = requireText(r.projectId(), "project_id");
+        requireReach(projectId);
         Instant now = Instant.now();
         String id = r.id() == null || r.id().isBlank() ? "feq_" + UUID.randomUUID() : r.id();
         LocalDate nextDue = computeNextDue(r.installDate(), null, r.maintenanceCycleDays());
@@ -192,6 +197,10 @@ public class FacilityEquipmentService {
         authorizationService.requirePlatformScope();
         FacilityEquipmentRequest r = require(request);
         FacilityEquipmentRecord cur = load(id);
+        requireReach(cur.projectId());
+        if (!java.util.Objects.equals(r.projectId(), cur.projectId())) {
+            requireReach(r.projectId());
+        }
         validateType(r.equipmentType());
         LocalDate nextDue = computeNextDue(r.installDate(), cur.lastMaintenanceAt(), r.maintenanceCycleDays());
         FacilityEquipmentRecord rec = new FacilityEquipmentRecord(id,
@@ -217,6 +226,7 @@ public class FacilityEquipmentService {
             throw ApiException.badRequest("VALIDATION_FAILED", "status is invalid");
         }
         FacilityEquipmentRecord cur = load(id);
+        requireReach(cur.projectId());
         String target = request.status();
         // HP-F03（BSM L1408「楼宇设备报废由设备所有权主体确认，沿现有审批流程办理」）：报废只经报废申请审批后置；已报废不得改回。
         if ("retired".equals(target)) {
@@ -261,6 +271,7 @@ public class FacilityEquipmentService {
                     "维保完成须选维保类型：定期保养、例行巡检、故障维修、安全检测或部件更换");
         }
         FacilityEquipmentRecord cur = load(id);
+        requireReach(cur.projectId());
         requireNotRetired(cur);
         Instant now = Instant.now();
         LocalDate nextDue = computeNextDue(cur.installDate(), now, cur.maintenanceCycleDays());
@@ -270,6 +281,23 @@ public class FacilityEquipmentService {
         auditEventService.recordSuccess("facility.equipment_maintained", PERM, "facility_equipment", id,
                 null, idempotencyKey, Map.of("maintenance_type", maintenanceType));
         return rec;
+    }
+
+    /**
+     * 第十八批 G 段 82b-R1（治理地图第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」；
+     * 裁决 M737-iter7「行本身没有项目的不出」，与终端设备 M723 说明（四）「认不出项目的设备只有平台管理员能管」同理）：设备项目须在 facility.equipment.manage 可触及范围内（平台管理员不限），
+     * 项目为空的只给平台管理员；否则 403 CROSS_PROJECT_FORBIDDEN。外包维保账号的列表照旧只看本项目。
+     */
+    private void requireReach(String projectId) {
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), projectId, PERM)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该记录不在本权限可触及的项目范围内");
+        }
+    }
+
+    /** 82b-R1：列表只留可触及项目内的设备（同上口径）。 */
+    private List<FacilityEquipmentRecord> inReach(List<FacilityEquipmentRecord> items) {
+        AuthorizationService.ProjectReach reach = authorizationService.projectReach(authorizationService.currentActor(), PERM);
+        return items.stream().filter(item -> reach.covers(item.projectId())).toList();
     }
 
     private FacilityEquipmentRecord load(String id) {

@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -224,14 +224,31 @@ public class ContractService implements com.complex.platform.finance.Termination
     }
 
     // AUD-005 真分页: SQL COUNT + LIMIT/OFFSET, total 取真值; 500 默认保留既有前端一次拉取契约。
+    // 第十八批 G 段 82b-R3（PGM 第 659 行「普通岗位没有跨项目查看权」「逐个勾选的只能查看被选中的项目」）：平台管理员照旧全量，
+    // 其余只列 contract.draft.manage 可触及项目的合同（total 同口径）。
     public PageResponse<ContractRecord> listContracts(int page, int size) {
-        return repository.listContractsPaged(page, size);
+        var actor = authorizationService.currentActor();
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return repository.listContractsPaged(page, size);
+        }
+        return repository.listContractsPaged(page, size,
+                authorizationService.projectReach(actor, "contract.draft.manage").organizationIds());
     }
 
-    /** 起草合同（手工或招商签约带入），状态 drafting。也是招商 signIntent 接线入口。 */
-    // AUD-002①：公有入口开事务（原 @Transactional 误标在私有自调用方法上=Spring 代理不生效，事务从未开）。
+    /** 手工起草合同，状态 drafting；落地项目按 contract.draft.manage 核。 */
     @Transactional
     public ContractRecord createDraft(ContractDraftRequest request) {
+        return createDraft(request, "contract.draft.manage");
+    }
+
+    /**
+     * 起草合同（手工或招商签约带入），状态 drafting。也是招商 signIntent 接线入口：落地项目按 reachPermission 核——招商签约传
+     * leasing.convert（签约是这一个动作，入口已按它核过意向项目，不另要 contract.draft.manage；PGM:659「在所分配的权限内可以查看、
+     * 处理该角色可查看项目的数据」）。
+     */
+    // AUD-002①：公有入口开事务（原 @Transactional 误标在私有自调用方法上=Spring 代理不生效，事务从未开）。
+    @Transactional
+    public ContractRecord createDraft(ContractDraftRequest request, String reachPermission) {
         authorizationService.requirePlatformScope();
         ContractDraftRequest actual = requireRequest(request);
         // AUD-002③：字段级业务校验前置——先于任何写入、且先于幂等短路，确保幂等命中(重放)也必过校验、不被绕过。
@@ -251,6 +268,7 @@ public class ContractService implements com.complex.platform.finance.Termination
             throw ApiException.badRequest("VALIDATION_FAILED", "租金条款不得带变更链等系统维护项（parent_contract_id／amendment_type／deposit_adjustment）");
         }
         Long draftDeposit = draftDeposit(inTerms, actual.depositCent());
+        String projectId = draftProject(actual, reachPermission);
         // 1.5 幂等：带 idempotencyKey 时合同 id 由其确定性派生；重复提交/招商重签命中既有草稿直接返回，不重复建。
         // 校验已前置于此，故重放亦已过校验；失败草稿在 @Transactional 下整体回滚，重试将重走完整校验，无半成品可复用。
         String idempotencyKey = trimToNull(actual.idempotencyKey());
@@ -301,7 +319,7 @@ public class ContractService implements com.complex.platform.finance.Termination
                 actual.settlementRules() == null ? List.of() : List.copyOf(actual.settlementRules()),
                 null, null,
                 actual.attachmentIds() == null ? List.of() : List.copyOf(actual.attachmentIds()),
-                "drafting", trimToNull(actual.projectId()), null, null, null, now, now));
+                "drafting", projectId, null, null, null, now, now));
         auditEventService.recordSuccess("contract.drafted", "contract.draft.manage", "contract", saved.id(),
                 null, actual.idempotencyKey(), Map.of("merchant_id", saved.merchantId()));
         // 3.13 预绑定意向空间（存在性/冲突已在 validateDraftSpaces 落库前校验）。
@@ -309,6 +327,29 @@ public class ContractService implements com.complex.platform.finance.Termination
             repository.bindContractSpaces(saved.id(), draftSpaces, saved.projectId());
         }
         return saved;
+    }
+
+    /**
+     * 第十八批 G 段 82b-R3（PGM 第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」；第 413 行「所有基础对象都要带“综合体项目归属”」）：
+     * 起草落地项目＝请求项目 → 第一个意向铺位所在项目 → 本人项目，须是项目且在入口码可触及范围内（照 LeasingService.landingProject；
+     * 复核：城市项目公司员工的本人归属是公司编号、不是项目，不带项目时 403）；手工起草按 contract.draft.manage，招商签约 signIntent
+     * 带线索所在项目、按 leasing.convert。平台管理员不带项目也没带铺位时照旧为空。
+     */
+    private String draftProject(ContractDraftRequest actual, String reachPermission) {
+        var actor = authorizationService.currentActor();
+        boolean admin = authorizationService.isPlatformAdmin(actor);
+        String space = actual.spaceIds() == null || actual.spaceIds().isEmpty() ? null : trimToNull(actual.spaceIds().get(0));
+        String fallback = space == null ? null : repository.findSpaceProjectId(space);
+        String landing = trimToNull(actual.projectId()) != null ? trimToNull(actual.projectId()) : fallback != null ? fallback
+                : admin ? null : actor.organizationId();
+        if (landing == null && admin) {
+            return null;
+        }
+        if (landing == null || !(admin || (platformRepository.projectExists(landing)
+                && authorizationService.canReachProject(actor, landing, reachPermission)))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
+        }
+        return landing;
     }
 
     /**
@@ -324,12 +365,7 @@ public class ContractService implements com.complex.platform.finance.Termination
             authorizationService.requirePermission("contract.draft.manage");
             authorizationService.requirePlatformScope();
             ContractDraftRentTermsRequest actual = requireRequest(request);
-            ContractRecord found = requireContract(contractId);
-            var actor = authorizationService.currentActor();
-            if (found.projectId() != null && !authorizationService.isPlatformAdmin(actor)
-                    && !authorizationService.canReachProject(actor, found.projectId(), "contract.draft.manage")) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "合同草稿不在本权限可触及的项目范围内");
-            }
+            ContractRecord found = requireContractInReach(contractId, "contract.draft.manage");
             return idempotencyService.execute("editContractDraftRentTerms:" + found.id(), actual.idempotencyKey(), actual,
                     () -> editDraftRentTermsOnce(found.id(), actual), ContractRecord.class);
         } catch (RuntimeException exception) {
@@ -423,7 +459,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         if (add.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "attachment_ids is required");
         }
-        ContractRecord c = requireContract(contractId);
+        ContractRecord c = requireContractInReach(contractId, "contract.draft.manage");
         List<String> merged = new ArrayList<>(c.attachmentIds() == null ? List.of() : c.attachmentIds());
         for (String a : add) {
             if (!merged.contains(a)) {
@@ -481,7 +517,7 @@ public class ContractService implements com.complex.platform.finance.Termination
     public ContractRecord submit(String contractId, ContractSubmitRequest request) {
         authorizationService.requirePlatformScope();
         ContractSubmitRequest actual = requireRequest(request);
-        ContractRecord contract = requireContract(contractId);
+        ContractRecord contract = requireContractInReach(contractId, "contract.draft.manage");
         if (!"drafting".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_DRAFTING", "只有草拟中的合同才能提交审批");
         }
@@ -609,7 +645,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         if (spaceIds.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "space_ids is required");
         }
-        ContractRecord contract = requireContract(contractId);
+        ContractRecord contract = requireContractInReach(contractId, "contract.lifecycle.activate");
         if (!"pending_effective".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_PENDING_EFFECTIVE",
                     "合同必须通过全部审批后才能生效");
@@ -680,7 +716,7 @@ public class ContractService implements com.complex.platform.finance.Termination
             // scope_grant 只从专用申请入口(requestScopeGrant)发起，通用变更入口拒收(避免缺 requestedCategory 载荷)。
             throw ApiException.badRequest("VALIDATION_FAILED", "超范围经营申请请走 scope-requests 入口");
         }
-        ContractRecord contract = requireContract(contractId);
+        ContractRecord contract = requireContractInReach(contractId, "contract.change.manage");
         if (!"effective".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能变更");
         }
@@ -829,7 +865,7 @@ public class ContractService implements com.complex.platform.finance.Termination
                 throw ApiException.badRequest("VALIDATION_FAILED", "临时经营许可 valid_until 须为将来日期");
             }
         }
-        ContractRecord contract = requireContract(contractId);
+        ContractRecord contract = requireContractInReach(contractId, "contract.scope_request.raise");
         if (!"effective".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能发起范围调整申请");
         }
@@ -855,6 +891,7 @@ public class ContractService implements com.complex.platform.finance.Termination
     }
 
     public PageResponse<ContractChangeRecord> listChanges(String contractId) {
+        requireContractInReach(contractId, "contract.change.manage");
         List<ContractChangeRecord> items = repository.listChangesByContract(contractId);
         return new PageResponse<>(items, 1, 500, items.size());
     }
@@ -871,7 +908,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         authorizationService.requirePermission("contract.settlement.manage");
         ContractSettleRequest actual = requireRequest(request);
         String trigger = requireEnum(actual.triggerType(), SETTLE_TRIGGERS, "trigger_type");
-        ContractRecord contract = requireContract(contractId);
+        ContractRecord contract = requireContractInReach(contractId, "contract.settlement.manage");
         if (!Set.of("effective", "expired").contains(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_SETTLEABLE", "合同不在生效或到期状态");
         }
@@ -912,6 +949,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         ContractResolveDisputeRequest actual = requireRequest(request);
         ContractSettlementRecord found = repository.findSettlementById(requireText(settlementId, "settlement_id"))
                 .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "结算单不存在或已被删除"));
+        requireContractInReach(found.contractId(), "contract.settlement.dispute.resolve");
         ContractRecord contract = lockContract(found.contractId());
         ContractSettlementRecord settlement = repository.findSettlementById(found.id()).orElseThrow();   // 锁后重读状态
         if (!DISPUTED_SETTLEMENT_STATUSES.contains(settlement.status())) {
@@ -945,6 +983,9 @@ public class ContractService implements com.complex.platform.finance.Termination
             authorizationService.requirePermission("contract.settlement.manage");
             ContractResolveDisputeRequest actual = requireRequest(request);
             String id = requireText(settlementId, "settlement_id");
+            requireContractInReach(repository.findSettlementById(id)
+                    .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "结算单不存在或已被删除")).contractId(),
+                    "contract.settlement.manage");
             return idempotencyService.execute("checkContractSettlementDocuments:" + id, actual.idempotencyKey(), actual,
                     () -> checkDocumentsOnce(id, actual), ContractSettlementRecord.class);
         } catch (RuntimeException exception) {
@@ -1034,6 +1075,7 @@ public class ContractService implements com.complex.platform.finance.Termination
     }
 
     public PageResponse<ContractSettlementRecord> listSettlements(String contractId) {
+        requireContractInReach(contractId, "contract.settlement.manage");
         List<ContractSettlementRecord> items = repository.listSettlementsByContract(contractId);
         return new PageResponse<>(items, 1, 500, items.size());
     }
@@ -1220,7 +1262,7 @@ public class ContractService implements com.complex.platform.finance.Termination
 
     /**
      * BSM L1352／ENUM L252「业务参数，按项目可配，出厂默认 30 日，须同时配置上下限」：日数与上下限须同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限
-     * （控制席技术约定：值落在闭区间内，不自拟上下限出厂数值）；只作用于该项目，项目账号只能改本项目。
+     * （控制席技术约定：值落在闭区间内，不自拟上下限出厂数值）；只作用于该项目，项目须在本权限可触及范围内（82b-R3）。
      */
     @Transactional
     public DepositRefundWaitSettingRecord saveDepositRefundWaitSetting(DepositRefundWaitSettingRequest request) {
@@ -1250,18 +1292,12 @@ public class ContractService implements com.complex.platform.finance.Termination
         }
     }
 
-    /** 等待期按项目：项目账号缺省取本项目、不得指定别的项目（CROSS_PROJECT_FORBIDDEN）；无项目范围的账号须指定项目。 */
+    /**
+     * 第十八批 G 段 82b-R3④／82b-R4（PGM 第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：等待期按项目，
+     * 项目须在 contract.deposit_refund_wait.manage 可触及范围内（含可跨项目角色勾选的项目）；不带取本人项目，平台管理员须指定项目。
+     */
     private String requireWaitProject(String projectId) {
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        String requested = trimToNull(projectId);
-        if (scope != null && requested != null && !scope.equals(requested)) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能配置当前综合体项目的押金退还等待期");
-        }
-        String project = requested != null ? requested : scope;
-        if (project == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目");
-        }
-        return project;
+        return authorizationService.requireReachableProject(projectId, DEPOSIT_REFUND_WAIT_MANAGE, AuthorizationService.PROJECT_OUT_OF_REACH);
     }
 
     // ============ 配置：押金收取月数（HP-C03，全平台统一，仅平台可改） ============
@@ -1335,7 +1371,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         List<SpaceExpiryColorRuleRecord> rules = repository.listColorRules(pid).stream()
                 .sorted((a, b) -> Integer.compare(a.thresholdDays(), b.thresholdDays())).toList();
         List<SpaceRentalStatusRecord> out = new ArrayList<>();
-        for (SpaceRentalStatusRecord raw : repository.listSpaceRentalRaw(pid, asOf)) {
+        for (SpaceRentalStatusRecord raw : spaceRentalRaw(pid, asOf)) {
             if (!"let".equals(raw.rentalStatus()) || raw.daysToExpiry() == null) {
                 out.add(raw);
                 continue;
@@ -1349,6 +1385,19 @@ public class ContractService implements com.complex.platform.finance.Termination
         return out;
     }
 
+    /**
+     * 第十八批 G 段 82b-R3（PGM 第 659 行「普通岗位没有跨项目查看权」「逐个勾选的只能查看被选中的项目」）：平台管理员照旧（不带＝全平台）；
+     * 其余只出 contract.draft.manage 可触及项目的铺位，带 project_id 时取它与可触及项目的交集。
+     */
+    private List<SpaceRentalStatusRecord> spaceRentalRaw(String pid, LocalDate asOf) {
+        var actor = authorizationService.currentActor();
+        if (authorizationService.isPlatformAdmin(actor)) {
+            return repository.listSpaceRentalRaw(pid, asOf);
+        }
+        var reach = authorizationService.projectReach(actor, "contract.draft.manage");
+        return repository.listSpaceRentalRaw(pid == null ? reach.organizationIds() : reach.covers(pid) ? Set.of(pid) : Set.<String>of(), asOf);
+    }
+
     // ============ 租金 AR 逐期挂账（用 ContractRentMath：base+递增−免租）============
     /** 生效合同某期挂账：算应收 → 联动 ar_ap_items(receivable)+contract_rent_bills。免租/生效前返回 null。 */
     @Transactional
@@ -1359,7 +1408,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         if (!period.matches("\\d{4}-\\d{2}")) {
             throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
         }
-        ContractRecord c = requireContract(contractId);
+        ContractRecord c = requireContractInReach(contractId, "finance.ar_ap.manage");
         if (!"effective".equals(c.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成租金账单");
         }
@@ -1388,7 +1437,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         if (!period.matches("\\d{4}-\\d{2}")) {
             throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
         }
-        ContractRecord c = requireContract(contractId);
+        ContractRecord c = requireContractInReach(contractId, "finance.ar_ap.manage");
         if (!"effective".equals(c.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成账单");
         }
@@ -1910,7 +1959,7 @@ public class ContractService implements com.complex.platform.finance.Termination
     public List<ContractRecord> listChildContracts(String parentContractId) {
         authorizationService.requirePermission("contract.change.manage");
         String pid = requireText(parentContractId, "parent_contract_id");
-        requireContract(pid);   // 与其它端点对齐：先证合同存在再查子合同
+        requireContractInReach(pid, "contract.change.manage");   // 与其它端点对齐：先证合同存在且在可触及项目内再查子合同
         return repository.listChildContracts(pid);
     }
 
@@ -2309,6 +2358,21 @@ public class ContractService implements com.complex.platform.finance.Termination
     private ContractRecord requireContract(String contractId) {
         return repository.findContractById(requireText(contractId, "contract_id"))
                 .orElseThrow(() -> ApiException.notFound("CONTRACT_NOT_FOUND", "合同不存在或已被删除"));
+    }
+
+    /**
+     * 第十八批 G 段 82b-R3（PGM 第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」）：
+     * 既有合同的读写入口取到合同后、进幂等执行与行锁之前核合同所属项目在该入口权限码可触及范围内（含可跨项目角色勾选的项目）；
+     * 平台管理员不限，其余账号对未带项目的合同一律 403。
+     */
+    private ContractRecord requireContractInReach(String contractId, String code) {
+        ContractRecord c = requireContract(contractId);
+        var actor = authorizationService.currentActor();
+        if (!authorizationService.isPlatformAdmin(actor)
+                && (c.projectId() == null || !authorizationService.canReachProject(actor, c.projectId(), code))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "合同不在本权限可触及的项目范围内");
+        }
+        return c;
     }
 
     private <T> T requireRequest(T request) {

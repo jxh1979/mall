@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -464,6 +464,44 @@ describe("借用只转保管责任：约定归还时间、交货与收货扫码�
       fromOwnerId: "merchant-A",
       toOwnerId: "merchant-B",
       returnDueAt: new Date("2026-12-31T10:00").toISOString(),
+    })));
+  });
+
+  // 第十八批 G 段 82-R18a（第十八批裁决 18「要货单、借用单建单时记所属项目（在 m 的经营项目里选，只有一个时自动带）」）。
+  it("建单在接收方商户的经营项目里选所属项目：只有一个自动带，多个须选，按后端契约提交 projectId", async () => {
+    const base = getResolver();
+    const get = vi.fn().mockImplementation((path: string) => {
+      if (path === "/api/v1/platform/merchants/merchant-1/operating-projects") {
+        return Promise.resolve({ merchantId: "merchant-1", primaryProjectId: "prj-A", primaryProjectName: "A 综合体", operatingProjects: [{ projectId: "prj-B", projectName: "B 综合体" }] });
+      }
+      if (path === "/api/v1/platform/merchants/merchant-B/operating-projects") {
+        return Promise.resolve({ merchantId: "merchant-B", primaryProjectId: "prj-A", primaryProjectName: "A 综合体", operatingProjects: [] });
+      }
+      return base(path);
+    });
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(get, post));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create-open")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-open"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-create-from")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-from"), { target: { value: "supply_1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-item"), { target: { value: "item-1" } });
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-to"), { target: { value: "merchant-B" } });
+    await waitFor(() => expect(screen.queryByTestId("inventory-transfer-create-project")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create-project")).toHaveValue("prj-A"));
+
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-to"), { target: { value: "merchant-1" } });
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create-project")).toHaveTextContent("B 综合体"));
+    expect(screen.getByTestId("inventory-transfer-create-project")).toHaveValue("");
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-submit"));
+    await waitFor(() => expect(screen.getByTestId("inventory-transfer-create")).toHaveTextContent("请选择所属项目。"));
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("inventory-transfer-create-project"), { target: { value: "prj-B" } });
+    fireEvent.click(screen.getByTestId("inventory-transfer-create-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/inventory/transfer-orders", expect.objectContaining({
+      transferType: "supply",
+      toOwnerId: "merchant-1",
+      projectId: "prj-B",
     })));
   });
 

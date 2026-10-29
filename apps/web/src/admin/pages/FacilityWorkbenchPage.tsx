@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -181,6 +181,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       });
   }, [api, canProjectView]);
   const projectOptions: GovernanceProjectRow[] = projects.length ? projects : user?.organizationId ? [{ id: user.organizationId }] : [];
+  const pickProject = projects.some((p) => p.id !== user?.organizationId);
   const [statusForm, setStatusForm] = React.useState({ equipmentId: "", status: "normal", alarmNote: "", priority: "" });
   const [alarmRows, setAlarmRows] = React.useState<FacilityAlarmDetailRow[]>([]);
   const [myAlarms, setMyAlarms] = React.useState<FacilityAlarmRow[]>([]);
@@ -198,11 +199,13 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [maintenanceForm, setMaintenanceForm] = React.useState({ equipmentId: "", maintenanceType: "" });
   const [scrapDisposal, setScrapDisposal] = React.useState<{ scrapId: string; note: string; proofs: { id: string; name: string }[] }>({ scrapId: "", note: "", proofs: [] });
   const [scrapFinance, setScrapFinance] = React.useState({ scrapId: "", residual: "", counterparty: "", loss: "" });
-  const [workOrderForm, setWorkOrderForm] = React.useState({ workOrderType: "repair", priority: "normal", title: "", equipmentId: "", spaceId: "", reporterId: "", reporterType: "staff", source: "platform" });
+  // 第十八批 G 段 82b-R2（PGM:659「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：建工单、巡检模板、巡检任务可选所属项目，
+  // 能看到本人项目以外的项目就显示（复核：角色只勾了 B、只看得到 B 一个时也显示），默认不选（后端按设备、空间或模板所在项目，否则本人项目），选了才提交 projectId。
+  const [workOrderForm, setWorkOrderForm] = React.useState({ workOrderType: "repair", priority: "normal", title: "", equipmentId: "", spaceId: "", reporterId: "", reporterType: "staff", source: "platform", projectId: "" });
   const [workOrderAction, setWorkOrderAction] = React.useState({ assigneeId: "", resolution: "现场处理完成", satisfaction: "5", note: "", confirmerId: "", reassignReason: "", customerFeedback: "" });
   const [policyForm, setPolicyForm] = React.useState({ workOrderType: "repair", priority: "normal", responseMinutes: "60", handleMinutes: "720", requiresAcceptance: true, acceptanceBy: "supervisor", active: true });
-  const [templateForm, setTemplateForm] = React.useState({ name: "", inspectionType: "security", cycleDays: "7", abnormalMode: "light", checklist: "现场照片,关键设备状态", scopeNote: "" });
-  const [taskForm, setTaskForm] = React.useState({ templateId: "", inspectionType: "security", title: "", scheduleMode: "manual", assigneeId: "", scheduledDate: "", dueDate: "", spaceId: "" });
+  const [templateForm, setTemplateForm] = React.useState({ name: "", inspectionType: "security", cycleDays: "7", abnormalMode: "light", checklist: "现场照片,关键设备状态", scopeNote: "", projectId: "" });
+  const [taskForm, setTaskForm] = React.useState({ templateId: "", inspectionType: "security", title: "", scheduleMode: "manual", assigneeId: "", scheduledDate: "", dueDate: "", spaceId: "", projectId: "" });
   const [selectedTaskId, setSelectedTaskId] = React.useState("");
   const [recordForm, setRecordForm] = React.useState({ result: "normal", inspectorId: "", note: "", abnormalNote: "" });
   // 行明细抽屉：本页 8 张业务表整行可点 → 该行完整字段（枚举中文·日期 cnDate·人员 TraceLink）。一个 detail state 复用。
@@ -490,6 +493,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       spaceId: workOrderForm.spaceId.trim() || undefined,
       reporterId: workOrderForm.reporterId.trim() || undefined,
       reporterType: workOrderForm.reporterType,
+      ...(workOrderForm.projectId ? { projectId: workOrderForm.projectId } : {}),
     });
     setActionResult({ action: "facility_work_order_created", title: workOrderForm.title.trim() });
     setWorkOrderForm({ ...workOrderForm, title: "" });
@@ -591,6 +595,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       checklist: splitLines(templateForm.checklist).map((label) => ({ label })),
       scopeNote: templateForm.scopeNote.trim() || undefined,
       active: true,
+      ...(templateForm.projectId ? { projectId: templateForm.projectId } : {}),
     });
     setActionResult({ action: "facility_inspection_template_created", name: templateForm.name.trim() });
     setTemplateForm({ ...templateForm, name: "" });
@@ -611,6 +616,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       scheduledDate: taskForm.scheduledDate || undefined,
       dueDate: taskForm.dueDate || undefined,
       spaceId: taskForm.spaceId.trim() || undefined,
+      ...(taskForm.projectId ? { projectId: taskForm.projectId } : {}),
     });
     setActionResult({ action: "facility_inspection_task_created", title: taskForm.title.trim() || taskForm.templateId.trim() });
     setTaskForm({ ...taskForm, title: "" });
@@ -920,6 +926,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <input data-testid="facility-work-order-title" aria-label="工单标题" placeholder="工单标题" value={workOrderForm.title} onChange={(event) => setWorkOrderForm({ ...workOrderForm, title: event.target.value })} />
           <input data-testid="facility-work-order-equipment" aria-label="关联设备" placeholder="设备 id" value={workOrderForm.equipmentId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, equipmentId: event.target.value })} />
           <input data-testid="facility-work-order-space" aria-label="空间 id" placeholder="空间 id" value={workOrderForm.spaceId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, spaceId: event.target.value })} />
+          {pickProject ? <label>所属项目<select data-testid="facility-work-order-project" aria-label="工单所属项目" value={workOrderForm.projectId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, projectId: event.target.value })}><option value="">按设备/空间所在项目，否则本人所在项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label> : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid="facility-work-order-create" onClick={() => void createWorkOrder()}>新建工单</PermissionButton>
         </div>
         <div className="admin-inline-form" data-testid="facility-work-order-action-form">
@@ -1011,6 +1018,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <input data-testid="facility-inspection-template-cycle" aria-label="周期天数" type="number" min="1" value={templateForm.cycleDays} onChange={(event) => setTemplateForm({ ...templateForm, cycleDays: event.target.value })} />
           <select data-testid="facility-inspection-template-abnormal-mode" aria-label="异常模式" value={templateForm.abnormalMode} onChange={(event) => setTemplateForm({ ...templateForm, abnormalMode: event.target.value })}><option value="light">轻度告警</option><option value="to_work_order">转工单</option></select>
           <input data-testid="facility-inspection-template-checklist" aria-label="检查项" placeholder="检查项，逗号分隔" value={templateForm.checklist} onChange={(event) => setTemplateForm({ ...templateForm, checklist: event.target.value })} />
+          {pickProject ? <label>所属项目<select data-testid="facility-inspection-template-project" aria-label="巡检模板所属项目" value={templateForm.projectId} onChange={(event) => setTemplateForm({ ...templateForm, projectId: event.target.value })}><option value="">本人所在项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label> : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-template-create" onClick={() => void createInspectionTemplate()}>新建模板</PermissionButton>
         </div>
         <div className="admin-inline-form" data-testid="facility-inspection-task-form">
@@ -1021,6 +1029,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <input data-testid="facility-inspection-task-assignee" aria-label="巡检人" placeholder="巡检人 id" value={taskForm.assigneeId} onChange={(event) => setTaskForm({ ...taskForm, assigneeId: event.target.value })} />
           <CnDatePicker data-testid="facility-inspection-task-scheduled-date" aria-label="计划日期" value={taskForm.scheduledDate} onChange={(v) => setTaskForm({ ...taskForm, scheduledDate: v })} />
           <CnDatePicker data-testid="facility-inspection-task-due-date" aria-label="到期日期" value={taskForm.dueDate} onChange={(v) => setTaskForm({ ...taskForm, dueDate: v })} />
+          {pickProject ? <label>所属项目<select data-testid="facility-inspection-task-project" aria-label="巡检任务所属项目" value={taskForm.projectId} onChange={(event) => setTaskForm({ ...taskForm, projectId: event.target.value })}><option value="">按模板/空间所在项目，否则本人所在项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label> : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-task-create" onClick={() => void createInspectionTask()}>新建任务</PermissionButton>
         </div>
         <div className="admin-table-scroll">

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -77,7 +77,7 @@ public class CustomerAccountStatusService {
         int days;
         try {
             authorizationService.requirePermission(MANAGE);
-            String project = requireProject(projectId);
+            String project = requireProject(projectId, MANAGE);
             requireText(reason, "reason");
             CustomerRecord customer = repository.findCustomerById(requireText(customerId, "customer_id"))
                     .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "客人不存在或已被删除"));
@@ -98,7 +98,7 @@ public class CustomerAccountStatusService {
 
     public RestrictionSetting getRestrictionSetting(String projectId) {
         authorizationService.requirePermission(MANAGE);
-        return resolveRestriction(requireProject(projectId));
+        return resolveRestriction(requireProject(projectId, MANAGE));
     }
 
     /** 本项目受限时长：天数与下限、上限须同时填写，且 1 ≤ 下限 ≤ 天数 ≤ 上限。 */
@@ -106,7 +106,7 @@ public class CustomerAccountStatusService {
     public RestrictionSetting configureRestrictionSetting(String projectId, RestrictionSettingRequest request) {
         try {
             authorizationService.requirePermission(MANAGE);
-            String project = requireProject(projectId);
+            String project = requireProject(projectId, MANAGE);
             if (request == null || request.durationDays() == null || request.minDays() == null || request.maxDays() == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "受限时长须与其下限、上限同时填写");
             }
@@ -163,7 +163,7 @@ public class CustomerAccountStatusService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "action is invalid");
             }
             String reason = requireText(command.reason(), "reason");
-            String project = requireProject(command.projectId());
+            String project = requireProject(command.projectId(), REQUEST);
             CustomerRecord customer = repository.findCustomerById(requireText(customerId, "customer_id"))
                     .orElseThrow(() -> ApiException.notFound("CUSTOMER_NOT_FOUND", "客人不存在或已被删除"));
             if ("list".equals(action) && ("blacklisted".equals(customer.status()) || "deregistered".equals(customer.status()))) {
@@ -320,17 +320,12 @@ public class CustomerAccountStatusService {
         return timestamp == null ? null : timestamp.toInstant();
     }
 
-    /** 项目范围：项目账号只能操作本项目（不传即本项目）；平台账号须指定项目。 */
-    private String requireProject(String projectId) {
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        String requested = trimToNull(projectId);
-        if (scope != null) {
-            if (requested != null && !requested.equals(scope)) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能操作本综合体项目");
-            }
-            return scope;
-        }
-        return requireText(requested, "project_id");
+    /**
+     * 项目范围：不传即本项目（平台账号须指定）；项目须在入口权限码可触及的范围内（含可跨项目角色勾选的项目），
+     * 否则 403 CROSS_PROJECT_FORBIDDEN（第十八批 G 段 82b-R4）。
+     */
+    private String requireProject(String projectId, String permission) {
+        return authorizationService.requireReachableProject(projectId, permission, AuthorizationService.PROJECT_OUT_OF_REACH);
     }
 
     private static String codeOf(RuntimeException exception) {

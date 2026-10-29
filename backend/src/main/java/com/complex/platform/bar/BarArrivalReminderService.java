@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -57,7 +57,7 @@ public class BarArrivalReminderService {
 
     public Policy getPolicy(String projectId) {
         authorizationService.requirePermission(VIEW_PERMISSION);
-        return policy(requireProject(projectId));
+        return policy(requireProject(projectId, VIEW_PERMISSION));
     }
 
     @Transactional
@@ -68,7 +68,7 @@ public class BarArrivalReminderService {
             if (authorizationService.currentMerchantIdQuietly().isPresent()) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "到店前提醒是综合体项目参数，商户账号不能修改");
             }
-            String project = requireProject(projectId);
+            String project = requireProject(projectId, MANAGE_PERMISSION);
             Integer minutes = request == null ? null : request.remindMinutes();
             Integer min = request == null ? null : request.minMinutes();
             Integer max = request == null ? null : request.maxMinutes();
@@ -143,16 +143,12 @@ public class BarArrivalReminderService {
                 .orElseThrow(() -> ApiException.conflict("POLICY_NOT_CONFIGURED", "到店前提醒参数未配置出厂行"));
     }
 
-    /** 项目账号只能管本项目（403 CROSS_PROJECT_FORBIDDEN）。 */
-    private String requireProject(String projectId) {
+    /** 项目须在入口权限码可触及的范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN（第十八批 G 段 82b-R4）。 */
+    private String requireProject(String projectId, String permission) {
         String project = projectId == null || projectId.isBlank() ? null : projectId.trim();
         if (project == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目");
         }
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        if (scope != null && !scope.equals(project)) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能配置当前综合体项目的到店前提醒");
-        }
-        return project;
+        return authorizationService.requireReachableProject(project, permission, AuthorizationService.PROJECT_OUT_OF_REACH);
     }
 }

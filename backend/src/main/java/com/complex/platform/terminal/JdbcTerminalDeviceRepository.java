@@ -160,22 +160,25 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     // M723-F24（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：范围过滤在库里做、不截断——先取全平台最近更新的 200 台
     // 再过滤时，范围外的设备占满名额，范围内的设备会列不全。项目的认定与 TerminalDeviceService.deviceProjectId 同口径。
     @Override
-    public List<TerminalDeviceRecord> listDevicesInScope(String merchantId, String projectId) {
+    public List<TerminalDeviceRecord> listDevicesInScope(String merchantId, java.util.Set<String> projectIds) {
         String scope = "";
         Map<String, Object> parameters = Map.of();
         if (merchantId != null) {
             scope = " WHERE d.merchant_id = :merchant";
             parameters = Map.of("merchant", merchantId);
-        } else if (projectId != null) {
+        } else if (projectIds != null) {
+            if (projectIds.isEmpty()) {
+                return List.of();
+            }
             scope = """
                       LEFT JOIN merchants m ON m.id = NULLIF(btrim(d.merchant_id), '')
                       LEFT JOIN spaces s ON s.id = NULLIF(btrim(d.bound_space_id), '')
                       LEFT JOIN staff_profiles p ON p.id = NULLIF(btrim(d.staff_id), '')
-                     WHERE CASE WHEN NULLIF(btrim(d.merchant_id), '') IS NOT NULL THEN m.project_id
-                                WHEN NULLIF(btrim(d.bound_space_id), '') IS NOT NULL THEN s.project_id
-                                ELSE p.project_id END = :project
+                     WHERE CASE WHEN NULLIF(btrim(d.bound_space_id), '') IS NOT NULL THEN s.project_id
+                                WHEN NULLIF(btrim(d.merchant_id), '') IS NOT NULL THEN m.project_id
+                                ELSE p.project_id END IN (:projects)
                     """;
-            parameters = Map.of("project", projectId);
+            parameters = Map.of("projects", projectIds);
         }
         return jdbcTemplate.query("""
                 SELECT d.id, d.device_id, d.device_code, d.terminal_type, d.binding_scope, d.bound_space_id,

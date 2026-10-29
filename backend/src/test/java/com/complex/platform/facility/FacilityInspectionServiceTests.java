@@ -41,7 +41,7 @@ class FacilityInspectionServiceTests {
         inspections = new InMemoryInspectionRepository();
         events = new ArrayList<>();
         service = new FacilityInspectionService(inspections, mock(AuditEventService.class),
-                mock(AuthorizationService.class), events::add);
+                FacilityWorkOrderServiceTests.anyProjectAuth(), events::add);
     }
 
     @AfterEach
@@ -181,9 +181,9 @@ class FacilityInspectionServiceTests {
         seedPolicy(workOrders, "rectification", "normal", 240, 4320, true, "supervisor");
         FacilityWorkOrderService workOrderService = new FacilityWorkOrderService(workOrders,
                 new FacilityWorkOrderServiceTests.InMemoryFacilityRepository(), mock(AuditEventService.class),
-                mock(AuthorizationService.class), inspections);
+                FacilityWorkOrderServiceTests.anyProjectAuth(), inspections);
         service = new FacilityInspectionService(inspections, mock(AuditEventService.class),
-                mock(AuthorizationService.class), event -> workOrderService.onInspectionAbnormal((FacilityInspectionAbnormalEvent) event));
+                FacilityWorkOrderServiceTests.anyProjectAuth(), event -> workOrderService.onInspectionAbnormal((FacilityInspectionAbnormalEvent) event));
 
         FacilityInspectionTemplateRecord template =
                 service.createTemplate(templateReq("fire", 1, "to_work_order", true));

@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -160,7 +160,7 @@ public class DealerDeliveryService {
             Discrepancy difference=delivery.discrepancy(found.discrepancyId()).orElseThrow();
             scoped(difference.orderId(),DealerOrderService.SHIP);
             if(request==null) throw invalid("请填写实际交接或处置完成时间和凭证");
-            money.lockDealerForOrder(difference.orderId());
+            money.lockDealerForOrder(difference.orderId(), DealerOrderService.SHIP);
             DealerOrderRecord order=orders.lockOrder(difference.orderId()).orElseThrow();
             return idempotency.execute("dealerDeliveryPhysical:"+resolutionId,request.idempotencyKey(),request,()->{
                 Resolution current=resolution(resolutionId);

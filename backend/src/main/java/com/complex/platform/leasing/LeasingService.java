@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
@@ -389,6 +389,7 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         authorizationService.requirePlatformScope();
         LeasingSignRequest actual = requireRequest(request);
         LeasingIntentRecord intent = requireIntent(intentId);
+        requireInReach(intent.projectId(), "leasing.convert", "签约意向不在本权限可触及的项目范围内");
         if (!"pending_signing".equals(intent.stage())) {
             throw ApiException.conflict("LEASING_INTENT_NOT_PENDING_SIGNING",
                     "只有待签约状态的意向才能签约");
@@ -415,7 +416,8 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
                 operationSubjectId != null ? operationSubjectId : contractSubjectId,
                 settlementSubjectId != null ? settlementSubjectId : contractSubjectId,
                 actual.effectiveDate(), actual.expiryDate(), intent.rentTerms(),
-                null, null, actual.depositCent(), null, null, List.of(), intent.projectId(), null, intendedSpaces));
+                null, null, actual.depositCent(), null, null, List.of(), intent.projectId(), null, intendedSpaces),
+                "leasing.convert"); // 复核：起草落地项目按签约码核一次（入口已按它核过意向项目），不另要 contract.draft.manage
         // CG-01：把起草的合同绑到来源意向（V442 leasing_intents.contract_id），合同生效后据此反查线索置已签约；
         // 线索状态此处不动（合同未经审批、未生效，不是已签约）。
         repository.bindIntentContract(intent.id(), contract.id());
@@ -527,6 +529,7 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         LeasingBrandBlacklistRequest actual = requireRequest(request);
         LeasingBrandRecord ex = repository.findBrandById(requireText(brandId, "brand_id"))
                 .orElseThrow(() -> ApiException.notFound("LEASING_BRAND_NOT_FOUND", "品牌不存在或已被删除"));
+        requireInReach(ex.projectId(), "leasing.brand.blacklist", "品牌不在本权限可触及的项目范围内");
         Instant now = Instant.now();
         LeasingBrandRecord saved;
         if (actual.blacklist()) {
@@ -657,6 +660,18 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "招商线索不在本权限可触及的项目范围内");
         }
         return lead;
+    }
+
+    /**
+     * 第十八批 G 段第 82 条 82a-R1（治理地图第 528 行「在该角色所含权限内」、第 659 行「逐个勾选的只能查看被选中的项目」）：
+     * 既有对象所在项目须在该入口权限码可触及的范围内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不受此限。
+     */
+    private void requireInReach(String projectId, String permission, String message) {
+        var actor = authorizationService.currentActor();
+        if (!authorizationService.isPlatformAdmin(actor)
+                && (projectId == null || !authorizationService.canReachProject(actor, projectId, permission))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", message);
+        }
     }
 
     private LeasingIntentRecord requireIntent(String intentId) {

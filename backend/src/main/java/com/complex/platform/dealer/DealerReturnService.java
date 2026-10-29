@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -93,7 +93,7 @@ public class DealerReturnService {
 
     public DealerReturnRecord getReturn(String returnId) {
         authorization.requirePermission(VIEW);
-        return requireReturn(returnId);
+        return requireReturn(returnId, VIEW);
     }
 
     public PageResponse<DealerReturnRecord> listReturns(String orderId) {
@@ -103,13 +103,13 @@ public class DealerReturnService {
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     PageResponse<DealerReturnRecord> listReturns(String orderId, String permission) {
-        requireOrder(orderId);
+        requireOrder(orderId, permission);
         return page(returns.listReturns(orderId));
     }
 
     public PageResponse<DealerReturnLineRecord> listReturnLines(String returnId) {
         authorization.requirePermission(VIEW);
-        requireReturn(returnId);
+        requireReturn(returnId, VIEW);
         return page(returns.listLines(returnId));
     }
 
@@ -120,7 +120,7 @@ public class DealerReturnService {
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     PageResponse<DealerInvoiceRecord> listInvoices(String orderId, String permission) {
-        requireOrder(orderId);
+        requireOrder(orderId, permission);
         return page(returns.listInvoices(orderId));
     }
 
@@ -136,7 +136,7 @@ public class DealerReturnService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerReturnRecord requestReturn(String orderId, DealerReturnRequest request, String permission) {
         try {
-            requireOrder(orderId);
+            requireOrder(orderId, permission);
             if (MANAGE.equals(permission)) {
                 String project=orders.findOrderProjectId(orderId).orElse(null);
                 if(project==null || !authorization.canReachProject(authorization.currentActor(),project,permission))
@@ -214,7 +214,7 @@ public class DealerReturnService {
     public DealerReturnRecord decideReturn(String returnId, DealerReturnDecisionRequest request) {
         authorization.requirePermission(REVIEW);
         try {
-            DealerReturnRecord ret = requireReturn(returnId);
+            DealerReturnRecord ret = requireReturn(returnId, REVIEW);
             requireStatus(ret, "pending_approval");
             String decision = requireDecision(request == null ? null : request.decision());
             if (Objects.equals(actorId(), ret.createdBy())) {
@@ -244,7 +244,7 @@ public class DealerReturnService {
     public DealerReturnRecord receiveReturn(String returnId, String idempotencyKey) {
         authorization.requirePermission(INSPECT);
         try {
-            DealerReturnRecord ret = requireReturn(returnId);
+            DealerReturnRecord ret = requireReturn(returnId, INSPECT);
             requireStatus(ret, "pending_receipt");
             return idempotency.execute("dealerReturnReceive:" + returnId, idempotencyKey, Map.of("id", returnId), () -> {
                 DealerReturnRecord saved = with(ret, "inspecting").toBuilderReceived(actorId(), Instant.now());
@@ -267,15 +267,15 @@ public class DealerReturnService {
     public DealerReturnRecord inspectReturn(String returnId, DealerReturnInspectionRequest request) {
         authorization.requirePermission(INSPECT);
         try {
-            DealerReturnRecord initial = requireReturn(returnId);
+            DealerReturnRecord initial = requireReturn(returnId, INSPECT);
             requireStatus(initial, "inspecting");
             if (request == null || request.lines() == null || request.lines().isEmpty()) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "验收至少一条明细");
             }
-            DealerOrderRecord candidate = requireOrder(initial.orderId());
+            DealerOrderRecord candidate = requireOrder(initial.orderId(), INSPECT);
             dealers.lockDealerCredit(candidate.dealerId()).orElseThrow();
             DealerOrderRecord order = orders.lockOrder(initial.orderId()).orElseThrow();
-            DealerReturnRecord ret = requireReturn(returnId);
+            DealerReturnRecord ret = requireReturn(returnId, INSPECT);
             requireStatus(ret, "inspecting");
             List<DealerReturnLineRecord> lines = returns.listLines(returnId);
             List<DealerReturnLineRecord> inspected = new ArrayList<>();
@@ -411,7 +411,7 @@ public class DealerReturnService {
     @Transactional
     public DealerReturnRecord recordRefundResult(String returnId, DealerReturnRefundResultRequest request) {
         authorization.requirePermission(REFUND_EXECUTE);
-        var ret=requireReturn(returnId);
+        var ret=requireReturn(returnId, REFUND_EXECUTE);
         String project=orders.findOrderProjectId(ret.orderId()).orElse(null);
         if(project==null || !authorization.canReachProject(authorization.currentActor(),project,REFUND_EXECUTE)) throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN","退款不在授权项目范围内");
         audit.recordFailure("dealer.return.refund_execute_failed",REFUND_EXECUTE,"dealer_return",returnId,null,
@@ -449,19 +449,16 @@ public class DealerReturnService {
         return accepted >= requested ? "completed" : "partially_completed";
     }
 
-    private DealerReturnRecord requireReturn(String id) {
+    private DealerReturnRecord requireReturn(String id, String permission) {
         DealerReturnRecord ret = returns.findReturn(requireText(id, "return_id")).orElseThrow(() -> ApiException.notFound("DEALER_RETURN_NOT_FOUND", "退货单不存在"));
-        requireOrder(ret.orderId());
+        requireOrder(ret.orderId(), permission);
         return ret;
     }
 
-    private DealerOrderRecord requireOrder(String id) {
+    private DealerOrderRecord requireOrder(String id, String permission) {
         DealerOrderRecord order = orders.findOrder(requireText(id, "order_id")).orElseThrow(() -> ApiException.notFound("DEALER_ORDER_NOT_FOUND", "经销订单不存在"));
         DealerRecord dealer = dealers.findDealer(order.dealerId()).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        String scope = DealerPortalAccountService.projectScopeOf(authorization);
-        if (scope != null && dealer.projectId() != null && !scope.equals(dealer.projectId())) {
-            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权访问其他项目的经销商");
-        }
+        DealerPortalAccountService.requireDealerInReach(authorization, dealer, permission);
         return order;
     }
 

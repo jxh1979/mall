@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,7 +57,7 @@ class FacilityWorkOrderServiceTests {
         seedPolicy("cleaning", "normal", 120, 480, false, "handler");
         seedPolicy("complaint", "normal", 120, 1440, false, "reporter");
         service = new FacilityWorkOrderService(workOrders, facility, mock(AuditEventService.class),
-                mock(AuthorizationService.class), null, null, null, idempotency());
+                anyProjectAuth(), null, null, null, idempotency());
     }
 
     @AfterEach
@@ -68,7 +68,7 @@ class FacilityWorkOrderServiceTests {
     @Test
     void listAssignedToMeReturnsOnlyOwnOrders() {
         // BYOD 一期(2026-07-02):员工自有手机「我的工单」——凭 view_assigned 只看流转到自己的,不见别人。
-        AuthorizationService auth = mock(AuthorizationService.class);
+        AuthorizationService auth = anyProjectAuth();
         org.mockito.Mockito.when(auth.currentActor()).thenReturn(
                 new AccessActor("staff_me", "staff_me", "staff", null, null, "active"));
         FacilityWorkOrderService scoped = new FacilityWorkOrderService(workOrders, facility,
@@ -103,7 +103,7 @@ class FacilityWorkOrderServiceTests {
     void readMethodsRequirePlatformScopeSoMerchantCannotReadAllPlatformWorkOrders() {
         // B1d 跨租户读隔离：list/listOverdue/findById 也必须过平台域闸，
         // 否则持 facility.work_order.manage 的商户角色可读全平台工单。
-        AuthorizationService authz = mock(AuthorizationService.class);
+        AuthorizationService authz = anyProjectAuth();
         org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "merchant-scoped"))
                 .when(authz).requirePlatformScope();
         FacilityWorkOrderService scoped = new FacilityWorkOrderService(
@@ -431,7 +431,7 @@ class FacilityWorkOrderServiceTests {
     /** R3：自动工单的提单确认只能由在岗承接人本人做。 */
     @Test
     void autoOrder_onlyOnDutyConfirmerCanConfirm() {
-        AuthorizationService auth = mock(AuthorizationService.class);
+        AuthorizationService auth = anyProjectAuth();
         AccessRepository access = mock(AccessRepository.class);
         onDuty(access, "usr_eng", "proj_9");
         FacilityWorkOrderService dual = dualAutoService(auth, access);
@@ -449,7 +449,7 @@ class FacilityWorkOrderServiceTests {
     /** R3：设备责任人本人负责此次维修 → 须物业主管指定其他人并留痕，再由被指定人确认。 */
     @Test
     void autoOrder_confirmerIsRepairer_requiresDesignation() {
-        AuthorizationService auth = mock(AuthorizationService.class);
+        AuthorizationService auth = anyProjectAuth();
         AccessRepository access = mock(AccessRepository.class);
         AuditEventService audit = mock(AuditEventService.class);
         onDuty(access, "usr_eng", "proj_9");
@@ -478,7 +478,7 @@ class FacilityWorkOrderServiceTests {
     /** R3：责任人不在岗可指定；责任人在岗且非本次维修人不需另行指定；被指定人须在岗且不是维修人。 */
     @Test
     void autoOrder_confirmerNotOnDuty_allowsDesignationAndValidatesDesignee() {
-        AuthorizationService auth = mock(AuthorizationService.class);
+        AuthorizationService auth = anyProjectAuth();
         AccessRepository access = mock(AccessRepository.class);
         onDuty(access, "usr_eng", "proj_9");
         onDuty(access, "usr_b", "proj_9");
@@ -586,7 +586,7 @@ class FacilityWorkOrderServiceTests {
     }
 
     private FacilityWorkOrderService reassignService(AuditEventService audit) {
-        return new FacilityWorkOrderService(workOrders, facility, audit, mock(AuthorizationService.class), null, null, null,
+        return new FacilityWorkOrderService(workOrders, facility, audit, anyProjectAuth(), null, null, null,
                 idempotency());
     }
 
@@ -602,6 +602,18 @@ class FacilityWorkOrderServiceTests {
     private FacilityWorkOrderService dualAutoService(AuthorizationService auth, AccessRepository access) {
         return new FacilityWorkOrderService(workOrders, facility, mock(AuditEventService.class), auth, null, null, access,
                 idempotency());
+    }
+
+    /**
+     * 第十八批 G 段 82b-R1：设施各服务的列表与既有对象写改按入口权限码可触及项目判（真库回归见 FacilityCrossProjectReachJdbcIntegrationTests）；
+     * 本类与同包单测只测业务流转，授权桩成可触及一切项目，断言不变。
+     */
+    static AuthorizationService anyProjectAuth() {
+        AuthorizationService auth = mock(AuthorizationService.class);
+        when(auth.canReachProject(any(), any(), any(String[].class))).thenReturn(true);
+        when(auth.projectReach(any(), any(String[].class)))
+                .thenReturn(new AuthorizationService.ProjectReach(true, true, null, true, java.util.Set.of()));
+        return auth;
     }
 
     private static IdempotencyService idempotency() {

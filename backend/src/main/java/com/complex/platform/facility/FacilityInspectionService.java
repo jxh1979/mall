@@ -10,6 +10,7 @@ import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest
 import com.complex.platform.facility.dto.FacilityInspectionRecordSubmitRequest;
 import com.complex.platform.facility.dto.FacilityInspectionTaskRequest;
 import com.complex.platform.facility.dto.FacilityInspectionTemplateRequest;
+import com.complex.platform.governance.PlatformService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -18,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,20 +46,29 @@ public class FacilityInspectionService {
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final PlatformService platformService;
 
+    @Autowired
     public FacilityInspectionService(FacilityInspectionRepository repository, AuditEventService auditEventService,
-            AuthorizationService authorizationService, ApplicationEventPublisher eventPublisher) {
+            AuthorizationService authorizationService, ApplicationEventPublisher eventPublisher, PlatformService platformService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.eventPublisher = eventPublisher;
+        this.platformService = platformService;
+    }
+
+    /** 测试与内部装配用：不带平台服务（新建模板与任务照旧取请求里的项目，见 {@link #landingProject}）。 */
+    public FacilityInspectionService(FacilityInspectionRepository repository, AuditEventService auditEventService,
+            AuthorizationService authorizationService, ApplicationEventPublisher eventPublisher) {
+        this(repository, auditEventService, authorizationService, eventPublisher, null);
     }
 
     public PageResponse<FacilityInspectionTemplateRecord> listTemplates() {
         AccessActor actor = authorizationService.currentActor();
         List<FacilityInspectionTemplateRecord> items = authorizationService.isOutsourcedVendor(actor)
                 ? repository.listTemplatesByProject(authorizationService.requireProjectScope(actor))
-                : repository.listTemplates();
+                : inReach(repository.listTemplates(), FacilityInspectionTemplateRecord::projectId);
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -65,7 +76,7 @@ public class FacilityInspectionService {
         AccessActor actor = requireScopeActor();
         List<FacilityInspectionTaskRecord> items = authorizationService.isOutsourcedVendor(actor)
                 ? repository.listTasksAssignedTo(actor.id(), authorizationService.requireProjectScope(actor))
-                : repository.listTasks();
+                : inReach(repository.listTasks(), FacilityInspectionTaskRecord::projectId);
         return new PageResponse<>(items, 1, 500, items.size());
     }
 
@@ -94,7 +105,7 @@ public class FacilityInspectionService {
         FacilityInspectionTemplateRecord rec = new FacilityInspectionTemplateRecord(
                 "fit_" + UUID.randomUUID(), requireText(r.name(), "name"), type, cycleDays, abnormalMode,
                 listOrEmpty(r.checklist()), trimToNull(r.scopeNote()), r.active() == null || r.active(),
-                trimToNull(r.projectId()), now, now);
+                landingProject(r.projectId(), null, null), now, now);
         repository.insertTemplate(rec);
         audit("facility.inspection_template_created", TEMPLATE_BUSINESS_TYPE, rec.id(), r.idempotencyKey(),
                 Map.of("type", type, "abnormal_mode", abnormalMode));
@@ -188,6 +199,7 @@ public class FacilityInspectionService {
         authorizationService.requirePlatformScope();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
         FacilityInspectionTaskRecord cur = loadTask(id);
+        requireReach(cur.projectId());
         requireStatus(cur, "rectifying", "只有整改中的巡检任务才能复检");
         Instant now = Instant.now();
         FacilityInspectionTaskRecord rechecked = withTaskState(cur, "rechecked", cur.startedAt(), cur.completedAt(), now);
@@ -202,6 +214,7 @@ public class FacilityInspectionService {
         authorizationService.requirePlatformScope();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
         FacilityInspectionTaskRecord cur = loadTask(id);
+        requireReach(cur.projectId());
         requireStatus(cur, "rechecked", "只有已复检的巡检任务才能确认");
         Instant now = Instant.now();
         FacilityInspectionTaskRecord closed = withTaskState(cur, "closed", cur.startedAt(), now, now);
@@ -266,7 +279,8 @@ public class FacilityInspectionService {
         return new FacilityInspectionTaskRecord(
                 "fitask_" + UUID.randomUUID(), templateId, type, "pending", requireText(title, "title"),
                 scheduleMode, routePoints, trimToNull(r.assigneeId()), r.scheduledDate(), dueDate, null, null,
-                null, trimToNull(r.projectId()), trimToNull(r.spaceId()), now, now);
+                null, landingProject(r.projectId(), template == null ? null : template.projectId(), r.spaceId()),
+                trimToNull(r.spaceId()), now, now);
     }
 
     private String applySubmitTransition(FacilityInspectionTaskRecord cur, FacilityInspectionRecordRecord rec, Instant now) {
@@ -331,6 +345,56 @@ public class FacilityInspectionService {
 
     private void enforceAssignedScope(AccessActor actor, FacilityInspectionTaskRecord task) {
         authorizationService.enforceOutsourcedAssigneeScope(actor, task.assigneeId(), task.projectId());
+        if (!authorizationService.isOutsourcedVendor(actor)) {
+            requireReach(task.projectId());
+        }
+    }
+
+    /**
+     * 第十八批 G 段 82b-R1（治理地图第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」；
+     * 裁决 M737-iter7「行本身没有项目的不出」）：巡检任务项目须在 facility.inspection.manage 可触及范围内（平台管理员不限），
+     * 项目为空的只给平台管理员；否则 403 CROSS_PROJECT_FORBIDDEN。外包维保账号照旧只按派给本人、本项目判。
+     */
+    private void requireReach(String projectId) {
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), projectId, PERM)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该记录不在本权限可触及的项目范围内");
+        }
+    }
+
+    /** 82b-R1：列表只留可触及项目内的模板或任务（同上口径）。 */
+    private <T> List<T> inReach(List<T> items, java.util.function.Function<T, String> projectOf) {
+        AuthorizationService.ProjectReach reach = authorizationService.projectReach(authorizationService.currentActor(), PERM);
+        return items.stream().filter(item -> reach.covers(projectOf.apply(item))).toList();
+    }
+
+    /**
+     * 第十八批 G 段 82b-R2（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」；第 413 行「所有基础对象都要带
+     * “综合体项目归属”」）：新建巡检模板落地＝请求 project_id → 本人项目；新建巡检任务落地＝请求 project_id → 模板的项目 → 空间所在项目 →
+     * 本人项目。须是项目且在 facility.inspection.manage 可触及范围内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不带任何锚点时照旧落空。
+     * 定期生成的任务照旧随模板（{@link #generateScheduledTasks}）。不带平台服务的测试装配照旧取请求里的项目。
+     */
+    private String landingProject(String requested, String templateProject, String spaceId) {
+        String landing = trimToNull(requested);
+        if (platformService == null) {
+            return landing;
+        }
+        if (landing == null) {
+            landing = templateProject;
+        }
+        if (landing == null) {
+            landing = platformService.spaceProjectId(trimToNull(spaceId));
+        }
+        AccessActor actor = authorizationService.currentActor();
+        if (landing == null) {
+            if (authorizationService.isPlatformAdmin(actor)) {
+                return null;
+            }
+            landing = actor.organizationId();
+        }
+        if (!platformService.projectExists(landing) || !authorizationService.canReachProject(actor, landing, PERM)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
+        }
+        return landing;
     }
 
     private FacilityInspectionTemplateRequest requireTemplate(FacilityInspectionTemplateRequest request) {

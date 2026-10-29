@@ -1,8 +1,9 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -15,8 +16,8 @@ import com.complex.platform.terminal.dto.DeviceLifecycleRequest;
 import com.complex.platform.terminal.dto.DeviceMerchantRequest;
 import com.complex.platform.terminal.dto.DeviceReturnRequest;
 import com.complex.platform.terminal.dto.DeviceUnbindRequest;
+import com.complex.platform.terminal.dto.EntryDeviceRegisterRequest;
 import com.complex.platform.terminal.dto.KioskHeartbeatRequest;
-import com.complex.platform.terminal.dto.SecurityXrayRegisterRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -53,6 +54,9 @@ public class TerminalDeviceService {
     private static final Set<String> TERMINAL_TYPES = Set.of("staff_work_phone", "tablet", "kiosk");
     // 第 63 条：安检 X 光设备只在后台登记（不进上面员工端领用绑定的类型，/devices/bind 照旧拒绝）
     private static final String SECURITY_XRAY = "security_xray";
+    // 第 82 条 82c-R1（PGM:618「综合体入场三道环节设备（安检环节的 X 光设备、年龄核验环节的人脸扫描设备、检票环节的检票闸机）」）：
+    // 入场三道环节设备固定在点位、只在后台登记（同样不进上面的 TERMINAL_TYPES）
+    private static final Set<String> FIXED_ENTRY_TYPES = Set.of(SECURITY_XRAY, "face_scanner", "ticket_gate");
     private static final Set<String> KIOSK_MODES = Set.of("ticketing", "service");
     private static final Set<String> KIOSK_STATUSES = Set.of("online", "degraded", "offline");
     private static final Set<String> DEVICE_CREDENTIAL_REJECTION_CODES = Set.of(
@@ -110,7 +114,9 @@ public class TerminalDeviceService {
         try {
             // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：先核设备归属范围，再进幂等层——越范围的请求
             // 不占位、不执行，也拿不到别人那次登记的结果；设备不存在留给下面照旧报 404。
-            repository.findByDeviceId(id).ifPresent(this::requireDeviceInScope);
+            // 第十八批 G 段 82b-R5 ④：按入口权限码可触及的项目判，在取设备锁之前算好
+            ProjectReach reach = reach(BIND_PERMISSION);
+            repository.findByDeviceId(id).ifPresent(device -> requireDeviceInScope(reach, device));
             return idempotencyService.execute(
                     "registerDeviceSigningKey:" + id,
                     idempotencyKey,
@@ -162,7 +168,7 @@ public class TerminalDeviceService {
                 "terminal.device.bind_failed",
                 BIND_PERMISSION,
                 // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：同号旧设备与绑定后的归属都要在本人能管的范围内
-                () -> requireBindInScope(request),
+                () -> requireBindInScope(reach(BIND_PERMISSION), request),
                 () -> bind(request),
                 this::withoutDeviceToken
         );
@@ -179,7 +185,7 @@ public class TerminalDeviceService {
                 "terminal.device.returned_failed",
                 BIND_PERMISSION,
                 // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：按设备码取到的设备要在本人能管的范围内
-                () -> requireReturnInScope(request),
+                () -> requireReturnInScope(reach(BIND_PERMISSION), request),
                 () -> returnBoundDevice(request)
         );
     }
@@ -191,6 +197,7 @@ public class TerminalDeviceService {
         try {
             authorizationService.requirePermission(permission);
             var actor=authorizationService.currentActor();
+            var reach=reach(permission); // 第十八批 G 段 82b-R5 ④：取锁之前算好
             accessRepository.lockAccessUsers(List.of(actor.id()));
             var assignment=accessRepository.findUserPositionAssignment(actor.id())
                     .filter(p -> "night_duty_manager".equals(p.positionCode()) && !p.assignedAt().isAfter(Instant.now())
@@ -210,9 +217,9 @@ public class TerminalDeviceService {
             var replacement=repository.findByDeviceId(replacementId).orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND","替换手机尚未登记"));
             if (old.deviceId().equals(replacementId)) throw ApiException.badRequest("VALIDATION_FAILED","替换手机不能是原手机");
             java.util.stream.Stream.of(old.id(),replacement.id()).sorted().forEach(repository::lockDevice);
-            old=requireDeviceInScope(repository.findById(old.id()).orElseThrow());
-            replacement=requireDeviceInScope(repository.findById(replacement.id()).orElseThrow());
-            requireNewHolderInScope(old.staffId(),replacement.staffId());
+            old=requireDeviceInScope(reach,repository.findById(old.id()).orElseThrow());
+            replacement=requireDeviceInScope(reach,repository.findById(replacement.id()).orElseThrow());
+            requireNewHolderInScope(reach,old.staffId(),replacement.staffId());
             var original=old; var next=replacement;
             return idempotencyService.execute("swapWorkPhone",actual.idempotencyKey(),actual,() -> {
             if (!"staff_work_phone".equals(original.terminalType()) || !"bound".equals(original.status())
@@ -257,7 +264,10 @@ public class TerminalDeviceService {
                 "terminal.device.unbind_failed",
                 UNBIND_PERMISSION,
                 // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：按 id 取到的设备要在本人能管的范围内
-                () -> repository.findById(id).ifPresent(this::requireDeviceInScope),
+                () -> {
+                    ProjectReach reach = reach(UNBIND_PERMISSION);
+                    repository.findById(id).ifPresent(device -> requireDeviceInScope(reach, device));
+                },
                 () -> unbind(id, request)
         );
     }
@@ -291,7 +301,11 @@ public class TerminalDeviceService {
                 "terminal.device.scrapped", "terminal.device.scrap_failed");
     }
 
-    /** 第 63 条：安检 X 光设备修好后恢复在用（维修中 → 在用）；其他设备不走这里（409）。 */
+    /**
+     * 第 63 条、第 82 条 82c-R1：入场三道环节设备修好后恢复在用（维修中 → 在用）。
+     * 第 82 条 82c-R2（PGM:618「设备要绑定员工、班次、点位和状态」；ENUM:241「待领用」）：工作手机、平板、一体机修好后回待领用
+     * （维修中 → returned），再走领用绑定；落点在 applyLifecycle 里按设备类型改写。
+     */
     @Transactional
     public DeviceBindingResponse completeDeviceRepair(String id, DeviceLifecycleRequest request) {
         return transitionLifecycle(
@@ -300,32 +314,104 @@ public class TerminalDeviceService {
     }
 
     /**
-     * 第 63 条（BSM:800「安检环节不产生按人记录，仅记设备状态、故障事件与维修工单留痕」；PGM:618「设备要绑定员工、班次、点位和状态」；
-     * PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：后台登记安检 X 光设备——编号、型号、绑定点位、责任人四项必填，登记即在用。
-     * 不接设备接口、不发设备凭证（X 光机不登录本系统）；当班员工与班次由该点位的排班取得，不另记。
-     * 范围闸在幂等之前：绑定点位与责任人都要在本人能管的范围内。
+     * 第 82 条 82c-R3（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」；PGM:618「设备要绑定员工……」）：入场三道环节设备
+     * 更换责任人（调岗、离职）——只换责任人、状态不变，原因必填。工作手机、平板、一体机的持有人随归还、领用更换，不走这里（409）。
+     * 范围闸在幂等之前：设备要在本人能管的范围内，新责任人所在项目也须在 terminal.device.lifecycle 可触及的项目内（82b-R5 ④；与生命周期入口顺带改持有员工同一道闸）。
      */
     @Transactional
-    public DeviceBindingResponse registerSecurityXray(SecurityXrayRegisterRequest request) {
+    public DeviceBindingResponse changeResponsibleStaff(String id, DeviceLifecycleRequest request) {
+        String deviceId = requireText(id, "id");
         return executeWrite(
-                "registerSecurityXray",
+                "responsible-staff:" + deviceId,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 DeviceBindingResponse.class,
-                "terminal.device.xray_registered",
-                "terminal.device.xray_register_failed",
+                "terminal.device.responsible_staff_changed",
+                "terminal.device.responsible_staff_change_failed",
                 LIFECYCLE_PERMISSION,
                 () -> {
-                    SecurityXrayRegisterRequest actual = requireRequest(request);
-                    requireAttributionInScope(null, requireText(actual.boundSpaceId(), "bound_space_id"),
-                            requireText(actual.staffId(), "staff_id"));
-                    requireNewHolderInScope(actual.staffId(), null);
+                    ProjectReach reach = reach(LIFECYCLE_PERMISSION);
+                    repository.findById(deviceId).ifPresent(device -> requireHolderChangeInScope(reach,
+                            device, requireText(request == null ? null : request.staffId(), "staff_id")));
                 },
-                () -> insertSecurityXray(request)
+                () -> applyResponsibleStaffChange(deviceId, request)
         );
     }
 
-    private DeviceBindingResponse insertSecurityXray(SecurityXrayRegisterRequest actual) {
+    private DeviceBindingResponse applyResponsibleStaffChange(String id, DeviceLifecycleRequest request) {
+        DeviceLifecycleRequest actual = requireRequest(request);
+        String staff = requireText(actual.staffId(), "staff_id");
+        TerminalDeviceRecord existing = repository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
+        if (TERMINAL_STATUSES.contains(existing.status())) {
+            throw ApiException.conflict("DEVICE_TERMINAL_STATUS",
+                    "设备处于终态 " + existing.status() + "，不能更换责任人");
+        }
+        if (!FIXED_ENTRY_TYPES.contains(existing.terminalType())) {
+            throw ApiException.conflict("INVALID_DEVICE_STATUS",
+                    "只有入场三道环节设备在本入口更换责任人，其他设备随归还、领用更换持有人");
+        }
+        String reason = requireText(actual.reason(), "reason");
+        if (staff.equals(existing.staffId())) {
+            throw ApiException.conflict("DEVICE_STAFF_UNCHANGED", "设备责任人没有变化");
+        }
+        Instant now = Instant.now();
+        TerminalDeviceRecord updated = new TerminalDeviceRecord(existing.id(), existing.deviceId(), existing.deviceCode(),
+                existing.terminalType(), existing.bindingScope(), existing.boundSpaceId(), existing.mdmDeviceRef(),
+                existing.kioskMode(), existing.merchantId(), existing.venueId(), existing.areaId(),
+                existing.locationPointId(), staff, existing.status(), existing.boundAt(), existing.returnedAt(),
+                existing.unboundAt(), existing.returnReason(), existing.unbindReason(), existing.createdAt(), now,
+                existing.deviceModel(), existing.repairWorkOrderId());
+        if (repository.compareAndSetStatus(existing.id(), existing.status(), updated) == 0) {
+            throw ApiException.conflict("DEVICE_TRANSITION_CONFLICT", "设备状态已被并发变更，更换责任人被拒绝");
+        }
+        repository.saveStatusEvent(new TerminalDeviceStatusEventRecord(
+                "dev_evt_" + UUID.randomUUID().toString().replace("-", ""),
+                updated.id(),
+                updated.deviceCode(),
+                "terminal.device.responsible_staff_changed",
+                updated.status(),
+                reason,
+                staff,
+                now
+        ));
+        return toResponse(updated, null);
+    }
+
+    /**
+     * 第 63 条（BSM:800「安检环节不产生按人记录，仅记设备状态、故障事件与维修工单留痕」；PGM:618「设备要绑定员工、班次、点位和状态」；
+     * PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：后台登记安检 X 光设备——编号、型号、绑定点位、责任人四项必填，登记即在用。
+     * 不接设备接口、不发设备凭证（X 光机不登录本系统）；当班员工与班次由该点位的排班取得，不另记。
+     * 第 82 条 82c-R1（PGM:618「综合体入场三道环节设备（安检环节的 X 光设备、年龄核验环节的人脸扫描设备、检票环节的检票闸机）」）：
+     * 人脸扫描设备、检票闸机共用本入口，请求带 terminal_type、只收这三类；只有安检 X 光设备送修即开维修工单。
+     * 范围闸在幂等之前：绑定点位与责任人都要在本人能管的范围内。
+     */
+    @Transactional
+    public DeviceBindingResponse registerEntryDevice(EntryDeviceRegisterRequest request) {
+        return executeWrite(
+                "registerEntryDevice",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                DeviceBindingResponse.class,
+                "terminal.device.entry_device_registered",
+                "terminal.device.entry_device_register_failed",
+                LIFECYCLE_PERMISSION,
+                () -> {
+                    EntryDeviceRegisterRequest actual = requireRequest(request);
+                    ProjectReach reach = reach(LIFECYCLE_PERMISSION);
+                    requireAttributionInScope(reach, null, requireText(actual.boundSpaceId(), "bound_space_id"),
+                            requireText(actual.staffId(), "staff_id"));
+                    requireNewHolderInScope(reach, actual.staffId(), null);
+                },
+                () -> insertEntryDevice(request)
+        );
+    }
+
+    private DeviceBindingResponse insertEntryDevice(EntryDeviceRegisterRequest actual) {
+        String type = requireText(actual.terminalType(), "terminal_type");
+        if (!FIXED_ENTRY_TYPES.contains(type)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "terminal_type is invalid");
+        }
         String code = requireText(actual.deviceCode(), "device_code");
         String model = requireText(actual.deviceModel(), "device_model");
         String space = requireText(actual.boundSpaceId(), "bound_space_id");
@@ -336,14 +422,14 @@ public class TerminalDeviceService {
             throw ApiException.conflict("DEVICE_CODE_EXISTS", "设备编号已登记：" + code);
         }
         Instant now = Instant.now();
-        TerminalDeviceRecord saved = repository.insertSecurityXray(new TerminalDeviceRecord(id, code, code, SECURITY_XRAY,
+        TerminalDeviceRecord saved = repository.insertSecurityXray(new TerminalDeviceRecord(id, code, code, type,
                 "space", space, null, null, null, null, null, space, staff, "bound", now, null, null, null, null, now, now,
                 model, null));
         repository.saveStatusEvent(new TerminalDeviceStatusEventRecord(
                 "dev_evt_" + UUID.randomUUID().toString().replace("-", ""),
                 saved.id(),
                 saved.deviceCode(),
-                "terminal.device.xray_registered",
+                "terminal.device.entry_device_registered",
                 saved.status(),
                 null,
                 saved.staffId(),
@@ -371,8 +457,11 @@ public class TerminalDeviceService {
                 LIFECYCLE_PERMISSION,
                 // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：送修、挂失、找回、报废共用——
                 // 按 id 取到的设备要在本人能管的范围内；顺带改写持有员工的，改完后也要仍在范围内
-                () -> repository.findById(id).ifPresent(
-                        device -> requireHolderChangeInScope(device, request == null ? null : request.staffId())),
+                () -> {
+                    ProjectReach reach = reach(LIFECYCLE_PERMISSION);
+                    repository.findById(id).ifPresent(
+                            device -> requireHolderChangeInScope(reach, device, request == null ? null : request.staffId()));
+                },
                 () -> applyLifecycle(id, request, targetStatus, allowedFrom, successEvent)
         );
     }
@@ -398,10 +487,10 @@ public class TerminalDeviceService {
                     "设备状态 " + existing.status() + " 不能流转到 " + targetStatus);
         }
         boolean xray = SECURITY_XRAY.equals(existing.terminalType());
-        // 第 63 条：修复完成（维修中 → 在用）只用于安检 X 光设备
-        if ("bound".equals(targetStatus) && !xray) {
-            throw ApiException.conflict("INVALID_DEVICE_STATUS", "只有安检 X 光设备可以登记修复完成");
-        }
+        // 第 63 条、第 82 条 82c-R1：入场三道环节设备修复完成回在用；第 82 条 82c-R2（PGM:618「设备要绑定员工、班次、点位和状态」；
+        // ENUM:241「待领用」）：工作手机、平板、一体机修好后不在任何人的当班里，回待领用（returned），再走领用绑定
+        String landing = "bound".equals(targetStatus) && !FIXED_ENTRY_TYPES.contains(existing.terminalType())
+                ? "returned" : targetStatus;
         // 第 63 条（BSM:800「仅记设备状态、故障事件与维修工单留痕」）：安检 X 光设备登记故障即开一张维修工单，与送修同一事务
         String repairWorkOrderId = existing.repairWorkOrderId();
         if (xray && "repair".equals(targetStatus)) {
@@ -424,7 +513,7 @@ public class TerminalDeviceService {
                 existing.areaId(),
                 existing.locationPointId(),
                 firstNonBlank(actual.staffId(), existing.staffId()),
-                targetStatus,
+                landing,
                 existing.boundAt(),
                 existing.returnedAt(),
                 existing.unboundAt(),
@@ -472,10 +561,13 @@ public class TerminalDeviceService {
             // M723-F21、F24（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备列表只显示本人能管的设备，按范围在库里查、
             // 完整列出——不再先取全平台最近更新的 200 台再过滤（范围外的设备占满名额时，范围内的设备会列不全）。范围口径与写入口的
             // attributionInScope 相同：带商户归属 → 本商户；否则项目范围空＝平台管理员全量，非空 → 认定为本项目的设备。
+            // 第十八批 G 段 82b-R5 ④（PGM 第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：不带商户归属的按
+            // terminal.switch.view 可触及的项目在库里查（平台管理员全部）。
             Optional<String> actorMerchant = authorizationService.currentMerchantIdQuietly();
+            ProjectReach reach = reach("terminal.switch.view");
             List<TerminalDeviceRecord> records = repository.listDevicesInScope(
                     actorMerchant.orElse(null),
-                    actorMerchant.isPresent() ? null : authorizationService.currentProjectScopeQuietly().orElse(null));
+                    reach == null || reach.platformAdmin() ? null : reach.organizationIds());
             auditEventService.recordSuccess(
                     "terminal.device.viewed",
                     "terminal.switch.view",
@@ -520,9 +612,10 @@ public class TerminalDeviceService {
             // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：先核范围，再进幂等层——原设备要在本人能管的
             // 范围内，改完后的归属（目标商户＋原绑定空间＋原持有员工）也要仍在范围内：带商户归属的员工只能改到本商户，
             // 项目员工改完后仍须认定为本项目。设备不存在留给下面照旧报 404。
+            ProjectReach reach = reach(MERCHANT_PERMISSION);
             repository.findById(deviceRecordId).ifPresent(device -> {
-                TerminalDeviceRecord locked = requireDeviceInScope(device);
-                requireAttributionInScope(trimToNull(actual.merchantId()), locked.boundSpaceId(), locked.staffId());
+                TerminalDeviceRecord locked = requireDeviceInScope(reach, device);
+                requireAttributionInScope(reach, trimToNull(actual.merchantId()), locked.boundSpaceId(), locked.staffId());
             });
             return idempotencyService.execute(
                     "updateTerminalDeviceMerchant:" + deviceRecordId,
@@ -624,47 +717,54 @@ public class TerminalDeviceService {
     }
 
     // ── M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）设备归属范围 ─────────────
-    // 平台管理员全部设备都能管；带商户归属的员工只能管本商户的设备；不带商户归属的项目员工能管本项目内的全部设备
-    // （含本项目内各商户的设备和不挂商户的设备）。认不出项目的设备只有平台管理员能管。
+    // 平台管理员全部设备都能管；带商户归属的员工只能管本商户的设备；不带商户归属的员工能管入口权限码可触及项目内的全部设备
+    // （含这些项目内各商户的设备和不挂商户的设备；第十八批 G 段 82b-R5 ④，PGM 第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」
+    // 「逐个勾选的只能查看被选中的项目」，第 528 行「不受第④类「别的项目」限制」）。认不出项目的设备只有平台管理员能管。
+
+    // 第十八批 G 段 82b-R5 ④：入口权限码可触及的项目，各入口在取设备锁、进幂等之前算好传下去。带商户归属的员工只按商户判，不算（返回空）。
+    // 非平台管理员没有项目归属时 projectReach 抛 PROJECT_SCOPE_REQUIRED。
+    private ProjectReach reach(String permission) {
+        return authorizationService.currentMerchantIdQuietly().isPresent()
+                ? null : authorizationService.projectReach(authorizationService.currentActor(), permission);
+    }
 
     // 先锁住这台设备的行，再按锁后的归属判定：各写入口都在事务里，本次写入结束之前别人改不了它的归属
     // （判定与写入用同一份事实）。返回锁后的那一行。
-    private TerminalDeviceRecord requireDeviceInScope(TerminalDeviceRecord device) {
+    private TerminalDeviceRecord requireDeviceInScope(ProjectReach reach, TerminalDeviceRecord device) {
         repository.lockDevice(device.id());
         TerminalDeviceRecord locked = repository.findById(device.id()).orElse(device);
-        requireAttributionInScope(locked.merchantId(), locked.boundSpaceId(), locked.staffId());
+        requireAttributionInScope(reach, locked.merchantId(), locked.boundSpaceId(), locked.staffId());
         return locked;
     }
 
     // 归还、送修、挂失、找回、报废可以顺带改写持有员工：原设备要在本人能管的范围内，改完后的归属也要仍在范围内
     // （不挂商户、不绑空间的设备按持有员工认定项目——不能借改持有员工把设备挪到别的项目）。
-    private void requireHolderChangeInScope(TerminalDeviceRecord device, String requestedStaffId) {
-        TerminalDeviceRecord locked = requireDeviceInScope(device);
+    private void requireHolderChangeInScope(ProjectReach reach, TerminalDeviceRecord device, String requestedStaffId) {
+        TerminalDeviceRecord locked = requireDeviceInScope(reach, device);
         if (trimToNull(requestedStaffId) != null) {
-            requireAttributionInScope(locked.merchantId(), locked.boundSpaceId(), requestedStaffId);
-            requireNewHolderInScope(requestedStaffId, locked.staffId());
+            requireAttributionInScope(reach, locked.merchantId(), locked.boundSpaceId(), requestedStaffId);
+            requireNewHolderInScope(reach, requestedStaffId, locked.staffId());
         }
     }
 
-    // M723-F22（治理地图第 653 行「所有业务数据默认按项目隔离」；操作员 2026-10-06 裁决）：项目员工改写持有员工时，新的持有员工
-    // 也须是本项目的人——设备按所属商户或绑定空间认定为本项目时，只核设备的项目拦不住把另一项目的员工写成持有人。
+    // M723-F22（治理地图第 653 行「所有业务数据默认按项目隔离」；操作员 2026-10-06 裁决）：不带商户归属的员工改写持有员工时，新的持有员工
+    // 也须在可触及的项目内（82b-R5 ④）——设备按所属商户或绑定空间认定在范围内时，只核设备的项目拦不住把范围外的员工写成持有人。
     // 带商户归属的员工仍只按商户判断（裁决第二点）；平台管理员不受限；没有换人（与原持有员工相同）不核。
-    private void requireNewHolderInScope(String requestedStaffId, String currentStaffId) {
+    private void requireNewHolderInScope(ProjectReach reach, String requestedStaffId, String currentStaffId) {
         String staff = trimToNull(requestedStaffId);
         if (staff == null || staff.equals(trimToNull(currentStaffId))
-                || authorizationService.currentMerchantIdQuietly().isPresent()) {
+                || authorizationService.currentMerchantIdQuietly().isPresent() || reach.platformAdmin()) {
             return;
         }
-        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
-        if (projectScope.isPresent() && !projectScope.get().equals(repository.findStaffProjectId(staff).orElse(null))) {
+        if (!reach.covers(repository.findStaffProjectId(staff).orElse(null))) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "持有员工不在当前综合体项目范围内");
         }
     }
 
     // 归属三项（所属商户、绑定空间、持有员工）既可以是库里现有的，也可以是绑定、改归属之后将要写入的。
     // 拒绝码沿用同域范式（FloorPlanService.checkMerchantOwnership / checkProjectOwnership）。
-    private void requireAttributionInScope(String merchantId, String boundSpaceId, String staffId) {
-        if (attributionInScope(merchantId, boundSpaceId, staffId)) {
+    private void requireAttributionInScope(ProjectReach reach, String merchantId, String boundSpaceId, String staffId) {
+        if (attributionInScope(reach, merchantId, boundSpaceId, staffId)) {
             return;
         }
         throw authorizationService.currentMerchantIdQuietly().isPresent()
@@ -672,28 +772,27 @@ public class TerminalDeviceService {
                 : ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "设备归属不在当前综合体项目范围内");
     }
 
-    // 判定顺序：操作人带商户归属 → 设备所属商户必须等于本人商户；否则取项目范围，空＝平台管理员放行；
-    // 非空 → 设备认定出的项目必须等于它，认不出也拒绝。非平台管理员没有项目归属时 currentProjectScopeQuietly 抛 PROJECT_SCOPE_REQUIRED。
-    private boolean attributionInScope(String merchantId, String boundSpaceId, String staffId) {
+    // 判定顺序：操作人带商户归属 → 设备所属商户必须等于本人商户；否则平台管理员放行；其余设备认定出的项目须在入口权限码可触及的
+    // 项目内，认不出也拒绝。
+    private boolean attributionInScope(ProjectReach reach, String merchantId, String boundSpaceId, String staffId) {
         Optional<String> actorMerchant = authorizationService.currentMerchantIdQuietly();
         if (actorMerchant.isPresent()) {
             return actorMerchant.get().equals(merchantId);
         }
-        Optional<String> projectScope = authorizationService.currentProjectScopeQuietly();
-        return projectScope.isEmpty()
-                || projectScope.get().equals(deviceProjectId(merchantId, boundSpaceId, staffId).orElse(null));
+        return reach.platformAdmin() || reach.covers(deviceProjectId(merchantId, boundSpaceId, staffId).orElse(null));
     }
 
-    // 设备属于哪个项目：先看所属商户的项目，没有商户的看绑定空间的项目，再没有的看持有员工的项目；
-    // 三样都没填、或填了的那一样查不出项目，都是认不出（返回空）。
+    // 设备属于哪个项目（第十八批裁决 18 所选选项原文「设备绑了空间的按空间所在项目，没绑的仍按主项目（这会改 10-06 M723 裁决（四）
+    // 「先看所属商户的项目」的顺序）」）：先看绑定空间的项目，没绑空间的看所属商户的主项目，两样都没有的看持有员工的项目——不挂商户的设备
+    // 仍是先看绑定空间、再看持有员工。三样都没填、或填了的那一样查不出项目，都是认不出（返回空）。
     private Optional<String> deviceProjectId(String merchantId, String boundSpaceId, String staffId) {
-        String merchant = trimToNull(merchantId);
-        if (merchant != null) {
-            return merchantDirectory.findMerchant(merchant).map(MerchantRecord::projectId);
-        }
         String space = trimToNull(boundSpaceId);
         if (space != null) {
             return repository.findSpaceProjectId(space);
+        }
+        String merchant = trimToNull(merchantId);
+        if (merchant != null) {
+            return merchantDirectory.findMerchant(merchant).map(MerchantRecord::projectId);
         }
         String staff = trimToNull(staffId);
         return staff == null ? Optional.empty() : repository.findStaffProjectId(staff);
@@ -701,27 +800,27 @@ public class TerminalDeviceService {
 
     // 登记设备：已存在的同号设备要在本人能管的范围内；绑定后的归属（请求里的商户或沿用原商户、请求里的绑定空间、
     // 请求里的持有员工或沿用原持有员工，取值与 bind() 一致）也要在范围内。请求缺设备号时不在这里拦，留给 bind() 照旧报必填。
-    private void requireBindInScope(DeviceBindRequest request) {
+    private void requireBindInScope(ProjectReach reach, DeviceBindRequest request) {
         String deviceId = request == null ? null : trimToNull(request.deviceId());
         if (deviceId == null) {
             return;
         }
         TerminalDeviceRecord existing = repository.findByDeviceId(deviceId).orElse(null);
         if (existing != null) {
-            existing = requireDeviceInScope(existing);
+            existing = requireDeviceInScope(reach, existing);
         }
-        requireAttributionInScope(
+        requireAttributionInScope(reach,
                 firstNonBlank(request.merchantId(), existing == null ? null : existing.merchantId()),
                 trimToNull(request.boundSpaceId()),
                 firstNonBlank(request.staffId(), existing == null ? null : existing.staffId()));
-        requireNewHolderInScope(request.staffId(), existing == null ? null : existing.staffId());
+        requireNewHolderInScope(reach, request.staffId(), existing == null ? null : existing.staffId());
     }
 
     // 归还按设备码定位；请求缺设备码、设备不存在都不在这里拦，留给 returnBoundDevice() 照旧报必填／404。
-    private void requireReturnInScope(DeviceReturnRequest request) {
+    private void requireReturnInScope(ProjectReach reach, DeviceReturnRequest request) {
         String deviceCode = request == null ? null : trimToNull(request.deviceCode());
         if (deviceCode != null) {
-            repository.findByDeviceCode(deviceCode).ifPresent(device -> requireHolderChangeInScope(device, request.staffId()));
+            repository.findByDeviceCode(deviceCode).ifPresent(device -> requireHolderChangeInScope(reach, device, request.staffId()));
         }
     }
 
