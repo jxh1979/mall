@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.37",
+    "version": "V0.38",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -760,7 +760,7 @@
         ],
         "operationId": "createAccessUser",
         "summary": "创建权限用户",
-        "description": "后台手动创建工作人员/商户/销售账号。必须绑定 organization_id；销售、商户员工、商户管理员必须绑定 merchant_id；密码仅用于写入生产登录凭证哈希；手机号不落明文。",
+        "description": "后台手动创建工作人员/商户/销售账号。必须绑定 organization_id；销售、商户员工、商户管理员必须绑定 merchant_id；密码仅用于写入生产登录凭证哈希；手机号不落明文。 18F：外包账号带商户时，商户不在该项目经营（主项目或已批准的经营项目；自营商户另可挂在其经营主体公司）403 MERCHANT_NOT_IN_PROJECT、不建账号。",
         "x-permission": "access.user.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -2057,7 +2057,7 @@
         ],
         "operationId": "listBusinessMetricSnapshots",
         "summary": "List P2 business metric snapshots for operational analytics",
-        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements. M737：平台管理员看全表；其余人按 analytics.dashboard.view 可触及的项目逐行留——平台段只给经勾选了「可以查看全部项目」的角色持有该权限的人，项目段只出可触及项目的，商户段只出在可触及项目内经营的商户的，其他分段不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
+        "description": "List P2 business metric snapshots for operational analytics. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements. M737：平台管理员看全表；其余人按 analytics.dashboard.view 可触及的项目逐行留——平台段只给经勾选了「可以查看全部项目」的角色持有该权限的人，项目段只出可触及项目的，商户段只出在可触及项目内经营的商户的，其他分段不出。18F 第 80 条：另有商户分项目段 merchant_project（segment_id＝商户编号|项目编号，金额按应收、售票订单、库存、补录各自的项目拆，酒吧按酒吧商户的主项目）；商户合计段改为只给经勾选了「可以查看全部项目」的角色持有该权限的人，商户分项目段只出项目可触及且商户在可触及项目内经营的。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "analytics.dashboard.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -11356,6 +11356,211 @@
           }
         },
         "x-auth-context": "staff-token"
+      },
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "listTraceHandovers",
+        "summary": "按溯源码查交接单",
+        "description": "第十八批 F 段第 14 条（BSM 第 1201 行）：按溯源码列交接单表头（整链状态、当前段、建链时间），新建在前；商户账号只列本商户的交接单。",
+        "x-permission": "inventory.handover.scan",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "trace_code",
+            "in": "query",
+            "required": true,
+            "description": "溯源码。",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/trace-handovers/{id}": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "getTraceHandover",
+        "summary": "查交接链（原扫码五段、异常与人工补录并列）",
+        "description": "第十八批 F 段第 14 条（BSM 第 1201 行「补录记录与原始扫码记录并列展示、互不覆盖」）：返回表头 handover、五段原扫码记录 steps（原样，补录不改写）、 异常 exceptions 与该交接单全部人工补录单 backfills（字段同 GET /api/v1/evidence/manual-backfills）。整链完成＝每段扫码完成或该段有已通过的人工补录，且没有待处理异常。 商户账号只能查本商户的交接单，否则 403 CROSS_MERCHANT_FORBIDDEN；交接单不存在 404 HANDOVER_NOT_FOUND。",
+        "x-permission": "inventory.handover.scan",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "交接单号。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "backfillTraceHandoverSegment",
+        "summary": "交接缺段人工补录（附证据、进主管复核，通过后才生效）",
+        "description": "第十八批 F 段第 14 条（BSM 第 1201 行「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）并经主管复核后方生效，补录记录与原始扫码记录并列展示、互不覆盖」；第 1642 行）： 只补四个人工扫码段 out_verify（库管出库）、kitchen_receive（后厨接收）、staff_pickup（服务员取走）、deliver_customer（送达客人或卡座），段名不在五段内 400 VALIDATION_FAILED， 机器人配送段 dispatch 400 HANDOVER_SEGMENT_NOT_STAFF；该段已扫码（含重复扫码）或已有通过的补录 409 HANDOVER_STEP_NOT_MISSING；原时点 occurred_at 必填且须在建立交接任务之后、当前时间之前， 否则 400 VALIDATION_FAILED。原因、责任人、凭证（经 business_type=manual_backfill 上传）、补录时限（自建立交接任务起算，超时 409 MANUAL_BACKFILL_WINDOW_EXPIRED）同通用人工补录主链； 提交即生成主管复核单（动作类型 inventory.trace.scan_backfill，发起人直接上级复核，责任人本人不得复核 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN），返回补录单（status=pending）。 复核通过后该段原扫码记录不改，按补录完成回算整链；批准时该段已被扫码或已有别的补录通过 409 MANUAL_BACKFILL_TARGET_CHANGED、整笔批准不生效。商户账号只能补本商户的交接单，否则 403 CROSS_MERCHANT_FORBIDDEN。",
+        "x-permission": "inventory.handover.scan",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "evidence.manual_backfill_submitted",
+        "x-audit-event-failure": "evidence.manual_backfill_submit_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "交接单号。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "path",
+            "required": true,
+            "description": "补录的交接段。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "out_verify",
+                "kitchen_receive",
+                "staff_pickup",
+                "deliver_customer"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "occurred_at",
+                  "reason",
+                  "responsible_staff_id",
+                  "evidence_attachment_ids"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  },
+                  "occurred_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "被补录扫码的原时点。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "补录原因。"
+                  },
+                  "responsible_staff_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "责任人账号。"
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "原始记录凭证附件编号（照片、录音、录像，经 business_type=manual_backfill 上传）。"
+                  },
+                  "final_approver_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "指定的最终审批人（选填，不填即发起人直接上级）。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
       }
     },
     "/api/v1/inventory/trace-handovers/{id}/scan-segment": {
@@ -16504,7 +16709,7 @@
         ],
         "operationId": "submitStaffRegistration",
         "summary": "商户代员工提交注册",
-        "description": "项目和商户编号必填；后端按经营主体公司层级解析对应域公司审批。自营商户员工使用本人注册入口。个人资料加密存放，日常响应脱敏。 18E：project_id 可填操作人按 staff.profile.submit 可触及的项目（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_ORG_FORBIDDEN）、不建档案；商户账号照旧只到本人所属项目与本商户。",
+        "description": "项目和商户编号必填；后端按经营主体公司层级解析对应域公司审批。自营商户员工使用本人注册入口。个人资料加密存放，日常响应脱敏。 18E：project_id 可填操作人按 staff.profile.submit 可触及的项目（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_ORG_FORBIDDEN）、不建档案；商户账号照旧只到本人所属项目与本商户。 18F：商户不在 project_id 所指项目经营（主项目或已批准的经营项目）403 MERCHANT_NOT_IN_PROJECT、不建档案，失败留痕 staff.register_failed。",
         "x-permission": "staff.profile.submit",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -21974,6 +22179,116 @@
             "$ref": "#/components/responses/Error"
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/table-sessions/{session_id}/sales-backfill": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "submitBarTableSessionSalesBackfill",
+        "summary": "补录台位会话销售归属（人工补录，店长复核）",
+        "description": "第十八批 F 段第 14 条 14-R3（BSM 第 1642 行「以通话录音为凭证的，录音起始时间必须早于客人到店时间、且早于客人开卡时间达到后台配置的时长……涉及金额、销售归属、提成或责任认定的补录，须由被影响方之外的主管复核」；第 1021 行「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」）：开台与其订台都没有销售归属（自来客）时补录销售人员，已有归属 409 SALES_ATTRIBUTION_PRESENT；已关台或台组账单已全部结清 409 BAR_BILL_ALREADY_SETTLED；拟归属人须有员工档案且在岗（可为别的酒吧员工，BSM 第 1070 行），否则 400 VALIDATION_FAILED。其余同人工补录（见 listManualBackfills）：必写原因与责任人、必附经 business_type=manual_backfill 上传的凭证、在补录时限内；以通话录音为凭证的，录音起始须早于到店（开台时刻）与开卡（订台时刻，直接到店开台取开台时刻）达录音提前量。提交即进主管复核（动作 bar.sales.backfill：直接上级之后由经角色持有 bar.sales_backfill.review 的店长复核，拟归属人不得复核），复核通过才生效：会话、台组未结清账单（销售岗位档按拟归属人员工档案重取）及其订单、尚未开单的订单改归拟归属人，已结清账单与其订单不动；批准时已有归属或已结清 409 MANUAL_BACKFILL_TARGET_CHANGED、整笔批准不生效。台位须在操作人可触及项目、商户账号只到本商户，否则 403 BAR_PAYROLL_SCOPE_MISMATCH；会话不存在 404 BAR_TABLE_SESSION_NOT_FOUND。",
+        "x-auth-context": "staff-token",
+        "x-permission": "bar.table_session.create",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "evidence.manual_backfill_submitted",
+        "x-audit-event-failure": "evidence.manual_backfill_submit_failed",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "台位会话 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "sales_staff_id",
+                  "reason",
+                  "responsible_staff_id",
+                  "evidence_attachment_ids"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  },
+                  "sales_staff_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "拟归属的销售人员（员工账号）；须有员工档案且在岗。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "补录原因。"
+                  },
+                  "responsible_staff_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "责任人（员工账号）。"
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "description": "原始记录凭证（微信截图、通话录音等）附件编号，须已上传。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  },
+                  "recording_started_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "以通话录音为凭证时必填：录音起始时间。"
+                  },
+                  "final_approver_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "可选：指定最终审批人（店长），须在发起人直接上级链上且经角色持有 bar.sales_backfill.review；不填则直接上级之后由店长角色复核。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -37767,7 +38082,7 @@
         ],
         "operationId": "listArOverdueDebtors",
         "summary": "欠费商户明细排行(账龄钻取)",
-        "description": "BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤 a0_30/a31_60/a61_90/a90p。 M737：按 finance.ar_ap.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出应收行项目落在可触及项目内的行（先过滤再按商户汇总），项目为空的行不出。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
+        "description": "BI S2(2026-07-02 拍板):按未清金额降序的欠费商户实时明细,与账龄快照同过滤同口径 (direction=receivable、未结清、已过应收日);bucket 过滤 a0_30/a31_60/a61_90/a90p。 M737：按 finance.ar_ap.view 可触及的项目过滤——平台管理员看全部行；其余人（含经勾选了「可以查看全部项目」的角色持有该权限的人，M737-F07）只出应收行项目落在可触及项目内的行（先过滤再按商户汇总），项目为空的行不出。18F 第 80 条：按商户与应收所属项目分行，每行带 project_id，能到多个项目的人看同一商户在各项目的欠费各一行、不合成一行。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "finance.ar_ap.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -38195,7 +38510,7 @@
         ],
         "operationId": "getRentToSales",
         "summary": "店级/业态级/平台级租售比",
-        "description": "P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。 M737：平台管理员看全量；经勾选了「可以查看全部项目」的角色持有 contract.view 的人看平台合计与未归属营业额，商户行与业态行只出在其可触及项目内经营的商户（M737-F06）；其余人只出在其可触及项目内经营的商户行与由这些行合并出的业态行，不出平台合计，未归属营业额记 0。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
+        "description": "P1c(2026-07-21 拍板):租售比 = 当期租金(月租应收 contract_rent + 营业额抽成 turnover_rent,按会计期 accounting_period 归期) 除以 第三方回流营业额(含税毛额、扣退款、排除通票核销 voucher_verification);输出店级(商户即店)/业态级(复用 merchant_type)/平台级三档;无门店归属营业额只计入平台级分母并显式标注(诚实不静默,绝不摊给某商户);某档营业额为 0 时该档租售比返回 null。 M737：平台管理员看全量；经勾选了「可以查看全部项目」的角色持有 contract.view 的人看平台合计与未归属营业额，商户行与业态行只出在其可触及项目内经营的商户（M737-F06）；其余人只出在其可触及项目内经营的商户行与由这些行合并出的业态行，不出平台合计，未归属营业额记 0。18F 第 80 条：店级与业态级按（商户或业态, 项目）分行，每行带 project_id（平台行为空），租金只取该项目的应收、不跨项目合计；平台管理员看全部行（含项目为空的），其余人只出项目非空且可触及的行；第三方营业额只给经营项目恰好一个的商户归到该项目，多于一个的各项目行营业额为 0、只计入平台级分母；平台合计照旧。商户账号、外包账号 403（PLATFORM_SCOPE_REQUIRED）。",
         "x-permission": "contract.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -53565,6 +53880,221 @@
         }
       }
     },
+    "/api/v1/evidence/manual-backfill-policies/{project_id}": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "operationId": "getManualBackfillPolicy",
+        "summary": "查人工补录参数（补录时限与录音提前量，按项目）",
+        "description": "第十八批 F 段第 14 条（BSM 第 1642 行「补录时限为业务发生后的配置天数内（安全阈值，按项目可配，调整须最高权限审批并留痕，出厂默认 3 天，须同时配置上下限）…… 录音起始时间必须早于客人到店时间、且早于客人开卡时间达到后台配置的时长（业务参数，按项目可配，出厂默认 30 分钟，须同时配置上下限）」）：返回生效参数， 项目无自有行时返回出厂行（project_id=__global__、window_days=3、recording_lead_minutes=30、上下限为空）。项目须在参数权限可触及范围内（最高权限不限）， 否则 403 CROSS_PROJECT_FORBIDDEN；项目不存在 404 PROJECT_NOT_FOUND。",
+        "x-permission": "evidence.manual_backfill.policy.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "evidence"
+        ],
+        "operationId": "saveManualBackfillPolicy",
+        "summary": "配置人工补录参数（补录时限、录音提前量及各自上下限，按项目）",
+        "description": "第十八批 F 段第 14 条（BSM 第 1642 行；决策台账 DEC-R3-2026-08-04-41「持授权 U 盘密钥的最高权限本人发起的操作不需要经过任何审批」）：两组参数分开提交，至少带一组， 带了的组三项同填、值在上下限内（补录时限下限不小于 1 天，录音提前量下限不小于 0 分钟），否则 400 VALIDATION_FAILED；补录时限是安全阈值，带该组须最高权限本人办理， 否则 403 MASTER_APPROVAL_REQUIRED；只带录音提前量组持本权限即可。没带的组沿用现生效值一并写入该项目行。项目参数，商户账号 403 CROSS_MERCHANT_FORBIDDEN； 项目须在可触及范围内（最高权限不限），否则 403 CROSS_PROJECT_FORBIDDEN；项目不存在 404 PROJECT_NOT_FOUND（出厂行 __global__ 只由迁移种、不经接口改）。留痕改动人与前后值。",
+        "x-permission": "evidence.manual_backfill.policy.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "evidence.manual_backfill_policy_updated",
+        "x-audit-event-failure": "evidence.manual_backfill_policy_update_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键（与 Idempotency-Key 头同值）；重复提交返回第一次的结果。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "调整说明。"
+                  },
+                  "window_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "补录时限（业务发生后天数，出厂 3）；与 window_min_days、window_max_days 同填，须最高权限本人。"
+                  },
+                  "window_min_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "补录时限下限（天）。"
+                  },
+                  "window_max_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "补录时限上限（天）。"
+                  },
+                  "recording_lead_minutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "通话录音起始须早于到店与开卡的分钟数（出厂 30）；与 lead_min_minutes、lead_max_minutes 同填。"
+                  },
+                  "lead_min_minutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "录音提前分钟数下限。"
+                  },
+                  "lead_max_minutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "录音提前分钟数上限。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/evidence/manual-backfills": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "operationId": "listManualBackfills",
+        "summary": "查某对象的人工补录记录（与原始记录并列展示）",
+        "description": "第十八批 F 段第 14 条（BSM 第 1642 行「补录记录与原始记录并列展示，标明“人工补录”」；第 1320 行「查看与本商户相关的异常、补录和复核记录。」）： 按对象类型核权（交接扫码补录 inventory.handover.scan、销售归属补录 bar.table_session.view、服务责任补录 bar.payroll.view），按提交时间返回该对象全部补录单（补录部位、项目与商户、业务发生时间、原时点、拟补录内容 proposed、提交时的原始记录 original_snapshot、原因、责任人、 凭证附件编号、录音起始时间、复核单号、状态 pending/approved/rejected、提交人与时间、结论与生效时间）。target_type 为 trace_handover_step（交接扫码补录）、 bar_session_sales（销售归属补录）、bar_session_service（服务责任补录）之一，尚未接入的类型 400 VALIDATION_FAILED；权限与范围按该类对象的查看口径 （交接扫码补录：商户账号非本商户 403 CROSS_MERCHANT_FORBIDDEN，不带商户的账号（平台管理员除外）403 MERCHANT_SCOPE_REQUIRED；销售归属与服务责任补录：台位不在可触及项目或商户账号非本商户 403 BAR_PAYROLL_SCOPE_MISMATCH）。补录提交走各对象的补录入口：一律附凭证（照片、录音、录像， 经 business_type=manual_backfill 上传，可收语音）、写原因与责任人、在业务发生后补录时限内（超时 409 MANUAL_BACKFILL_WINDOW_EXPIRED）， 以通话录音为凭证的须填录音起始（400 RECORDING_START_REQUIRED）且早于到店与开卡达录音提前量（400 RECORDING_NOT_EARLY_ENOUGH）， 无凭证 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；提交即进主管复核（被影响方不得复核），复核通过才生效，批准时对象已变 409 MANUAL_BACKFILL_TARGET_CHANGED、整笔批准不生效。",
+        "x-permission": "authenticated",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "target_type",
+            "in": "query",
+            "required": true,
+            "description": "补录对象类型。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "trace_handover_step",
+                "bar_session_sales",
+                "bar_session_service"
+              ]
+            }
+          },
+          {
+            "name": "target_id",
+            "in": "query",
+            "required": true,
+            "description": "补录对象编号（交接单号或台位会话号）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/evidence/attachments/upload": {
       "post": {
         "tags": [
@@ -53572,7 +54102,7 @@
         ],
         "operationId": "uploadEvidenceAttachment",
         "summary": "上传证据照片/视频",
-        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。 本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。",
+        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。 本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。 18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。",
         "x-permission": "evidence.attachment.create",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -64061,7 +64591,7 @@
         ],
         "operationId": "readSupervisorReviewOriginal",
         "summary": "按编号读取有权查看的主管复核原件",
-        "description": "审批依赖逐笔读取的真实原件及状态，不依赖待审列表前200条。复用原件项目和商户范围校验；最高权限按既有逐笔跨范围规则读取时额外留痕，不扩大待审清单。附件另走受控证据读取。 实际交付客户端为后台 Web；后端沿统一终端总开关，没有新增 web-only 白名单。 18E：可见范围按 governance.supervisor_review.view 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；当前审批人、被转发人、发起人本人照旧可见；看不到的 403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）。18E 复核后操作员裁决补充第 16 条：员工状态变更、奖惩、排班发布三类人事复核单改按所处理员工的登记项目（员工档案 project_id）判，排班批次须全部员工的登记项目都在可触及的项目内。该单审批链上的审批人、被转发人与裁决人（含已裁决的）照旧按发起人判。",
+        "description": "审批依赖逐笔读取的真实原件及状态，不依赖待审列表前200条。复用原件项目和商户范围校验；最高权限按既有逐笔跨范围规则读取时额外留痕，不扩大待审清单。附件另走受控证据读取。 实际交付客户端为后台 Web；后端沿统一终端总开关，没有新增 web-only 白名单。 18E：可见范围按 governance.supervisor_review.view 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；当前审批人、被转发人、发起人本人照旧可见；看不到的 403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）。18E 复核后操作员裁决补充第 16 条：员工状态变更、奖惩、排班发布三类人事复核单改按所处理员工的登记项目（员工档案 project_id）判，排班批次须全部员工的登记项目都在可触及的项目内。该单审批链上的审批人、被转发人与裁决人（含已裁决的）照旧按发起人判。 18F 第 83 条（18F 核对后操作员裁决补充第 17 条）：其余复核单所处理对象有所属项目的（如采购、供货合同、招商签约生成的租赁合同、授权申请、设备报废、营业日配置、经销退款），不是商户账号的普通查看人按对象所属项目判（商户加经营项目申请取商户的主项目与各经营项目，任一可触及即可）；对象没有项目的（全平台或全国配置、手填对象、没带项目的合同）照旧按发起人；审批人、发起人本人、商户账号照旧。",
         "x-permission": "governance.supervisor_review.view",
         "x-data-scope": "project-merchant",
         "x-auth-context": "staff-token",
@@ -69841,6 +70371,123 @@
         },
         "x-audit-event-success": "bar.service.handover",
         "x-audit-event-failure": "bar.service.handover_failed"
+      }
+    },
+    "/api/v1/bar/table-sessions/{id}/service-backfill": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "submitBarTableSessionServiceBackfill",
+        "summary": "补录台位会话服务责任区间（人工补录，主管复核）",
+        "description": "第十八批 F 段第 14 条 14-R6（BSM 第 1642 行「记录缺失时允许人工补录，但必须写原因和责任人……涉及金额、销售归属、提成或责任认定的补录，须由被影响方之外的主管复核。补录记录与原始记录并列展示，标明“人工补录”」；第 1077 行「小费按各人实际负责该台的时长占合计实际负责时长的比例分配，以真实交接记录为依据」）：开台未登记服务员等造成的服务责任空档（卡座小费月结即列待结 BAR_SERVICE_HISTORY_INCOMPLETE）补录一段责任区间。区间须在开台与关台（未关台为当前时刻）之间且开始早于结束，否则 400 SERVICE_INTERVAL_INVALID；与本会话已有区间重叠（未结束的算到当前）409 SERVICE_INTERVAL_OVERLAP，只补空档、不改已有区间；被补为责任人的员工须在岗并有本综合体及商户的点单工作权限，否则 409 BAR_SERVICE_WORKER_INVALID，没有员工档案或账号 400 BAR_PAYROLL_INVALID。其余同人工补录（见 listManualBackfills）：必写原因与责任人、必附经 business_type=manual_backfill 上传的凭证、在补录时限内（自开台起算）；以通话录音为凭证的，录音起始须早于到店（开台时刻）与开卡（订台时刻，直接到店开台取开台时刻）达录音提前量。提交即进主管复核（动作 bar.service.backfill：发起人直接上级复核，被补为责任人的员工不得复核），复核通过才追加该区间（依据写明「人工补录」、登记人为提交人，随 listBarServiceResponsibilities 与原区间并列返回），会话当前责任人与已有区间不改；批准时该时段已有区间 409 MANUAL_BACKFILL_TARGET_CHANGED、整笔批准不生效。台位须在操作人可触及项目、商户账号只到本商户，否则 403 BAR_PAYROLL_SCOPE_MISMATCH；会话不存在 404 BAR_TABLE_SESSION_NOT_FOUND。",
+        "x-auth-context": "staff-token",
+        "x-permission": "bar.table_session.transfer",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "evidence.manual_backfill_submitted",
+        "x-audit-event-failure": "evidence.manual_backfill_submit_failed",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "台位会话 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "user_id",
+                  "started_at",
+                  "ended_at",
+                  "reason",
+                  "responsible_staff_id",
+                  "evidence_attachment_ids"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "补为该时段服务责任人的员工账号；须在岗并有本综合体及商户的点单工作权限。"
+                  },
+                  "started_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "补录区间开始时间；不早于开台时间。"
+                  },
+                  "ended_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "补录区间结束时间；晚于开始时间，不晚于关台时间（未关台为当前时刻）。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "description": "补录原因。"
+                  },
+                  "responsible_staff_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "责任人（员工账号）。"
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "description": "原始记录凭证（照片、录音、录像等）附件编号，须已上传。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
+                  },
+                  "recording_started_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "以通话录音为凭证时必填：录音起始时间。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/bar/table-sessions/{id}/service-close": {

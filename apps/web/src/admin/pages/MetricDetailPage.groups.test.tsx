@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -106,5 +106,17 @@ describe("MetricDetailPage ROOT-04：分组表与新登记指标", () => {
     expect(screen.getByTestId("metric-detail-table").textContent).toContain("锁账后补录");
     expect(screen.queryByTestId("metric-detail-groups")).toBeNull();
     expect(screen.getByTestId("metric-detail-summary").textContent).toContain("1");
+  });
+
+  // 第十八批 F 段第 14 条 14-R8（BSM 第 1823 行「补录数量」）：人工补录单三类按补录对象类型计入，补录类型显示中文。
+  it.each([
+    ["trace_handover_step", "交接扫码补录"],
+    ["bar_session_sales", "销售归属补录"],
+    ["bar_session_service", "服务责任补录"],
+  ])("补录数量：补录类型 %s 显示「%s」", async (sourceType, label) => {
+    renderPage({ ...BACKFILL_PAYLOAD, rows: [{ id: "mb-1", sourceType, status: "pending" }] }, "risk.manual_backfill|2026-07-17|2026-07-17");
+
+    await waitFor(() => expect(screen.queryByTestId("metric-detail-table")).not.toBeNull());
+    expect(screen.getByTestId("metric-detail-table").textContent).toContain(label);
   });
 });

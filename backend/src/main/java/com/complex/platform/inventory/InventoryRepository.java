@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.time.Instant;
 import java.util.List;
@@ -346,6 +346,16 @@ public interface InventoryRepository {
     TraceHandoverExceptionRecord saveTraceHandoverException(TraceHandoverExceptionRecord exception);
 
     Optional<TraceHandoverExceptionRecord> findTraceHandoverExceptionByIdForUpdate(String id);
+
+    /** 第十八批 F 段第 14 条 14-R2：交接单的全部异常（链视图并列展示；回算判是否仍有待处理异常）。 */
+    default List<TraceHandoverExceptionRecord> listTraceHandoverExceptions(String handoverId) {
+        throw new UnsupportedOperationException("trace handover exceptions not supported");
+    }
+
+    /** 14-R2：按溯源码列交接单，新建在前；merchantId 非空只列该商户的。 */
+    default List<TraceHandoverRecord> listTraceHandoversByTraceCode(String traceCode, String merchantId) {
+        throw new UnsupportedOperationException("trace handover lookup not supported");
+    }
 
     /** T14 关联：机器人段被动留痕写入 integration_robot_task_events(handover_id)。 */
     void saveRobotTaskEvent(String id, String robotTaskRef, String eventType, String handoverId, String payloadJson, Instant reportedAt);

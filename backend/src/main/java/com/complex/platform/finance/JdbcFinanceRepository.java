@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1198,6 +1198,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                   FROM turnover_rent_rules
                  WHERE id = :id
                 """, Map.of("id", id), this::mapTurnoverRentRule).stream().findFirst();
+    }
+
+    @Override
+    public String findContractProjectId(String contractId) {
+        return jdbcTemplate.query("SELECT project_id FROM contracts WHERE id = :id", new MapSqlParameterSource("id", contractId),
+                rs -> rs.next() ? rs.getString(1) : null);
     }
 
     @Override

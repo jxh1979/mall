@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -446,6 +446,12 @@ class JdbcContractRepository implements ContractRepository {
                 VALUES (:contract_id, :space_id, :project_id, :created_at)
                 ON CONFLICT (contract_id, space_id) DO NOTHING
                 """, batch);
+    }
+
+    @Override
+    public String findSpaceProjectId(String spaceId) {
+        return jdbcTemplate.query("SELECT project_id FROM spaces WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", spaceId), rs -> rs.next() ? rs.getString(1) : null);
     }
 
     /**

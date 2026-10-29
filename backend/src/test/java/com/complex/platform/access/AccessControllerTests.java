@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.access;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -650,6 +650,12 @@ class AccessControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
+        }
+
+        // 18F（第 81 条）：AccessService 按字段注入平台仓储（挂商户时核商户经营项目），切片里给桩
+        @Bean
+        com.complex.platform.governance.PlatformRepository platformRepository() {
+            return Mockito.mock(com.complex.platform.governance.PlatformRepository.class);
         }
 
         @Bean

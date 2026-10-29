@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -439,6 +439,19 @@ export const FIELD_LABELS: Record<string, string> = {
   remind_minutes: "最晚到店前提醒分钟数",
   min_minutes: "分钟数下限",
   max_minutes: "分钟数上限",
+  // 第十八批 F 段第 14 条：人工补录单与补录参数（时限、录音提前量，值与上下限同配）。
+  responsible_staff_id: "责任人",
+  target_part: "补录部位",
+  recording_started_at: "录音起始时间",
+  business_at: "业务发生时间",
+  proposed: "拟补录内容",
+  original_snapshot: "原始记录",
+  backfills: "人工补录单",
+  window_min_days: "补录时限下限（天）",
+  window_max_days: "补录时限上限（天）",
+  recording_lead_minutes: "录音提前分钟数",
+  lead_min_minutes: "录音提前分钟数下限",
+  lead_max_minutes: "录音提前分钟数上限",
   // 第十八批 C 段第 15、17 条：酒吧员工代订爽约率上限／损耗率阈值（值与上下限同配）、代订权限停用记录、吧台出酒量采集设备。
   value_pct: "取值（%）",
   min_pct: "下限（%）",
@@ -2836,6 +2849,7 @@ export const VALUE_LABELS: Record<string, string> = {
   inventory_item_high_value_marked: "高价值标记已更新",
   inventory_item_safety_stock_updated: "安全库存已修改",
   inventory_high_value_review_decided: "高价值复核已处理",
+  inventory_trace_backfill_submitted: "交接缺扫码补录已提交，待主管复核",
   inventory_transfer_order_draft_edited: "调拨单草稿已修改",
   inventory_transfer_order_created: "调拨单已创建",
   inventory_transfer_order_returned: "调拨单已退回",
@@ -2900,6 +2914,8 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_staff_booking_no_show_limit_configured: "员工代订爽约率上限已配置",
   merchant_pour_loss_rate_configured: "酒吧损耗率阈值已配置",
   bar_staff_booking_restored: "员工代订权限已恢复",
+  bar_sales_backfill_submitted: "销售归属补录已提交，待店长复核",
+  bar_service_backfill_submitted: "服务责任区间补录已提交，待主管复核",
   merchant_penalty_recorded: "商户处罚已登记",
   merchant_penalty_bounds_saved: "单次扣分上下限已保存",
   org_superior_set: "直接上级已设置",

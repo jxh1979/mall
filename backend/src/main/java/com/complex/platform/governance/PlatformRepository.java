@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.util.List;
 import java.util.Optional;
@@ -65,6 +65,19 @@ public interface PlatformRepository {
     default List<String> listMerchantOperatingProjectIds(String merchantId) {
         return findMerchantById(merchantId).map(MerchantRecord::projectId).filter(java.util.Objects::nonNull)
                 .map(List::of).orElse(List.of());
+    }
+
+    /**
+     * 18F（第 81 条 81-R1）：能不能把该商户（非空）的员工挂到该归属。裁决 fresh-M474 所选选项原文「只有商户的主项目或已批准的经营项目里，
+     * 才能挂这个商户的员工；否则拒绝。」——经营项目见 {@link #listMerchantOperatingProjectIds}；商户不存在不能挂。
+     * 自营商户另可挂在其经营主体公司：治理地图第 580 行「在商户档案上标注为自营的商户视同公司自有，其员工按公司自有员工路径办理。」
+     * （公司自有路径的归属是所属公司；经营主体公司同 StaffRegistrationService 的口径：生效绑定的运营主体，否则档案上的 business_entity_id）。
+     */
+    default boolean merchantStaffMayAttach(String merchantId, String organizationId) {
+        return findMerchantById(merchantId).map(m -> listMerchantOperatingProjectIds(merchantId).contains(organizationId)
+                || "self_operated".equals(m.cooperationForm()) && java.util.Objects.equals(organizationId,
+                        findActiveBusinessEntityBindingByMerchantId(merchantId).map(b -> b.operationEntityId()).orElse(m.businessEntityId())))
+                .orElse(false);
     }
 
     ProjectRecord saveProject(ProjectRecord project);

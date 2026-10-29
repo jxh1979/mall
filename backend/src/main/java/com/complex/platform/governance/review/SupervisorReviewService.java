@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -141,6 +141,16 @@ public class SupervisorReviewService {
             // 第十八批 E 段第 20 条（PGM:659「一个商户要在别的项目经营的，由能管理商户档案的人在商户档案里加经营项目，要经过审批才生效」）：
             // 恒阻断；发起人沿直接上级链到其指定的最终审批人（PGM:528），申请人不得审批（PGM:529，approve 现有闸）。
             new SupervisorReviewPolicyRecord("merchant_project_add", "merchant.project.add", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批 F 段第 14 条 14-R1（BSM:1642「补录一律进入主管复核队列，复核通过才生效；涉及金额、销售归属、提成或责任认定的补录，
+            // 须由被影响方之外的主管复核」）：人工补录三类对象各一条恒阻断策略，被影响方以直接受益人登记（approve 现有闸拒其复核）；
+            // 销售归属补录由店长复核（BSM:1021「来源与销售人员的事后改派须店长复核并留痕」）。提交凭证由 ManualBackfillService 卡，
+            // 审批意见只要求 reason（写 evidence_attachment 会逼审批人另附件）。
+            new SupervisorReviewPolicyRecord("manual_backfill_trace_scan", "inventory.trace.scan_backfill", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            new SupervisorReviewPolicyRecord("manual_backfill_bar_sales", "bar.sales.backfill", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "bar.sales_backfill.review"),
+            new SupervisorReviewPolicyRecord("manual_backfill_bar_service", "bar.service.backfill", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // HP-P01（BSM L1438「免费放行和减免须经物业主管审批」）：恒阻断；最终审批人须经角色持有停车减免审批权限（物业主管）。
             new SupervisorReviewPolicyRecord("parking_release_waive", "parking.release.waive", 0, 1, true,
@@ -1160,7 +1170,7 @@ public class SupervisorReviewService {
      * M007-R6-02（PGM-1.10.1「所有业务数据默认按项目隔离……不提供关闭开关」、PGM-1.7.1「④看不到别的商户和别的项目的数据」）：
      * 待复核清单按当前操作人范围过滤——平台管理员跨范围查看留痕（D-032）；其余主体只看到发起人属本项目（有商户隔离键时同商户）的单据，
      * 或自己是当前节点审批人 / 被转发人 / 发起人的单据。员工状态变更、奖惩、排班发布三类人事复核单的「属本项目」按所处理员工的登记项目
-     * （staff_profiles.project_id）判，排班批次须全部员工的登记项目都在范围内，该单审批链上的审批人、被转发人与裁决人（含已裁决的）照旧按发起人判（18E 复核后操作员裁决补充第 16 条；商户隔离仍按发起人）。持密钥最高权限也按此过滤，不整表（红线④逐笔开放：按编号读取见 requireVisibleReview）。
+     * （staff_profiles.project_id）判，排班批次须全部员工的登记项目都在范围内，该单审批链上的审批人、被转发人与裁决人（含已裁决的）照旧按发起人判（18E 复核后操作员裁决补充第 16 条；商户隔离仍按发起人）。其余复核单所处理对象有所属项目的，不是商户账号的查看人按对象所属项目判（任一项可触及即可），对象没有项目的照旧按发起人（第十八批 F 段第 83 条，18F 核对后操作员裁决补充第 17 条）。持密钥最高权限也按此过滤，不整表（红线④逐笔开放：按编号读取见 requireVisibleReview）。
      */
     public PageResponse<SupervisorReviewRepository.PendingReview> listPending(int limit) {
         AccessActor actor = authorizationService.currentActor();
@@ -1179,8 +1189,9 @@ public class SupervisorReviewService {
         return new PageResponse<>(items, 1, limit, items.size());
     }
 
-    /** bySubject：按查看码读（待复核清单、按编号读原件、审批链）时三类人事复核单按所处理员工的登记项目判；写入口（通过、重生成审批链）照旧按发起人。
-     *  该单审批链上任一节点的审批人、被转发人、裁决人（含已裁决、尚未轮到的）照旧按发起人判（裁决原文「审批人、发起人本人照旧」）。 */
+    /** bySubject：按查看码读（待复核清单、按编号读原件、审批链）时三类人事复核单按所处理员工的登记项目判，其余复核单按所处理对象所属项目判（第 83 条，对象没有项目、查看人是商户账号的照旧按发起人）；写入口（通过、重生成审批链）照旧按发起人。
+     *  该单审批链上任一节点的审批人、被转发人、裁决人（含已裁决、尚未轮到的）照旧按发起人判（裁决原文「审批人、发起人本人照旧」）；
+     *  链上有按角色解析的节点（指定岗位审批未指定最终审批人时的链尾，不记审批人编号）的，经角色持有该事项审批权限的人同属审批人，同样照旧（18F 复核）。 */
     private boolean visibleTo(AccessActor actor, AuthorizationService.ProjectReach reach, String merchantId, SupervisorReviewRepository.PendingReview item,
                               boolean bySubject) {
         String reviewId = item.decision().reviewId();
@@ -1198,14 +1209,32 @@ public class SupervisorReviewService {
                 || actor.id().equals(node.decidedBy()));
         List<String> subjectProjects = bySubject && !onChain && STAFF_SUBJECT_ACTIONS.contains(item.decision().actionType())
                 ? staffRepository.reviewSubjectProjectIds(reviewId) : null;
-        boolean sameProject = subjectProjects == null
-                ? authorizationService.organizationIdOf(initiator).map(reach::covers).orElse(false)
-                : !subjectProjects.isEmpty() && subjectProjects.stream().allMatch(reach::covers);
+        // 第十八批 F 段第 83 条（18F 核对后操作员裁决补充第 17 条所选选项原文「对象有所属项目的，普通查看人按对象项目判；对象没有项目的（全平台或
+        // 全国配置、手填对象、没带项目的合同）照旧按发起人；审批人、发起人本人、商户账号照旧。」）：多项（商户的各经营项目）任一可触及即可，
+        // 同 PGM:659「各经营项目的员工和主项目的员工一样」；查看人是商户账号的照旧（PGM:528「商户账号持有这类角色仍不能跨项目」）。
+        List<String> objectProjects = subjectProjects == null && bySubject && !onChain && merchantId.isEmpty()
+                ? supervisorReviewRepository.reviewObjectProjectIds(item.decision().objectType(), item.decision().objectId()) : List.of();
+        boolean sameProject = subjectProjects != null
+                ? !subjectProjects.isEmpty() && subjectProjects.stream().allMatch(reach::covers)
+                : !objectProjects.isEmpty()
+                        ? objectProjects.stream().anyMatch(reach::covers)
+                        : authorizationService.organizationIdOf(initiator).map(reach::covers).orElse(false);
+        if (!sameProject && (subjectProjects != null || !objectProjects.isEmpty()) && roleNodeApprover(actor.id(), item.decision().policyCode(), nodes)) {
+            sameProject = authorizationService.organizationIdOf(initiator).map(reach::covers).orElse(false);
+        }
         Optional<String> initiatorMerchant = authorizationService.merchantIdOf(initiator);
         boolean sameMerchant = merchantId.isEmpty()
                 ? initiatorMerchant.isEmpty()
                 : initiatorMerchant.map(merchantId::equals).orElse(false);
         return sameProject && sameMerchant;
+    }
+
+    /** 链上有按角色解析的节点，且查看人经角色持有该事项要求的审批权限（同 requireRoleNodeGates 的角色闸）。 */
+    private boolean roleNodeApprover(String actorId, String policyCode, List<ApprovalChainNode> nodes) {
+        SupervisorReviewPolicyRecord policy = findPolicyByCode(policyCode);
+        return policy != null && policy.requiredApproverPermission() != null && authorizationService.canResolveRoles()
+                && nodes.stream().anyMatch(node -> ApprovalChainNode.KIND_ROLE.equals(node.approverKind()))
+                && authorizationService.holdsPermissionViaRole(actorId, policy.requiredApproverPermission());
     }
 
     private void requireVisibleReview(SupervisorReviewDecisionRecord record, String permissionCode) {

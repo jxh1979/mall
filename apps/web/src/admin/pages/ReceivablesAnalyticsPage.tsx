@@ -18,6 +18,8 @@ type DebtorRow = {
   oldestDueDate?: string;
   overdueDays?: number;
   bucket?: string;
+  // 18F 第 80 条：按（商户, 项目）分行，projectId 为该行应收所属项目。
+  projectId?: string | null;
 };
 
 const TEXT = {
@@ -100,6 +102,7 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
             ? <TraceLink navigateTo={navigateTo} pageId="ADM-FIN-001" objectId={row.merchantId}>{row.merchantName ?? row.merchantId}</TraceLink>
             : "未挂商户(散项)",
         },
+        { label: "项目", value: row.projectId ?? "—" },
         { label: "未清金额", value: money(row.outstandingCent === undefined ? null : Number(row.outstandingCent)) },
         { label: "最早应收日", value: cnDate(row.oldestDueDate) },
         { label: "逾期天数", value: row.overdueDays ?? "—" },
@@ -147,16 +150,17 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="receivables-debtors-table">
             <thead>
-              <tr><th>商户</th><th>未清金额</th><th>最早应收日</th><th>逾期天数</th><th>账龄段</th><th>详情</th></tr>
+              <tr><th>商户</th><th>项目</th><th>未清金额</th><th>最早应收日</th><th>逾期天数</th><th>账龄段</th><th>详情</th></tr>
             </thead>
             <tbody>
               {paged.pageRows.map((row, index) => (
-                <tr key={row.merchantId ?? `row-${index}`} className="admin-row-clickable" tabIndex={0} data-testid={`receivables-debtor-row-${row.merchantId ?? index}`}
+                <tr key={`${row.merchantId ?? `row-${index}`}|${row.projectId ?? ""}`} className="admin-row-clickable" tabIndex={0} data-testid={`receivables-debtor-row-${row.merchantId ?? index}${row.projectId ? `-${row.projectId}` : ""}`}
                   onClick={() => openDebtorDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDebtorDetail(row); } }}>
                   <td onClick={(event) => { if (row.merchantId) event.stopPropagation(); }}>{row.merchantId
                     ? <TraceLink navigateTo={navigateTo} pageId="ADM-FIN-001" objectId={row.merchantId}>{row.merchantName ?? row.merchantId}</TraceLink>
                     : "未挂商户(散项)"}</td>
+                  <td>{row.projectId ?? "—"}</td>
                   <td>{money(row.outstandingCent === undefined ? null : Number(row.outstandingCent))}</td>
                   <td>{cnDate(row.oldestDueDate)}</td>
                   <td>{row.overdueDays ?? "—"}</td>

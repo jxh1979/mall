@@ -43,13 +43,29 @@ function listEnvelope(items: unknown[]): Response {
   return dataEnvelope({ items, page: 1, page_size: 200, total: items.length });
 }
 
-function makeApi(): AdminApi {
+// 18F 第 80 条：跨项目经营的商户在两个项目各一行（项目级查看人拿不到平台合计）。
+const R2S_SPLIT = {
+  period: "2099-09",
+  by_merchant: [
+    { key: "m_x", label: "餐饮X", rent_cent: 100, sales_cent: 0, ratio_bps: null, note: null, project_id: "prj_a" },
+    { key: "m_x", label: "餐饮X", rent_cent: 900, sales_cent: 0, ratio_bps: null, note: null, project_id: "prj_b" },
+  ],
+  by_merchant_type: [
+    { key: "catering", label: "catering", rent_cent: 100, sales_cent: 0, ratio_bps: null, note: null, project_id: "prj_a" },
+    { key: "catering", label: "catering", rent_cent: 900, sales_cent: 0, ratio_bps: null, note: null, project_id: "prj_b" },
+  ],
+  platform: null,
+  unattributed_sales_cent: 0,
+  note: "仅含您可查看项目内经营的商户，不含平台合计与未归属营业额",
+};
+
+function makeApi(r2s: unknown = R2S): AdminApi {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/dashboards/leasing")) return Promise.resolve(dataEnvelope(DASHBOARD));
-      if (url.includes("/rent-to-sales")) return Promise.resolve(dataEnvelope(R2S));
+      if (url.includes("/rent-to-sales")) return Promise.resolve(dataEnvelope(r2s));
       if (url.includes("/occupancy/vacant-spaces")) return Promise.resolve(listEnvelope([]));
       if (url.includes("/occupancy/expiring-contracts")) return Promise.resolve(listEnvelope([]));
       return Promise.resolve(listEnvelope([]));
@@ -60,9 +76,9 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage() {
+function renderPage(r2s?: unknown) {
   const fullProps: AdminPageProps = {
-    api: makeApi(),
+    api: makeApi(r2s),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
@@ -95,5 +111,16 @@ describe("OccupancyAnalyticsPage 租售比(P1c)", () => {
     // 店级:m_a 有营业额 → 24.00%;m_c 无营业额归属 → 诚实标。
     expect(screen.getByTestId("occupancy-r2s-merchant-m_a").textContent).toContain("24.00%");
     expect(screen.getByTestId("occupancy-r2s-merchant-m_c").textContent).toContain("—（无营业额归属）");
+  });
+
+  it("18F 第 80 条：同一商户、同一业态按项目各一行，门店表与业态表都有「项目」列", async () => {
+    renderPage(R2S_SPLIT);
+    await waitFor(() => expect(screen.queryByTestId("occupancy-r2s-merchant-m_x-prj_a")?.textContent).toContain("prj_a"));
+    expect(screen.getByTestId("occupancy-r2s-merchant-m_x-prj_a").textContent).toContain("1.00 元");
+    expect(screen.getByTestId("occupancy-r2s-merchant-m_x-prj_b").textContent).toContain("prj_b");
+    expect(screen.getByTestId("occupancy-r2s-merchant-m_x-prj_b").textContent).toContain("9.00 元");
+    expect(screen.getByTestId("occupancy-r2s-type-catering-prj_b").textContent).toContain("9.00 元");
+    expect(within(screen.getByTestId("occupancy-r2s-merchant-table")).getByText("项目")).toBeTruthy();
+    expect(within(screen.getByTestId("occupancy-r2s-type-table")).getByText("项目")).toBeTruthy();
   });
 });

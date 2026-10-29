@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V569**，发现 **261** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V570**，发现 **263** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -202,6 +202,8 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `leasing_intents` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `leasing_leads` | `project_id` | direct | V161 | `V161__leasing_acquisition.sql` |
 | `mall_floor_plans` | `merchant_id` + `project_id` | direct | V023, V052 | `V023__p1_floor_plan_polygons.sql`<br>`V052__floorplan_merchant_isolation.sql` |
+| `manual_backfill_policies` | `project_id` | direct | V570 | `V570__manual_backfills.sql` |
+| `manual_backfills` | `merchant_id` + `project_id` | direct | V570 | `V570__manual_backfills.sql` |
 | `media_performance_shows` | `project_id` | direct | V523 | `V523__media_performance_shows.sql` |
 | `merchant_bill_disputes` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |
 | `merchant_bill_dunning_records` | `merchant_id` | direct | V026 | `V026__p1_merchant_billing_portal.sql` |

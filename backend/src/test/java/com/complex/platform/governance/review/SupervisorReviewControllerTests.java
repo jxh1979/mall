@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -371,6 +371,12 @@ class SupervisorReviewControllerTests {
         @Bean
         AccessService accessService() {
             return Mockito.mock(AccessService.class);
+        }
+
+        // 18F（第 81 条）：AccessService 按字段注入平台仓储（挂商户时核商户经营项目），切片里给桩
+        @Bean
+        com.complex.platform.governance.PlatformRepository platformRepository() {
+            return Mockito.mock(com.complex.platform.governance.PlatformRepository.class);
         }
 
         @Bean

@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -621,7 +621,10 @@ public class ContractService implements com.complex.platform.finance.Termination
                         "该铺位已被生效期重叠的合同占用：" + spaceId);
             }
         }
-        repository.bindContractSpaces(contractId, spaceIds, contract.projectId());
+        // 18F 第 80 条（PGM:413「所有基础对象都要带“综合体项目归属”」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：
+        // 合同未带项目（工作台起草不提交所属综合体）时取所绑第一个铺位的项目，铺位绑定、生效合同与预排的租金应收随之带项目。
+        String projectId = contract.projectId() != null ? contract.projectId() : repository.findSpaceProjectId(spaceIds.get(0));
+        repository.bindContractSpaces(contractId, spaceIds, projectId);
         // 批2b:每平米租金生效固化——用绑定铺位登记面积×每平米单价算月租(baseRentCent)固化进生效快照。
         ContractRecord contractEff = withRentTerms(contract, resolvePerSqmBaseRent(contract.rentTerms(), spaceIds));
         // HP-C03（BSM L1347「押金金额 ＝ 收取月数 × 该商户签约时的月租金」）：押金＝当前配置收取月数×生效固化月租（每平米为上一步按铺位面积
@@ -635,7 +638,7 @@ public class ContractService implements com.complex.platform.finance.Termination
                 contractEff.commissionMode(), contractEff.energyFeeBasis(),
                 agreedDeposit ? contractEff.depositCent() : Long.valueOf(depositFor(contractEff.rentTerms(), depositMonths)),
                 contractEff.penaltyTerms(), contractEff.settlementRules(), null, contractEff.shareholderRatioForReport(),
-                contract.attachmentIds(), "effective", contract.projectId(), null, null,
+                contract.attachmentIds(), "effective", projectId, null, null,
                 contract.renewedFromContractId(), contract.createdAt(), Instant.now(), contract.reviewId());
         ContractRecord effective = repository.saveContract(withSnapshot(frozen, buildSnapshot(frozen, depositMonths)));
         // P1-A 收入闭环：生效即按整租期逐期幂等排租金/物业/能源 AR（base+递增−免租，免租/0 跳过）。

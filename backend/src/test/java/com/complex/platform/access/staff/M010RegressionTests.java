@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -51,7 +51,8 @@ class M010RegressionTests {
     @BeforeEach void setup() {
         registrationMerchant = "merchant_reg_"+key();
         jdbc.update("INSERT INTO business_entities(id,entity_name,entity_role,status,created_at,updated_at) VALUES('m010_p','回归项目公司','project_company','active',now(),now()) ON CONFLICT(id) DO NOTHING");
-        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,status,created_at,updated_at) VALUES(?,'注册回归商户','retail','m010_p','active',now(),now())",registrationMerchant);
+        jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now()) ON CONFLICT (id) DO NOTHING", "m010_p", "m010_p"); // 18F（第 81 条 81-R1）：商户主项目＝登记项目
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,project_id,status,created_at,updated_at) VALUES(?,'注册回归商户','retail','m010_p','m010_p','active',now(),now())",registrationMerchant);
         manager = "u_" + key();
         role = "r_" + key();
         access.createUser(new AccessUser(manager, manager, "platform_admin", "m010_p", null, "active", Instant.now()));

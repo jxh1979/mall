@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -135,6 +135,11 @@ public class StaffService {
         requireRegistrationScope(request.projectId(), request.merchantId(), reachOf("staff.profile.submit"));
         String approvingCompany = registrations.merchantApprovingCompany(request.merchantId());
         try {
+            // 18F（第 81 条 81-R1，裁决 fresh-M474「只有商户的主项目或已批准的经营项目里，才能挂这个商户的员工；否则拒绝。」）：
+            // 在 try 内（失败留痕 staff.register_failed）、幂等之前；商户已由上一行判为必填且非自营。
+            if (!platformRepository.merchantStaffMayAttach(trimToNull(request.merchantId()), trimToNull(request.projectId()))) {
+                throw ApiException.forbidden("MERCHANT_NOT_IN_PROJECT", "该商户不在该项目经营，不能把员工挂到这里");
+            }
             return idempotencyService.execute(
                     "submitStaffRegistration",
                     request.idempotencyKey(),

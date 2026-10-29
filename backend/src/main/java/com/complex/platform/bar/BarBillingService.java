@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -807,8 +807,10 @@ public class BarBillingService {
      *
      * <p>档案仓储缺失（仅未注入的旧构造/单测，生产恒注入）时<b>拒绝开单</b>而非默认非销售档：
      * 判不出岗位却照发提成，正是本批要根除的那类静默错档。
+     *
+     * <p>第十八批 F 段第 14 条 14-R3：销售归属补录批准时对未结清账单按新归属重取岗位档，复用本方法（包级可见）。
      */
-    private String resolveSalesRoleType(String salesStaffId) {
+    String resolveSalesRoleType(String salesStaffId) {
         String staffId = trimToNull(salesStaffId);
         if (staffId == null) {
             return "non_sales";

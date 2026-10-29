@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -32,6 +32,11 @@ public interface FinanceRepository {
     /** 按 id 查营业额抽成规则。default 空实现兼容既有测试双子。 */
     default Optional<TurnoverRentRuleRecord> findTurnoverRentRuleById(String id) {
         return Optional.empty();
+    }
+
+    /** 18F 第 80 条：合同所属项目（营业额抽成应收带合同项目）。default 返回 null 兼容既有测试双子。 */
+    default String findContractProjectId(String contractId) {
+        return null;
     }
 
     /** 按合同查其生效(active)提成规则,取最新生效。default 空兼容测试双子。 */

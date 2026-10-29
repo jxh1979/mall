@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -553,6 +553,17 @@ public final class FieldLabels {
         p("remind_minutes", "最晚到店前提醒分钟数");
         p("min_minutes", "分钟数下限");
         p("max_minutes", "分钟数上限");
+        // 第十八批 F 段第 14 条：人工补录（原因、责任人、凭证、录音起始）与补录参数（时限、录音提前量，值与上下限同配）。
+        p("responsible_staff_id", "责任人");
+        p("evidence_attachment_ids", "证据附件");
+        p("recording_started_at", "录音起始时间");
+        p("window_min_days", "补录时限下限（天）");
+        p("window_max_days", "补录时限上限（天）");
+        p("recording_lead_minutes", "录音提前分钟数");
+        p("lead_min_minutes", "录音提前分钟数下限");
+        p("lead_max_minutes", "录音提前分钟数上限");
+        // 第十八批 F 段第 14 条 14-R3：销售归属补录的拟归属人（与前端 fieldLabels.ts 同名）。
+        p("sales_staff_id", "销售员工");
         p("pour_device_equipped", "是否配有出酒量采集设备");
         p("suspension_id", "代订权限停用记录");
         p("penalty_points", "扣分");

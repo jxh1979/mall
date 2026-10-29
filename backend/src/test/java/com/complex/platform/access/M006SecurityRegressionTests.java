@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.34
+// 文件版本：V0.35
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -659,6 +659,8 @@ class M006SecurityRegressionTests {
         var merchant = new com.complex.platform.governance.MerchantRecord("merchant", "商户", "retail", "org", null, null, null, null,
                 null, null, null, null, null, null, null, "lease", "active", now, now);
         when(platform.findMerchantById("merchant")).thenReturn(Optional.of(merchant));
+        when(platform.merchantStaffMayAttach("merchant", "org")).thenReturn(true); // 18F（第 81 条 81-R1）
+        org.springframework.test.util.ReflectionTestUtils.setField(staff, "platformRepository", platform);
         when(platform.findActiveBusinessEntityBindingByMerchantId(anyString())).thenReturn(Optional.empty());
         when(platform.listBusinessEntities()).thenReturn(List.of(new com.complex.platform.governance.BusinessEntityRecord(
                 "org", "公司", "management_company", null, null, null, "active", now, now)));

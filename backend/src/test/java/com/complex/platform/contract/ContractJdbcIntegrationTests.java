@@ -1,9 +1,13 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.access.AccessActor;
 import com.complex.platform.support.MigrationVersions;
 import java.time.Clock;
 import java.time.Instant;
@@ -12,10 +16,17 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -27,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class ContractJdbcIntegrationTests {
 
@@ -41,6 +53,9 @@ class ContractJdbcIntegrationTests {
 
     @Autowired
     private ContractService contractService;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings={"by_area","by_usage"})
@@ -663,6 +678,96 @@ class ContractJdbcIntegrationTests {
                 "面积/位置变更 cch_rb 生效重排")).isEmpty();
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE origin_item_id LIKE 'arap_ctr_rb_%'",
                 Integer.class)).isEqualTo(3);
+    }
+
+    /**
+     * 18F 第 80 条（PGM:413「所有基础对象都要带“综合体项目归属”」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：
+     * 合同工作台起草不提交所属综合体与铺位，合同项目为空；待生效后按前端请求形状（蛇形键）生效、绑项目 B 的铺位——
+     * 合同、铺位绑定、生效时预排的租金账单与租金应收都带项目 B。
+     */
+    @Test
+    void activationOfContractWithoutProjectTakesProjectOfBoundSpace() throws Exception {
+        String s = UUID.randomUUID().toString().substring(0, 8);
+        String projectB = "f80_prj_b_" + s;
+        String spaceB = "f80_sp_b_" + s;
+        String contractId = "f80_ctr_" + s;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','第80条生效项目','active',now(),now())",
+                projectB);
+        jdbcTemplate.update("INSERT INTO spaces (id, project_id, space_name, space_type, floor_no, area_square_meter, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, 'shop', '1F', 88.0, 'active', now(), now())", spaceB, projectB, spaceB);
+        jdbcTemplate.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
+                    lifecycle_status, project_id, rent_terms, created_at, updated_at)
+                VALUES (?, ?, ?, ?, DATE '2098-01-01', DATE '2098-03-31', 'pending_effective', NULL,
+                    '{"baseRentCent":100000}'::jsonb, now(), now())""",
+                contractId, "f80_mch_" + s, "f80_subj_" + s, "f80_subj_" + s);
+
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/activate").with(staffWith(s, "staff", "contract.lifecycle.activate"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"f80_act_" + s + "\",\"space_ids\":[\"" + spaceB + "\"]}"))
+                .andExpect(status().isOk());
+
+        assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM contracts WHERE id = ?", String.class, contractId))
+                .isEqualTo(projectB);
+        assertThat(jdbcTemplate.queryForList("SELECT project_id FROM contract_spaces WHERE contract_id = ?", String.class, contractId))
+                .containsExactly(projectB);
+        assertThat(jdbcTemplate.queryForList("SELECT project_id FROM contract_rent_bills WHERE contract_id = ?", String.class, contractId))
+                .hasSize(3).containsOnly(projectB);
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT a.project_id FROM contract_rent_bills b JOIN ar_ap_items a ON a.id = b.ar_ap_item_id
+                 WHERE b.contract_id = ? AND a.source_type = 'contract_rent'""", String.class, contractId))
+                .hasSize(3).containsOnly(projectB);
+    }
+
+    /** 18F 第 80 条：营业额抽成应收带合同所属项目（带最低额的抽成规则，平台管理员按前端请求形状出账；出账入口须平台或商户范围）。 */
+    @Test
+    void turnoverRentReceivableCarriesContractProject() throws Exception {
+        String s = UUID.randomUUID().toString().substring(0, 8);
+        String projectB = "f80_prj_t_" + s;
+        String contractId = "f80_ctr_t_" + s;
+        String merchantId = "f80_mch_t_" + s;
+        String ruleId = "f80_rule_" + s;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','第80条抽成项目','active',now(),now())",
+                projectB);
+        jdbcTemplate.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
+                    lifecycle_status, project_id, rent_terms, created_at, updated_at)
+                VALUES (?, ?, ?, ?, DATE '2098-01-01', DATE '2098-12-31', 'effective', ?, '{}'::jsonb, now(), now())""",
+                contractId, merchantId, "f80_subj_" + s, "f80_subj_" + s, projectB);
+        jdbcTemplate.update("""
+                INSERT INTO turnover_rent_rules
+                    (id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, effective_from, effective_to, status, is_draft)
+                VALUES (?, ?, ?, '第80条抽成规则', 1000, 5000, DATE '2098-01-01', NULL, 'active', FALSE)
+                """, ruleId, contractId, merchantId);
+
+        mockMvc.perform(post("/api/v1/finance/turnover-rent/bills").with(staffWith(s, "platform_admin", "finance.turnover_rent.bill"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"f80_tr_" + s + "\",\"rule_id\":\"" + ruleId
+                                + "\",\"period_start\":\"2098-02-01\",\"period_end\":\"2098-02-28\",\"due_date\":\"2098-03-10\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(jdbcTemplate.queryForList("SELECT project_id FROM ar_ap_items WHERE source_type = 'turnover_rent' AND source_id = ?",
+                String.class, ruleId)).containsExactly(projectB);
+    }
+
+    /** 给定账号类型的平台公司账号，经一个普通角色持有给定权限码（后台 Web 终端）。 */
+    private RequestPostProcessor staffWith(String s, String accountType, String... codes) {
+        String role = "f80_role_" + s;
+        jdbcTemplate.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'第80条','project','active',now())",
+                role, role);
+        for (String code : codes) {
+            jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,?)", role, code);
+        }
+        String user = "f80_usr_" + s;
+        jdbcTemplate.update("INSERT INTO access_users(id,username,account_type,organization_id,merchant_id,status,created_at) VALUES(?,?,?,'org',NULL,'active',now())",
+                user, user, accountType);
+        jdbcTemplate.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", user, role);
+        AccessActor actor = new AccessActor(user, user, accountType, "org", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private String regclass(String tableName) {

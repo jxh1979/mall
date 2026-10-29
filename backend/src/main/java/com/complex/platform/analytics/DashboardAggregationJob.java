@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.05
+// 文件版本：V0.06
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
@@ -24,7 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>按 r5-aggregation-metrics-draft §2 七类指标从真实业务表聚合，upsert 到
  * analytics_business_metric_snapshots（metric_key + period_type + business_date + segment_type + segment_id）。
- * 平台口径 segment_type='platform'、segment_id=NULL；商户口径 segment_type='merchant'、segment_id=merchant_id。
+ * 平台口径 segment_type='platform'、segment_id=NULL；商户口径 segment_type='merchant'、segment_id=merchant_id；
+ * 18F 第 80 条商户分项目口径 segment_type='merchant_project'、segment_id=商户编号|项目编号。
  * 源表无 merchant_id 的指标只产出平台口径行，商户登录读不到（按"不伪造"返回 null）。
  */
 @Component
@@ -107,6 +108,7 @@ public class DashboardAggregationJob {
     static final String SEGMENT_PLATFORM = "platform";
     static final String SEGMENT_MERCHANT = "merchant";
     static final String SEGMENT_PROJECT = "project";
+    static final String SEGMENT_MERCHANT_PROJECT = "merchant_project";
     static final String PERIOD_DAILY = "daily";
     static final String PROJECTION_ETL = "etl_aggregate";
 
@@ -250,15 +252,29 @@ public class DashboardAggregationJob {
         // 比率指标（0~1，BigDecimal 保留 4 位小数）；分母为 0（当日无发放）按"不伪造"置 0，不产生除零。
         Map<String, BigDecimal> issuedByMerchant = repository.countTicketIssuedByMerchant(businessDate);
         upsertRedemptionRate(businessDate, verifyDoneByMerchant, issuedByMerchant, now, platformTotals);
+        // 18F 第 80 条：核销数与券核销率另出商户分项目段（核销率按同一公式逐「商户|项目」键算）。
+        Map<String, BigDecimal> verifyDoneByMerchantProject = repository.countTicketVerificationSuccessByMerchantProject(businessDate);
+        Map<String, BigDecimal> issuedByMerchantProject = repository.countTicketIssuedByMerchantProject(businessDate);
+        upsertByMerchantProject(VERIFY_DONE, "ticketing", businessDate, verifyDoneByMerchantProject, now);
+        java.util.Set<String> redemptionKeys = new java.util.LinkedHashSet<>(verifyDoneByMerchantProject.keySet());
+        redemptionKeys.addAll(issuedByMerchantProject.keySet());
+        Map<String, BigDecimal> redemptionByMerchantProject = new java.util.LinkedHashMap<>();
+        for (String key : redemptionKeys) {
+            redemptionByMerchantProject.put(key,
+                    ratio(nonNull(verifyDoneByMerchantProject.get(key)), nonNull(issuedByMerchantProject.get(key))));
+        }
+        upsertByMerchantProject(REDEMPTION_RATE, "ticketing", businessDate, redemptionByMerchantProject, now);
 
         // 会员·新增：customers 无 merchant_id → 仅平台口径。
         upsertPlatform(MEMBER_NEW, "customer", businessDate, repository.countNewMembers(businessDate), now, platformTotals);
 
         // 供应链·库存余额：inventory_stock_balances 有 merchant_id → 平台 + 商户口径（存量快照，与经营日无关，落当日）。
         upsertByMerchant(SUPPLY_BALANCE, "inventory", businessDate, repository.sumInventoryBalanceByMerchant(), now, platformTotals);
+        upsertByMerchantProject(SUPPLY_BALANCE, "inventory", businessDate, repository.sumInventoryBalanceByMerchantProject(), now);
 
         // 供应链·缺货预警：按 SKU 绝对值阈值（inventory_items.min_quantity）count(可用量<阈值)，阈值≤0 不预警（财务确认口径）。
         upsertByMerchant(SUPPLY_LOW_STOCK, "inventory", businessDate, repository.countLowStockByMerchant(), now, platformTotals);
+        upsertByMerchantProject(SUPPLY_LOW_STOCK, "inventory", businessDate, repository.countLowStockByMerchantProject(), now);
 
         // 风险·待复核：supervisor_review_decisions / analytics_risk_alerts 无 merchant_id → 仅平台口径。
         upsertPlatform(RISK_PENDING_REVIEW, "governance", businessDate, repository.countPendingReview(), now, platformTotals);
@@ -267,6 +283,8 @@ public class DashboardAggregationJob {
         // 快照供月度对比与异常提醒（BSM「月度对比」「异常提醒」）；总控卡片与明细实时取同谓词。
         upsertByMerchant(RISK_MANUAL_BACKFILL, "governance", businessDate,
                 repository.countManualBackfillByMerchant(businessDate, "governance"), now, platformTotals);
+        upsertByMerchantProject(RISK_MANUAL_BACKFILL, "governance", businessDate,
+                repository.countManualBackfillByMerchantProject(businessDate, "governance"), now);
 
         // S2 财务应收:账龄桶(as-of=businessDate 期末存量)+欠费总额+月内回款。
         Map<String, Map<String, BigDecimal>> aging = repository.arOverdueAgingByMerchant(businessDate);
@@ -277,6 +295,16 @@ public class DashboardAggregationJob {
         upsertAgingBucket(AR_AGING_90P, aging.get("a90p"), agingTotal, businessDate, now, platformTotals);
         // 口径硬约束:欠费总额 = Σ四桶(同一查询同一过滤,构造上桶和恒等于总额)。
         upsertByMerchant(AR_BALANCE, "finance", businessDate, agingTotal, now, platformTotals);
+        // 18F 第 80 条：账龄四桶与欠费总额另出商户分项目段（项目取应收行的项目；欠费总额＝四桶之和）。
+        Map<String, Map<String, BigDecimal>> agingByMerchantProject = repository.arOverdueAgingByMerchantProject(businessDate);
+        Map<String, BigDecimal> balanceByMerchantProject = new java.util.LinkedHashMap<>();
+        for (String[] bucket : new String[][] {
+                {AR_AGING_0_30, "a0_30"}, {AR_AGING_31_60, "a31_60"}, {AR_AGING_61_90, "a61_90"}, {AR_AGING_90P, "a90p"}}) {
+            Map<String, BigDecimal> rows = agingByMerchantProject.getOrDefault(bucket[1], Map.of());
+            upsertByMerchantProject(bucket[0], "finance", businessDate, rows, now);
+            rows.forEach((key, value) -> balanceByMerchantProject.merge(key, nonNull(value), BigDecimal::add));
+        }
+        upsertByMerchantProject(AR_BALANCE, "finance", businessDate, balanceByMerchantProject, now);
 
         LocalDate monthStart = businessDate.withDayOfMonth(1);
         Instant mtdStart = businessDayResolver.start(businessDayResolver.soleProject(), null, monthStart);
@@ -402,9 +430,12 @@ public class DashboardAggregationJob {
         // 酒吧商品按整单付清时点、服务费扣留按原经营日；代收小费及员工应发不计收入。
         // 只汇总已确认部分，待结状态在明细列示；不含通票分摊。
         upsertByMerchant(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchant(businessDate, "bar"), now, platformTotals);
+        upsertByMerchantProject(REVENUE_BAR, "bar", businessDate, repository.sumBarRevenueCentsByMerchantProject(businessDate, "bar"), now);
 
         // 商品退款按真实应付足额付款时点及退款分项；服务费退款另调整原经营日扣留。
         upsertByMerchant(REVENUE_BAR_REFUND, "bar", businessDate, repository.sumBarRefundCentsByMerchant(businessDate, "bar"), now, platformTotals);
+        upsertByMerchantProject(REVENUE_BAR_REFUND, "bar", businessDate,
+                repository.sumBarRefundCentsByMerchantProject(businessDate, "bar"), now);
 
         // RC1②：收入·自营售票退款展示行 REVENUE_TICKET_REFUND 取平台退款总额（sumTicketRefundCents，平台口径）；
         //        商户维退款分量见下方 ticketRefundByMerchant(V220 直连) 并入商户行级 net。
@@ -436,6 +467,15 @@ public class DashboardAggregationJob {
                 repository.sumContractRentReceivableByMerchant(businessDate, "finance"), now, platformTotals);
         upsertNetRevenue(businessDate, ticketRevenue, ticketRefund, barRevenue, barRefund,
                 ticketAllocated, ticketRefundByMerchant, contractRent, now, platformTotals);
+        // 18F 第 80 条：合同租金与净收入另出商户分项目段；净收入与商户行同一公式与归属规则，逐「商户|项目」键算。
+        upsertByMerchantProject(REVENUE_CONTRACT_RENT, "finance", businessDate,
+                repository.sumContractRentReceivableByMerchantProject(businessDate, "finance"), now);
+        upsertByMerchantProject(REVENUE_NET, "finance", businessDate, merchantProjectNet(
+                repository.sumBarRevenueCentsByMerchantProject(businessDate, "platform"),
+                repository.sumBarRefundCentsByMerchantProject(businessDate, "platform"),
+                repository.sumTicketAllocatedRevenueByMerchantProject(businessDate, "platform"),
+                repository.sumTicketRefundByMerchantProject(businessDate, "platform"),
+                repository.sumContractRentReceivableByMerchantProject(businessDate, "platform")), now);
 
         // 待确认项#1：通票售票收入业态拆分展示（issued_entitlements.allocated_revenue_cent 按业态/商户汇总）。
         // 仅作展示口径，不并入 revenue.net：订单实付全额已在 revenue.ticket 计入，这里只是把"售票确认收入"
@@ -444,6 +484,10 @@ public class DashboardAggregationJob {
                 repository.sumTicketBarShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
         upsertByMerchant(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
                 repository.sumTicketAmusementShareCentsByMerchant(businessDate, "ticketing"), now, platformTotals);
+        upsertByMerchantProject(REVENUE_TICKET_BAR_SHARE, "ticketing", businessDate,
+                repository.sumTicketBarShareCentsByMerchantProject(businessDate, "ticketing"), now);
+        upsertByMerchantProject(REVENUE_TICKET_AMUSEMENT_SHARE, "ticketing", businessDate,
+                repository.sumTicketAmusementShareCentsByMerchantProject(businessDate, "ticketing"), now);
 
         // ROOT-04-R1 收入·第三方回流：餐饮/零售已入账、已落商户的回流订单按商户营业日（10:00 起算）落窗，按商户写快照；
         // 单列展示，不并入 revenue.net（r5-aggregation-metrics-draft「第三方回流仅计商户结算口径，不计平台净收入」定稿；V221 thirdparty 默认 exclude）。
@@ -596,6 +640,45 @@ public class DashboardAggregationJob {
                 now
         );
         recordPlatformTotal(platformTotals, metricKey, domain, platformTotal);
+    }
+
+    /**
+     * 18F 第 80 条（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：
+     * 商户分项目段 segment_type='merchant_project'、segment_id＝商户编号|项目编号；只写这一段、不累加平台合计（平台、商户、项目段照旧）。
+     * 键为空（项目为空）的不出。
+     */
+    private void upsertByMerchantProject(String metricKey, String domain, LocalDate businessDate,
+            Map<String, BigDecimal> byMerchantProject, Instant now) {
+        for (Map.Entry<String, BigDecimal> entry : byMerchantProject.entrySet()) {
+            if (entry.getKey() != null && !entry.getKey().isBlank()) {
+                repository.upsertMetricSnapshot(
+                        new MetricSnapshotKey(metricKey, domain, PERIOD_DAILY, businessDate, SEGMENT_MERCHANT_PROJECT, entry.getKey()),
+                        nonNull(entry.getValue()),
+                        PROJECTION_ETL,
+                        now
+                );
+            }
+        }
+    }
+
+    /** 18F 第 80 条：商户分项目段净收入——与商户行（upsertNetRevenue）同一公式与归属规则，按「商户|项目」键各算一遍。 */
+    private Map<String, BigDecimal> merchantProjectNet(Map<String, BigDecimal> barRevenue, Map<String, BigDecimal> barRefund,
+            Map<String, BigDecimal> ticketAllocated, Map<String, BigDecimal> ticketRefund, Map<String, BigDecimal> contractRent) {
+        AnalyticsRecords.MerchantRevenueAttributionRule ticketRule = repository.findDefaultAttributionRule("ticket");
+        AnalyticsRecords.MerchantRevenueAttributionRule barRule = repository.findDefaultAttributionRule("bar");
+        AnalyticsRecords.MerchantRevenueAttributionRule rentRule = repository.findDefaultAttributionRule("contract_rent");
+        java.util.Set<String> keys = new java.util.LinkedHashSet<>(barRevenue.keySet());
+        keys.addAll(barRefund.keySet());
+        keys.addAll(ticketAllocated.keySet());
+        keys.addAll(ticketRefund.keySet());
+        keys.addAll(contractRent.keySet());
+        Map<String, BigDecimal> net = new java.util.LinkedHashMap<>();
+        for (String key : keys) {
+            net.put(key, attributionContribution(ticketRule, ticketAllocated.get(key), ticketRefund.get(key))
+                    .add(attributionContribution(barRule, barRevenue.get(key), barRefund.get(key)))
+                    .add(attributionContribution(rentRule, contractRent.get(key), BigDecimal.ZERO)));
+        }
+        return net;
     }
 
     /** 累积 metric 的平台口径合计（key 编码 metricKey|domain，供 project 维度复用同一 domain）。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,6 +66,9 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     @Autowired
     private com.complex.platform.common.BusinessDayResolver businessDayResolver;
+
+    @Autowired
+    private AnalyticsRepository analyticsRepository;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String projectA = "prj_m737_a_" + suffix;
@@ -218,8 +222,8 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         assertThat(merchantSummaries(admin)).containsExactlyInAnyOrder(merchantA, merchantB, merchantNone);
     }
 
-    // J4（2.6 指标快照逐段留）：很靠后的同一经营日有平台段、项目段 A 与 B、商户段甲（主项目 A）与乙（主项目 B）。
-    // 修复前 A 的普通员工拿到全表，含平台段与 B 的两段（第一处断言即红）。
+    // J4（2.6 指标快照逐段留）：很靠后的同一经营日有平台段、项目段 A 与 B、商户段甲（主项目 A）与乙（主项目 B）、商户分项目段甲|A。
+    // 修复前 A 的普通员工拿到全表，含平台段与 B 的两段（第一处断言即红）。18F 第 80 条：商户合计段只给勾了全部项目的人，其余人拿分项目段。
     @Test
     void metricSnapshotsOnlyShowReachableSegments() throws Exception {
         String merchantA = merchant("a", projectA);
@@ -229,13 +233,14 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         String ofProjectB = snapshot("pb", "project", projectB);
         String ofMerchantA = snapshot("ma", "merchant", merchantA);
         String ofMerchantB = snapshot("mb", "merchant", merchantB);
+        String ofMerchantProjectA = snapshot("mpa", "merchant_project", merchantA + "|" + projectA);
         String code = "analytics.dashboard.view";
 
-        // A 的普通员工：只有项目段 A 与在 A 经营的商户段，平台段不出
-        assertThat(snapshots(staffOfA("plain", plainRole("plain", code)))).containsExactlyInAnyOrder(ofProjectA, ofMerchantA);
-        // 勾全部：含平台段
+        // A 的普通员工：只有项目段 A 与在 A 经营的商户在 A 的分项目段，平台段、商户合计段不出
+        assertThat(snapshots(staffOfA("plain", plainRole("plain", code)))).containsExactlyInAnyOrder(ofProjectA, ofMerchantProjectA);
+        // 勾全部：含平台段与商户合计段
         assertThat(snapshots(staffOfA("all", allProjectsRole("all", code))))
-                .containsExactlyInAnyOrder(platform, ofProjectA, ofProjectB, ofMerchantA, ofMerchantB);
+                .containsExactlyInAnyOrder(platform, ofProjectA, ofProjectB, ofMerchantA, ofMerchantB, ofMerchantProjectA);
     }
 
     // J5（M737-F06 租售比逐商户行）：商户甲（主项目 A）与「无」（主项目为空——V432 不回填历史商户的项目）同一账期各有一笔合同租金（100 分、900 分）。
@@ -244,8 +249,8 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
     void rentToSalesRowsForAllProjectsHoldersOnlyShowMerchantsOperatingInProjects() throws Exception {
         String merchantA = merchant("a", projectA);
         String merchantNone = merchant("none", null);
-        rent("a", merchantA, 100);
-        rent("none", merchantNone, 900);
+        rent("a", merchantA, projectA, 100);
+        rent("none", merchantNone, null, 900);
 
         RequestPostProcessor all = staffOfA("all", allProjectsRole("all", "contract.view"));
         assertThat(rentToSalesMerchants(all)).containsExactly(merchantA);
@@ -309,6 +314,86 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
         assertReviewLocksDenied("mch", grantedReviewLock("mch", "merchant", merchant("lock", projectA)), "商户账号无权查看平台级经营分析");
         assertReviewLocksDenied("vendor", grantedReviewLock("vendor", "outsourced_vendor", null), "外包供应商无权查看平台级数据");
+    }
+
+    // 18F 第 80 条 R2（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：
+    // 商户 m 主项目 A、追加经营项目 B，同一账期 A、B 各一笔合同租金（100 分、900 分）。店级与业态级都按（商户/业态, 项目）出行、金额只取该项目的；
+    // 能到 A、B 的人分两行、不跨项目合计；平台合计照旧只给平台管理员。修复前 A 的普通员工拿到的那行不带项目、租金 1000 分（第一处断言即红）。
+    @Test
+    void rentToSalesSplitsCrossProjectMerchantByProject() throws Exception {
+        String m = merchant("x", projectA);
+        jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id, project_id) VALUES (?, ?)", m, projectB);
+        rent("xa", m, projectA, 100);
+        rent("xb", m, projectB, 900);
+        String code = "contract.view";
+        String rowA = m + "|" + projectA + "|100";
+        String rowB = m + "|" + projectB + "|900";
+        String typeA = "catering|" + projectA + "|100";
+        String typeB = "catering|" + projectB + "|900";
+
+        RequestPostProcessor plain = staffOfA("plain", plainRole("plain", code));
+        assertThat(rentToSalesRows(plain, "by_merchant")).containsExactly(rowA);
+        assertThat(rentToSalesRows(plain, "by_merchant_type")).containsExactly(typeA);
+        RequestPostProcessor ticked = staffOfA("ticked", tickedBRole("ticked", code));
+        assertThat(rentToSalesRows(ticked, "by_merchant")).containsExactly(rowB);
+        assertThat(rentToSalesRows(ticked, "by_merchant_type")).containsExactly(typeB);
+        RequestPostProcessor both = staffOfA("both", tickedBRole("both_t", code), plainRole("both_p", code));
+        assertThat(rentToSalesRows(both, "by_merchant")).containsExactlyInAnyOrder(rowA, rowB);
+        assertThat(rentToSalesRows(both, "by_merchant_type")).containsExactlyInAnyOrder(typeA, typeB);
+        RequestPostProcessor admin = platformAdmin(code);
+        assertThat(rentToSalesRows(admin, "by_merchant")).containsExactlyInAnyOrder(rowA, rowB);
+        assertThat(rentToSalesRows(admin, "by_merchant_type")).containsExactlyInAnyOrder(typeA, typeB);
+        assertThat(platformRentCent(admin)).isEqualTo(1000L);
+    }
+
+    // 18F 第 80 条 R4（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：
+    // 商户 m 主项目 A、追加经营项目 B，A、B 各一笔已逾期未收应收。欠费商户明细按（商户, 项目）出行：能到 A、B 的人两行、不合成一行；
+    // A 的普通员工只有 A 那行；平台管理员也是两行。金额取极大值，理由同 overdueReceivable。修复前能到 A、B 的人拿到一行、不带项目（第一处断言即红）。
+    @Test
+    void overdueDebtorsSplitCrossProjectMerchantByProject() throws Exception {
+        String m = merchant("y", projectA);
+        jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id, project_id) VALUES (?, ?)", m, projectB);
+        overdueReceivableOf("ya", m, projectA, 9000000000100L);
+        overdueReceivableOf("yb", m, projectB, 9000000000900L);
+        String code = "finance.ar_ap.view";
+        String rowA = m + "|" + projectA + "|9000000000100";
+        String rowB = m + "|" + projectB + "|9000000000900";
+
+        RequestPostProcessor both = staffOfA("both", tickedBRole("both_t", code), plainRole("both_p", code));
+        assertThat(debtorRows(both)).containsExactlyInAnyOrder(rowA, rowB);
+        assertThat(debtorRows(staffOfA("plain", plainRole("plain", code)))).containsExactly(rowA);
+        assertThat(debtorRows(platformAdmin(code))).containsExactlyInAnyOrder(rowA, rowB);
+    }
+
+    // 18F 第 80 条 R3（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；业务地图「项目级操作人员只看自己所在项目范围内的 KPI 和明细，
+    // 看不到别的项目。」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：商户 m 主项目 A、追加经营项目 B，很靠后的同一经营日 A、B 各一笔
+    // 合同租金应收（100 分、900 分）。真实 ETL 后商户段仍是合计 1000，另出商户分项目段 m|A＝100、m|B＝900，净收入同样拆开。指标快照列表：没勾全部项目的人
+    // 不拿商户合计段、只拿可触及项目的分项目段；勾全部的人合计加两行；平台管理员全表。修复前没有分项目段（第二处断言即红）。
+    @Test
+    void metricSnapshotsSplitCrossProjectMerchantByProject() throws Exception {
+        LocalDate day = LocalDate.of(2097, 11, 18);
+        String m = merchant("z", projectA);
+        jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id, project_id) VALUES (?, ?)", m, projectB);
+        contractRentDue("za", m, projectA, 100, day);
+        contractRentDue("zb", m, projectB, 900, day);
+        new DashboardAggregationJob(analyticsRepository, businessDayResolver, false).refreshSnapshots(day);
+
+        assertThat(snapshotValue("revenue.contract_rent", day, "merchant", m)).isEqualByComparingTo("1000");
+        assertThat(snapshotValue("revenue.contract_rent", day, "merchant_project", m + "|" + projectA)).isEqualByComparingTo("100");
+        assertThat(snapshotValue("revenue.contract_rent", day, "merchant_project", m + "|" + projectB)).isEqualByComparingTo("900");
+        assertThat(snapshotValue("revenue.net", day, "merchant_project", m + "|" + projectA)).isEqualByComparingTo("100");
+        assertThat(snapshotValue("revenue.net", day, "merchant_project", m + "|" + projectB)).isEqualByComparingTo("900");
+
+        String code = "analytics.dashboard.view";
+        String total = "merchant:" + m;
+        String ofA = "merchant_project:" + m + "|" + projectA;
+        String ofB = "merchant_project:" + m + "|" + projectB;
+        assertThat(rentSnapshotSegments(staffOfA("plain", plainRole("plain", code)), m)).containsExactly(ofA);
+        assertThat(rentSnapshotSegments(staffOfA("ticked", tickedBRole("ticked", code)), m)).containsExactly(ofB);
+        assertThat(rentSnapshotSegments(staffOfA("both", tickedBRole("both_t", code), plainRole("both_p", code)), m))
+                .containsExactlyInAnyOrder(ofA, ofB);
+        assertThat(rentSnapshotSegments(staffOfA("all", allProjectsRole("all", code)), m)).containsExactlyInAnyOrder(total, ofA, ofB);
+        assertThat(rentSnapshotSegments(platformAdmin(code), m)).containsExactlyInAnyOrder(total, ofA, ofB);
     }
 
     // ROOT-04-R2（BSM「采购、库管和酒吧店长看采购周期……」；BSM「项目级操作人员只看自己所在项目范围内的 KPI 和明细」；裁决 M01）：
@@ -399,15 +484,15 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         return id;
     }
 
-    /** 2098-07 账期的一笔合同租金应收（租售比分子）；账期远在未来，库里没有同期的行。 */
-    private void rent(String tag, String merchantId, long cent) {
+    /** 2098-07 账期的一笔合同租金应收（租售比分子），挂在给定项目（可为空）；账期远在未来，库里没有同期的行。 */
+    private void rent(String tag, String merchantId, String projectId, long cent) {
         String id = "ar_m737_rent_" + tag + "_" + suffix;
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,
-                        unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at, merchant_id)
+                        unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at, merchant_id, project_id)
                 VALUES (?, ?, 'receivable', ?, 'contract_rent', ?, ?, 0, ?, 'CNY', DATE '2098-07-31', '2098-07', 'pending_collection',
-                        now(), now(), ?)
-                """, id, id, merchantId, id, cent, cent, merchantId);
+                        now(), now(), ?, ?)
+                """, id, id, merchantId, id, cent, cent, merchantId, projectId);
     }
 
     private String userId(String tag) {
@@ -486,6 +571,35 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         return merchantId;
     }
 
+    /** 给定商户在给定项目、到期日为给定经营日的一笔合同租金应收（指标快照 revenue.contract_rent 按到期日当日确认）。 */
+    private void contractRentDue(String tag, String merchantId, String projectId, long cent, LocalDate due) {
+        String id = "ar_m737_due_" + tag + "_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at, merchant_id, project_id)
+                VALUES (?, ?, 'receivable', ?, 'contract_rent', ?, ?, 0, ?, 'CNY', ?, ?, 'pending_collection', now(), now(), ?, ?)
+                """, id, id, merchantId, id, cent, cent, due, java.time.YearMonth.from(due).toString(), merchantId, projectId);
+    }
+
+    /** 某指标某经营日某段的日快照值，没有该行为 null。 */
+    private java.math.BigDecimal snapshotValue(String metricKey, LocalDate day, String segmentType, String segmentId) {
+        List<java.math.BigDecimal> values = jdbcTemplate.queryForList("""
+                SELECT actual_value FROM analytics_business_metric_snapshots
+                 WHERE metric_key = ? AND period_type = 'daily' AND business_date = ? AND segment_type = ? AND segment_id = ?
+                """, java.math.BigDecimal.class, metricKey, day, segmentType, segmentId);
+        return values.isEmpty() ? null : values.getFirst();
+    }
+
+    /** 给定商户在给定项目的一笔已逾期未收应收。 */
+    private void overdueReceivableOf(String tag, String merchantId, String projectId, long cent) {
+        String id = "ar_m737_" + tag + "_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, status, created_at, updated_at, merchant_id, project_id)
+                VALUES (?, ?, 'receivable', ?, ?, 0, ?, 'CNY', current_date - 10, 'open', now(), now(), ?, ?)
+                """, id, id, merchantId, cent, cent, merchantId, projectId);
+    }
+
     /** 一个商户（主项目可为空），带一行健康分、一行经营汇总。 */
     private String merchant(String tag, String projectId) {
         String id = "mch_m737_" + tag + "_" + suffix;
@@ -533,6 +647,15 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
         return mine(session, "/api/v1/analytics/finance-receivables/debtors", "$.data.items[*].merchant_id");
     }
 
+    /** 欠费商户明细各行的「商户|项目|未清金额」，只看本次夹具的商户。 */
+    private List<String> debtorRows(RequestPostProcessor session) throws Exception {
+        List<Map<String, Object>> rows = JsonPath.read(mockMvc.perform(get("/api/v1/analytics/finance-receivables/debtors").with(session))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.items[*]");
+        return rows.stream().filter(r -> r.get("merchant_id") != null && r.get("merchant_id").toString().endsWith(suffix))
+                .map(r -> r.get("merchant_id") + "|" + r.get("project_id") + "|" + r.get("outstanding_cent")).toList();
+    }
+
     private List<String> headcount(RequestPostProcessor session) throws Exception {
         return mine(session, headcountUrl, "$.data.rows[*].id");
     }
@@ -543,6 +666,16 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     private List<String> merchantSummaries(RequestPostProcessor session) throws Exception {
         return mine(session, "/api/v1/analytics/merchants", "$.data.items[*].merchant_id");
+    }
+
+    /** 指标快照列表里给定商户的 revenue.contract_rent 各段「段型:段编号」（段编号以该商户编号起头）。 */
+    private List<String> rentSnapshotSegments(RequestPostProcessor session, String merchantId) throws Exception {
+        List<Map<String, Object>> rows = JsonPath.read(mockMvc.perform(get("/api/v1/analytics/business-metric-snapshots").with(session))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.items[*]");
+        return rows.stream().filter(r -> "revenue.contract_rent".equals(r.get("metric_key")) && r.get("segment_id") != null
+                        && r.get("segment_id").toString().startsWith(merchantId))
+                .map(r -> r.get("segment_type") + ":" + r.get("segment_id")).toList();
     }
 
     private List<String> snapshots(RequestPostProcessor session) throws Exception {
@@ -597,6 +730,15 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
 
     private List<String> rentToSalesMerchants(RequestPostProcessor session) throws Exception {
         return mine(session, "/api/v1/analytics/rent-to-sales?month=2098-07", "$.data.by_merchant[*].key");
+    }
+
+    /** 租售比某一档各行的「编号|项目|租金」，只看本次夹具的项目（项目编号以随机后缀结尾）。 */
+    private List<String> rentToSalesRows(RequestPostProcessor session, String tier) throws Exception {
+        List<Map<String, Object>> rows = JsonPath.read(mockMvc.perform(get("/api/v1/analytics/rent-to-sales?month=2098-07").with(session))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data." + tier + "[*]");
+        return rows.stream().filter(r -> r.get("project_id") != null && r.get("project_id").toString().endsWith(suffix))
+                .map(r -> r.get("key") + "|" + r.get("project_id") + "|" + r.get("rent_cent")).toList();
     }
 
     private long platformRentCent(RequestPostProcessor session) throws Exception {

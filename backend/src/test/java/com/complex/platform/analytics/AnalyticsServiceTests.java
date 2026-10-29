@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1123,7 +1123,10 @@ class AnalyticsServiceTests {
                 new AnalyticsRecords.RentToSalesMerchantRow("m_a", "餐饮A", "catering", 120000L, 500000L),
                 new AnalyticsRecords.RentToSalesMerchantRow("m_b", "餐饮B", "catering", 50000L, 200000L),
                 new AnalyticsRecords.RentToSalesMerchantRow("m_c", "零售C", "retail", 30000L, 0L)),
-                250000L);
+                250000L, java.util.List.of(
+                new AnalyticsRecords.RentToSalesMerchantProjectRow("m_a", "餐饮A", "catering", "org_a", 120000L, 500000L),
+                new AnalyticsRecords.RentToSalesMerchantProjectRow("m_b", "餐饮B", "catering", "org_a", 50000L, 200000L),
+                new AnalyticsRecords.RentToSalesMerchantProjectRow("m_c", "零售C", "retail", "org_a", 30000L, 0L)));
         AnalyticsRecords.RentToSalesResponse resp = service.rentToSales("2099-09");
         assertThat(resp.period()).isEqualTo("2099-09");
         java.util.Map<String, AnalyticsRecords.RentToSalesRow> m = resp.byMerchant().stream()
@@ -1340,7 +1343,9 @@ class AnalyticsServiceTests {
         analyticsRepository.rentToSalesStub = new AnalyticsRecords.RentToSalesAggregate(List.of(
                 new AnalyticsRecords.RentToSalesMerchantRow("m_a", "餐饮A", "catering", 120000L, 500000L),
                 new AnalyticsRecords.RentToSalesMerchantRow("m_b", "餐饮B", "catering", 50000L, 200000L)),
-                250000L);
+                250000L, List.of(
+                new AnalyticsRecords.RentToSalesMerchantProjectRow("m_a", "餐饮A", "catering", "org_a", 120000L, 500000L),
+                new AnalyticsRecords.RentToSalesMerchantProjectRow("m_b", "餐饮B", "catering", "org_b", 50000L, 200000L)));
         analyticsRepository.merchantsOperatingIn.put("org_a", Set.of("m_a"));
         analyticsRepository.merchantsOperatingIn.put("org_b", Set.of("m_b"));
 
@@ -1474,7 +1479,7 @@ class AnalyticsServiceTests {
         @Override
         public AnalyticsRecords.RentToSalesAggregate rentToSales(String period) {
             return rentToSalesStub != null ? rentToSalesStub
-                    : new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(), 0L);
+                    : new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(), 0L, java.util.List.of());
         }
         public AnalyticsRecords.LeasingFunnel leasingFunnel(LocalDate businessDate, String windowDomain) {
             return new AnalyticsRecords.LeasingFunnel(0, 0, 0);

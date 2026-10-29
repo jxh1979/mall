@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -50,6 +50,8 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-INV-003", label: "采购与退供", module: "库存", group: "inventory", route: "/admin/inventory/purchases", requiredPermissions: ["inventory.purchase_request.view"] },
   // 第十八批第 24 条 24-R2：库存高价值复核（门店主管复核码或财务应收应付管理码任一可进）。
   { pageId: "ADM-INV-004", label: "高价值复核", module: "库存", group: "inventory", route: "/admin/inventory/high-value-reviews", requiredPermissions: ["inventory.high_value.review", "finance.ar_ap.manage"] },
+  // 第十八批 F 段第 14 条 14-R4：交接链与补录（原扫码五段与人工补录并列、缺扫码段发起补录）。
+  { pageId: "ADM-INV-005", label: "交接链与补录", module: "库存", group: "inventory", route: "/admin/inventory/trace-handovers", requiredPermissions: ["inventory.handover.scan"] },
   { pageId: "ADM-DLR-001", label: "经销商准入与价格目录", module: "经销", group: "inventory", route: "/admin/dealers/admission", requiredPermissions: ["dealer.view"] },
   { pageId: "ADM-DLR-002", label: "经销订单与履约", module: "经销", group: "inventory", route: "/admin/dealers/orders", requiredPermissions: ["dealer.order.view"] },
   { pageId: "ADM-DLR-003", label: "经销退货与开票", module: "经销", group: "inventory", route: "/admin/dealers/returns", requiredPermissions: ["dealer.return.view"] },

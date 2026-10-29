@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -174,7 +174,7 @@ public class AnalyticsService {
             new MetricCatalogEntry("supply.received", "inventory", "quantity_by_item_unit", true,
                     "按商品及单位分列，不出标量快照"),
             new MetricCatalogEntry(DashboardAggregationJob.RISK_MANUAL_BACKFILL, "governance", "count", true,
-                    "补录申请提交即计数（锁账后补录、无可信领取时刻补证），状态另列")
+                    "补录申请提交即计数（锁账后补录、无可信领取时刻补证、交接扫码补录、销售归属补录、服务责任补录），状态另列")
     );
 
     /**
@@ -517,21 +517,27 @@ public class AnalyticsService {
         // M737：逐商户行只有平台管理员不过滤；其余（含勾了全部项目的人，M737-F06：治理地图「只能触及归属在项目或项目公司下……的账号与数据」）
         // 只留在可触及项目内经营的商户，店级、业态级都只用留下的行。平台合计仍按全部商户算。
         Set<String> operating = reach.platformAdmin() ? Set.of() : repository.listMerchantIdsOperatingIn(reach.organizationIds());
-        java.util.List<AnalyticsRecords.RentToSalesMerchantRow> merchants = reach.platformAdmin() ? agg.merchants()
-                : agg.merchants().stream().filter(m -> operating.contains(m.merchantId())).toList();
-        // 店级（口径⑦ 商户即店）：每商户一行；无第三方营业额归属→比率 null 诚实标（NULL 分母只进平台级）。
-        java.util.List<AnalyticsRecords.RentToSalesRow> byMerchant = merchants.stream()
-                .map(m -> rentToSalesRow(m.merchantId(), m.merchantName(), m.rentCent(), m.salesCent()))
+        // 18F 第 80 条（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营商户的
+        // 金额按项目拆分」）：店级、业态级都按（商户, 项目）行出、不跨项目合计。平台管理员看全部行（含项目为空的）；其余人只看在可触及项目内
+        // 经营的商户、项目非空且可触及的行（商户口径不变）。
+        java.util.List<AnalyticsRecords.RentToSalesMerchantProjectRow> rows = reach.platformAdmin() ? agg.merchantProjects()
+                : agg.merchantProjects().stream()
+                        .filter(m -> m.projectId() != null && operating.contains(m.merchantId()) && reach.covers(m.projectId()))
+                        .toList();
+        // 店级（口径⑦ 商户即店）：每（商户, 项目）一行；无第三方营业额归属→比率 null 诚实标（NULL 分母只进平台级）。
+        java.util.List<AnalyticsRecords.RentToSalesRow> byMerchant = rows.stream()
+                .map(m -> rentToSalesRow(m.merchantId(), m.merchantName(), m.projectId(), m.rentCent(), m.salesCent()))
                 .toList();
-        // 业态级（口径⑥ 复用 merchant_type，不新增维度）：按 merchant_type 合并租金/营业额。
-        Map<String, long[]> byType = new LinkedHashMap<>();
-        for (AnalyticsRecords.RentToSalesMerchantRow m : merchants) {
-            long[] acc = byType.computeIfAbsent(m.merchantType() == null ? "" : m.merchantType(), k -> new long[2]);
+        // 业态级（口径⑥ 复用 merchant_type，不新增维度）：按（merchant_type, 项目）合并租金/营业额。
+        Map<java.util.List<String>, long[]> byType = new LinkedHashMap<>();
+        for (AnalyticsRecords.RentToSalesMerchantProjectRow m : rows) {
+            long[] acc = byType.computeIfAbsent(
+                    java.util.Arrays.asList(m.merchantType() == null ? "" : m.merchantType(), m.projectId()), k -> new long[2]);
             acc[0] += m.rentCent();
             acc[1] += m.salesCent();
         }
         java.util.List<AnalyticsRecords.RentToSalesRow> byMerchantType = byType.entrySet().stream()
-                .map(e -> rentToSalesRow(e.getKey(), e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .map(e -> rentToSalesRow(e.getKey().get(0), e.getKey().get(0), e.getKey().get(1), e.getValue()[0], e.getValue()[1]))
                 .sorted((a, b) -> Long.compare(b.rentCent(), a.rentCent()))
                 .toList();
         if (!whole) {
@@ -543,7 +549,7 @@ public class AnalyticsService {
         long totalRent = agg.merchants().stream().mapToLong(AnalyticsRecords.RentToSalesMerchantRow::rentCent).sum();
         long attributedSales = agg.merchants().stream().mapToLong(AnalyticsRecords.RentToSalesMerchantRow::salesCent).sum();
         AnalyticsRecords.RentToSalesRow platform =
-                rentToSalesRow("__platform__", "平台合计", totalRent, attributedSales + agg.unattributedSalesCent());
+                rentToSalesRow("__platform__", "平台合计", null, totalRent, attributedSales + agg.unattributedSalesCent());
         String note = agg.unattributedSalesCent() > 0
                 ? "含未归属第三方营业额（无门店号 / 未维护渠道映射）：仅计入平台级分母，不参与任何店级或业态抽成"
                 : "本期第三方回流营业额均已归属到店";
@@ -552,13 +558,14 @@ public class AnalyticsService {
     }
 
     /** 租售比 = 租金 / 营业额（基点，1 基点=0.01%）；营业额<=0 时比率不可计→null 并标注（诚实不伪造）。 */
-    private static AnalyticsRecords.RentToSalesRow rentToSalesRow(String key, String label, long rentCent, long salesCent) {
+    private static AnalyticsRecords.RentToSalesRow rentToSalesRow(String key, String label, String projectId, long rentCent,
+            long salesCent) {
         Long ratioBps = salesCent > 0
                 ? BigDecimal.valueOf(rentCent).multiply(BigDecimal.valueOf(10000L))
                         .divide(BigDecimal.valueOf(salesCent), 0, java.math.RoundingMode.HALF_UP).longValueExact()
                 : null;
         String note = salesCent > 0 ? null : "无第三方营业额归属，租售比不可计（仅计入平台级分母）";
-        return new AnalyticsRecords.RentToSalesRow(key, label, rentCent, salesCent, ratioBps, note);
+        return new AnalyticsRecords.RentToSalesRow(key, label, rentCent, salesCent, ratioBps, note, projectId);
     }
 
     /** 结算B2 放弃权益额外收入（客人买票但已过期未核销的权益，其未核销部分归项目公司的额外收入）：
@@ -1075,6 +1082,7 @@ public class AnalyticsService {
      * M737（治理地图「KPI 可见性分层」：「全平台合计只给平台管理员和勾选了「可以查看全部项目」的人看；只逐个勾选了项目的人，
      * 只能分别查看被选中项目各自的数据。」）：reach 由控制器按 analytics.dashboard.view 算好——平台管理员看全表；其余按段类型逐行留：
      * 平台段只给勾了全部项目的人，项目段按可触及项目，商户段按在可触及项目经营的商户，别的段不出。
+     * 18F 第 80 条：商户合计段只给勾了全部项目的人；商户分项目段按项目可触及且商户在可触及项目经营。
      */
     public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots(
             com.complex.platform.access.AuthorizationService.ProjectReach reach) {
@@ -1098,8 +1106,15 @@ public class AnalyticsService {
                         if (DashboardAggregationJob.SEGMENT_PROJECT.equals(segmentType)) {
                             return reach.allProjects() || reach.covers(snapshot.segmentId());
                         }
-                        return DashboardAggregationJob.SEGMENT_MERCHANT.equals(segmentType)
-                                && snapshot.segmentId() != null && merchantIds.contains(snapshot.segmentId());
+                        // 18F 第 80 条（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营
+                        // 商户的金额按项目拆分」）：商户合计段只给勾了全部项目的人；商户分项目段（商户|项目）给项目可触及、商户在可触及项目经营的人。
+                        if (DashboardAggregationJob.SEGMENT_MERCHANT.equals(segmentType)) {
+                            return reach.allProjects() && snapshot.segmentId() != null && merchantIds.contains(snapshot.segmentId());
+                        }
+                        String segmentId = snapshot.segmentId();
+                        int bar = segmentId == null ? -1 : segmentId.indexOf('|');
+                        return DashboardAggregationJob.SEGMENT_MERCHANT_PROJECT.equals(segmentType) && bar > 0
+                                && merchantIds.contains(segmentId.substring(0, bar)) && reach.covers(segmentId.substring(bar + 1));
                     }).toList();
                 }
         );

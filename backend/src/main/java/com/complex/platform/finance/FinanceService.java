@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -2961,6 +2961,7 @@ public class FinanceService implements TerminationSettlementPort {
         }
         // 营业额抽成应收：counterparty=商户。V299 起落 accounting_period=期间起始月——
         // 租金自动挂接（费用台账→分红基数）按 accounting_period 归期；历史行无期间标记不挂接（如实边界）。
+        // 18F 第 80 条（PGM:413；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：应收带合同所属项目。
         return persistDerivedArApItem(
                 "receivable",
                 rule.merchantId(),
@@ -2969,7 +2970,9 @@ public class FinanceService implements TerminationSettlementPort {
                 rent,
                 actual.idempotencyKey(),
                 rule.merchantId(),
-                java.time.YearMonth.from(periodStart).toString());
+                java.time.YearMonth.from(periodStart).toString(),
+                null,
+                repository.findContractProjectId(rule.contractId()));
     }
 
     /**

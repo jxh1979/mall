@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 export type AdminUser = {
   id: string;
   username: string;
@@ -300,6 +300,7 @@ export type BarReservationRow = {
   status?: string;
   reservedAt?: string;
   createdAt?: string;
+  salesStaffId?: string;
 };
 
 /** 第十八批 C 段第 15 条：员工代订权限停用记录（GET /api/v1/bar/staff-booking-suspensions）。 */
