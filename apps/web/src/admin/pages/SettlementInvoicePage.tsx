@@ -1,9 +1,10 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { PermissionButton } from "../security/Can";
+import { saveDownloadedFile } from "../client/adminClient";
 import type { AdminPageProps } from "../types";
 
 // 开票清单（ADM-STL-002）—— 结算重构 PRD 附录 B.1 / 附录 D、财务底稿 23_开票清单模板。
@@ -11,6 +12,8 @@ import type { AdminPageProps } from "../types";
 // 金额铁律（业务 HTML 逐字）：开票金额 ≤ 已收 − 已退 − 已开；退款后先红冲再重开。
 const BASE = "/api/v1/settlement/invoice-items";
 const MANAGE = ["settlement.invoice.manage"];
+// 第 23 条 23-R3：开票清单导出单独授权（PGM:685「导出须单独授权、逐次留痕」），不预授。
+const EXPORT = ["settlement.invoice.export"];
 
 type Item = {
   id: string; billId?: string | null; settlementItemId?: string | null; projectId?: string | null;
@@ -144,25 +147,22 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
     );
   };
 
-  const exportCsv = () => {
-    const header = [
-      "结算月", "开票主体", "开票项目", "税目口径", "收入类型",
-      "开票金额(元)", "增值税率", "税额(元)", "文化事业建设费(元)", "凭证要件", "开票状态", "发票号", "来源单号", "购方",
-    ].join(",");
-    const lines = items.map((i) => [
-      i.periodStart ?? "", i.subjectName ?? "（归属未配置）", i.invoiceItemName, i.taxCategory ?? "",
-      label(INCOME_LABELS, i.incomeType), yuan(i.amountCent), pct(i.vatRateBps), yuan(i.vatAmountCent),
-      i.culturalFeeApplicable ? yuan(i.culturalFeeCent) : "不计", i.evidenceRequired ?? "",
-      label(STATUS_LABELS, i.status), i.invoiceNo ?? "", i.billId ?? i.pointsBillId ?? "", i.buyerName ?? "",
-    ].map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","));
-    // BOM 前缀：Excel 直接双击打开不乱码。
-    const blob = new Blob(["﻿" + [header, ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `开票清单-${month || "全部结算月"}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  // 第 23 条 23-R3（PGM:687）：按当前筛选调后端导出，下载服务端生成的带密码、不可复制不可编辑、带暗纹的 PDF（十四列同上表）。
+  const exportFile = async () => {
+    if (!api.getFile) return;
+    const q = new URLSearchParams();
+    if (periodStart) q.set("periodStart", periodStart);
+    if (statusFilter) q.set("status", statusFilter);
+    const query = q.toString();
+    setBusy(true);
+    try {
+      saveDownloadedFile(await api.getFile(`${BASE}/export${query ? `?${query}` : ""}`));
+      setActionResult({ ok: true, message: "已导出（带密码的 PDF），打开密码请到「我的导出」查看" });
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : "导出失败");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const grouped = React.useMemo(() => {
@@ -203,8 +203,8 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
         </label>
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} onClick={generate} disabled={busy}
           data-testid="settlement-invoice-generate">按结算单生成开票清单</PermissionButton>
-        <button type="button" onClick={exportCsv} disabled={items.length === 0}
-          data-testid="settlement-invoice-export">导出清单（CSV）</button>
+        <PermissionButton permissionsState={effectivePermissions} permissions={EXPORT} onClick={() => void exportFile()}
+          disabled={items.length === 0 || busy} data-testid="settlement-invoice-export">导出清单（带密码）</PermissionButton>
       </div>
 
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>

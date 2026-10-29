@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
@@ -63,11 +63,14 @@ function looseTableQrValue(tableId: string) {
   return `table?t=${encodeURIComponent(tableId)}`;
 }
 
-export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, reportViewedObjects }: AdminPageProps) {
   const [tables, setTables] = React.useState<BarTableRow[]>([]);
   const [reservations, setReservations] = React.useState<BarReservationRow[]>([]);
   const [reservationNotice, setReservationNotice] = React.useState<string | null>(null);
   const [sessions, setSessions] = React.useState<BarTableSessionRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("bar_reservation", reservations), [reservations, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("bar_table_session", sessions), [sessions, reportViewedObjects]);
   const [suspensions, setSuspensions] = React.useState<BarStaffBookingSuspensionRow[]>([]);
   const canRestoreStaffBooking = hasPermissions(effectivePermissions, [BAR_STAFF_BOOKING_RESTORE_PERMISSION]);
   const { setSelectedId, selected: selectedReservation } = useSelectedRow(reservations);

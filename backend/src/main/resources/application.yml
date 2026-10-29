@@ -1,4 +1,4 @@
-# 文件版本：V0.02
+# 文件版本：V0.03
 server:
   port: ${COMPLEX_API_PORT:8080}
   address: ${COMPLEX_API_HOST:127.0.0.1}
@@ -96,6 +96,13 @@ compliance:
         # 企微 webhook 回调 HMAC 验签密钥（AUD 复核 P1-2 新增）。生产必须由 env COMPLEX_WECOM_WEBHOOK_SIGNING_SECRET
         # 注入强随机密钥；下方 dev 默认仅供本地/测试，切勿用于生产（SigningSecretGuard 在 prod 对弱/默认值 fail-closed）。
         secret: ${COMPLEX_WECOM_WEBHOOK_SIGNING_SECRET:complex-dev-wecom-webhook-secret-change-me}
+
+security:
+  export:
+    # 第 23 条 23-R3 导出文件打开密码的 HMAC 密钥（PGM:687「密码由导出人账号、导出时刻、导出所用设备的唯一识别号……以及接入网络等可查证要素
+    # 按统一算法生成」）。生产必须由 env COMPLEX_EXPORT_PASSWORD_SECRET 注入强随机密钥（ops/keyvault/keys.list 纳管）；
+    # 下方 dev 默认仅供本地/测试，切勿用于生产（SigningSecretGuard 在 prod 对弱/默认值 fail-closed）。
+    password-secret: ${COMPLEX_EXPORT_PASSWORD_SECRET:complex-dev-export-password-secret-change-me}
 
 keyvault:
   keys:

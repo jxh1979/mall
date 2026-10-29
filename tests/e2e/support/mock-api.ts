@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -42,6 +42,13 @@ function json(route: Route, data: ApiData, status = 200) {
     body: JSON.stringify(status >= 400 ? data : envelope(data)),
   });
 }
+
+const EXPORT_FILE_PATHS = new Set([
+  "/api/v1/analytics/reports/monthly-export",
+  "/api/v1/finance/ar-ap-items/export",
+  "/api/v1/audit/operation-events/export",
+  "/api/v1/settlement/invoice-items/export",
+]);
 
 function pathMatches(pathname: string, patterns: Array<string | undefined>) {
   return patterns.filter(Boolean).some((pattern) => pathname.includes(pattern as string));
@@ -233,7 +240,6 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/ticketing/issued-entitlements": state.issuedEntitlements,
     "/api/v1/ticketing/verifications": state.verifications,
     "/api/v1/finance/ar-ap-items": state.financeItems,
-    "/api/v1/finance/ar-ap-items/export": { id: "arap-export-1", format: "csv", rowCount: state.financeItems.length, rows: state.financeItems, csvText: "item_no,direction,status\nBILL-1,receivable,pending", exportedAt: now },
     "/api/v1/finance/property-fee/rates": [{ id: "pfr-1", projectId: "venue-1", effectivePeriod: null, ratePerSquareMeterCent: 2500, status: "active", createdAt: now, updatedAt: now }],
     "/api/v1/finance/merchant-expenses": { items: [{ id: "mex_m_1", merchantId: "merchant-1", period: "2026-07", expenseType: "labor", amountCent: 500000, source: "manual", sourceRef: null, note: "七月人工", operatorUserId: "usr_admin", createdAt: now }, { id: "mex_ae_1", merchantId: "merchant-1", period: "2026-07", expenseType: "energy", amountCent: 88800, source: "auto_energy", sourceRef: "arap_energy_1", note: "能耗费自动挂接", operatorUserId: "usr_admin", createdAt: now }], page: 1, pageSize: 20, total: 2 },
     "/api/v1/finance/dividends/plans": [{ id: "divp_1", merchantId: "merchant-1", principalUserId: "usr_principal", principalName: "主理人甲", platformShareBps: 8000, taxRateBps: 2000, periodType: "quarterly", revenueDomains: ["bar", "ticket"], includeInventoryCost: true, expenseTypes: ["rent_allocation", "energy", "property_fee", "labor", "amortization", "other"], status: "active", createdAt: now, updatedAt: now }],
@@ -385,10 +391,10 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
       { metric_key: "ar.balance", label: "欠费余额", domain: "finance", unit: "cent", aggregation: "period_end",
         current: 700000, prev_month: null, mom_pct: null, yoy_same_month: null, yoy_pct: null },
     ] },
-    "/api/v1/analytics/reports/monthly-export": { month: "2026-07", rows: [
-      { metric_key: "revenue.net", label: "净收入", domain: "finance", unit: "cent", aggregation: "monthly_sum",
-        current: 3000000, prev_month: 2000000, mom_pct: 0.5, yoy_same_month: null, yoy_pct: null },
-    ] },
+    // 第 23 条 23-R3：我的导出（本人导出与打开密码）。
+    "/api/v1/security/my-exports": { items: [{ id: "exp-mock-1", export_type: "finance_ar_ap_ledger", filters: { merchant_id: null, project_ids: null },
+      row_count: 1, exported_at: now, device_no: "WBMOCKDEVICE01", network: "127.0.0.1", editable: false, password: "MOCKPW2345" }],
+      page: 1, page_size: 20, total: 1 },
     "/api/v1/analytics/dashboards/facility": { business_date: "2026-07-01", metrics: {
       "wo.response_hours_p50": { value: 2.5, unit: "hours" },
       "wo.handle_hours_p50": { value: 6, unit: "hours" },
@@ -560,6 +566,11 @@ export async function installMockApi(page: Page, options: MockOptions = {}) {
       return json(route, effectivePermissionsFor(options));
     }
     if (isWrite) return handleWrite(route, url.pathname, state, options);
+    // 第 23 条 23-R3：导出接口只交出服务端生成的带密码 PDF。
+    if (EXPORT_FILE_PATHS.has(url.pathname)) {
+      return route.fulfill({ status: 200, contentType: "application/pdf", body: "%PDF-1.7 mock",
+        headers: { "content-disposition": "attachment; filename*=UTF-8''%E5%AF%BC%E5%87%BA.pdf" } });
+    }
     if (url.pathname === "/api/v1/analytics/metric-detail") {
       // KPI 页 useMetricKpiValue 按 metric 拉明细取 summary_value；按指标返回对应值（与仪表盘同源），
       // 未覆盖指标退回既有票务收入明细桩（metric-detail 抽屉用例断言 TK-1/TK-2 行）。
@@ -1061,6 +1072,8 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
     }
     return json(route, item ?? { id: "blocker-1", status: "verified" });
   }
+  // 第 23 条 23-R2：外壳每进一页登记一次打开，返回暗纹码。
+  if (pathname === "/api/v1/security/page-views") return json(route, { code: "MOCKWM23", opened_at: now });
   if (pathname.startsWith("/api/open/")) return json(route, { accepted: true, requestId: "mock-open-webhook" });
   if (pathname.startsWith("/api/v1/floor-plans")) return json(route, { id: "floor-plan-mock", status: "success" });
   return json(route, { id: "mock-post", status: "success" });

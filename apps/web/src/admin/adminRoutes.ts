@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -92,6 +92,8 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-INT-005", label: "渠道映射维护", module: "第三方", group: "integration", route: "/admin/integrations/channel-maps", requiredPermissions: ["integration.channel_store_map.view"] },
   { pageId: "ADM-RISK-001", label: "风控预警", module: "风控", group: "risk", route: "/admin/risk/alerts", requiredPermissions: ["analytics.risk_alert.view"] },
   { pageId: "ADM-EVD-001", label: "审计事件", module: "审计", group: "audit", route: "/admin/audit/events", requiredPermissions: ["evidence.event.view"] },
+  { pageId: "ADM-SEC-001", label: "我的导出", module: "审计", group: "audit", route: "/admin/security/my-exports", requiredPermissions: [] },
+  { pageId: "ADM-SEC-002", label: "暗纹与导出密码反查", module: "审计", group: "audit", route: "/admin/security/watermark-trace", requiredPermissions: ["security.watermark.trace"] },
   { pageId: "ADM-ANA-001", label: "经营分析", module: "分析", group: "overview", route: "/admin/analytics/business", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-002", label: "集团总览", module: "分析", group: "overview", route: "/admin/analytics/group-overview", requiredPermissions: ["analytics.group.view"] },
   { pageId: "ADM-ANA-004", label: "欠费与回款", module: "分析", group: "overview", route: "/admin/analytics/receivables", requiredPermissions: ["finance.ar_ap.view"] },
@@ -122,6 +124,23 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-COMP-001", label: "合规到期提醒台账", module: "合规", group: "compliance", route: "/admin/compliance/reminders", requiredPermissions: ["compliance.reminder.view"] },
   { pageId: "ADM-COMP-002", label: "企微会话合规监察", module: "合规", group: "compliance", route: "/admin/compliance/wecom", requiredPermissions: ["wecom.risk_hit.view"] },
 ];
+
+// 第 23 条：敏感页（PGM:687「凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页」）的页面编号，清单由 23-R5 定；
+// 外壳登记打开（page-views）时按它报 sensitive。不放在路由对象上：页面矩阵校验按路由对象的固定写法解析。
+// 23-R5：按页面上（含子面板、明细抽屉）出现 PGM:686 两类内容判，掩码显示也算；员工姓名、所属部门与公司不算；DEC-R8-40 已判清单外的
+// 商户专区费用通知接收人手机号（ADM-MER-007）不算。逐页依据见 platform-governance-prd §15A.3。
+export const SENSITIVE_PAGE_IDS = new Set<string>([
+  // 个人信息（姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置）
+  "ADM-TKT-005", "ADM-CUS-001", "ADM-BAR-001", "ADM-BAR-002", "ADM-BAR-003", "ADM-GOV-002", "ADM-GOV-005", "ADM-STF-004",
+  "ADM-LEASE-001", "ADM-FAC-001", "ADM-VND-003", "ADM-FAC-002", "ADM-FAC-003", "ADM-AMU-002", "ADM-COMP-002",
+  // 指标明细（新增会员明细的脱敏手机号、团体预约明细的客户姓名）
+  "ADM-ANA-012",
+  // 个人信息与供应链价格（经销商联系人手机号、经销价目）
+  "ADM-DLR-001", "ADM-DLR-002", "ADM-DLR-003",
+  // 敏感经营数据（内部结算价、成本价、采购价、毛利、分账底价、域内补贴缺口、供应链价格）
+  "ADM-STL-001", "ADM-STL-003", "ADM-TKT-001", "ADM-BAR-005", "ADM-BAR-006", "ADM-INV-001", "ADM-INV-002", "ADM-INV-003",
+  "ADM-CUS-002", "ADM-AMU-007", "ADM-PARK-001", "ADM-GOV-009",
+]);
 
 // 业务域分组顺序与展示文案（frontend-admin §4.3：8 业务域 + 平台域聚合）。
 // 渲染顺序即此数组顺序；未在 adminRoutes 中出现的分组会被 AdminApp 自动跳过。

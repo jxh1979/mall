@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -128,6 +128,8 @@ class SingleUseGrantRequestTransactionTests {
     private final String userId = "usr_xmj_" + suffix;
     private final String otherUserId = "usr_xmj2_" + suffix;
     private final String merchantId = "mch_xmj_" + suffix;
+    // 第 23 条 23-R3：导出密码用本浏览器登记过的设备编号（第十八批裁决 6），导出请求带它
+    private final String deviceNo = "WBXMJ" + suffix;
 
     // 18E（第 19 条 19-R2）：本类员工都归 org；新建线索落本人项目、须是真实项目，用到时临时补一行项目、用完删掉
     private boolean orgProjectAdded;
@@ -139,6 +141,7 @@ class SingleUseGrantRequestTransactionTests {
             jdbcTemplate.update("DELETE FROM projects WHERE id = 'org'");
         }
         jdbcTemplate.update("DELETE FROM user_roles WHERE user_id IN (?, ?)", userId, otherUserId);
+        jdbcTemplate.update("DELETE FROM browser_devices WHERE device_no = ?", deviceNo);
         jdbcTemplate.update("DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE role_name LIKE ?)", roleName("%"));
         jdbcTemplate.update("DELETE FROM roles WHERE role_name LIKE ?", roleName("%"));
         jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id IN (?, ?)", userId, otherUserId);
@@ -919,7 +922,7 @@ class SingleUseGrantRequestTransactionTests {
         holdAllProjectsDashboardRole();
         List<MockHttpServletResponse> responses = raceTwoOnTheGrantRow(() -> mockMvc.perform(
                         get("/api/v1/analytics/reports/monthly-export").header("Idempotency-Key", "xmj-export-same-" + suffix)
-                                .with(session(null)))
+                                .with(exportSession(null)))
                 .andReturn().getResponse());
         assertOneSucceededAndTheOtherWasDenied(responses);
         assertConsumedOnce();
@@ -1288,7 +1291,7 @@ class SingleUseGrantRequestTransactionTests {
         String url = "/api/v1/analytics/reports/monthly-export";
         staffWithSingleUseGrant(null, "analytics.report.export");
         holdAllProjectsDashboardRole();
-        mockMvc.perform(get(url).with(session(null))).andExpect(status().isOk());
+        mockMvc.perform(get(url).with(exportSession(null))).andExpect(status().isOk());
         assertConsumedOnce();
         mockMvc.perform(get(url).with(session(null)))
                 .andExpect(status().isForbidden())
@@ -1318,7 +1321,7 @@ class SingleUseGrantRequestTransactionTests {
 
     private void assertExportUsesUpTheGrant(String merchant, String permissionCode, String url) throws Exception {
         staffWithSingleUseGrant(merchant, permissionCode);
-        mockMvc.perform(get(url).with(session(merchant))).andExpect(status().isOk());
+        mockMvc.perform(get(url).with(exportSession(merchant))).andExpect(status().isOk());
         assertConsumedOnce();
         mockMvc.perform(get(url).with(session(merchant)))
                 .andExpect(status().isForbidden())
@@ -2375,6 +2378,17 @@ class SingleUseGrantRequestTransactionTests {
     // 后台 Web 终端（grace 模式下自报 web 的写请求留痕放行）+ 生产过滤器放入的 AccessActor 主体。
     private RequestPostProcessor session(String merchant) {
         return session(userId, merchant);
+    }
+
+    // 第 23 条 23-R3：导出请求另带本浏览器已登记的设备编号 Cookie（没有就 409 DEVICE_NOT_REGISTERED）。
+    private RequestPostProcessor exportSession(String merchant) {
+        jdbcTemplate.update("INSERT INTO browser_devices (device_no, first_user_id) VALUES (?, ?) ON CONFLICT (device_no) DO NOTHING",
+                deviceNo, userId);
+        RequestPostProcessor session = session(merchant);
+        return request -> {
+            request.setCookies(new jakarta.servlet.http.Cookie("complex_device_no", deviceNo));
+            return session.postProcessRequest(request);
+        };
     }
 
     private RequestPostProcessor session(String user, String merchant) {

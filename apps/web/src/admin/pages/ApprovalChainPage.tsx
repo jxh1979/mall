@@ -13,7 +13,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -172,8 +172,11 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return `复核单 ${reviewId} 审批链已重生成，共 ${count} 个节点`;
 }
 
-export function ApprovalChainPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId }: AdminPageProps) {
+export function ApprovalChainPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, reportViewedObjects }: AdminPageProps) {
   const [pendingRows, setPendingRows] = React.useState<PendingRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("supervisor_review", pendingRows.map((row) => ({ id: row.decision.reviewId }))),
+    [pendingRows, reportViewedObjects]);
   const [reviewId, setReviewId] = React.useState<string>(() => focusObjectId || readReviewIdFromUrl());
   const [nodes, setNodes] = React.useState<ChainNode[]>([]);
   const [chainLoaded, setChainLoaded] = React.useState(false);
@@ -181,6 +184,8 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
   const [forwardTarget, setForwardTarget] = React.useState("");
   const [original, setOriginal] = React.useState<PendingRow["decision"] | null>(null);
   const [originalError, setOriginalError] = React.useState<string | null>(null);
+  // 第 23 条复核：显示采购价等内容的是读到的复核单原件，已终结、不在待审列表里的也报为这一次看到的对象。
+  React.useEffect(() => { if (original) reportViewedObjects?.("supervisor_review", [{ id: original.reviewId }]); }, [original, reportViewedObjects]);
   const selectedReview = original?.reviewId === reviewId ? original : null;
   const canDecide = selectedReview?.reviewStatus === "pending_review" && chainLoaded;
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import type { AdminPageProps, GovernanceProjectRow } from "../types";
@@ -50,7 +50,7 @@ const emptySetting: BoundedSetting = { value: "", min: "", max: "" };
  * 手机号可重新注册。ROOT-03-R22（ENUM 第 68 行）：同号一年内注销与注册合计超上限提示风控（全平台，出厂 3 次，值与上下限同配）。
  */
 export function CustomerAccountsPage(props: AdminPageProps) {
-  const { api, setActionResult, setGlobalError, effectivePermissions, user } = props;
+  const { api, setActionResult, setGlobalError, effectivePermissions, user, reportViewedObjects } = props;
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   const [project, setProject] = React.useState(user?.organizationId ?? "");
   const [phone, setPhone] = React.useState("");
@@ -59,6 +59,9 @@ export function CustomerAccountsPage(props: AdminPageProps) {
   const [loading, setLoading] = React.useState(false);
   const [reason, setReason] = React.useState("");
   const [requests, setRequests] = React.useState<BlacklistRequestRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("customer_blacklist_request", requests), [requests, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("customer", account ? [account] : []), [account, reportViewedObjects]);
   const [restriction, setRestriction] = React.useState<BoundedSetting>(emptySetting);
   const [churn, setChurn] = React.useState<BoundedSetting>(emptySetting);
   // 行明细抽屉：整行可点 → 该客人账号完整字段（掩码手机号·中文状态·中文日期）。

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.39
+# P0 OpenAPI Operation 验收矩阵 V0.40
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1197 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1204 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -979,6 +979,7 @@
 | evidence | `GET` | `/api/v1/evidence/attachments/{attachment_id}/file` | `readEvidenceAttachmentFile` | 回读证据文件 | `-` | `evidence.timeline.view` | `staff-token` | `merchant` | web, tablet | 否 | `evidence.attachment_file_viewed` | `evidence.attachment_file_view_failed` |
 | settlement | `GET` | `/api/v1/settlement/invoice-items` | `listSettlementInvoiceItems` | 开票清单列表 | `-` | `settlement.invoice.view` | `staff-token` | `platform` | web | 否 | `settlement.invoice.list` | `settlement.invoice.list_failed` |
 | settlement | `GET` | `/api/v1/settlement/invoice-items/summary` | `settlementInvoiceSummary` | 开票清单按主体汇总 | `-` | `settlement.invoice.view` | `staff-token` | `platform` | web | 否 | `settlement.invoice.summary` | `settlement.invoice.summary_failed` |
+| settlement | `GET` | `/api/v1/settlement/invoice-items/export` | `exportSettlementInvoiceItems` | 导出开票清单（带密码 PDF） | `-` | `settlement.invoice.export` | `staff-token` | `platform` | web | 否 | `settlement.invoice.exported` | `settlement.invoice.export_failed` |
 | settlement | `POST` | `/api/v1/settlement/invoice-items/generate` | `generateSettlementInvoiceItems` | 按结算单生成开票清单 | `-` | `settlement.invoice.manage` | `staff-token` | `platform` | web | 否 | `settlement.invoice.generated` | `settlement.invoice.generate_failed` |
 | settlement | `POST` | `/api/v1/settlement/invoice-items/{id}/status` | `changeSettlementInvoiceItemStatus` | 流转开票状态 | `object` | `settlement.invoice.manage` | `staff-token` | `platform` | web | 否 | `settlement.invoice.status_changed` | `settlement.invoice.status_change_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/price-check` | `ticketTypePriceCheck` | 票种定价核算（系统算出售价 vs 填的售价） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
@@ -1218,6 +1219,12 @@
 | bar | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | `saveBarArrivalReminderPolicy` | 配置最晚到店时间前提醒提前分钟数及上下限（按项目） | `object` | `bar.reservation.manage` | `staff-token` | `project` | web | 是 | `bar.arrival_reminder_policy_updated` | `bar.arrival_reminder_policy_update_failed` |
 | customer | `GET` | `/api/v1/home-contents/{project_id}` | `getCustomerHomeContent` | 查客人端首页已发布与待审批的综合体介绍与活动公告 | `-` | `customer.home_content.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `POST` | `/api/v1/home-contents/{project_id}/publish` | `publishCustomerHomeContent` | 提交发布客人端首页综合体介绍与活动公告（审批后生效） | `object` | `customer.home_content.manage` | `staff-token` | `project` | web | 是 | `customer.home_content_published` | `customer.home_content_publish_failed` |
+| evidence | `POST` | `/api/v1/security/page-views` | `recordPageView` | 登记页面打开并发暗纹码 | `object` | `authenticated` | `staff-token` | `self` | web, merchant_portal, staff_work_phone, staff_private_phone | 是 | `security.sensitive_page.viewed` | `security.page_view.failed` |
+| evidence | `POST` | `/api/v1/security/watermarks/trace` | `traceWatermark` | 截屏或拍屏照片按暗纹反查 | `object` | `security.watermark.trace` | `staff-token` | `project` | web | 否 | `security.watermark.traced` | `security.watermark.trace_failed` |
+| evidence | `GET` | `/api/v1/security/my-exports` | `listMyExports` | 我的导出（本人导出文件与打开密码） | `-` | `authenticated` | `staff-token` | `self` | web, merchant_portal | 否 | `security.my_exports.viewed` | `security.my_exports.view_failed` |
+| evidence | `POST` | `/api/v1/security/export-files/lookup` | `lookupExportPassword` | 导出密码反查 | `object` | `security.watermark.trace` | `staff-token` | `project` | web | 否 | `security.export_password.traced` | `security.export_password.trace_failed` |
+| evidence | `POST` | `/api/v1/security/export-files/{id}/editable-requests` | `requestEditableExportCopy` | 申请导出文件可编辑版（最高权限审批） | `object` | `authenticated` | `staff-token` | `self` | web, merchant_portal | 是 | `security.export.editable_requested` | `security.export.editable_request_failed` |
+| evidence | `GET` | `/api/v1/security/export-files/{id}/editable-copy` | `downloadEditableExportCopy` | 下载导出文件可编辑版（一次批准发放一次） | `-` | `authenticated` | `staff-token` | `self` | web, merchant_portal | 否 | `security.export.editable_downloaded` | `security.export.editable_download_failed` |
 
 ## 4. 通用 Given/When/Then 验收标准
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -61,8 +61,10 @@ function contractAttachments(row: ContractRow) {
   return row.attachmentIds?.length ? row.attachmentIds.join(" / ") : row.evidenceAttachmentIds?.join(" / ") ?? "-";
 }
 
-export function AdmissionAuditsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function AdmissionAuditsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [merchants, setMerchants] = React.useState<MerchantAdmissionRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("merchant", merchants), [merchants, reportViewedObjects]);
   // 第 32 条：三类统计数取后端分页 total（列表只拿到一页，按条数算会少）。
   const [totals, setTotals] = React.useState({ merchants: 0, bindings: 0, contracts: 0 });
   const [bindings, setBindings] = React.useState<SubjectBindingRow[]>([]);

@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -35,6 +35,8 @@ const REVIEW_LABELS: Record<string, string> = {
   "leasing.intent.key_stage": "招商意向关键阶段确认", leasing_intent: "招商意向",
   "merchant.project.add": "商户加经营项目", merchant_project_request: "加经营项目申请",
   "compliance.expiry_item.grace": "证照宽限期申请", compliance_expiry_item: "证照",
+  // 第十八批 H 段第 23 条 23-R4（PGM:687）：导出文件可编辑版申请。
+  "security.export.editable_copy": "可编辑版导出申请", export_file: "导出文件",
   // 第十八批 F 段第 14 条 14-R8（BSM 第 1642 行「补录一律进入主管复核队列」）：人工补录三类复核动作与补录单。
   "inventory.trace.scan_backfill": "交接扫码补录", "bar.sales.backfill": "销售归属补录", "bar.service.backfill": "服务责任补录",
   manual_backfill: "人工补录单",

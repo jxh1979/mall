@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
@@ -48,8 +48,10 @@ function readKpiFocusFromUrl(): KpiFocus | null {
   return { status: params.get("status") };
 }
 
-export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [bookings, setBookings] = React.useState<AmusementGroupBookingRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("amusement_group_booking", bookings), [bookings, reportViewedObjects]);
   const { setSelectedId, selected } = useSelectedRow(bookings);
   const [releaseReason, setReleaseReason] = React.useState("完整后台验收释放");
   const [formError, setFormError] = React.useState("");

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
@@ -187,8 +187,10 @@ function numberValue(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function StoredWinePage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function StoredWinePage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<StoredWineRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("saved_bottle", rows), [rows, reportViewedObjects]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [claimPhone, setClaimPhone] = React.useState("");
   const [verificationCode, setVerificationCode] = React.useState("");

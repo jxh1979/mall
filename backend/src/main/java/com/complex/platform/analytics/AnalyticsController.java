@@ -31,17 +31,19 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/analytics")
-public class AnalyticsController {
+public class AnalyticsController implements com.complex.platform.security.ExportFileService.Source {
 
     private final AnalyticsService service;
     private final AuthorizationService authorizationService;
     private final OperatingParamsService operatingParamsService;
+    private final com.complex.platform.security.ExportFileService exportFiles;
 
     public AnalyticsController(AnalyticsService service, AuthorizationService authorizationService,
-            OperatingParamsService operatingParamsService) {
+            OperatingParamsService operatingParamsService, com.complex.platform.security.ExportFileService exportFiles) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.operatingParamsService = operatingParamsService;
+        this.exportFiles = exportFiles;
     }
 
     /** M737 全平台口径：商户、外包照旧由 requirePlatformScope 拒绝；其余须是平台管理员或经勾了「可以查看全部项目」的角色持有该码。 */
@@ -194,14 +196,76 @@ public class AnalyticsController {
 
     @GetMapping("/reports/monthly-export")
     @com.complex.platform.access.ConsumesSingleUseGrant("analytics.report.export") // M723：导出导一次扣一次（操作员 2026-10-03）
-    public ApiResponse<AnalyticsRecords.MonthlyComparisonResponse> exportMonthlyReport(
+    public org.springframework.http.ResponseEntity<byte[]> exportMonthlyReport(
             @org.springframework.web.bind.annotation.RequestParam(value = "month", required = false) String month) {
         // 治理口径(V196 范式):导出与查看分权——看板 view 可看,导出须独立高危权限,不直授审计角色。
         authorizationService.requirePermission("analytics.report.export");
         // M737（操作员 2026-10-08 所选选项原文：「范围按他「能不能看全平台合计」判，导出授权只管「能不能导」。」「看不了全平台合计的人，
         // 有导出授权也导不了（被拒、不扣次数）。」）：范围按查看经营分析看板的权限判；被拒时单次消耗随请求事务回滚。
         requireWholePlatform("analytics.dashboard.view");
-        return ApiResponse.ok(service.exportMonthlyReport(month));
+        // 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码……导出文件中的数据不可复制、不可编辑」）：服务端生成带密码、带暗纹的 PDF，
+        // 七列同月度对比页面表格；导出记录 filters 记月份与取数范围（全平台合计）。
+        return service.exportMonthlyReport(month, report -> {
+            var table = monthlyTable(report);
+            return exportFiles.create("analytics_monthly_report", table.title(), table.filters(), table.columns(), table.rows());
+        }).response();
+    }
+
+    @Override
+    public String exportType() {
+        return "analytics_monthly_report";
+    }
+
+    /** 第 23 条 23-R4 可编辑版重取：同查看月度对比（analytics.dashboard.view＋全平台口径），不再要导出权限。 */
+    @Override
+    public com.complex.platform.security.ExportFileService.Table viewTable(java.util.Map<String, Object> filters) {
+        authorizationService.requirePermission("analytics.dashboard.view");
+        requireWholePlatform("analytics.dashboard.view");
+        return monthlyTable(service.monthlyComparison((String) filters.get("month")));
+    }
+
+    /** 七列同月度对比页面表格；导出记录 filters 记月份与取数范围（全平台合计）。 */
+    private static com.complex.platform.security.ExportFileService.Table monthlyTable(AnalyticsRecords.MonthlyComparisonResponse report) {
+        return new com.complex.platform.security.ExportFileService.Table("月度经营对比-" + report.month(),
+                java.util.Map.of("month", report.month(), "scope", "全平台"), MONTHLY_EXPORT_COLUMNS,
+                report.rows().stream().map(AnalyticsController::monthlyExportRow).toList());
+    }
+
+    private static final List<String> MONTHLY_EXPORT_COLUMNS = List.of("指标", "口径", "本月", "上月", "环比", "去年同月", "同比");
+    private static List<String> monthlyExportRow(AnalyticsRecords.MonthlyComparisonRow row) {
+        return List.of(row.label() == null ? row.metricKey() : row.label(),
+                row.aggregation() == null ? "" : switch (row.aggregation()) {
+                    case "monthly_sum" -> "月累计";
+                    case "period_end" -> "期末时点";
+                    default -> row.aggregation();
+                },
+                monthlyAmount(row.current(), row.unit()), monthlyAmount(row.prevMonth(), row.unit()), monthlyChange(row.momPct()),
+                monthlyAmount(row.yoySameMonth(), row.unit()), monthlyChange(row.yoyPct()));
+    }
+
+    /** 同月度对比页面的显示：缺数为「积累中」；分折元带 ¥，比率乘 100 带 %，其余按单位。 */
+    private static String monthlyAmount(java.math.BigDecimal value, String unit) {
+        if (value == null) {
+            return "积累中";
+        }
+        java.text.DecimalFormat number = new java.text.DecimalFormat("#,##0.##");
+        return switch (unit == null ? "" : unit) {
+            case "cent" -> "¥" + number.format(value.movePointLeft(2));
+            case "rate" -> value.movePointRight(2).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() + "%";
+            case "sqm" -> number.format(value) + " ㎡";
+            case "kwh" -> number.format(value) + " kWh";
+            case "ton" -> number.format(value) + " 吨";
+            case "m3" -> number.format(value) + " m³";
+            default -> number.format(value);
+        };
+    }
+
+    private static String monthlyChange(java.math.BigDecimal value) {
+        if (value == null) {
+            return "积累中";
+        }
+        java.math.BigDecimal pct = value.movePointRight(2).setScale(2, java.math.RoundingMode.HALF_UP);
+        return (pct.signum() > 0 ? "+" : "") + pct.toPlainString() + "%";
     }
 
     @GetMapping("/rent-to-sales")

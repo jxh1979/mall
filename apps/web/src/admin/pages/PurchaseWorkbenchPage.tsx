@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
@@ -35,13 +35,17 @@ const date = (v?: string) => v ? new Date(v).toLocaleString("zh-CN") : "尚未�
 const name = (v: Option) => v.name ?? v.itemName ?? v.entityName ?? v.supplierName ?? v.merchantName ?? v.id;
 const enc = encodeURIComponent;
 
-export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActionResult, setGlobalError, navigateTo, focusObjectId }: AdminPageProps) {
+export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActionResult, setGlobalError, navigateTo, focusObjectId, reportViewedObjects }: AdminPageProps) {
   const can = (permissions: string[]) => hasPermissions(effectivePermissions, permissions);
   const canView = can([VIEW]), canContract = can([CONTRACT]);
   const [options, setOptions] = React.useState<Options>(emptyOptions);
   const [purchases, setPurchases] = React.useState<Purchase[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("purchase_request", purchases), [purchases, reportViewedObjects]);
   const [detail, setDetail] = React.useState<Detail | null>(null);
   const [contract, setContract] = React.useState<{ contract: Contract; reviewId?: string; terms?: Terms } | null>(null);
+  // 第 23 条复核：合同单价（采购价）在「查看合同」读出的执行条款里，这份供货合同报为这一次看到的对象。
+  React.useEffect(() => { if (contract) reportViewedObjects?.("supply_contract", [{ id: contract.contract.id }]); }, [contract, reportViewedObjects]);
   const [payments, setPayments] = React.useState<Payment[]>([]);
   const [loadErrors, setLoadErrors] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState("");

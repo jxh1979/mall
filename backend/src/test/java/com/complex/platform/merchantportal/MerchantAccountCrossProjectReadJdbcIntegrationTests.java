@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -108,8 +108,8 @@ class MerchantAccountCrossProjectReadJdbcIntegrationTests {
         // 修复前红：只出 A 的行
         assertThat(mine("/api/v1/finance/ar-ap-items?size=200", "$.data.items[*].id"))
                 .containsExactlyInAnyOrder(itemA, itemB, payrollB).doesNotContain(itemN);
-        assertThat(mine("/api/v1/finance/ar-ap-items/export", "$.data.rows[*].id"))
-                .containsExactlyInAnyOrder(itemA, itemB, payrollB);
+        // 第 23 条 23-R3：导出改为带密码 PDF——用「我的导出」查到的密码打开，本商户各项目的行在、别的商户与门票分账行不在
+        assertThat(exportedText("/api/v1/finance/ar-ap-items/export")).contains(itemA, itemB, payrollB).doesNotContain(itemN, ticketB);
         assertThat(mine("/api/v1/finance/refunds", "$.data.items[*].id")).containsExactlyInAnyOrder(refundA, refundB)
                 .doesNotContain(refundN);
         mockMvc.perform(get("/api/v1/finance/refunds/" + refundB).with(merchantAccount))
@@ -280,6 +280,19 @@ class MerchantAccountCrossProjectReadJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), path);
         return ids.stream().filter(id -> id != null && id.endsWith(suffix)).toList();
+    }
+
+    /** 以商户账号导出（带已登记的浏览器设备编号），用「我的导出」里的密码打开 PDF，返回文本。 */
+    private String exportedText(String url) throws Exception {
+        String deviceNo = "WBMCR" + suffix;
+        jdbcTemplate.update("INSERT INTO browser_devices (device_no, first_user_id) VALUES (?, ?)", deviceNo, userId("acct"));
+        byte[] pdf = mockMvc.perform(get(url).with(merchantAccount).cookie(new jakarta.servlet.http.Cookie("complex_device_no", deviceNo)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        String password = JsonPath.read(mockMvc.perform(get("/api/v1/security/my-exports").with(merchantAccount))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.items[0].password");
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(pdf, password)) {
+            return new org.apache.pdfbox.text.PDFTextStripper().getText(doc);
+        }
     }
 
     private ResultActions postJson(String url, String body) throws Exception {

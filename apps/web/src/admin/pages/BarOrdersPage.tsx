@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { TechDetails } from "../components/TechDetails";
@@ -150,8 +150,10 @@ function deliveryLabel(item: BarOrderItemRow) {
   return "未上菜";
 }
 
-export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("bar_order", orders), [orders, reportViewedObjects]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiTarget | null>(readKpiFocusFromUrl);
   // 聚焦时对订单表做客户端筛选：仅过滤已加载的内存数组，不发起后端查询。
   const visibleOrders = kpiFocus === "open" ? orders.filter(isOpenOrder) : orders;

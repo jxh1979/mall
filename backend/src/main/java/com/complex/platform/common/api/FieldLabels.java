@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -674,6 +674,19 @@ public final class FieldLabels {
         p("object_type", "对象类型");
         p("ref_id", "关联单据");
         p("ref_type", "关联单据类型");
+        // 第 23 条 23-R2 页面暗纹（PGM:687）。
+        p("page_id", "页面");
+        // 第 23 条 23-R4 可编辑版申请（PGM:687「说明用途与接收方」）与复核单说明里导出筛选条件的中文名（同前端 fieldLabels.ts）。
+        p("purpose", "用途");
+        p("scope", "范围");
+        p("period_start", "期初");
+        p("subject_entity_id", "主体");
+        p("actor_id", "操作人");
+        p("event_name", "事件名称");
+        p("from", "起始");
+        p("to", "截止");
+        p("limit", "条数上限");
+        p("project_ids", "项目");
         p("request_id", "请求标识");
         p("reason", "原因");
         // 第十八批 E 段第 22 条 证照宽限期与预警提前量（PGM:531）。

@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.39
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.40
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1197 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 417 | 人工权限矩阵正文未覆盖 316 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2394 | 人工事件矩阵正文未覆盖 2349 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1197 | 人工任务映射正文未逐项覆盖 1191 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 719 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1204 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 419 | 人工权限矩阵正文未覆盖 318 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2408 | 人工事件矩阵正文未覆盖 2363 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1204 | 人工任务映射正文未逐项覆盖 1198 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 723 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -100,7 +100,7 @@
 | `analytics.risk_alert.view` | staff-token | project | 8 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listMetricAnomalyTimeline, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
 | `audit.operation_log.export` | staff-token | platform | 1 | exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `audit.operation_log.view` | staff-token | platform | 1 | queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
-| `authenticated` | staff-token | current-session, merchant, self | 4 | logout, refreshToken, getEffectivePermissions, listManualBackfills | 已在权限矩阵正文出现 |
+| `authenticated` | staff-token | current-session, merchant, self | 8 | logout, refreshToken, getEffectivePermissions, listManualBackfills, recordPageView, listMyExports, requestEditableExportCopy, downloadEditableExportCopy | 已在权限矩阵正文出现 |
 | `bar.bill.adjust` | staff-token | project-bar-table | 2 | raiseBarBillAnomaly, adjustBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.anomaly.resolve` | staff-token | project-bar-table | 1 | resolveBarBillAnomaly | OpenAPI 补充，以本附录为准 |
 | `bar.bill.refund` | staff-token | project-merchant | 1 | getBarBillRefundContext | OpenAPI 补充，以本附录为准 |
@@ -376,6 +376,7 @@
 | `risk_alert.resolve` | staff-token | platform | 1 | resolveEvidenceRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.transfer` | staff-token | platform | 1 | transferRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.view` | staff-token | platform | 2 | searchRiskAlerts, getRiskAlertDetail | 已在权限矩阵正文出现 |
+| `security.watermark.trace` | staff-token | project | 2 | traceWatermark, lookupExportPassword | OpenAPI 补充，以本附录为准 |
 | `service.catalog.approve` | staff-token | platform | 1 | activateServiceCatalogFeeDraft | OpenAPI 补充，以本附录为准 |
 | `service.catalog.manage` | staff-token | platform | 5 | upsertServiceCatalogItem, draftServiceCatalogFeeChange, listServiceCatalogAll, listServiceOrders, setServicePayConfig | OpenAPI 补充，以本附录为准 |
 | `service.order.create` | staff-token | platform | 7 | listServiceCatalog, createServiceOrder, completeServiceOrder, cancelServiceOrder, serviceOrderPaymentCode, markServiceOrderPaid, getServicePayConfig | OpenAPI 补充，以本附录为准 |
@@ -384,6 +385,7 @@
 | `settlement.bill.special_approve` | staff-token | platform | 2 | settlementConfigApprovePassIncentive, settlementConfigRejectPassIncentive | OpenAPI 补充，以本附录为准 |
 | `settlement.config.manage` | staff-token | platform, project | 24 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigSaveDistributionScheme ... | OpenAPI 补充，以本附录为准 |
 | `settlement.config.view` | staff-token | platform, project | 5 | settlementConfigOverview, settlementConfigDistributionScheme, listInternalPayDayRules, getSettlementObjectionPeriod, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
+| `settlement.invoice.export` | staff-token | platform | 1 | exportSettlementInvoiceItems | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.view` | staff-token | platform | 2 | listSettlementInvoiceItems, settlementInvoiceSummary | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.punch` | staff-token | platform, self | 4 | punchStaffAttendance, issueStaffPhoneTimeAnchor, recordStaffPhoneReceipt, getCurrentStaffWorkPhoneContext | OpenAPI 补充，以本附录为准 |
@@ -2298,6 +2300,18 @@
 | `role.viewable_projects.view_failed` | failure | `getRoleViewableProjects` | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `role.viewable_projects.viewed` | success | `getRoleViewableProjects` | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `role.viewed` | success | `listRoles` | `GET` | `/api/v1/access/roles` | AUTH-账号权限 | `access.role.view` | 接口级事件，以本附录为准 |
+| `security.export_password.trace_failed` | failure | `lookupExportPassword` | `POST` | `/api/v1/security/export-files/lookup` | EVD-事件证据 | `security.watermark.trace` | 接口级事件，以本附录为准 |
+| `security.export_password.traced` | success | `lookupExportPassword` | `POST` | `/api/v1/security/export-files/lookup` | EVD-事件证据 | `security.watermark.trace` | 接口级事件，以本附录为准 |
+| `security.export.editable_download_failed` | failure | `downloadEditableExportCopy` | `GET` | `/api/v1/security/export-files/{id}/editable-copy` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.export.editable_downloaded` | success | `downloadEditableExportCopy` | `GET` | `/api/v1/security/export-files/{id}/editable-copy` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.export.editable_request_failed` | failure | `requestEditableExportCopy` | `POST` | `/api/v1/security/export-files/{id}/editable-requests` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.export.editable_requested` | success | `requestEditableExportCopy` | `POST` | `/api/v1/security/export-files/{id}/editable-requests` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.my_exports.view_failed` | failure | `listMyExports` | `GET` | `/api/v1/security/my-exports` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.my_exports.viewed` | success | `listMyExports` | `GET` | `/api/v1/security/my-exports` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.page_view.failed` | failure | `recordPageView` | `POST` | `/api/v1/security/page-views` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.sensitive_page.viewed` | success | `recordPageView` | `POST` | `/api/v1/security/page-views` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `security.watermark.trace_failed` | failure | `traceWatermark` | `POST` | `/api/v1/security/watermarks/trace` | EVD-事件证据 | `security.watermark.trace` | 接口级事件，以本附录为准 |
+| `security.watermark.traced` | success | `traceWatermark` | `POST` | `/api/v1/security/watermarks/trace` | EVD-事件证据 | `security.watermark.trace` | 接口级事件，以本附录为准 |
 | `service.catalog.fee_activate_failed` | failure | `activateServiceCatalogFeeDraft` | `POST` | `/api/v1/services/catalog/{id}/fee-activate` | P0-待归类 | `service.catalog.approve` | 接口级事件，以本附录为准 |
 | `service.catalog.fee_activated` | success | `activateServiceCatalogFeeDraft` | `POST` | `/api/v1/services/catalog/{id}/fee-activate` | P0-待归类 | `service.catalog.approve` | 接口级事件，以本附录为准 |
 | `service.catalog.fee_draft_failed` | failure | `draftServiceCatalogFeeChange` | `POST` | `/api/v1/services/catalog/{id}/fee-draft` | P0-待归类 | `service.catalog.manage` | 接口级事件，以本附录为准 |
@@ -2392,6 +2406,8 @@
 | `settlement.internal_pay_day_rule.decision_failed` | failure | `decideInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules/{rule_id}/decision` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.internal_pay_day_rule.submit_failed` | failure | `submitInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.internal_pay_day_rule.submitted` | success | `submitInternalPayDayRule` | `POST` | `/api/v1/settlement/internal-pay-days/rules` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
+| `settlement.invoice.export_failed` | failure | `exportSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items/export` | P0-待归类 | `settlement.invoice.export` | 接口级事件，以本附录为准 |
+| `settlement.invoice.exported` | success | `exportSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items/export` | P0-待归类 | `settlement.invoice.export` | 接口级事件，以本附录为准 |
 | `settlement.invoice.generate_failed` | failure | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
 | `settlement.invoice.generated` | success | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | P0-待归类 | `settlement.invoice.manage` | 接口级事件，以本附录为准 |
 | `settlement.invoice.list` | success | `listSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
@@ -3249,6 +3265,7 @@
 | EVD-事件证据 | `createEvidenceEvents` | `POST` | `/api/v1/evidence/events` | 创建证据事件 | `evidence.event.create` | `evidence.events_reported` / `evidence.events_report_failed` | staff_work_phone, tablet, kiosk | operation 级补充 |
 | EVD-事件证据 | `createEvidenceReview` | `POST` | `/api/v1/evidence/reviews` | 风险或异常复核 | `evidence.review.create` | `evidence.review_created` / `evidence.review_create_failed` | web | operation 级补充 |
 | EVD-事件证据 | `dismissRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | 忽略关闭风险预警 | `risk_alert.dismiss` | `exception.dismissed` / `exception.dismiss_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `downloadEditableExportCopy` | `GET` | `/api/v1/security/export-files/{id}/editable-copy` | 下载导出文件可编辑版（一次批准发放一次） | `authenticated` | `security.export.editable_downloaded` / `security.export.editable_download_failed` | web, merchant_portal | operation 级补充 |
 | EVD-事件证据 | `escalateRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | 升级风险预警 | `risk_alert.escalate` | `exception.escalated` / `exception.escalate_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `getEvidenceTimeline` | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | 业务时间线 | `evidence.timeline.view` | `evidence.timeline_viewed` / `evidence.timeline_view_failed` | web | operation 级补充 |
 | EVD-事件证据 | `getManualBackfillPolicy` | `GET` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | 查人工补录参数（补录时限与录音提前量，按项目） | `evidence.manual_backfill.policy.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
@@ -3256,11 +3273,16 @@
 | EVD-事件证据 | `getTraceabilityAutoCaptureRate` | `GET` | `/api/v1/evidence/traceability/auto-capture-rate` | 查询业务流程追溯自动采集率 | `evidence.timeline.view` | `evidence.traceability_auto_capture_rate_viewed` / `evidence.traceability_auto_capture_rate_view_failed` | web | operation 级补充 |
 | EVD-事件证据 | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | 事件查询 | `evidence.event.view` | `evidence.event_viewed` / `evidence.event_view_failed` | web | operation 级补充 |
 | EVD-事件证据 | `listManualBackfills` | `GET` | `/api/v1/evidence/manual-backfills` | 查某对象的人工补录记录（与原始记录并列展示） | `authenticated` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| EVD-事件证据 | `listMyExports` | `GET` | `/api/v1/security/my-exports` | 我的导出（本人导出文件与打开密码） | `authenticated` | `security.my_exports.viewed` / `security.my_exports.view_failed` | web, merchant_portal | operation 级补充 |
+| EVD-事件证据 | `lookupExportPassword` | `POST` | `/api/v1/security/export-files/lookup` | 导出密码反查 | `security.watermark.trace` | `security.export_password.traced` / `security.export_password.trace_failed` | web | operation 级补充 |
 | EVD-事件证据 | `readEvidenceAttachmentFile` | `GET` | `/api/v1/evidence/attachments/{attachment_id}/file` | 回读证据文件 | `evidence.timeline.view` | `evidence.attachment_file_viewed` / `evidence.attachment_file_view_failed` | web, tablet | operation 级补充 |
+| EVD-事件证据 | `recordPageView` | `POST` | `/api/v1/security/page-views` | 登记页面打开并发暗纹码 | `authenticated` | `security.sensitive_page.viewed` / `security.page_view.failed` | web, merchant_portal, staff_work_phone, staff_private_phone | operation 级补充 |
 | EVD-事件证据 | `reportRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts` | 上报统一风险预警 | `risk_alert.report` | `exception.reported` / `exception.report_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `requestEditableExportCopy` | `POST` | `/api/v1/security/export-files/{id}/editable-requests` | 申请导出文件可编辑版（最高权限审批） | `authenticated` | `security.export.editable_requested` / `security.export.editable_request_failed` | web, merchant_portal | operation 级补充 |
 | EVD-事件证据 | `resolveEvidenceRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | 关闭风险预警（需结论） | `risk_alert.resolve` | `exception.resolved` / `exception.resolve_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `saveManualBackfillPolicy` | `PUT` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | 配置人工补录参数（补录时限、录音提前量及各自上下限，按项目） | `evidence.manual_backfill.policy.manage` | `evidence.manual_backfill_policy_updated` / `evidence.manual_backfill_policy_update_failed` | web | operation 级补充 |
 | EVD-事件证据 | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | 查询风险预警列表 | `risk_alert.view` | `exception.alerts_viewed` / `exception.alerts_view_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `traceWatermark` | `POST` | `/api/v1/security/watermarks/trace` | 截屏或拍屏照片按暗纹反查 | `security.watermark.trace` | `security.watermark.traced` / `security.watermark.trace_failed` | web | operation 级补充 |
 | EVD-事件证据 | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | 转交风险预警 | `risk_alert.transfer` | `exception.transferred` / `exception.transfer_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `uploadEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/upload` | 上传证据照片/视频 | `evidence.attachment.create` | `evidence.attachment_uploaded` / `evidence.attachment_uploaded_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | FIN-财务台账 | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | 锁定后补录审批决定 | `finance.locked_backfill.approve` | `finance.locked_backfill_approved` / `finance.locked_backfill_decision_failed` | web, mobile_admin | operation 级补充 |
@@ -3622,6 +3644,7 @@
 | P0-待归类 | `executeWecomCleanup` | `POST` | `/api/v1/compliance/wecom/cleanup-previews/{id}/execute` | 签名确认并执行精确清理 | `wecom.retention.manage` | `wecom.cleanup_executed` / `wecom.cleanup_execute_failed` | web | operation 级补充 |
 | P0-待归类 | `expireDealerInquiry` | `POST` | `/api/v1/dealers/inquiries/{id}/expire` | 报价置为已失效 | `dealer.inquiry.quote` | `dealer.inquiry.expired` / `dealer.inquiry.expire_failed` | web | operation 级补充 |
 | P0-待归类 | `exportAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events/export` | 导出操作留痕（敏感） | `audit.operation_log.export` | `audit.operation_log.exported` / `audit.operation_log.export_failed` | web | operation 级补充 |
+| P0-待归类 | `exportSettlementInvoiceItems` | `GET` | `/api/v1/settlement/invoice-items/export` | 导出开票清单（带密码 PDF） | `settlement.invoice.export` | `settlement.invoice.exported` / `settlement.invoice.export_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractPeriodBills` | `POST` | `/api/v1/contracts/{contract_id}/period-bills` | 某期全费目挂账(租金+物业费+能源费) | `finance.ar_ap.manage` | `contract.fee_billed` / `contract.period_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractRentBill` | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | 生成某期合同租金应收(base+递增−免租) | `finance.ar_ap.manage` | `contract.rent_billed` / `contract.rent_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | 按结算单生成开票清单 | `settlement.invoice.manage` | `settlement.invoice.generated` / `settlement.invoice.generate_failed` | web | operation 级补充 |

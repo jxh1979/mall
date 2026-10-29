@@ -1,11 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
-import { withBase } from "../../basePath";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { cnDate } from "../components/RowDetailDrawer";
 import { PermissionButton } from "../security/Can";
-import type { AdminPageProps } from "../types";
+import type { AdminApiClient, AdminPageProps } from "../types";
 
 // 后端 StudentCertificationService.ReviewItem（unwrap 已 camel 化）。
 type ReviewItem = {
@@ -21,6 +20,32 @@ type ReviewItem = {
 };
 
 const REVIEW = ["ticket.student_cert.review"];
+
+/** 第 23 条 23-R5：证件照片在本页（敏感页、带暗纹）内显示，不给新标签打开的文件链接——否则照片可在新标签直接另存（PGM:687「也不提供页面另存与打印」）。 */
+function CertificationPhoto({ api, path, index }: { api: AdminApiClient; path: string; index: number }) {
+  const [src, setSrc] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => {
+    if (!api.getFile) return;
+    let url: string | null = null;
+    let cancelled = false;
+    api.getFile(path)
+      .then(({ blob }) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(blob);
+        setSrc(url);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [api, path]);
+  if (src) return <img src={src} alt={`学生证件照片 ${index}`} style={{ display: "block", maxWidth: 240, maxHeight: 180 }} />;
+  return <span>{failed ? `照片 ${index} 读取失败` : `照片 ${index} 读取中`}</span>;
+}
 const key = () => `student-cert-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
@@ -29,8 +54,10 @@ const key = () => `student-cert-${Date.now()}-${Math.random().toString(36).slice
  * （第十三批裁决第 1 条），驳回须填原因。
  */
 export function StudentCertificationsPage(props: AdminPageProps) {
-  const { api, setActionResult, setGlobalError, effectivePermissions } = props;
+  const { api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects } = props;
   const [rows, setRows] = React.useState<ReviewItem[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("student_certification", rows), [rows, reportViewedObjects]);
   const [loaded, setLoaded] = React.useState(false);
   const [graduation, setGraduation] = React.useState<Record<string, string>>({});
   // 日历按今天所在月份打开（预计毕业日期只能选未来，后端拒收已过日期）。
@@ -84,8 +111,8 @@ export function StudentCertificationsPage(props: AdminPageProps) {
                 <td>{row.customerId}</td>
                 <td>{row.chsiVerificationCode ?? "-"}</td>
                 <td>{Array.from({ length: row.attachmentCount }, (_, index) => (
-                  <a key={index} href={withBase(`/api/v1/student-certifications/${encodeURIComponent(row.id)}/files/${index + 1}`)}
-                    target="_blank" rel="noreferrer">照片 {index + 1}{" "}</a>
+                  <CertificationPhoto key={index} api={api} index={index + 1}
+                    path={`/api/v1/student-certifications/${encodeURIComponent(row.id)}/files/${index + 1}`} />
                 ))}</td>
                 <td>{cnDate(row.submittedAt)}</td>
                 <td><CnDatePicker data-testid={`student-certification-valid-until-${row.id}`} aria-label="预计毕业日期"

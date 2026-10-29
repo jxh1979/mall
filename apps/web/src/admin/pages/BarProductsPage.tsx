@@ -63,8 +63,10 @@ const EMPTY_CATEGORY_FORM: CategoryForm = { barId: "", categoryName: "", sortOrd
  * product_type（粗类别，历史兼容）保留展示；categoryId 为新的可配置精分类。
  * 查看需 bar.product.view；商品录入/改需 bar.product.manage；分类维护需 bar.category.manage。
  */
-export function BarProductsPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function BarProductsPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<BarProductRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("bar_product", rows), [rows, reportViewedObjects]);
   const [categories, setCategories] = React.useState<BarProductCategoryRow[]>([]);
   const [form, setForm] = React.useState<ProductForm>(EMPTY_FORM);
   const [categoryForm, setCategoryForm] = React.useState<CategoryForm>(EMPTY_CATEGORY_FORM);

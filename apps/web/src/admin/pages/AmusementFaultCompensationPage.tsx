@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -55,7 +55,7 @@ const eventLabel = (b: BatchRow) => (b.eventType === "session_early_end" ? `场�
  * 全园故障补偿页（ADM-AMU-007）：选择已生效/已解除的全园故障事件 → 发起补偿批次（快照受影响人份）→ 另一岗位确认发放；
  * 查看批次与逐条补偿记录；配置按项目的补偿有效期参数（出厂默认一年，须同时配置上下限）。
  */
-export function AmusementFaultCompensationPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function AmusementFaultCompensationPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const canHead = useCan(effectivePermissions, [PERM_HEAD]);
   const canEngineering = useCan(effectivePermissions, [PERM_ENGINEERING_SAFETY]);
   const canPolicy = useCan(effectivePermissions, [PERM_POLICY]);
@@ -67,6 +67,8 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
   const faultIdRef = React.useRef("");
   const [batches, setBatches] = React.useState<BatchRow[]>([]);
   const [items, setItems] = React.useState<ItemRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("amusement_compensation_item", items), [items, reportViewedObjects]);
   const [selectedBatch, setSelectedBatch] = React.useState("");
   const [policy, setPolicy] = React.useState<PolicyRow | null>(null);
   const [role, setRole] = React.useState(canHead ? ROLE_HEAD : ROLE_ENGINEERING_SAFETY);

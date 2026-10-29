@@ -1,6 +1,7 @@
 package com.complex.platform.auth;
 
 import com.complex.platform.common.api.ApiResponse;
+import com.complex.platform.security.BrowserDeviceRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
@@ -21,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class MasterAuthController {
 
     private final MasterAuthorityService service;
+    private final BrowserDeviceRegistry browserDevices;
 
-    public MasterAuthController(MasterAuthorityService service) {
+    public MasterAuthController(MasterAuthorityService service, BrowserDeviceRegistry browserDevices) {
         this.service = service;
+        this.browserDevices = browserDevices;
     }
 
     @PostMapping("/challenge")
@@ -41,6 +44,8 @@ public class MasterAuthController {
                 sourceKey(httpRequest));
         AuthCookies.writeSession(httpRequest, httpResponse,
                 result.accessToken(), result.refreshToken(), AuthCookies.newCsrfToken());
+        // 第 23 条 23-R1（第十八批裁决 6）：破窗进后台同样发浏览器设备编号并登记（请求体无 device_id）。
+        browserDevices.ensure(httpRequest, httpResponse, result.user().id());
         return ApiResponse.ok(result);
     }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -282,8 +282,11 @@ export function InventoryTransferWorkbenchPage({
   effectivePermissions,
   navigateTo,
   focusObjectId,
+  reportViewedObjects,
 }: AdminPageProps) {
   const [orders, setOrders] = React.useState<TransferOrder[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("inventory_transfer_order", orders), [orders, reportViewedObjects]);
   const [supplyEntities, setSupplyEntities] = React.useState<SupplyEntity[]>([]);
   const [merchants, setMerchants] = React.useState<MerchantLite[]>([]);
   const [items, setItems] = React.useState<ItemLite[]>([]);

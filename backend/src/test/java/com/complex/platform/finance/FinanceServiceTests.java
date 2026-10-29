@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -142,8 +142,8 @@ class FinanceServiceTests {
         // 用户下载的 AR/AP 台账 CSV 表头必须是中文业务标签，不得泄露英文字段名。
         service.createArApItem(itemRequest("arap-csv-i18n", "receivable", 128800L));
 
-        String csv = service.exportArApItems().csvText();
-        String header = csv.split("\n", 2)[0];
+        List<List<String>> table = exportedTable();
+        String header = String.join(",", table.get(0));
 
         assertThat(header)
                 .isEqualTo("单据编号,收付方向,往来对象编号,来源类型,来源编号,金额(分),已收付金额(分),未收付金额(分),币种,到期日,账期,状态");
@@ -165,10 +165,9 @@ class FinanceServiceTests {
         ArApItemRecord partial = service.createArApItem(itemRequest("arap-csv-part", "receivable", 80000L));
         service.registerArApPayment(partial.id(), paymentRequest("pay-csv-part", 30000L));
 
-        String csv = service.exportArApItems().csvText();
-        String[] lines = csv.split("\n");
+        List<List<String>> table = exportedTable();
         // 数据行 = 去掉表头行。
-        String body = String.join("\n", java.util.Arrays.copyOfRange(lines, 1, lines.length));
+        String body = table.subList(1, table.size()).toString();
 
         // 方向中文、来源类型中文、状态中文均出现在数据行。
         assertThat(body).contains("应收").contains("应付").contains("订单");
@@ -181,6 +180,24 @@ class FinanceServiceTests {
                 .doesNotContain("pending_payment")
                 .doesNotContain("partial_paid")
                 .doesNotContain("settled");
+    }
+
+    /** 第 23 条 23-R3：导出改为带密码 PDF——表头与数据行从交给导出文件服务的表格取（表头一行在前）。 */
+    @SuppressWarnings("unchecked")
+    private List<List<String>> exportedTable() {
+        var exportFiles = mock(com.complex.platform.security.ExportFileService.class);
+        when(exportFiles.create(any(), any(), any(), any(), any()))
+                .thenReturn(new com.complex.platform.security.ExportFileService.ExportFile("exp_t", "应收应付台账.pdf", new byte[0]));
+        service.exportFiles = exportFiles;
+        service.exportArApItems();
+        var columns = org.mockito.ArgumentCaptor.forClass(List.class);
+        var rows = org.mockito.ArgumentCaptor.forClass(List.class);
+        org.mockito.Mockito.verify(exportFiles).create(org.mockito.ArgumentMatchers.eq("finance_ar_ap_ledger"), any(), any(),
+                columns.capture(), rows.capture());
+        List<List<String>> table = new ArrayList<>();
+        table.add((List<String>) columns.getValue());
+        table.addAll((List<List<String>>) rows.getValue());
+        return table;
     }
 
     @Test

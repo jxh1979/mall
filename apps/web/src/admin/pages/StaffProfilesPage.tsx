@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -56,10 +56,12 @@ const MANAGE = ["staff.profile.review"];
  *   · 改动必须填事由，落审计留痕，对账时能回溯是谁哪天为什么改的；
  *   · 改岗位只影响此后新开的账单，不回算已开账单的历史提成——否则改一次岗位就悄悄改写旧账。
  */
-export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const canManage = useCan(effectivePermissions, MANAGE);
   const canDispatch = canManage && !user.merchantId && !["merchant", "merchant_admin", "outsourced_vendor"].includes(user.accountType);
   const [rows, setRows] = React.useState<StaffProfileRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("staff_profile", rows), [rows, reportViewedObjects]);
   const [reason, setReason] = React.useState("");
   const [effectiveAt, setEffectiveAt] = React.useState("");
   const [handoverProfile, setHandoverProfile] = React.useState<StaffProfileRow | null>(null);

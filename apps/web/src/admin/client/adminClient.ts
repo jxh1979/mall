@@ -1,6 +1,7 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { apiErrorFromResponse } from "../../shared/apiError";
 import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
+import type { DownloadedFile } from "../types";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -63,6 +64,16 @@ function readCookie(name: string): string | null {
   return match && match[1] !== undefined ? decodeURIComponent(match[1]) : null;
 }
 
+/** 第 23 条 23-R3：把下载到的导出文件交给浏览器保存。 */
+export function saveDownloadedFile(file: DownloadedFile): void {
+  const url = URL.createObjectURL(file.blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export interface PagedResult<T> {
   items: T[];
   total: number;
@@ -98,6 +109,9 @@ function normalizeRequestBody(body: JsonBody): JsonValue {
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// 第 23 条 23-R2、23-R5：外壳自发的页面打开留痕。不是用户的一次操作，不进操作编号登记、不撤下「已完成」提示（M725-F03），每次带新编号。
+const PAGE_VIEWS_PATH = "/api/v1/security/page-views";
 
 export class AdminApi {
   private readonly apiBaseUrl = getApiBaseUrl();
@@ -171,6 +185,23 @@ export class AdminApi {
     return (text ? unwrap(JSON.parse(text)) : null) as T;
   }
 
+  /**
+   * 第 23 条 23-R3：下载导出文件（服务端生成的带密码 PDF，浏览器拿不到明文数据）。同 401 刷新重放一次；
+   * 下载文件名取 Content-Disposition 的 UTF-8 文件名。
+   */
+  async getFile(path: string): Promise<DownloadedFile> {
+    let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
+    if (response.status === 401) {
+      if (await this.tryRefresh()) {
+        response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
+      }
+      if (response.status === 401) this.notifySessionExpired();
+    }
+    if (!response.ok) throw apiErrorFromResponse(path, response.status, await response.text(), "GET");
+    const name = /filename\*=UTF-8''([^;]+)/i.exec(response.headers.get("content-disposition") ?? "")?.[1];
+    return { blob: await response.blob(), fileName: name ? decodeURIComponent(name) : "导出文件.pdf" };
+  }
+
   /** 写请求带 CSRF 双提交头（X-XSRF-TOKEN = XSRF-TOKEN Cookie）；读请求不需要。 */
   private applyCsrf(headers: Headers, method: string): void {
     if (SAFE_METHODS.has(method)) return;
@@ -211,8 +242,8 @@ export class AdminApi {
   private async request<T>(path: string, method = "GET", body?: JsonBody): Promise<T> {
     // M725-F02：请求编号跟着「一次操作」走（见 shared/operationKey）——上一次没拿到明确结果时，
     // 再提交同一内容沿用原编号；401 刷新后的重放也沿用同一编号（服务端按请求编号去重）。
-    const operation = body ? beginWriteOperation(method, path, body, nextIdempotencyKey) : null;
-    const stableBody = body && operation ? { ...body, idempotencyKey: operation.key } : undefined;
+    const operation = body && path !== PAGE_VIEWS_PATH ? beginWriteOperation(method, path, body, nextIdempotencyKey) : null;
+    const stableBody = body && operation ? { ...body, idempotencyKey: operation.key } : body;
     // 认证域自身（登录/刷新/登出）失败不再走刷新，避免自递归。
     const isAuthEndpoint = path.includes("/auth/");
     let response: Response;

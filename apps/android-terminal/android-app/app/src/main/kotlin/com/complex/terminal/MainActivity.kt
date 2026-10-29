@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import android.app.Activity
 import android.content.Intent
@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -995,7 +996,10 @@ class MainActivity : Activity() {
             latestArrivalAt = la, customerPhone = ph,
           ))
         },
-        onSuccess = { r -> status.text = "订位成功：${r.id ?: "-"}(定金 ${statusZh(r.depositStatus ?: "not_required")})" },
+        onSuccess = { r ->
+          status.text = "订位成功：${r.id ?: "-"}(定金 ${statusZh(r.depositStatus ?: "not_required")})"
+          r.id?.let { reportPageView("酒吧空位 / 帮客订位", true, listOf(PageObjectRef("bar_reservation", it)), null) }
+        },
         onError = { status.text = "订位失败：${friendly(it)}" },
       )
     }
@@ -1003,6 +1007,7 @@ class MainActivity : Activity() {
       title = "酒吧空位 / 帮客订位",
       children = listOf(status, list, barId, tableId, time, latest, phone, guests, reserveButton,
         backButton()),
+      sensitive = true,
     ))
   }
 
@@ -1499,6 +1504,7 @@ class MainActivity : Activity() {
         },
         onSuccess = { (order, qr) ->
           lastOrderId.setText(order.id ?: "")
+          order.id?.let { reportPageView("代客点服务(公司代收)", true, listOf(PageObjectRef("service_order", it)), null) }
           status.text = "已下单 ${order.itemName}(${order.id});请客人扫码支付到公司账户 ¥${"%.2f".format((order.priceCent ?: 0) / 100.0)}"
           if (qr.isNotEmpty()) {
             runCatching {
@@ -1517,6 +1523,7 @@ class MainActivity : Activity() {
         lastOrderId, memberPhone, paidButton, completeButton,
         backButton()),
       secure = true,
+      sensitive = true,
     ))
   }
 
@@ -1633,11 +1640,14 @@ class MainActivity : Activity() {
         phone.text.toString().trim().ifEmpty { null }, idDoc.text.toString().trim().ifEmpty { null })
       runBackground(
         action = { api.submitStaffRegistration(request) },
-        onSuccess = { p -> status.text = "已提交：${p.name ?: n}，等待对应域公司审批" },
+        onSuccess = { p ->
+          status.text = "已提交：${p.name ?: n}，等待对应域公司审批"
+          p.id?.let { reportPageView("商户员工注册申请", true, listOf(PageObjectRef("staff_profile", it)), null) }
+        },
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
     }
-    setContentView(screen(title = "商户员工注册申请", children = listOf(status, name, projectId, merchantId, phone, idDoc, submitButton, backButton())))
+    setContentView(screen(title = "商户员工注册申请", children = listOf(status, name, projectId, merchantId, phone, idDoc, submitButton, backButton()), sensitive = true))
   }
 
   // ===========================================================================
@@ -1988,7 +1998,7 @@ class MainActivity : Activity() {
     }
   }
 
-  private fun screen(title: String, children: List<View>, root: Boolean = false, secure: Boolean = false): View {
+  private fun screen(title: String, children: List<View>, root: Boolean = false, secure: Boolean = false, sensitive: Boolean = false): View {
     onRootScreen = root
     if (title != "考勤打卡") nfcResult = null
     // 防截屏:敏感屏(薪资/考勤/服务分账)设 FLAG_SECURE 挡截图/录屏/最近任务缩略图;
@@ -2027,10 +2037,69 @@ class MainActivity : Activity() {
       gravity = Gravity.CENTER
       addView(container, LinearLayout.LayoutParams(contentWidth, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
-    return ScrollView(this).apply {
+    val page = ScrollView(this).apply {
       setBackgroundColor(Color.WHITE)
       isFillViewport = true
       addView(centerWrapper, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+    // 第 23 条 23-R6：外包一层，暗纹叠在整屏最上层、不随内容滚动。敏感屏（页面上出现 PGM:686 两类内容）输入框不能选中、不弹复制菜单
+    // （PGM:687「敏感页上的文字不能被选中、不能被复制」；TextView 默认不可选，应用内也没有另存与打印入口）。
+    val frame = FrameLayout(this).apply {
+      addView(page, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+    if (sensitive) {
+      children.filterIsInstance<EditText>().forEach { it.isLongClickable = false; it.customSelectionActionModeCallback = noCopy }
+    }
+    reportPageView(title, sensitive, emptyList(), frame)
+    return frame
+  }
+
+  private val noCopy = object : android.view.ActionMode.Callback {
+    override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = false
+    override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?) = false
+    override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?) = false
+    override fun onDestroyActionMode(mode: android.view.ActionMode?) {}
+  }
+
+  /**
+   * 第 23 条 23-R6（PGM:687）：员工工作手机、员工私人手机登录后的在线屏，打开即上报哪个屏（page_id＝屏标题）、是否敏感屏、这一次看到的对象；
+   * 拿到暗纹码后平铺在 [frame] 最上层（frame 为空＝敏感屏补报看到的对象，不换已显示的暗纹）。失败或离线不叠；登录前的屏没有账号，不发。
+   */
+  private fun reportPageView(pageId: String, sensitive: Boolean, objects: List<PageObjectRef>, frame: FrameLayout?) {
+    if (api.accessToken == null || !watermarkApplies(api.terminalType)) return
+    runBackground(
+      action = { api.postPageView(PageViewRequest(pageId, sensitive, objects, java.util.UUID.randomUUID().toString())) },
+      onSuccess = { mark ->
+        frame?.addView(watermark(mark.code), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+      },
+      onError = { android.util.Log.w("ComplexTerminal", "page view not recorded", it) },
+    )
+  }
+
+  /**
+   * 与后台 PageWatermark、后端 WatermarkQr 同一组参数：码画成纠错 H、无静区二维码（模块 6dp），每格 200dp 平铺、格内偏移 24dp，码文小字在下，
+   * 不透明度 0.08；不可点击，触摸照常落到下面的屏。
+   */
+  private fun watermark(code: String): View {
+    val module = dp(6)
+    val offset = dp(24)
+    val qr = com.google.zxing.qrcode.QRCodeWriter().encode(code, com.google.zxing.BarcodeFormat.QR_CODE, 0, 0, mapOf(
+      com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.H,
+      com.google.zxing.EncodeHintType.MARGIN to 0))
+    val tile = Bitmap.createBitmap(dp(200), dp(200), Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(tile)
+    val paint = android.graphics.Paint().apply { color = Color.BLACK; textSize = dp(12).toFloat() }
+    for (y in 0 until qr.height) for (x in 0 until qr.width) if (qr.get(x, y)) {
+      canvas.drawRect((offset + x * module).toFloat(), (offset + y * module).toFloat(),
+        (offset + (x + 1) * module).toFloat(), (offset + (y + 1) * module).toFloat(), paint)
+    }
+    canvas.drawText(code, offset.toFloat(), (offset + qr.height * module + dp(14)).toFloat(), paint)
+    return View(this).apply {
+      background = android.graphics.drawable.BitmapDrawable(resources, tile).apply {
+        setTileModeXY(android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT)
+      }
+      alpha = 0.08f
+      importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
   }
 

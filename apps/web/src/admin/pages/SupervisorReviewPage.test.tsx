@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -463,6 +463,18 @@ describe("M043 真实审批信封与既有规则", () => {
     expect(row).toContain("证照 / lic-1");
     expect(row).not.toContain("未识别类型");
     expect(screen.getByTestId("supervisor-review-row-compliance_grace_period").textContent).toContain("证照宽限期申请");
+  });
+
+  // 第 23 条 23-R4：可编辑版导出申请的动作类型与对象显示中文。
+  it("可编辑版导出申请的动作类型与对象显示中文", async () => {
+    const pending = [{ decision: { review_id: "review_e1", policy_code: "export_editable_copy", action_type: "security.export.editable_copy", object_type: "export_file", object_id: "exp_1", initiated_by: "u-e", approval_level: "top_authority", required_level: 3, review_status: "pending_review" }, schedule: null }];
+    const policies = [{ policy_code: "export_editable_copy", action_type: "security.export.editable_copy", required_evidence_types: ["reason"], status: "active", blocks_by_default: true }];
+    renderPage(ADMIN_PERMS, { policies, pending });
+    await waitFor(() => expect(screen.queryByTestId("supervisor-review-pending-review_e1")?.textContent ?? "").toContain("可编辑版导出申请"));
+    const row = screen.getByTestId("supervisor-review-pending-review_e1").textContent ?? "";
+    expect(row).toContain("导出文件 / exp_1");
+    expect(row).not.toContain("未识别类型");
+    expect(screen.getByTestId("supervisor-review-row-export_editable_copy").textContent).toContain("可编辑版导出申请");
   });
 
   it("第三人不能按用户编号转交给直接受益人", async () => {

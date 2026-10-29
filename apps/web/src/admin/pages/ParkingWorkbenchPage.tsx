@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { Tabs } from "antd";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -247,6 +247,8 @@ function MonthlyVehiclesPanel({ props, project }: { props: AdminPageProps; proje
 /** 消费抵免台账：同一客人当日一条；已使用的按实际抵掉小时×每小时内部结算价计成本，按组成比例分担，尾差由城市项目公司承担。 */
 function CreditsPanel({ props, project }: { props: AdminPageProps; project: string }) {
   const [rows, setRows] = React.useState<Credit[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => props.reportViewedObjects?.("parking_credit", rows), [rows, props.reportViewedObjects]);
   React.useEffect(() => {
     // 分页信封经 adminClient.get 拍平为条目数组。
     props.api.get<Credit[]>(`/api/v1/parking/credits?project_id=${encodeURIComponent(project)}`)

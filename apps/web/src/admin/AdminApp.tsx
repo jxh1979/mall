@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -6,14 +6,15 @@ import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import "antd/dist/reset.css";
 import { AdminApi } from "./client/adminClient";
-import { accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
+import { SENSITIVE_PAGE_IDS, accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
 import { stripBase, withBase } from "../basePath";
 import { forgetWriteOperations } from "../shared/operationKey";
 import { ReplayedNotice } from "../shared/ReplayedNotice";
 import { ActionResultView } from "./components/ActionResultView";
+import { PageWatermark } from "./components/PageWatermark";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
-import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState } from "./types";
+import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState, ViewedRow } from "./types";
 
 // antd 组件（日期选择器等）中文化；dayjs 同步切中文（周一开头/中文月份）。
 dayjs.locale("zh-cn");
@@ -135,6 +136,8 @@ const MetricDetailPage = React.lazy(() => import("./pages/MetricDetailPage").the
 const DealerAdmissionCatalogPage = React.lazy(() => import("./pages/DealerAdmissionCatalogPage").then((m) => ({ default: m.DealerAdmissionCatalogPage })));
 const DealerOrderFulfillmentPage = React.lazy(() => import("./pages/DealerOrderFulfillmentPage").then((m) => ({ default: m.DealerOrderFulfillmentPage })));
 const DealerReturnInvoicePage = React.lazy(() => import("./pages/DealerReturnInvoicePage").then((m) => ({ default: m.DealerReturnInvoicePage })));
+const WatermarkTracePage = React.lazy(() => import("./pages/WatermarkTracePage").then((m) => ({ default: m.WatermarkTracePage })));
+const MySecurityExportsPage = React.lazy(() => import("./pages/MySecurityExportsPage").then((m) => ({ default: m.MySecurityExportsPage })));
 
 // 侧边栏分组图标（移植自 UI 原型，纯展示，不影响导航行为/测试 testid）。
 const ICON_PATHS: Record<string, string> = {
@@ -453,6 +456,10 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <DealerOrderFulfillmentPage {...props} />;
     case "ADM-DLR-003":
       return <DealerReturnInvoicePage {...props} />;
+    case "ADM-SEC-001":
+      return <MySecurityExportsPage {...props} />;
+    case "ADM-SEC-002":
+      return <WatermarkTracePage {...props} />;
     default:
       // findAdminRoute 兜底到 adminRoutes[0]，正常导航不会落到这里；保留未知页面占位仅为类型完备与极端防御。
       return <div className="admin-state admin-error">未知页面：{route.pageId}</div>;
@@ -619,6 +626,69 @@ export default function AdminApp() {
     return hasPermissions(effectivePermissions, ["access.role.manage"]) ? ["access.role.manage"] : target.requiredPermissions;
   }
 
+  // 第 23 条 23-R2（PGM:687「后台、商户专区和员工手机端的所有在线页面都带有按同一规则生成的暗纹」）：页面放行后登记一次打开，
+  // 拿到的暗纹码平铺在最上层；拿不到时页面照常、下次切路由重取。敏感页报 sensitive（清单见 SENSITIVE_PAGE_IDS，23-R5）。
+  // 23-R5（PGM:687「打开敏感页这件事本身也要留痕」）：敏感页登记成功才显示内容，登记失败报错、不显示（留痕先于查看）。
+  const [watermarkCode, setWatermarkCode] = React.useState<string | null>(null);
+  const [openedPageId, setOpenedPageId] = React.useState<string | null>(null);
+  const sensitivePage = SENSITIVE_PAGE_IDS.has(route.pageId);
+  const routeOpen = !!user && routeAllowsAccountForm(route, accountForm)
+    && hasPermissions(routePermissionState(route), routePermissions(route));
+  React.useEffect(() => {
+    if (!user) {
+      setWatermarkCode(null);
+      return;
+    }
+    if (!routeOpen) return;
+    let cancelled = false;
+    setOpenedPageId(null);
+    api
+      .post<{ code?: string }>("/api/v1/security/page-views", { pageId: route.pageId, sensitive: sensitivePage, objectRefs: [] })
+      .then((mark) => {
+        if (cancelled) return;
+        if (mark?.code) setWatermarkCode(mark.code);
+        setOpenedPageId(route.pageId);
+      })
+      .catch((error) => {
+        if (!cancelled && sensitivePage) setGlobalError(error instanceof Error ? error.message : "页面打开登记失败，请刷新后重试");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, user, route, routeOpen, sensitivePage]);
+
+  // 23-R5 这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）：敏感页每次载入完把显示的行交上来再登记一次，拿到的码不替换已显示的暗纹。
+  const reportViewedObjects = React.useCallback((objectType: string, rows: ReadonlyArray<ViewedRow>) => {
+    if (!sensitivePage) return;
+    const refs = new Map<string, { objectType: string; objectId: string }>();
+    for (const row of rows) {
+      for (const [type, id] of [[objectType, row.id], ["customer", row.customerId], ["merchant", row.merchantId]] as const) {
+        if (id) refs.set(`${type}:${id}`, { objectType: type, objectId: id });
+      }
+    }
+    if (refs.size === 0) return;
+    void api.post("/api/v1/security/page-views", { pageId: route.pageId, sensitive: true, objectRefs: [...refs.values()] }).catch(() => undefined);
+  }, [api, route.pageId, sensitivePage]);
+
+  // 23-R5（PGM:687「敏感页上的文字不能被选中、不能被复制，也不提供页面另存与打印」）：标记打在 body 上（盖住 antd 弹窗浮层），拦复制、剪切、
+  // 右键、拖拽与另存、打印快捷键；不可选中与打印不出内容见 styles.css。浏览器菜单里的另存为拦不住（第十八批裁决 6 不装软件）。
+  React.useEffect(() => {
+    if (!user || !sensitivePage) return;
+    document.body.dataset.sensitive = "true";
+    const block = (event: Event) => event.preventDefault();
+    const blockKeys = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && /^[sp]$/i.test(event.key)) event.preventDefault();
+    };
+    const types = ["copy", "cut", "contextmenu", "dragstart"];
+    types.forEach((type) => document.addEventListener(type, block));
+    document.addEventListener("keydown", blockKeys);
+    return () => {
+      delete document.body.dataset.sensitive;
+      types.forEach((type) => document.removeEventListener(type, block));
+      document.removeEventListener("keydown", blockKeys);
+    };
+  }, [user, sensitivePage]);
+
   function navigate(nextRoute: AdminRoute) {
     // onClick 级拦截：无权限项不导航（不止 aria-disabled）。
     if (!hasPermissions(routePermissionState(nextRoute), routePermissions(nextRoute))) {
@@ -723,6 +793,7 @@ export default function AdminApp() {
   ) : (
     <div className="admin-shell" data-testid="admin-shell">
       <a className="skip-link" href="#main-content">跳到主内容</a>
+      {watermarkCode ? <PageWatermark code={watermarkCode} theme={themeMode} /> : null}
       {navOpen ? (
         <div
           className="admin-nav-backdrop"
@@ -837,7 +908,8 @@ export default function AdminApp() {
                 不带 .loading-state class），避免触发 e2e 的常驻 loading-state 断言。
                 chunk 加载完成后页面 testid 会正常出现，Playwright 自动等待。 */}
             <React.Suspense fallback={<div className="admin-page-loading" role="status" aria-live="polite">页面加载中…</div>}>
-              {renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions, refreshEffectivePermissions, navigateTo, focusObjectId })}
+              {sensitivePage && openedPageId !== route.pageId ? null
+                : renderPage(route, { api, user, setActionResult, setGlobalError, effectivePermissions, refreshEffectivePermissions, navigateTo, focusObjectId, reportViewedObjects })}
             </React.Suspense>
           </PermissionGate>
           )}

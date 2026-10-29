@@ -1,6 +1,6 @@
 package com.complex.platform.energy;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.access.*;
 import com.complex.platform.analytics.AnalyticsRepository;
@@ -200,7 +200,7 @@ class EnergyWorkflowJdbcIntegrationTests {
         String exportRole="energy_export_scope_"+suffix;
         access.createRole(new RoleRecord(exportRole,"本项目财务导出",null,"project","active",Instant.now(),List.of("finance.ar_ap.export"),null,false,List.of()));
         access.assignUserRole(reader,exportRole);
-        assertThat(finance.exportArApItems().rows()).extracting(com.complex.platform.finance.ArApItemRecord::id)
+        assertThat(finance.listArApItemsForExport()).extracting(com.complex.platform.finance.ArApItemRecord::id)
             .contains(ownItem).doesNotContain(otherItem,foreignItem,nullItem);
         var request=new com.complex.platform.finance.dto.ArApPaymentRequest(key(),"只有查看权",List.of(),100L,"bank_transfer",END,"flow");
         assertThatThrownBy(()->finance.registerArApPayment(ownItem,request)).isInstanceOf(ApiException.class);
@@ -224,9 +224,8 @@ class EnergyWorkflowJdbcIntegrationTests {
         access.assignUserRole(reader,exportRole);
         for(int i=0;i<201;i++)ledger("energy_export_"+suffix+"_"+i,project,merchant);
         assertThatThrownBy(()->finance.listArApItems(null,1,10)).isInstanceOf(ApiException.class);
-        var exported=finance.exportArApItems();
-        assertThat(exported.rowCount()).isEqualTo(201);
-        assertThat(exported.rows()).hasSize(201).allSatisfy(row->assertThat(row.projectId()).isEqualTo(project));
+        var exported=finance.listArApItemsForExport();
+        assertThat(exported).hasSize(201).allSatisfy(row->assertThat(row.projectId()).isEqualTo(project));
     }
 
     private void ledger(String id,String p,String merchantId){

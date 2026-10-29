@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/finance")
-public class FinanceController {
+public class FinanceController implements com.complex.platform.security.ExportFileService.Source {
 
     private final FinanceService service;
     private final AuthorizationService authorizationService;
@@ -62,10 +62,22 @@ public class FinanceController {
 
     @GetMapping("/ar-ap-items/export")
     @com.complex.platform.access.ConsumesSingleUseGrant({"finance.ar_ap.export", "finance.payroll.export"}) // M723：导出导一次扣一次（操作员 2026-10-03）
-    public ApiResponse<ArApLedgerExportRecord> exportArApItems() {
+    public org.springframework.http.ResponseEntity<byte[]> exportArApItems() {
         // 治理口径：资金流水属敏感信息，导出与查看分权——审计角色只直授 view，export 须走临时授权审批（V196）。
         authorizationService.requirePermission("finance.ar_ap.export");
-        return ApiResponse.ok(service.exportArApItems());
+        // 第 23 条 23-R3：只交出服务端生成的带密码、带暗纹的 PDF（PGM:687）。
+        return service.exportArApItems().response();
+    }
+
+    @Override
+    public String exportType() {
+        return "finance_ar_ap_ledger";
+    }
+
+    /** 第 23 条 23-R4 可编辑版重取：同查看往来台账的权限与范围（finance.ar_ap.view），不再要导出权限。 */
+    @Override
+    public com.complex.platform.security.ExportFileService.Table viewTable(java.util.Map<String, Object> filters) {
+        return service.arApViewTable();
     }
 
     @PostMapping("/ar-ap-items")

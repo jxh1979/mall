@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -240,6 +240,16 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       expect(text).toContain(label);
       expect(text).not.toContain(action);
     }
+  });
+
+  // 第 23 条复核（PGM:687「这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）」；PGM:686 采购价）：读到的复核单原件（含到货单价）报给外壳，
+  // 已终结、不在待审列表里的也报。
+  it("读到的复核单原件报为这一次看到的对象，已终结不在待审列表的也报", async () => {
+    const reportViewedObjects = vi.fn();
+    render(<ApprovalChainPage api={makeApi([])} user={{ id: "u1", username: "admin", accountType: "platform_admin" }} setActionResult={vi.fn()}
+      setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} focusObjectId="review_final" reportViewedObjects={reportViewedObjects} />);
+
+    await waitFor(() => expect(reportViewedObjects).toHaveBeenCalledWith("supervisor_review", [{ id: "review_final" }]));
   });
 
   it("逐笔原件已经终结时仍可查看但不能再次裁决", async () => {

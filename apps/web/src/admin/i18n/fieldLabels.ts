@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -572,6 +572,22 @@ export const FIELD_LABELS: Record<string, string> = {
   object_type: "对象类型",
   ref_id: "关联单据",
   ref_type: "关联单据类型",
+  // 第 23 条 23-R2 页面暗纹与截屏反查（PGM:687）。
+  page_id: "页面",
+  device_no: "设备编号",
+  network: "接入网络",
+  export_file_id: "导出文件",
+  // 第 23 条 23-R3 导出文件与「我的导出」（PGM:686、687）。
+  export_type: "导出内容",
+  exporter_id: "导出人",
+  filters: "筛选条件",
+  editable: "可编辑版",
+  project_ids: "项目",
+  limit: "条数上限",
+  // 第 23 条 23-R4 可编辑版申请（PGM:687「说明用途与接收方」）与「我的导出」每行的申请状态。
+  purpose: "用途",
+  editable_request: "可编辑版申请",
+  issued: "已发放",
   request_id: "请求标识",
   reason: "原因",
   reason_code: "原因编码",

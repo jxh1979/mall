@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AdminDataState } from "../components/AdminDataState";
@@ -12,8 +12,10 @@ import type { AdminPageProps } from "../types";
 
 type Report = { id: string; workScope: string; projectId: string; vendorUserId: string; status: string; spaceId?: string; plannedStartDate?: string; plannedEndDate?: string; crewCount?: number; contactName?: string; contactPhone?: string; reviewComment?: string; acceptanceComment?: string };
 
-export function SiteEntryPropertyPage({ api, setActionResult, setGlobalError, effectivePermissions, stage }: AdminPageProps & { stage: "review" | "accept" }) {
+export function SiteEntryPropertyPage({ api, setActionResult, setGlobalError, effectivePermissions, stage, reportViewedObjects }: AdminPageProps & { stage: "review" | "accept" }) {
   const [rows, setRows] = React.useState<Report[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("site_entry_report", rows), [rows, reportViewedObjects]);
   const [selectedId, setSelectedId] = React.useState("");
   const [note, setNote] = React.useState("");
   const [history, setHistory] = React.useState<SiteEntryHistoryRow[] | null>(null);
