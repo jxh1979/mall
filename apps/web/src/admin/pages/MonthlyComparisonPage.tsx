@@ -6,6 +6,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { saveDownloadedFile } from "../client/adminClient";
 import type { AdminPageProps } from "../types";
 
 type ComparisonRow = {
@@ -39,6 +40,7 @@ const TEXT = {
   description: "本月与上月(环比)、去年同月(同比)怎么变——收入等流量数=月累计,欠费/出租率等存量数=月末时点;快照逐日积累,历史月份数据攒够后环比同比自然可比,缺的月份标「积累中」不硬凑。",
   loadFailed: "月度对比读取失败",
   exportDenied: "导出经营报表需要独立的导出权限(与查看分权),请走临时授权申请",
+  exported: "已导出（带密码的 PDF），打开密码请到「我的导出」查看",
 };
 
 const AGG_LABELS: Record<string, string> = { monthly_sum: "月累计", period_end: "期末时点" };
@@ -89,7 +91,7 @@ function defaultMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
-export function MonthlyComparisonPage({ api, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function MonthlyComparisonPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [month, setMonth] = React.useState(defaultMonth);
   const [data, setData] = React.useState<ComparisonResponse | null>(null);
   const [exporting, setExporting] = React.useState(false);
@@ -168,27 +170,13 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
     }
   };
 
-  const exportCsv = async () => {
+  // 第 23 条 23-R3（PGM:687）：导出一律由服务端生成带密码、不可复制不可编辑、带暗纹的 PDF，浏览器不再拼 CSV。
+  const exportFile = async () => {
+    if (!api.getFile) return;
     setExporting(true);
     try {
-      const report = await api.get<ComparisonResponse>(`/api/v1/analytics/reports/monthly-export?month=${month}`);
-      const header = "指标,口径,本月,上月,环比,去年同月,同比";
-      const lines = (report.rows ?? []).map((row) => [
-        row.label ?? row.metricKey,
-        AGG_LABELS[row.aggregation ?? ""] ?? row.aggregation ?? "",
-        fmt(row.current, row.unit),
-        fmt(row.prevMonth, row.unit),
-        pct(row.momPct),
-        fmt(row.yoySameMonth, row.unit),
-        pct(row.yoyPct),
-      ].map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","));
-      const blob = new Blob(["﻿" + [header, ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `月度经营对比-${report.month ?? month}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      saveDownloadedFile(await api.getFile(`/api/v1/analytics/reports/monthly-export?month=${month}`));
+      setActionResult({ ok: true, message: TEXT.exported });
     } catch (e) {
       setGlobalError(e instanceof Error ? e.message : "导出失败");
     } finally {
@@ -214,10 +202,10 @@ export function MonthlyComparisonPage({ api, setGlobalError, effectivePermission
           type="button"
           data-testid="monthly-comparison-export"
           disabled={!canExport || exporting}
-          title={canExport ? "导出当前月份对比报表 CSV" : TEXT.exportDenied}
-          onClick={exportCsv}
+          title={canExport ? "导出当前月份对比报表（带密码的 PDF）" : TEXT.exportDenied}
+          onClick={exportFile}
         >
-          {exporting ? "导出中…" : "导出 CSV"}
+          {exporting ? "导出中…" : "导出（带密码）"}
         </button>
       </div>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>

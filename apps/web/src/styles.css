@@ -2575,3 +2575,22 @@ body {
 }
 .admin-row-detail-btn:hover { border-color: var(--adm-accent); color: var(--adm-accent); }
 .admin-row-detail-btn:focus-visible { outline: 2px solid var(--adm-accent); outline-offset: 2px; }
+
+/* 第 23 条 23-R5 敏感页（PGM:687「敏感页上的文字不能被选中、不能被复制，也不提供页面另存与打印」）：外壳在 body 上打 data-sensitive，
+   盖住渲染在 body 下的 antd 弹窗与抽屉；输入框照常可输入。 */
+body[data-sensitive="true"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body[data-sensitive="true"] input,
+body[data-sensitive="true"] textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@media print {
+  body[data-sensitive="true"] {
+    display: none !important;
+  }
+}

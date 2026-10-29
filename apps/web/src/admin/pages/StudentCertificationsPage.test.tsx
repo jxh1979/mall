@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,6 +16,7 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 function renderPage(post = vi.fn().mockResolvedValue({}), setGlobalError = vi.fn()) {
   const api = {
     get: vi.fn().mockResolvedValue({ items: [PENDING] }),
+    getFile: vi.fn().mockResolvedValue({ blob: new Blob(["png"], { type: "image/png" }), fileName: "photo.png" }),
     getPaged: vi.fn(),
     post,
     put: vi.fn(),
@@ -39,7 +40,6 @@ describe("StudentCertificationsPage", () => {
     await waitFor(() => expect(screen.getByTestId("student-certification-scert_1")).toBeInTheDocument());
     expect(api.get).toHaveBeenCalledWith("/api/v1/student-certifications?status=pending");
     expect(screen.getByText("CHSI1234567890AB")).toBeInTheDocument();
-    expect(screen.getByText(/照片 2/).closest("a")?.getAttribute("href")).toContain("/api/v1/student-certifications/scert_1/files/2");
 
     fireEvent.click(screen.getByTestId("student-certification-approve-scert_1"));
     await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("请按学信网《学籍在线验证报告》填写预计毕业日期"));
@@ -55,6 +55,16 @@ describe("StudentCertificationsPage", () => {
     const expected = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-15`;
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/student-certifications/scert_1/approve",
       expect.objectContaining({ validUntil: expected })));
+  });
+
+  // PGM:687「敏感页上的文字不能被选中、不能被复制，也不提供页面另存与打印」：证件照片在敏感页内显示（带暗纹），不开新标签裸文件链接。
+  it("证件照片在页内显示，不开新标签文件链接", async () => {
+    Object.assign(URL, { createObjectURL: vi.fn(() => "blob:photo"), revokeObjectURL: vi.fn() });
+    const { api } = renderPage();
+    await waitFor(() => expect(screen.queryAllByRole("img", { name: /学生证件照片/ })).toHaveLength(2));
+    expect((api as unknown as { getFile: ReturnType<typeof vi.fn> }).getFile).toHaveBeenCalledWith("/api/v1/student-certifications/scert_1/files/2");
+    expect(screen.getAllByRole("img", { name: /学生证件照片/ })[0]!.getAttribute("src")).toBe("blob:photo");
+    expect(document.querySelector("a[target=_blank]")).toBeNull();
   });
 
   it("驳回须填原因", async () => {

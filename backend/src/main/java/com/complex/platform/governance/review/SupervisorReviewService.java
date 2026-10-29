@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -92,6 +92,10 @@ public class SupervisorReviewService {
             // 第十八批 E 段第 22 条（PGM:531「宽限期须经最高权限审批后生效」）：商户申请证照宽限期。
             new SupervisorReviewPolicyRecord("compliance_grace_period", "compliance.expiry_item.grace", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
+            // 第十八批 H 段第 23 条 23-R4（PGM:687「确需可编辑版本用于二次加工的，须另行申请、说明用途与接收方，经最高权限审批后发放」）：
+            // 导出文件可编辑版申请，恒阻断、最高权限审批；一次批准发放一次（EditableExportService）。
+            new SupervisorReviewPolicyRecord("export_editable_copy", "security.export.editable_copy", 0, 3, true,
+                    List.of("reason"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("inventory_purchase_request", "inventory.purchase_request", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "inventory.purchase.approve"),
             new SupervisorReviewPolicyRecord("inventory_purchase_terminate", "inventory.purchase_terminate", 0, 1, true,

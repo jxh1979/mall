@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -252,8 +252,10 @@ function projectFromSummary(summary: string): string | undefined {
   return m[1];
 }
 
-export function SettlementConfigPage({ api, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function SettlementConfigPage({ api, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [data, setData] = React.useState<Overview | null>(null);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("settlement_config_draft", data?.pendingDrafts ?? []), [data, reportViewedObjects]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);

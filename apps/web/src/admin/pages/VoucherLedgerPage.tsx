@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -93,7 +93,7 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result };
 }
 
-export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [definitions, setDefinitions] = React.useState<VoucherDefinitionRow[]>([]);
   // 视图切换：统一台账实例 / 全部券聚合（含通票第三方券，只读）。
   const [viewMode, setViewMode] = React.useState<"unified" | "all">("unified");
@@ -155,6 +155,8 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
     onError: setGlobalError,
     fallbackMessage: TEXT.loadFailed,
   });
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("voucher", rows.rows), [rows.rows, reportViewedObjects]);
 
   React.useEffect(() => {
     rows.reload();

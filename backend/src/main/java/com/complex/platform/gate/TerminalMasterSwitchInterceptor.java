@@ -43,7 +43,10 @@ public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
             "/api/v1/terminals/kiosks/", // 一体机自助端点，X-Device-Token 认证，亦豁免于设备凭证拦截器
             // U05-003/U07-004：公开自助注册入口——私人手机此时尚未成为受管终端，身份证明是请求体里的设备公钥/指纹（服务端校验 + 频控）。
             "/api/v1/staff/self-registrations",
-            "/api/v1/staff/registration-companies"
+            "/api/v1/staff/registration-companies",
+            // 第 23 条 23-R2：打开页面的暗纹与留痕（PGM:687「这条留痕不提供关闭开关」；DEC-R3B-2026-08-04-14「兜底关闭不含留痕的写入」）。
+            // 本拦截器对读请求放行，开关关掉或读取失败兜底关闭时页面照样出数据；page-views 是写请求，被拒就成了「页面照常显示但没有暗纹、没有打开留痕」。
+            "/api/v1/security/page-views"
     );
 
     // ObjectProvider：@WebMvcTest 切片自动纳入 HandlerInterceptor 但不装 gate 依赖，guard 缺席时跳过闸；

@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import { readFileSync } from "node:fs";
 
 const matrixPath = "docs/full-admin-page-permission-field-matrix-v0.1.csv";
@@ -123,6 +123,8 @@ const bespokePages = new Set([
   "ADM-DLR-001",
   "ADM-DLR-002",
   "ADM-DLR-003",
+  "ADM-SEC-001",
+  "ADM-SEC-002",
 ]);
 
 function read(path) {

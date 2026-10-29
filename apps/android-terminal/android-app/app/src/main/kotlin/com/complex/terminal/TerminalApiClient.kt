@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -72,6 +72,10 @@ class TerminalApiClient(
 
   fun login(username: String, password: String): LoginResponse =
     post("/api/v1/auth/login", LoginRequest(username, password))
+
+  /** 第 23 条 23-R6：员工手机在线屏打开即发暗纹码并留痕（与后台、商户专区同一接口；走设备签名，设备号由服务端按验签结果取登记设备号）。 */
+  fun postPageView(request: PageViewRequest): PageViewMark =
+    post("/api/v1/security/page-views", request)
 
   fun bindDevice(request: BindDeviceRequest): DeviceBinding =
     post("/api/v1/terminals/devices/bind", request)

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PurchaseWorkbenchPage } from "./PurchaseWorkbenchPage";
@@ -10,7 +10,7 @@ const grants = ["inventory.purchase_request.view", "inventory.purchase_request.m
 const contract = { id: "sc_1", contract_no: "合同一", supplier_id: "supplier_1", project_id: "p_1", contract_mode: "platform_self_use", purchasable_scope: ["item_A_01"], approval_status: "approved", status: "active", valid_from: "2026-01-01", valid_to: "2099-12-31" };
 const purchase = { id: "pur_1", request_no: "采购一", supplier_id: "supplier_1", item_id: "item_A_01", quantity: 100, status: "arrived", supply_contract_id: "sc_1" };
 const receipt = { id: "receipt_1", arrived_quantity: 80, accepted_quantity: 70, rejected_quantity: 10, received_at: "2026-01-10T02:00:00Z", warehouse_id: "wh_1", location_id: "loc_1", unit_cost_cent: 100, payable_id: "ap_1" };
-function setup(config: { permissions?: string[]; detail?: Record<string, unknown>; contract?: Record<string, unknown>; contractTerms?: Record<string, unknown>; optionsFail?: boolean; failOnce?: string; merchants?: Record<string, unknown>[] } = {}) {
+function setup(config: { permissions?: string[]; detail?: Record<string, unknown>; contract?: Record<string, unknown>; contractTerms?: Record<string, unknown>; optionsFail?: boolean; failOnce?: string; merchants?: Record<string, unknown>[]; reportViewedObjects?: AdminPageProps["reportViewedObjects"] } = {}) {
   const posts: { path: string; body: Record<string, unknown> }[] = [], uploads: FormData[] = [];
   let failed = false;
   const actualContract = { ...contract, ...config.contract };
@@ -35,7 +35,7 @@ function setup(config: { permissions?: string[]; detail?: Record<string, unknown
     return new Response(JSON.stringify({ code: "OK", data }), { headers: { "Content-Type": "application/json" } });
   }));
   const navigateTo = vi.fn(), setActionResult = vi.fn();
-  const props: AdminPageProps = { api: new AdminApi(), user: { id: "actor", username: "经办人", accountType: "platform_admin" }, setActionResult, setGlobalError: vi.fn(), navigateTo, effectivePermissions: { status: "ready", value: { grants: config.permissions ?? grants, denies: [], wildcard: false } } };
+  const props: AdminPageProps = { api: new AdminApi(), user: { id: "actor", username: "经办人", accountType: "platform_admin" }, setActionResult, setGlobalError: vi.fn(), navigateTo, reportViewedObjects: config.reportViewedObjects, effectivePermissions: { status: "ready", value: { grants: config.permissions ?? grants, denies: [], wildcard: false } } };
   render(<PurchaseWorkbenchPage {...props} />);
   return { posts, uploads, navigateTo, setActionResult };
 }
@@ -74,6 +74,15 @@ it("第 82 条 82b-R8：主项目在别处、已批准在所选项目经营的�
 it("新建采购只提交所选批准合同的一种商品，供应商来自该合同", async () => {
   const { posts } = setup(); await screen.findByText("合同一"); click("新建采购申请"); fill("已批准供货合同", "sc_1"); fill("采购商品", "item_A_01"); fill("采购数量", "15"); fill("预计到货日", "2026-02-01"); fill("申请依据", "门店补货"); click("确认新建采购申请");
   await waitFor(() => expect(posts).toHaveLength(1)); expect(posts[0]!.body).toMatchObject({ supplier_id: "supplier_1", supply_contract_id: "sc_1", items: [{ item_id: "item_A_01", quantity: 15 }] });
+});
+// 第 23 条复核（PGM:687「这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）」；PGM:686 采购价、供应链价格）：查看合同读到逐商品合同单价后，
+// 这份供货合同报为这一次看到的对象。
+it("查看合同读到合同单价后，这份供货合同报为这一次看到的对象", async () => {
+  const reportViewedObjects = vi.fn();
+  setup({ reportViewedObjects });
+  await waitFor(() => expect(screen.queryByText("合同一")).not.toBeNull());
+  click("查看合同");
+  await waitFor(() => expect(reportViewedObjects).toHaveBeenCalledWith("supply_contract", [{ id: "sc_1" }]));
 });
 it("合同条款采用结构化价格和实际原件，单价商品标识不被改写", async () => {
   const { posts, uploads } = setup({ contract: { approval_status: "draft" } }); await screen.findByText("合同一"); click("查看合同"); await screen.findByText("合同 合同一"); click("登记合同执行条款");

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -47,8 +47,10 @@ type Form = { itemCode: string; merchantId: string; entityId: string; category: 
 const EMPTY_FORM: Form = { itemCode: "", merchantId: "", entityId: "", category: "", itemName: "", priceYuan: "" };
 const provider = (row: CatalogRow) => row.merchantId ?? row.providerEntityId ?? "—";
 
-export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<CatalogRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("internal_price_item", rows), [rows, reportViewedObjects]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);

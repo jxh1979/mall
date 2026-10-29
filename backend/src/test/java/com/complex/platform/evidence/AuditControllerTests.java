@@ -18,7 +18,8 @@ class AuditControllerTests {
 
     private final AuditEventService service = mock(AuditEventService.class);
     private final AuthorizationService authz = mock(AuthorizationService.class);
-    private final AuditController controller = new AuditController(service, authz);
+    private final com.complex.platform.security.ExportFileService exportFiles = mock(com.complex.platform.security.ExportFileService.class);
+    private final AuditController controller = new AuditController(service, authz, exportFiles);
 
     @Test
     void queryRequiresViewPermissionAndPassesFilters() {
@@ -33,6 +34,8 @@ class AuditControllerTests {
     @Test
     void exportRequiresExportPermission() {
         when(service.searchOperationEvents(any(), any(), any(), any(), any(), any(), anyInt(), any())).thenReturn(List.of());
+        when(exportFiles.create(any(), any(), any(), any(), any()))
+                .thenReturn(new com.complex.platform.security.ExportFileService.ExportFile("exp_1", "操作留痕.pdf", new byte[0]));
         controller.exportOperationEvents(null, null, null, null, null, null, 1000);
         verify(authz).requirePermission("audit.operation_log.export");
     }

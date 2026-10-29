@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { SiteEntryHistory, type SiteEntryHistoryRow } from "./SiteEntryHistory";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -55,8 +55,10 @@ function readKpiFocusFromUrl(): KpiFocus | null {
   return { subset: params.get("subset") === "enterable" ? "enterable" : "all" };
 }
 
-export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorSiteEntryRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("site_entry_report", rows), [rows, reportViewedObjects]);
   const [selectedId, setSelectedId] = React.useState("");
   // 引导式「新建进场报备」弹窗：必填项（项目/空间/施工范围）默认留空，避免默认值让缺字段拦截失效。
   const [form, setForm] = React.useState({

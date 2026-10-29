@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -348,37 +348,59 @@ public class FinanceService implements TerminationSettlementPort {
         );
     }
 
-    public ArApLedgerExportRecord exportArApItems() {
+    /** 第 23 条 23-R3 导出文件生成（带密码、不可复制不可编辑、带暗纹的 PDF，PGM:687）。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.security.ExportFileService exportFiles;
+
+    private static final List<String> AR_AP_EXPORT_COLUMNS = List.of("单据编号", "收付方向", "往来对象编号", "来源类型", "来源编号",
+            "金额(分)", "已收付金额(分)", "未收付金额(分)", "币种", "到期日", "账期", "状态");
+
+    /** 导出取数结果与所按的范围（商户号、项目集合；null＝不按该项收窄）。 */
+    private record ArApExport(List<ArApItemRecord> items, String merchant, Set<String> projects) {
+    }
+
+    /** 导出所取的行（导出权限＋可触及范围，取全不分页）。 */
+    public List<ArApItemRecord> listArApItemsForExport() {
+        return arApExport("finance.ar_ap.export", FinancePayrollService.EXPORT).items();
+    }
+
+    /** 第 23 条 23-R4 可编辑版重取：按查看往来台账的权限与范围（finance.ar_ap.view）取全，不再要导出权限。 */
+    public com.complex.platform.security.ExportFileService.Table arApViewTable() {
+        return arApTable(arApExport("finance.ar_ap.view", FinancePayrollService.VIEW));
+    }
+
+    /** 按入口权限码（导出或查看）的可触及范围取全；工资类往来按同一入口的工资权限可见。 */
+    private ArApExport arApExport(String permission, String payrollPermission) {
+        authorizationService.requirePermission(permission);
+        var actor = authorizationService.currentActor();
+        var reach = authorizationService.projectReach(actor, permission);
+        String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
+        Set<String> projects = readProjects(reach, merchant);
+        List<ArApItemRecord> items = new java.util.ArrayList<>();
+        for (int page=1;;page++) {
+            var result = repository.listArApItemsForProjects(merchant,
+                    projects, null, page, 200, payrollVisibleItems(payrollPermission));
+            items.addAll(result.items());
+            if (result.items().isEmpty() || items.size() >= result.total()) break;
+        }
+        return new ArApExport(items, merchant, projects);
+    }
+
+    public com.complex.platform.security.ExportFileService.ExportFile exportArApItems() {
         try {
-            authorizationService.requirePermission("finance.ar_ap.export");
-            var actor = authorizationService.currentActor();
-            var reach = authorizationService.projectReach(actor, "finance.ar_ap.export");
-            String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
-            List<ArApItemRecord> items = new java.util.ArrayList<>();
-            for (int page=1;;page++) {
-                var result = repository.listArApItemsForProjects(merchant,
-                        readProjects(reach, merchant), null, page, 200, payrollVisibleItems(FinancePayrollService.EXPORT));
-                items.addAll(result.items());
-                if (result.items().isEmpty() || items.size() >= result.total()) break;
-            }
-            ArApLedgerExportRecord export = new ArApLedgerExportRecord(
-                    "arap_export_" + UUID.randomUUID().toString().replace("-", ""),
-                    "csv",
-                    items.size(),
-                    List.copyOf(items),
-                    arApCsv(items),
-                    Instant.now()
-            );
+            ArApExport data = arApExport("finance.ar_ap.export", FinancePayrollService.EXPORT);
+            var table = arApTable(data);
+            var file = exportFiles.create("finance_ar_ap_ledger", table.title(), table.filters(), table.columns(), table.rows());
             auditEventService.recordSuccess(
                     "finance_ar_ap.exported",
                     "finance.ar_ap.export",
                     "ar_ap_export",
-                    export.id(),
+                    file.id(),
                     "req_" + UUID.randomUUID(),
                     null,
-                    Map.of("row_count", export.rowCount(), "format", export.format())
+                    Map.of("row_count", data.items().size(), "format", "pdf", "export_file_id", file.id())
             );
-            return export;
+            return file;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     "finance_ar_ap.export_failed",
@@ -393,36 +415,27 @@ public class FinanceService implements TerminationSettlementPort {
         }
     }
 
-    private String arApCsv(List<ArApItemRecord> items) {
-        StringBuilder csv = new StringBuilder("单据编号,收付方向,往来对象编号,来源类型,来源编号,金额(分),已收付金额(分),未收付金额(分),币种,到期日,账期,状态\n");
-        for (ArApItemRecord item : items) {
-            csv.append(csv(item.itemNo())).append(',')
-                    .append(csv(arApLabel(AR_AP_DIRECTION_LABELS, item.direction()))).append(',')
-                    .append(csv(item.counterpartyId())).append(',')
-                    .append(csv(arApLabel(AR_AP_SOURCE_TYPE_LABELS, item.sourceType()))).append(',')
-                    .append(csv(item.sourceId())).append(',')
-                    .append(item.amountCent()).append(',')
-                    .append(item.paidAmountCent()).append(',')
-                    .append(item.unpaidAmountCent()).append(',')
-                    .append(csv(item.currency())).append(',')
-                    .append(csv(item.dueDate() == null ? null : item.dueDate().toString())).append(',')
-                    .append(csv(item.accountingPeriod())).append(',')
-                    .append(csv(arApLabel(AR_AP_STATUS_LABELS, item.status()))).append('\n');
-        }
-        return csv.toString();
+    /** 导出内容：十二列同 AR_AP_EXPORT_COLUMNS；导出记录 filters 记 merchant_id 与 project_ids（null＝不按该项收窄）。 */
+    private static com.complex.platform.security.ExportFileService.Table arApTable(ArApExport data) {
+        Map<String, Object> filters = new java.util.LinkedHashMap<>();
+        filters.put("merchant_id", data.merchant());
+        filters.put("project_ids", data.projects() == null ? null : new java.util.TreeSet<>(data.projects()));
+        return new com.complex.platform.security.ExportFileService.Table("应收应付台账", filters, AR_AP_EXPORT_COLUMNS,
+                data.items().stream().map(FinanceService::arApExportRow).toList());
+    }
+
+    /** 导出一行（列同 AR_AP_EXPORT_COLUMNS；枚举翻中文）。 */
+    private static List<String> arApExportRow(ArApItemRecord item) {
+        return java.util.Arrays.asList(item.itemNo(), arApLabel(AR_AP_DIRECTION_LABELS, item.direction()), item.counterpartyId(),
+                arApLabel(AR_AP_SOURCE_TYPE_LABELS, item.sourceType()), item.sourceId(), String.valueOf(item.amountCent()),
+                String.valueOf(item.paidAmountCent()), String.valueOf(item.unpaidAmountCent()), item.currency(),
+                item.dueDate() == null ? null : item.dueDate().toString(), item.accountingPeriod(),
+                arApLabel(AR_AP_STATUS_LABELS, item.status()));
     }
 
     /** 枚举列翻中文：命中映射用中文，未知值（含 null）原样返回不吞值。 */
     private static String arApLabel(Map<String, String> labels, String raw) {
         return raw == null ? null : labels.getOrDefault(raw, raw);
-    }
-
-    private String csv(String value) {
-        String safe = value == null ? "" : value;
-        if (safe.contains(",") || safe.contains("\n") || safe.contains("\"")) {
-            return "\"" + safe.replace("\"", "\"\"") + "\"";
-        }
-        return safe;
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.ar_ap.manage", admissionAction = "finance.locked_backfill", objectType = "ar_ap_item")

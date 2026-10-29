@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 export type AdminUser = {
   id: string;
   username: string;
@@ -67,7 +67,12 @@ export type AdminApiClient = {
   delete<T>(path: string): Promise<T>;
   /** multipart 上传（图片等）：不做 JSON 键转换，浏览器自动设 multipart 边界。可选=既有测试 mock 无需改。 */
   postForm?<T>(path: string, form: FormData): Promise<T>;
+  /** 第 23 条 23-R3：下载服务端生成的导出文件（带密码 PDF），返回文件与下载文件名。可选=既有测试 mock 无需改。 */
+  getFile?(path: string): Promise<DownloadedFile>;
 };
+
+/** 第 23 条 23-R3 下载到的导出文件。 */
+export type DownloadedFile = { blob: Blob; fileName: string };
 
 export type AdminPageProps = {
   api: AdminApiClient;
@@ -85,7 +90,15 @@ export type AdminPageProps = {
   navigateTo?: (pageId: string, objectId?: string) => void;
   /** 下钻进入本页时携带的对象 id（URL ?focus=），供本页定位/高亮/过滤。 */
   focusObjectId?: string;
+  /**
+   * 第 23 条 23-R5：敏感页每次载入完把显示的行交给外壳，登记「这一次看到的是哪些对象」（PGM:687）。行 id 按 objectType 记，
+   * 行上的 customerId、merchantId 另记为客人、商户；非敏感页调用不登记。AdminApp 注入。
+   */
+  reportViewedObjects?: (objectType: string, rows: ReadonlyArray<ViewedRow>) => void;
 };
+
+/** 第 23 条 23-R5 敏感页看到的一行（见 AdminPageProps.reportViewedObjects）。 */
+export type ViewedRow = { id?: string | null; customerId?: string | null; merchantId?: string | null };
 
 // T12 经营看板：以 metric_code 为权威键的指标 map（与后端 OverviewResponse 对齐）。
 // value 可能为 null（数据源未就绪/源表无 merchant_id 维度，不伪造）。

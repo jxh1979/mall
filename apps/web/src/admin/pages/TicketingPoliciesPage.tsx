@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -134,10 +134,13 @@ type PriceCheckRow = {
   roundingSuggested: number;
 };
 
-export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo }: AdminPageProps) {
+export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [tickets, setTickets] = React.useState<TicketTypeRow[]>([]);
   const [templates, setTemplates] = React.useState<EntitlementTemplateRow[]>([]);
   const [rules, setRules] = React.useState<PriceRuleRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("ticket_type", tickets), [tickets, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("ticket_price_rule", rules), [rules, reportViewedObjects]);
   const [merchants, setMerchants] = React.useState<MerchantRow[]>([]);
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   // V260 存档/删除范式：显示已存档票种/价规开关（后端按 includeArchived 过滤）。

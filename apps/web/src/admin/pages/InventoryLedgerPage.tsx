@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { TechDetails } from "../components/TechDetails";
@@ -105,12 +105,15 @@ function asNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [items, setItems] = React.useState<InventoryItemRow[]>([]);
   const [balances, setBalances] = React.useState<StockBalanceRow[]>([]);
   const canReadQuarantine = useCan(effectivePermissions, ["inventory.stock.view"]);
   const canManageQuarantine = useCan(effectivePermissions, ["inventory.stock.adjust", "evidence.attachment.create"]);
   const [movements, setMovements] = React.useState<StockMovementRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("inventory_item", items), [items, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("stock_movement", movements), [movements, reportViewedObjects]);
   const pagedBalances = usePagedRows(balances, 10, balances.length);
   const pagedMovements = usePagedRows(movements, 10, movements.length);
   const { selectedId: selectedItemId, setSelectedId: setSelectedItemId, selected: selectedItem } = useSelectedRow(items);

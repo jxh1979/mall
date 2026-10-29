@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -11,7 +11,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
-import type { PagedResult } from "../client/adminClient";
+import { saveDownloadedFile, type PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
@@ -152,13 +152,15 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
   }
 
 
+  // 第 23 条 23-R3（PGM:687）：下载服务端生成的带密码 PDF；结果区只记已导出，不放数据行。
   async function exportLedger() {
+    if (!api.getFile) return;
     setExporting(true);
     setFormError("");
     setGlobalError(null);
     try {
-      const result = await api.get<Record<string, unknown>>("/api/v1/finance/ar-ap-items/export");
-      setActionResult({ action: "ledger_export", status: "exported", result });
+      saveDownloadedFile(await api.getFile("/api/v1/finance/ar-ap-items/export"));
+      setActionResult({ action: "ledger_export", status: "exported", message: "已导出（带密码的 PDF），打开密码请到「我的导出」查看" });
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "应收应付导出失败";
       setFormError(message);

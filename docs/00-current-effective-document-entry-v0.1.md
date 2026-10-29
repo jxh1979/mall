@@ -23,7 +23,7 @@
 | 楼宇运营业务域 PRD | `docs/building-operations-prd-v1.0.md` |
 | 集团治理重建 PRD | `docs/group-governance-rebuild-prd-v1.0.md` |
 | 服务点单业务域 PRD | `docs/service-order-product-prd-v0.1.md`；承接域＝BSM 服务点单章（`section#service-order`）+ ENUM 第十二章「服务点单」；2026-08-05（R7）新建 |
-| P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-10-29）核验为 1197 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
+| P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-10-29）核验为 1204 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
 | OpenAPI 与业务 HTML 覆盖核对（2026-06-30 复核更新，分辨四类，勿再笼统列缺口） | ① 商户档案/入驻=已覆盖（`/api/v1/platform/merchants` + `merchant.profile.view/manage`）；② 应收=已覆盖（AR/AP 域）；③ 楼层/区域/点位/商铺/卡座/吧台位/游乐入口/库房/设备点位=由扁平 `spaces` 的 `space_type`+`parent_space_id` 自套承载（非缺口，映射见 foundation-database-design）；④ 发票=税务/电子发票平台第三方对接、故意延后（预留接口+后台开关+不阻塞自研，真实资料到位再补契约，见 finance-settlement-product-prd §6A）；⑤ 操作审计日志查询/导出=**现状已覆盖 + 明确增强项**：审计事件页 ADM-EVD-001（AUDITOR，搜索/筛选/导出留痕）已实现、由 `/api/v1/evidence/events` 承载，按对象时间线已 UNION `audit_events`；**待增强（P1/P2 留档、非阻塞）**=跨对象批量搜索/导出全量 `audit_events` 操作日志（如“导出某月全部退款放行”），需另开 audit_events 专属查询/导出端点+页+测试，按审计实际需要再排。 |
 | P0 operation 级验收矩阵 | `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` |
 | P0 OpenAPI 权限、事件、任务追溯附录 | `docs/p0-openapi-contract-closure-appendix-v0.1.md` |
@@ -123,7 +123,7 @@
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
-本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-10-29 实测 OpenAPI 1197 operations、Flyway 最新 V571；后端 surefire 现有报告 4641 tests。
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-10-29 实测 OpenAPI 1204 operations、Flyway 最新 V574；后端 surefire 现有报告 4641 tests。
 
 | 交付物 | 入口 |
 |---|---|
@@ -157,7 +157,7 @@
 <!-- 文档goal(2026-06-20)：新增 §2.3，登记 R6/R7 决策批次与本会话新功能落地，刷新事实基线 -->
 ## 2.3 R6/R7 决策批次与本会话新功能落地登记（2026-06-20）`文档goal(2026-06-20)`
 
-本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-10-29 取证为 Flyway 最新 V571、OpenAPI 1197 operations；后端 surefire 现有报告 4641 tests。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
+本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-10-29 取证为 Flyway 最新 V574、OpenAPI 1204 operations；后端 surefire 现有报告 4641 tests。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
 
 ### 决策批次登记
 
@@ -202,7 +202,7 @@
 | 18 | `formal-security-baseline-generation-task-v0.1.md` | 查看正式安全基线生成条件、输入、输出和阻断项 |
 | 19 | `p0-api-contract-pack-v0.1.md`、`openapi/openapi-p0.yaml`、`openapi/openapi-p0.json` | 查看 P0 接口契约基线和机器可读契约 |
 | 19A | `external-dependency-gates-v0.1.md`、`delivery-readiness-gates-v0.1.md` | 查看外部依赖阻断、交付总闸口和 `npm run verify:delivery-gates` 准入口径 |
-| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看本轮核验 1197 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径（operation 数以本矩阵与 OpenAPI 实时为准；下文历史变更记录里的 181/191/198/207/386/419 为旧快照）<!-- 文档goal(2026-06-30)：419→516 --> |
+| 20 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 查看本轮核验 1204 个 operation 的权限、认证上下文、终端、幂等、事件和验收口径（operation 数以本矩阵与 OpenAPI 实时为准；下文历史变更记录里的 181/191/198/207/386/419 为旧快照）<!-- 文档goal(2026-06-30)：419→516 --> |
 | 21 | `p0-openapi-contract-closure-appendix-v0.1.md` | 查看 OpenAPI 反向生成的权限、事件、任务追溯和样例准入口径 |
 | 22 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 查看 P0 用户故事地图和迭代切片 |
 | 23 | `requirement-traceability-matrix-v0.1.md` | 查看需求到设计、任务、验收的追踪关系 |
@@ -385,7 +385,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 
 | 验证层 | 命令 | 通过后代表什么 | 不代表什么 |
 |---|---|---|---|
-| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、1197 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合（operation 数以 OpenAPI/矩阵实时为准） | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |
+| 契约层 | `npm run verify:p0-contract` | OpenAPI、示例、1204 个 operation 矩阵、追溯附录、客户端路径、客户端 OpenAPI 覆盖和请求字段已闭合（operation 数以 OpenAPI/矩阵实时为准） | 不代表后端 Java、Web 构建、Android APK 或 160 环境已通过 |
 | Web 层 | `npm run verify:p0-web` | 契约层通过，且 Web 可构建 | 不代表后端和 Android 环境已就绪 |
 | 环境层 | `npm run verify:p0-env` | 后端 Java/Maven 与 Android Java/Gradle/SDK 前置环境满足验收条件 | 本机缺 Java 21 时不得判定代码失败；Java/后端测试和完整 P0 默认在 160 或等效 Java 21 环境执行 |
 | 完整 P0 | `npm run verify:p0` | 契约、后端测试、Web 构建、Android 环境、Android 构建、smoke 和 APK 验证均通过 | 这是完整验收口径，不能用单项通过替代；当前协作中以后端/Java 测试在 `192.168.88.160` 执行为准 |
@@ -417,7 +417,7 @@ P0 验证不再只使用一个总命令表达。为避免 Java/Android 环境缺
 | 优先级 | 文档 | 目的 |
 |---|---|---|
 | P0 | `p0-api-contract-pack-v0.1.md` + `openapi/openapi-p0.yaml` + `openapi/openapi-p0.json` | 已新增并落地机器可读契约。固化正式 OpenAPI 基线、错误码、幂等、签名、分页、Webhook、回调和接口目录 |
-| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把本轮核验 1197 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵（operation 数以 OpenAPI/矩阵实时为准） |
+| P0 | `p0-openapi-operation-acceptance-matrix-v0.1.md` | 已新增。把本轮核验 1204 个 OpenAPI operation 的请求体、权限、认证上下文、数据范围、终端、幂等和事件转成可测试验收矩阵（operation 数以 OpenAPI/矩阵实时为准） |
 | P0 | `p0-openapi-contract-closure-appendix-v0.1.md` | 已新增。由 OpenAPI 反向生成权限、事件、任务追溯和样例准入附录，补齐人工矩阵未逐 operation 展开的缺口 |
 | P0 | `code-contract-difference-and-migration-audit-v0.1.md` | 已新增。明确旧 TypeScript/Fastify/SQLite API、旧 Web/Android 路径和正式 Java/OpenAPI 契约的迁移闸口 |
 | P0 | `p0-user-story-map-and-sprint-slices-v0.1.md` | 已新增。按角色和业务闭环拆用户故事，避免只按模块开发 |

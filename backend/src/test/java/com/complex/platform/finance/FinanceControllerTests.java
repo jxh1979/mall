@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -171,21 +171,17 @@ class FinanceControllerTests {
     }
 
     @Test
-    void exportArApItemsUsesDedicatedExportPermissionAndReturnsCsvSnapshot() throws Exception {
-        when(service.exportArApItems()).thenReturn(new ArApLedgerExportRecord(
-                "arap_export_1",
-                "csv",
-                1,
-                List.of(arApItem()),
-                "item_no,direction,status\nARAP202606140001,receivable,pending_collection",
-                Instant.parse("2026-06-14T00:10:00Z")
-        ));
+    void exportArApItemsUsesDedicatedExportPermissionAndReturnsPasswordProtectedPdf() throws Exception {
+        // 第 23 条 23-R3：导出只交出服务端生成的带密码 PDF（PGM:687），不再返回数据行与 CSV 文本。
+        when(service.exportArApItems()).thenReturn(new com.complex.platform.security.ExportFileService.ExportFile(
+                "exp_1", "应收应付台账.pdf", new byte[] {'%', 'P', 'D', 'F'}));
 
         mockMvc.perform(get("/api/v1/finance/ar-ap-items/export")
                         .with(user("finance").roles("P0_SMOKE")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.row_count").value(1))
-                .andExpect(jsonPath("$.data.csv_text").value(org.hamcrest.Matchers.containsString("ARAP202606140001")));
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("application/pdf"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("filename*=UTF-8''")));
 
         // 查≠导：导出须独立权限点（审计角色不直授，走临时授权审批）。
         verify(authorizationService).requirePermission("finance.ar_ap.export");

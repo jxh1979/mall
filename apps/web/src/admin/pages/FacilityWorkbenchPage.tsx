@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -154,7 +154,7 @@ function statusBadge(status?: string | null) {
   return <span className={`admin-badge ${kind}`}>{zh(value)}</span>;
 }
 
-export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [equipment, setEquipment] = React.useState<FacilityEquipmentRow[]>([]);
   const [maintenanceDue, setMaintenanceDue] = React.useState<FacilityEquipmentRow[]>([]);
   const [workOrders, setWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
@@ -186,6 +186,8 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [alarmRows, setAlarmRows] = React.useState<FacilityAlarmDetailRow[]>([]);
   const [myAlarms, setMyAlarms] = React.useState<FacilityAlarmRow[]>([]);
   const [dutyRows, setDutyRows] = React.useState<FacilityAlarmDutyRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("facility_alarm_duty", dutyRows), [dutyRows, reportViewedObjects]);
   const [faultRules, setFaultRules] = React.useState<FacilityFaultRuleRow[]>([]);
   const [alarmNotice, setAlarmNotice] = React.useState<string | null>(null);
   const [alarmPolicies, setAlarmPolicies] = React.useState<FacilityAlarmPolicyRow[]>([]);

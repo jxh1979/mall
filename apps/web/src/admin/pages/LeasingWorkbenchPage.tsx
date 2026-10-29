@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -146,8 +146,10 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
   return { action, idempotencyKey: request.idempotencyKey, result: lead ? { ...lead, status: label(LEAD_STATUS_LABELS, lead.status) } : result };
 }
 
-export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalError, navigateTo, effectivePermissions, refreshEffectivePermissions }: AdminPageProps) {
+export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalError, navigateTo, effectivePermissions, refreshEffectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [leads, setLeads] = React.useState<LeasingLeadRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("leasing_lead", leads), [leads, reportViewedObjects]);
   const [intents, setIntents] = React.useState<LeasingIntentRow[]>([]);
   const [brands, setBrands] = React.useState<LeasingBrandRow[]>([]);
   const [followUps, setFollowUps] = React.useState<LeasingFollowUpRow[]>([]);

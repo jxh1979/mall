@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -475,15 +475,18 @@ public class AnalyticsService {
                 () -> buildMonthlyComparison(yearMonth));
     }
 
-    /** M2 导出:与对比中心同一份组装逻辑(图表=导出,单一口径);权限独立分权(V206,V196 范式)。 */
-    public AnalyticsRecords.MonthlyComparisonResponse exportMonthlyReport(String month) {
+    /**
+     * M2 导出:与对比中心同一份组装逻辑(图表=导出,单一口径);权限独立分权(V206,V196 范式)。
+     * 第 23 条 23-R3：file 把同一份数据生成为导出文件（带密码 PDF），成功审计的 business_id 记导出文件编号。
+     */
+    public <T> T exportMonthlyReport(String month, java.util.function.Function<AnalyticsRecords.MonthlyComparisonResponse, T> file) {
         java.time.YearMonth yearMonth = parseMonth(month);
         return readSingle(
                 "analytics.monthly_report.exported",
                 "analytics.monthly_report.export_failed",
                 "analytics.report.export",
                 "analytics_business_metric_snapshots",
-                () -> buildMonthlyComparison(yearMonth));
+                () -> file.apply(buildMonthlyComparison(yearMonth)));
     }
 
     /** P1c 店级/业态级租售比（2026-07-21 拍板）：租金(月租+营业额抽成)/第三方回流营业额；三档+未归属标注。
@@ -1771,6 +1774,9 @@ public class AnalyticsService {
         }
         if (value instanceof AiQualitySuggestionResponse response) {
             return response.task().taskId();
+        }
+        if (value instanceof com.complex.platform.security.ExportFileService.ExportFile file) {
+            return file.id();
         }
         return null;
     }

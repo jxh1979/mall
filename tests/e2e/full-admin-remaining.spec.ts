@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -89,6 +89,8 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-INT-005", label: "渠道映射维护", route: "/admin/integrations/channel-maps" },
   { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },
   { pageId: "ADM-EVD-001", label: "审计事件", route: "/admin/audit/events" },
+  { pageId: "ADM-SEC-001", label: "我的导出", route: "/admin/security/my-exports" },
+  { pageId: "ADM-SEC-002", label: "暗纹与导出密码反查", route: "/admin/security/watermark-trace" },
   { pageId: "ADM-ANA-001", label: "经营分析", route: "/admin/analytics/business" },
   { pageId: "ADM-ANA-002", label: "集团总览", route: "/admin/analytics/group-overview" },
   { pageId: "ADM-ANA-003", label: "经营参数", route: "/admin/analytics/operating-params" },
@@ -175,6 +177,14 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("merchant-zone-staff-vehicles-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-010") {
     await expect(page.getByTestId("merchant-zone-licenses-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-SEC-001") {
+    // 第 23 条 23-R3：我的导出列本人导出与打开密码。
+    await expect(page.getByTestId("my-exports-page")).toBeVisible();
+    await expect(page.getByTestId("my-export-exp-mock-1")).toContainText("MOCKPW2345");
+  } else if (spec.pageId === "ADM-SEC-002") {
+    // 第 23 条 23-R2：反查页可见，外壳暗纹叠加层已按 page-views 返回的码挂上。
+    await expect(page.getByTestId("watermark-trace-page")).toBeVisible();
+    await expect(page.getByTestId("admin-watermark").first()).toContainText("MOCKWM23");
   } else if (spec.pageId === "ADM-MER-008") {
     await expect(page.getByTestId("merchant-zone-dividends-page")).toBeVisible();
     await expect(page.getByTestId("merchant-dividend-table")).toBeVisible();

@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { DealerDeliveryPanel } from "../../dealer/DealerDeliveryPanel";
 import { CounterpartyConfirmationPanel, CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
@@ -48,11 +48,14 @@ function cnTime(value?: string | null) {
   return Number.isNaN(d.getTime()) ? value : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
+export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActionResult, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [dealers, setDealers] = React.useState<DealerRow[]>([]);
   const [dealer, setDealer] = React.useState<DealerRow | null>(null);
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
   const [orders, setOrders] = React.useState<OrderRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("dealer", dealers), [dealers, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("dealer_order", orders), [orders, reportViewedObjects]);
   const [overpayments, setOverpayments] = React.useState<OverpaymentRow[]>([]);
   const [order, setOrder] = React.useState<OrderRow | null>(null);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);

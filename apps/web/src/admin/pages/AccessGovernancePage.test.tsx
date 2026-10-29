@@ -472,6 +472,8 @@ describe("M002-F34 最高权限本人自设拒绝后界面不卡死", () => {
     const current = (): EffectivePermissions => ({ grants: GRANTS.filter((code) => !denied.has(code)), denies: [...denied], wildcard: false });
     vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      // 第 23 条 23-R2：外壳每进一页登记一次打开（暗纹），不算本页的写操作。
+      if (url.includes("/api/v1/security/page-views")) return Promise.resolve(raw({ code: "K7MX3PQR" }));
       if ((init?.method ?? "GET").toUpperCase() !== "GET") {
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         writes.push({ url, body });

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.auth;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -277,6 +277,12 @@ class AuthControllerTests {
         @Bean
         AuditEventRepository auditEventRepository() {
             return new InMemoryAuditEventRepository();
+        }
+
+        // 第 23 条 23-R1：登录接口新依赖浏览器设备编号登记；切片不装持久层，桩掉。
+        @Bean
+        com.complex.platform.security.BrowserDeviceRegistry browserDeviceRegistry() {
+            return org.mockito.Mockito.mock(com.complex.platform.security.BrowserDeviceRegistry.class);
         }
     }
 

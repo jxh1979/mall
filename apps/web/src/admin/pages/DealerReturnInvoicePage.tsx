@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
 import { DealerReturnFinancialPanel, DealerInvoiceActions, ReturnEvidenceUpload } from "./DealerReturnFinancialPanel";
@@ -46,12 +46,16 @@ function label(map: Record<string, string>, value?: string | null) {
 }
 
 export function DealerReturnInvoicePage(props: AdminPageProps) {
-  const { api, setGlobalError, setActionResult, effectivePermissions } = props;
+  const { api, setGlobalError, setActionResult, effectivePermissions, reportViewedObjects } = props;
   const [dealers, setDealers] = React.useState<DealerRow[]>([]);
   const [dealer, setDealer] = React.useState<DealerRow | null>(null);
   const [orders, setOrders] = React.useState<OrderRow[]>([]);
   const [order, setOrder] = React.useState<OrderRow | null>(null);
   const [returns, setReturns] = React.useState<ReturnRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("dealer", dealers), [dealers, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("dealer_order", orders), [orders, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("dealer_return", returns), [returns, reportViewedObjects]);
   const [invoices, setInvoices] = React.useState<InvoiceRow[]>([]);
   const [ret, setRet] = React.useState<ReturnRow | null>(null);
   const [lines, setLines] = React.useState<ReturnLineRow[]>([]);

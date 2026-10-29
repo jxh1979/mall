@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.39
+  version: V0.40
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2165,6 +2165,7 @@ paths:
         - auth
       operationId: login
       summary: 员工或商户员工登录
+      description: 第 23 条 23-R1（第十八批裁决 6）：网页登录（请求体不带 device_id）成功时另下发 Set-Cookie complex_device_no——浏览器设备编号（WB＋12 位），HttpOnly、SameSite=Strict、Path=/、Max-Age 400 天；Cookie 里的编号已在后台登记的沿用并续期，没有或未登记的发新号并登记；退出登录不清此 Cookie。请求体带 device_id、或请求头 X-Terminal-Type 报员工工作手机、员工私人手机、平板、一体机（设备绑定型终端）的设备端登录不下发、不登记。导出密码与页面暗纹用这个编号。
       security: []
       x-permission: public
       x-data-scope: none
@@ -21796,7 +21797,7 @@ paths:
         - finance
       operationId: exportArApItems
       summary: 导出应收应付台账快照
-      description: "导出当前权限范围内的应收应付台账 JSON/CSV 快照；该接口只代表平台侧导出留痕，不改变财务数据。资金流水属敏感信息，导出与查看分权：审计角色只直授查看，导出须经临时授权审批（V196）。导出按 finance.ar_ap.export 获批项目范围与商户范围交集获取全部结果，不截断为首个分页；项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。"
+      description: 导出当前权限范围内的应收应付台账（十二列：单据编号至状态，枚举为中文）；不改变财务数据。资金流水属敏感信息，导出与查看分权：审计角色只直授查看，导出须经临时授权审批（V196）。导出按 finance.ar_ap.export 获批项目范围与商户范围交集获取全部结果，不截断为首个分页；项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。导出记录 filters 记 merchant_id 与 project_ids（null＝不按该项收窄）；成功审计 finance_ar_ap.exported 的 metadata 记 format=pdf 与 export_file_id。
       x-auth-context: staff-token
       x-permission: finance.ar_ap.export
       x-data-scope: project-entity
@@ -21807,8 +21808,15 @@ paths:
       x-audit-event-failure: finance_ar_ap.export_failed
       responses:
         "200":
-          $ref: "#/components/responses/Success"
+          description: 带打开密码（AES-256）、不可复制不可编辑、每页平铺暗纹的 PDF 文件（Content-Disposition 附件名带 UTF-8 中文）；打开密码到「我的导出」查看。
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -27098,7 +27106,7 @@ paths:
       x-auth-context: staff-token
       operationId: exportAuditOperationEvents
       summary: 导出操作留痕（敏感）
-      description: 导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。
+      description: 导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。列：发生时间（北京时间）、事件名称、结果、操作人类型、操作人、终端、权限码、业务类型、业务编号、请求编号、商户编号；导出记录 filters 记各筛选参数与 merchant_id。
       parameters:
         - name: business_type
           in: query
@@ -27152,10 +27160,17 @@ paths:
             maximum: 1000
       responses:
         "200":
-          $ref: "#/components/responses/Page"
+          description: 带打开密码（AES-256）、不可复制不可编辑、每页平铺暗纹的 PDF 文件（Content-Disposition 附件名带 UTF-8 中文）；打开密码到「我的导出」查看。
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -29348,10 +29363,7 @@ paths:
         - analytics
       operationId: exportMonthlyReport
       summary: 月度经营报表导出(分权)
-      description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批);
-        数据与月度对比同一份组装(图表=导出,单一口径)。 M737：除持有
-        analytics.report.export（任何有效来源，含临时、单次授权）外，还须能看全平台合计——平台管理员，或经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view；否则
-        403（PLATFORM_SCOPE_REQUIRED），被拒不消耗单次授权。
+      description: BI M2(V196 范式):导出与查看分权——看板 view 可看,导出聚合经营数据须 独立高危权限 analytics.report.export(不直授审计角色,走临时授权审批); 数据与月度对比同一份组装(图表=导出,单一口径)。 M737：除持有 analytics.report.export（任何有效来源，含临时、单次授权）外，还须能看全平台合计——平台管理员，或经勾选了「可以查看全部项目」的角色持有 analytics.dashboard.view；否则 403（PLATFORM_SCOPE_REQUIRED），被拒不消耗单次授权。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。七列同月度对比表格：指标、口径、本月、上月、环比、去年同月、同比；导出记录 filters 记 month 与 scope（全平台）。
       x-permission: analytics.report.export
       x-data-scope: platform
       x-terminal-allowed:
@@ -29369,10 +29381,17 @@ paths:
             maxLength: 7
       responses:
         "200":
-          $ref: "#/components/responses/Success"
+          description: 带打开密码（AES-256）、不可复制不可编辑、每页平铺暗纹的 PDF 文件（Content-Disposition 附件名带 UTF-8 中文）；打开密码到「我的导出」查看。
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
         "400":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -40963,6 +40982,68 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/settlement/invoice-items/export:
+    get:
+      tags:
+        - settlement
+      operationId: exportSettlementInvoiceItems
+      summary: 导出开票清单（带密码 PDF）
+      description: 参数与开票清单列表一致（projectId、periodStart、subjectEntityId、status），范围同列表，分页取全；十四列同开票清单页面（结算月、开票主体、开票项目、税目口径、收入类型、开票金额(元)、增值税率、税额(元)、文化事业建设费(元)、凭证要件、开票状态、发票号、来源单号、购方）。导出须单独授权（PGM:685「导出须单独授权、逐次留痕」）：settlement.invoice.export 为未归类的新功能，按高危处理、逐项单独授予，不预授任何角色（PGM:666、DEC-R3B-2026-08-04-10），经临时或单次授权取得，导一次扣一次。第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。导出记录 filters 记 project_id、period_start、subject_entity_id、status 与 scope（全平台）。
+      x-auth-context: staff-token
+      x-permission: settlement.invoice.export
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: settlement.invoice.exported
+      x-audit-event-failure: settlement.invoice.export_failed
+      parameters:
+        - name: projectId
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 按项目公司过滤。
+        - name: periodStart
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: 结算月起日(YYYY-MM-DD)。
+        - name: subjectEntityId
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 按开票主体过滤。
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 开票状态:pending/issuing/issued/reversed/voided/failed。
+      responses:
+        "200":
+          description: 带打开密码（AES-256）、不可复制不可编辑、每页平铺暗纹的 PDF 文件（Content-Disposition 附件名带 UTF-8 中文）；打开密码到「我的导出」查看。
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -53987,6 +54068,303 @@ paths:
       x-auth-context: open-app-credential
       x-invocation-channel:
         - server-to-server
+  /api/v1/security/page-views:
+    post:
+      tags:
+        - evidence
+      operationId: recordPageView
+      summary: "登记页面打开并发暗纹码"
+      description: "第 23 条 23-R2（PGM:687「后台、商户专区和员工手机端的所有在线页面都带有按同一规则生成的暗纹」「打开敏感页这件事本身也要留痕……这条留痕不提供关闭开关」）：登录即可。后台与商户专区外壳每进一页调一次；按当前账号、本请求的设备编号（浏览器设备编号 Cookie complex_device_no；员工手机经设备凭证验签的取登记设备号，第十八批裁决 6）、接入网络（来源地址）与时间落一条暗纹留痕（watermark_marks，只增不改不删），返回 8 位暗纹码 code 与打开时间 opened_at，页面据此平铺二维码暗纹。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。sensitive=true（敏感页）另写审计 security.sensitive_page.viewed（记 page_id、object_refs、设备编号与接入网络）。不加 @GuardedAction，并在终端总开关豁免前缀内：终端总开关、模块开关关闭或读取失败兜底关闭时照常登记（DEC-R3B-2026-08-04-14 兜底关闭不含留痕的写入）。"
+      x-auth-context: staff-token
+      x-permission: authenticated
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+        - staff_work_phone
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: security.sensitive_page.viewed
+      x-audit-event-failure: security.page_view.failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+                - page_id
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。"
+                page_id:
+                  type: string
+                  maxLength: 64
+                  description: "打开的页面：后台与商户专区为页面编号（如 ADM-OV-001）。"
+                sensitive:
+                  type: boolean
+                  description: "是否敏感页（页面上出现 PGM:686 两类必须强制脱敏的内容）；缺省 false。"
+                object_refs:
+                  type: array
+                  description: "这一次看到的对象（哪个客人、哪个商户、哪些单据）；缺省为空。"
+                  items:
+                    type: object
+                    required:
+                      - object_type
+                      - object_id
+                    properties:
+                      object_type:
+                        type: string
+                        description: "对象类型（如 customer、merchant 或单据类型）。"
+                      object_id:
+                        type: string
+                        description: "对象编号。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/security/watermarks/trace:
+    post:
+      tags:
+        - evidence
+      operationId: traceWatermark
+      summary: "截屏或拍屏照片按暗纹反查"
+      description: "第 23 条 23-R2（PGM:687「暗纹可反向推算：把页面的截屏图片、或对着屏幕拍摄的照片上传到系统，即可算出该页面是由哪个账号、在哪一台设备上、于什么时间打开的」）：multipart 上传 file（PNG 或 JPEG），读不出图片 400 VALIDATION_FAILED。按页面暗纹同一组参数解出暗纹码查留痕，返回 code、account_id、username、device_no、network、kind（page 页面／export 导出文件）、page_id 或 export_file_id、opened_at。权限 security.watermark.trace 为未归类的新功能，按高危处理、逐项单独授予，不预授平台管理员（PGM:666、DEC-R3B-2026-08-04-10），最高权限可用；解不出暗纹、码不存在、或目标账号不在反查人按该权限可触及的范围内，一律 404 WATERMARK_NOT_FOUND。每次反查都写审计：查到 security.watermark.traced，查不到或范围外 security.watermark.trace_failed。拍屏照片识别率以真机实拍样张验收为准。"
+      x-auth-context: staff-token
+      x-permission: security.watermark.trace
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: security.watermark.traced
+      x-audit-event-failure: security.watermark.trace_failed
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: "页面截屏或对着屏幕拍的照片（PNG、JPEG）。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/security/my-exports:
+    get:
+      tags:
+        - evidence
+      operationId: listMyExports
+      summary: 我的导出（本人导出文件与打开密码）
+      description: 第 23 条 23-R3（PGM:687「导出人可以在专门的地方查到自己导出文件的密码」）：登录即可，只列本人导出（导出人＝当前账号），按导出时间倒序分页。每行返回 id、export_type（analytics_monthly_report 月度经营对比／finance_ar_ap_ledger 应收应付台账／audit_operation_events 操作留痕／settlement_invoice_items 开票清单）、filters（请求筛选参数与取数范围）、row_count、exported_at、device_no、network、editable，以及按行内要素重算的打开密码 password（密码不落库）。系统不代发密码给接收方。23-R4：每行另带本人对这份导出最近一次可编辑版申请 editable_request（review_id、review_status、issued＝这次批准是否已发放；没有申请为 null）。
+      x-auth-context: staff-token
+      x-permission: authenticated
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: security.my_exports.viewed
+      x-audit-event-failure: security.my_exports.view_failed
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: 页码，默认 1。
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: 每页条数，默认 20、上限 100。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "401":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/security/export-files/lookup:
+    post:
+      tags:
+        - evidence
+      operationId: lookupExportPassword
+      summary: 导出密码反查
+      description: 第 23 条 23-R3（PGM:687「可由系统反向推算出对应的导出人、导出时间与导出设备」）：请求体 password（放请求体、不放网址；不区分大小写）。按密码摘要查导出记录，返回 export_file_id、exporter_id、username、exported_at、device_no、network、export_type、filters、row_count。权限 security.watermark.trace（与暗纹反查同一权限：未归类的新功能按高危处理、逐项单独授予，不预授平台管理员，最高权限可用；PGM:666）；查不到、或导出人不在反查人按该权限可触及的范围内，一律 404 EXPORT_PASSWORD_NOT_FOUND；每次反查都写审计：查到 security.export_password.traced，查不到或范围外 security.export_password.trace_failed（不记输入的密码）。不加 @GuardedAction。
+      x-auth-context: staff-token
+      x-permission: security.watermark.trace
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: security.export_password.traced
+      x-audit-event-failure: security.export_password.trace_failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  maxLength: 64
+                  description: 导出文件的打开密码（10 位）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/security/export-files/{id}/editable-requests:
+    post:
+      tags:
+        - evidence
+      operationId: requestEditableExportCopy
+      summary: 申请导出文件可编辑版（最高权限审批）
+      description: "第 23 条 23-R4（PGM:687「确需可编辑版本用于二次加工的，须另行申请、说明用途与接收方，经最高权限审批后发放，可编辑版同样带密码与暗纹并逐次留痕」）：登录即可，只能为本人导出的、非可编辑版的文件申请——不是本人导出的或不存在 403 EXPORT_NOT_OWNED，已是可编辑版 409 EXPORT_ALREADY_EDITABLE，此闸在幂等之前；请求体 purpose（用途）、recipient（接收方）必填，缺 400 VALIDATION_FAILED。申请记录即主管复核单（不另建申请表）：动作 security.export.editable_copy、对象 export_file＝导出编号、恒阻断、最高权限审批（top_authority），复核单说明写用途、接收方、导出类型与筛选条件，审批页原样显示；返回复核单（review_id、review_status＝pending_review、approval_level＝top_authority 等）。最高权限经 POST /api/v1/platform/supervisor-review/{review_id}/approve 批准后，申请人到 GET /api/v1/security/export-files/{id}/editable-copy 下载；「我的导出」每行带本人最近一次申请 editable_request（review_id、review_status、issued）。同一幂等键重放只生成一张复核单。成功写审计 security.export.editable_requested。不加 @GuardedAction。"
+      x-auth-context: staff-token
+      x-permission: authenticated
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: true
+      x-audit-event-success: security.export.editable_requested
+      x-audit-event-failure: security.export.editable_request_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 原导出文件编号（「我的导出」里的 id）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotency_key
+                - purpose
+                - recipient
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                purpose:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+                  description: 用途（可编辑版用来做什么二次加工）。
+                recipient:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                  description: 接收方。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/security/export-files/{id}/editable-copy:
+    get:
+      tags:
+        - evidence
+      operationId: downloadEditableExportCopy
+      summary: 下载导出文件可编辑版（一次批准发放一次）
+      description: "第 23 条 23-R4（PGM:687「经最高权限审批后发放，可编辑版同样带密码与暗纹并逐次留痕」）：登录即可，只能下载本人导出的文件的可编辑版（不是本人导出的或不存在 403 EXPORT_NOT_OWNED）。review_id 须是本人为这份导出申请、已经最高权限批准的复核单，否则 409 EDITABLE_EXPORT_NOT_APPROVED；一次批准发放一次（M007-A-01「一次批准只放行一次」），已发放过 409 EDITABLE_EXPORT_ALREADY_ISSUED，再要须另行申请。按原导出的导出类型与筛选条件、以申请人当前的查看范围重取数据（审批即授权，不再要导出权限：月度对比按 analytics.dashboard.view＋全平台口径，应收应付台账按 finance.ar_ap.view 的范围，操作留痕按 audit.operation_log.view，开票清单按 settlement.invoice.view），生成新的带打开密码、带暗纹的 PDF，只放开复制与修改（不可编辑版的其余保护照旧）；落新的导出记录 export_files（editable＝true、source_export_id＝原导出、review_id＝复核单，导出人、时间、设备、网络照常记），打开密码到「我的导出」查看。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。成功写审计 security.export.editable_downloaded。不加 @GuardedAction。"
+      x-auth-context: staff-token
+      x-permission: authenticated
+      x-data-scope: self
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+      x-idempotency-required: false
+      x-audit-event-success: security.export.editable_downloaded
+      x-audit-event-failure: security.export.editable_download_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 原导出文件编号（「我的导出」里的 id）。
+        - name: review_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 已经最高权限批准的可编辑版申请复核单号。
+      responses:
+        "200":
+          description: 带打开密码（AES-256）、每页平铺暗纹、可复制可编辑的 PDF 文件（Content-Disposition 附件名带 UTF-8 中文）；打开密码到「我的导出」查看。
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
 components:
   securitySchemes:
     BearerAuth:

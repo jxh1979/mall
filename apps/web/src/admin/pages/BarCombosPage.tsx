@@ -37,8 +37,10 @@ const EMPTY_COMBO_FORM: ComboForm = { barId: "", comboName: "", priceYuan: "", c
  *   后台从既有 SKU（bar_products）挑若干件组成套餐，定套餐整体售价与内部结算价。供平板图形化点单直接下套餐。
  * 查看需 bar.combo.view；维护需 bar.combo.manage（含内部结算价，敏感）。
  */
-export function BarCombosPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function BarCombosPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<BarComboRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("bar_combo", rows), [rows, reportViewedObjects]);
   const [products, setProducts] = React.useState<BarProductRow[]>([]);
   const [form, setForm] = React.useState<ComboForm>(EMPTY_COMBO_FORM);
   const [formError, setFormError] = React.useState<string | null>(null);

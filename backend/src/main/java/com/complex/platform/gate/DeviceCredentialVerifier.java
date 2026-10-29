@@ -65,7 +65,7 @@ public class DeviceCredentialVerifier {
 
     // U01-001/U07-003：私人手机也是设备绑定型——身份由员工私人手机凭证（staff_device_credentials，指纹＝X-Device-Id）派生，不自报。
     static final String STAFF_PRIVATE_PHONE = "staff_private_phone";
-    static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", STAFF_PRIVATE_PHONE);
+    public static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", STAFF_PRIVATE_PHONE);
     private static final String STAFF_WORK_PHONE = "staff_work_phone";
     /** #553：登录请求此时还没有会话 Cookie，web/经销商门户不能因缺 Cookie 拒登录。 */
     private static final String WEB_LOGIN_PATH = "/api/v1/auth/login";

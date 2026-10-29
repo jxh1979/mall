@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -60,6 +60,13 @@ const CATALOG: Array<{ key: string; name: string; sourcePageId: string; sourceLa
 const VALUE_TYPE_LABELS: Record<string, string> = { additive: "可加（区间求和）", ratio: "比率（分子/分母）", balance: "余额（区间末值）" };
 const PAGE_SIZE = 20;
 
+// 第 23 条复核：明细里出现 PGM:686 两类内容的指标（新增会员的脱敏手机号、团体预约的客户姓名），这一次看到的行按对象类型报给外壳（PGM:687）。
+const VIEWED_OBJECT_TYPES: Record<string, string> = {
+  "member.new": "customer",
+  "amusement.group_booking_count": "amusement_group_booking",
+  "amusement.group_reserved_capacity": "amusement_group_booking",
+};
+
 function formatNumber(value: number | string | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const parsed = Number(value);
@@ -85,7 +92,7 @@ function formatCell(value: unknown): string {
  * 比率类分「分子明细/分母明细」两页签。URL ?focus=metric|from|to 全量承载状态（链接可发同事）。
  * CSV 导出（查看/导出分权范式）列为后续项，本期只做查看。
  */
-export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectId }: AdminPageProps) {
+export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectId, reportViewedObjects }: AdminPageProps) {
   const initial = parseMetricDetailFocus(focusObjectId);
   const [metric, setMetric] = React.useState(initial?.metric ?? "");
   const [dateFrom, setDateFrom] = React.useState(initial?.from ?? "");
@@ -121,6 +128,11 @@ export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectI
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useEffect(() => {
+    const objectType = data ? VIEWED_OBJECT_TYPES[data.metricKey] : undefined;
+    if (data && objectType) reportViewedObjects?.(objectType, data.rows.map((row) => ({ id: row.id == null ? null : String(row.id) })));
+  }, [data, reportViewedObjects]);
 
   // 已在本页时再次从其它页入口进入（focus 变化）：按新 metric|from|to 重置视图。
   React.useEffect(() => {

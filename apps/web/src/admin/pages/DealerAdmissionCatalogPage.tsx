@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -43,7 +43,7 @@ function cnDate(value?: string | null) {
   return m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日` : value;
 }
 
-export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActionResult, effectivePermissions }: AdminPageProps) {
+export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActionResult, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const canUpload = useCan(effectivePermissions, ["dealer.manage", "evidence.attachment.create"]);
   const canReadEvidence = useCan(effectivePermissions, ["evidence.timeline.view"]);
   const [dealers, setDealers] = React.useState<DealerRow[]>([]);
@@ -51,6 +51,9 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
   const [contractId, setContractId] = React.useState("");
   const [catalogs, setCatalogs] = React.useState<CatalogRow[]>([]);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("dealer", dealers), [dealers, reportViewedObjects]);
+  React.useEffect(() => reportViewedObjects?.("dealer_price_catalog", catalogs), [catalogs, reportViewedObjects]);
   const [lines, setLines] = React.useState<{ catalogId: string; rows: CatalogLine[] } | null>(null);
   const [inquiries, setInquiries] = React.useState<InquiryRow[]>([]);
   const [stock, setStock] = React.useState<StockRow[]>([]);

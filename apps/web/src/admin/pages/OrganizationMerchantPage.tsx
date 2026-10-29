@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -95,7 +95,7 @@ function kpiFocusTitle(focus: KpiFocus): string {
   return focus.status ? `本页商户档案（${formatOrganizationStatus(focus.status)}）` : "商户档案";
 }
 
-export function OrganizationMerchantPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
+export function OrganizationMerchantPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId, reportViewedObjects }: AdminPageProps) {
   // M012-006：不预填验收默认值；商户名/联系人/电话/合作形式均由用户填写或选择。
   const [merchantName, setMerchantName] = React.useState("");
   // 业态必填 → 不预选，逼招商自己选；选错＝通票分账份额拆给错的业态。
@@ -180,6 +180,8 @@ export function OrganizationMerchantPage({ api, user, setActionResult, setGlobal
     500, { onError: setGlobalError, fallbackMessage: TEXT.loadFailed });
   const entities = entityRows.rows;
   const merchants = merchantRows.rows;
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("merchant", merchants), [merchants, reportViewedObjects]);
   const projects = projectRows.rows;
   const pickProject = projects.some((row) => row.id !== user?.organizationId);
   // FS-024：主管公司候选＝在用的城市项目公司／域主管公司；列表与详情按 id 回显主体名称。

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.analytics;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -444,6 +444,11 @@ class AnalyticsControllerTests {
         @Bean
         AuthService authService() {
             return Mockito.mock(AuthService.class);
+        }
+
+        @Bean
+        com.complex.platform.security.ExportFileService exportFileService() {
+            return Mockito.mock(com.complex.platform.security.ExportFileService.class);
         }
     }
 }

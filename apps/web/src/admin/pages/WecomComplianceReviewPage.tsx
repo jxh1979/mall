@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -49,8 +49,10 @@ function asRows<T>(value: unknown): T[] {
  * 永久保存只读；手动清理逐条填理由，先预览，再由最高权限本人使用当次 U 盘签名执行。
  * 平台合规口径 fail-closed：后端已拒绝 merchant 越权调阅；某读接口权限不足时 allSettled 局部降级。
  */
-export function WecomComplianceReviewPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function WecomComplianceReviewPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [data, setData] = React.useState<WecomData | null>(null);
+  // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
+  React.useEffect(() => reportViewedObjects?.("wecom_risk_hit", (data?.riskHits ?? []).map((hit) => ({ id: hit.hitId }))), [data, reportViewedObjects]);
   const [selectedHitId, setSelectedHitId] = React.useState("");
   const [reviewForm, setReviewForm] = React.useState({ status: "reviewing", reviewNote: "" });
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);

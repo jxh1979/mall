@@ -1,6 +1,7 @@
 package com.complex.platform.auth;
 
 import com.complex.platform.common.api.ApiResponse;
+import com.complex.platform.security.BrowserDeviceRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Profile;
@@ -16,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final BrowserDeviceRegistry browserDevices;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, BrowserDeviceRegistry browserDevices) {
         this.authService = authService;
+        this.browserDevices = browserDevices;
     }
 
     @PostMapping("/login")
@@ -30,6 +33,10 @@ public class AuthController {
         // 后台 Web：令牌种入 HttpOnly Cookie（JS 读不到）+ 下发 CSRF 令牌。设备端仍读响应体令牌，行为不变。
         AuthCookies.writeSession(httpRequest, httpResponse,
                 result.accessToken(), result.refreshToken(), AuthCookies.newCsrfToken());
+        // 第 23 条 23-R1（第十八批裁决 6）：网页登录发浏览器设备编号并登记；带 device_id 或报设备绑定型终端的设备端不发（见 browserLogin）。
+        if (BrowserDeviceRegistry.browserLogin(httpRequest, request.deviceId())) {
+            browserDevices.ensure(httpRequest, httpResponse, result.user().id());
+        }
         return ApiResponse.ok(result);
     }
 

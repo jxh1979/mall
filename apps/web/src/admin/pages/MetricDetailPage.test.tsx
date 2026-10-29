@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MetricDetailPage } from "./MetricDetailPage";
+import { SENSITIVE_PAGE_IDS } from "../adminRoutes";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, MetricDetailPayload } from "../types";
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -123,5 +124,40 @@ describe("MetricDetailPage 统一明细页（指标登记簿）", () => {
     renderPage(api, undefined);
     expect(screen.getByTestId("metric-detail-empty")).toBeTruthy();
     expect((api.get as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
+  });
+});
+
+// 第 23 条复核（PGM:687「凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页」「打开敏感页这件事本身也要留痕，记下……这一次看到的是
+// 哪些对象（哪个客人、哪个商户、哪些单据）」）：指标明细列出新增会员的脱敏手机号、团体预约的客户姓名，是敏感页，载入后报这一次看到的对象。
+describe("MetricDetailPage 敏感页", () => {
+  function renderSensitive(payload: MetricDetailPayload, focus: string) {
+    const reportViewedObjects = vi.fn();
+    render(<MetricDetailPage api={makeApi(() => payload)} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} navigateTo={vi.fn()} focusObjectId={focus}
+      reportViewedObjects={reportViewedObjects} />);
+    return reportViewedObjects;
+  }
+
+  it("新增会员明细（脱敏手机号）按客人报这一次看到的对象；页面列入敏感页清单", async () => {
+    const report = renderSensitive({
+      ...TICKET_PAYLOAD, metricKey: "member.new", name: "新增会员数", unit: "人",
+      columns: [{ key: "maskedPhone", label: "脱敏手机号" }, { key: "id", label: "客人编号" }],
+      rows: [{ id: "cus_1", maskedPhone: "138****0001" }, { id: "cus_2", maskedPhone: "139****0002" }], totalRows: 2, traceLinkPageId: "ADM-CUS-001",
+    }, "member.new||");
+
+    await waitFor(() => expect(report).toHaveBeenCalledWith("customer", [{ id: "cus_1" }, { id: "cus_2" }]));
+    expect(SENSITIVE_PAGE_IDS.has("ADM-ANA-012")).toBe(true);
+  });
+
+  it("团体预约明细（客户姓名）按团体预约报；不含两类内容的指标不报", async () => {
+    const report = renderSensitive({
+      ...TICKET_PAYLOAD, metricKey: "amusement.group_booking_count", name: "团体预约数", unit: "笔",
+      columns: [{ key: "customerName", label: "客户" }], rows: [{ id: "agb_1", customerName: "张三" }], totalRows: 1, traceLinkPageId: "ADM-AMU-002",
+    }, "amusement.group_booking_count||");
+    await waitFor(() => expect(report).toHaveBeenCalledWith("amusement_group_booking", [{ id: "agb_1" }]));
+
+    const ticket = renderSensitive(TICKET_PAYLOAD, "revenue.ticket|2026-07-17|2026-07-17");
+    await waitFor(() => expect(screen.getAllByTestId("metric-detail-row-to-1").length).toBeGreaterThan(0));
+    expect(ticket).not.toHaveBeenCalled();
   });
 });

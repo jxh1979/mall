@@ -367,6 +367,33 @@ describe("AdminApi 同一次操作的请求编号", () => {
     off();
   });
 
+  // 第 23 条复核（M725-F03「同一次操作重复提交时，返回第一次的结果并提示已完成」）：外壳自发的打开留痕 page-views 不是用户的
+  // 下一次提交，不撤下「已完成」提示、不进操作编号登记，照常每次带新的请求编号。
+  it("页面打开留痕 page-views 不撤下「已完成」提示，每次带新的请求编号", async () => {
+    const notices: Array<string | null> = [];
+    const off = onReplayedNotice((notice) => notices.push(notice));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(replayedResponse({ id: "sb_1", status: "transferred" }))
+      .mockResolvedValueOnce(jsonResponse({ code: "ABCDEFGH" }))
+      .mockResolvedValueOnce(jsonResponse({ code: "ABCDEFGJ" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = new AdminApi();
+
+    await api.post("/api/v1/inventory/saved-bottles/sb_1/transfer", { targetPhone: "13800000000", idempotencyKey: "transfer-sb_1-13800000000" });
+    expect(notices[notices.length - 1]).toBe(REPLAYED_NOTICE);
+    const view = { pageId: "ADM-BAR-003", sensitive: true, objectRefs: [{ objectType: "saved_bottle", objectId: "sb_1" }] };
+    await api.post("/api/v1/security/page-views", view);
+    await api.post("/api/v1/security/page-views", view);
+
+    expect(notices[notices.length - 1]).toBe(REPLAYED_NOTICE);
+    expect(JSON.parse(String((fetchMock.mock.calls[1]![1] as RequestInit).body))).toMatchObject({
+      page_id: "ADM-BAR-003", sensitive: true, object_refs: [{ object_type: "saved_bottle", object_id: "sb_1" }],
+    });
+    expect(sentKey(fetchMock, 1)).toMatch(/^admin-web-/);
+    expect(sentKey(fetchMock, 2)).not.toBe(sentKey(fetchMock, 1));
+    off();
+  });
+
   // PUT 改写的是路径所指的那个对象。关开关没拿到结果（其实已关），操作员重新读数后打开、再关，
   // 第三次正文与第一次逐字相同，但已不是同一个操作：不能沿用第一次的编号被当成重放（服务端不执行，开关仍开着）。
   it("同一对象的 PUT 改写成功后，之前对它没拿到结果的登记作废：关（丢响应）→ 开 → 再关，第三次换新编号、真正执行", async () => {
