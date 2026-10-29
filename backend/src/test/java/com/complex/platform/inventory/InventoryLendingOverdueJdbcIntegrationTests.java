@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.evidence.EvidenceEventService;
+import com.complex.platform.facility.FacilityWorkOrderService;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -70,6 +71,9 @@ class InventoryLendingOverdueJdbcIntegrationTests {
 
     @Autowired
     private EvidenceEventService evidence;
+
+    @Autowired
+    private FacilityWorkOrderService workOrderService;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "b24od_prj_" + suffix;
@@ -184,7 +188,9 @@ class InventoryLendingOverdueJdbcIntegrationTests {
         assertThat(closed.get("resolution")).isNotNull();
     }
 
-    // ⑤「按与其他工单相同的超时升级路径继续催办」：借用逾期工单与其他工单同表同策略，超过处理时限即进物业工单超时清单。
+    // ⑤「按与其他工单相同的超时升级路径继续催办」：借用逾期工单与其他工单同表同策略，超过处理时限即进物业工单超时清单；
+    // 第 77 条 77-R1：同一升级作业通知该单项目的物业主管（不带商户归属、持 facility.work_order.manage、有员工档案）一条系统通知，
+    // 借出方员工与主管是商户账号（PGM:528④），升级不通知，借出方主管只有建单时那一条。修复前物业主管收不到（断言即红）。
     @Test
     void overdueWorkOrderJoinsTheSameOvertimeListAsOtherWorkOrders() throws Exception {
         lentOut(codes.get(0), codes.get(1));
@@ -194,6 +200,16 @@ class InventoryLendingOverdueJdbcIntegrationTests {
 
         mockMvc.perform(get("/api/v1/facility/work-orders/overdue").with(admin)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[*].id").value(hasItem(wo)));
+
+        account("prop_boss", "staff", project, null, "b24od_role_" + suffix);
+        jdbc.update("INSERT INTO staff_profiles(id,project_id,merchant_id,user_id,name,registration_status,status,created_at,updated_at) VALUES(?,?,NULL,?,'物业主管','approved','active',now(),now())",
+                "b24od_sp_prop_boss_" + suffix, project, user("prop_boss"));
+        workOrderService.escalateOverdue(Instant.now());
+
+        assertThat(notices("prop_boss")).singleElement().satisfies(n -> assertThat(n)
+                .containsEntry("notice_type", "system_notice").containsEntry("title", "工单超时：" + workOrders().getFirst().get("code")));
+        assertThat(notices("lender")).isEmpty();
+        assertThat(notices("lender_boss")).hasSize(1);
     }
 
     // ⑥ 借用逾期是系统专用来源：后台人工建单带 source=lending_overdue 400 VALIDATION_FAILED，不落工单。

@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -430,6 +430,38 @@ class TerminalDeviceScopeJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM audit_events WHERE event_name = 'terminal.device.scrapped' "
                         + "AND event_result = 'success' AND idempotency_key = ?", Integer.class, key("rc-scrap"))).isEqualTo(1);
+    }
+
+    // 第 89 条 89-R2（第十八批裁决 20「回待领用」：后台挂失行给「找回」，原因必填，挂失→待领用，之后照常领用；ENUM:241「待领用」）：
+    // 项目员工把本项目在用的平板挂失，找回后回待领用（returned），再走领用绑定回到在用。修复前找回落 found（returned 的断言即红）。
+    @Test
+    void tabletLostFoundThenRebind() throws Exception {
+        String id = device("lf", "bound", null, spaceA, holderA);
+        send(projectStaff, "POST", DEVICES + "/" + id + "/lost", """
+                {"idempotency_key": "%s", "reason": "场内遗失"}
+                """.formatted(key("lf-lost")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("lost"));
+
+        send(projectStaff, "POST", DEVICES + "/" + id + "/found", """
+                {"idempotency_key": "%s", "reason": "已在吧台找回"}
+                """.formatted(key("lf-found")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("returned"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM terminal_device_status_events WHERE device_id = ? "
+                        + "AND event_type = 'terminal.device.found' AND status = 'returned'", Integer.class, id))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = 'terminal.device.found' "
+                        + "AND event_result = 'success' AND idempotency_key = ?", Integer.class, key("lf-found"))).isEqualTo(1);
+
+        send(projectStaff, "POST", DEVICES + "/bind", """
+                {"idempotency_key": "%s", "device_id": "%s", "terminal_type": "tablet", "binding_scope": "space",
+                 "bound_space_id": "%s"}
+                """.formatted(key("lf-bind"), deviceId("lf"), spaceA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("bound"));
     }
 
     // ── 带商户归属的员工：范围内成功的代表用例 ─────────────────────────────────────────

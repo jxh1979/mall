@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import android.app.Activity
 import android.content.Intent
@@ -46,6 +46,8 @@ import kotlinx.serialization.json.JsonPrimitive
  */
 // TK-06：入场人脸拍照的回调请求码（与 ZXing 扫码 0xc0de 区分）。
 private const val FACE_SHOT_REQUEST = 0x7E06
+// 第 84 条 84-R2：交接补录选证据的回调请求码。
+private const val TRACE_EVIDENCE_REQUEST = 0x7E84
 
 class MainActivity : Activity() {
 
@@ -76,12 +78,13 @@ class MainActivity : Activity() {
   private var scanResult: ((String) -> Unit)? = null
   private var nfcResult: ((String) -> Unit)? = null
 
-  private fun launchScan(target: EditText) {
+  /** 84-R2：提示语可换（交接页对准酒水或物品上的平台二维码）；给了 onResult 就把扫到的码交给它，不回填输入框。 */
+  private fun launchScan(target: EditText?, prompt: String = "对准客人验票二维码", onResult: ((String) -> Unit)? = null) {
     scanTarget = target
-    scanResult = null
+    scanResult = onResult
     IntentIntegrator(this)
       .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
-      .setPrompt("对准客人验票二维码")
+      .setPrompt(prompt)
       .setBeepEnabled(true)
       .setOrientationLocked(false)
       .initiateScan()
@@ -107,6 +110,18 @@ class MainActivity : Activity() {
       faceShotResult = null
       @Suppress("DEPRECATION")
       callback?.invoke(if (resultCode == RESULT_OK) data?.extras?.get("data") as? Bitmap else null)
+      return
+    }
+    if (requestCode == TRACE_EVIDENCE_REQUEST) {
+      val callback = evidencePickResult
+      evidencePickResult = null
+      val clip = data?.clipData
+      val uris = when {
+        resultCode != RESULT_OK || data == null -> emptyList()
+        clip != null -> (0 until clip.itemCount).map { clip.getItemAt(it).uri }
+        else -> listOfNotNull(data.data)
+      }
+      callback?.invoke(uris)
       return
     }
     val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
@@ -345,6 +360,7 @@ class MainActivity : Activity() {
     val children = mutableListOf<View>(
       info,
       button("门票/权益核销") { showTicketVerify() },
+      button("酒水与物品交接扫码") { showTraceHandover() },
       button("游乐核销") { showAmusementVerify() },
       button("酒吧点酒下单 / 支付") { showBarOrder() },
       button("平板点单 POS（图形）") { showPosEntry() },
@@ -729,6 +745,188 @@ class MainActivity : Activity() {
     api.accessToken = null
     showLogin()
   }
+
+  // ---------------------------------------------------------------------------
+  // 第十八批 I 段第 84 条 84-R2 酒水与物品交接扫码（BSM:1891 工作手机「库房和酒水交接扫码」；PGM:633「记录出库、后厨接收、服务员取走和送达」；
+  // BSM:1201「每一步都必须扫码」「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）并经主管复核后方生效」）。
+  // 扫溯源码查进行中的交接单：没有就由库管建单并确认出库；有就只给下一个人工段一个确认按钮。每次扫码只确认一段——确认成功回到扫码页，
+  // 下一段须重新扫码才出现按钮。机器人配送段被动留痕、不在手机上扫。
+  // ---------------------------------------------------------------------------
+
+  /** 幂等键按「交接单＋段」：失败重试沿用同一个键，成功后才换，网络重试不会变成重复扫码。 */
+  private val traceKeys = java.util.concurrent.ConcurrentHashMap<String, String>()
+  private var evidencePickResult: ((List<android.net.Uri>) -> Unit)? = null
+
+  private fun traceKey(scope: String): String = traceKeys.getOrPut(scope) { java.util.UUID.randomUUID().toString() }
+
+  private fun showTraceHandover(message: String = "扫酒水或物品上的平台二维码，逐段确认交接", chain: TraceHandoverChain? = null) {
+    val status = statusText(message)
+    val chainView = statusText("").apply { visibility = View.GONE }
+    val actions = rowsContainer()
+    val scan = button("扫描溯源码") {
+      launchScan(null, "对准酒水或物品上的平台二维码") { code -> lookupTrace(code.trim(), status, chainView, actions) }
+    }
+    setContentView(screen(title = "酒水与物品交接扫码", children = listOf(status, scan, chainView, actions, backButton())))
+    if (chain != null) {
+      renderTrace(chain.handover.traceCode ?: "", chain, status, chainView, actions)
+      status.text = message + "\n" + status.text
+    }
+  }
+
+  private fun lookupTrace(code: String, status: TextView, chainView: TextView, actions: LinearLayout) {
+    actions.removeAllViews()
+    chainView.visibility = View.GONE
+    if (code.isEmpty()) { status.text = "未读取到二维码，请重扫"; return }
+    status.text = "正在查询交接单…"
+    runBackground(
+      action = { activeChain(api.listTraceHandovers(code))?.let { api.getTraceHandover(it.id) } },
+      onSuccess = { chain -> renderTrace(code, chain, status, chainView, actions) },
+      onError = { status.text = "查询失败：${friendly(it)}" },
+    )
+  }
+
+  private fun renderTrace(code: String, chain: TraceHandoverChain?, status: TextView, chainView: TextView, actions: LinearLayout) {
+    actions.removeAllViews()
+    if (chain == null) {
+      chainView.visibility = View.GONE
+      status.text = "溯源码 $code 没有进行中的交接单"
+      actions.addView(button("库管出库：建交接单并确认出库") {
+        val device = api.deviceId
+        if (device == null) { status.text = "请先绑定设备"; return@button }
+        val createScope = "create:$code"
+        val createKey = traceKey(createScope)
+        status.text = "正在建交接单并确认出库…"
+        runBackground(
+          action = {
+            val id = api.createTraceHandover(TraceHandoverCreateRequest(createKey, code, device)).handover.id
+            api.scanTraceSegment(id, TraceScanSegmentRequest(traceKey("$id:out_verify"), "out_verify"))
+          },
+          onSuccess = { done ->
+            traceKeys.remove(createScope)
+            traceKeys.remove("${done.handover.id}:out_verify")
+            showTraceHandover("已确认：库管出库。下一段请重新扫码")
+          },
+          onError = { status.text = "出库确认失败：${friendly(it)}" },
+        )
+      })
+      return
+    }
+    val handover = chain.handover
+    chainView.visibility = View.VISIBLE
+    chainView.text = buildString {
+      append("溯源码：").append(handover.traceCode ?: code)
+      append("\n整链状态：").append(handover.overallStatus?.let { TRACE_OVERALL_STATUS[it] } ?: "—")
+      TRACE_STAFF_SEGMENTS.forEach { (segment, name) ->
+        val step = chain.steps.firstOrNull { it.segment == segment }
+        append("\n\n").append(name).append("：").append(step?.stepStatus?.let { TRACE_STEP_STATUS[it] } ?: "—")
+        step?.operatorUserId?.let { append("　扫码人 ").append(it) }
+        step?.scanAt?.let { append("　").append(traceTime(it)) }
+        chain.backfills.filter { it.targetPart == segment }.forEach { row ->
+          append("\n　人工补录·").append(row.status?.let { TRACE_BACKFILL_STATUS[it] } ?: "—")
+          row.occurredAt?.let { append("　原时点 ").append(traceTime(it)) }
+          row.responsibleStaffId?.let { append("　责任人 ").append(it) }
+        }
+      }
+    }
+    val next = nextStaffSegment(chain)
+    status.text = if (next == null) "四个人工段都已完成" else "本次扫码可确认：${TRACE_STAFF_SEGMENTS[next]}"
+    if (next != null) {
+      val name = TRACE_STAFF_SEGMENTS.getValue(next)
+      actions.addView(button("确认：$name") {
+        val scope = "${handover.id}:$next"
+        val key = traceKey(scope)
+        status.text = "正在确认：$name…"
+        runBackground(
+          action = { api.scanTraceSegment(handover.id, TraceScanSegmentRequest(key, next)) },
+          onSuccess = { traceKeys.remove(scope); showTraceHandover("已确认：$name。下一段请重新扫码") },
+          onError = { status.text = "确认失败：${friendly(it)}" },
+        )
+      })
+    }
+    TRACE_STAFF_SEGMENTS.forEach { (segment, name) ->
+      if (canBackfill(chain, segment)) actions.addView(button("人工补录：$name") { showTraceBackfill(chain, segment) })
+    }
+  }
+
+  /** 缺段人工补录：原时点、原因、责任人账号（默认本人）、证据（照片、录音、录像，至少一份）；提交后进主管复核，通过才算该段完成。 */
+  private fun showTraceBackfill(chain: TraceHandoverChain, segment: String) {
+    val id = chain.handover.id
+    val name = TRACE_STAFF_SEGMENTS.getValue(segment)
+    val status = statusText("补录「$name」：须附照片、录音或录像证据，经主管复核通过后才算该段完成")
+    val date = editText("原时点日期（如 2026-10-29）").apply { setText(java.time.LocalDate.now().toString()) }
+    val time = editText("原时点时刻（如 20:30）")
+    val reason = editText("补录原因")
+    val responsible = editText("责任人账号").apply { setText(store.session?.staffId ?: "") }
+    val proofs = mutableListOf<String>()
+    val proofText = statusText("尚未上传证据")
+    val pick = button("选择证据（照片、录音、录像）") {
+      evidencePickResult = { uris ->
+        if (uris.isEmpty()) {
+          status.text = "未选择证据"
+        } else {
+          val start = proofs.size
+          status.text = "正在上传证据…"
+          runBackground(
+            action = {
+              uris.mapIndexed { index, uri ->
+                val ext = evidenceExtension(uri)
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("读不到所选文件")
+                api.uploadEvidence("evidence_${start + index + 1}" + (if (ext.isEmpty()) "" else ".$ext"), bytes).id
+              }
+            },
+            onSuccess = { ids -> proofs += ids; proofText.text = "已上传证据 ${proofs.size} 份"; status.text = "证据已上传" },
+            onError = { status.text = "证据上传失败：${friendly(it)}" },
+          )
+        }
+      }
+      startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).apply {
+        type = "*/*"
+        addCategory(Intent.CATEGORY_OPENABLE)
+        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "audio/*", "video/*"))
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+      }, TRACE_EVIDENCE_REQUEST)
+    }
+    val submit = button("提交补录（进主管复核）") {
+      val occurred = runCatching {
+        java.time.LocalDateTime.parse("${date.text.toString().trim()}T${time.text.toString().trim()}")
+          .atZone(java.time.ZoneId.systemDefault()).toInstant().toString()
+      }.getOrNull()
+      val why = reason.text.toString().trim()
+      val who = responsible.text.toString().trim()
+      if (occurred == null) { status.text = "请填写原时点日期和时刻（如 2026-10-29 和 20:30）"; return@button }
+      if (why.isEmpty()) { status.text = "请填写补录原因"; return@button }
+      if (who.isEmpty()) { status.text = "请填写责任人账号"; return@button }
+      if (proofs.isEmpty()) { status.text = "须先上传至少一份证据（照片、录音或录像）"; return@button }
+      val scope = "$id:$segment:backfill"
+      val key = traceKey(scope)
+      status.text = "正在提交补录…"
+      runBackground(
+        action = {
+          api.submitTraceStepBackfill(id, segment, TraceStepBackfillRequest(key, occurred, why, who, proofs.toList()))
+          api.getTraceHandover(id)
+        },
+        onSuccess = { refreshed -> traceKeys.remove(scope); showTraceHandover("已提交「$name」补录，待主管复核", refreshed) },
+        onError = { status.text = "补录提交失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(title = "交接人工补录", children = listOf(status, date, time, reason, responsible, pick, proofText, submit,
+      button("返回交接扫码") { showTraceHandover() })))
+  }
+
+  /** 证据扩展名：取所选文件显示名的扩展名，没有时按内容类型反查（服务端按扩展名判定照片、录音、录像）；只留 ASCII 小写字母数字，签名规范串里的文件名与服务端一致。 */
+  private fun evidenceExtension(uri: android.net.Uri): String {
+    val name = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+      ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+    val ext = name?.substringAfterLast('.', "")?.lowercase()?.takeIf { it.isNotBlank() }
+      ?: contentResolver.getType(uri)?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+      ?: ""
+    return ext.takeIf { value -> value.all { it in 'a'..'z' || it in '0'..'9' } } ?: ""
+  }
+
+  private fun traceTime(iso: String): String = runCatching {
+    java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
+      .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+  }.getOrDefault(iso)
 
   // ---------------------------------------------------------------------------
   // 通用辅助

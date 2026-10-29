@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,6 +72,21 @@ class ExportFileServiceTest {
             String text = new PDFTextStripper().getText(doc);
             assertThat(text).contains(title, "指标", "本月", "同比", "门店金额", "一二十人日", "长期车马用方比", "ABCDEFGH");
             assertThat(text.codePoints().filter(cp -> (cp >= 0x2E80 && cp <= 0x2EFF) || (cp >= 0x2F00 && cp <= 0x2FDF)).count()).isZero();
+        }
+    }
+
+    /**
+     * 复核（PGM:687 可编辑版「用于二次加工」）：拉丁字母逐字写入，ff、fi、fl、ffi 不被字体合成连字——复制出来的编号、单词与原数据逐字一致。
+     */
+    @Test
+    void copiedTextKeepsLatinLetterPairsInsteadOfLigatures() throws Exception {
+        String title = "office fixture";
+        List<String> columns = List.of("单据编号", "备注");
+        List<List<String>> rows = List.of(List.of("arap_mcr_a_2a35ff3d", "ff fi fl ffi"));
+        byte[] pdf = ExportFileService.pdf(title, columns, rows, "ABCDEFGH", "PASSWD2345", true);
+
+        try (PDDocument doc = Loader.loadPDF(pdf, "PASSWD2345")) {
+            assertThat(new PDFTextStripper().getText(doc)).contains(title, "arap_mcr_a_2a35ff3d", "ff fi fl ffi");
         }
     }
 

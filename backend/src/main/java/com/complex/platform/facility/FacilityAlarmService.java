@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -66,8 +66,8 @@ public class FacilityAlarmService {
     private static final String DUTY_BUSINESS_TYPE = "facility_alarm_duty";
     private static final String AWAITING = "awaiting_takeover";
     /** 接警消息里的优先级叫法（裁决补充第 1 条「紧急/高/普通」）与本地时间的响应时限。 */
-    private static final Map<String, String> PRIORITY_LABELS = Map.of("urgent", "紧急", "high", "高", "normal", "普通");
-    private static final DateTimeFormatter DUE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(LocalZone.ID);
+    static final Map<String, String> PRIORITY_LABELS = Map.of("urgent", "紧急", "high", "高", "normal", "普通");
+    static final DateTimeFormatter DUE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(LocalZone.ID);
 
     /** 此刻的实际当班值守人：role 取值守安排角色，shiftId/endAt 为原班或顶班那一段，phone 为联系电话。 */
     record OnDuty(String dutyId, String role, String userId, String shiftId, Instant endAt, String phone) {}

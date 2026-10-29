@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -25,6 +25,8 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
             completed_at, verified_at, verifier_id, satisfaction, overtime, resolution, project_id, merchant_id,
             created_at, updated_at, confirmer_id, reporter_confirmed_at, reporter_confirmed_by
             """;
+    /** 在办六态（{@link FacilityWorkOrderService#ACTIVE_STATUSES}）。 */
+    private static final String ACTIVE = "('pending_assign','assigned','processing','pending_review','pending_acceptance','accepted')";
     private static final String POLICY_COLS = """
             id, work_order_type, priority, response_minutes, handle_minutes, requires_acceptance, acceptance_by,
             active, created_at, updated_at
@@ -155,14 +157,38 @@ class JdbcFacilityWorkOrderRepository implements FacilityWorkOrderRepository {
                 this::mapWorkOrder);
     }
 
+    /** 第 77 条 77-R1：在办且已过处理时限，或（设备告警来源除外）未开始处理且已过响应时限；已升级（已标记超时）的仍列出。 */
     @Override
     public List<FacilityWorkOrderRecord> listOverdue(Instant now) {
-        return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + """
-                 FROM facility_work_orders
-                 WHERE handle_due_at IS NOT NULL AND handle_due_at < :now AND overtime = false
-                   AND status IN ('pending_assign','assigned','processing','pending_review','pending_acceptance','accepted')
-                 ORDER BY handle_due_at ASC, id
-                """, new MapSqlParameterSource("now", timestampWithTimeZone(now)), this::mapWorkOrder);
+        return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + " FROM facility_work_orders WHERE status IN " + ACTIVE
+                + " AND (handle_due_at < :now OR (source <> 'equipment_alarm' AND responded_at IS NULL AND response_due_at < :now))"
+                + " ORDER BY handle_due_at ASC, id", new MapSqlParameterSource("now", timestampWithTimeZone(now)), this::mapWorkOrder);
+    }
+
+    @Override
+    public List<FacilityWorkOrderRecord> listResponseEscalationDue(Instant now) {
+        return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + " FROM facility_work_orders WHERE status IN ('pending_assign','assigned')"
+                + " AND responded_at IS NULL AND response_due_at < :now AND source <> 'equipment_alarm' AND response_escalated_at IS NULL"
+                + " ORDER BY response_due_at ASC, id", new MapSqlParameterSource("now", timestampWithTimeZone(now)), this::mapWorkOrder);
+    }
+
+    @Override
+    public List<FacilityWorkOrderRecord> listHandleEscalationDue(Instant now) {
+        return jdbcTemplate.query("SELECT " + WORK_ORDER_COLS + " FROM facility_work_orders WHERE status IN " + ACTIVE
+                + " AND handle_due_at < :now AND handle_escalated_at IS NULL ORDER BY handle_due_at ASC, id",
+                new MapSqlParameterSource("now", timestampWithTimeZone(now)), this::mapWorkOrder);
+    }
+
+    @Override
+    public boolean markEscalated(String id, String kind, Instant now) {
+        String column = switch (kind) {
+            case "response" -> "response_escalated_at";
+            case "handle" -> "handle_escalated_at";
+            default -> throw new IllegalArgumentException("unknown escalation kind: " + kind);
+        };
+        return jdbcTemplate.update("UPDATE facility_work_orders SET overtime = true, " + column + " = :now, updated_at = :now"
+                + " WHERE id = :id AND " + column + " IS NULL",
+                new MapSqlParameterSource("id", id).addValue("now", timestampWithTimeZone(now))) == 1;
     }
 
     @Override

@@ -132,7 +132,9 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
 
   const billId = firstBillId(selectedOrder);
   const salesOrders = orders.filter((order) => isSalesOrder(order)).length;
-  const nonSalesOrders = orders.length - salesOrders;
+  // 第十八批 I 段 86-R4（BSM 第 1070 行「自来客不产生销售提成」）：非销售费率只计有销售归属、归属人不是销售岗的单；没有销售归属的单不计提成。
+  const isNonSalesOrder = (order: BarOrderRow) => Boolean(order.salesStaffId) && !isSalesOrder(order);
+  const nonSalesOrders = orders.filter(isNonSalesOrder).length;
   // 列表接口返回 totalAmountCent（旧 totalAmount 字段兼容保留）：此前读幽灵字段恒为 0。
   const totalAmount = orders.reduce((sum, order) => sum + Number(order.totalAmountCent ?? order.totalAmount ?? 0), 0);
 
@@ -146,7 +148,7 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   const visibleOrders = kpiFocus === "sales"
     ? orders.filter((order) => isSalesOrder(order))
     : kpiFocus === "non_sales"
-      ? orders.filter((order) => !isSalesOrder(order))
+      ? orders.filter(isNonSalesOrder)
       : orders;
 
   async function calculateCommission() {

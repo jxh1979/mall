@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -153,6 +153,10 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     private static final List<String> HANDOVER_SEGMENTS =
             List.of("out_verify", "dispatch", "kitchen_receive", "staff_pickup", "deliver_customer");
     private static final String ROBOT_SEGMENT = "dispatch";
+    // 第十八批 I 段第 85 条 85-R1：四个人工扫码段（BSM:1201 库管出库、后厨接收、服务员取走、送达客人或卡座）按序放行，整链完成只看这四段；
+    // 机器人配送段被动留痕（BSM:1579），不作完成前提（BSM:1167「机器人或人工配送」）。
+    private static final List<String> STAFF_SEGMENTS =
+            List.of("out_verify", "kitchen_receive", "staff_pickup", "deliver_customer");
     private static final String ROBOT_SYNC_CAPABILITY = "integration.robot.sync";
 
     private final InventoryRepository repository;
@@ -273,7 +277,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             merchantId,
                             // 第十八批第 24 条：手工标记高价值限库房主管，走 markInventoryItemHighValue，建物料一律不标。
                             false,
-                            Boolean.TRUE.equals(actual.nonConsumable())
+                            Boolean.TRUE.equals(actual.nonConsumable()),
+                            // 第十八批 I 段第 76 条：规格容量（毫升），按杯按容量扣库存的物料须登记。
+                            actual.specVolumeMl()
                     );
                     return repository.saveInventoryItem(item);
                 }
@@ -3560,7 +3566,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         );
     }
 
-    /** R5 T17：员工段扫码（主动留痕）。同段重复→duplicate 异常；全段 done→overall completed。 */
+    /**
+     * R5 T17：员工段扫码（主动留痕）。同段重复→duplicate 异常；四个人工段都完成→overall completed。
+     * 85-R1：排在本段前面的人工段须已扫码或补录已复核通过，否则 409 HANDOVER_PREVIOUS_SEGMENT_INCOMPLETE
+     * （BSM:1201「缺任何一步即视为该环节工作未完成，不得进入下一环节」「经主管复核后方生效」）。
+     */
     @Transactional
     @com.complex.platform.gate.GuardedAction(capability = "inventory.handover.scan")
     public TraceHandoverChainView scanTraceSegment(String handoverId, TraceScanSegmentRequest request) {
@@ -3582,10 +3592,19 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     String operator = authorizationService.currentActor().id();
                     Instant now = Instant.now();
                     if ("done".equals(step.stepStatus())) {
-                        // 同段重复扫码 → duplicate 异常 + overall exception。
-                        markStep(step, operator, null, "duplicate", now, "duplicate scan on segment " + segment);
-                        raiseException(id, segment, "duplicate", "duplicate scan on segment " + segment, now);
+                        // 同段重复扫码 → duplicate 异常 + overall exception。85-R2：原扫码行（状态、扫码人、时刻）原样保留、不被覆盖
+                        // （BSM:1201「补录记录与原始扫码记录并列展示、互不覆盖」「交接几次就记几条，全部保留」）；重复那次的扫码人与时刻
+                        // 由执行成功审计 inventory.handover_segment_scanned 留痕，异常行作复核对象（BSM:1581）。
+                        raiseException(id, segment, "duplicate",
+                                "同段重复扫码：" + TraceHandoverStepBackfillTarget.SEGMENT_NAMES.get(segment), now);
                         return chainView(id);
+                    }
+                    Set<String> backfilled = approvedBackfillSegments(id);
+                    for (String previous : STAFF_SEGMENTS.subList(0, STAFF_SEGMENTS.indexOf(segment))) {
+                        if (!"done".equals(requireStep(id, previous).stepStatus()) && !backfilled.contains(previous)) {
+                            throw ApiException.conflict("HANDOVER_PREVIOUS_SEGMENT_INCOMPLETE", "上一环节（"
+                                    + TraceHandoverStepBackfillTarget.SEGMENT_NAMES.get(previous) + "）尚未扫码或补录未经复核通过，不得进入下一环节");
+                        }
                     }
                     markStep(step, operator, null, "done", now, null);
                     completeOrAdvance(header, segment, now);
@@ -3888,11 +3907,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     /**
      * 第十八批 F 段第 14 条 14-R2 回算：段完成＝扫码 done 或该段有已通过的人工补录（原段行不改，补录与原扫码并列、互不覆盖）。
      * 仍有待处理异常时表头保持 exception、不被覆盖；全部完成置 completed、留痕并收口过程实例；否则 in_progress 推进到第一个未完成段。
+     * 85-R1：只看四个人工扫码段，机器人配送段被动留痕、不计入完成（机器人开关出厂关时链也能完成）。
      * 返回下一段，全部完成返回 completed。
      */
     private String recomputeOverall(TraceHandoverRecord header, String segment, Set<String> backfilled, Instant now) {
         String next = repository.listTraceHandoverSteps(header.id()).stream()
-                .filter(s -> !"done".equals(s.stepStatus()) && !backfilled.contains(s.segment()))
+                .filter(s -> !ROBOT_SEGMENT.equals(s.segment()) && !"done".equals(s.stepStatus()) && !backfilled.contains(s.segment()))
                 .map(TraceHandoverStepRecord::segment)
                 .findFirst()
                 .orElse(null);
@@ -3924,6 +3944,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         // 14-R2：人工补录段记责任人（不取复核人）、人工录入、须写原因，时点取补录原时点。
         boolean backfill = backfillActor != null;
         String actorId = robot ? null : backfill ? backfillActor : authorizationService.currentActor().id();
+        // 第十八批 I 段 84-R2：人工扫码段记本次请求已验签的终端（交接扫码在工作手机上做，BSM:1891；平板只做酒吧点酒下单，BSM:612），
+        // 未验签写 null；不再写死 tablet、不再一律用建链设备号。补录段不记终端与设备。
+        com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal scanned = robot || backfill ? null
+                : com.complex.platform.gate.TerminalIdentityHolder.current()
+                        .filter(com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal::verified).orElse(null);
         traceabilityService.recordStep(new TraceabilityStepRecord(
                 header.id() + "_step_" + segment,
                 header.id(),
@@ -3931,8 +3956,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 segment,
                 robot ? "robot" : "staff",
                 actorId,
-                robot || backfill ? null : "tablet",
-                backfill ? null : header.deviceId(),
+                scanned == null ? null : scanned.terminalType(),
+                backfill ? null : robot ? header.deviceId() : scanned == null ? null : scanned.deviceId(),
                 null,
                 null,
                 !backfill,

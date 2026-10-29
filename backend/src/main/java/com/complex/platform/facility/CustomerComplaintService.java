@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -36,7 +36,7 @@ public class CustomerComplaintService {
     /** 单次投诉附件上限：照片、视频、语音合计 9 个。 */
     static final int MAX_FILES = 9;
     private static final String BUSINESS_TYPE = "customer_complaint";
-    private static final Map<String, String> STATUS_LABELS = Map.of(
+    static final Map<String, String> STATUS_LABELS = Map.of(
             "pending_assign", "待派单", "assigned", "已派单", "processing", "处理中", "pending_review", "待回访",
             "pending_acceptance", "待验收", "accepted", "已验收", "closed", "已关闭", "suspended", "已挂起");
 

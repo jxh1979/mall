@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -176,6 +176,32 @@ describe("InventoryLedgerPage 行明细抽屉（整行可点·时间中文）", 
     await waitFor(() => expect(screen.getByTestId("inventory-item-row-i-1")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("选择物料 SKU-1"));
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});
+
+// 第十八批 I 段第 76 条 76-R6（BSM:1153「酒吧卖出去的酒、赠送出去的酒、按杯消耗的酒……都要有清楚记录」）。
+describe("InventoryLedgerPage 按杯按容量扣库（第十八批 I 段第 76 条）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/inventory/ledger");
+  });
+
+  it("物料详情显示规格容量、余额详情显示已开瓶余量、流水详情显示出酒量与损耗量（毫升）", async () => {
+    renderPage(makeApi(vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/inventory/items")) return Promise.resolve([{ ...ITEMS[0], specVolumeMl: 700 }]);
+      if (path.includes("/inventory/stock-balances")) return Promise.resolve([{ ...BALANCES[0], openedVolumeMl: 645 }]);
+      if (path.includes("/inventory/stock-movements")) return Promise.resolve([{ ...MOVEMENTS[0], volumeMl: 50, lossVolumeMl: 5 }]);
+      return Promise.resolve([]);
+    })));
+    await waitFor(() => expect(screen.getByTestId("inventory-item-row-i-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("inventory-item-row-i-1"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("规格容量（毫升）700");
+    fireEvent.click(screen.getByTestId("inventory-balance-row-sb-1"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("已开瓶余量（毫升）645");
+    fireEvent.click(screen.getByTestId("inventory-movement-row-sm-1"));
+    const drawer = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(drawer).toContain("出酒量（毫升）50");
+    expect(drawer).toContain("损耗量（毫升）5");
   });
 });
 

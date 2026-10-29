@@ -4,9 +4,11 @@ import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.contract.ContractRecord;
+import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.leasing.dto.LeasingBlacklistExceptionRequest;
 import com.complex.platform.leasing.dto.LeasingBrandBlacklistRequest;
 import com.complex.platform.leasing.dto.LeasingBrandRequest;
@@ -17,6 +19,7 @@ import com.complex.platform.leasing.dto.LeasingLeadAssignRequest;
 import com.complex.platform.leasing.dto.LeasingLeadRequest;
 import com.complex.platform.leasing.dto.LeasingLeadStatusRequest;
 import com.complex.platform.leasing.dto.LeasingSignRequest;
+import java.util.function.Supplier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,12 +36,14 @@ public class LeasingController {
     private final LeasingService service;
     private final AuthorizationService authorizationService;
     private final LeasingBlacklistExceptionService blacklistExceptions;
+    private final AuditEventService auditEventService;
 
     public LeasingController(LeasingService service, AuthorizationService authorizationService,
-            LeasingBlacklistExceptionService blacklistExceptions) {
+            LeasingBlacklistExceptionService blacklistExceptions, AuditEventService auditEventService) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.blacklistExceptions = blacklistExceptions;
+        this.auditEventService = auditEventService;
     }
 
     // ---- 线索 ----
@@ -72,25 +77,22 @@ public class LeasingController {
 
     @PostMapping("/leads")
     public ApiResponse<LeasingLeadRecord> createLead(@RequestBody @jakarta.validation.Valid LeasingLeadRequest request) {
-        authorizationService.requirePermission("leasing.lead.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createLead(request).withMaskedPhone());
+        return failureAudited("leasing.lead.create_failed", "leasing.lead.manage", "leasing_lead", "new",
+                request == null ? null : request.idempotencyKey(), () -> service.createLead(request).withMaskedPhone());
     }
 
     @PostMapping("/leads/{lead_id}/assign")
     public ApiResponse<LeasingLeadRecord> assignLead(
             @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadAssignRequest request) {
-        authorizationService.requirePermission("leasing.lead.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.assignLead(leadId, request).withMaskedPhone());
+        return failureAudited("leasing.lead.assign_failed", "leasing.lead.manage", "leasing_lead", leadId,
+                request == null ? null : request.idempotencyKey(), () -> service.assignLead(leadId, request).withMaskedPhone());
     }
 
     @PostMapping("/leads/{lead_id}/status")
     public ApiResponse<LeasingLeadRecord> updateLeadStatus(
             @PathVariable("lead_id") String leadId, @RequestBody @jakarta.validation.Valid LeasingLeadStatusRequest request) {
-        authorizationService.requirePermission("leasing.lead.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.updateLeadStatus(leadId, request).withMaskedPhone());
+        return failureAudited("leasing.lead.status_change_failed", "leasing.lead.manage", "leasing_lead", leadId,
+                request == null ? null : request.idempotencyKey(), () -> service.updateLeadStatus(leadId, request).withMaskedPhone());
     }
 
     // ---- 意向 ----
@@ -104,25 +106,22 @@ public class LeasingController {
 
     @PostMapping("/intents")
     public ApiResponse<LeasingIntentRecord> createIntent(@RequestBody @jakarta.validation.Valid LeasingIntentRequest request) {
-        authorizationService.requirePermission("leasing.intent.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createIntent(request));
+        return failureAudited("leasing.intent.create_failed", "leasing.intent.manage", "leasing_intent", "new",
+                request == null ? null : request.idempotencyKey(), () -> service.createIntent(request));
     }
 
     @PostMapping("/intents/{intent_id}/advance")
     public ApiResponse<LeasingIntentRecord> advanceIntent(
             @PathVariable("intent_id") String intentId, @RequestBody @jakarta.validation.Valid LeasingIntentAdvanceRequest request) {
-        authorizationService.requirePermission("leasing.intent.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.advanceIntent(intentId, request));
+        return failureAudited("leasing.intent.advance_failed", "leasing.intent.manage", "leasing_intent", intentId,
+                request == null ? null : request.idempotencyKey(), () -> service.advanceIntent(intentId, request));
     }
 
     @PostMapping("/intents/{intent_id}/sign")
     public ApiResponse<ContractRecord> signIntent(
             @PathVariable("intent_id") String intentId, @RequestBody @jakarta.validation.Valid LeasingSignRequest request) {
-        authorizationService.requirePermission("leasing.convert");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.signIntent(intentId, request));
+        return failureAudited("leasing.intent.sign_failed", "leasing.convert", "leasing_intent", intentId,
+                request == null ? null : request.idempotencyKey(), () -> service.signIntent(intentId, request));
     }
 
     // ---- 品牌库 ----
@@ -136,17 +135,15 @@ public class LeasingController {
 
     @PostMapping("/brands")
     public ApiResponse<LeasingBrandRecord> createBrand(@RequestBody @jakarta.validation.Valid LeasingBrandRequest request) {
-        authorizationService.requirePermission("leasing.brand.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createBrand(request));
+        return failureAudited("leasing.brand.create_failed", "leasing.brand.manage", "leasing_brand", "new",
+                request == null ? null : request.idempotencyKey(), () -> service.createBrand(request));
     }
 
     @PostMapping("/brands/{brand_id}/blacklist")
     public ApiResponse<LeasingBrandRecord> blacklistBrand(
             @PathVariable("brand_id") String brandId, @RequestBody @jakarta.validation.Valid LeasingBrandBlacklistRequest request) {
-        authorizationService.requirePermission("leasing.brand.blacklist");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.blacklistBrand(brandId, request));
+        return failureAudited("leasing.brand.blacklist_change_failed", "leasing.brand.blacklist", "leasing_brand", brandId,
+                request == null ? null : request.idempotencyKey(), () -> service.blacklistBrand(brandId, request));
     }
 
     // ---- 黑名单例外放行（第十八批第 30 条，PGM L502：须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批） ----
@@ -159,7 +156,6 @@ public class LeasingController {
     @PostMapping("/blacklist-exceptions")
     public ApiResponse<LeasingBlacklistExceptionService.BlacklistException> requestBlacklistException(
             @RequestBody @jakarta.validation.Valid LeasingBlacklistExceptionRequest request) {
-        authorizationService.requirePermission("leasing.brand.blacklist_exception");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(blacklistExceptions.request(request));
     }
@@ -177,9 +173,31 @@ public class LeasingController {
 
     @PostMapping("/follow-ups")
     public ApiResponse<LeasingFollowUpRecord> createFollowUp(@RequestBody @jakarta.validation.Valid LeasingFollowUpRequest request) {
-        authorizationService.requirePermission("leasing.lead.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createFollowUp(request));
+        return failureAudited("leasing.follow_up.create_failed", "leasing.lead.manage", "leasing_follow_up", "new",
+                request == null ? null : request.idempotencyKey(), () -> service.createFollowUp(request));
+    }
+
+    /**
+     * 第十八批 I 段第 90 条（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」、L899）：招商写入口先核权限码与幂等键再执行，
+     * 任一步失败（权限、范围、校验、业务冲突）落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。失败事件是独立事务
+     * （AuditEventService.recordFailure，XM-M031-B），业务回滚也保留；写失败事件本身出错挂在原异常上、不顶掉原异常。
+     * 放在控制器、不挪进 AuditEventService：自调用会绕过 recordFailure 的 REQUIRES_NEW。
+     */
+    private <T> ApiResponse<T> failureAudited(String failureEvent, String permission, String businessType, String businessId,
+            String idempotencyKey, Supplier<T> action) {
+        try {
+            authorizationService.requirePermission(permission);
+            requireIdempotencyKey(idempotencyKey);
+            return ApiResponse.ok(action.get());
+        } catch (RuntimeException error) {
+            try {
+                auditEventService.recordFailure(failureEvent, permission, businessType, businessId, null, idempotencyKey,
+                        error instanceof ApiException api ? api.code() : error.getClass().getSimpleName());
+            } catch (RuntimeException auditError) {
+                error.addSuppressed(auditError);
+            }
+            throw error;
+        }
     }
 
     // ── P0-A/GAP-07 招商线索联系人手机号展示脱敏（V339）；M724 起列表一律脱敏（见「线索」段注释），不再按 pii.contact_phone.view 分支。

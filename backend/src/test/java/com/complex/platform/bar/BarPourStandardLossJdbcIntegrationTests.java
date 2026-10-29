@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -68,7 +68,8 @@ class BarPourStandardLossJdbcIntegrationTests {
                 .andExpect(status().isOk());
         jdbc.update("INSERT INTO warehouses (id, project_id, merchant_id, warehouse_type, name) VALUES (?, ?, ?, 'bar_counter', '一号吧台')", counter, project, bar);
         jdbc.update("INSERT INTO warehouses (id, project_id, merchant_id, warehouse_type, name) VALUES (?, ?, ?, 'bar', '酒吧库')", barStore, project, bar);
-        jdbc.update("INSERT INTO inventory_items (id, item_name, item_type, unit, status, created_at, updated_at) VALUES (?, '威士忌', 'liquor', 'ml', 'active', now(), now())", item);
+        // 第十八批 I 段第 76 条：按杯按容量扣库，物料须登记规格容量（700 毫升瓶装）。
+        jdbc.update("INSERT INTO inventory_items (id, item_name, item_type, unit, status, spec_volume_ml, created_at, updated_at) VALUES (?, '威士忌', 'liquor', '瓶', 'active', 700, now(), now())", item);
         jdbc.update("INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id)"
                 + " VALUES (?, ?, ?, 100, 0, 100, now(), ?, ?)", "pour_bal_" + s, item, location, bar, counter);
         Instant now = Instant.now();

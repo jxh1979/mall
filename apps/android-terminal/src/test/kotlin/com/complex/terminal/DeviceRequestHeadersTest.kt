@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.security.KeyPairGenerator
 import java.security.Signature
@@ -32,5 +32,11 @@ class DeviceRequestHeadersTest {
     assertEquals("123456", headers["X-Device-Timestamp"])
     assertTrue(verifies(body))
     assertFalse(verifies(body.replace("qr", "nfc")))
+  }
+
+  /** 第 84 条 84-R1 交叉向量：与后端 DeviceCredentialVerifierTests 同一组输入，摘要逐字相同。 */
+  @Test fun multipartDigestMatchesServerCrossVector() {
+    assertEquals("bd6fee8fd9f720c2809af688010ac65c38b4be2562ca42ddfa4656a5d11d99d3",
+      multipartBodyDigest(listOf("business_type" to "manual_backfill"), listOf(Triple("file", "a.jpg", "abc".toByteArray(Charsets.UTF_8)))))
   }
 }

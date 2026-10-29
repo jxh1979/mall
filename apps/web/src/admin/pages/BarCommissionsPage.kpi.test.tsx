@@ -9,7 +9,9 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 const ORDERS: BarOrderRow[] = [
   // G/V349：销售/非销售档一律看账单上快照的 salesRoleType（员工岗位判定的结果），不看有没有 salesStaffId。
   { id: "b-1", tableId: "T-1", status: "billed", totalAmount: 8800, salesStaffId: "staff_sales_1", bills: [{ id: "bill-1", status: "settled", salesRoleType: "sales", commissionRateBp: 2000, commissionAmountCent: 1760 }] },
-  { id: "b-2", tableId: "T-2", status: "billed", totalAmount: 6000, bills: [{ id: "bill-2", status: "settled", salesRoleType: "non_sales", commissionRateBp: 1000, commissionAmountCent: 600 }] },
+  { id: "b-2", tableId: "T-2", status: "billed", totalAmount: 6000, salesStaffId: "staff_waiter_1", bills: [{ id: "bill-2", status: "settled", salesRoleType: "non_sales", commissionRateBp: 1000, commissionAmountCent: 600 }] },
+  // 第十八批 I 段 86-R4（BSM 第 1070 行「自来客不产生销售提成」）：没有销售归属的单不计提成，不进非销售费率卡与聚焦。
+  { id: "b-3", tableId: "T-3", status: "billed", totalAmount: 5000, bills: [{ id: "bill-3", status: "settled", salesRoleType: "non_sales" }] },
 ];
 
 function makeApi(): AdminApiClient {
@@ -71,6 +73,16 @@ describe("BarCommissionsPage KPI 聚焦视图 + 英文全清", () => {
     const table = screen.getByTestId("bar-commissions-table").textContent ?? "";
     expect(table).toContain("b-2");
     expect(table).not.toContain("b-1");
+  });
+
+  it("没有销售归属的单显示「无销售（不计提成）」，不计入非销售费率卡与 non_sales 聚焦", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("bar-commissions-kpi-non-sales").textContent).toBe("1"));
+    expect(screen.getByTestId("bar-commissions-table").textContent ?? "").toContain("无销售（不计提成）");
+    fireEvent.click(screen.getByTestId("bar-commissions-kpi-non-sales"));
+    const table = screen.getByTestId("bar-commissions-table").textContent ?? "";
+    expect(table).toContain("b-2");
+    expect(table).not.toContain("b-3");
   });
 
   it("“不含通票”KPI 子标签为业务中文，不含 includeTicketAmount=false 技术标签", async () => {

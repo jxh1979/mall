@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -317,7 +317,6 @@ data class BarOrderRequest(
   val tableId: String? = null,
   val reservationId: String? = null,
   val items: List<Map<String, String>> = emptyList(),
-  val salespersonUserId: String? = null,
   val serviceUserIds: List<String> = emptyList(),
   val paymentMode: String? = null,
 )
@@ -847,6 +846,14 @@ data class ServiceOrderRow(
   val mgmtFeeCent: Long? = null,
   val dancerShareCent: Long? = null,
   val createdAt: String? = null,
+)
+
+/** 第 84 条 84-R1：证据上传回执（POST /api/v1/evidence/attachments/upload 的 data）。 */
+@Serializable
+data class EvidenceAttachmentRecord(
+  val id: String,
+  val contentType: String? = null,
+  val fileSize: Long? = null,
 )
 
 @Serializable

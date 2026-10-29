@@ -10,7 +10,7 @@ import { useSelectedRow } from "../hooks/useSelectedRow";
 import { rowMatchesKeyword } from "../components/rowSearch";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
-import { PermissionButton } from "../security/Can";
+import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
@@ -20,6 +20,12 @@ const WO_CREATE = ["merchant.service_work_order.create"];
 const WO_ASSIGN = ["merchant.service_work_order.assign"];
 const WO_PROCESS = ["merchant.service_work_order.process"];
 const WO_CLOSE = ["merchant.service_work_order.close"];
+const POLICIES = "/api/v1/merchant-service/work-order-policies";
+const TYPE_OPTIONS: Array<[string, string]> = [["repair", "报修"], ["complaint", "投诉"], ["rectification", "整改"], ["service", "服务"]];
+const PRIORITY_OPTIONS: Array<[string, string]> = [["low", "低"], ["medium", "中"], ["high", "高"], ["critical", "紧急"]];
+
+// 第 77 条 77-R3：处理时限按「工单类型×优先级」后台配置（BSM:1385），商户单只有处理时限、没有响应时限。
+type MerchantWorkOrderPolicyRow = { workOrderType: string; priority: string; handleMinutes: number };
 
 const TEXT = {
   title: "商户服务工单",
@@ -56,6 +62,11 @@ const TEXT = {
   dueAt: "截止时间",
   evidenceLabel: "附件证据",
   focusClear: "清除筛选，返回全部",
+  policyTitle: "处理时限",
+  policyHint: "按工单类型×优先级配置，建单时截止时间＝建单时刻＋处理时限；未配置的组合不设截止时间、不超时升级。超时后通知持派单权限、能管到该商户经营项目的主管。",
+  handleMinutes: "处理时限（分钟）",
+  policyMinutesRequired: "处理时限必须是大于 0 的整数分钟。",
+  policySave: "保存处理时限",
 };
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=<all|pending|high>；点 KPI 数字=带参重进本页只渲染工单表（对应子集）。
@@ -118,6 +129,9 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-4：新建工单收起为主按钮 + 分步引导弹窗（派单/处理/关闭动作表单不变）。
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [policies, setPolicies] = React.useState<MerchantWorkOrderPolicyRow[]>([]);
+  const [policyForm, setPolicyForm] = React.useState({ workOrderType: "repair", priority: "high", handleMinutes: "" });
+  const canSetPolicy = useCan(effectivePermissions, WO_ASSIGN);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -146,6 +160,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     async () => {
       const workOrders = await api.get<MerchantWorkOrderRow[]>("/api/v1/merchant-service/work-orders");
       setRows(workOrders);
+      // 时限读写都要派单权限（与后端同码）；没有的不读，免得整页读取失败。
+      if (canSetPolicy) setPolicies(await api.get<MerchantWorkOrderPolicyRow[]>(POLICIES));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -192,7 +208,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       description,
       reportedByUserId: "staff_reporter",
       reportedChannel: "web_admin",
-      dueAt: "2026-06-16T10:00:00.000Z",
     };
     const ok = await runAction("merchant_work_order_created", request, () => api.post("/api/v1/merchant-service/work-orders", request));
     if (ok) setCreateOpen(false);
@@ -251,6 +266,21 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       operatorUserId: "staff_closer",
     };
     await runAction("merchant_work_order_closed", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/close`, request));
+  }
+
+  async function savePolicy() {
+    const handleMinutes = Number(policyForm.handleMinutes);
+    if (!Number.isInteger(handleMinutes) || handleMinutes <= 0) {
+      setFormError(TEXT.policyMinutesRequired);
+      return;
+    }
+    const request = {
+      idempotencyKey: nextKey("merchant-work-order-policy"),
+      workOrderType: policyForm.workOrderType,
+      priority: policyForm.priority,
+      handleMinutes,
+    };
+    await runAction("merchant_work_order_policy_saved", request, () => api.put(POLICIES, request));
   }
 
   function openWorkOrderDetail(row: MerchantWorkOrderRow) {
@@ -351,6 +381,25 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <PermissionButton permissionsState={effectivePermissions} permissions={WO_CLOSE} data-testid="merchant-work-order-close" disabled={busyAction !== ""} onClick={() => void closeWorkOrder()}>{TEXT.close}</PermissionButton>
         </div>
         {formError ? <div data-testid="merchant-work-order-error" className="admin-inline-error">{formError}</div> : null}
+
+        {canSetPolicy ? (
+        <div data-testid="merchant-work-order-policies">
+          <h3>{TEXT.policyTitle}</h3>
+          <span className="admin-muted-action">{TEXT.policyHint}</span>
+          <div className="admin-inline-form" data-testid="merchant-work-order-policy-form">
+            <select data-testid="merchant-work-order-policy-type" aria-label={TEXT.type} value={policyForm.workOrderType} onChange={(event) => setPolicyForm({ ...policyForm, workOrderType: event.target.value })}>{TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <select data-testid="merchant-work-order-policy-priority" aria-label={TEXT.priority} value={policyForm.priority} onChange={(event) => setPolicyForm({ ...policyForm, priority: event.target.value })}>{PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <input data-testid="merchant-work-order-policy-minutes" aria-label={TEXT.handleMinutes} placeholder={TEXT.handleMinutes} type="number" min="1" value={policyForm.handleMinutes} onChange={(event) => setPolicyForm({ ...policyForm, handleMinutes: event.target.value })} />
+            <PermissionButton permissionsState={effectivePermissions} permissions={WO_ASSIGN} data-testid="merchant-work-order-policy-save" disabled={busyAction !== ""} onClick={() => void savePolicy()}>{TEXT.policySave}</PermissionButton>
+          </div>
+          <div className="admin-table-scroll">
+            <table className="admin-table" data-testid="merchant-work-order-policies-table">
+              <thead><tr><th>{TEXT.type}</th><th>{TEXT.priority}</th><th>{TEXT.handleMinutes}</th></tr></thead>
+              <tbody>{policies.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} data-testid={`merchant-work-order-policy-${row.workOrderType}-${row.priority}`}><td>{formatBusinessStatus(row.workOrderType)}</td><td>{formatBusinessStatus(row.priority)}</td><td>{row.handleMinutes}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+        ) : null}
         </>
         )}
 

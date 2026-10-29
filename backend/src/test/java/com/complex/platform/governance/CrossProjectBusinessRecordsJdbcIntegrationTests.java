@@ -1,6 +1,6 @@
 package com.complex.platform.governance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -40,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>夹具随测试事务回滚：项目 A、B 两行（编号带随机后缀），操作人都是归属 A 的员工；持有人的角色只逐个勾 B，普通员工的角色两项都没勾。
  * 被拒请求的失败留痕是独立事务，按随机后缀隔离留在库里。终端设备一项由设备线另做，不在本类。</p>
+ * <p>第十八批 I 段 88-R1：企微违规命中列表与复核按入口权限码可触及项目判，同一夹具。</p>
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -180,6 +181,30 @@ class CrossProjectBusinessRecordsJdbcIntegrationTests {
                 .isEqualTo(1);
     }
 
+    // 18I 88-R1 企微违规命中：普通员工列表只见本人项目 A 的命中，复核 B 的命中 403 CROSS_PROJECT_FORBIDDEN、不改库、不记复核事件；
+    // 只勾 B 的持有人列表只见 B 的命中（逐个勾选的只能查看被选中的项目），复核 B 200 落库。
+    @Test
+    void wecomRiskHitsFollowTheRole() throws Exception {
+        String hitA = wecomHit("a", projectA);
+        String hitB = wecomHit("b", projectB);
+        String url = "/api/v1/compliance/wecom/risk-hits";
+        String review = "{\"status\":\"confirmed\",\"review_note\":\"确认违规\"}";
+        String reviewed = "SELECT status || '/' || coalesce(reviewer_id, '') FROM wecom_risk_hits WHERE hit_id=?";
+
+        RequestPostProcessor plain = staffOfA("wh", role("wh", List.of(), "wecom.risk_hit.view", "wecom.risk_hit.review"));
+        assertThat(ids(plain, url, "$.data.items[*].hit_id")).contains(hitA).doesNotContain(hitB);
+        send(plain, post(url + "/" + hitB + "/review"), review)
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject(reviewed, String.class, hitB)).isEqualTo("open/");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='wecom.risk.hit_reviewed' AND business_id=?",
+                Integer.class, hitB)).isZero();
+
+        RequestPostProcessor ticked = staffOfA("wht", role("wht", List.of(projectB), "wecom.risk_hit.view", "wecom.risk_hit.review"));
+        assertThat(ids(ticked, url, "$.data.items[*].hit_id")).contains(hitB).doesNotContain(hitA);
+        send(ticked, post(url + "/" + hitB + "/review"), review).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject(reviewed, String.class, hitB)).isEqualTo("confirmed/usr_g82r5_wht_" + suffix);
+    }
+
     // ⑥ 经销商：持有人建档带 B 落 B、带未勾的本人项目 A 403；列表只见 B 与项目为空的经销商；能读 B 经销商的合同。普通员工带 B 建档、读 B 经销商都 403。
     @Test
     void dealersLandAndListByTheRole() throws Exception {
@@ -235,6 +260,19 @@ class CrossProjectBusinessRecordsJdbcIntegrationTests {
         accessRepository.createRole(new RoleRecord(roleId, "G82R5 " + tag + " " + suffix, null, "project", "active", Instant.now(),
                 List.of(codes), null, false, ticked));
         return roleId;
+    }
+
+    /** 18I 88-R1：在给定项目建一条会话、一条消息和一条待复核（open）的企微违规命中，返回命中编号。 */
+    private String wecomHit(String tag, String projectId) {
+        String conversationId = "wconv_g88_" + tag + "_" + suffix;
+        String messageId = "wmsg_g88_" + tag + "_" + suffix;
+        String hitId = "whit_g88_" + tag + "_" + suffix;
+        jdbc.update("INSERT INTO wecom_conversations (id, external_conversation_id, project_id) VALUES (?, ?, ?)",
+                conversationId, "ext_g88_" + tag + "_" + suffix, projectId);
+        jdbc.update("INSERT INTO wecom_messages (id, conversation_id) VALUES (?, ?)", messageId, conversationId);
+        jdbc.update("INSERT INTO wecom_risk_hits (hit_id, conversation_id, message_id, rule_code, risk_level, status, project_id) "
+                + "VALUES (?, ?, ?, 'wecom_g88', 'high', 'open', ?)", hitId, conversationId, messageId, projectId);
+        return hitId;
     }
 
     /** 建一名归属 A 的员工、挂上给定角色，返回以其身份登录的会话（后台 Web 终端＋生产过滤器放入的 AccessActor 主体）。 */

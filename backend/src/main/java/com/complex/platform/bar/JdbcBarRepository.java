@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -1677,6 +1677,49 @@ class JdbcBarRepository implements BarRepository {
     }
 
     @Override
+    public Optional<Integer> decreaseStockByVolume(String itemId, String locationId, int volumeMl) {
+        // 第十八批 I 段第 76 条：开瓶数 n＝max(0, ceil((需量−已开瓶余量)/规格容量))（同 BarPourLoss.bottlesToOpen）。子查询 FOR UPDATE
+        // 锁库存行、按最新版本算 n；可用瓶数够 n 才扣：瓶数与可用各减 n，余量＝余量＋n×规格−需量。0 行＝瓶数不够、无库存行或没登记规格容量。
+        return jdbcTemplate.query("""
+                UPDATE inventory_stock_balances b
+                   SET quantity           = b.quantity - x.n,
+                       available_quantity = b.available_quantity - x.n,
+                       opened_volume_ml   = b.opened_volume_ml + x.n * x.spec - :volume,
+                       updated_at         = NOW()
+                  FROM (SELECT s.id, i.spec_volume_ml AS spec,
+                               GREATEST(0, CEIL((:volume - s.opened_volume_ml)::numeric / i.spec_volume_ml))::int AS n
+                          FROM inventory_stock_balances s
+                          JOIN inventory_items i ON i.id = s.item_id
+                         WHERE s.item_id = :item_id
+                           AND s.location_id = :location_id
+                           AND i.spec_volume_ml IS NOT NULL
+                           FOR UPDATE OF s) x
+                 WHERE b.id = x.id
+                   AND b.available_quantity >= x.n
+                RETURNING x.n
+                """, Map.of("item_id", itemId, "location_id", locationId, "volume", volumeMl),
+                (rs, i) -> rs.getInt(1)).stream().findFirst();
+    }
+
+    @Override
+    public boolean increaseOpenedVolume(String itemId, String locationId, int volumeMl) {
+        // 第十八批 I 段第 76 条：按杯退品回库只加回已开瓶余量，瓶数不变。
+        return jdbcTemplate.update("""
+                UPDATE inventory_stock_balances
+                   SET opened_volume_ml = opened_volume_ml + :volume,
+                       updated_at       = NOW()
+                 WHERE item_id = :item_id
+                   AND location_id = :location_id
+                """, Map.of("item_id", itemId, "location_id", locationId, "volume", volumeMl)) > 0;
+    }
+
+    @Override
+    public Optional<Integer> findInventoryItemSpecVolumeMl(String itemId) {
+        return jdbcTemplate.query("SELECT spec_volume_ml FROM inventory_items WHERE id = :id", Map.of("id", itemId),
+                (rs, i) -> rs.getObject(1, Integer.class)).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    @Override
     public Optional<StockBalanceSnapshot> findStockBalance(String itemId, String locationId) {
         return jdbcTemplate.query("""
                 SELECT id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at
@@ -1742,7 +1785,9 @@ class JdbcBarRepository implements BarRepository {
                     movement.evidenceAttachmentIds(),
                     movement.status(),
                     movement.createdAt(),
-                    merchantId), projectId);
+                    merchantId,
+                    movement.volumeMl(),
+                    movement.lossVolumeMl()), projectId);
             return movement;
         });
     }

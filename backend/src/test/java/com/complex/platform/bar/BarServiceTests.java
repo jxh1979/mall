@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -342,7 +342,7 @@ class BarServiceTests {
 
         BarOrderRecord order = service.placeScanOrder("session_scan", new BarOrderRequest(
                 "scan-order-1", "scan order", List.of(), null, null, null,
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "app"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "app"));
 
         assertThat(order.orderSource()).isEqualTo("app");
         assertThat(order.createdTerminal()).isEqualTo("miniapp");
@@ -359,7 +359,7 @@ class BarServiceTests {
                 2, 0L, 0, null, null, "open", now, null, null, 1L, now, now));
         assertThatThrownBy(() -> service.placeScanOrder("session_scan_off", new BarOrderRequest(
                 "scan-off", "x", List.of(), null, null, null,
-                List.of(Map.of("product_id", "p", "quantity", 1)), null, List.of(), "app")))
+                List.of(Map.of("product_id", "p", "quantity", 1)), List.of(), "app")))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                 .extracting("code").isEqualTo("BAR_SCAN_ORDER_DISABLED");
     }
@@ -407,7 +407,7 @@ class BarServiceTests {
                 10000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-mincon", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), "staff_sales", List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
                 "bill-mincon", "create bill", List.of(), "offline", false, 0));
 
@@ -574,7 +574,7 @@ class BarServiceTests {
         , null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-cross-deliver", "create", List.of(), "bar_1", reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"
         ));
         String itemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
@@ -601,7 +601,7 @@ class BarServiceTests {
                 null, null, "active", null, null, false, null, null, null, null, null, null, null));
         assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
                 "order-cross-table", "create", List.of(), "bar_1", bTable.id(), null,
-                List.of(Map.of("product_id", aProduct.id(), "quantity", 1)), null, List.of(), "offline")))
+                List.of(Map.of("product_id", aProduct.id(), "quantity", 1)), List.of(), "offline")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
@@ -618,7 +618,7 @@ class BarServiceTests {
                 "table-own-a", "create", List.of(), "bar_1", "VIP A2", "card_seat", 50000L, 2, "active"));
         assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
                 "order-cross-product", "create", List.of(), "bar_1", aTable.id(), null,
-                List.of(Map.of("product_id", bProduct.id(), "quantity", 1)), null, List.of(), "offline")))
+                List.of(Map.of("product_id", bProduct.id(), "quantity", 1)), List.of(), "offline")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
@@ -644,7 +644,7 @@ class BarServiceTests {
                     null, null, "active", null, null, false, null, null, null, null, null, null, null));
             assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
                     "order-scope-x", "create", List.of(), "bar_1", table.id(), null,
-                    List.of(Map.of("product_id", spirit.id(), "quantity", 1)), null, List.of(), "offline")))
+                    List.of(Map.of("product_id", spirit.id(), "quantity", 1)), List.of(), "offline")))
                     .isInstanceOfSatisfying(ApiException.class,
                             e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
             BarProductRecord beer = service.createProduct(new BarProductRequest(
@@ -652,7 +652,7 @@ class BarServiceTests {
                     null, null, "active", null, null, false, null, null, null, null, null, null, null));
             BarOrderRecord ok = service.createOrder(new BarOrderRequest(
                     "order-scope-ok", "create", List.of(), "bar_1", table.id(), null,
-                    List.of(Map.of("product_id", beer.id(), "quantity", 1)), null, List.of(), "offline"));
+                    List.of(Map.of("product_id", beer.id(), "quantity", 1)), List.of(), "offline"));
             assertThat(ok.totalAmountCent()).isEqualTo(3800L);
         } finally {
             barOrderService.contractScopeGuard = null;
@@ -696,12 +696,12 @@ class BarServiceTests {
             TestSecurityActors.asPlatformAdmin();
             BarOrderRecord order = service.createOrder(new BarOrderRequest(
                     "order-scope-fb", "create", List.of(), "bar_1", table.id(), null,
-                    List.of(Map.of("product_id", beer.id(), "quantity", 1)), null, List.of(), "offline"));
+                    List.of(Map.of("product_id", beer.id(), "quantity", 1)), List.of(), "offline"));
             assertThat(order.merchantId()).isNull();
             // 加菜越界品类：修复前 order.merchantId()=null 会跳过拦截 → 现回退桌台商户仍拦。
             assertThatThrownBy(() -> service.addOrderItem(order.id(), new BarOrderRequest(
                     "order-scope-fb-add", "create", List.of(), "bar_1", table.id(), null,
-                    List.of(Map.of("product_id", spirit.id(), "quantity", 1)), null, List.of(), "offline")))
+                    List.of(Map.of("product_id", spirit.id(), "quantity", 1)), List.of(), "offline")))
                     .isInstanceOfSatisfying(ApiException.class,
                             e -> assertThat(e.code()).isEqualTo("CONTRACT_SCOPE_VIOLATION"));
         } finally {
@@ -992,7 +992,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)),
-                "staff_sales",
                 List.of("staff_service"),
                 "offline"
         ));
@@ -1071,8 +1070,8 @@ class BarServiceTests {
                 new CommissionCalculateRequest("commission-sales", salesBill.id(), true, false)
         );
 
-        // 这单没有销售归属人 → 无人可判岗 → 非销售人员费率(10%)。
-        BarBillRecord nonSalesBill = billForOrder("service-order", null);
+        // 归属人在员工档案里没标销售岗 → 非销售人员费率(10%)（无归属的账单不计提成，86-R4）。
+        BarBillRecord nonSalesBill = billForOrder("service-order", "staff_non_sales");
         BarCommissionCalculationRecord nonSalesCommission = service.calculateCommission(
                 nonSalesBill.id(),
                 new CommissionCalculateRequest("commission-non-sales", nonSalesBill.id(), true, false)
@@ -1190,7 +1189,7 @@ class BarServiceTests {
         BarBillRecord salesBill = billForOrder("cfg-sales-order", "staff_sales");
         BarCommissionCalculationRecord salesCommission = service.calculateCommission(
                 salesBill.id(), new CommissionCalculateRequest("cfg-commission-sales", salesBill.id(), true, false));
-        BarBillRecord nonSalesBill = billForOrder("cfg-service-order", null);
+        BarBillRecord nonSalesBill = billForOrder("cfg-service-order", "staff_non_sales");
         BarCommissionCalculationRecord nonSalesCommission = service.calculateCommission(
                 nonSalesBill.id(), new CommissionCalculateRequest("cfg-commission-non-sales", nonSalesBill.id(), true, false));
 
@@ -1237,14 +1236,14 @@ class BarServiceTests {
                 giftCreated.soldOut(), giftCreated.soldOutAt(), giftCreated.soldOutReason(), 8000L,
                 giftCreated.categoryId(), giftCreated.imageUrl());
         barRepository.saveProduct(gift);
-        BarOrderRecord order = service.createOrder(new BarOrderRequest(
+        BarOrderRecord order = withSales(service.createOrder(new BarOrderRequest(
                 "order-gift-commission", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
                 List.of(
                         Map.of("product_id", sold.id(), "quantity", 1),
                         Map.of("product_id", gift.id(), "quantity", 2, "is_gift", true)
                 ),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline")), "staff_sales");
 
         // 赠送项落库：金额 0、单价保留售价、isGift=true、数量保留。
         BarOrderItemRecord giftItem = barRepository.listOrderItems(order.id()).stream()
@@ -1367,7 +1366,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1426,7 +1424,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1488,7 +1485,6 @@ class BarServiceTests {
                 firstReservation.tableId(),
                 firstReservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1500,7 +1496,6 @@ class BarServiceTests {
                 secondReservation.tableId(),
                 secondReservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1566,7 +1561,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1593,13 +1587,13 @@ class BarServiceTests {
     void deliveryWithExcessPourRecordsLossAndEmitsLossExceptionWhenOverThreshold() {
         BarReservationRecord reservation = createReservation("reservation-pour-loss", "bar_1", 2);
         // 标准 30ml/杯，损耗阈值 10ml；按杯销售配置（REQ-22）。第十八批 C 段第 17 条：出酒吧台配有采集设备，按设备实际量计损耗。
+        equippedCounterStock("inventory_whisky_loss");
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-loss", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
                 "active", "inventory_whisky_loss", "bar_1", true, 30, "ml", 10, null, null, null, null));
-        equippedCounterStock("inventory_whisky_loss");
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-loss", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         // 2 杯标准 60ml，实际 75ml → 损耗 15ml > 阈值 10ml
@@ -1622,13 +1616,13 @@ class BarServiceTests {
     void deliveryRejectsByGlassAtCounterWithPourDeviceWhenActualPourVolumeMissing() {
         // 第十八批 C 段第 17 条（BSM 第 1065 行「配有出酒量采集设备的吧台，实际出酒量必须由设备采集」）：缺实际出酒量 → 拒单。
         BarReservationRecord reservation = createReservation("reservation-pour-required", "bar_1", 2);
+        equippedCounterStock("inventory_whisky_required");
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-required", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
                 "active", "inventory_whisky_required", "bar_1", true, 30, "ml", 10, null, null, null, null));
-        equippedCounterStock("inventory_whisky_required");
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-required", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         assertThatThrownBy(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
@@ -1646,6 +1640,8 @@ class BarServiceTests {
     private void equippedCounterStock(String itemId) {
         barRepository.saveStockBalance(new StockBalanceSnapshot("balance-" + itemId, itemId, "bar_1", 5, 0, 5, Instant.now()));
         barRepository.pourDeviceStock.add(itemId + ":bar_1");
+        // 第十八批 I 段第 76 条：按杯按容量扣库，物料须登记规格容量（700 毫升瓶装）。
+        barRepository.specVolumes.put(itemId, 700);
     }
 
     @Test
@@ -1658,7 +1654,7 @@ class BarServiceTests {
                 "active", null, null, false, 30, "ml", 10, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-pour-standard", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         assertThatCode(() -> service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
@@ -1682,7 +1678,7 @@ class BarServiceTests {
                 "active", null, null, false, null, null, null, null, null, null, null));
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-non-by-glass", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
@@ -1730,7 +1726,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 2)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1834,7 +1829,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1924,7 +1918,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -1976,7 +1969,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -2030,7 +2022,6 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                null,
                 List.of(),
                 "offline"
         ));
@@ -2067,7 +2058,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "partial-deliver", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", beer.id(), "quantity", 1), Map.of("product_id", wine.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
 
         BarOrderRecord afterFirst = service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
                 "partial-deliver-1", "deliver beer", List.of(),
@@ -2094,7 +2085,7 @@ class BarServiceTests {
                 "allvoid-deliver", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", beer.id(), "quantity", 1), Map.of("product_id", wine.id(), "quantity", 1),
                         Map.of("product_id", gin.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         BarOrderItemRecord ginItem = barRepository.orderItems.get(itemOf(order, gin));
         barRepository.saveOrderItem(new BarOrderItemRecord(ginItem.id(), ginItem.orderId(), ginItem.productId(),
                 ginItem.productName(), ginItem.quantity(), ginItem.unitPriceCent(), ginItem.amountCent(), "voided",
@@ -2127,7 +2118,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "closed-deliver", "create order", List.of(), "bar_1", reservation.tableId(), reservation.id(),
                 List.of(Map.of("product_id", beer.id(), "quantity", 1), Map.of("product_id", wine.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest("closed-1", "deliver beer", List.of(),
                 List.of(Map.of("order_item_id", itemOf(order, beer), "quantity", 1)), "staff_1", List.of()));
 
@@ -3071,7 +3062,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-ret1", "create order", List.of(), "bar_1", table.id(), null,
                 List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         BarBillRecord bill = bill("ret1", order.id());
         settle(bill, "ret1");
 
@@ -3096,7 +3087,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-ret2", "create order", List.of(), "bar_1", table.id(), null,
                 List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         BarBillRecord bill = bill("ret2", order.id());
         settle(bill, "ret2");
 
@@ -3122,7 +3113,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-ret3", "create order", List.of(), "bar_1", table.id(), null,
                 List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         BarBillRecord bill = bill("ret3", order.id());
 
         service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -3145,7 +3136,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-ret4", "create order", List.of(), "bar_1", table.id(), null,
                 List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         BarBillRecord bill = bill("ret4", order.id());
         settle(bill, "ret4");
         service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -3178,7 +3169,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-ret5", "create order", List.of(), "bar_1", table.id(), null,
                 List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         BarBillRecord bill = bill("ret5", order.id());
         settle(bill, "ret5");
         service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -3203,7 +3194,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-ret6", "create order", List.of(), "bar_1", table.id(), null,
                 List.of(Map.of("product_id", big.id(), "quantity", 1), Map.of("product_id", small.id(), "quantity", 1)),
-                "staff_sales", List.of(), "offline"));
+                List.of(), "offline"));
         BarBillRecord bill = bill("ret6", order.id());
         settle(bill, "ret6");
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -3231,9 +3222,9 @@ class BarServiceTests {
 
     private BarOrderRecord order(String key, String barId, String tableId, String reservationId,
             BarProductRecord product, int quantity) {
-        return service.createOrder(new BarOrderRequest(
+        return withSales(service.createOrder(new BarOrderRequest(
                 "order-" + key, "create order", List.of(), barId, tableId, reservationId,
-                List.of(Map.of("product_id", product.id(), "quantity", quantity)), "staff_sales", List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", quantity)), List.of(), "offline")), "staff_sales");
     }
 
     private BarBillRecord bill(String key, String orderId) {
@@ -3564,7 +3555,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-pending", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -3589,7 +3580,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-return", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
                 "deliver-void-return", "deliver", List.of(),
@@ -3625,7 +3616,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-twice", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
                 "void-twice-1", "x", List.of(), orderItemId, "first", false, null, null));
@@ -3646,7 +3637,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-approve", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -3676,7 +3667,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-reject", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -3715,7 +3706,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-rej-reverse", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
                 "deliver-void-rej-reverse", "deliver", List.of(),
@@ -3765,7 +3756,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-appr-keep", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
                 "deliver-void-appr-keep", "deliver", List.of(),
@@ -3805,7 +3796,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-rej-idem", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
                 "deliver-void-rej-idem", "deliver", List.of(),
@@ -3854,7 +3845,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-rej-once", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 2)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 2)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
                 "deliver-void-rej-once", "deliver", List.of(),
@@ -3909,7 +3900,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-" + key, "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", quantity)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", quantity)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
         service.deliverOrder(order.id(), new BarOrderDeliveryRequest(
                 "deliver-" + key, "deliver", List.of(),
@@ -4130,7 +4121,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-void-cancel-highamount", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         String orderItemId = barRepository.listOrderItems(order.id()).getFirst().id();
 
         BarOrderItemVoidRecord voided = service.voidOrderItem(order.id(), new BarOrderItemVoidRequest(
@@ -4300,7 +4291,7 @@ class BarServiceTests {
         assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
                 "order-soldout", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline")))
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("PRODUCT_SOLD_OUT");
@@ -4313,7 +4304,7 @@ class BarServiceTests {
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
                 "order-soldout-ok", "create order", List.of(), "bar_1",
                 reservation.tableId(), reservation.id(),
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         assertThat(order.totalAmountCent()).isEqualTo(500000L);
     }
 
@@ -4553,13 +4544,13 @@ class BarServiceTests {
                 0L, 2, "active"));
         BarOrderRecord counterOrder = service.createOrder(new BarOrderRequest(
                 "order-dualdrive-counter", "create order", List.of(), "bar_1", counter.id(), null,
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         assertThat(barRepository.findProductionTicketByOrderId(counterOrder.id())).isEmpty();
         // 卡座=完整流转：照旧建票（既有行为不回退）。
         BarTableRecord seat = createTable("dualdrive-seat", "bar_1", "active", 0L);
         BarOrderRecord seatOrder = service.createOrder(new BarOrderRequest(
                 "order-dualdrive-seat", "create order", List.of(), "bar_1", seat.id(), null,
-                List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         assertThat(barRepository.findProductionTicketByOrderId(seatOrder.id())).isPresent();
     }
 
@@ -4584,7 +4575,7 @@ class BarServiceTests {
                     0L, 2, "active"));
             BarOrderRecord order = service.createOrder(new BarOrderRequest(
                     "order-fooddrive", "create order", List.of(), "bar_1", table.id(), null,
-                    List.of(Map.of("product_id", product.id(), "quantity", 1)), null, List.of(), "offline"));
+                    List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
             assertThat(barRepository.findProductionTicketByOrderId(order.id())).isEmpty();
         } finally {
             barOrderService.merchantDirectory = null;
@@ -4639,10 +4630,12 @@ class BarServiceTests {
                 reservation.tableId(),
                 reservation.id(),
                 List.of(Map.of("product_id", product.id(), "quantity", 1)),
-                salesStaffId,
                 List.of(),
                 "offline"
         ));
+        if (salesStaffId != null) {
+            order = withSales(order, salesStaffId);
+        }
         return service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
                 "bill-" + key,
                 "create bill",
@@ -4651,6 +4644,16 @@ class BarServiceTests {
                 false,
                 0
         ));
+    }
+
+    /**
+     * 第十八批 I 段 86-R1：订单销售取开台会话的销售归属（本类未注入服务责任，下单后订单销售恒空）；要带销售归属的用例按落库形状直接写入订单记录，
+     * 不为单测在生产代码加回落。
+     */
+    private BarOrderRecord withSales(BarOrderRecord order, String salesStaffId) {
+        return barRepository.saveOrder(new BarOrderRecord(order.id(), order.barId(), order.merchantId(), order.tableId(),
+                order.reservationId(), order.customerId(), order.orderSource(), order.status(), order.totalAmountCent(), order.currency(),
+                order.createdTerminal(), order.deviceId(), salesStaffId, order.createdAt(), order.updatedAt(), order.orderType(), order.paidAt()));
     }
 
     /** ROOT-03 clients-R6：门口只认成员本人动态入场码（客人端签发，窗口内有效）。 */
@@ -4705,6 +4708,41 @@ class BarServiceTests {
         @Override
         public boolean pourDeviceEquipped(String itemId, String locationId) {
             return pourDeviceStock.contains(itemId + ":" + locationId);
+        }
+
+        /** 第十八批 I 段第 76 条：物料规格容量（毫升）与库存行已开瓶余量（物品:库位），按 Jdbc 语义扣加。 */
+        final Map<String, Integer> specVolumes = new LinkedHashMap<>();
+        final Map<String, Integer> openedVolumes = new LinkedHashMap<>();
+
+        @Override
+        public Optional<Integer> findInventoryItemSpecVolumeMl(String itemId) {
+            return Optional.ofNullable(specVolumes.get(itemId));
+        }
+
+        @Override
+        public Optional<Integer> decreaseStockByVolume(String itemId, String locationId, int volumeMl) {
+            String key = itemId + ":" + locationId;
+            int opened = openedVolumes.getOrDefault(key, 0);
+            Integer spec = specVolumes.get(itemId);
+            if (spec == null) {
+                return Optional.empty();
+            }
+            int bottles = BarPourLoss.bottlesToOpen(volumeMl, opened, spec);
+            if (!atomicDecreaseStock(itemId, locationId, bottles)) {
+                return Optional.empty();
+            }
+            openedVolumes.put(key, opened + bottles * spec - volumeMl);
+            return Optional.of(bottles);
+        }
+
+        @Override
+        public boolean increaseOpenedVolume(String itemId, String locationId, int volumeMl) {
+            String key = itemId + ":" + locationId;
+            if (!stockBalances.containsKey(key)) {
+                return false;
+            }
+            openedVolumes.merge(key, volumeMl, Integer::sum);
+            return true;
         }
 
         @Override

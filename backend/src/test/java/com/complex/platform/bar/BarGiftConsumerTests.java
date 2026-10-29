@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -417,6 +417,41 @@ class BarGiftConsumerTests {
         public StockMovementSnapshot saveStockMovement(StockMovementSnapshot movement) {
             stockMovements.add(movement);
             return movement;
+        }
+
+        /** 第十八批 I 段第 76 条：物料规格容量（毫升）与库存行已开瓶余量（物品:库位），按 Jdbc 语义扣加。 */
+        final Map<String, Integer> specVolumes = new LinkedHashMap<>();
+        final Map<String, Integer> openedVolumes = new LinkedHashMap<>();
+
+        @Override
+        public Optional<Integer> findInventoryItemSpecVolumeMl(String itemId) {
+            return Optional.ofNullable(specVolumes.get(itemId));
+        }
+
+        @Override
+        public Optional<Integer> decreaseStockByVolume(String itemId, String locationId, int volumeMl) {
+            String key = itemId + ":" + locationId;
+            int opened = openedVolumes.getOrDefault(key, 0);
+            Integer spec = specVolumes.get(itemId);
+            if (spec == null) {
+                return Optional.empty();
+            }
+            int bottles = BarPourLoss.bottlesToOpen(volumeMl, opened, spec);
+            if (!atomicDecreaseStock(itemId, locationId, bottles)) {
+                return Optional.empty();
+            }
+            openedVolumes.put(key, opened + bottles * spec - volumeMl);
+            return Optional.of(bottles);
+        }
+
+        @Override
+        public boolean increaseOpenedVolume(String itemId, String locationId, int volumeMl) {
+            String key = itemId + ":" + locationId;
+            if (!stockBalances.containsKey(key)) {
+                return false;
+            }
+            openedVolumes.merge(key, volumeMl, Integer::sum);
+            return true;
         }
 
         @Override

@@ -1,6 +1,6 @@
 package com.complex.platform.governance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -234,6 +234,15 @@ class CrossProjectGovernanceJdbcIntegrationTests {
         send(ticked, post("/api/v1/leasing/brands"), "{\"idempotency_key\":\"lb-" + suffix + "\",\"brand_name\":\"B 新品牌\","
                 + "\"brand_type\":\"prospective\",\"business_type\":\"retail\",\"project_id\":\"" + projectB + "\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.project_id").value(projectB));
+        assertThat(failureCount("lb-" + suffix)).isZero();
+        // 第十八批 I 段第 90 条 90-R2（PGM L738）：在够不着的 C 建品牌 403、不落行，落 leasing.brand.create_failed
+        send(ticked, post("/api/v1/leasing/brands"), "{\"idempotency_key\":\"lbc-" + suffix + "\",\"brand_name\":\"C 新品牌 " + suffix
+                + "\",\"brand_type\":\"prospective\",\"business_type\":\"retail\",\"project_id\":\"" + projectC + "\"}")
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM leasing_brands WHERE brand_name=?", Integer.class, "C 新品牌 " + suffix))
+                .isZero();
+        assertThat(failures("leasing.brand.create_failed", "lbc-" + suffix)).containsExactly(Map.of("actor_id", userId("c"),
+                "business_id", "new", "error_code", "CROSS_PROJECT_FORBIDDEN"));
         send(ticked, post("/api/v1/loyalty/config/check-in-tiers"),
                 "{\"project_id\":\"" + projectB + "\",\"streak_days\":5,\"award_points\":10}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.project_id").value(projectB));
@@ -315,10 +324,15 @@ class CrossProjectGovernanceJdbcIntegrationTests {
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
         assertThat(jdbc.queryForObject("SELECT contract_id FROM leasing_intents WHERE id=?", String.class, id("int", "b"))).isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM contracts WHERE merchant_id=?", Integer.class, id("mch", "b"))).isZero();
+        // 第十八批 I 段第 90 条 90-R1（PGM L738、L899）：被拒落 OpenAPI 声明的失败事件（独立事务，按本次幂等键查）
+        assertThat(failures("leasing.intent.sign_failed", "sign-mx-" + suffix)).containsExactly(Map.of("actor_id", userId("mx"),
+                "business_id", id("int", "b"), "error_code", "CROSS_PROJECT_FORBIDDEN"));
         send(mixed, post("/api/v1/leasing/brands/" + id("brand", "b") + "/blacklist"), blacklistBody("mx"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
         assertThat(jdbc.queryForObject("SELECT brand_type FROM leasing_brands WHERE id=?", String.class, id("brand", "b")))
                 .isEqualTo("prospective");
+        assertThat(failures("leasing.brand.blacklist_change_failed", "bl-mx-" + suffix)).containsExactly(Map.of("actor_id",
+                userId("mx"), "business_id", id("brand", "b"), "error_code", "CROSS_PROJECT_FORBIDDEN"));
 
         RequestPostProcessor full = staffOfA("fx", tickedBRole("fx", "leasing.intent.manage", "leasing.brand.manage",
                 "leasing.convert", "leasing.brand.blacklist"));
@@ -333,6 +347,9 @@ class CrossProjectGovernanceJdbcIntegrationTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.project_id").value(projectA));
         send(plain, post("/api/v1/leasing/brands/" + id("brand", "a") + "/blacklist"), blacklistBody("pl"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.brand_type").value("blacklist"));
+        for (String key : List.of("sign-fx-", "bl-fx-", "sign-pl-", "bl-pl-")) {
+            assertThat(failureCount(key + suffix)).isZero();
+        }
     }
 
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
@@ -508,6 +525,17 @@ class CrossProjectGovernanceJdbcIntegrationTests {
     private List<String> ids(RequestPostProcessor session, String url) throws Exception {
         return JsonPath.read(mockMvc.perform(get(url).with(session)).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.items[*].id");
+    }
+
+    /** 失败事件是独立事务写入（AuditEventService.recordFailure）、不随测试回滚：按本次请求唯一的幂等键查。 */
+    private List<Map<String, Object>> failures(String event, String key) {
+        return jdbc.queryForList("SELECT actor_id, business_id, metadata->>'error_code' AS error_code FROM audit_events "
+                + "WHERE event_name=? AND event_result='failure' AND idempotency_key=?", event, key);
+    }
+
+    private int failureCount(String key) {
+        return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_result='failure' AND idempotency_key=?",
+                Integer.class, key);
     }
 
     /** 以给定身份 GET（须 200），取出该 JSON 路径下属于本次夹具的编号（都以随机后缀结尾）；共享库里别的行不看。 */

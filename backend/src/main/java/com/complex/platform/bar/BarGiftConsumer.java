@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.GiftReversedEvent;
@@ -141,11 +141,21 @@ public class BarGiftConsumer {
         //    AUD-015：库存不足（含并发抢到最后一件的失败方）→ 抛错回滚，绝不标记 delivered。
         String inventoryItemId = trimToNull(giftProduct.inventoryItemId());
         boolean deductStock = giftProduct.stockDeductionRequired() && inventoryItemId != null;
+        // 第十八批 I 段第 76 条（BSM:1065「按杯按标准出酒量扣库存、超出记损耗」；BSM:1049「扣减吧台售卖消耗、赠饮消耗和报损」）：按杯赠饮按容量扣——
+        //     标准出酒量＋损耗（未配设备＝标准损耗；配设备吧台的赠饮没有设备实采来源，不记损耗），先用已开瓶余量、不够再开新瓶。
+        Integer standardPour = giftProduct.standardPourVolume();
+        boolean pourDevice = standardPour != null && deductStock && repository.pourDeviceEquipped(inventoryItemId, STOCK_LOCATION_DEFAULT);
+        Integer giftLoss = standardPour == null || pourDevice ? null
+                : Math.toIntExact(BarPourLoss.standardLoss(standardPour, repository.pourLossRatePct(barId)));
+        int giftVolume = standardPour == null ? 0 : standardPour + (giftLoss == null ? 0 : giftLoss);
         String inventoryMovementId = null;
         String note = "gift redeemed; stock deduction not required for this product";
         if (deductStock) {
             inventoryMovementId = "movement_" + slug(seed + ":" + inventoryItemId);
-            if (!repository.atomicDecreaseStock(inventoryItemId, STOCK_LOCATION_DEFAULT, 1)) {
+            Optional<Integer> bottles = standardPour == null
+                    ? (repository.atomicDecreaseStock(inventoryItemId, STOCK_LOCATION_DEFAULT, 1) ? Optional.of(1) : Optional.empty())
+                    : repository.decreaseStockByVolume(inventoryItemId, STOCK_LOCATION_DEFAULT, giftVolume);
+            if (bottles.isEmpty()) {
                 throw ApiException.conflict("GIFT_STOCK_INSUFFICIENT",
                         "赠饮对应吧台库存不足，无法履约");
             }
@@ -155,14 +165,16 @@ public class BarGiftConsumer {
                     inventoryItemId,
                     STOCK_LOCATION_DEFAULT,
                     null,
-                    1,
+                    bottles.get(),
                     "bar_gift_redemption",
                     orderId,
                     null,
                     null,
                     List.of(),
                     "completed",
-                    now
+                    now,
+                    standardPour,
+                    giftLoss
             ));
             note = "gift redeemed; stock decreased via redeem_consume";
         }
@@ -210,11 +222,10 @@ public class BarGiftConsumer {
         //     标准损耗，不得按零损耗记账」；第十八批裁决 4）：按杯赠饮商品在未配设备的吧台出酒，与点单出品同一算法记一行 0 元赠送明细——
         //     实际出酒量＝标准出酒量，标准损耗＝标准出酒量×本酒吧损耗率阈值。吧台＝本次实际扣库库存行（物料＋default 库位）所挂库房，不扣库按未配处理。
         //     配有设备的吧台：赠饮核销没有设备采集的实际出酒量来源（设备对接不在第 17 条），维持原样不记。明细 id 由核销号派生，重复事件同行覆盖。
-        Integer standardPour = giftProduct.standardPourVolume();
-        if (standardPour != null && !(deductStock && repository.pourDeviceEquipped(inventoryItemId, STOCK_LOCATION_DEFAULT))) {
+        if (giftLoss != null) {
             repository.saveOrderItem(new BarOrderItemRecord(
                     "order_item_" + slug(seed), orderId, giftProduct.id(), giftProduct.productName(), 1, 0L, 0L, "delivered",
-                    now, now, standardPour, BarPourLoss.standardLoss(standardPour, repository.pourLossRatePct(barId)),
+                    now, now, standardPour, giftLoss.longValue(),
                     false, null, null, null, false, true, now));
         }
 
@@ -236,7 +247,12 @@ public class BarGiftConsumer {
         if (!inserted) {
             // 并发下另一次已先落单：本次回补已扣库存以避免重复扣减。
             if (inventoryMovementId != null) {
-                repository.atomicDecreaseStock(inventoryItemId, STOCK_LOCATION_DEFAULT, -1);
+                // 第十八批 I 段第 76 条：按杯的把本次扣的全部容量加回已开瓶余量。
+                if (standardPour == null) {
+                    repository.atomicDecreaseStock(inventoryItemId, STOCK_LOCATION_DEFAULT, -1);
+                } else {
+                    repository.increaseOpenedVolume(inventoryItemId, STOCK_LOCATION_DEFAULT, giftVolume);
+                }
             }
             return;
         }
@@ -265,9 +281,11 @@ public class BarGiftConsumer {
         Instant now = Instant.now();
         // 若此前已实际扣减库存，则回补（反向 movement，redeem_consume 反向）。
         // S5：itemRef 是提供方商品 id，库存走它绑定的库存物料（与正向扣减同一把钥匙）。
-        String reverseInventoryItemId = redemption.itemRef() == null ? null
-                : repository.findProductById(redemption.itemRef())
-                        .map(BarProductRecord::inventoryItemId).orElse(null);
+        BarProductRecord reverseProduct = redemption.itemRef() == null ? null
+                : repository.findProductById(redemption.itemRef()).orElse(null);
+        String reverseInventoryItemId = reverseProduct == null ? null : reverseProduct.inventoryItemId();
+        // 第十八批 I 段第 76 条：按杯赠饮冲正只把标准出酒量加回已开瓶余量（损耗不退），瓶数不变，流水瓶数 0、带出酒量。
+        Integer reverseVolume = reverseProduct == null ? null : reverseProduct.standardPourVolume();
         if (redemption.inventoryMovementId() != null && reverseInventoryItemId != null) {
             repository.saveStockMovement(new StockMovementSnapshot(
                     "movement_" + slug("gift_reverse:" + verificationId),
@@ -277,17 +295,23 @@ public class BarGiftConsumer {
                     // 此前误写出库形态(source=default,target=null)，致按流水重建库存重复扣减、账实偏差累积。
                     null,
                     STOCK_LOCATION_DEFAULT,
-                    1,
+                    reverseVolume == null ? 1 : 0,
                     "bar_gift_redemption_reverse",
                     redemption.barOrderId(),
                     null,
                     null,
                     List.of(),
                     "completed",
-                    now
+                    now,
+                    reverseVolume,
+                    null
             ));
-            // 反向回补余额：负数量增量恢复原扣减（atomicDecreaseStock 以负数实现回补）。
-            repository.atomicDecreaseStock(reverseInventoryItemId, STOCK_LOCATION_DEFAULT, -1);
+            if (reverseVolume == null) {
+                // 反向回补余额：负数量增量恢复原扣减（atomicDecreaseStock 以负数实现回补）。
+                repository.atomicDecreaseStock(reverseInventoryItemId, STOCK_LOCATION_DEFAULT, -1);
+            } else {
+                repository.increaseOpenedVolume(reverseInventoryItemId, STOCK_LOCATION_DEFAULT, reverseVolume);
+            }
         }
         // 第十八批 C 段第 17 条同根：核销时 4b 段记下的赠送明细照点单退酒写法置撤单，出酒量与损耗原值保留——
         //     冲正后权益可再核销、另起新单新明细，被冲正的这行不能仍算已出酒。

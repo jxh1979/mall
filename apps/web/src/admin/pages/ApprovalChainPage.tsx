@@ -1,6 +1,7 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { COMPLIANCE_ITEM_TYPE_LABELS } from "../i18n/complianceLabels";
+import { formatReviewValue } from "../i18n/reviewLabels";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -13,7 +14,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -302,10 +303,10 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
               <tbody>{pendingRows.map((row) => (
                 <tr key={row.decision.reviewId} data-testid={`approval-chain-pending-${row.decision.reviewId}`} className={row.decision.reviewId === reviewId ? "admin-row-selected" : undefined}>
                   <td>{row.decision.reviewId}</td>
-                  <td>{formatBusinessStatus(row.decision.actionType ?? "")}</td>
-                  <td>{row.decision.objectType ?? "-"} / {row.decision.objectId ?? "-"}</td>
+                  <td>{formatReviewValue(row.decision.actionType)}</td>
+                  <td>{formatReviewValue(row.decision.objectType)} / {row.decision.objectId ?? "-"}</td>
                   <td>{row.decision.initiatedBy ?? "-"}</td>
-                  <td>{formatBusinessStatus(row.decision.approvalLevel ?? "")}</td>
+                  <td>{formatReviewValue(row.decision.approvalLevel)}</td>
                   <td>{row.schedule?.dueAt ? cnDate(row.schedule.dueAt) : "-"}</td>
                   <td><button type="button" data-testid={`approval-chain-select-${row.decision.reviewId}`} onClick={() => void selectReview(row.decision.reviewId)}>{TEXT.select}</button></td>
                 </tr>
@@ -334,7 +335,7 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
                   <td>{node.lineCode === "main" ? "主线" : (LINE_LABELS[node.lineCode] ?? node.lineCode)}</td>
                   <td>{node.seq}</td>
                   <td>{KIND_ZH[node.approverKind] ?? node.approverKind}</td>
-                  <td>{node.approverId ?? (node.approverKind === "master" ? "USB 最高权限" : "按角色解析")}</td>
+                  <td>{node.approverId ?? (node.approverKind === "master" ? "最高权限本人" : "按角色解析")}</td>
                   <td>{(STATUS_ZH[node.status] ?? node.status) + (currentNodeIds.has(node.nodeId) ? "（当前）" : "")}</td>
                   <td>{node.forwardedTo ?? "-"}</td>
                   <td>{node.escalationCount ?? 0}</td>

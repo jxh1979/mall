@@ -2,7 +2,7 @@ package com.complex.platform.gate;
 
 import com.complex.platform.auth.AuthCookies;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -17,23 +17,31 @@ import com.complex.platform.terminal.DeviceSigningKeyStore;
 import com.complex.platform.terminal.TerminalDeviceRecord;
 import com.complex.platform.terminal.TerminalDeviceRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestInputStream;
 import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.springframework.web.util.WebUtils;
 
 /**
@@ -43,6 +51,8 @@ import org.springframework.web.util.WebUtils;
  * {@code deviceId|timestamp|nonce|METHOD|path|sha256(body)} 的签名验签：staff_work_phone→工作手机设备级公钥且
  * header deviceId 归属该员工（⑤）；所有设备绑定型终端均使用设备级签名公钥（{@code terminal_device_signing_keys}，②）。
  * 验签量含 body SHA-256（④）；nonce 由拦截器落库防重放（③）。
+ * multipart 请求（第 84 条 84-R1，工作手机签名上传证据）的摘要取部件规范串：参数按名排序逐行 {@code p:<名>=<值>}，
+ * 再文件按字段名排序逐行 {@code f:<名>:<原文件名>:<文件字节 SHA-256>}，换行连接后取 SHA-256（与终端 multipartBodyDigest 逐字相同）。
  *
  * <p><b>2026-08-03 收口</b>：终端类型不再由自报的 {@code X-Terminal-Type} 决定入闸与否——带
  * {@code X-Device-Id} 时一律先反查 {@code terminal_devices.terminal_type} 顶上，登记类型压过自报值。
@@ -290,7 +300,8 @@ public class DeviceCredentialVerifier {
         if (INVALID_OWNER.equals(publicKey)) {
             return Outcome.invalid("device_owner_mismatch");
         }
-        String bodyDigest = sha256Hex(cachedBody(request));
+        MultipartHttpServletRequest multipart = WebUtils.getNativeRequest(request, MultipartHttpServletRequest.class);
+        String bodyDigest = multipart != null ? multipartDigest(multipart) : sha256Hex(cachedBody(request));
         String canonical = deviceId + "\n" + ts + "\n" + nonce + "\n"
                 + request.getMethod().toUpperCase(Locale.ROOT) + "\n" + request.getRequestURI()
                 + "\n" + bodyDigest;
@@ -369,6 +380,31 @@ public class DeviceCredentialVerifier {
     private static byte[] cachedBody(HttpServletRequest request) {
         CachedBodyHttpServletRequest cached = WebUtils.getNativeRequest(request, CachedBodyHttpServletRequest.class);
         return cached != null ? cached.cachedBody() : new byte[0];
+    }
+
+    /** 84-R1 multipart 部件规范串的 SHA-256；文件流式取摘要，不整读进内存。读不出的文件记空摘要，验签自然不过（fail-closed）。 */
+    static String multipartDigest(MultipartHttpServletRequest request) {
+        List<String> lines = new ArrayList<>();
+        new TreeMap<>(request.getParameterMap()).forEach((name, values) -> {
+            for (String value : values) {
+                lines.add("p:" + name + "=" + value);
+            }
+        });
+        new TreeMap<>(request.getMultiFileMap()).forEach((name, files) -> {
+            for (MultipartFile file : files) {
+                lines.add("f:" + name + ":" + file.getOriginalFilename() + ":" + fileSha256Hex(file));
+            }
+        });
+        return sha256Hex(String.join("\n", lines).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String fileSha256Hex(MultipartFile file) {
+        try (DigestInputStream in = new DigestInputStream(file.getInputStream(), MessageDigest.getInstance("SHA-256"))) {
+            in.transferTo(OutputStream.nullOutputStream());
+            return HexFormat.of().formatHex(in.getMessageDigest().digest());
+        } catch (IOException | java.security.NoSuchAlgorithmException e) {
+            return "";
+        }
     }
 
     private static String sha256Hex(byte[] data) {

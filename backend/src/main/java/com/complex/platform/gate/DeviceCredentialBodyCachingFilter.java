@@ -22,6 +22,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *
  * <p>预认证 DoS 防护：仅在需缓存时才处理，且先按 Content-Length 早拒超 {@link CachedBodyHttpServletRequest#MAX_BODY_BYTES}
  * 的体（413），无 Content-Length 时由 wrapper 的有上限读取兜底（截断→验签失败）。
+ *
+ * <p>第 84 条 84-R1：multipart/form-data 不包、不走 1MB 早拒——包装器会读空原输入流，Spring 再解析不出文件部件。
+ * 交给 Spring multipart 按 application.yml 的上限解析（与不签名上传同一套上限），验签按部件规范串取摘要
+ * （{@link DeviceCredentialVerifier}）。
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -45,6 +49,10 @@ public class DeviceCredentialBodyCachingFilter extends OncePerRequestFilter {
     private static boolean needsBodyCache(HttpServletRequest request) {
         String sig = request.getHeader("X-Device-Signature");
         if (sig == null || sig.isBlank()) {
+            return false;
+        }
+        String contentType = request.getContentType();
+        if (contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).startsWith("multipart/form-data")) {
             return false;
         }
         return DeviceCredentialVerifier.isWrite(request.getMethod());

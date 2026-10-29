@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1012,7 +1012,7 @@ class BarJdbcIntegrationTests {
         Instant now = Instant.parse("2026-06-20T03:00:00Z");
         BarOrderRecord order = repository.saveOrder(new BarOrderRecord("order_rob_a", merchant, merchant, "table_rob_a", null, null,
                 "staff", "created", 30000L, "CNY", "web", null, null, now, now));
-        responsibilities.recordOrder(order);
+        responsibilities.recordOrder(order, responsibilities.currentSession("table_rob_a", merchant).orElseThrow());
         assertThat(repository.findSessionIdByOrderId("order_rob_a")).contains(a.id());
         repository.saveBill(new BarBillRecord("bill_rob_a", "BILL-rob_a", "order_rob_a", merchant, merchant,
                 "table_rob_a", null, 30000L, 0L, 0L, 30000L, 0L, "CNY", "unpaid", "unsettled", null, "non_sales", now, now));

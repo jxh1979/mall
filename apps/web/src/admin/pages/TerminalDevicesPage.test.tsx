@@ -1,8 +1,12 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // 第 63 条（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」；BSM:800「仅记设备状态、故障事件与维修工单留痕」）：
 // 后台登记安检 X 光设备、登记故障（即开维修工单）、修复完成、报废。
 // 第 82 条 82c-R1（PGM:618 综合体入场三道环节设备）：人脸扫描设备、检票闸机与 X 光设备共用登记入口 /devices/entry-devices（带 terminalType）。
 // 第 82 条 82c-R2（PGM:624）：工作手机、平板、一体机后台送修、修复完成、报废（在用工作手机不给）；82c-R3（PGM:623）：列表显示责任人、入场设备更换责任人。
+// 第 89 条 89-R1（PGM:624「记录设备领用、归还、维修、挂失和报废」）：入场三道环节设备与在用工作手机以外的设备后台挂失，原因必填。
+// 89-R2（第十八批裁决 20「回待领用」）：挂失行给「找回」，原因必填，找回后回待领用；returned 显示「待领用」（ENUM:241）。
+// 89-R3（PGM:618「……扫码设备……和其他现场设备」；PGM:379 扫码设备领还）：扫码设备、其他现场设备在本页登记进台账；扫码设备在本页归还、领用，
+// 其他现场设备与入场设备一样更换责任人，两者都可挂商户、挂失。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +25,11 @@ const PHONE_RETURNED = {
 };
 const PHONE_BOUND = { ...PHONE_RETURNED, id: "dev_ph_2", deviceId: "PH-2", deviceCode: "PH-2", status: "bound" };
 const TABLET_REPAIR = { ...PHONE_RETURNED, id: "dev_tb_1", deviceId: "TB-1", deviceCode: "TB-1", terminalType: "tablet", status: "repair" };
+const TABLET_BOUND = { ...PHONE_RETURNED, id: "dev_tb_x", deviceId: "TB-X", deviceCode: "TB-X", terminalType: "tablet", status: "bound" };
+const TABLET_LOST = { ...TABLET_BOUND, id: "dev_tb_l", deviceId: "TB-L", deviceCode: "TB-L", status: "lost" };
+const SCANNER_BOUND = { ...XRAY_BOUND, id: "dev_sc_1", deviceId: "SC-1", deviceCode: "SC-1", terminalType: "scanner", deviceModel: "NL-2100" };
+const SCANNER_RETURNED = { ...SCANNER_BOUND, id: "dev_sc_2", deviceId: "SC-2", deviceCode: "SC-2", status: "returned" };
+const OTHER_BOUND = { ...XRAY_BOUND, id: "dev_os_1", deviceId: "OS-1", deviceCode: "OS-1", terminalType: "other_site_device", deviceModel: "LED-55" };
 
 function makeApi(post = vi.fn().mockResolvedValue({}), rows: unknown[] = [XRAY_BOUND, XRAY_REPAIR]): AdminApiClient {
   const get = vi.fn((path: string) =>
@@ -43,7 +52,7 @@ describe("TerminalDevicesPage 安检 X 光设备（第 63 条）", () => {
   it("登记安检 X 光设备：编号、型号、点位、责任人四项提交到后台登记入口", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
-    await waitFor(() => expect(screen.queryByText("登记入场三道环节设备")).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText("登记设备进台账")).not.toBeNull());
     fireEvent.change(screen.getByTestId("terminal-xray-code"), { target: { value: "XR-9" } });
     fireEvent.change(screen.getByTestId("terminal-xray-model"), { target: { value: "FISCAN CX6040" } });
     fireEvent.change(screen.getByTestId("terminal-xray-space"), { target: { value: "spc_gate_1" } });
@@ -143,5 +152,102 @@ describe("TerminalDevicesPage 设备送修去路与责任人（第 82 条）", (
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith({
       action: "terminal_device_responsible_staff_changed", id: "dev_xr_1",
     }));
+  });
+});
+
+describe("TerminalDevicesPage 设备挂失、找回，扫码设备与其他现场设备（第 89 条）", () => {
+  it("89-R1：待领用的工作手机有挂失；在用的工作手机、入场三道环节设备没有", async () => {
+    renderPage(makeApi(vi.fn().mockResolvedValue({}), [PHONE_RETURNED, PHONE_BOUND, XRAY_BOUND, FACE_BOUND]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-lost-dev_ph_1")?.textContent).toBe("挂失"));
+    for (const id of ["dev_ph_2", "dev_xr_1", "dev_fs_1"]) {
+      expect(screen.queryByTestId(`terminal-device-lost-${id}`)).toBeNull();
+    }
+  });
+
+  it("89-R1：在用平板填原因点挂失，调挂失入口、用挂失结果码", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [TABLET_BOUND]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-lost-dev_tb_x")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("terminal-xray-reason-dev_tb_x"), { target: { value: "场内遗失" } });
+    fireEvent.click(screen.getByTestId("terminal-device-lost-dev_tb_x"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/terminals/devices/dev_tb_x/lost", { reason: "场内遗失" }));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith({ action: "terminal_device_lost_reported", id: "dev_tb_x" }));
+  });
+
+  it("89-R1：不填原因点挂失，提示原因必填、不发请求", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [TABLET_BOUND]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-lost-dev_tb_x")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("terminal-device-lost-dev_tb_x"));
+    expect(props.setGlobalError).toHaveBeenCalledWith("请填写原因（留痕必填）");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("89-R2：挂失的平板填原因点找回，调找回入口、用找回结果码；挂失行没有送修、有报废", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [TABLET_LOST]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-found-dev_tb_l")?.textContent).toBe("找回"));
+    expect(screen.queryByTestId("terminal-xray-fault-dev_tb_l")).toBeNull();
+    expect(screen.queryByTestId("terminal-xray-scrap-dev_tb_l")).not.toBeNull();
+    fireEvent.change(screen.getByTestId("terminal-xray-reason-dev_tb_l"), { target: { value: "已在吧台找回" } });
+    fireEvent.click(screen.getByTestId("terminal-device-found-dev_tb_l"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/terminals/devices/dev_tb_l/found", { reason: "已在吧台找回" }));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith({ action: "terminal_device_found", id: "dev_tb_l" }));
+  });
+
+  it("89-R2：待领用（returned）的设备行状态列显示「待领用」", async () => {
+    renderPage(makeApi(vi.fn().mockResolvedValue({}), [PHONE_RETURNED]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-row-dev_ph_1")?.textContent ?? "").toContain("待领用"));
+  });
+
+  it("89-R3：登记下拉含扫码设备、其他现场设备；选扫码设备填四项提交到登记入口", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(post));
+    await waitFor(() => expect(screen.queryByTestId("terminal-entry-type")?.textContent ?? "").toContain("扫码设备"));
+    expect(screen.getByTestId("terminal-entry-type").textContent).toContain("其他现场设备");
+    fireEvent.change(screen.getByTestId("terminal-entry-type"), { target: { value: "scanner" } });
+    fireEvent.change(screen.getByTestId("terminal-xray-code"), { target: { value: "SC-9" } });
+    fireEvent.change(screen.getByTestId("terminal-xray-model"), { target: { value: "NL-2100" } });
+    fireEvent.change(screen.getByTestId("terminal-xray-space"), { target: { value: "spc_gate_1" } });
+    fireEvent.change(screen.getByTestId("terminal-xray-staff"), { target: { value: "stf_1" } });
+    fireEvent.click(screen.getByTestId("terminal-xray-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/terminals/devices/entry-devices", {
+      terminalType: "scanner", deviceCode: "SC-9", deviceModel: "NL-2100", boundSpaceId: "spc_gate_1", staffId: "stf_1",
+    }));
+  });
+
+  it("89-R3：在用扫码设备填原因点归还，调归还入口", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [SCANNER_BOUND]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-return-dev_sc_1")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("terminal-xray-reason-dev_sc_1"), { target: { value: "交班" } });
+    fireEvent.click(screen.getByTestId("terminal-device-return-dev_sc_1"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/terminals/devices/return", { deviceCode: "SC-1", reason: "交班" }));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith({ action: "terminal_device_returned", id: "dev_sc_1" }));
+  });
+
+  it("89-R3：待领用扫码设备不填领用人点领用不发请求；填领用人点领用，调领用绑定入口", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [SCANNER_RETURNED]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-checkout-dev_sc_2")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("terminal-device-checkout-dev_sc_2"));
+    expect(props.setGlobalError).toHaveBeenCalledWith("请填写领用人（员工档案编号）");
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("terminal-device-staff-dev_sc_2"), { target: { value: "stf_2" } });
+    fireEvent.click(screen.getByTestId("terminal-device-checkout-dev_sc_2"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/terminals/devices/bind", {
+      deviceId: "SC-2", terminalType: "scanner", bindingScope: "space", boundSpaceId: "spc_gate_1", staffId: "stf_2",
+    }));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith({ action: "terminal_device_checked_out", id: "dev_sc_2" }));
+  });
+
+  it("89-R3：其他现场设备行有更换责任人、改绑商户与挂失；扫码设备行有挂失与改绑商户、没有更换责任人", async () => {
+    renderPage(makeApi(vi.fn().mockResolvedValue({}), [OTHER_BOUND, SCANNER_BOUND]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-staff-submit-dev_os_1")).not.toBeNull());
+    expect(screen.queryByTestId("terminal-device-rebind-dev_os_1")).not.toBeNull();
+    expect(screen.queryByTestId("terminal-device-lost-dev_os_1")).not.toBeNull();
+    expect(screen.queryByTestId("terminal-device-lost-dev_sc_1")).not.toBeNull();
+    expect(screen.queryByTestId("terminal-device-rebind-dev_sc_1")).not.toBeNull();
+    expect(screen.queryByTestId("terminal-device-staff-submit-dev_sc_1")).toBeNull();
   });
 });

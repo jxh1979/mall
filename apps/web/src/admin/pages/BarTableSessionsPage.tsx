@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
@@ -413,7 +413,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         // ROOT-03-R19（ENUM 第 100 行「已预留只能经取消订台、超时释放、到店开台三条路径退出」）：客人到店开台带上该台位的订台号，占台随即退出。
         reservationId: newSession.reservationId.trim() || undefined,
         guestCount: Number(newSession.guestCount),
-        salesStaffId: newSession.salesStaffId.trim() || undefined,
+        // 第十八批 I 段 86-R2（BSM 第 1021 行）：带订台开台的销售按订台带出，现场补选销售只限直接到店（订台号为空）。
+        salesStaffId: newSession.reservationId.trim() ? undefined : newSession.salesStaffId.trim() || undefined,
         serviceStaffId: newSession.serviceStaffId.trim() || undefined,
       });
       setActionResult({ action: "bar_table_session_create", status: "opened", result });
@@ -565,8 +566,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <label>卡座 ID<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座 ID" /></label>
         <label>订台号（有预订必填）<input data-testid="bar-new-session-reservation" value={newSession.reservationId} onChange={(event) => setNewSession((p) => ({ ...p, reservationId: event.target.value }))} placeholder="客人到店开台填该台位的订台号" /></label>
         <label>人数<input data-testid="bar-new-session-guests" type="number" min={1} value={newSession.guestCount} onChange={(event) => setNewSession((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
-        <label>销售（选填）<input data-testid="bar-new-session-sales" value={newSession.salesStaffId} onChange={(event) => setNewSession((p) => ({ ...p, salesStaffId: event.target.value }))} placeholder="销售 ID" /></label>
-        <label>服务员（选填）<input data-testid="bar-new-session-service" value={newSession.serviceStaffId} onChange={(event) => setNewSession((p) => ({ ...p, serviceStaffId: event.target.value }))} placeholder="服务员 ID" /></label>
+        {newSession.reservationId.trim()
+          ? <span data-testid="bar-new-session-sales-from-reservation">销售：按订台带出</span>
+          : <label>销售（选填）<input data-testid="bar-new-session-sales" value={newSession.salesStaffId} onChange={(event) => setNewSession((p) => ({ ...p, salesStaffId: event.target.value }))} placeholder="销售 ID" /></label>}
+        {/* 第十八批 I 段 86-R3（BSM 第 1077 行「主责服务提供人按当日该场次排班指派到该卡座」）：卡座不填由服务端按排班指派。 */}
+        <label>服务员（不填按排班自动指派；当班多人时填其一）<input data-testid="bar-new-session-service" value={newSession.serviceStaffId} onChange={(event) => setNewSession((p) => ({ ...p, serviceStaffId: event.target.value }))} placeholder="服务员 ID" /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_SESSION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createSession()} data-testid="bar-new-session-submit">开台</PermissionButton>
       </div>
       {barError ? <div data-testid="bar-create-error" className="admin-inline-error">{barError}</div> : null}

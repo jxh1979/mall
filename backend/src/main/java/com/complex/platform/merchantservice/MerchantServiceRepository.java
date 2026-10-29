@@ -48,4 +48,19 @@ public interface MerchantServiceRepository {
 
     /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */
     void setWorkOrderArchiveReason(String id, String reason);
+
+    /** 第十八批 I 段 77-R3：该类型×优先级配置的处理时限（分钟）；未配置为空。默认空（内存桩无时限表＝一律未配置）。 */
+    default Optional<Integer> findHandleMinutes(String workOrderType, String priority) {
+        return Optional.empty();
+    }
+
+    /** 77-R3：已配置的处理时限，按类型、优先级排序。 */
+    default List<MerchantWorkOrderPolicyRecord> listPolicies() {
+        return List.of();
+    }
+
+    /** 77-R3：按类型×优先级写入处理时限（已有则改）。 */
+    default MerchantWorkOrderPolicyRecord savePolicy(MerchantWorkOrderPolicyRecord policy) {
+        throw new UnsupportedOperationException("savePolicy");
+    }
 }

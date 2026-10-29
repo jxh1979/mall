@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -32,6 +32,10 @@ public class BarOrderService {
 
     @Autowired
     BarServiceResponsibilityService serviceResponsibilities;
+    // 第十八批 I 段 86-R1：客人扫码已结账单按销售归属人员工档案快照岗位档（同 BarBillingService.createBill）。字段注入 + @Lazy 断环。
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    BarBillingService billing;
     // 第十批 TK-24-R3：落单后按台组低消进度判定金达标退回（字段注入免改构造点；单测手工置位）。
     @Autowired(required = false)
     BarDepositSettlementService depositSettlements;
@@ -112,6 +116,12 @@ public class BarOrderService {
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         boolean stockManaged = Boolean.TRUE.equals(actual.stockDeductionRequired());
+        // 第十八批 I 段第 76 条（BSM:1065「按杯按标准出酒量扣库存」；ENUM:79「定价、库存、结算、对账一律按商品规格逐项进行」）：按杯扣库存的商品
+        // 按容量扣库，所挂库存物料须已登记规格容量（物料没有改容量入口，建商品时拦住，出品不再另判）。
+        if (stockManaged && actual.standardPourVolume() != null
+                && Optional.ofNullable(trimToNull(actual.inventoryItemId())).flatMap(repository::findInventoryItemSpecVolumeMl).isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "按杯扣库存的商品，所挂库存商品规格须登记规格容量（毫升）");
+        }
         // 批10/E(V380)：内部结算价唯一可编辑处 = SKU 目录。直填一律拒绝(静默忽略会骗运营"以为配好了");
         // 要配价请引用目录条目(catalog_item_code,可先在目录「就地新建」再引用)。
         if (actual.internalSettlementPriceCent() != null) {
@@ -263,6 +273,11 @@ public class BarOrderService {
         String customerId = customerIdOverride != null
                 ? customerIdOverride
                 : (reservation == null ? null : reservation.customerId());
+        // 第十八批 I 段 86-R1（BSM 第 1070 行「一张账单的提成只计一次、只归帮该客人预订的那个人……协助服务、加单、送达等其他经手人只留责任痕迹、
+        // 不产生销售提成」；DEC-R8-95「销售提成跟客人走」）：订单销售取该台位当前开台会话的销售归属，不取下单人，也不由请求指定；
+        // 无开台会话（吧台直点）即无销售。下单人留痕见 BarService 写操作审计的操作人。
+        BarTableSessionRecord session = serviceResponsibilities == null ? null
+                : serviceResponsibilities.currentSession(table.id(), barId).orElse(null);
         BarOrderRecord order = repository.saveOrder(new BarOrderRecord(
                 orderId,
                 barId,
@@ -276,11 +291,11 @@ public class BarOrderService {
                 CURRENCY_CNY,
                 createdTerminal,
                 null,
-                trimToNull(actual.salespersonUserId()),
+                session == null ? null : session.salesStaffId(),
                 now,
                 now
         ));
-        if (serviceResponsibilities != null) serviceResponsibilities.recordOrder(order);
+        if (session != null) serviceResponsibilities.recordOrder(order, session);
         orderItems.forEach(repository::saveOrderItem);
         // 出品票据双驱动（业务HTML 983 行口径）：吧台直点即点即取不走流转；独立餐饮出品在第三方系统、
         // 平台只拿回流不建票；卡座点酒/扫码点单/后厨自营小吃走「接单→制作→备好→送达」完整留痕。
@@ -455,7 +470,7 @@ public class BarOrderService {
         long total = order.totalAmountCent();
         BarBillRecord bill = repository.saveBill(new BarBillRecord("bill_" + slug(order.id()), "BILL" + now.toEpochMilli(),
                 order.id(), order.barId(), order.merchantId(), order.tableId(), order.reservationId(), total, 0L, 0L, total, total,
-                CURRENCY_CNY, "paid", "settled", order.salesStaffId(), null, now, now, false, null, null, null, 0, 0L, now));
+                CURRENCY_CNY, "paid", "settled", order.salesStaffId(), billing.resolveSalesRoleType(order.salesStaffId()), now, now, false, null, null, null, 0, 0L, now));
         repository.saveBillSettlement(new BarBillSettlementRecord("settle_" + slug(order.id()), bill.id(), "aggregate_pay",
                 null, null, total, order.merchantId(), now));
         return repository.saveOrder(new BarOrderRecord(order.id(), order.barId(), order.merchantId(), order.tableId(),
@@ -508,7 +523,6 @@ public class BarOrderService {
                 session.tableId(),
                 session.reservationId(),
                 actual.items(),
-                actual.salespersonUserId(),
                 actual.serviceUserIds(),
                 actual.paymentMode());
         // merchant 取自会话（权威，修员工 scope 兜底 + 支持客人无 scope）；customerId 客人路径=本人。
@@ -603,17 +617,20 @@ public class BarOrderService {
                     .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
             int quantity = requirePositiveItemQuantity(delivered, "quantity");
             requireCompleteDeliveryQuantity(item, quantity);
-            if (product.stockDeductionRequired()) {
-                atomicDecreaseStock(
-                        requireText(product.inventoryItemId(), "inventory_item_id"),
-                        requireText(product.stockLocationId(), "stock_location_id"),
-                        quantity,
-                        order.id(),
-                        deliveryEvidenceAttachmentIds
-                );
-            }
             // 第十八批 C 段第 17 条：按杯出酒量与损耗按出酒吧台有无采集设备二分（见 resolvePourCost）。
             PourCostResult pour = resolvePourCost(order, product, delivered, quantity, item, actual.idempotencyKey());
+            if (product.stockDeductionRequired()) {
+                String inventoryItemId = requireText(product.inventoryItemId(), "inventory_item_id");
+                String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
+                if (product.standardPourVolume() == null) {
+                    atomicDecreaseStock(inventoryItemId, stockLocationId, quantity, order.id(), deliveryEvidenceAttachmentIds);
+                } else {
+                    // 第十八批 I 段第 76 条（BSM:1065「按杯按标准出酒量扣库存、超出记损耗」；BSM:1168「按杯消耗按标准容量扣减，
+                    // 超出部分进入损耗」）：出酒量＝标准×杯数（配设备实采少于标准仍扣标准），连同损耗一并按容量扣库。
+                    decreaseStockByVolume(inventoryItemId, stockLocationId, product.standardPourVolume() * quantity,
+                            Math.toIntExact(pour.lossVolume()), order.id(), item.id(), deliveryEvidenceAttachmentIds);
+                }
+            }
             Integer actualPourVolume = pour.actualPourVolume();
             long lossVolume = pour.lossVolume();
             repository.saveOrderItem(new BarOrderItemRecord(
@@ -906,6 +923,34 @@ public class BarOrderService {
         ));
     }
 
+    /**
+     * 第十八批 I 段第 76 条：按杯出品按容量扣库（先用已开瓶余量，不够再开新瓶；瓶数不够 409）并记一条流水——瓶数＝开的新瓶数
+     * （只动余量为 0）、出酒量 volume_ml、损耗量 loss_volume_ml；同单同物料多行不撞号，流水号按订单＋订单明细。
+     */
+    private void decreaseStockByVolume(String itemId, String locationId, int salesVolume, int lossVolume, String orderId,
+            String orderItemId, List<String> evidenceAttachmentIds) {
+        int bottles = repository.decreaseStockByVolume(itemId, locationId, salesVolume + lossVolume)
+                .orElseThrow(() -> ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足"));
+        // ponytail: 成本按开瓶的瓶数计（只动余量的流水成本 0），要按杯分摊成本再改。
+        repository.saveStockMovement(new StockMovementSnapshot(
+                "movement_" + slug(orderId + ":" + orderItemId),
+                "outbound",
+                itemId,
+                locationId,
+                null,
+                bottles,
+                "bar_order",
+                orderId,
+                null,
+                null,
+                evidenceAttachmentIds,
+                "completed",
+                Instant.now(),
+                salesVolume,
+                lossVolume
+        ));
+    }
+
     // ========================================================================
     // V091 沽清（86/估清）：置沽清 / 恢复供应；下单时 requireProductSellable 拦截。
     // ========================================================================
@@ -1189,7 +1234,12 @@ public class BarOrderService {
         if (returnToStock && product.stockDeductionRequired()) {
             String inventoryItemId = requireText(product.inventoryItemId(), "inventory_item_id");
             String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
-            boolean increased = repository.atomicIncreaseStock(inventoryItemId, stockLocationId, item.quantity());
+            // 第十八批 I 段第 76 条（BSM:1068「出品后退品按是否回库处理」；BSM:1065「按杯按标准出酒量扣库存」）：按杯商品回库只把
+            // 标准×杯数加回已开瓶余量（损耗不退），瓶数不变，流水瓶数 0、带出酒量。
+            Integer returnVolume = product.standardPourVolume() == null ? null : product.standardPourVolume() * item.quantity();
+            boolean increased = returnVolume == null
+                    ? repository.atomicIncreaseStock(inventoryItemId, stockLocationId, item.quantity())
+                    : repository.increaseOpenedVolume(inventoryItemId, stockLocationId, returnVolume);
             if (!increased) {
                 throw ApiException.conflict("STOCK_BALANCE_NOT_FOUND", "退回库存时未找到库存余额记录");
             }
@@ -1200,14 +1250,16 @@ public class BarOrderService {
                     inventoryItemId,
                     null,
                     stockLocationId,
-                    item.quantity(),
+                    returnVolume == null ? item.quantity() : 0,
                     "bar_order_item_void",
                     item.id(),
                     null,
                     actorId,
                     evidenceAttachmentIds,
                     "completed",
-                    now));
+                    now,
+                    returnVolume,
+                    null));
         }
 
         // 资金：从关联账单扣减（结账前减应付 = waiver 类减项；结账后走 refund 冲正——复用既有账单调整路径）。
@@ -1401,8 +1453,12 @@ public class BarOrderService {
             if (product.stockDeductionRequired()) {
                 String inventoryItemId = requireText(product.inventoryItemId(), "inventory_item_id");
                 String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
-                boolean decreased = repository.atomicDecreaseStock(inventoryItemId, stockLocationId, current.quantity());
-                if (!decreased) {
+                // 第十八批 I 段第 76 条：按杯商品按容量扣回退品时加回的标准×杯数（余量不够会开新瓶），流水瓶数＝开的新瓶数、带出酒量。
+                Integer returnVolume = product.standardPourVolume() == null ? null : product.standardPourVolume() * current.quantity();
+                Integer bottles = returnVolume == null
+                        ? (repository.atomicDecreaseStock(inventoryItemId, stockLocationId, current.quantity()) ? current.quantity() : null)
+                        : repository.decreaseStockByVolume(inventoryItemId, stockLocationId, returnVolume).orElse(null);
+                if (bottles == null) {
                     throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足");
                 }
                 repository.saveStockMovement(new StockMovementSnapshot(
@@ -1411,14 +1467,16 @@ public class BarOrderService {
                         inventoryItemId,
                         stockLocationId,
                         null,
-                        current.quantity(),
+                        bottles,
                         "bar_order_item_void_reject",
                         item.id(),
                         null,
                         reviewer,
                         safeList(current.evidenceAttachmentIds()),
                         "completed",
-                        now));
+                        now,
+                        returnVolume,
+                        null));
             }
         }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -203,7 +203,7 @@ class BarControllerTests {
                         .with(user("bar").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"idempotency_key":"order-deposit-web","operator_note":"web order","evidence_attachment_ids":[],"bar_id":"bar_1","table_id":"table_1","reservation_id":"reservation_1","items":[{"product_id":"product_1","quantity":2}],"salesperson_user_id":"staff_sales","service_user_ids":[],"payment_mode":"offline"}
+                                {"idempotency_key":"order-deposit-web","operator_note":"web order","evidence_attachment_ids":[],"bar_id":"bar_1","table_id":"table_1","reservation_id":"reservation_1","items":[{"product_id":"product_1","quantity":2}],"service_user_ids":[],"payment_mode":"offline"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value("order_1"));
@@ -401,7 +401,7 @@ class BarControllerTests {
                     """;
         }
         return "{" + idempotency + """
-                "bar_id":"bar_1","table_id":"table_1","reservation_id":"reservation_1","items":[{"product_id":"product_1","quantity":1}],"salesperson_user_id":"staff_sales","payment_mode":"offline"}
+                "bar_id":"bar_1","table_id":"table_1","reservation_id":"reservation_1","items":[{"product_id":"product_1","quantity":1}],"payment_mode":"offline"}
                 """;
     }
 

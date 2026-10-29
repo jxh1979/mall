@@ -1,4 +1,4 @@
-# 证据留痕与风控产品 PRD V0.05
+# 证据留痕与风控产品 PRD V0.06
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -382,7 +382,7 @@ flowchart TD
 | 机制 | 触发方式 | 落地 | 状态/留痕 |
 |---|---|---|---|
 | 异常域升级（本 PRD §3/§6/§7.3） | **人工 escalate**（主管/责任人手动触发） | `RiskAlertService.escalateRiskAlert`（事件 `exception.escalated`），见 §11A.1 责任链 | handling → escalated，写 escalate 责任链流水 |
-| 工单域 SLA 升级（merchant_service 工单，非本 PRD 直管） | **定时任务自动升级**（默认关，需显式开启） | `MerchantWorkOrderSlaEscalationJob`（`@Scheduled`，开关 `merchant.service.sla-escalation.scheduled.enabled=true` 才注册），迁移 `V120`（`sla_breached` + `escalated_at`） | 不改 status，仅打标 sla_breached + escalated_at + 写 escalated 动作；命中后移出待扫描索引防重复升级 |
+| 工单域 SLA 升级（merchant_service 工单，非本 PRD 直管） | **定时任务自动升级**（默认关，需显式开启） | `MerchantWorkOrderSlaEscalationJob`（`@Scheduled`，开关 `merchant.service.sla-escalation.scheduled.enabled=true` 才注册），迁移 `V120`（`sla_breached` + `escalated_at`） | 不改 status，打标 sla_breached + escalated_at + 写 escalated 动作；第十八批 I 段第 77 条 77-R2 起升级后另给持派单权限（`merchant.service_work_order.assign`）、平台口径、可触及该商户经营项目的员工各发一条员工系统通知；命中后移出待扫描索引防重复升级 |
 
 业务规则：
 - 本 PRD“异常首响超时进入升级队列”是把超时异常呈现到升级队列供人工升级，当前实现细节见 spec §6。
@@ -392,7 +392,7 @@ flowchart TD
 
 验收口径要点（细化 G/W/T 见 spec §6/§15）：
 - 异常域：超时异常进升级队列 → 人工 escalate → handling→escalated、写责任链流水。
-- 工单域：工单 due_at 已过、未关闭、未升级 + SLA 扫描任务运行（开关开启）→ 打标 sla_breached + escalated_at + 写 escalated 动作、status 不变；已升级工单不重复升级；开关未开则任务不注册。
+- 工单域：工单 due_at 已过、未关闭、未升级 + SLA 扫描任务运行（开关开启）→ 打标 sla_breached + escalated_at + 写 escalated 动作、status 不变，并通知持派单权限的平台员工（第十八批 I 段第 77 条 77-R2）；已升级工单不重复升级；开关未开则任务不注册。
 
 > 待业务确认（evidence-risk）：本 PRD §6「异常首响超时」是否需要补充"超时呈现到升级队列"的明确呈现口径与超时阈值默认值；以及是否需要在 §6 风控规则表显式标注"升级=人工 escalate（异常域）"以与工单域 V120 定时升级区分，避免后续误实现为异常域自动升级。
 
@@ -404,6 +404,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-29 | 改 | §11A 工单域 SLA 升级行与验收口径 | 版本升 V0.06；第十八批 I 段第 77 条 77-R2：商户服务工单超时升级后通知持派单权限的平台员工，「仅打标」改为打标并通知 | BSM L1385；ENUM L264、L265 |
 | 2026-10-29 | 增 | §7.2 | 补「实现现状（第十八批 F 段第 14 条 14-R1）」：通用人工补录单、两项按项目参数（时限为安全阈值须最高权限本人、录音提前量为业务参数）、凭证收录音、主管复核与被影响方回避、批准落地与并列查询、补录数量接入 | BSM 第 1642 行；待开发清单第 14 条 |
 | 2026-08-11 | 改 | §7.2 / §8 / §9 | 删除人工补录“无需复核即可直接生效”旁路，统一为附证据后进入主管复核、仅通过后生效；页面与验收同步主管复核状态及并列留痕 | OPS-008；ENUM“主管复核强制项”；BSM“记录缺失时允许人工补录，但必须写原因和责任人” |
 | 2026-08-05 | 增 | §7.2 人工补录 | 补 RSK-05 补录六条细则：①补录时限（安全阈值·按项目可配·出厂默认 3 天·须配上下限）且超时不得补录；②必须附原始记录凭证（微信截图、通话录音等）并经审核；③通话录音须早于到店且早于开卡达配置时长（业务参数·按项目可配·出厂默认 30 分钟），不满足不予采信；④一律进主管复核队列、复核通过才生效；⑤涉金额/销售归属/提成/责任认定的补录须由被影响方之外的主管复核；⑥补录与原始记录并列展示并标明「人工补录」 | DIFF-A-045；BSM「记录缺失时允许人工补录，但必须写原因和责任人」条；方向与 DEC-R6-09 一致 |

@@ -12,9 +12,12 @@ import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteApprovalRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteDecision;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderPolicyRequest;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -77,6 +80,20 @@ public class MerchantServiceController {
         authorizationService.requirePermission("merchant.service_work_order.close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.closeWorkOrder(id, request));
+    }
+
+    // ── 第十八批 I 段 77-R3 处理时限（工单类型×优先级）───────────────────────
+    @GetMapping("/work-order-policies")
+    public ApiResponse<List<MerchantWorkOrderPolicyRecord>> listPolicies() {
+        authorizationService.requirePermission("merchant.service_work_order.assign");
+        return ApiResponse.ok(service.listPolicies());
+    }
+
+    @PutMapping("/work-order-policies")
+    public ApiResponse<MerchantWorkOrderPolicyRecord> savePolicy(@RequestBody MerchantWorkOrderPolicyRequest request) {
+        authorizationService.requirePermission("merchant.service_work_order.assign");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.savePolicy(request));
     }
 
     // ── V264 数据存档与审批后删除 ──────────────────────────────────────────

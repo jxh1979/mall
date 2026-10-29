@@ -113,3 +113,52 @@ describe("MerchantWorkOrdersPage 行明细抽屉", () => {
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
   });
 });
+
+// 第 77 条 77-R3：BSM:1385「响应/处理时限按「工单类型×优先级」矩阵后台配置」「商户服务工单不设首次响应环节」——
+// 建单不再由页面写死截止时间（由后端按处理时限算）；处理时限按类型×优先级保存（PUT，蛇形键）并列出已配置行。
+describe("MerchantWorkOrdersPage 处理时限", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function json(data: unknown): Response {
+    return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+  }
+
+  it("列出已配置时限；保存发 PUT（work_order_type/priority/handle_minutes）；建单请求不带 due_at", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (String(url).includes("/work-order-policies") && method === "GET") {
+        return Promise.resolve(json([{ work_order_type: "complaint", priority: "low", handle_minutes: 240 }]));
+      }
+      if (method === "PUT") return Promise.resolve(json({ work_order_type: "repair", priority: "critical", handle_minutes: 90 }));
+      if (method === "POST") return Promise.resolve(json({ id: "wo-new" }));
+      return Promise.resolve(envelope(ROWS));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MerchantWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("merchant-work-order-policy-complaint-low")?.textContent ?? "").toContain("240"));
+
+    fireEvent.change(screen.getByTestId("merchant-work-order-policy-type"), { target: { value: "repair" } });
+    fireEvent.change(screen.getByTestId("merchant-work-order-policy-priority"), { target: { value: "critical" } });
+    fireEvent.change(screen.getByTestId("merchant-work-order-policy-minutes"), { target: { value: "90" } });
+    fireEvent.click(screen.getByTestId("merchant-work-order-policy-save"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(true));
+    const [putUrl, putInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
+    expect(String(putUrl)).toContain("/api/v1/merchant-service/work-order-policies");
+    expect(JSON.parse(String(putInit.body))).toMatchObject({ work_order_type: "repair", priority: "critical", handle_minutes: 90 });
+
+    await waitFor(() => expect((screen.getByTestId("merchant-work-order-policy-save") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("merchant-work-order-create-open"));
+    fireEvent.click(screen.getByTestId("merchant-work-order-guided-next"));
+    fireEvent.click(screen.getByTestId("merchant-work-order-create"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders"))).toBe(true));
+    const [, postInit] = fetchMock.mock.calls.find(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders"))!;
+    const created = JSON.parse(String(postInit.body));
+    expect(created).toMatchObject({ work_order_type: "repair", priority: "high" });
+    expect(created).not.toHaveProperty("due_at");
+  });
+});

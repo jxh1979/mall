@@ -1,10 +1,18 @@
 package com.complex.platform.merchantservice;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.access.staff.EmployeeNoticeRecord;
+import com.complex.platform.access.staff.JdbcStaffRepository;
+import com.complex.platform.access.staff.StaffProfileRecord;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.governance.MerchantRecord;
+import com.complex.platform.governance.PlatformRepository;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderActionRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderAssignRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseRequest;
@@ -12,7 +20,12 @@ import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteApprovalRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteDecision;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderPolicyRequest;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -50,10 +64,29 @@ public class MerchantServiceService {
             "pending_merchant", Set.of("processing", "resolved"),
             "resolved", Set.of());
 
+    // 77-R2 超时通知用的中文名：类型与优先级同后台页选项，状态同 ENUM:264（升级只扫未处理完的四种状态）。
+    private static final String ASSIGN_PERMISSION = "merchant.service_work_order.assign";
+    private static final Map<String, String> TYPE_NAMES =
+            Map.of("repair", "报修", "complaint", "投诉", "rectification", "整改", "service", "服务");
+    private static final Map<String, String> PRIORITY_NAMES = Map.of("low", "低", "medium", "中", "high", "高", "critical", "紧急");
+    private static final Map<String, String> STATUS_NAMES =
+            Map.of("created", "已提交", "assigned", "已派单", "processing", "处理中", "pending_merchant", "待商户确认");
+    private static final DateTimeFormatter DUE_TEXT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Asia/Shanghai"));
+
     private final MerchantServiceRepository repository;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+
+    // 77-R2 超时通知主管（字段注入；单测直接 new 时为空＝只升级标记、不通知）。
+    @Autowired(required = false)
+    AccessRepository accessRepository;
+
+    @Autowired(required = false)
+    JdbcStaffRepository staffRepository;
+
+    @Autowired(required = false)
+    PlatformRepository platformRepository;
 
     public MerchantServiceService(
             MerchantServiceRepository repository,
@@ -162,6 +195,7 @@ public class MerchantServiceService {
      * 扫描 due_at 已过、未完成（status 非 resolved/closed/cancelled）且尚未升级（escalated_at IS NULL）的工单，
      * 逐单打标 sla_breached + escalated_at（markSlaBreached，不改 status），并写一条 'escalated' 动作留痕。
      * 留痕的 from/to status 一致（升级不迁移状态），operator 用系统标识（无登录上下文）。
+     * 第十八批 I 段 77-R2：赢得升级的单同时通知主管（ENUM:265「超时自动升级通知主管」）——见 {@link #dispatchers()}。
      * 一次调用最多处理 escalateBatchLimit 条；返回本次升级的工单数。
      *
      * @param now 参照时刻（due_at &lt;= now 视为已超时）
@@ -173,6 +207,7 @@ public class MerchantServiceService {
         }
         List<MerchantWorkOrderRecord> overdue = repository.findOverdueOpenWorkOrders(now, ESCALATE_BATCH_LIMIT);
         int escalated = 0;
+        List<Dispatcher> dispatchers = null; // 本轮有单升级时才算一次
         for (MerchantWorkOrderRecord record : overdue) {
             // 并发护栏：条件 UPDATE WHERE escalated_at IS NULL，受影响行数==1 才算本调用赢得升级。
             // 行数==0 表示已被其它并发事务（定时 vs 手动触发）抢先升级，跳过留痕/审计避免双重升级、双留痕。
@@ -189,6 +224,10 @@ public class MerchantServiceService {
                     "SLA overdue auto-escalation",
                     List.of()
             ));
+            if (dispatchers == null) {
+                dispatchers = dispatchers();
+            }
+            int notified = notifyDispatchers(record, dispatchers, now);
             auditEventService.recordSuccess(
                     "merchant_service.work_order.escalated",
                     "merchant.service_work_order.process",
@@ -196,11 +235,73 @@ public class MerchantServiceService {
                     record.id(),
                     requestId(),
                     null,
-                    Map.of("status", record.status(), "sla_breached", true)
+                    Map.of("status", record.status(), "sla_breached", true, "notified", notified)
             );
             escalated++;
         }
         return escalated;
+    }
+
+    /** 77-R2 候选收件人：员工档案编号与其派单码可触及的项目范围。 */
+    private record Dispatcher(String staffProfileId, AuthorizationService.ProjectReach reach) {
+    }
+
+    /**
+     * 77-R2：主管＝在用、平台口径（无商户归属、非外包账号，与入口 requirePlatformScope 同口径，PGM:528④）、
+     * 有效持派单权限（派单是客户关怀部主管动作，BSM:1385）、有员工档案的账号；各算一次派单码可触及的项目（没有项目归属的跳过）。
+     */
+    private List<Dispatcher> dispatchers() {
+        if (accessRepository == null || staffRepository == null || platformRepository == null) {
+            return List.of();
+        }
+        List<Dispatcher> result = new ArrayList<>();
+        for (AccessUser user : accessRepository.listUsers()) {
+            AccessActor actor = new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(),
+                    user.merchantId(), user.status());
+            if (!"active".equals(user.status()) || trimToNull(user.merchantId()) != null
+                    || authorizationService.isOutsourcedVendor(actor)
+                    || !authorizationService.hasEffectivePermission(actor, ASSIGN_PERMISSION)) {
+                continue;
+            }
+            Optional<StaffProfileRecord> profile = staffRepository.findProfileByUserId(user.id());
+            if (profile.isEmpty()) {
+                continue;
+            }
+            try {
+                result.add(new Dispatcher(profile.get().id(), authorizationService.projectReach(actor, ASSIGN_PERMISSION)));
+            } catch (ApiException noProjectScope) {
+                // 没有项目归属，够不到任何项目
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 77-R2：给派单码可触及该单商户任一经营项目（主项目或追加的经营项目，裁决 M737-iter7）的主管各发一条员工系统通知；返回通知人数。
+     */
+    private int notifyDispatchers(MerchantWorkOrderRecord record, List<Dispatcher> dispatchers, Instant now) {
+        if (dispatchers.isEmpty()) {
+            return 0;
+        }
+        List<String> projects = platformRepository.listMerchantOperatingProjectIds(record.merchantId());
+        String merchantName = platformRepository.findMerchantById(record.merchantId())
+                .map(MerchantRecord::merchantName).orElse(record.merchantId());
+        String title = "商户工单超时：" + record.title();
+        String body = merchantName + "的工单「" + record.title() + "」（"
+                + TYPE_NAMES.getOrDefault(record.workOrderType(), record.workOrderType()) + "/"
+                + PRIORITY_NAMES.getOrDefault(record.priority(), record.priority()) + "）已超过处理时限（"
+                + DUE_TEXT.format(record.dueAt()) + "，北京时间）仍未处理完，当前状态"
+                + STATUS_NAMES.getOrDefault(record.status(), record.status()) + "。";
+        int notified = 0;
+        for (Dispatcher dispatcher : dispatchers) {
+            if (projects.stream().anyMatch(dispatcher.reach()::covers)) {
+                staffRepository.saveNotice(new EmployeeNoticeRecord(
+                        "notice_" + UUID.randomUUID().toString().replace("-", ""), dispatcher.staffProfileId(), "system_notice",
+                        title, body, false, "pending", null, SYSTEM_OPERATOR, now, now));
+                notified++;
+            }
+        }
+        return notified;
     }
 
     private MerchantWorkOrderRecord createWorkOrderOnce(MerchantWorkOrderCreateRequest request) {
@@ -212,6 +313,10 @@ public class MerchantServiceService {
         // Operator identity always comes from the authenticated principal
         String reportedByUserId = authorizationService.currentActor().id();
         Instant now = Instant.now();
+        // 77-R3：截止时间＝建单时刻＋该类型×优先级的处理时限（BSM:1385 后台配置）；未配置的组合不设截止时间、不升级。
+        Instant dueAt = repository.findHandleMinutes(type, priority)
+                .map(minutes -> now.plus(Duration.ofMinutes(minutes)))
+                .orElse(null);
         MerchantWorkOrderRecord record = repository.saveWorkOrder(new MerchantWorkOrderRecord(
                 "mswo_" + UUID.randomUUID().toString().replace("-", ""),
                 merchantId,
@@ -226,7 +331,7 @@ public class MerchantServiceService {
                 requireText(request.reportedChannel(), "reported_channel"),
                 null,
                 null,
-                request.dueAt(),
+                dueAt,
                 null,
                 null,
                 null,
@@ -359,6 +464,42 @@ public class MerchantServiceService {
                 Map.of("status", closed.status())
         );
         return closed;
+    }
+
+    // ================= 第十八批 I 段 77-R3 处理时限（工单类型×优先级） =================
+
+    public List<MerchantWorkOrderPolicyRecord> listPolicies() {
+        return repository.listPolicies();
+    }
+
+    /** 保存一格处理时限（平台口径；商户账号与外包账号拒绝）。只影响此后新建的工单。 */
+    @Transactional
+    public MerchantWorkOrderPolicyRecord savePolicy(MerchantWorkOrderPolicyRequest request) {
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            String type = normalizeAllowed(request.workOrderType(), "work_order_type", TYPES);
+            String priority = normalizeAllowed(request.priority(), "priority", PRIORITIES);
+            if (request.handleMinutes() == null || request.handleMinutes() <= 0) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "handle_minutes 必须大于 0");
+            }
+            return idempotencyService.execute("saveMerchantWorkOrderPolicy:" + type + ":" + priority, request.idempotencyKey(), request,
+                    () -> {
+                        MerchantWorkOrderPolicyRecord saved = repository.savePolicy(new MerchantWorkOrderPolicyRecord(
+                                type, priority, request.handleMinutes(), actorId(), Instant.now()));
+                        auditEventService.recordSuccess("merchant_service.work_order_policy_saved", "merchant.service_work_order.assign",
+                                "merchant_service_work_order_policy", type + ":" + priority, requestId(), request.idempotencyKey(),
+                                Map.of("handle_minutes", saved.handleMinutes()));
+                        return saved;
+                    }, MerchantWorkOrderPolicyRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("merchant_service.work_order_policy_save_failed", "merchant.service_work_order.assign",
+                    "merchant_service_work_order_policy", null, requestId(), request == null ? null : request.idempotencyKey(),
+                    errorCode(exception));
+            throw exception;
+        }
     }
 
     // ================= V264 数据存档与审批后删除范式 =================

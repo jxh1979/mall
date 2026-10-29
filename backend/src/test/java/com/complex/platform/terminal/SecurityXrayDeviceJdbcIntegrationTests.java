@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -45,6 +45,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * 人脸扫描设备、检票闸机与安检 X 光设备共用后台登记入口 /devices/entry-devices（请求带 terminal_type）；只有安检 X 光设备送修即开维修工单。
  * 第 82 条 82c-R2（PGM:618「设备要绑定员工、班次、点位和状态」；PGM:624）：工作手机、平板、一体机修复完成回待领用（returned）。
  * 第 82 条 82c-R3（PGM:623「记录编号、型号、点位、责任人和状态」）：入场三道环节设备单独入口更换责任人（/devices/{id}/responsible-staff）。
+ * 第 89 条 89-R3（PGM:618「设备包括……扫码设备……和其他现场设备」；PGM:379「管理工作手机、平板、一体机和扫码设备的台账、领还……」）：
+ * 扫码设备 scanner、其他现场设备 other_site_device 也走后台登记入口进台账；扫码设备经归还、领用换持有人，其他现场设备按点位与责任人管。
  *
  * <p>不开测试事务（走真实接口、真实提交）。夹具按随机后缀隔离、结束时删除；设备状态流水与审计事件只追加不删，按后缀隔离留在库里。
  */
@@ -266,7 +268,7 @@ class SecurityXrayDeviceJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.status").value("bound"));
     }
 
-    // 第 82 条 82c-R1：后台登记入口只收入场三道环节设备，别的类型 400、不落台账。
+    // 第 82 条 82c-R1、第 89 条 89-R3：后台登记入口只收入场三道环节设备、扫码设备、其他现场设备，别的类型 400、不落台账。
     @Test
     void unknownEntryTypeRejected() throws Exception {
         send(DEVICES + "/entry-devices", registerJson(key("kiosk"), "k", spaceA, "kiosk"))
@@ -333,10 +335,88 @@ class SecurityXrayDeviceJdbcIntegrationTests {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("INVALID_DEVICE_STATUS"));
 
+        // 第 89 条 89-R3：扫码设备随归还、领用换持有人，同样不走该入口
+        String scanner = register("rss", "scanner");
+        send(DEVICES + "/" + scanner + "/responsible-staff", staffJson(key("rss"), holderA2))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("INVALID_DEVICE_STATUS"));
+
         send(DEVICES + "/" + id + "/scrap", reasonJson(key("rsu-scrap"), "无法修复")).andExpect(status().isOk());
         send(DEVICES + "/" + id + "/responsible-staff", staffJson(key("rsu-after"), holderA2))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DEVICE_TERMINAL_STATUS"));
+    }
+
+    // 第 89 条 89-R3（PGM:618「设备包括……扫码设备」；PGM:379「管理……扫码设备的台账、领还」；PGM:623）：扫码设备在后台登记进台账、
+    // 登记即在用，之后经归还（/devices/return）、领用（/devices/bind）换持有人，领用后型号仍在；修好回待领用。
+    // 修复前登记入口只收入场三道环节设备：登记 200 的断言即红（400 VALIDATION_FAILED）。
+    @Test
+    void scannerRegisterReturnAndCheckout() throws Exception {
+        String id = read(send(DEVICES + "/entry-devices", registerJson(key("reg-sc"), "sc", spaceA, "scanner"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.device_type").value("scanner"))
+                .andExpect(jsonPath("$.data.status").value("bound"))).path("data").path("id").asText();
+
+        send(DEVICES + "/return", """
+                {"idempotency_key": "%s", "device_code": "%s", "reason": "交班"}
+                """.formatted(key("sc-return"), code("sc")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("returned"));
+
+        send(DEVICES + "/bind", """
+                {"idempotency_key": "%s", "device_id": "%s", "terminal_type": "scanner", "binding_scope": "space",
+                 "bound_space_id": "%s", "staff_id": "%s"}
+                """.formatted(key("sc-bind"), code("sc"), spaceA, holderA2))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("bound"));
+        JsonNode listed = listedDevice(code("sc"));
+        assertThat(listed).as("设备台账列出扫码设备").isNotNull();
+        assertThat(listed.path("staff_id").asText()).isEqualTo(holderA2);
+        assertThat(listed.path("device_model").asText()).isEqualTo("FISCAN CX6040");
+
+        send(DEVICES + "/" + id + "/repair", reasonJson(key("sc-fault"), "扫码头失灵")).andExpect(status().isOk());
+        send(DEVICES + "/" + id + "/repair-complete", reasonJson(key("sc-done"), "已换扫码头"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("returned"));
+    }
+
+    // 第 89 条 89-R3（PGM:618「……和其他现场设备」；PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：其他现场设备在后台
+    // 登记进台账，按点位与责任人管——登记故障只进维修中、不开维修工单，修好回在用，责任人走单独入口更换。
+    // 修复前登记入口 400：register 里 200 的断言即红。
+    @Test
+    void otherSiteDeviceRegisterRepairAndChangeStaff() throws Exception {
+        String id = register("os", "other_site_device");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM terminal_devices WHERE id = ?", String.class, id)).isEqualTo("bound");
+        send(DEVICES + "/" + id + "/repair", reasonJson(key("os-fault"), "屏幕不亮"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("repair"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT repair_work_order_id FROM terminal_devices WHERE id = ?", String.class, id)).isNull();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM facility_work_orders WHERE space_id = ?", Integer.class, spaceA)).isZero();
+        send(DEVICES + "/" + id + "/repair-complete", reasonJson(key("os-done"), "已更换屏幕"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("bound"));
+        send(DEVICES + "/" + id + "/responsible-staff", staffJson(key("os-rs"), holderA2))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.staff_id").value(holderA2))
+                .andExpect(jsonPath("$.data.status").value("bound"));
+    }
+
+    // 第 89 条 89-R2（第十八批裁决 20「挂失→待领用，之后照常领用；和修好的设备回待领用是同一条路」）与 89-R1、89-R3：其他现场设备
+    // 挂失后找回，与修好同一去路——回在用、责任人沿用（领用绑定不收其他现场设备，落待领用就再也回不到在用）。
+    // 修复前找回一律落 returned：找回后 status 为 bound 的断言即红。
+    @Test
+    void otherSiteDeviceLostThenFoundBackInUse() throws Exception {
+        String id = register("osl", "other_site_device");
+        send(DEVICES + "/" + id + "/lost", reasonJson(key("osl-lost"), "场内遗失"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("lost"));
+        send(DEVICES + "/" + id + "/found", reasonJson(key("osl-found"), "已找回"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("bound"))
+                .andExpect(jsonPath("$.data.staff_id").value(holderA));
     }
 
     private String staffJson(String key, String staff) {

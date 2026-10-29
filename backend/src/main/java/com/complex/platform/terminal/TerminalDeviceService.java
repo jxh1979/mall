@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AuthorizationService.ProjectReach;
@@ -51,12 +51,18 @@ public class TerminalDeviceService {
     private static final Set<String> NON_OPERATIONAL_STATUSES = Set.of("lost", "scrapped", "repair", "blocked");
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
-    private static final Set<String> TERMINAL_TYPES = Set.of("staff_work_phone", "tablet", "kiosk");
+    // 第 89 条 89-R3（PGM:379「管理工作手机、平板、一体机和扫码设备的台账、领还……」）：扫码设备 scanner 也走领用绑定与归还
+    private static final Set<String> TERMINAL_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", "scanner");
     // 第 63 条：安检 X 光设备只在后台登记（不进上面员工端领用绑定的类型，/devices/bind 照旧拒绝）
     private static final String SECURITY_XRAY = "security_xray";
     // 第 82 条 82c-R1（PGM:618「综合体入场三道环节设备（安检环节的 X 光设备、年龄核验环节的人脸扫描设备、检票环节的检票闸机）」）：
     // 入场三道环节设备固定在点位、只在后台登记（同样不进上面的 TERMINAL_TYPES）
     private static final Set<String> FIXED_ENTRY_TYPES = Set.of(SECURITY_XRAY, "face_scanner", "ticket_gate");
+    // 第 89 条 89-R3（PGM:618「……和其他现场设备。设备要绑定员工、班次、点位和状态」；PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：
+    // 其他现场设备按点位与责任人管（更换责任人、修好回在用同入场设备）；后台登记入口另收扫码设备（登记后走归还、领用）
+    private static final Set<String> POINT_FIXED_TYPES = Set.of(SECURITY_XRAY, "face_scanner", "ticket_gate", "other_site_device");
+    private static final Set<String> REGISTERABLE_TYPES =
+            Set.of(SECURITY_XRAY, "face_scanner", "ticket_gate", "other_site_device", "scanner");
     private static final Set<String> KIOSK_MODES = Set.of("ticketing", "service");
     private static final Set<String> KIOSK_STATUSES = Set.of("online", "degraded", "offline");
     private static final Set<String> DEVICE_CREDENTIAL_REJECTION_CODES = Set.of(
@@ -287,6 +293,8 @@ public class TerminalDeviceService {
                 "terminal.device.lost", "terminal.device.lost_failed");
     }
 
+    // 第 89 条 89-R2（第十八批裁决 20「回待领用」：挂失→待领用，原因必填，之后照常领用；ENUM:241「待领用」）：
+    // 找回落点在 applyLifecycle 里与修复完成同一去路（其他现场设备回在用，其余回待领用 returned），found 不再停留
     @Transactional
     public DeviceBindingResponse markDeviceFound(String id, DeviceLifecycleRequest request) {
         return transitionLifecycle(
@@ -316,6 +324,7 @@ public class TerminalDeviceService {
     /**
      * 第 82 条 82c-R3（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」；PGM:618「设备要绑定员工……」）：入场三道环节设备
      * 更换责任人（调岗、离职）——只换责任人、状态不变，原因必填。工作手机、平板、一体机的持有人随归还、领用更换，不走这里（409）。
+     * 第 89 条 89-R3：其他现场设备同入场设备在这里更换责任人；扫码设备随归还、领用更换持有人（409）。
      * 范围闸在幂等之前：设备要在本人能管的范围内，新责任人所在项目也须在 terminal.device.lifecycle 可触及的项目内（82b-R5 ④；与生命周期入口顺带改持有员工同一道闸）。
      */
     @Transactional
@@ -347,9 +356,9 @@ public class TerminalDeviceService {
             throw ApiException.conflict("DEVICE_TERMINAL_STATUS",
                     "设备处于终态 " + existing.status() + "，不能更换责任人");
         }
-        if (!FIXED_ENTRY_TYPES.contains(existing.terminalType())) {
+        if (!POINT_FIXED_TYPES.contains(existing.terminalType())) {
             throw ApiException.conflict("INVALID_DEVICE_STATUS",
-                    "只有入场三道环节设备在本入口更换责任人，其他设备随归还、领用更换持有人");
+                    "只有入场三道环节设备与其他现场设备在本入口更换责任人，其他设备随归还、领用更换持有人");
         }
         String reason = requireText(actual.reason(), "reason");
         if (staff.equals(existing.staffId())) {
@@ -385,6 +394,8 @@ public class TerminalDeviceService {
      * 第 82 条 82c-R1（PGM:618「综合体入场三道环节设备（安检环节的 X 光设备、年龄核验环节的人脸扫描设备、检票环节的检票闸机）」）：
      * 人脸扫描设备、检票闸机共用本入口，请求带 terminal_type、只收这三类；只有安检 X 光设备送修即开维修工单。
      * 范围闸在幂等之前：绑定点位与责任人都要在本人能管的范围内。
+     * 第 89 条 89-R3（PGM:618「设备包括……扫码设备……和其他现场设备」；PGM:379 扫码设备领还）：扫码设备 scanner、其他现场设备
+     * other_site_device 也走本入口登记进台账（登记即在用、责任人即首个持有人）；扫码设备之后经归还、领用换持有人。
      */
     @Transactional
     public DeviceBindingResponse registerEntryDevice(EntryDeviceRegisterRequest request) {
@@ -409,7 +420,7 @@ public class TerminalDeviceService {
 
     private DeviceBindingResponse insertEntryDevice(EntryDeviceRegisterRequest actual) {
         String type = requireText(actual.terminalType(), "terminal_type");
-        if (!FIXED_ENTRY_TYPES.contains(type)) {
+        if (!REGISTERABLE_TYPES.contains(type)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "terminal_type is invalid");
         }
         String code = requireText(actual.deviceCode(), "device_code");
@@ -488,9 +499,12 @@ public class TerminalDeviceService {
         }
         boolean xray = SECURITY_XRAY.equals(existing.terminalType());
         // 第 63 条、第 82 条 82c-R1：入场三道环节设备修复完成回在用；第 82 条 82c-R2（PGM:618「设备要绑定员工、班次、点位和状态」；
-        // ENUM:241「待领用」）：工作手机、平板、一体机修好后不在任何人的当班里，回待领用（returned），再走领用绑定
-        String landing = "bound".equals(targetStatus) && !FIXED_ENTRY_TYPES.contains(existing.terminalType())
-                ? "returned" : targetStatus;
+        // ENUM:241「待领用」）：工作手机、平板、一体机修好后不在任何人的当班里，回待领用（returned），再走领用绑定；
+        // 第 89 条 89-R3：其他现场设备修好同入场设备回在用，扫码设备回待领用；
+        // 第 89 条 89-R2（第十八批裁决 20「和修好的设备回待领用是同一条路」）：挂失的设备找回与修好同一去路——
+        // 工作手机、平板、一体机、扫码设备回待领用（returned），之后照常领用；其他现场设备回在用（领用绑定不收此类）
+        String landing = "bound".equals(targetStatus) || "found".equals(targetStatus)
+                ? (POINT_FIXED_TYPES.contains(existing.terminalType()) ? "bound" : "returned") : targetStatus;
         // 第 63 条（BSM:800「仅记设备状态、故障事件与维修工单留痕」）：安检 X 光设备登记故障即开一张维修工单，与送修同一事务
         String repairWorkOrderId = existing.repairWorkOrderId();
         if (xray && "repair".equals(targetStatus)) {

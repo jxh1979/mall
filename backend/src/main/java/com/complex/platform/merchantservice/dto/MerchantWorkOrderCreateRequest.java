@@ -1,6 +1,5 @@
 package com.complex.platform.merchantservice.dto;
 
-import java.time.Instant;
 import java.util.List;
 
 public record MerchantWorkOrderCreateRequest(
@@ -15,7 +14,6 @@ public record MerchantWorkOrderCreateRequest(
         String title,
         String description,
         String reportedByUserId,
-        String reportedChannel,
-        Instant dueAt
+        String reportedChannel
 ) {
 }

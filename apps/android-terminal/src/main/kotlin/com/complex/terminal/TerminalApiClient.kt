@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.net.URI
 import java.net.URLEncoder
@@ -9,6 +9,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.util.UUID
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromString
@@ -325,6 +326,45 @@ class TerminalApiClient(
     return post("/api/v1/ticketing/verifications/${verificationSeg}/reverse", request)
   }
 
+  // ── 第十八批 I 段第 84 条 84-R2：酒水与物品交接扫码（PGM 第 633 行「记录出库、后厨接收、服务员取走和送达」；BSM 第 1201 行）──
+
+  /** 按扫到的溯源码查交接单（新建在前）。 */
+  fun listTraceHandovers(traceCode: String): List<TraceHandoverRecord> =
+    get("/api/v1/inventory/trace-handovers?trace_code=${urlEncode(traceCode)}")
+
+  /** 交接链：表头、五段原扫码记录与人工补录单并列。 */
+  fun getTraceHandover(id: String): TraceHandoverChain = get("/api/v1/inventory/trace-handovers/${urlEncode(id)}")
+
+  /** 库管出库前建交接单（device_id＝本机登记设备号）。 */
+  fun createTraceHandover(request: TraceHandoverCreateRequest): TraceHandoverChain =
+    post("/api/v1/inventory/trace-handovers", request)
+
+  /** 逐段扫码确认一个人工段。 */
+  fun scanTraceSegment(id: String, request: TraceScanSegmentRequest): TraceHandoverChain =
+    post("/api/v1/inventory/trace-handovers/${urlEncode(id)}/scan-segment", request)
+
+  /** 缺段人工补录（附证据，进主管复核）。 */
+  fun submitTraceStepBackfill(id: String, segment: String, request: TraceStepBackfillRequest): TraceHandoverBackfillRow =
+    post("/api/v1/inventory/trace-handovers/${urlEncode(id)}/segments/${urlEncode(segment)}/backfill", request)
+
+  /** 第 84 条 84-R1（BSM 第 1201 行「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）」）：工作手机签名上传交接补录证据。
+   *  business_type 固定 manual_backfill；签名摘要取部件规范串（[multipartBodyDigest]）。
+   *  ponytail: 整个文件读进内存，上限就是服务端 50MB，以后要更大再改流式。 */
+  fun uploadEvidence(fileName: String, bytes: ByteArray): EvidenceAttachmentRecord {
+    val path = "/api/v1/evidence/attachments/upload"
+    val fields = listOf("business_type" to "manual_backfill")
+    val files = listOf(Triple("file", fileName, bytes))
+    val boundary = "complex" + UUID.randomUUID().toString().replace("-", "")
+    val builder = HttpRequest.newBuilder()
+      .uri(URI.create("$baseUrl$path"))
+      .timeout(Duration.ofSeconds(30))
+      .header("content-type", "multipart/form-data; boundary=$boundary")
+      .POST(HttpRequest.BodyPublishers.ofByteArray(multipartFormBody(boundary, fields, files)))
+    applyHeaders(builder, path, "POST", "", bodyDigest = multipartBodyDigest(fields, files))
+    val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
+    return decode(path, response)
+  }
+
   inline fun <reified T> get(path: String, terminalTypeOverride: String? = null): T {
     val builder = HttpRequest.newBuilder()
       .uri(URI.create("$baseUrl$path"))
@@ -360,12 +400,14 @@ class TerminalApiClient(
   }
 
   /** 类型头只来自绑定/登记类型（或私人手机通道的固定声明），不按路径改报；设备签名只跳过登录（U02-001/U07-003）。 */
-  fun applyHeaders(builder: HttpRequest.Builder, path: String, method: String, body: String, terminalTypeOverride: String? = null) {
+  fun applyHeaders(builder: HttpRequest.Builder, path: String, method: String, body: String, terminalTypeOverride: String? = null,
+      bodyDigest: String? = null) {
     (terminalTypeOverride ?: terminalType)?.let { builder.header("X-Terminal-Type", it) }
     val id = deviceId
     val signer = deviceSigner
     if (id != null && signer != null && path != "/api/v1/auth/login") {
-      deviceRequestHeaders(id, method, path, body, signer).forEach { (name, value) -> builder.header(name, value) }
+      (if (bodyDigest != null) deviceRequestHeadersWithDigest(id, method, path, bodyDigest, signer)
+        else deviceRequestHeaders(id, method, path, body, signer)).forEach { (name, value) -> builder.header(name, value) }
     }
     accessToken?.takeIf { it.isNotBlank() }?.let { builder.header("authorization", "Bearer $it") }
   }

@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -475,6 +475,16 @@ describe("M043 真实审批信封与既有规则", () => {
     expect(row).toContain("导出文件 / exp_1");
     expect(row).not.toContain("未识别类型");
     expect(screen.getByTestId("supervisor-review-row-export_editable_copy").textContent).toContain("可编辑版导出申请");
+  });
+
+  // 第十八批 I 段第 87 条 87-R1：主管复核页与审批链页读同一张码表（reviewLabels.ts），新建合同复核单显示中文。
+  it("新建合同复核单的动作类型显示中文，不显示未识别类型", async () => {
+    const pending = [{ decision: { review_id: "review_cn1", policy_code: "contract_new", action_type: "contract.new", object_type: "contract", object_id: "c9", initiated_by: "u-c", approval_level: "one_level_up", required_level: 1, review_status: "pending_review" }, schedule: null }];
+    renderPage(ADMIN_PERMS, { pending });
+    await waitFor(() => expect(screen.queryByTestId("supervisor-review-pending-review_cn1")?.textContent ?? "").toContain("新建合同"));
+    const row = screen.getByTestId("supervisor-review-pending-review_cn1").textContent ?? "";
+    expect(row).toContain("合同 / c9");
+    expect(row).not.toContain("未识别类型");
   });
 
   it("第三人不能按用户编号转交给直接受益人", async () => {

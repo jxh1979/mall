@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -172,7 +172,7 @@ public class CustomerBarScanOrderService {
             // 成单放在保存点里：下单后、到账前被沽清或下架、扫码点单被关、或改了价（账单金额≠实付）都成不了单——只回滚成单，已到账的收款保留并原路待退。
             order = savepoint.execute(status -> {
                 BarOrderRecord placed = barOrders.placePaidCustomerScanOrder(sessionId,
-                        new BarOrderRequest("scan_" + row.get("id"), null, List.of(), null, null, null, readItems(row), null, List.of(), null),
+                        new BarOrderRequest("scan_" + row.get("id"), null, List.of(), null, null, null, readItems(row), List.of(), null),
                         (String) row.get("customer_id"), (String) row.get("created_terminal"));
                 if (placed.totalAmountCent() != paidAmount) {
                     throw ApiException.conflict("BAR_SCAN_ORDER_PRICE_CHANGED", "下单后商品价格已变，账单金额与实付不一致");

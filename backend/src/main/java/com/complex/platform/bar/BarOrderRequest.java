@@ -11,7 +11,6 @@ public record BarOrderRequest(
         String tableId,
         String reservationId,
         List<Map<String, Object>> items,
-        String salespersonUserId,
         List<String> serviceUserIds,
         String paymentMode
 ) {

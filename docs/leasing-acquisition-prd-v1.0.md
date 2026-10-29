@@ -1,4 +1,4 @@
-# 招商获客业务域 PRD（V1.10·据需求重建）
+# 招商获客业务域 PRD（V1.11·据需求重建）
 
 > 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径；最终业务解释仍以三份业务 HTML 为准。
 >
@@ -98,6 +98,7 @@
 - 品牌库：`GET/POST /leasing/brands`、`POST /brands/{id}/blacklist`
 - 黑名单例外放行：`GET/POST /leasing/blacklist-exceptions`（第十八批第 30 条，见 §4）
 - 跟进：`GET/POST /leasing/follow-ups`
+- 失败留痕（第十八批 I 段第 90 条，PGM L738、L899）：招商各写入口失败时落 OpenAPI 声明的 `x-audit-event-failure`（独立事务，业务回滚也保留）。
 - **实现缺口（M08 仅登记）**：当前 Controller 没有 `POST /leads/{id}/to-intent`，实际以 `POST /intents` 携带 `leadId` 建意向，须补端点并与 OpenAPI 对齐；`createIntent` 以随机 ID 新建，未见按幂等键去重，不能声称全部写操作均已幂等。签约链对合同草稿、自动建商户与四主体绑定使用按意向派生的稳定幂等键；其余写操作的幂等边界须逐项实现和验证。所有现有及后续写操作均须保持项目隔离与审计留痕。
 
 ## 10. UI / 验收（现有页面矩阵）
@@ -117,6 +118,7 @@
 
 | 日期 | 类型 | 章节 | 内容 |
 |---|---|---|---|
+| 2026-10-29 | 改 | 版本、§9 | 版本升至 V1.11：第十八批 I 段第 90 条——新建线索、指派、改状态、新建意向、推进意向、签约、新建品牌、拉黑/解黑品牌、新建跟进九个写入口在权限码、幂等键、范围、校验或业务冲突被拒时落 OpenAPI 声明的失败事件（`LeasingController.failureAudited`，独立事务）；黑名单例外放行申请的权限码只在服务层核，被拒落 `leasing.blacklist_exception.request_failed`（PGM L738、L899、L502） |
 | 2026-10-29 | 改 | §7 | V1.10 同版续记：18G 复核修正——签约起草合同草稿的所属项目按 `leasing.convert` 核，不另要 `contract.draft.manage`（PGM L659） |
 | 2026-10-29 | 改 | 版本、§7 | 版本升至 V1.10：第十八批 G 段第 82 条——签约意向按 `leasing.convert`、拉黑/解黑品牌按 `leasing.brand.blacklist` 判对象所在项目，不可触及 403 `CROSS_PROJECT_FORBIDDEN`，平台管理员不受此限（PGM L528、L659） |
 | 2026-10-28 | 改 | 版本、§2、§3、§4、§7、§9 | 版本升至 V1.09：第十八批第 30 条——拉黑前既有线索转意向拦截、黑名单例外放行（单独授予权限、按层级主管审批、禁止自审、全字段留痕）、意向不得向前跳级、进入方案报价与商务谈判经主管复核确认后才生效（PGM「招商运营细则」），各节「待实现」改为落地记录 |

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -29,13 +29,16 @@ public class BarServiceResponsibilityService {
     }
     /** 订单在创建事务锁定当时场次；历史订单不反查当前开台补造历史。
      *  复核 money B3：并台期间被并台位的会话为 merged（当前有效并台链内），订单归属该台位的并台会话——随台组计进度、关台检查其账单，
-     *  拆台时按实际订单归属回到原台（BSM L1079）。 */
-    void recordOrder(BarOrderRecord order) {
+     *  拆台时按实际订单归属回到原台（BSM L1079）。
+     *  第十八批 I 段 86-R1：下单前先取当时场次（订单销售取其销售归属），保存订单后再记来源。 */
+    Optional<BarTableSessionRecord> currentSession(String tableId,String barId) {
         var sessions=p.jdbc.queryForList("SELECT id FROM bar_table_sessions WHERE table_id=? AND bar_id=? AND status IN ('open','merged') ORDER BY opened_at,id FOR UPDATE",
-            String.class,order.tableId(),order.barId());
+            String.class,tableId,barId);
         if(sessions.size()>1)throw conflict("BAR_SESSION_AMBIGUOUS","该台位存在多个开台场次，须先核实再点单");
-        if(sessions.isEmpty())return;
-        var session=session(sessions.getFirst(),false);var scope=p.tableScope(order.tableId());
+        return sessions.isEmpty()?Optional.empty():Optional.of(session(sessions.getFirst(),false));
+    }
+    void recordOrder(BarOrderRecord order,BarTableSessionRecord session) {
+        var scope=p.tableScope(order.tableId());
         if(!Objects.equals(scope.merchant(),session.merchantId()) || (order.merchantId()!=null && !order.merchantId().equals(scope.merchant())))
             throw conflict("BAR_PAYROLL_SOURCE_SCOPE","订单与场次的商户不一致");
         p.jdbc.update("INSERT INTO bar_order_service_sources(order_id,session_id,table_id,project_id,merchant_id,business_date) VALUES(?,?,?,?,?,?)",
@@ -76,17 +79,21 @@ public class BarServiceResponsibilityService {
             if(!id.equals(sessionId))p.jdbc.update("UPDATE bar_table_sessions SET service_staff_id=?,session_version=session_version+1,updated_at=? WHERE id=?",nextUser,ts(at),id);
         }
     }
-    /** 正式排班表仅保存已发布班次；待审修订不在本表，真实顶班同样发布为班次。 */
+    /** 正式排班表仅保存已发布班次；待审修订不在本表，真实顶班同样发布为班次。
+     *  第十八批 I 段 86-R3：该台位点位此刻当班（已发布排班且未被顶班覆盖、或顶班班次本身）的人员，开台指派与转台接手共用。 */
+    List<String> scheduledServiceStaff(String table,Instant at) {
+        return p.jdbc.queryForList("""
+            SELECT DISTINCT s.user_id FROM staff_shift_schedules s JOIN bar_tables t ON t.id=?
+                WHERE s.start_at<=? AND s.end_at>?
+                  AND s.point_space_ids @> jsonb_build_array(t.space_id)
+                  AND NOT EXISTS(SELECT 1 FROM staff_shift_covers c WHERE c.shift_id=s.id AND c.start_at<=? AND c.end_at>?)
+                ORDER BY s.user_id
+            """,String.class,table,ts(at),ts(at),ts(at),ts(at));
+    }
     void requireTransferStaff(String table,String user,Instant at) {
         var scope=p.tableScope(table);
         p.requireWorker(requireText(user,"target_service_staff_id"),scope.project(),scope.merchant());
-        boolean scheduled=Boolean.TRUE.equals(p.jdbc.queryForObject("""
-            SELECT EXISTS(SELECT 1 FROM staff_shift_schedules s JOIN bar_tables t ON t.id=?
-                WHERE s.user_id=? AND s.start_at<=? AND s.end_at>?
-                  AND s.point_space_ids @> jsonb_build_array(t.space_id)
-                  AND NOT EXISTS(SELECT 1 FROM staff_shift_covers c WHERE c.shift_id=s.id AND c.start_at<=? AND c.end_at>?))
-            """,Boolean.class,table,user,ts(at),ts(at),ts(at),ts(at)));
-        if(!scheduled)throw conflict("BAR_TARGET_SERVICE_STAFF_NOT_ON_DUTY","目标接手人须有该点位当前已发布排班或真实顶班记录，不能继承原台人员");
+        if(!scheduledServiceStaff(table,at).contains(user))throw conflict("BAR_TARGET_SERVICE_STAFF_NOT_ON_DUTY","目标接手人须有该点位当前已发布排班或真实顶班记录，不能继承原台人员");
     }
     void recordTransfer(BarTableSessionRecord before,BarTableSessionRecord after,Instant at,String sourceId) {
         String target=requireText(after.serviceStaffId(),"target_service_staff_id");
