@@ -101,6 +101,22 @@ describe("BusinessAnalyticsPage 分组列英文枚举业务化", () => {
     expect(table).toContain("项目:pj-1");
     expect(table).not.toContain("project:pj-1");
   });
+
+  it("18F 第 80 条：商户分项目段渲染为「商户分项目:商户|项目」，不直出 merchant_project", async () => {
+    const get = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/analytics/review-locks")) return Promise.resolve([]);
+      if (path.includes("/analytics/business-metric-snapshots")) {
+        return Promise.resolve([
+          { snapshotId: "s3", metricKey: "revenue.contract_rent", domain: "finance", businessDate: "2026-07-01", actualValue: 100, baselineValue: 90, varianceRate: 0.1, trendDirection: "up", segmentType: "merchant_project", segmentId: "m-1|pj-1" },
+        ]);
+      }
+      if (path.includes("/analytics/traffic-hourly")) return Promise.resolve({ buckets: [] });
+      return Promise.resolve([]);
+    });
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.queryByTestId("business-analytics-table")?.textContent).toContain("商户分项目:m-1|pj-1"));
+    expect(screen.getByTestId("business-analytics-table").textContent).not.toContain("merchant_project");
+  });
 });
 
 describe("BusinessAnalyticsPage 行明细抽屉（整行可点·域/趋势/风险/状态中文）", () => {

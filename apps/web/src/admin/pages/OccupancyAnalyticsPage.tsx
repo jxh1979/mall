@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
@@ -15,7 +15,8 @@ type MetricValue = { value?: number | string | null; unit?: string | null; note?
 type LeasingDashboard = { businessDate?: string; metrics?: Record<string, MetricValue> };
 type VacantRow = { spaceId: string; spaceName?: string; spaceType?: string; floorNo?: string; areaSqm?: number | string; rentalStatus?: string };
 type ExpiringRow = { contractId: string; merchantId?: string; merchantName?: string; expiryDate?: string; daysLeft?: number; boundArea?: number | string };
-type RentToSalesRow = { key: string; label: string; rentCent?: number; salesCent?: number; ratioBps?: number | null; note?: string | null };
+// 18F 第 80 条：店级、业态级按项目分行，projectId 为该行项目（平台行为空）。
+type RentToSalesRow = { key: string; label: string; rentCent?: number; salesCent?: number; ratioBps?: number | null; note?: string | null; projectId?: string | null };
 type RentToSales = { period?: string; byMerchant?: RentToSalesRow[]; byMerchantType?: RentToSalesRow[]; platform?: RentToSalesRow | null; unattributedSalesCent?: number; note?: string | null };
 
 const TEXT = {
@@ -244,11 +245,12 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
           <h4>按业态(复用商户业态)</h4>
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="occupancy-r2s-type-table">
-              <thead><tr><th>业态</th><th>租金</th><th>第三方营业额</th><th>租售比</th></tr></thead>
+              <thead><tr><th>业态</th><th>项目</th><th>租金</th><th>第三方营业额</th><th>租售比</th></tr></thead>
               <tbody>
                 {(rentToSales.byMerchantType ?? []).map((row) => (
-                  <tr key={row.key} data-testid={`occupancy-r2s-type-${row.key || "unknown"}`}>
+                  <tr key={`${row.key}|${row.projectId ?? ""}`} data-testid={`occupancy-r2s-type-${row.key || "unknown"}${row.projectId ? `-${row.projectId}` : ""}`}>
                     <td>{formatBusinessStatus(row.key)}</td>
+                    <td>{row.projectId ?? "—"}</td>
                     <td>{money(row.rentCent)}</td>
                     <td>{money(row.salesCent)}</td>
                     <td>{ratioLabel(row.ratioBps)}</td>
@@ -260,11 +262,12 @@ export function OccupancyAnalyticsPage({ api, setGlobalError, navigateTo }: Admi
           <h4>按门店(商户即店)</h4>
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="occupancy-r2s-merchant-table">
-              <thead><tr><th>商户</th><th>租金</th><th>第三方营业额</th><th>租售比</th></tr></thead>
+              <thead><tr><th>商户</th><th>项目</th><th>租金</th><th>第三方营业额</th><th>租售比</th></tr></thead>
               <tbody>
                 {(rentToSales.byMerchant ?? []).map((row) => (
-                  <tr key={row.key} data-testid={`occupancy-r2s-merchant-${row.key}`}>
+                  <tr key={`${row.key}|${row.projectId ?? ""}`} data-testid={`occupancy-r2s-merchant-${row.key}${row.projectId ? `-${row.projectId}` : ""}`}>
                     <td>{row.label}</td>
+                    <td>{row.projectId ?? "—"}</td>
                     <td>{money(row.rentCent)}</td>
                     <td>{money(row.salesCent)}</td>
                     <td>{ratioLabel(row.ratioBps)}</td>

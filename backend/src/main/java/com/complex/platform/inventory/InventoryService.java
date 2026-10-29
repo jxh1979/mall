@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -77,6 +77,10 @@ import static com.complex.platform.common.Strings.requireText;
 public class InventoryService implements com.complex.platform.finance.SavedBottleRemedyRecoveryPort {
     @org.springframework.beans.factory.annotation.Autowired PurchaseWorkflowService purchaseWorkflow;
     @org.springframework.beans.factory.annotation.Autowired InventoryTransferFlowService transferFlow;
+    /** 第十八批 F 段第 14 条 14-R2：交接缺段人工补录走通用补录主链；单测未注入时视为没有补录（链视图不带补录、回算只认扫码）。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.evidence.ManualBackfillService manualBackfills;
+    static final String BACKFILL_TYPE = "trace_handover_step";
     /** OBS-13-02：到期存酒逐瓶转库存走本类代理的小事务（同 LoyaltyService.evaluateLevels 范式）；单测未注入时直接调用。 */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     org.springframework.context.ApplicationContext applicationContext;
@@ -3544,13 +3548,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "inventory_trace_handover_step",
                 () -> {
                     TraceScanSegmentRequest actual = requireRequest(request);
-                    String segment = requireSegment(actual.segment());
-                    if (ROBOT_SEGMENT.equals(segment)) {
-                        throw ApiException.badRequest("HANDOVER_SEGMENT_NOT_STAFF",
-                                "该配送段由机器人被动执行，请使用机器人上报接口");
-                    }
-                    TraceHandoverRecord header = requireHandover(id);
-                    enforceHandoverOwnership(header);
+                    String segment = requireStaffSegment(actual.segment());
+                    TraceHandoverRecord header = requireOwnedHandover(id);
                     TraceHandoverStepRecord step = requireStep(id, segment);
                     String operator = authorizationService.currentActor().id();
                     Instant now = Instant.now();
@@ -3660,6 +3659,64 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     return resolved;
                 }
         );
+    }
+
+    /** 第十八批 F 段第 14 条 14-R2：按溯源码列交接单（商户账号只列本商户，平台管理员全列），新建在前。 */
+    public List<TraceHandoverRecord> listTraceHandovers(String traceCode) {
+        return repository.listTraceHandoversByTraceCode(requireText(traceCode, "trace_code"),
+                authorizationService.currentMerchantScope().orElse(null));
+    }
+
+    /** 14-R2：交接链视图——原扫码五段、异常、人工补录单并列（BSM:1201「补录记录与原始扫码记录并列展示、互不覆盖」）。 */
+    public TraceHandoverChainView getTraceHandover(String handoverId) {
+        return chainView(requireOwnedHandover(requireText(handoverId, "handover_id")).id());
+    }
+
+    /** 14-R2：交接缺段人工补录（BSM:1201「扫码缺失的可事后人工补录，但一律须附证据……并经主管复核后方生效」），走通用补录主链。 */
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.handover.scan")
+    public com.complex.platform.evidence.ManualBackfillService.Backfill submitStepBackfill(
+            String handoverId, String segment, com.complex.platform.evidence.ManualBackfillService.Request request) {
+        return manualBackfills.submit(BACKFILL_TYPE, handoverId, segment, request);
+    }
+
+    /** 交接单存在且属本商户（商户账号）；与扫码、机器人上报、异常复核同一归属闸。 */
+    TraceHandoverRecord requireOwnedHandover(String handoverId) {
+        TraceHandoverRecord header = requireHandover(handoverId);
+        enforceHandoverOwnership(header);
+        return header;
+    }
+
+    /** 员工扫码段：五段之一且不是机器人配送段。 */
+    String requireStaffSegment(String segment) {
+        String value = requireSegment(segment);
+        if (ROBOT_SEGMENT.equals(value)) {
+            throw ApiException.badRequest("HANDOVER_SEGMENT_NOT_STAFF", "该配送段由机器人被动执行，请使用机器人上报接口");
+        }
+        return value;
+    }
+
+    /** 14-R2：已复核通过的人工补录所补的段。 */
+    Set<String> approvedBackfillSegments(String handoverId) {
+        return manualBackfills == null ? Set.of() : manualBackfills.rows(BACKFILL_TYPE, handoverId).stream()
+                .filter(backfill -> "approved".equals(backfill.status()))
+                .map(com.complex.platform.evidence.ManualBackfillService.Backfill::targetPart)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * 14-R2：补录复核通过时落链（批准事务内）。锁表头重核该段仍待扫码、无别的已通过补录，否则 409 MANUAL_BACKFILL_TARGET_CHANGED（整笔批准回滚）；
+     * 原段行不改，按「扫码完成或补录通过」回算整链，补录段记过程步骤（责任人、人工录入、原时点）。
+     */
+    void applyStepBackfill(com.complex.platform.evidence.ManualBackfillService.Backfill backfill) {
+        TraceHandoverRecord header = requireHandover(backfill.targetId());
+        TraceHandoverStepRecord step = requireStep(header.id(), backfill.targetPart());
+        Set<String> backfilled = new java.util.HashSet<>(approvedBackfillSegments(header.id()));
+        if (!"pending".equals(step.stepStatus()) || !backfilled.add(step.segment())) {
+            throw ApiException.conflict("MANUAL_BACKFILL_TARGET_CHANGED", "该段已扫码或已有通过的补录，请驳回本补录");
+        }
+        Instant now = Instant.now();
+        recordTraceStep(header, step.segment(), now, recomputeOverall(header, step.segment(), backfilled, now),
+                backfill.responsibleStaffId(), backfill.occurredAt());
     }
 
     private TraceHandoverRecord createHandoverChain(
@@ -3794,31 +3851,37 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         }
     }
 
-    /** 一段 done 后：若五段全 done → overall completed + 事件；否则推进 current_segment 到下一未完成段。 */
+    /** 一段 done 后：回算整链（全部完成即 completed 并收口过程实例），再记本段过程步骤。 */
     private void completeOrAdvance(TraceHandoverRecord header, String segment, Instant now) {
-        List<TraceHandoverStepRecord> steps = repository.listTraceHandoverSteps(header.id());
-        boolean allDone = steps.stream().allMatch(s -> "done".equals(s.stepStatus()));
-        if (allDone) {
-            repository.saveTraceHandover(withOverall(header, "completed", segment));
-            // 三层留痕：本段步骤入库 + 过程实例收口（completed）。
-            recordTraceStep(header, segment, now, "completed");
-            auditEventService.recordSuccess(
-                    "inventory.handover_completed", "inventory.handover.scan",
-                    "inventory_trace_handover", header.id(), null, null,
-                    Map.of("handover_id", header.id()));
-            return;
-        }
-        String next = steps.stream()
-                .filter(s -> "pending".equals(s.stepStatus()))
+        recordTraceStep(header, segment, now, recomputeOverall(header, segment, approvedBackfillSegments(header.id()), now),
+                null, now);
+    }
+
+    /**
+     * 第十八批 F 段第 14 条 14-R2 回算：段完成＝扫码 done 或该段有已通过的人工补录（原段行不改，补录与原扫码并列、互不覆盖）。
+     * 仍有待处理异常时表头保持 exception、不被覆盖；全部完成置 completed、留痕并收口过程实例；否则 in_progress 推进到第一个未完成段。
+     * 返回下一段，全部完成返回 completed。
+     */
+    private String recomputeOverall(TraceHandoverRecord header, String segment, Set<String> backfilled, Instant now) {
+        String next = repository.listTraceHandoverSteps(header.id()).stream()
+                .filter(s -> !"done".equals(s.stepStatus()) && !backfilled.contains(s.segment()))
                 .map(TraceHandoverStepRecord::segment)
                 .findFirst()
-                .orElse(segment);
-        // 仅当当前非 exception 时维持 in_progress 推进；exception 不被一段 done 覆盖。
-        if (!"exception".equals(header.overallStatus())) {
-            repository.saveTraceHandover(withOverall(header, "in_progress", next));
+                .orElse(null);
+        if (repository.listTraceHandoverExceptions(header.id()).stream().anyMatch(e -> "pending".equals(e.reviewStatus()))) {
+            return next == null ? segment : next;
         }
-        // 三层留痕：本段步骤入库 + 过程实例当前步推进（running）。
-        recordTraceStep(header, segment, now, next);
+        if (next != null) {
+            repository.saveTraceHandover(withOverall(header, "in_progress", next));
+            return next;
+        }
+        repository.saveTraceHandover(withOverall(header, "completed", segment));
+        auditEventService.recordSuccess(
+                "inventory.handover_completed", "inventory.handover.scan",
+                "inventory_trace_handover", header.id(), null, null,
+                Map.of("handover_id", header.id()));
+        recordProcessInstance(header, segment, true, now);
+        return "completed";
     }
 
     /**
@@ -3827,9 +3890,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
      * <p>actor/capture_source 区分人工扫码段（staff/qr_scan）与机器人段（robot/robot_callback）；
      * 机器人段被动留痕，requiresManualReason 维持 false。instanceStatus 为新的过程实例状态。
      */
-    private void recordTraceStep(TraceHandoverRecord header, String segment, Instant now, String nextStepCode) {
+    private void recordTraceStep(TraceHandoverRecord header, String segment, Instant now, String nextStepCode,
+            String backfillActor, Instant occurredAt) {
         boolean robot = ROBOT_SEGMENT.equals(segment);
-        String actorId = robot ? null : authorizationService.currentActor().id();
+        // 14-R2：人工补录段记责任人（不取复核人）、人工录入、须写原因，时点取补录原时点。
+        boolean backfill = backfillActor != null;
+        String actorId = robot ? null : backfill ? backfillActor : authorizationService.currentActor().id();
         traceabilityService.recordStep(new TraceabilityStepRecord(
                 header.id() + "_step_" + segment,
                 header.id(),
@@ -3837,34 +3903,32 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 segment,
                 robot ? "robot" : "staff",
                 actorId,
-                robot ? null : "tablet",
-                header.deviceId(),
+                robot || backfill ? null : "tablet",
+                backfill ? null : header.deviceId(),
                 null,
                 null,
-                true,
-                robot ? "robot_callback" : "qr_scan",
-                false,
+                !backfill,
+                robot ? "robot_callback" : backfill ? "manual_input" : "qr_scan",
+                backfill,
                 "success",
-                now));
-        boolean completed = "completed".equals(nextStepCode);
+                occurredAt));
+        // 全部完成时过程实例已由回算收口（completed）。
+        if (!"completed".equals(nextStepCode)) {
+            recordProcessInstance(header, nextStepCode, false, now);
+        }
+    }
+
+    private void recordProcessInstance(TraceHandoverRecord header, String currentStep, boolean completed, Instant now) {
         traceabilityService.recordProcessInstance(new TraceabilityProcessInstanceRecord(
                 header.id(), "inventory_delivery", "inventory_item",
                 header.itemId() == null ? header.id() : header.itemId(), null, null, null, null,
-                null, null, completed ? segment : nextStepCode,
-                completed ? "completed" : "running", null, completed ? now : null));
+                null, null, currentStep, completed ? "completed" : "running", null, completed ? now : null));
     }
 
-    /** 复核闭合后：若该交接已无 pending 异常，则按 steps 真实状态回算 overall。 */
+    /** 复核闭合后：若该交接已无 pending 异常，则按 steps 真实状态（含已通过的人工补录）回算 overall。 */
     private void closeExceptionOnHeader(String handoverId, Instant now) {
         TraceHandoverRecord header = requireHandover(handoverId);
-        List<TraceHandoverStepRecord> steps = repository.listTraceHandoverSteps(handoverId);
-        boolean allDone = steps.stream().allMatch(s -> "done".equals(s.stepStatus()));
-        String next = steps.stream()
-                .filter(s -> "pending".equals(s.stepStatus()))
-                .map(TraceHandoverStepRecord::segment)
-                .findFirst()
-                .orElse(header.currentSegment());
-        repository.saveTraceHandover(withOverall(header, allDone ? "completed" : "in_progress", next));
+        recomputeOverall(header, header.currentSegment(), approvedBackfillSegments(handoverId), now);
     }
 
     private TraceHandoverRecord withOverall(TraceHandoverRecord h, String overall, String currentSegment) {
@@ -3895,7 +3959,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         return new TraceHandoverChainView(
                 header,
                 repository.listTraceHandoverSteps(handoverId),
-                List.of());
+                repository.listTraceHandoverExceptions(handoverId),
+                manualBackfills == null ? List.of() : manualBackfills.rows(BACKFILL_TYPE, handoverId));
     }
 
     private TraceHandoverRecord requireHandover(String handoverId) {
@@ -3903,7 +3968,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 .orElseThrow(() -> ApiException.notFound("HANDOVER_NOT_FOUND", "交接记录不存在或已被删除"));
     }
 
-    private TraceHandoverStepRecord requireStep(String handoverId, String segment) {
+    TraceHandoverStepRecord requireStep(String handoverId, String segment) {
         return repository.findTraceHandoverStep(handoverId, segment)
                 .orElseThrow(() -> ApiException.notFound("HANDOVER_STEP_NOT_FOUND", "交接环节不存在或已被删除"));
     }

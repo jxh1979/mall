@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.37
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.38
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1188 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 416 | 人工权限矩阵正文未覆盖 315 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2376 | 人工事件矩阵正文未覆盖 2331 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1188 | 人工任务映射正文未逐项覆盖 1182 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 714 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1196 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 417 | 人工权限矩阵正文未覆盖 316 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2392 | 人工事件矩阵正文未覆盖 2347 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1196 | 人工任务映射正文未逐项覆盖 1190 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 718 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -100,7 +100,7 @@
 | `analytics.risk_alert.view` | staff-token | project | 8 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listMetricAnomalyTimeline, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
 | `audit.operation_log.export` | staff-token | platform | 1 | exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `audit.operation_log.view` | staff-token | platform | 1 | queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
-| `authenticated` | staff-token | current-session, self | 3 | logout, refreshToken, getEffectivePermissions | 已在权限矩阵正文出现 |
+| `authenticated` | staff-token | current-session, merchant, self | 4 | logout, refreshToken, getEffectivePermissions, listManualBackfills | 已在权限矩阵正文出现 |
 | `bar.bill.adjust` | staff-token | project-bar-table | 2 | raiseBarBillAnomaly, adjustBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.anomaly.resolve` | staff-token | project-bar-table | 1 | resolveBarBillAnomaly | OpenAPI 补充，以本附录为准 |
 | `bar.bill.refund` | staff-token | project-merchant | 1 | getBarBillRefundContext | OpenAPI 补充，以本附录为准 |
@@ -143,11 +143,11 @@
 | `bar.shift.manage` | staff-token | project-bar-table | 2 | listBarShifts, openBarShift | OpenAPI 补充，以本附录为准 |
 | `bar.staff_booking.restore` | staff-token | project-bar | 2 | listBarStaffBookingSuspensions, restoreBarStaffBookingSuspension | OpenAPI 补充，以本附录为准 |
 | `bar.table_commission.calculate` | staff-token | project-bar | 1 | calculateBarTableCommission | 已在权限矩阵正文出现 |
-| `bar.table_session.create` | staff-token | project-bar-table | 1 | createBarTableSession | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.create` | staff-token | project-bar-table | 2 | createBarTableSession, submitBarTableSessionSalesBackfill | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.merge` | staff-token | project-bar-table | 1 | mergeBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.renew` | staff-token | project-bar-table | 1 | renewBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.split` | staff-token | project-bar-table | 1 | splitBarTableSession | OpenAPI 补充，以本附录为准 |
-| `bar.table_session.transfer` | staff-token | project-bar-table, project-merchant | 2 | transferBarTableSession, handoverBarServiceResponsibility | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.transfer` | staff-token | project-bar-table, project-merchant | 3 | transferBarTableSession, handoverBarServiceResponsibility, submitBarTableSessionServiceBackfill | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.view` | staff-token | project-bar-table | 1 | listBarTableSessions | OpenAPI 补充，以本附录为准 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 3 | checkInBarReservationGuest, verifyBarReservationInvitationEntry, verifyBarReservationEntryAllowance | 已在权限矩阵正文出现 |
 | `bar.table.manage` | staff-token | project-bar, project-bar-table | 3 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace | 已在权限矩阵正文出现 |
@@ -223,6 +223,7 @@
 | `evidence.attachment.create` | staff-token | merchant, project-object | 4 | createEvidenceAttachmentUploadIntent, bindEvidenceAttachment, completeEvidenceAttachmentUpload, uploadEvidenceAttachment | 已在权限矩阵正文出现 |
 | `evidence.event.create` | staff-token | project-device | 1 | createEvidenceEvents | 已在权限矩阵正文出现 |
 | `evidence.event.view` | staff-token | project-object | 1 | listEvidenceEvents | 已在权限矩阵正文出现 |
+| `evidence.manual_backfill.policy.manage` | staff-token | project | 2 | getManualBackfillPolicy, saveManualBackfillPolicy | OpenAPI 补充，以本附录为准 |
 | `evidence.review.create` | staff-token | project-object | 1 | createEvidenceReview | 已在权限矩阵正文出现 |
 | `evidence.timeline.view` | staff-token | merchant, project-object | 3 | getEvidenceTimeline, getTraceabilityAutoCaptureRate, readEvidenceAttachmentFile | 已在权限矩阵正文出现 |
 | `facility.alarm.manage` | staff-token | platform, project | 8 | saveFacilityAlarmResponsePolicy, listFacilityAlarms, listFacilityAlarmDuties, assignFacilityAlarmDuty, cancelFacilityAlarmDuty, listFacilityFaultRules, createFacilityFaultRule, retireFacilityFaultRule | OpenAPI 补充，以本附录为准 |
@@ -291,7 +292,7 @@
 | `integration.video.view` | staff-token | project | 1 | listIntegrationVideoAnchors | OpenAPI 补充，以本附录为准 |
 | `inventory.cost.view` | staff-token | project-warehouse | 2 | listInventoryCostLedger, getInventoryCostSummary | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.review` | staff-token | project-warehouse-bar | 1 | reviewTraceHandoverException | OpenAPI 补充，以本附录为准 |
-| `inventory.handover.scan` | staff-token | project-warehouse-bar | 4 | scanTraceCodeHandover, createTraceHandover, scanTraceSegment, reportRobotSegment | OpenAPI 补充，以本附录为准 |
+| `inventory.handover.scan` | staff-token | project-warehouse-bar | 7 | scanTraceCodeHandover, listTraceHandovers, createTraceHandover, getTraceHandover, backfillTraceHandoverSegment, scanTraceSegment, reportRobotSegment | OpenAPI 补充，以本附录为准 |
 | `inventory.high_value.review` | staff-token | project, project-bar-customer, project-warehouse-bar | 4 | markInventoryItemHighValue, listHighValueReviews, reviewHighValue, approveSavedBottleRemedy | OpenAPI 补充，以本附录为准 |
 | `inventory.purchase_request.manage` | staff-token | project-merchant | 11 | createPurchaseRequest, approvePurchaseRequest, orderPurchaseRequest, arrivePurchaseRequest, receivePurchaseRequest, getPurchaseSuggestions, resolvePurchaseQuantity, registerPurchaseConsignmentSale, requestPurchaseReturn, handoverPurchaseReturn, requestPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
 | `inventory.purchase_request.view` | staff-token | project-merchant | 3 | listPurchaseRequests, getPurchaseWorkbenchOptions, getPurchaseWorkflowDetail | 已在权限矩阵正文出现 |
@@ -1466,6 +1467,14 @@
 | `evidence.event_viewed` | success | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | EVD-事件证据 | `evidence.event.view` | 接口级事件，以本附录为准 |
 | `evidence.events_report_failed` | failure | `createEvidenceEvents` | `POST` | `/api/v1/evidence/events` | EVD-事件证据 | `evidence.event.create` | 接口级事件，以本附录为准 |
 | `evidence.events_reported` | success | `createEvidenceEvents` | `POST` | `/api/v1/evidence/events` | EVD-事件证据 | `evidence.event.create` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_policy_update_failed` | failure | `saveManualBackfillPolicy` | `PUT` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | EVD-事件证据 | `evidence.manual_backfill.policy.manage` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_policy_updated` | success | `saveManualBackfillPolicy` | `PUT` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | EVD-事件证据 | `evidence.manual_backfill.policy.manage` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submit_failed` | failure | `backfillTraceHandoverSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submit_failed` | failure | `submitBarTableSessionSalesBackfill` | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submit_failed` | failure | `submitBarTableSessionServiceBackfill` | `POST` | `/api/v1/bar/table-sessions/{id}/service-backfill` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submitted` | success | `backfillTraceHandoverSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submitted` | success | `submitBarTableSessionSalesBackfill` | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
+| `evidence.manual_backfill_submitted` | success | `submitBarTableSessionServiceBackfill` | `POST` | `/api/v1/bar/table-sessions/{id}/service-backfill` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `evidence.review_create_failed` | failure | `createEvidenceReview` | `POST` | `/api/v1/evidence/reviews` | EVD-事件证据 | `evidence.review.create` | 接口级事件，以本附录为准 |
 | `evidence.review_created` | success | `createEvidenceReview` | `POST` | `/api/v1/evidence/reviews` | EVD-事件证据 | `evidence.review.create` | 接口级事件，以本附录为准 |
 | `evidence.timeline_view_failed` | failure | `getEvidenceTimeline` | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | EVD-事件证据 | `evidence.timeline.view` | 接口级事件，以本附录为准 |
@@ -2117,6 +2126,8 @@
 | `not_applicable` | failure | `getCustomerTerms` | `GET` | `/api/v1/customer/terms` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getManualBackfillPolicy` | `GET` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | EVD-事件证据 | `evidence.manual_backfill.policy.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getManualBackfillPolicy` | `GET` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | EVD-事件证据 | `evidence.manual_backfill.policy.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getMerchantCardExitNoticePolicy` | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getMerchantCardExitNoticePolicy` | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getMyStudentCertification` | `GET` | `/api/v1/customer/student-certifications/current` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -2129,6 +2140,8 @@
 | `not_applicable` | failure | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getTraceHandover` | `GET` | `/api/v1/inventory/trace-handovers/{id}` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getTraceHandover` | `GET` | `/api/v1/inventory/trace-handovers/{id}` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listCustomerAmusementProjects` | `GET` | `/api/v1/customer/amusement/projects` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listCustomerAmusementProjects` | `GET` | `/api/v1/customer/amusement/projects` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listCustomerBarScanMenu` | `GET` | `/api/v1/customer/bar-tables/{table_id}/menu` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
@@ -2155,6 +2168,8 @@
 | `not_applicable` | failure | `listLoyaltyConfigBirthdayRules` | `GET` | `/api/v1/loyalty/config/birthday-rules` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listLoyaltyConfigCheckInTiers` | `GET` | `/api/v1/loyalty/config/check-in-tiers` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listLoyaltyConfigMemberLevels` | `GET` | `/api/v1/loyalty/config/member-levels` | CUS-客人端 | `customer.loyalty.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listManualBackfills` | `GET` | `/api/v1/evidence/manual-backfills` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listManualBackfills` | `GET` | `/api/v1/evidence/manual-backfills` | EVD-事件证据 | `authenticated` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantPenalties` | `GET` | `/api/v1/merchant-penalties` | ANA-风控分析 | `merchant.penalty.record` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMerchantPenalties` | `GET` | `/api/v1/merchant-penalties` | ANA-风控分析 | `merchant.penalty.record` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
@@ -2171,6 +2186,8 @@
 | `not_applicable` | failure | `listParkingMonthlyVehicles` | `GET` | `/api/v1/parking/monthly-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `readFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `readFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
@@ -3086,6 +3103,8 @@
 | BAR-酒吧经营 | `splitBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | 拆分酒水台位会话（拆台） | `bar.table_session.split` | `bar.table.split` / `bar.table.split_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `submitBarBusinessDayConfig` | `POST` | `/api/v1/bar-business-day-configs` | 提交酒吧营业日最高权限审批 | `bar.business_day.manage` | `bar.business_day.submit_completed` / `bar.business_day.submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `submitBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/submit` | 提交有原件的已配置审批 | `bar.payroll.manage` | `bar.payroll_rule.submitted` / `bar.payroll_rule.submit_failed` | web, tablet | operation 级补充 |
+| BAR-酒吧经营 | `submitBarTableSessionSalesBackfill` | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | 补录台位会话销售归属（人工补录，店长复核） | `bar.table_session.create` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `submitBarTableSessionServiceBackfill` | `POST` | `/api/v1/bar/table-sessions/{id}/service-backfill` | 补录台位会话服务责任区间（人工补录，主管复核） | `bar.table_session.transfer` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table_session.transfer` / `bar.table_session.transfer_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | 流转出品工单状态 | `bar.production_ticket.manage` | `bar.production_ticket.transition` / `bar.production_ticket.transition_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | 上传酒吧商品/套餐图片 | `bar.product.manage` | `bar.catalog.image_uploaded` / `bar.catalog.image_uploaded_failed` | web, tablet | operation 级补充 |
@@ -3230,12 +3249,15 @@
 | EVD-事件证据 | `dismissRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | 忽略关闭风险预警 | `risk_alert.dismiss` | `exception.dismissed` / `exception.dismiss_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `escalateRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | 升级风险预警 | `risk_alert.escalate` | `exception.escalated` / `exception.escalate_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `getEvidenceTimeline` | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | 业务时间线 | `evidence.timeline.view` | `evidence.timeline_viewed` / `evidence.timeline_view_failed` | web | operation 级补充 |
+| EVD-事件证据 | `getManualBackfillPolicy` | `GET` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | 查人工补录参数（补录时限与录音提前量，按项目） | `evidence.manual_backfill.policy.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | EVD-事件证据 | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | 查询风险预警详情 | `risk_alert.view` | `exception.alert_viewed` / `exception.alert_view_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `getTraceabilityAutoCaptureRate` | `GET` | `/api/v1/evidence/traceability/auto-capture-rate` | 查询业务流程追溯自动采集率 | `evidence.timeline.view` | `evidence.traceability_auto_capture_rate_viewed` / `evidence.traceability_auto_capture_rate_view_failed` | web | operation 级补充 |
 | EVD-事件证据 | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | 事件查询 | `evidence.event.view` | `evidence.event_viewed` / `evidence.event_view_failed` | web | operation 级补充 |
+| EVD-事件证据 | `listManualBackfills` | `GET` | `/api/v1/evidence/manual-backfills` | 查某对象的人工补录记录（与原始记录并列展示） | `authenticated` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | EVD-事件证据 | `readEvidenceAttachmentFile` | `GET` | `/api/v1/evidence/attachments/{attachment_id}/file` | 回读证据文件 | `evidence.timeline.view` | `evidence.attachment_file_viewed` / `evidence.attachment_file_view_failed` | web, tablet | operation 级补充 |
 | EVD-事件证据 | `reportRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts` | 上报统一风险预警 | `risk_alert.report` | `exception.reported` / `exception.report_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `resolveEvidenceRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | 关闭风险预警（需结论） | `risk_alert.resolve` | `exception.resolved` / `exception.resolve_failed` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `saveManualBackfillPolicy` | `PUT` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | 配置人工补录参数（补录时限、录音提前量及各自上下限，按项目） | `evidence.manual_backfill.policy.manage` | `evidence.manual_backfill_policy_updated` / `evidence.manual_backfill_policy_update_failed` | web | operation 级补充 |
 | EVD-事件证据 | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | 查询风险预警列表 | `risk_alert.view` | `exception.alerts_viewed` / `exception.alerts_view_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `transferRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | 转交风险预警 | `risk_alert.transfer` | `exception.transferred` / `exception.transfer_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `uploadEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/upload` | 上传证据照片/视频 | `evidence.attachment.create` | `evidence.attachment_uploaded` / `evidence.attachment_uploaded_failed` | web, tablet, staff_work_phone | operation 级补充 |
@@ -3373,6 +3395,7 @@
 | INV-库存存酒 | `approveSupplyContract` | `POST` | `/api/v1/inventory/supply-contracts/{id}/approve` | 提交供应合同主线及业务财务法务并行审批 | `inventory.supply_contract.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `arrivePurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests/{id}/arrive` | 采购单到货(ordered/expected→arrived) | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `assignSavedBottleRemedyStaffLiability` | `POST` | `/api/v1/inventory/saved-bottles/remedies/{id}/staff-liability` | 复核认定责任员工照价赔偿登记（金额由服务端按内部结算价×数量计，不收前端金额；不改对客状态） | `bar.saved_bottle.manage` | `bar.saved_bottle.remedy_staff_liability_assigned` / `bar.saved_bottle.remedy_staff_liability_assign_failed` | tablet, web | operation 级补充 |
+| INV-库存存酒 | `backfillTraceHandoverSegment` | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | 交接缺段人工补录（附证据、进主管复核，通过后才生效） | `inventory.handover.scan` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | web | operation 级补充 |
 | INV-库存存酒 | `cancelSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废) | `bar.saved_bottle.manage` | `bar.saved_bottle.cancelled` / `bar.saved_bottle.cancel_failed` | tablet, web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | 取消调拨／要货单 | `inventory.transfer_order.manage` | `inventory.transfer_order_cancelled` / `inventory.transfer_order_cancel_failed` | web | operation 级补充 |
 | INV-库存存酒 | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | 存酒领取 | `bar.saved_bottle.manage` | `bar.saved_bottle_picked_up` / `bar.saved_bottle.pickup_failed` | tablet, staff_work_phone | operation 级补充 |
@@ -3415,6 +3438,7 @@
 | INV-库存存酒 | `getPurchaseWorkbenchOptions` | `GET` | `/api/v1/inventory/purchase-workbench-options` | 读取采购工作台可用目录（逐项目及货权过滤） | `inventory.purchase_request.view` | `inventory.purchase_workbench.viewed` / `inventory.purchase_workbench.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getPurchaseWorkflowDetail` | `GET` | `/api/v1/inventory/purchase-requests/{id}` | 读取采购数量、逐次验收及独立结算事实 | `inventory.purchase_request.view` | `inventory.purchase_request_viewed` / `inventory.purchase_request_view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `getSupplyContractTerms` | `GET` | `/api/v1/inventory/supply-contracts/{id}/terms` | 读取供应合同条款及审批状态 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
+| INV-库存存酒 | `getTraceHandover` | `GET` | `/api/v1/inventory/trace-handovers/{id}` | 查交接链（原扫码五段、异常与人工补录并列） | `inventory.handover.scan` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | INV-库存存酒 | `getTransferOrderFulfillment` | `GET` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions` | 门店要货签收结果与差异处理 | `inventory.transfer_order.view` | `inventory.transfer_fulfillment_viewed` / `inventory.transfer_fulfillment_view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `handoverPurchaseReturn` | `POST` | `/api/v1/inventory/purchase-returns/{id}/handover` | 登记批准退供的实际交接并出库 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `handoverSavedBottlesToPlatform` | `POST` | `/api/v1/inventory/saved-bottles/handover` | 门店退出存酒交所属娱乐平台公司（平台操作者办理；该门店有效期内未结存酒须全部清点；指定领取地点、原有效期与原取酒规则不变；毁损与实收为 0 的短少走作废路径，部分短少按差额） | `bar.saved_bottle.manage` | `bar.saved_bottle.handed_over` / `bar.saved_bottle.handover_failed` | tablet, web | operation 级补充 |
@@ -3442,6 +3466,7 @@
 | INV-库存存酒 | `listSupplierReconciliations` | `GET` | `/api/v1/inventory/supplier-reconciliations` | 查询供应商对账列表 | `inventory.supplier.reconcile` | `inventory.supplier_reconciliation.list` / `inventory.supplier_reconciliation.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSupplierSettlementMethods` | `GET` | `/api/v1/inventory/supplier-settlement-methods` | 查询供应商结算档列表 | `inventory.supplier.settlement.manage` | `inventory.supplier_settlement_method.list` / `inventory.supplier_settlement_method.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | 查询供应合同列表 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | 按溯源码查交接单 | `inventory.handover.scan` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | INV-库存存酒 | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | 查询库房列表 | `inventory.warehouse.manage` | `inventory.warehouse.list` / `inventory.warehouse.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `lookupSavedBottlesByPhone` | `POST` | `/api/v1/inventory/saved-bottles/lookup` | 按手机号检索存酒（检索只能输入手机号，姓名与昵称不得用于检索；手机号走请求体不进 URL） | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `markInventoryItemHighValue` | `POST` | `/api/v1/inventory/items/{id}/high-value-mark` | 物料手工标记或取消标记高价值 | `inventory.high_value.review` | `inventory.item.high_value_marked` / `inventory.item.high_value_mark_failed` | web | operation 级补充 |

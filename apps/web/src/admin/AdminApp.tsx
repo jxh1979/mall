@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -96,6 +96,7 @@ const PurchaseWorkbenchPage = React.lazy(() => import("./pages/PurchaseWorkbench
 const InventoryLedgerPage = React.lazy(() => import("./pages/InventoryLedgerPage").then((m) => ({ default: m.InventoryLedgerPage })));
 const InventoryTransferWorkbenchPage = React.lazy(() => import("./pages/InventoryTransferWorkbenchPage").then((m) => ({ default: m.InventoryTransferWorkbenchPage })));
 const InventoryHighValueReviewPage = React.lazy(() => import("./pages/InventoryHighValueReviewPage").then((m) => ({ default: m.InventoryHighValueReviewPage })));
+const TraceHandoverBackfillPage = React.lazy(() => import("./pages/TraceHandoverBackfillPage").then((m) => ({ default: m.TraceHandoverBackfillPage })));
 const BarOrdersPage = React.lazy(() => import("./pages/BarOrdersPage").then((m) => ({ default: m.BarOrdersPage })));
 const StoredWinePage = React.lazy(() => import("./pages/StoredWinePage").then((m) => ({ default: m.StoredWinePage })));
 const BarCommissionsPage = React.lazy(() => import("./pages/BarCommissionsPage").then((m) => ({ default: m.BarCommissionsPage })));
@@ -266,6 +267,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <PurchaseWorkbenchPage {...props} />;
     case "ADM-INV-004":
       return <InventoryHighValueReviewPage {...props} />;
+    case "ADM-INV-005":
+      return <TraceHandoverBackfillPage {...props} />;
     case "ADM-FIN-002":
       return <ReconciliationPage {...props} />;
     case "ADM-TER-001":

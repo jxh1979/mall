@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -12,6 +12,7 @@ import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, SupervisorReviewPolicyRow } from "../types";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { ManualBackfillPolicySection } from "./ManualBackfillPolicySection";
 
 const REVIEW_LABELS: Record<string, string> = {
   "staff.shift.publish": "发布排班", "staff.payroll.penalty_cap.adjust": "调整工资扣罚上限",
@@ -34,6 +35,9 @@ const REVIEW_LABELS: Record<string, string> = {
   "leasing.intent.key_stage": "招商意向关键阶段确认", leasing_intent: "招商意向",
   "merchant.project.add": "商户加经营项目", merchant_project_request: "加经营项目申请",
   "compliance.expiry_item.grace": "证照宽限期申请", compliance_expiry_item: "证照",
+  // 第十八批 F 段第 14 条 14-R8（BSM 第 1642 行「补录一律进入主管复核队列」）：人工补录三类复核动作与补录单。
+  "inventory.trace.scan_backfill": "交接扫码补录", "bar.sales.backfill": "销售归属补录", "bar.service.backfill": "服务责任补录",
+  manual_backfill: "人工补录单",
 };
 
 function formatReviewValue(value?: string | null) {
@@ -508,6 +512,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
             {formError ? <div data-testid="supervisor-review-error" className="admin-inline-error">{formError}</div> : null}
 
             {policyTable}
+            <ManualBackfillPolicySection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
           </>
         )}
       </AdminDataState>

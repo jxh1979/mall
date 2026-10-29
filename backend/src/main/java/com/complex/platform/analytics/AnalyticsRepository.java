@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -241,7 +241,7 @@ public interface AnalyticsRepository {
     /** P1c 店级/业态级租售比取数：按 accounting_period=YYYY-MM 汇租金、按经营日窗口汇第三方回流营业额，
      *  已归属商户行 + 未归属营业额桶。默认空聚合（供无需此能力的内存测试替身）；真实实现见 JdbcAnalyticsRepository。 */
     default AnalyticsRecords.RentToSalesAggregate rentToSales(String period) {
-        return new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(), 0L);
+        return new AnalyticsRecords.RentToSalesAggregate(java.util.List.of(), 0L, java.util.List.of());
     }
 
     /**
@@ -428,6 +428,61 @@ public interface AnalyticsRepository {
      * 阈值取 inventory_items.min_quantity（绝对值/SKU 可配），阈值 ≤ 0 视为不预警。返回 merchantId(可 null) -> 数量。
      */
     Map<String, BigDecimal> countLowStockByMerchant();
+
+    // 18F 第 80 条（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：
+    // 指标快照商户分项目段取数——与上列商户口径同谓词，键为「商户编号|项目编号」，项目为空的键为 null（ETL 不出行）。default 空供测试替身。
+
+    default Map<String, BigDecimal> sumBarRevenueCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> sumBarRefundCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> sumTicketBarShareCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> sumTicketRefundByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> sumContractRentReceivableByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> countTicketVerificationSuccessByMerchantProject(LocalDate businessDate) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> countTicketIssuedByMerchantProject(LocalDate businessDate) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> sumInventoryBalanceByMerchantProject() {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> countLowStockByMerchantProject() {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> countManualBackfillByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return Map.of();
+    }
+
+    default Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchantProject(LocalDate asOf) {
+        return Map.of();
+    }
 
     /** count(supervisor_review_decisions pending) + count(analytics_risk_alerts open)——待复核；无 merchant_id，仅平台口径。 */
     BigDecimal countPendingReview();
@@ -707,7 +762,7 @@ public interface AnalyticsRepository {
         return new AnalyticsRecords.MetricDetailRows(java.util.List.of(), 0, null, java.util.List.of());
     }
 
-    /** risk.manual_backfill ETL：补录申请（锁账后补录、无可信领取时刻补证）按提交时刻落窗、按商户计笔数（无商户的并入平台）。 */
+    /** risk.manual_backfill ETL：补录申请（锁账后补录、无可信领取时刻补证、交接扫码补录、销售归属补录、服务责任补录）按提交时刻落窗、按商户计笔数（无商户的并入平台）。 */
     default Map<String, BigDecimal> countManualBackfillByMerchant(LocalDate businessDate, String windowDomain) {
         return Map.of();
     }

@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -102,6 +102,11 @@ public interface ContractRepository {
 
     // 生效绑定空间 + 防重复出租
     void bindContractSpaces(String contractId, List<String> spaceIds, String projectId);
+
+    /** 18F 第 80 条：铺位所在项目（合同未带项目时生效取所绑铺位的项目）。default 返回 null 供内存替身。 */
+    default String findSpaceProjectId(String spaceId) {
+        return null;
+    }
 
     /** 3.13：读合同已绑定（含草稿预绑定）空间 id，供提交审批阶段冲突早检。 */
     List<String> listContractSpaceIds(String contractId);

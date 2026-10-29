@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.37
+# P0 OpenAPI Operation 验收矩阵 V0.38
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1188 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1196 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -248,7 +248,10 @@
 | inventory | `GET` | `/api/v1/inventory/suppliers` | `listInventorySuppliers` | 查询供应商 | `-` | `inventory.supplier.view` | `staff-token` | `project` | web | 否 | `inventory.supplier_viewed` | `inventory.supplier_view_failed` |
 | inventory | `POST` | `/api/v1/inventory/suppliers` | `createInventorySupplier` | 创建供应商 | `InventorySupplierRequest` | `inventory.supplier.manage` | `staff-token` | `project` | web | 是 | `inventory.supplier_changed` | `inventory.supplier_change_failed` |
 | inventory | `POST` | `/api/v1/inventory/trace-codes/scan-handover` | `scanTraceCodeHandover` | 物品追踪码扫码交接 | `VerificationRequest` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet | 是 | `operation_handover.created` | `operation_handover.failed` |
+| inventory | `GET` | `/api/v1/inventory/trace-handovers` | `listTraceHandovers` | 按溯源码查交接单 | `-` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | web | 否 | `not_applicable` | `not_applicable` |
 | inventory | `POST` | `/api/v1/inventory/trace-handovers` | `createTraceHandover` | 创建扫码交接任务(五段链) | `object` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.handover_created` | `inventory.handover_create_failed` |
+| inventory | `GET` | `/api/v1/inventory/trace-handovers/{id}` | `getTraceHandover` | 查交接链（原扫码五段、异常与人工补录并列） | `-` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | web | 否 | `not_applicable` | `not_applicable` |
+| inventory | `POST` | `/api/v1/inventory/trace-handovers/{id}/segments/{segment}/backfill` | `backfillTraceHandoverSegment` | 交接缺段人工补录（附证据、进主管复核，通过后才生效） | `object` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | web | 是 | `evidence.manual_backfill_submitted` | `evidence.manual_backfill_submit_failed` |
 | inventory | `POST` | `/api/v1/inventory/trace-handovers/{id}/scan-segment` | `scanTraceSegment` | 员工扫码交接分段(主动留痕) | `object` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.handover_segment_scanned` | `inventory.handover_segment_scan_failed` |
 | inventory | `POST` | `/api/v1/inventory/trace-handovers/{id}/robot-report` | `reportRobotSegment` | 机器人配送段上报(被动留痕,受第三方开关门控) | `object` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone, tablet, web, mobile_admin | 是 | `inventory.handover_robot_reported` | `inventory.handover_robot_report_failed` |
 | inventory | `POST` | `/api/v1/inventory/trace-handovers/exceptions/{id}/review` | `reviewTraceHandoverException` | 交接异常复核(缺口/重复/差异) | `object` | `inventory.handover.review` | `staff-token` | `project-warehouse-bar` | web, mobile_admin | 是 | `inventory.handover_exception_resolved` | `inventory.handover_exception_review_failed` |
@@ -454,6 +457,7 @@
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | `splitBarTableSession` | 拆分酒水台位会话（拆台） | `object` | `bar.table_session.split` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table.split` | `bar.table.split_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | `renewBarTableSession` | 续台（延长台位会话） | `object` | `bar.table_session.renew` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table_session.renew` | `bar.table_session.renew_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | `transferBarTableSession` | 转台（台位会话转移） | `object` | `bar.table_session.transfer` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table_session.transfer` | `bar.table_session.transfer_failed` |
+| bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | `submitBarTableSessionSalesBackfill` | 补录台位会话销售归属（人工补录，店长复核） | `object` | `bar.table_session.create` | `staff-token` | `project-bar-table` | web | 是 | `evidence.manual_backfill_submitted` | `evidence.manual_backfill_submit_failed` |
 | bar | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | `listBarBillOperations` | 查询酒水账单拆并操作记录 | `-` | `bar.bill.split_merge` | `staff-token` | `project-bar-table` | tablet, web | 否 | `bar.bill_operation.list` | `bar.bill_operation.list_failed` |
 | bar | `GET` | `/api/v1/bar/bills/{bill_id}/rewards` | `listBarBillMerchantRewards` | 查询酒水账单产生的商户消费积分与成长值 | `-` | `bar.order.view` | `staff-token` | `project-bar-table` | tablet, web | 否 | `bar.bill_rewards.viewed` | `bar.bill_rewards.view_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/adjustments` | `adjustBarBill` | 对酒水账单应用调整 | `object` | `bar.bill.adjust` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill.adjust` | `bar.bill.adjust_failed` |
@@ -967,6 +971,9 @@
 | bar | `GET` | `/api/v1/bar/void-reason-codes` | `listBarVoidReasonCodes` | 列退酒原因（中文下拉数据源） | `-` | `bar.order_item.void` | `staff-token` | `project` | web, tablet | 否 | `bar.void_reason_code.viewed` | `bar.void_reason_code.view_failed` |
 | bar | `POST` | `/api/v1/bar/void-reason-codes` | `saveBarVoidReasonCode` | 新增或修改退酒原因 | `object` | `bar.order_item.void_decide` | `staff-token` | `project` | web, tablet | 是 | `bar.void_reason_code.saved` | `bar.void_reason_code.save_failed` |
 | bar | `POST` | `/api/v1/bar/void-reason-codes/{code}/archive` | `archiveBarVoidReasonCode` | 下线退酒原因（软删留理由） | `object` | `bar.order_item.void_decide` | `staff-token` | `project` | web, tablet | 是 | `bar.void_reason_code.archived` | `bar.void_reason_code.archive_failed` |
+| evidence | `GET` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | `getManualBackfillPolicy` | 查人工补录参数（补录时限与录音提前量，按项目） | `-` | `evidence.manual_backfill.policy.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| evidence | `PUT` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | `saveManualBackfillPolicy` | 配置人工补录参数（补录时限、录音提前量及各自上下限，按项目） | `object` | `evidence.manual_backfill.policy.manage` | `staff-token` | `project` | web | 是 | `evidence.manual_backfill_policy_updated` | `evidence.manual_backfill_policy_update_failed` |
+| evidence | `GET` | `/api/v1/evidence/manual-backfills` | `listManualBackfills` | 查某对象的人工补录记录（与原始记录并列展示） | `-` | `authenticated` | `staff-token` | `merchant` | web | 否 | `not_applicable` | `not_applicable` |
 | evidence | `POST` | `/api/v1/evidence/attachments/upload` | `uploadEvidenceAttachment` | 上传证据照片/视频 | `object` | `evidence.attachment.create` | `staff-token` | `merchant` | web, tablet, staff_work_phone | 否 | `evidence.attachment_uploaded` | `evidence.attachment_uploaded_failed` |
 | evidence | `GET` | `/api/v1/evidence/attachments/{attachment_id}/file` | `readEvidenceAttachmentFile` | 回读证据文件 | `-` | `evidence.timeline.view` | `staff-token` | `merchant` | web, tablet | 否 | `evidence.attachment_file_viewed` | `evidence.attachment_file_view_failed` |
 | settlement | `GET` | `/api/v1/settlement/invoice-items` | `listSettlementInvoiceItems` | 开票清单列表 | `-` | `settlement.invoice.view` | `staff-token` | `platform` | web | 否 | `settlement.invoice.list` | `settlement.invoice.list_failed` |
@@ -1143,6 +1150,7 @@
 | bar | `POST` | `/api/v1/bar/payroll-runs/close` | `closeBarPayrollMonth` | 按实际来源生成不可变月结及差额 | `BarPayrollCloseMonth` | `bar.payroll.manage` | `staff-token` | `project-merchant` | web, tablet | 是 | `bar.payroll.month_processed` | `bar.payroll.month_processed_failed` |
 | bar | `GET` | `/api/v1/bar/table-sessions/{id}/service-responsibilities` | `listBarServiceResponsibilities` | 读取原服务责任时间区间 | `-` | `bar.payroll.view` | `staff-token` | `project-merchant` | web, tablet | 否 | `bar.service.read` | `bar.service.read_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{id}/service-handover` | `handoverBarServiceResponsibility` | 登记真实服务交接 | `BarPayrollHandover` | `bar.table_session.transfer` | `staff-token` | `project-merchant` | web, tablet | 是 | `bar.service.handover` | `bar.service.handover_failed` |
+| bar | `POST` | `/api/v1/bar/table-sessions/{id}/service-backfill` | `submitBarTableSessionServiceBackfill` | 补录台位会话服务责任区间（人工补录，主管复核） | `object` | `bar.table_session.transfer` | `staff-token` | `project-merchant` | web | 是 | `evidence.manual_backfill_submitted` | `evidence.manual_backfill_submit_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{id}/service-close` | `closeBarServiceResponsibility` | 实际服务完成后关闭责任区间 | `BarPayrollCloseSession` | `bar.table.open_close` | `staff-token` | `project-merchant` | web, tablet | 是 | `bar.service.closed` | `bar.service.closed_failed` |
 | bar | `GET` | `/api/v1/bar/bills/{id}/refund-context` | `getBarBillRefundContext` | 读取本账单真实退款来源及累计明细 | `-` | `bar.bill.refund` | `staff-token` | `project-merchant` | web, tablet | 否 | `bar.refund_context.read` | `bar.refund_context.read_failed` |
 | inventory | `POST` | `/api/v1/inventory/stock-movements/damage` | `createDamageStockAdjustment` | 报损（damage）转库存调整 | `StockMovementRequest` | `inventory.stock.move` | `staff-token` | `project` | web | 是 | `inventory.counted` | `inventory.adjustment_failed` |

@@ -22,6 +22,8 @@ type Props = {
   /** 主按钮 data-testid：沿用原提交按钮的 testid，保持 e2e/门禁兼容。 */
   submitTestId: string;
   submitting?: boolean;
+  /** 业务态禁用提交（如必附凭证尚未上传）。 */
+  submitDisabled?: boolean;
   /** 外部提交错误（接口失败等），显示在弹窗内。 */
   error?: string;
   onSubmit: () => void;
@@ -30,7 +32,7 @@ type Props = {
   testId: string;
 };
 
-export function FormModal({ open, title, children, description, validate, submitLabel = "创建", submitTestId, submitting = false, error, onSubmit, onClose, testId }: Props) {
+export function FormModal({ open, title, children, description, validate, submitLabel = "创建", submitTestId, submitting = false, submitDisabled = false, error, onSubmit, onClose, testId }: Props) {
   const [stepError, setStepError] = React.useState("");
 
   React.useEffect(() => {
@@ -53,7 +55,7 @@ export function FormModal({ open, title, children, description, validate, submit
   const footer = (
     <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
       <Button data-testid={`${testId}-cancel`} onClick={onClose}>取消</Button>
-      <Button type="primary" data-testid={submitTestId} disabled={submitting} loading={submitting} onClick={submit}>{submitLabel}</Button>
+      <Button type="primary" data-testid={submitTestId} disabled={submitting || submitDisabled} loading={submitting} onClick={submit}>{submitLabel}</Button>
     </div>
   );
 

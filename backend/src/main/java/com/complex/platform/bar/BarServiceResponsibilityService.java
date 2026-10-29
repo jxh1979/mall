@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -181,5 +181,13 @@ public class BarServiceResponsibilityService {
         String payer=p.requireWorker(user,scope.project(),scope.merchant());
         p.jdbc.update("INSERT INTO bar_service_responsibilities(id,session_id,table_id,project_id,merchant_id,user_id,payer_company_id,started_at,source_id,recorded_by,reason) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             id("bsr"),sessionId,table,scope.project(),scope.merchant(),user,payer,ts(at),source,p.auth.currentActor().id(),reason);
+    }
+    /** 第十八批 F 段第 14 条 14-R6：服务责任补录复核通过后追加一条已结束的区间（只补空档，已有区间与会话当前责任人不改）；登记人为补录提交人。 */
+    void recordBackfilledInterval(BarTableSessionRecord session,String user,Instant start,Instant end,String backfillId,String submittedBy,String reason) {
+        var scope=p.tableScope(session.tableId());
+        String payer=p.requireWorker(user,scope.project(),scope.merchant());
+        p.jdbc.update("INSERT INTO bar_service_responsibilities(id,session_id,table_id,project_id,merchant_id,user_id,payer_company_id,started_at,ended_at,source_id,recorded_by,reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            id("bsr"),session.id(),session.tableId(),scope.project(),scope.merchant(),user,payer,ts(start),ts(end),"manual_backfill:"+backfillId,submittedBy,
+            "人工补录（补录单 "+backfillId+"）："+reason);
     }
 }

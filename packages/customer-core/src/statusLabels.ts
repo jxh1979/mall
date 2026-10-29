@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -230,6 +230,7 @@ const STATUS_LABELS: Record<string, string> = {
   // 经营分析统计口径（segment_type；merchant 多义不进全局表）
   platform: "平台",
   project: "项目",
+  merchant_project: "商户分项目", // 18F 第 80 条：指标快照商户分项目段（商户|项目）
   // 票务权益类型（entitlement_type）
   entry: "入园",
   ride: "游乐项目",
@@ -284,6 +285,14 @@ const STATUS_LABELS: Record<string, string> = {
   // 补录数量明细的补录类型（ROOT-04）
   locked_backfill: "锁账后补录",
   attendance_receipt: "领取时刻补证",
+  // 第十八批 F 段第 14 条 14-R8：人工补录单三类（补录对象类型）
+  trace_handover_step: "交接扫码补录",
+  bar_session_sales: "销售归属补录",
+  bar_session_service: "服务责任补录",
+  // 18F 复核：三类人工补录复核单的动作类型（审批链页待复核表）
+  "inventory.trace.scan_backfill": "交接扫码补录",
+  "bar.sales.backfill": "销售归属补录",
+  "bar.service.backfill": "服务责任补录",
   // OBS-14-02 复核（后台结果区）：迁移里 status 类列 CHECK 闭集的取值；一词多义的不进本表，见后台 i18n/fieldLabels VALUE_LABELS
   not_started: "未开始",
   pending_info: "待补资料",

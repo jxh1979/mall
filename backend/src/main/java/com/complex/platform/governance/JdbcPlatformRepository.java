@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.17
+// 文件版本：V0.18
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -51,6 +51,75 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         if (sql == null) return Optional.empty();
         return jdbcTemplate.query(sql, Map.of("id", objectId), (rs, row) -> rs.getString("requested_by"))
                 .stream().filter(value -> value != null && !value.isBlank()).findFirst();
+    }
+
+    private static final String DEALER_ORDER_PROJECT = "SELECT w.project_id FROM dealer_orders o JOIN warehouses w ON w.id = o.central_warehouse_id"
+            + " JOIN dealers d ON d.id = o.dealer_id WHERE (d.project_id IS NULL OR d.project_id = w.project_id) AND o.id = ";
+
+    /**
+     * 第十八批 F 段第 83 条（18F 核对后操作员裁决补充第 17 条所选选项原文「对象有所属项目的，普通查看人按对象项目判；对象没有项目的（全平台或
+     * 全国配置、手填对象、没带项目的合同）照旧按发起人」）：复核单 object_type → 以 :id（object_id）取所处理对象所属项目的 SQL。未登记的类型、
+     * 查不到或项目为空的对象返回空，照旧按发起人。商户加经营项目申请（merchant_project_request）不在表内，取商户的各经营项目，见 reviewObjectProjectIds。
+     * 经销四项的订单项目同 JdbcDealerOrderRepository.findOrderProjectId；员工考勤领取核实按员工最新一条档案，同 JdbcStaffRepository.reviewSubjectProjectIds。
+     */
+    static final Map<String, String> REVIEW_OBJECT_PROJECT_SQL = Map.ofEntries(
+            Map.entry("staff_payroll_scheme", "SELECT project_id FROM staff_payroll_scheme_versions WHERE id = :id"),
+            Map.entry("staff_payroll_period", "SELECT project_id FROM staff_payroll_period_facts WHERE id = :id"),
+            Map.entry("staff_payroll_calendar", "SELECT project_id FROM staff_payroll_calendar_versions WHERE id = :id"),
+            Map.entry("staff_performance_rule", "SELECT project_id FROM staff_performance_rule_versions WHERE id = :id"),
+            Map.entry("staff_performance_score", "SELECT project_id FROM staff_performance_score_adjustments WHERE id = :id"),
+            Map.entry("staff_attendance_receipt_review", "SELECT (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = e.user_id"
+                    + " ORDER BY p.created_at DESC LIMIT 1) FROM staff_attendance_receipt_reviews r JOIN staff_work_phone_events e ON e.id = r.event_id"
+                    + " WHERE r.id = :id"),
+            Map.entry("payroll_tax_assessment", "SELECT project_id FROM payroll_tax_assessments WHERE id = :id"),
+            Map.entry("bar_payroll_rule", "SELECT project_id FROM bar_payroll_rules WHERE id = :id"),
+            Map.entry("bar_business_day_config", "SELECT project_id FROM bar_business_day_configs WHERE id = :id"),
+            Map.entry("amusement_business_day_config", "SELECT project_id FROM amusement_business_day_configs WHERE id = :id"),
+            Map.entry("bar_bill", "SELECT m.project_id FROM bar_bills b JOIN merchants m ON m.id = b.bar_id WHERE b.id = :id"),
+            Map.entry("inventory_purchase_request", "SELECT project_id FROM inventory_purchase_requests WHERE id = :id"),
+            Map.entry("supply_contract", "SELECT project_id FROM supply_contracts WHERE id = :id"),
+            Map.entry("purchase_quantity_resolution", "SELECT p.project_id FROM purchase_quantity_resolutions x"
+                    + " JOIN inventory_purchase_requests p ON p.id = x.purchase_id WHERE x.id = :id"),
+            Map.entry("purchase_prepayment_resolution", "SELECT p.project_id FROM purchase_prepayment_resolutions x"
+                    + " JOIN inventory_purchase_requests p ON p.id = x.purchase_id WHERE x.id = :id"),
+            Map.entry("purchase_return", "SELECT c.project_id FROM purchase_returns x JOIN purchase_receipts c ON c.id = x.receipt_id WHERE x.id = :id"),
+            Map.entry("inventory_quarantine_disposition", "SELECT l.project_id FROM inventory_quarantine_dispositions x"
+                    + " JOIN inventory_quarantine_lots l ON l.id = x.lot_id WHERE x.id = :id"),
+            Map.entry("inventory_transfer_order", "SELECT m.project_id FROM inventory_transfer_orders o JOIN merchants m ON m.id = o.to_owner_id"
+                    + " WHERE o.id = :id"),
+            Map.entry("contract", "SELECT project_id FROM contracts WHERE id = :id"),
+            Map.entry("contract_change", "SELECT project_id FROM contract_changes WHERE id = :id"),
+            Map.entry("contract_settlement", "SELECT c.project_id FROM contract_settlements s JOIN contracts c ON c.id = s.contract_id WHERE s.id = :id"),
+            Map.entry("energy_reading_verification", "SELECT project_id FROM energy_reading_verifications WHERE id = :id"),
+            Map.entry("energy_review_settings", "SELECT project_id FROM energy_review_settings WHERE id = :id"),
+            Map.entry("dealer_order_refund", DEALER_ORDER_PROJECT + "(SELECT order_id FROM dealer_order_refunds WHERE id = :id)"),
+            Map.entry("dealer_return", DEALER_ORDER_PROJECT + "(SELECT order_id FROM dealer_returns WHERE id = :id)"),
+            Map.entry("dealer_return_freight", DEALER_ORDER_PROJECT + "(SELECT order_id FROM dealer_return_freight_adjustments WHERE id = :id)"),
+            Map.entry("dealer_delivery_resolution", DEALER_ORDER_PROJECT + "(SELECT dd.order_id FROM dealer_delivery_resolutions dr"
+                    + " JOIN dealer_delivery_discrepancies dd ON dd.id = dr.discrepancy_id WHERE dr.id = :id)"),
+            Map.entry("facility_equipment_scrap", "SELECT project_id FROM facility_equipment_scraps WHERE id = :id"),
+            Map.entry("parking_manual_release", "SELECT project_id FROM parking_manual_releases WHERE id = :id"),
+            Map.entry("leasing_blacklist_exception", "SELECT project_id FROM leasing_blacklist_exceptions WHERE id = :id"),
+            Map.entry("leasing_intent", "SELECT project_id FROM leasing_intents WHERE id = :id"),
+            Map.entry("ticket_reward_config", "SELECT project_id FROM ticket_reward_config_versions WHERE id = :id"),
+            Map.entry("ticket_points_objection_resolution", "SELECT b.project_id FROM ticket_points_bill_objections x"
+                    + " JOIN ticket_points_monthly_bills b ON b.id = x.bill_id WHERE x.id = :id"),
+            Map.entry("access_grant_request", "SELECT u.organization_id FROM access_grant_requests g JOIN access_users u ON u.id = g.target_user_id"
+                    + " WHERE g.id = :id"),
+            Map.entry("role_viewable_projects", "SELECT organization_id FROM roles WHERE id = :id"),
+            Map.entry("manual_backfill", "SELECT project_id FROM manual_backfills WHERE id = :id"));
+
+    @Override
+    public List<String> reviewObjectProjectIds(String objectType, String objectId) {
+        if ("merchant_project_request".equals(objectType)) {
+            return jdbcTemplate.queryForList("SELECT merchant_id FROM merchant_project_requests WHERE id = :id", Map.of("id", objectId), String.class)
+                    .stream().findFirst().map(this::listMerchantOperatingProjectIds).orElse(List.of());
+        }
+        String sql = REVIEW_OBJECT_PROJECT_SQL.get(objectType);
+        if (sql == null) {
+            return List.of();
+        }
+        return jdbcTemplate.queryForList(sql, Map.of("id", objectId), String.class).stream().filter(java.util.Objects::nonNull).toList();
     }
 
     @Override

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -998,6 +998,29 @@ class JdbcInventoryRepository implements InventoryRepository {
                  WHERE id = :id
                    FOR UPDATE
                 """, Map.of("id", id), rowMapper::mapTraceHandoverException).stream().findFirst();
+    }
+
+    @Override
+    public List<TraceHandoverExceptionRecord> listTraceHandoverExceptions(String handoverId) {
+        return jdbcTemplate.query("""
+                SELECT id, handover_id, segment, exception_type, review_status,
+                       reviewer_user_id, reason, created_at, reviewed_at
+                  FROM inventory_trace_handover_exceptions
+                 WHERE handover_id = :handover_id
+                 ORDER BY created_at, id
+                """, Map.of("handover_id", handoverId), rowMapper::mapTraceHandoverException);
+    }
+
+    @Override
+    public List<TraceHandoverRecord> listTraceHandoversByTraceCode(String traceCode, String merchantId) {
+        return jdbcTemplate.query("""
+                SELECT id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
+                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id
+                  FROM inventory_trace_handovers
+                 WHERE trace_code = :trace_code
+                """ + (merchantId == null ? "" : " AND merchant_id = :merchant_id") + " ORDER BY created_at DESC, id",
+                new MapSqlParameterSource("trace_code", traceCode).addValue("merchant_id", merchantId),
+                rowMapper::mapTraceHandover);
     }
 
     @Override

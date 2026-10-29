@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -53,13 +53,15 @@ public final class AnalyticsRecords {
     ) {
     }
 
+    /** 欠费商户明细一行；18F 第 80 条按（商户, 项目）分行，projectId 为该行应收所属项目。 */
     public record ArDebtorRow(
             String merchantId,
             String merchantName,
             java.math.BigDecimal outstandingCent,
             LocalDate oldestDueDate,
             long overdueDays,
-            String bucket
+            String bucket,
+            String projectId
     ) {
     }
 
@@ -429,21 +431,42 @@ public final class AnalyticsRecords {
     ) {
     }
 
-    /** P1c 租售比取数聚合包：已归属商户行 + 未归属第三方营业额（merchant_id IS NULL，只进平台级分母）。 */
-    public record RentToSalesAggregate(
-            java.util.List<RentToSalesMerchantRow> merchants,
-            long unattributedSalesCent
+    /**
+     * 18F 第 80 条：租售比（商户, 项目）取数行——租金按应收行的项目（项目为空的单独一行）；营业额只给经营项目恰好一个的商户归到该项目。
+     */
+    public record RentToSalesMerchantProjectRow(
+            String merchantId,
+            String merchantName,
+            String merchantType,
+            String projectId,
+            long rentCent,
+            long salesCent
     ) {
     }
 
-    /** P1c 租售比一档一行（店级/业态级/平台级通用）：ratioBps=租金*10000/营业额；营业额<=0→null（诚实标注 note）。 */
+    /**
+     * P1c 租售比取数聚合包：已归属商户行（平台合计用）+ 未归属第三方营业额（merchant_id IS NULL，只进平台级分母）
+     * + 18F 第 80 条（商户, 项目）行（店级、业态级逐行用）。
+     */
+    public record RentToSalesAggregate(
+            java.util.List<RentToSalesMerchantRow> merchants,
+            long unattributedSalesCent,
+            java.util.List<RentToSalesMerchantProjectRow> merchantProjects
+    ) {
+    }
+
+    /**
+     * P1c 租售比一档一行（店级/业态级/平台级通用）：ratioBps=租金*10000/营业额；营业额<=0→null（诚实标注 note）。
+     * 18F 第 80 条：店级、业态级按项目分行，projectId 为该行项目；平台行为 null。
+     */
     public record RentToSalesRow(
             String key,
             String label,
             long rentCent,
             long salesCent,
             Long ratioBps,
-            String note
+            String note,
+            String projectId
     ) {
     }
 

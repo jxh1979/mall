@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -329,7 +329,8 @@ class StaffJdbcIntegrationTests {
             var receipt=registrations.selfRegister(new com.complex.platform.access.staff.dto.StaffSelfRegistrationRequest(key(),"project_main",null,"员工"+key(),"13800138000","110101199001010000",proof[0],proof[1]));
             submitted=repository.findProfileById(receipt.id()).orElseThrow();
         } else {
-            jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,status,created_at,updated_at) VALUES(?,?,'retail','project_main','active',now(),now()) ON CONFLICT(id) DO NOTHING",merchantId,merchantId);
+            jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now()) ON CONFLICT (id) DO NOTHING", "project_main", "project_main"); // 18F（第 81 条 81-R1）：商户主项目＝登记项目
+            jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,project_id,status,created_at,updated_at) VALUES(?,?,'retail','project_main','project_main','active',now(),now()) ON CONFLICT(id) DO NOTHING",merchantId,merchantId);
             submitted=service.submitRegistration(new StaffRegistrationRequest(key(),null,"project_main",merchantId,"员工"+key(),"13800138000","110101199001010000",null));
         }
         StaffTestActors.actor("usr_m010_reviewer","platform_admin","project_main",null);

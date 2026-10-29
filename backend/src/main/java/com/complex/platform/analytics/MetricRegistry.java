@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import java.util.Collection;
@@ -877,8 +877,8 @@ public final class MetricRegistry {
                 TYPE_ADDITIVE,
                 "笔",
                 "补录申请逐笔计数：提交即计一笔，状态另列（待审、已通过、已驳回）；审批通过或驳回不重复计，同一提交重放不重复计，"
-                        + "驳回后重新提交另计一笔。当前已接入：锁账后补录、无可信领取时刻补证。可加口径=区间求和：按提交时间落治理营业日窗。",
-                "锁账补录台账＋领取时刻补证台账（ar_ap_adjustments / staff_attendance_receipt_reviews，实时查询）。",
+                        + "驳回后重新提交另计一笔。当前已接入：锁账后补录、无可信领取时刻补证、交接扫码补录、销售归属补录、服务责任补录。可加口径=区间求和：按提交时间落治理营业日窗。",
+                "锁账补录台账＋领取时刻补证台账＋人工补录单（ar_ap_adjustments / staff_attendance_receipt_reviews / manual_backfills，实时查询）。",
                 "governance.supervisor_review.view",
                 "governance",
                 false,

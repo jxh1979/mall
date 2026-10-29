@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.46
+// 文件版本：V0.47
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -98,6 +98,9 @@ public class AccessService {
     private final AccessCredentialProvisioner credentialProvisioner;
     private final SupervisorReviewService supervisorReviewService;
     private final boolean grantApprovalEnabled;
+    // 18F（第 81 条 81-R1）：挂商户时核商户的经营项目（字段注入，同 StaffService）
+    @Autowired
+    private com.complex.platform.governance.PlatformRepository platformRepository;
 
     @Autowired
     public AccessService(
@@ -1100,6 +1103,7 @@ public class AccessService {
                         String newOrganization = trimToDefault(r.organizationId(), target.organizationId());
                         String newMerchant = isBlank(r.merchantId()) ? null : r.merchantId().trim();
                         requireActorCanAssignToScope(actor, newOrganization, newMerchant, reach);
+                        requireMerchantOperatesIn(newMerchant, newOrganization);
                         if (java.util.Objects.equals(newOrganization, target.organizationId())
                                 && java.util.Objects.equals(newMerchant, target.merchantId())) {
                             throw ApiException.badRequest("SCOPE_UNCHANGED", "所属商户与项目均未变化；同范围换岗请使用定岗入口");
@@ -1838,6 +1842,7 @@ public class AccessService {
                             throw ApiException.conflict("STAFF_REGISTRATION_REQUIRED",
                                     "员工须先提交注册申请，由对应公司审批后生成账号和员工自助权限");
                         }
+                        requireMerchantOperatesIn(merchantId, organizationId);
                         if (credentialProvisioner == null) {
                             throw ApiException.conflict("CREDENTIAL_PROVIDER_UNAVAILABLE", "登录凭证服务未配置，不能创建账号");
                         }
@@ -3405,6 +3410,14 @@ public class AccessService {
         }
         if (!isBlank(actor.merchantId()) && !actor.merchantId().equals(merchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能把人员改挂到其他商户");
+        }
+    }
+
+    // 18F（第 81 条 81-R1，裁决 fresh-M474「只有商户的主项目或已批准的经营项目里，才能挂这个商户的员工；否则拒绝。」）：
+    // 改挂与外包建号共用；平台管理员与最高权限同样适用。
+    private void requireMerchantOperatesIn(String merchantId, String organizationId) {
+        if (merchantId != null && !platformRepository.merchantStaffMayAttach(merchantId, organizationId)) {
+            throw ApiException.forbidden("MERCHANT_NOT_IN_PROJECT", "该商户不在该项目经营，不能把员工挂到这里");
         }
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.governance.chain.ApprovalChainNode;
 import java.time.Instant;
@@ -14,6 +14,11 @@ public interface SupervisorReviewRepository {
 
     default Optional<String> findOriginalApplicant(String objectType, String objectId) {
         return Optional.empty();
+    }
+
+    /** 第十八批 F 段第 83 条：复核单所处理对象的所属项目；类型未登记或对象没有项目返回空（照旧按发起人）。 */
+    default List<String> reviewObjectProjectIds(String objectType, String objectId) {
+        return List.of();
     }
 
     Optional<SupervisorReviewDecisionRecord> findPendingSupervisorReviewById(String reviewId);

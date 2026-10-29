@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -28,10 +28,10 @@ const NODES = [
   { node_id: "n3", review_id: "review_c1", line_code: "finance_review", seq: 1, approver_kind: "user", approver_id: "usr_fin", status: "pending", decided_by: null, decided_at: null, forwarded_to: "usr_x", forwarded_by: "usr_fin", escalation_count: 0 },
 ];
 
-function makeApi(): AdminApi {
+function makeApi(extraPending: unknown[] = []): AdminApi {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.includes("supervisor-review/pending")) return Promise.resolve(envelope(PENDING));
+    if (url.includes("supervisor-review/pending")) return Promise.resolve(envelope([...PENDING, ...extraPending]));
     if (url.includes("/review_c1/chain/regenerate")) return Promise.resolve(raw(NODES));
     if (url.includes("/review_orphan/chain/regenerate")) return Promise.resolve(raw([NODES[1]]));
     if (url.includes("/review_c1/chain")) return Promise.resolve(raw(NODES));
@@ -82,9 +82,9 @@ function makeApi(): AdminApi {
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 const VIEW_ONLY: EffectivePermissionsState = { status: "ready", value: { grants: ["governance.supervisor_review.view"], denies: [], wildcard: false } };
 
-function renderPage(effectivePermissions: EffectivePermissionsState = ADMIN_PERMS, focusObjectId?: string) {
+function renderPage(effectivePermissions: EffectivePermissionsState = ADMIN_PERMS, focusObjectId?: string, extraPending: unknown[] = []) {
   const props: AdminPageProps = {
-    api: makeApi(),
+    api: makeApi(extraPending),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
@@ -226,6 +226,20 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByTestId("approval-chain-approve"));
     await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url).endsWith("/review_master/approve"))).toBe(true));
+  });
+
+  // 18F 复核（PGM:287「界面全中文（所有终端零英文）」）：交接链与补录页、卡座与订台页的补录行把复核单号链到本页，三类人工补录的动作类型显示中文。
+  it("三类人工补录复核单的动作类型显示中文，不显示动作码", async () => {
+    const backfills = [["rv_bf_trace", "inventory.trace.scan_backfill", "交接扫码补录"], ["rv_bf_sales", "bar.sales.backfill", "销售归属补录"],
+      ["rv_bf_service", "bar.service.backfill", "服务责任补录"]];
+    renderPage(ADMIN_PERMS, undefined, backfills.map(([id, action]) => ({ decision: { review_id: id, action_type: action, object_type: "manual_backfill",
+      object_id: `mb_${id}`, initiated_by: "usr_desk", review_status: "pending_review" }, schedule: null })));
+    await waitFor(() => expect(screen.queryByTestId("approval-chain-pending-rv_bf_trace")?.textContent ?? "").toContain("交接扫码补录"));
+    for (const [id, action, label] of backfills) {
+      const text = screen.getByTestId(`approval-chain-pending-${id}`).textContent ?? "";
+      expect(text).toContain(label);
+      expect(text).not.toContain(action);
+    }
   });
 
   it("逐笔原件已经终结时仍可查看但不能再次裁决", async () => {

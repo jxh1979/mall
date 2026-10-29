@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -591,6 +591,95 @@ class M738CrossProjectJdbcIntegrationTests {
                 "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
     }
 
+    // 第十八批 F 段第 83 条（裁决 17 所选选项原文「对象有所属项目的，普通查看人按对象项目判；对象没有项目的（全平台或全国配置、手填对象、
+    // 没带项目的合同）照旧按发起人；审批人、发起人本人、商户账号照旧。只改可见性，不改各发起入口。」）：A 的员工经只勾 B 的角色持有设备管理码与
+    // 授权申请码（另经普通角色持查看码与主管复核发起码），替 B 的设备发起报废（scrap）、替 B 的员工 eB 申请临时权限（grant），再在主管复核页手填一份
+    // 库里没有的合同发起违约复核（manual，对象没有项目）。修复前三张单都按发起人算 A：A 里只持查看码的普通员工在待复核清单里看得到 scrap、grant（第一处断言即红）。
+    @Test
+    void otherDomainReviewsForAnotherProjectFollowObjectProject() throws Exception {
+        String view = "governance.supervisor_review.view";
+        String eB = employee("eb83", entityB);
+        RequestPostProcessor holder = staffOfA("h83", tickedBRole("h83", "facility.equipment.manage", "access.grant_request.apply"),
+                plainRole("h83_p", view, "governance.supervisor_review.manage"));
+        String equipment = "feq_m738_" + suffix;
+        jdbcTemplate.update("INSERT INTO facility_equipment (id, name, equipment_type, status, project_id) VALUES (?, 'M738 冷却塔', 'hvac', 'normal', ?)",
+                equipment, entityB);
+        String scrap = reviewIdOf(postJson(holder, "/api/v1/facility/equipment/" + equipment + "/scrap-requests", """
+                {"idempotency_key": "%s", "reason": "M738 压缩机烧毁", "disposal_method": "整机交回收商"}
+                """.formatted(key())));
+        String grant = reviewIdOf(postJson(holder, "/api/v1/access/grant-requests", """
+                {"idempotency_key": "%s", "request_type": "temporary_permission", "target_user_id": "%s",
+                 "permission_codes": ["amusement.device.view"], "expires_at": "2099-01-01T00:00:00Z", "single_use": false,
+                 "reason": "M738 临时顶班", "operator_note": null}
+                """.formatted(key(), eB)));
+        String manual = reviewIdOf(postJson(holder, "/api/v1/platform/supervisor-review/evaluate", """
+                {"idempotency_key": "%s", "action_type": "contract_violation", "object_type": "contract", "object_id": "free_83_%s",
+                 "violation_summary": "M738 手填违约"}
+                """.formatted(key(), suffix)));
+        List<String> forB = List.of(scrap, grant);
+        // 待审清单按到期时刻排序、最多 200 张：夹具单排到前面
+        jdbcTemplate.update("UPDATE supervisor_review_decisions SET due_at = TIMESTAMPTZ '2000-01-01 00:00:00+00' WHERE review_id IN (?, ?, ?)",
+                scrap, grant, manual);
+        RequestPostProcessor viewerA = staffOfA("viewa83", plainRole("viewa83", view));
+        RequestPostProcessor viewerB = account("viewb83", "staff", entityB, null, plainRole("viewb83", view));
+
+        // 修复前红：A 的普通查看人看得到 scrap、grant
+        assertThat(pendingIds(viewerA)).doesNotContainAnyElementsOf(forB).contains(manual);
+        assertThat(pendingIds(viewerB)).containsAll(forB).doesNotContain(manual);
+        for (String id : forB) {
+            denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + id).with(viewerA)), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+            mockMvc.perform(get("/api/v1/platform/supervisor-review/" + id).with(viewerB))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.review_id").value(id));
+        }
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + scrap + "/chain").with(viewerA)),
+                "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + scrap + "/chain").with(viewerB)).andExpect(status().isOk());
+        // 对象没有项目（手填对象）照旧按发起人：A 的普通查看人读得到，B 的读不到（守护）
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + manual).with(viewerA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.review_id").value(manual));
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + manual).with(viewerB)), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        // 发起人本人照旧（守护）
+        assertThat(pendingIds(holder)).contains(scrap, grant, manual);
+        // 审批人照旧：A 里只持查看码、是报废单当前节点审批人的人看得到（守护）
+        RequestPostProcessor approverA = staffOfA("apr83", plainRole("apr83", view));
+        jdbcTemplate.update("INSERT INTO supervisor_review_nodes (node_id, review_id, line_code, seq, approver_kind, approver_id, status) "
+                + "VALUES (?, ?, 'main', 1, 'user', ?, 'pending')", "nd_" + scrap, scrap, userId("apr83"));
+        assertThat(pendingIds(approverA)).contains(scrap, manual).doesNotContain(grant);
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + scrap).with(approverA)).andExpect(status().isOk());
+    }
+
+    // 18F 复核（裁决补充第 17 条「审批人、发起人本人、商户账号照旧」）：指定岗位审批（specific_role）不指定最终审批人时，链尾是按角色解析的节点
+    // （approver_id 为空，任一经角色持该事项审批码的人裁决，批准入口照旧按发起人项目判）。A 里经角色持 bar.payroll.approve 的人照旧按发起人 A
+    // 看得到、读得到审批链；只持查看码的仍按对象项目 B。修复前第一处断言即红（A 的审批人清单里没有这张单，批准入口却按 A 放行）。
+    @Test
+    void roleNodeApproversOfOtherDomainReviewsKeepInitiatorProject() throws Exception {
+        String view = "governance.supervisor_review.view";
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now()) "
+                + "ON CONFLICT (id) DO NOTHING", entityB, entityB);
+        String rule = "bpr_m738_" + suffix;
+        jdbcTemplate.update("INSERT INTO bar_payroll_rules (id, rule_kind, project_id, effective_from, version, rule_json, reason, status, "
+                + "platform_company_id, created_by) VALUES (?, 'charge', ?, DATE '2099-03-01', 'V1', '{}'::jsonb, 'M738 服务费', 'pending_review', ?, ?)",
+                rule, entityB, entityB, userId("h83r"));
+        account("h83r", "staff", entityA, null);
+        String review = "rv_m738_h83r_" + suffix;
+        jdbcTemplate.update("""
+                INSERT INTO supervisor_review_decisions (review_id, policy_code, action_type, object_type, object_id, blocked, review_status,
+                                                         required_level, evaluated_at, initiated_by, due_at)
+                VALUES (?, 'bar_payroll_rule', 'bar.payroll_rule.adjust', 'bar_payroll_rule', ?, TRUE, 'pending_review', 1, now(), ?,
+                        TIMESTAMPTZ '2000-01-01 00:00:00+00')
+                """, review, rule, userId("h83r"));
+        roleNode(review);
+        RequestPostProcessor approverA = staffOfA("rna83", plainRole("rna83", view, "bar.payroll.approve"));
+        RequestPostProcessor viewerA = staffOfA("rnv83", plainRole("rnv83", view));
+        RequestPostProcessor approverB = account("rnb83", "staff", entityB, null, plainRole("rnb83", view, "bar.payroll.approve"));
+
+        assertThat(pendingReviews(approverA)).contains(review);
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + review + "/chain").with(approverA)).andExpect(status().isOk());
+        assertThat(pendingReviews(viewerA)).doesNotContain(review);
+        denied(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + review).with(viewerA)), "SUPERVISOR_REVIEW_SCOPE_FORBIDDEN");
+        assertThat(pendingReviews(approverB)).contains(review);
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     private String userId(String tag) {
@@ -684,11 +773,12 @@ class M738CrossProjectJdbcIntegrationTests {
         return profileId(tag);
     }
 
-    /** 一个在用商户，经营主体公司＝该主体。 */
+    /** 一个在用商户，经营主体公司＝主项目＝该主体（项目表补同编号的一行，商户主项目有外键）。 */
     private String merchant(String tag, String entity) {
         String id = "mch_m738_" + tag + "_" + suffix;
-        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, business_entity_id, status, created_at, updated_at) "
-                + "VALUES (?, ?, 'retail', ?, 'active', now(), now())", id, id, entity);
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now()) ON CONFLICT (id) DO NOTHING", entity, entity);
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, business_entity_id, project_id, status, created_at, updated_at) "
+                + "VALUES (?, ?, 'retail', ?, ?, 'active', now(), now())", id, id, entity, entity);
         return id;
     }
 

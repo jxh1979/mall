@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -4626,7 +4626,7 @@ class AccessServiceTests {
     }
 
     private AccessService newAccessService(boolean grantApprovalEnabled, SupervisorReviewService supervisorReviewService) {
-        return new AccessService(
+        AccessService created = new AccessService(
                 accessRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 new AuditEventService(auditEventRepository),
@@ -4637,6 +4637,12 @@ class AccessServiceTests {
                 3,
                 3
         );
+        // 18F（第 81 条 81-R1）：内存夹具没有商户档案，夹具商户一律视为在所挂项目经营
+        var platform = org.mockito.Mockito.mock(com.complex.platform.governance.PlatformRepository.class);
+        org.mockito.Mockito.when(platform.merchantStaffMayAttach(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(true);
+        org.springframework.test.util.ReflectionTestUtils.setField(created, "platformRepository", platform);
+        return created;
     }
 
     private SupervisorReviewService supervisorReviewService(InMemorySupervisorReviewRepository reviewRepository) {

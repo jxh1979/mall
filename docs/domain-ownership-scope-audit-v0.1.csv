@@ -287,6 +287,8 @@ leasing_follow_ups,direct,project_id,project_id column on leasing_follow_ups,rea
 leasing_intents,direct,project_id,project_id column on leasing_intents,ready for project/merchant scoped query enforcement,V0.07,covered
 leasing_leads,direct,project_id,project_id column on leasing_leads,ready for project/merchant scoped query enforcement,V0.07,covered
 mall_floor_plans,direct,project_id,project_id column on mall_floor_plans,ready for project/merchant scoped query enforcement,V0.07,covered
+manual_backfill_policies,direct,project_id,project_id column on manual_backfill_policies,ready for project/merchant scoped query enforcement,V0.07,covered
+manual_backfills,direct,project_id,project_id column on manual_backfills,ready for project/merchant scoped query enforcement,V0.07,covered
 mdm_app_whitelist,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 mdm_policy_violations,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 mdm_site_whitelist,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered

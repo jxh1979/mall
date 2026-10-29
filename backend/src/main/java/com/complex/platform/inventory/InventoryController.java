@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -932,6 +932,30 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.handover.review");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reviewException(id, request));
+    }
+
+    // 第十八批 F 段第 14 条 14-R2（BSM:1201）：按溯源码查交接单、交接链视图（原扫码五段、异常、人工补录并列）、缺段人工补录。
+    @GetMapping("/trace-handovers")
+    public ApiResponse<java.util.List<TraceHandoverRecord>> listTraceHandovers(@RequestParam("trace_code") String traceCode) {
+        authorizationService.requirePermission("inventory.handover.scan");
+        return ApiResponse.ok(service.listTraceHandovers(traceCode));
+    }
+
+    @GetMapping("/trace-handovers/{id}")
+    public ApiResponse<TraceHandoverChainView> getTraceHandover(@PathVariable String id) {
+        authorizationService.requirePermission("inventory.handover.scan");
+        return ApiResponse.ok(service.getTraceHandover(id));
+    }
+
+    @PostMapping("/trace-handovers/{id}/segments/{segment}/backfill")
+    public ApiResponse<com.complex.platform.evidence.ManualBackfillService.Backfill> backfillTraceHandoverSegment(
+            @PathVariable String id,
+            @PathVariable String segment,
+            @RequestBody com.complex.platform.evidence.ManualBackfillService.Request request
+    ) {
+        authorizationService.requirePermission("inventory.handover.scan");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.submitStepBackfill(id, segment, request));
     }
 
     // ── R5 T6：供应合同三模式 ──────────────────────────────────────────────────

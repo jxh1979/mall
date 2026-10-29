@@ -1,7 +1,8 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
+import { BarSalesBackfillPanel } from "./BarSessionBackfill";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -105,7 +106,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         { label: "所属酒吧", value: row.barId ?? "—" },
         { label: "营业日", value: cnDate(row.businessDate) },
         { label: "人数", value: row.guestCount ?? "—" },
-        { label: "销售", value: row.salesStaffId ?? "—" },
+        { label: "销售", value: row.salesStaffId ?? "无销售（自来客）" },
         { label: "服务员", value: row.serviceStaffId ?? "—" },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "版本", value: row.sessionVersion ?? "—" },
@@ -481,6 +482,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       )}
       <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并、续卡必须受结账与审批约束。" />
       <BarServiceResponsibilityPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} session={selectedSession} onChanged={reload} />
+      {/* 第十八批 F 段第 14 条 14-R7（BSM:1642、BSM:1021）：本场销售归属与人工补录并列。 */}
+      <BarSalesBackfillPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} session={selectedSession}
+        reservation={reservations.find((row) => row.id === selectedSession?.reservationId)} />
 
       {/* 从零起单入口：即便零数据也常驻可见（放在空态短路之外），支持新建卡座 / 新建订台（代客）/ 开台。 */}
       <h3>从零起单</h3>

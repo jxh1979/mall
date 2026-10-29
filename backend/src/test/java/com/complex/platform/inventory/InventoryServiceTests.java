@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -3876,6 +3876,11 @@ class InventoryServiceTests {
         @Override
         public Optional<TraceHandoverExceptionRecord> findTraceHandoverExceptionByIdForUpdate(String id) {
             return Optional.ofNullable(traceHandoverExceptions.get(id));
+        }
+
+        @Override
+        public List<TraceHandoverExceptionRecord> listTraceHandoverExceptions(String handoverId) {
+            return traceHandoverExceptions.values().stream().filter(e -> e.handoverId().equals(handoverId)).toList();
         }
 
         @Override

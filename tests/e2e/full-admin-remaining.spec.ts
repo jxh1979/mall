@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -66,6 +66,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-INV-001", label: "库存台账", route: "/admin/inventory/ledger" },
   { pageId: "ADM-INV-002", label: "跨主体调拨与借调", route: "/admin/inventory/transfers" },
   { pageId: "ADM-INV-004", label: "高价值复核", route: "/admin/inventory/high-value-reviews" },
+  { pageId: "ADM-INV-005", label: "交接链与补录", route: "/admin/inventory/trace-handovers" },
   { pageId: "ADM-FIN-002", label: "对账差异", route: "/admin/finance/reconciliation" },
   { pageId: "ADM-FIN-003", label: "退款分级授权", route: "/admin/finance/refund-authority" },
   { pageId: "ADM-MER-001", label: "商户服务工单", route: "/admin/merchant-service/tickets" },
@@ -160,6 +161,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("inventory-transfer-table")).toBeVisible();
   } else if (spec.pageId === "ADM-INV-004") {
     await expect(page.getByTestId("inventory-high-value-review-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-INV-005") {
+    await expect(page.getByTestId("inventory-trace-handover-page")).toBeVisible();
   } else if (spec.pageId === "ADM-FIN-006") {
     await expect(page.getByTestId("finance-merchant-expense-page")).toBeVisible();
     await expect(page.getByTestId("merchant-expense-table")).toBeVisible();

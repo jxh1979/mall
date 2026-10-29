@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -816,6 +816,149 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 """, new MapSqlParameterSource());
     }
 
+    // ── 18F 第 80 条：指标快照商户分项目段取数（键＝商户编号|项目编号，项目为空的键为 NULL，ETL 不出行）──
+
+    @Override
+    public Map<String, BigDecimal> sumBarRevenueCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return byMainProject(sumBarRevenueCentsByMerchant(businessDate, windowDomain));
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumBarRefundCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return byMainProject(sumBarRefundCentsByMerchant(businessDate, windowDomain));
+    }
+
+    /** 酒吧即商户，酒吧单没有项目列（V013），营业日本来就按商户所属项目：按商户主项目改键，主项目为空的不出。 */
+    private Map<String, BigDecimal> byMainProject(Map<String, BigDecimal> byMerchant) {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
+        if (!byMerchant.isEmpty()) {
+            jdbcTemplate.query("SELECT id, project_id FROM merchants WHERE id IN (:ids) AND project_id IS NOT NULL",
+                    Map.of("ids", byMerchant.keySet()), (org.springframework.jdbc.core.RowCallbackHandler) rs ->
+                            result.put(rs.getString(1) + "|" + rs.getString(2), byMerchant.get(rs.getString(1))));
+        }
+        return result;
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumTicketBarShareCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return sumAllocatedRevenueByMerchantProject(businessDate, windowDomain, """
+                   AND (ie.entitlement_type IN ('drink', 'gift_drink')
+                        OR ie.entitlement_type LIKE 'bar\\_%' ESCAPE '\\')
+                """);
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumTicketAmusementShareCentsByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return sumAllocatedRevenueByMerchantProject(businessDate, windowDomain, """
+                   AND (ie.entitlement_type = 'amusement'
+                        OR ie.entitlement_type LIKE 'amusement\\_%' ESCAPE '\\')
+                """);
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumTicketAllocatedRevenueByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return sumAllocatedRevenueByMerchantProject(businessDate, windowDomain, "");
+    }
+
+    /** 售票分量的项目取订单在售票时保存的项目（V463 ticket_orders.project_id）。 */
+    private Map<String, BigDecimal> sumAllocatedRevenueByMerchantProject(LocalDate businessDate, String windowDomain,
+            String entitlementTypeFilter) {
+        return keyTotals("""
+                SELECT ie.merchant_id || '|' || o.project_id, COALESCE(SUM(ie.allocated_revenue_cent), 0) AS total
+                  FROM issued_entitlements ie
+                  JOIN ticket_orders o ON o.id = ie.order_id
+                 WHERE ie.allocated_revenue_cent IS NOT NULL
+                   AND ie.created_at >= :start
+                   AND ie.created_at < :end
+                """ + entitlementTypeFilter + """
+                 GROUP BY 1
+                """, dayRange(windowDomain, businessDate));
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumTicketRefundByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return keyTotals("""
+                SELECT r.merchant_id || '|' || o.project_id, COALESCE(SUM(r.refund_amount_cent), 0) AS total
+                  FROM ticket_refunds r
+                  JOIN ticket_orders o ON o.id = r.target_id
+                 WHERE r.merchant_id IS NOT NULL
+                   AND r.status = 'success'
+                   AND r.succeeded_at >= :start
+                   AND r.succeeded_at < :end
+                 GROUP BY 1
+                """, dayRange(windowDomain, businessDate));
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumContractRentReceivableByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return keyTotals("""
+                SELECT merchant_id || '|' || project_id, COALESCE(SUM(amount_cent), 0) AS total
+                  FROM ar_ap_items
+                 WHERE direction = 'receivable'
+                   AND source_type IN ('contract_rent', 'contract_property_fee', 'contract_energy_fee', 'contract_parking_monthly')
+                   AND due_date = :business_date
+                 GROUP BY 1
+                """, new MapSqlParameterSource("business_date", businessDate));
+    }
+
+    @Override
+    public Map<String, BigDecimal> countTicketVerificationSuccessByMerchantProject(LocalDate businessDate) {
+        return keyTotals("""
+                SELECT v.merchant_id || '|' || o.project_id, COUNT(*) AS total
+                  FROM ticket_verifications v
+                  JOIN issued_entitlements ie ON ie.id = v.entitlement_id
+                  JOIN ticket_orders o ON o.id = ie.order_id
+                 WHERE v.status = 'success'
+                   AND v.created_at >= :start
+                   AND v.created_at < :end
+                 GROUP BY 1
+                """, dayRange("ticketing", businessDate));
+    }
+
+    @Override
+    public Map<String, BigDecimal> countTicketIssuedByMerchantProject(LocalDate businessDate) {
+        return keyTotals("""
+                SELECT ie.merchant_id || '|' || o.project_id, COUNT(*) AS total
+                  FROM issued_entitlements ie
+                  JOIN ticket_orders o ON o.id = ie.order_id
+                 WHERE ie.created_at >= :start
+                   AND ie.created_at < :end
+                 GROUP BY 1
+                """, dayRange("ticketing", businessDate));
+    }
+
+    @Override
+    public Map<String, BigDecimal> sumInventoryBalanceByMerchantProject() {
+        return keyTotals("""
+                SELECT merchant_id || '|' || project_id, COALESCE(SUM(quantity), 0) AS total
+                  FROM inventory_stock_balances
+                 GROUP BY 1
+                """, new MapSqlParameterSource());
+    }
+
+    @Override
+    public Map<String, BigDecimal> countLowStockByMerchantProject() {
+        // 余额按（商品, 项目）汇总后再比该商品的安全库存阈值。
+        return keyTotals("""
+                SELECT i.merchant_id || '|' || b.project_id, COUNT(*) AS total
+                  FROM inventory_items i
+                  JOIN (
+                        SELECT item_id, project_id, COALESCE(SUM(available_quantity), 0) AS available
+                          FROM inventory_stock_balances
+                         GROUP BY item_id, project_id
+                       ) b ON b.item_id = i.id
+                 WHERE i.min_quantity > 0
+                   AND b.available < i.min_quantity
+                 GROUP BY 1
+                """, new MapSqlParameterSource());
+    }
+
+    @Override
+    public Map<String, BigDecimal> countManualBackfillByMerchantProject(LocalDate businessDate, String windowDomain) {
+        return keyTotals("SELECT b.merchant_id || '|' || b.project_id, COUNT(*)\n  FROM " + MANUAL_BACKFILL_SOURCE + " GROUP BY 1",
+                dayRange(windowDomain, businessDate));
+    }
+
     @Override
     public BigDecimal countPendingReview() {
         // 待复核主管审批的规范状态值=SupervisorReviewService 写入的 'pending_review'（V050 索引亦以此为准）；
@@ -1466,7 +1609,50 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND created_at >= :window_start AND created_at < :window_end
                 """, params, Long.class);
 
-        return new AnalyticsRecords.RentToSalesAggregate(merchants, unattributed == null ? 0L : unattributed);
+        // 18F 第 80 条（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营商户的
+        // 金额按项目拆分」）：另出（商户, 项目）行。租金按应收行的项目分，项目为空的单独一行；回流营业额没有项目列（待开发清单第 48 条回流未接），
+        // 只给经营项目（主项目加追加的经营项目）恰好一个的商户归到那个项目，多于一个的各项目行营业额为 0、只进平台分母。
+        java.util.List<AnalyticsRecords.RentToSalesMerchantProjectRow> merchantProjects = jdbcTemplate.query("""
+                WITH rent AS (
+                    SELECT merchant_id, project_id, SUM(amount_cent) AS rent_cent
+                      FROM ar_ap_items
+                     WHERE direction = 'receivable'
+                       AND source_type IN ('contract_rent', 'turnover_rent')
+                       AND merchant_id IS NOT NULL
+                       AND accounting_period = :period
+                     GROUP BY merchant_id, project_id
+                ),
+                single_project AS (
+                    SELECT merchant_id, MIN(project_id) AS project_id
+                      FROM (SELECT id AS merchant_id, project_id FROM merchants WHERE project_id IS NOT NULL
+                            UNION SELECT merchant_id, project_id FROM merchant_projects) op
+                     GROUP BY merchant_id
+                    HAVING COUNT(*) = 1
+                ),
+                sales AS (
+                    SELECT o.merchant_id, sp.project_id,
+                           SUM(CASE o.sync_type WHEN 'order' THEN o.amount_cent
+                                                WHEN 'refund' THEN -o.amount_cent ELSE 0 END) AS sales_cent
+                      FROM integration_order_syncs o
+                      JOIN single_project sp ON sp.merchant_id = o.merchant_id
+                     WHERE o.status = 'synced'
+                       AND o.sync_type IN ('order', 'refund')
+                       AND o.created_at >= :window_start AND o.created_at < :window_end
+                     GROUP BY o.merchant_id, sp.project_id
+                )
+                SELECT m.id AS merchant_id, m.merchant_name, m.merchant_type, k.project_id,
+                       COALESCE(r.rent_cent, 0) AS rent_cent,
+                       GREATEST(COALESCE(s.sales_cent, 0), 0) AS sales_cent
+                  FROM (SELECT merchant_id, project_id FROM rent UNION SELECT merchant_id, project_id FROM sales) k
+                  JOIN merchants m ON m.id = k.merchant_id
+                  LEFT JOIN rent r ON r.merchant_id = k.merchant_id AND r.project_id IS NOT DISTINCT FROM k.project_id
+                  LEFT JOIN sales s ON s.merchant_id = k.merchant_id AND s.project_id = k.project_id
+                 ORDER BY rent_cent DESC, sales_cent DESC, m.id, k.project_id
+                """, params, (rs, n) -> new AnalyticsRecords.RentToSalesMerchantProjectRow(
+                        rs.getString("merchant_id"), rs.getString("merchant_name"), rs.getString("merchant_type"),
+                        rs.getString("project_id"), rs.getLong("rent_cent"), rs.getLong("sales_cent")));
+
+        return new AnalyticsRecords.RentToSalesAggregate(merchants, unattributed == null ? 0L : unattributed, merchantProjects);
     }
 
     @Override
@@ -1755,6 +1941,16 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
 
     @Override
     public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchant(LocalDate asOf) {
+        return arOverdueAging(asOf, "COALESCE(merchant_id, counterparty_id)");
+    }
+
+    /** 18F 第 80 条：账龄按「商户|应收所属项目」分组（指标快照商户分项目段；项目为空的键为 NULL，ETL 不出行）。 */
+    @Override
+    public Map<String, Map<String, BigDecimal>> arOverdueAgingByMerchantProject(LocalDate asOf) {
+        return arOverdueAging(asOf, "COALESCE(merchant_id, counterparty_id) || '|' || project_id");
+    }
+
+    private Map<String, Map<String, BigDecimal>> arOverdueAging(LocalDate asOf, String keyExpression) {
         Map<String, Map<String, BigDecimal>> result = new LinkedHashMap<>();
         // 逐行取未收额的应收读者（本方法、逾期欠款商户榜、逾期应收明细与 90 天以上明细）统一排除已有派生行回指的原行（合同账单作废冲正、V344 补录红冲）：
         // 冲正行未收额为负被「未收>0」滤掉、抵不掉原行，原行须直接排除（第四轮裁决第 2 条「作废……（留痕）」，与合同域 listUnpaidArIdsForContract 同口径）。
@@ -1763,15 +1959,15 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                             WHEN (:as_of - due_date) <= 60 THEN 'a31_60'
                             WHEN (:as_of - due_date) <= 90 THEN 'a61_90'
                             ELSE 'a90p' END AS bucket,
-                       COALESCE(merchant_id, counterparty_id) AS merchant_key, SUM(unpaid_amount_cent) AS total
+                       %s AS merchant_key, SUM(unpaid_amount_cent) AS total
                   FROM ar_ap_items
                  WHERE direction = 'receivable'
                    AND status <> 'closed'
                    AND unpaid_amount_cent > 0
                    AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = ar_ap_items.id)
                    AND due_date < :as_of
-                 GROUP BY 1, COALESCE(merchant_id, counterparty_id)
-                """, new MapSqlParameterSource().addValue("as_of", asOf),
+                 GROUP BY 1, 2
+                """.formatted(keyExpression), new MapSqlParameterSource().addValue("as_of", asOf),
                 (org.springframework.jdbc.core.RowCallbackHandler) rs ->
                         result.computeIfAbsent(rs.getString("bucket"), k -> new LinkedHashMap<>())
                               .put(rs.getString("merchant_key"), rs.getBigDecimal("total")));
@@ -1813,8 +2009,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 .addValue("bucket", bucket, java.sql.Types.VARCHAR)
                 .addValue("limit", Math.min(Math.max(limit, 1), 200))
                 .addValue("offset", Math.max(offset, 0)), projectIds);
+        // 18F 第 80 条（治理地图「只逐个勾选了项目的人，只能分别查看被选中项目各自的数据。」；裁决 M737-iter4 说明（三）「跨项目经营商户的
+        // 金额按项目拆分」）：按（商户, 应收所属项目）分行，能到多个项目的人不把同一商户各项目的欠费合成一行；账龄段按每行算。
         return jdbcTemplate.query("""
-                SELECT COALESCE(i.merchant_id, i.counterparty_id) AS merchant_key, m.merchant_name,
+                SELECT COALESCE(i.merchant_id, i.counterparty_id) AS merchant_key, m.merchant_name, i.project_id,
                        SUM(i.unpaid_amount_cent) AS outstanding,
                        MIN(i.due_date) AS oldest_due,
                        (:as_of - MIN(i.due_date)) AS overdue_days,
@@ -1830,13 +2028,13 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                    AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = i.id)
                    AND i.due_date < :as_of
                    AND (:all_projects OR i.project_id IN (:project_ids))
-                 GROUP BY COALESCE(i.merchant_id, i.counterparty_id), m.merchant_name
+                 GROUP BY COALESCE(i.merchant_id, i.counterparty_id), m.merchant_name, i.project_id
                 HAVING (:bucket IS NULL
                         OR CASE WHEN (:as_of - MIN(i.due_date)) <= 30 THEN 'a0_30'
                                 WHEN (:as_of - MIN(i.due_date)) <= 60 THEN 'a31_60'
                                 WHEN (:as_of - MIN(i.due_date)) <= 90 THEN 'a61_90'
                                 ELSE 'a90p' END = :bucket)
-                 ORDER BY outstanding DESC, merchant_key
+                 ORDER BY outstanding DESC, merchant_key, i.project_id
                  LIMIT :limit OFFSET :offset
                 """, params, (rs, n) -> new AnalyticsRecords.ArDebtorRow(
                 rs.getString("merchant_key"),
@@ -1844,7 +2042,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 rs.getBigDecimal("outstanding"),
                 rs.getObject("oldest_due", LocalDate.class),
                 rs.getLong("overdue_days"),
-                rs.getString("bucket")));
+                rs.getString("bucket"),
+                rs.getString("project_id")));
     }
 
     private MapSqlParameterSource dayRange(LocalDate businessDate) {
@@ -3332,8 +3531,9 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     // 补录数量（BSM「记录缺失时允许人工补录……补录一律进入主管复核队列，复核通过才生效……」；BSM「锁定后补录须上级审批」；
-    // 裁决 M02「补录提交即计数，状态另列」）：当前已接入两类补录申请——锁账后补录（ar_ap_adjustments，项目/商户取所补的应收应付）
-    // 与无可信领取时刻补证（staff_attendance_receipt_reviews，项目取所属排班，无商户）。一条申请计一笔，按提交时刻 created_at 落窗；
+    // 裁决 M02「补录提交即计数，状态另列」）：当前已接入——锁账后补录（ar_ap_adjustments，项目/商户取所补的应收应付）、
+    // 无可信领取时刻补证（staff_attendance_receipt_reviews，项目取所属排班，无商户），以及第十八批 F 段第 14 条人工补录单
+    // （manual_backfills：交接扫码补录、销售归属补录、服务责任补录，类型即 target_type，项目/商户取补录对象）。一条申请计一笔，按提交时刻落窗；
     // 批准、驳回只改状态，同一提交编号重放不新建行，驳回后重新提交是新申请。不出补录原因原文。
     private static final String MANUAL_BACKFILL_SOURCE = """
             (SELECT 'locked_backfill' AS source_type, a.id, a.ar_ap_item_id AS object_id, a.requested_by AS initiated_by,
@@ -3343,7 +3543,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
              UNION ALL
              SELECT 'attendance_receipt', r.id, r.event_id, r.initiated_by, r.status, r.created_at, r.decided_at, s.project_id, NULL
                FROM staff_attendance_receipt_reviews r
-               JOIN staff_shift_schedules s ON s.id = r.shift_id) b
+               JOIN staff_shift_schedules s ON s.id = r.shift_id
+             UNION ALL
+             SELECT m.target_type, m.id, m.target_id, m.submitted_by, m.status, m.submitted_at, m.decided_at, m.project_id, m.merchant_id
+               FROM manual_backfills m) b
              WHERE b.created_at >= :start AND b.created_at < :end
             """;
 
