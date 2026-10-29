@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.security;
 
 import com.complex.platform.access.AccessActor;
@@ -483,7 +483,7 @@ public class ExportFileService {
             out.beginText();
             out.setFont(font, TITLE_SIZE);
             out.newLineAtOffset(MARGIN, y - TITLE_SIZE);
-            out.showText(title);
+            show(title);
             out.endText();
             y -= TITLE_SIZE + 10;
             rowsOnPage = false;
@@ -522,13 +522,20 @@ public class ExportFileService {
                     out.beginText();
                     out.setFont(font, SIZE);
                     out.newLineAtOffset(x + PAD, y - PAD - SIZE - k * LEAD);
-                    out.showText(cell.get(k));
+                    show(cell.get(k));
                     out.endText();
                 }
                 x += widths[i];
             }
             y -= height;
             rowsOnPage |= !head;
+        }
+
+        /** 逐字绘制、不套连字：整串交给 showText 时 PDFBox 按字体 GSUB 把 ff、fi 等合成连字字形，连字不在 drawn 里、复制出来是别的字，字宽也与 width() 逐字算的不一致。 */
+        private void show(String text) throws IOException {
+            for (int cp : text.codePoints().toArray()) {
+                out.showText(Character.toString(cp));
+            }
         }
 
         /** 暗纹：与页面暗纹同一组参数（平铺 200、模块 6、格内偏移 24、不透明度 0.08，单位为点），二维码下附码的小字。 */
@@ -554,7 +561,7 @@ public class ExportFileService {
                     out.beginText();
                     out.setFont(font, 12);
                     out.newLineAtOffset(tx + WatermarkQr.OFFSET_PX, top - (ty + WatermarkQr.OFFSET_PX + qr.getHeight() * WatermarkQr.MODULE_PX + 16));
-                    out.showText(code);
+                    show(code);
                     out.endText();
                 }
             }

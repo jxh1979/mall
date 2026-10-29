@@ -101,7 +101,7 @@ class DeviceCredentialSignedMultipartJdbcIntegrationTests {
                 """, user, new BCryptPasswordEncoder(10).encode(password));
         jdbc.update("INSERT INTO staff_profiles(id,project_id,merchant_id,user_id,name,registration_status,status,created_at,updated_at) VALUES(?,?,?,?,'签名上传','approved','active',now(),now())",
                 profile, project, merchant, user);
-        jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'签名上传回归','project','active',now())", role, role);
+        jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'签名上传回归','project','active',now())", role, "签名上传回归角色-" + Long.parseLong(suffix, 16));
         jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'evidence.attachment.create')", role);
         jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", user, role);
         jdbc.update("""
