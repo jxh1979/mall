@@ -117,7 +117,7 @@ describe("AdminApi 商户手机应用令牌模式", () => {
   });
 
   it("App 里四类导出不发请求、提示到商户网页门户办理；页内显示证件照片照常请求", async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(new Blob(["img"]), { status: 200 }));
+    const fetchMock = vi.fn().mockImplementation(async () => new Response("img", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     const client = await loadClient();
     client.configureMerchantAppMode(fakeStore({ accessToken: "at-1", refreshToken: "rt-1" }, "WBABCDEFGHJKMN"), "0.1.0");
@@ -141,7 +141,7 @@ describe("AdminApi 商户手机应用令牌模式", () => {
   it("未配置 App 模式时网页版不变：Cookie 与 CSRF、不带令牌与版本号，导出照常请求", async () => {
     document.cookie = "XSRF-TOKEN=csrf-abc; path=/";
     const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) =>
-      String(input).endsWith("/export") ? new Response(new Blob(["pdf"]), { status: 200 }) : jsonResponse({ ok: true }));
+      String(input).endsWith("/export") ? new Response("pdf", { status: 200 }) : jsonResponse({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
     const client = await loadClient();
     const api = new client.AdminApi();
