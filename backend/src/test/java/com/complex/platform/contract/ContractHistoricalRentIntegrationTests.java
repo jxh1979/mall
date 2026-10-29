@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -108,7 +108,9 @@ class ContractHistoricalRentIntegrationTests {
     }
 
     private ContractService service() {
-        return new ContractService(repository, mock(AuditEventService.class), mock(AuthorizationService.class),
+        AuthorizationService authz = mock(AuthorizationService.class);
+        org.mockito.Mockito.when(authz.isPlatformAdmin(org.mockito.ArgumentMatchers.any())).thenReturn(true);   // 82b-R3：按平台管理员出账
+        return new ContractService(repository, mock(AuditEventService.class), authz,
                 null, null, null, financeService, null, null);
     }
 

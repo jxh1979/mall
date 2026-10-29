@@ -1,6 +1,6 @@
 package com.complex.platform.governance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -295,6 +295,46 @@ class CrossProjectGovernanceJdbcIntegrationTests {
         assertThat(mine(merchantAccount, "/api/v1/floor-plans", "$.data.items[*].id")).doesNotContain(id("fp", "b"));
     }
 
+    // 第十八批 G 段第 82 条 82a-R1：签约意向按 leasing.convert、拉黑/解黑品牌按 leasing.brand.blacklist 判对象所在项目（治理地图第 528 行
+    // 「在该角色所含权限内」、第 659 行「逐个勾选的只能查看被选中的项目」）。列表码经只勾 B 的角色、动作码只来自本项目普通角色的人：
+    // 页面列得出 B 的意向和品牌，签约、拉黑都 403 CROSS_PROJECT_FORBIDDEN，不起草合同、不改品牌；动作码也经勾 B 的角色持有的人签、拉黑 B 照常
+    // （合同落 B）；本项目普通员工签、拉黑 A 照常（守护）。三个会话都不含 contract.draft.manage：签约起草只按 leasing.convert 核一次
+    // （复核修复前红：只勾 B 的四码持有人签 B 被起草闸按 contract.draft.manage 403）。修复前签约 B 返回 200（第一处即红）。
+    @Test
+    void signAndBlacklistOnAnotherProjectFollowTheActionCode() throws Exception {
+        for (String p : List.of("a", "b")) {
+            seedProjectRows(p, project(p));
+        }
+        jdbc.update("UPDATE leasing_intents SET stage='pending_signing' WHERE id IN (?, ?)", id("int", "a"), id("int", "b"));
+        RequestPostProcessor mixed = staffOfA("mx", tickedBRole("mx", "leasing.intent.manage", "leasing.brand.manage"),
+                plainRole("mxl", "leasing.convert", "leasing.brand.blacklist"));
+        assertThat(mine(mixed, "/api/v1/leasing/intents", "$.data.items[*].id")).contains(id("int", "b"));
+        assertThat(mine(mixed, "/api/v1/leasing/brands", "$.data.items[*].id")).contains(id("brand", "b"));
+
+        send(mixed, post("/api/v1/leasing/intents/" + id("int", "b") + "/sign"), signBody("mx", "b"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT contract_id FROM leasing_intents WHERE id=?", String.class, id("int", "b"))).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM contracts WHERE merchant_id=?", Integer.class, id("mch", "b"))).isZero();
+        send(mixed, post("/api/v1/leasing/brands/" + id("brand", "b") + "/blacklist"), blacklistBody("mx"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT brand_type FROM leasing_brands WHERE id=?", String.class, id("brand", "b")))
+                .isEqualTo("prospective");
+
+        RequestPostProcessor full = staffOfA("fx", tickedBRole("fx", "leasing.intent.manage", "leasing.brand.manage",
+                "leasing.convert", "leasing.brand.blacklist"));
+        send(full, post("/api/v1/leasing/intents/" + id("int", "b") + "/sign"), signBody("fx", "b"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.project_id").value(projectB));
+        send(full, post("/api/v1/leasing/brands/" + id("brand", "b") + "/blacklist"), blacklistBody("fx"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.brand_type").value("blacklist"));
+
+        RequestPostProcessor plain = staffOfA("pl", plainRole("pl", "leasing.intent.manage", "leasing.brand.manage",
+                "leasing.convert", "leasing.brand.blacklist"));
+        send(plain, post("/api/v1/leasing/intents/" + id("int", "a") + "/sign"), signBody("pl", "a"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.project_id").value(projectA));
+        send(plain, post("/api/v1/leasing/brands/" + id("brand", "a") + "/blacklist"), blacklistBody("pl"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.brand_type").value("blacklist"));
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     private String project(String tag) {
@@ -397,6 +437,17 @@ class CrossProjectGovernanceJdbcIntegrationTests {
 
     private String archive(String key) {
         return "{\"idempotency_key\":\"" + key + "-" + suffix + "\",\"reason\":\"暂停经营\"}";
+    }
+
+    private String signBody(String key, String tag) {
+        String entity = id("be", tag);
+        return "{\"idempotency_key\":\"sign-" + key + "-" + suffix + "\",\"merchant_id\":\"" + id("mch", tag)
+                + "\",\"contract_subject_id\":\"" + entity + "\",\"operation_subject_id\":\"" + entity
+                + "\",\"settlement_subject_id\":\"" + entity + "\",\"effective_date\":\"2099-01-01\",\"expiry_date\":\"2099-12-31\"}";
+    }
+
+    private String blacklistBody(String key) {
+        return "{\"idempotency_key\":\"bl-" + key + "-" + suffix + "\",\"blacklist\":true,\"reason\":\"多次违约\"}";
     }
 
     private String spaceBody(String key, String name, String projectId) {

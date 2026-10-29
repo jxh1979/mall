@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -242,7 +242,7 @@ class LeasingServiceTests {
      */
     @Test
     void signPendingSigningIntentCreatesContractDraftWithoutMarkingLeadSigned() {
-        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+        when(contractService.createDraft(any(), any())).thenReturn(new ContractRecord(
                 "ctr_new", "mch_1", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
                 null, null, null, Instant.now(), Instant.now()));
@@ -277,7 +277,7 @@ class LeasingServiceTests {
      */
     @Test
     void signPassesEnteredAgreedDepositIntoContractDraft() {
-        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+        when(contractService.createDraft(any(), any())).thenReturn(new ContractRecord(
                 "ctr_tov", "mch_1", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of("rentBillingMode", "turnover_only"), null, "none", 500000L, Map.of(), List.of(), null, null, List.of(),
                 "drafting", null, null, null, null, Instant.now(), Instant.now()));
@@ -290,7 +290,7 @@ class LeasingServiceTests {
                 "mch_1", "cs", null, null, LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"), "tov4", 500000L));
         org.mockito.ArgumentCaptor<com.complex.platform.contract.dto.ContractDraftRequest> draft =
                 org.mockito.ArgumentCaptor.forClass(com.complex.platform.contract.dto.ContractDraftRequest.class);
-        verify(contractService).createDraft(draft.capture());
+        verify(contractService).createDraft(draft.capture(), org.mockito.ArgumentMatchers.eq("leasing.convert"));
         assertThat(draft.getValue().depositCent()).isEqualTo(500000L);
         assertThat(draft.getValue().rentTerms()).containsEntry("rentBillingMode", "turnover_only");
     }
@@ -298,7 +298,7 @@ class LeasingServiceTests {
     /** CG-01：合同生效 → 来源线索置已签约，留痕一次；重复生效回调（重放）不二次改写、不二次留痕。 */
     @Test
     void contractEffectiveMarksSourceLeadSignedOnceWithAudit() {
-        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+        when(contractService.createDraft(any(), any())).thenReturn(new ContractRecord(
                 "ctr_eff", "mch_1", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
                 null, null, null, Instant.now(), Instant.now()));
@@ -347,7 +347,7 @@ class LeasingServiceTests {
     void signIntentWithoutMerchantAutoCreatesFormalMerchant() {
         when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("lease-current-project"));
         // 1.4 决策A：merchant_id 空 → 签约自动建正式商户，带入线索联系人/业态、四类主体默认同一公司。
-        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+        when(contractService.createDraft(any(), any())).thenReturn(new ContractRecord(
                 "ctr_auto", "mch_auto", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
                 null, null, null, Instant.now(), Instant.now()));
@@ -399,7 +399,7 @@ class LeasingServiceTests {
      */
     @Test
     void signIntentWithUndecidedOrOtherBusinessTypeAutoCreatesOtherMerchantWithoutSupervisingCompany() {
-        when(contractService.createDraft(any())).thenReturn(new ContractRecord(
+        when(contractService.createDraft(any(), any())).thenReturn(new ContractRecord(
                 "ctr_other", "mch_other", "cs", null, "cs", LocalDate.parse("2026-07-01"), LocalDate.parse("2027-06-30"),
                 Map.of(), null, "none", null, Map.of(), List.of(), null, null, List.of(), "drafting", null,
                 null, null, null, Instant.now(), Instant.now()));

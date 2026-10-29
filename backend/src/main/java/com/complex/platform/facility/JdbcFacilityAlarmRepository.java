@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -199,9 +199,13 @@ class JdbcFacilityAlarmRepository {
                 """, this::mapAlarm);
     }
 
-    List<FacilityAlarmRecord> listAlarms() {
-        return jdbc.query("SELECT " + ALARM_COLS + " FROM facility_alarms ORDER BY raised_at DESC, id LIMIT 500",
-                this::mapAlarm);
+    /** 第十八批 G 段 82b-R1：projectIds 为 null 不限项目（平台管理员），否则只取这些项目的（空集合即空表），在库里筛、不占 500 条名额。 */
+    List<FacilityAlarmRecord> listAlarms(Collection<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.query("SELECT " + ALARM_COLS + " FROM facility_alarms" + (projectIds == null ? "" : " WHERE project_id IN (:projects)")
+                + " ORDER BY raised_at DESC, id LIMIT 500", new MapSqlParameterSource().addValue("projects", projectIds), this::mapAlarm);
     }
 
     List<FacilityAlarmRecord> listAwaitingTakeover() {
@@ -307,10 +311,14 @@ class JdbcFacilityAlarmRepository {
                 .addValue("reason", reason).addValue("at", timestampWithTimeZone(at)));
     }
 
-    List<FacilityAlarmDutyRecord> listDuties(String projectId) {
-        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project", projectId);
-        return jdbc.query(DUTY_SELECT + (projectId == null ? "" : " WHERE d.project_id = :project")
-                + " ORDER BY s.start_at DESC, d.duty_role, d.id LIMIT 500", params, this::mapDuty);
+    /** 82b-R1：同 {@link #listAlarms}，projectIds 为 null 不限项目。 */
+    List<FacilityAlarmDutyRecord> listDuties(Collection<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.query(DUTY_SELECT + (projectIds == null ? "" : " WHERE d.project_id IN (:projects)")
+                + " ORDER BY s.start_at DESC, d.duty_role, d.id LIMIT 500",
+                new MapSqlParameterSource().addValue("projects", projectIds), this::mapDuty);
     }
 
     /** 本项目此刻在进行的已发布班次上、未撤销且属指定角色的值守安排。 */
@@ -358,10 +366,14 @@ class JdbcFacilityAlarmRepository {
                 new MapSqlParameterSource().addValue("id", id).addValue("at", timestampWithTimeZone(at)));
     }
 
-    List<FacilityAlarmRecord.FaultRule> listFaultRules(String projectId) {
+    /** 82b-R1：同 {@link #listAlarms}，projectIds 为 null 不限项目。 */
+    List<FacilityAlarmRecord.FaultRule> listFaultRules(Collection<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) {
+            return List.of();
+        }
         return jdbc.query("SELECT " + RULE_COLS + " FROM facility_fault_handling_rules"
-                + (projectId == null ? "" : " WHERE project_id = :project") + " ORDER BY created_at DESC, id LIMIT 500",
-                new MapSqlParameterSource().addValue("project", projectId), this::mapRule);
+                + (projectIds == null ? "" : " WHERE project_id IN (:projects)") + " ORDER BY created_at DESC, id LIMIT 500",
+                new MapSqlParameterSource().addValue("projects", projectIds), this::mapRule);
     }
 
     /** 覆盖该设备的生效规则：按该设备登记的，或本项目同分类通用的。 */

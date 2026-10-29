@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -127,11 +127,24 @@ public class DealerPortalAccountService {
 
     private DealerRecord requireDealer(String id) {
         DealerRecord dealer = dealers.findDealer(requireText(id, "dealer_id")).orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        String scope = authorization.currentProjectScopeQuietly().orElse(null);
-        if (scope != null && dealer.projectId() != null && !scope.equals(dealer.projectId())) {
+        requireDealerInReach(authorization, dealer, MANAGE);
+        return dealer;
+    }
+
+    /**
+     * 第十八批 G 段 82b-R5（PGM 第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：带项目的经销商须在入口权限码
+     * 可触及的项目内（含可跨项目角色勾选的项目；平台管理员不限），否则 403 CROSS_ORG_FORBIDDEN；项目为空的经销商照旧对所有人可见；
+     * 经销商门户账号照旧不按项目（归属由 DealerPortalService 硬校验，见 {@link #projectScopeOf}）。
+     */
+    static void requireDealerInReach(AuthorizationService authorization, DealerRecord dealer, String permission) {
+        if (dealer.projectId() == null) {
+            return;
+        }
+        AccessActor actor = authorization.currentActor();
+        if ((actor == null || !ACCOUNT_TYPE.equals(actor.accountType()))
+                && !authorization.canReachProject(actor, dealer.projectId(), permission)) {
             throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权访问其他项目的经销商");
         }
-        return dealer;
     }
 
     /** CG-11d：经销商门户账号（account_type = dealer）按所属经销商隔离数据，不按项目范围过滤（归属由 DealerPortalService 硬校验）。 */

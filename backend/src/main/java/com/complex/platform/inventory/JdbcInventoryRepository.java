@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1402,6 +1402,13 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
+    public Optional<String> findStockBalanceProjectId(String itemId, String locationId) {
+        return jdbcTemplate.query("SELECT project_id FROM inventory_stock_balances WHERE item_id = :item_id AND location_id = :location_id",
+                Map.of("item_id", itemId, "location_id", locationId), (rs, n) -> rs.getString("project_id"))
+                .stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    @Override
     public Optional<String> findBarProjectId(String barId) {
         return jdbcTemplate.query("SELECT project_id FROM merchants WHERE id = :id", Map.of("id", barId),
                 (rs, n) -> rs.getString("project_id")).stream().filter(java.util.Objects::nonNull).findFirst();
@@ -2768,9 +2775,9 @@ class JdbcInventoryRepository implements InventoryRepository {
     public InventoryTransferOrderRecord saveTransferOrder(InventoryTransferOrderRecord o) {
         jdbcTemplate.update("""
                 INSERT INTO inventory_transfer_orders (id, transfer_type, lending_mode, from_owner_type, from_owner_id,
-                    to_owner_type, to_owner_id, from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at, return_due_at)
+                    to_owner_type, to_owner_id, from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at, return_due_at, project_id)
                 VALUES (:id, :transfer_type, :lending_mode, :from_owner_type, :from_owner_id,
-                    :to_owner_type, :to_owner_id, :from_location_id, :to_location_id, :status, :operator_note, :created_by, :created_at, :updated_at, :return_due_at)
+                    :to_owner_type, :to_owner_id, :from_location_id, :to_location_id, :status, :operator_note, :created_by, :created_at, :updated_at, :return_due_at, :project_id)
                 ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, operator_note = EXCLUDED.operator_note, updated_at = EXCLUDED.updated_at
                 """, new MapSqlParameterSource()
                 .addValue("id", o.id()).addValue("transfer_type", o.transferType()).addValue("lending_mode", o.lendingMode())
@@ -2779,7 +2786,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("from_location_id", o.fromLocationId()).addValue("to_location_id", o.toLocationId())
                 .addValue("status", o.status()).addValue("operator_note", o.operatorNote()).addValue("created_by", o.createdBy())
                 .addValue("created_at", offset(o.createdAt())).addValue("updated_at", offset(o.updatedAt()))
-                .addValue("return_due_at", offset(o.returnDueAt())));
+                .addValue("return_due_at", offset(o.returnDueAt())).addValue("project_id", o.projectId()));
         return o;
     }
 
@@ -2799,7 +2806,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<InventoryTransferOrderRecord> findTransferOrderById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, transfer_type, lending_mode, from_owner_type, from_owner_id, to_owner_type, to_owner_id,
-                       from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at, return_due_at
+                       from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at, return_due_at, project_id
                   FROM inventory_transfer_orders WHERE id = :id
                 """, Map.of("id", id), (rs, n) -> mapTransferOrder(rs)).stream().findFirst();
     }
@@ -2808,7 +2815,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<InventoryTransferOrderRecord> listTransferOrders() {
         return jdbcTemplate.query("""
                 SELECT id, transfer_type, lending_mode, from_owner_type, from_owner_id, to_owner_type, to_owner_id,
-                       from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at, return_due_at
+                       from_location_id, to_location_id, status, operator_note, created_by, created_at, updated_at, return_due_at, project_id
                   FROM inventory_transfer_orders ORDER BY created_at DESC, id
                 """, (rs, n) -> mapTransferOrder(rs));
     }
@@ -2825,7 +2832,8 @@ class JdbcInventoryRepository implements InventoryRepository {
         return new InventoryTransferOrderRecord(rs.getString("id"), rs.getString("transfer_type"), rs.getString("lending_mode"),
                 rs.getString("from_owner_type"), rs.getString("from_owner_id"), rs.getString("to_owner_type"), rs.getString("to_owner_id"),
                 rs.getString("from_location_id"), rs.getString("to_location_id"), rs.getString("status"), rs.getString("operator_note"),
-                rs.getString("created_by"), toInstant(rs, "created_at"), toInstant(rs, "updated_at"), toInstant(rs, "return_due_at"), List.of());
+                rs.getString("created_by"), toInstant(rs, "created_at"), toInstant(rs, "updated_at"), toInstant(rs, "return_due_at"),
+                rs.getString("project_id"), List.of());
     }
 
     private InventoryTransferLineRecord mapTransferLine(java.sql.ResultSet rs) throws java.sql.SQLException {

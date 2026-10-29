@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.time.Instant;
 import java.util.List;
@@ -221,6 +221,11 @@ public interface InventoryRepository {
 
     /** 仓库所属项目（warehouses.project_id）；无库替身返回空。 */
     default Optional<String> findWarehouseProjectId(String warehouseId) {
+        return Optional.empty();
+    }
+
+    /** 第十八批 G 段 82b-R6：库存行（物品＋库位）所在项目；无库替身或行上没有项目返回空。 */
+    default Optional<String> findStockBalanceProjectId(String itemId, String locationId) {
         return Optional.empty();
     }
 

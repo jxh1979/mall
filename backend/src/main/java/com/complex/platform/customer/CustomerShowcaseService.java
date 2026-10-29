@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -120,20 +120,21 @@ public class CustomerShowcaseService {
     /** 后台：编辑权限＋项目范围在过准入审批前先校验（无权的人不建复核单）。 */
     public void requireManage(String projectId) {
         authorizationService.requirePermission(MANAGE_PERMISSION);
-        requireProjectScope(projectId);
+        requireProjectScope(projectId, MANAGE_PERMISSION);
     }
 
-    private void requireProjectScope(String projectId) {
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        if (scope != null && !scope.equals(projectId)) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能编辑当前综合体项目的客人端首页内容");
-        }
+    /** 项目须在入口权限码可触及的范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN（第十八批 G 段 82b-R4）。 */
+    private void requireProjectScope(String projectId, String permission) {
+        authorizationService.requireReachableProject(projectId, permission, AuthorizationService.PROJECT_OUT_OF_REACH);
     }
 
-    /** 已发布内容与待审原文。编辑人（编辑权限）与审批人（主管复核审批权限，裁决第 5 条审批前须看到要发布的原文）可读，均限本项目。 */
+    /** 已发布内容与待审原文。编辑人（编辑权限）与审批人（主管复核审批权限，裁决第 5 条审批前须看到要发布的原文）可读，均限各自权限码可触及的项目。 */
     public HomeContent getHomeContent(String projectId) {
-        if (authorizationService.currentActorHasPermission(APPROVE_PERMISSION)) {
-            requireProjectScope(projectId);
+        // 复核：审批码够不着该项目、又持编辑码的，回落按编辑码判（两个码哪个能触及该项目都能读，不新增权限）。
+        if (authorizationService.currentActorHasPermission(APPROVE_PERMISSION)
+                && (!authorizationService.currentActorHasPermission(MANAGE_PERMISSION)
+                        || authorizationService.canReachProject(authorizationService.currentActor(), projectId, APPROVE_PERMISSION))) {
+            requireProjectScope(projectId, APPROVE_PERMISSION);
         } else {
             requireManage(projectId);
         }

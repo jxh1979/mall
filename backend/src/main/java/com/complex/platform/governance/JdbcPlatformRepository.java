@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.18
+// 文件版本：V0.19
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -85,8 +85,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             Map.entry("purchase_return", "SELECT c.project_id FROM purchase_returns x JOIN purchase_receipts c ON c.id = x.receipt_id WHERE x.id = :id"),
             Map.entry("inventory_quarantine_disposition", "SELECT l.project_id FROM inventory_quarantine_dispositions x"
                     + " JOIN inventory_quarantine_lots l ON l.id = x.lot_id WHERE x.id = :id"),
-            Map.entry("inventory_transfer_order", "SELECT m.project_id FROM inventory_transfer_orders o JOIN merchants m ON m.id = o.to_owner_id"
-                    + " WHERE o.id = :id"),
+            // 第十八批 G 段 82-R18a（第十八批裁决 18）：要货单、借用单取单上的所属项目（V571）。
+            Map.entry("inventory_transfer_order", "SELECT project_id FROM inventory_transfer_orders WHERE id = :id"),
             Map.entry("contract", "SELECT project_id FROM contracts WHERE id = :id"),
             Map.entry("contract_change", "SELECT project_id FROM contract_changes WHERE id = :id"),
             Map.entry("contract_settlement", "SELECT c.project_id FROM contract_settlements s JOIN contracts c ON c.id = s.contract_id WHERE s.id = :id"),

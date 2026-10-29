@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -49,6 +49,7 @@ export const FIELD_LABELS: Record<string, string> = {
   primary_project_id: "主项目",
   primary_project_name: "主项目名称",
   operating_projects: "经营项目",
+  operating_project_ids: "经营项目",
   project_options: "可申请的项目",
   requests: "申请记录",
   merchant_id: "商户",
@@ -2970,10 +2971,14 @@ export const VALUE_LABELS: Record<string, string> = {
   supervisor_review_approved: "主管复核已通过",
   supervisor_review_rejected: "主管复核已驳回",
   terminal_device_merchant_changed: "终端设备所属商户已变更",
-  terminal_device_xray_registered: "安检 X 光设备已登记",
+  terminal_device_entry_registered: "入场环节设备已登记",
   terminal_device_xray_fault_reported: "安检 X 光设备故障已登记并开维修工单",
   terminal_device_xray_repair_completed: "安检 X 光设备已修复、恢复在用",
   terminal_device_xray_scrapped: "安检 X 光设备已报废",
+  terminal_device_repair_reported: "设备已登记送修",
+  terminal_device_repair_completed: "设备已修复",
+  terminal_device_scrapped: "设备已报废",
+  terminal_device_responsible_staff_changed: "设备责任人已更换",
   terminal_switch_toggled: "终端开关已切换",
   terminal_canary_rollout_saved: "终端灰度发布已保存",
   terminal_canary_target_added: "灰度对象已添加",

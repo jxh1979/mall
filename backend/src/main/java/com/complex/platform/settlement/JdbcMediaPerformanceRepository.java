@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.settlement.MediaPerformanceRecords.FulfillmentRecord;
 import com.complex.platform.settlement.MediaPerformanceRecords.SettlementRecord;
@@ -95,6 +95,20 @@ public class JdbcMediaPerformanceRepository {
                 """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("merchant_id", merchantId), SHOW);
     }
 
+    /** 第十八批 G 段 82b-R5：给定项目集合内的场次（集合为空不出）。 */
+    public List<ShowRecord> listShowsIn(java.util.Collection<String> projectIds, String merchantId) {
+        if (projectIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.query("""
+                SELECT * FROM media_performance_shows
+                 WHERE project_id IN (:project_ids)
+                   AND (:merchant_id::text IS NULL OR bar_merchant_id = :merchant_id OR media_merchant_id = :merchant_id)
+                 ORDER BY show_date DESC, show_group_id, contract_version DESC
+                 LIMIT 500
+                """, new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("merchant_id", merchantId), SHOW);
+    }
+
     /** 月结补跑：该月演出日、已锁定、履约已确认或已裁决的场次。 */
     public List<ShowRecord> listLockedShowsWithSettleableFacts(LocalDate from, LocalDate toExclusive) {
         return jdbc.query("""
@@ -110,9 +124,12 @@ public class JdbcMediaPerformanceRepository {
                 new MapSqlParameterSource("id", merchantId), (rs, i) -> rs.getString(1)).stream().findFirst();
     }
 
-    public Optional<String> merchantProject(String merchantId) {
-        return jdbc.query("SELECT project_id FROM merchants WHERE id = :id AND status <> 'deleted'",
-                new MapSqlParameterSource("id", merchantId), (rs, i) -> rs.getString(1)).stream().findFirst();
+    /** 第十八批 G 段 82b-R8：商户以该项目为主项目或已批准的经营项目（merchant_projects 只在审批通过后写入）。 */
+    public boolean merchantOperatesIn(String merchantId, String projectId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM merchants m WHERE m.id = :id AND m.status <> 'deleted'
+                   AND (m.project_id = :project OR EXISTS (SELECT 1 FROM merchant_projects mp WHERE mp.merchant_id = m.id AND mp.project_id = :project)))
+                """, new MapSqlParameterSource().addValue("id", merchantId).addValue("project", projectId), Boolean.class));
     }
 
     public Optional<String> ticketTypeBar(String ticketTypeId) {

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.38
+# P0 OpenAPI Operation 验收矩阵 V0.39
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1196 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1197 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -523,10 +523,11 @@
 | compliance | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | `reviewWecomRiskHit` | 复核处置企微违规命中 | `object` | `wecom.risk_hit.review` | `staff-token` | `-` | web | 否 | `wecom.risk_hit.review` | `wecom.risk_hit.review_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/found` | `markTerminalDeviceFound` | 标记设备找回 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.found` | `terminal.device.found_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/lost` | `markTerminalDeviceLost` | 标记设备挂失 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.lost` | `terminal.device.lost_failed` |
-| terminals | `POST` | `/api/v1/terminals/devices/{id}/repair` | `markTerminalDeviceRepair` | 设备送修 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.repair` | `terminal.device.repair_failed` |
-| terminals | `POST` | `/api/v1/terminals/devices/{id}/scrap` | `markTerminalDeviceScrap` | 设备报废 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.scrap` | `terminal.device.scrap_failed` |
-| terminals | `POST` | `/api/v1/terminals/devices/security-xray` | `registerSecurityXrayDevice` | 登记安检 X 光设备 | `object` | `terminal.device.lifecycle` | `staff-token` | `project-device` | web | 是 | `terminal.device.xray_registered` | `terminal.device.xray_register_failed` |
-| terminals | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | `completeTerminalDeviceRepair` | 安检 X 光设备修复完成 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web | 是 | `terminal.device.repair_completed` | `terminal.device.repair_complete_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/{id}/repair` | `markTerminalDeviceRepair` | 设备送修 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.repaired` | `terminal.device.repair_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/{id}/scrap` | `markTerminalDeviceScrap` | 设备报废 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.scrapped` | `terminal.device.scrap_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/entry-devices` | `registerEntryDevice` | 登记入场三道环节设备（安检 X 光、人脸扫描、检票闸机） | `object` | `terminal.device.lifecycle` | `staff-token` | `project-device` | web | 是 | `terminal.device.entry_device_registered` | `terminal.device.entry_device_register_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | `completeTerminalDeviceRepair` | 设备修复完成 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web | 是 | `terminal.device.repair_completed` | `terminal.device.repair_complete_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/{id}/responsible-staff` | `changeTerminalDeviceResponsibleStaff` | 入场三道环节设备更换责任人 | `object` | `terminal.device.lifecycle` | `staff-token` | `project-device` | web | 是 | `terminal.device.responsible_staff_changed` | `terminal.device.responsible_staff_change_failed` |
 | terminals | `POST` | `/api/v1/terminals/mdm/violations/detect` | `detectMdmViolations` | 服务端检测设备违规 | `object` | `mdm.device.manage` | `staff-token` | `-` | web, mobile_admin | 是 | `mdm.violation.detect` | `mdm.violation.detect_failed` |
 | terminals | `POST` | `/api/v1/terminals/mdm/violations/{id}/handle` | `handleMdmViolation` | 违规处置闭环 | `object` | `mdm.violation.handle` | `staff-token` | `-` | web | 是 | `mdm.violation.handle` | `mdm.violation.handle_failed` |
 | merchant-billing | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | `confirmMerchantBill` | 确认商户账单 | `object` | `merchant.billing.confirm` | `staff-token` | `-` | web | 是 | `merchant.billing.confirm` | `merchant.billing.confirm_failed` |

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -1190,7 +1190,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     /**
      * 配置存酒到期提醒节点（BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、
      * 第 7 天、第 3 天、第 1 天）」）：scope_id=global（出厂行）| project:&lt;id&gt;；节点为到期前第 N 天（N≥1、不重复、至少一个），
-     * 超出单瓶实际有效期的节点由发送作业逐瓶跳过。项目级参数：商户账号不可改，非平台管理员只能改本项目（范围闸在幂等之前）；
+     * 超出单瓶实际有效期的节点由发送作业逐瓶跳过。项目级参数：商户账号不可改，非平台管理员只能改 bar.saved_bottle.reminder_policy.manage
+     * 可触及的项目（含可跨项目角色勾选的项目，第十八批 G 段 82b-R4），不能改出厂行（范围闸在幂等之前）；
      * 留痕 updated_by/updated_at 与审计事件。
      */
     @Transactional
@@ -1198,8 +1199,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
             com.complex.platform.inventory.dto.SavedBottleReminderPolicyRequest request) {
         authorizationService.requirePlatformScope();
         Optional<String> ownProject = authorizationService.currentProjectScopeQuietly();
-        if (ownProject.isPresent() && !("project:" + ownProject.get()).equals(request == null ? null : trimToNull(request.scopeId()))) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能配置本项目的存酒到期提醒节点");
+        String requestedScope = request == null ? null : trimToNull(request.scopeId());
+        if (ownProject.isPresent() && (requestedScope == null || !requestedScope.startsWith("project:")
+                || !authorizationService.canReachProject(authorizationService.currentActor(),
+                        requestedScope.substring("project:".length()), REMINDER_POLICY_MANAGE))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
         }
         return executeWrite("configureSavedBottleReminderPolicy", request == null ? null : request.idempotencyKey(), request,
                 SavedBottleReminderPolicyRecord.class, "bar.saved_bottle.reminder_policy_configured",
@@ -1221,16 +1225,17 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     /**
      * 读存酒到期提醒节点（BSM L1072「按后台配置的提醒节点」）：出厂行（global）与各项目行。商户账号不可读；
-     * 非平台管理员只看出厂行与本项目，没有项目归属则拒绝（范围闸在读之前，fail-closed）。
+     * 非平台管理员只看出厂行与 bar.saved_bottle.reminder_policy.manage 可触及的项目（第十八批 G 段 82b-R4），没有项目归属则拒绝（范围闸在读之前，fail-closed）。
      */
     public PageResponse<SavedBottleReminderPolicyRecord> listReminderPolicies() {
         return readPage("bar.saved_bottle.reminder_policy_viewed", "bar.saved_bottle.reminder_policy_view_failed",
                 REMINDER_POLICY_MANAGE, "saved_bottle_reminder_policy", () -> {
                     authorizationService.requirePlatformScope();
-                    Optional<String> ownProject = authorizationService.currentProjectScopeQuietly();
+                    AuthorizationService.ProjectReach reach =
+                            authorizationService.projectReach(authorizationService.currentActor(), REMINDER_POLICY_MANAGE);
                     return repository.listSavedBottleReminderPolicies().entrySet().stream()
-                            .filter(e -> ownProject.isEmpty() || "global".equals(e.getKey())
-                                    || ("project:" + ownProject.get()).equals(e.getKey()))
+                            .filter(e -> reach.platformAdmin() || "global".equals(e.getKey())
+                                    || (e.getKey().startsWith("project:") && reach.covers(e.getKey().substring("project:".length()))))
                             .map(e -> new SavedBottleReminderPolicyRecord(e.getKey(), e.getValue()))
                             .sorted(java.util.Comparator.comparing(SavedBottleReminderPolicyRecord::scopeId))
                             .toList();
@@ -2498,6 +2503,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                         int delta = variance.varianceQty() == null ? 0 : variance.varianceQty().intValue();
                         if (delta != 0) {
                             StocktakeRecord stocktake = loadStocktakeScoped(stId);
+                            // 第十八批 G 段 82b-R6（第十八批裁决 18「按业务发生地」）：纠账补写的余额与流水记到盘点库房所在项目，不是复核人本人项目。
+                            String bookProject = repository.findWarehouseProjectId(stocktake.warehouseId())
+                                    .orElseGet(() -> authorizationService.currentProjectScopeQuietly().orElse(null));
                             List<StockBalanceRecord> rows = repository.listStockBalances().stream()
                                     .filter(b -> variance.itemId().equals(b.itemId())
                                             && stocktake.warehouseId().equals(b.warehouseId()))
@@ -2508,7 +2516,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                 repository.atomicIncreaseStockBalance(
                                         variance.itemId(), targetLocation, delta,
                                         "bal_recon_" + slug(vId), variance.merchantId(), stocktake.warehouseId(),
-                                        authorizationService.currentProjectScopeQuietly().orElse(null));
+                                        bookProject);
                                 // 裁决#7 守恒账本：盘盈纠账改了余额，同事务（@Transactional reviewVariance）补写一条
                                 // inventory_stock_movements（count_correction，盘盈 → 目标库位入），否则按流水重建对不平。
                                 repository.saveStockMovement(new StockMovementRecord(
@@ -2528,7 +2536,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                         List.of(),
                                         "completed",
                                         now,
-                                        variance.merchantId()), authorizationService.currentProjectScopeQuietly().orElse(null));
+                                        variance.merchantId()), bookProject);
                             } else {
                                 int remaining = -delta;
                                 for (StockBalanceRecord row : rows) {
@@ -2559,7 +2567,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                                 List.of(),
                                                 "completed",
                                                 now,
-                                                variance.merchantId()), authorizationService.currentProjectScopeQuietly().orElse(null));
+                                                variance.merchantId()), bookProject);
                                     }
                                 }
                                 if (remaining > 0) {
@@ -3045,6 +3053,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         return executeWrite("createTransferOrder", request == null ? null : request.idempotencyKey(), request,
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_created", "inventory.transfer_order_create_failed",
                 "inventory.transfer_order.manage", "inventory_transfer_order",
+                // 复核：所属项目闸在幂等之前（同号重放也先过它）；体内照旧再取一次落库用的项目
+                () -> transferOrderProject(requireText(requireRequest(request).toOwnerId(), "to_owner_id"), trimToNull(request.projectId())),
                 () -> {
                     com.complex.platform.inventory.dto.CreateTransferOrderRequest actual = requireRequest(request);
                     String transferType = requireText(actual.transferType(), "transfer_type");
@@ -3091,6 +3101,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             }
                         }
                     }
+                    String projectId = transferOrderProject(toId, trimToNull(actual.projectId()));
                     Instant now = Instant.now();
                     String orderId = "trf_" + slug(actual.idempotencyKey());
                     // FS-011（BSM L1212/L1213）：门店要货（供货调拨）从草稿起步，门店提交后进待供货主体审核；借调沿用新建→发货。
@@ -3099,7 +3110,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             trimToNull(actual.lendingMode()), fromType, fromId, toType, toId,
                             trimToNull(actual.fromLocationId()), trimToNull(actual.toLocationId()),
                             requisition ? "draft" : "created", trimToNull(actual.operatorNote()), null, now, now,
-                            borrow ? actual.returnDueAt() : null, List.of());
+                            borrow ? actual.returnDueAt() : null, projectId, List.of());
                     repository.saveTransferOrder(order);
                     InventoryTransferFlowService.saveLines(repository, orderId, actual.lines(), now);
                     if (requisition) {
@@ -3107,6 +3118,23 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     }
                     return order;
                 });
+    }
+
+    /**
+     * 第十八批 G 段 82-R18a（第十八批裁决 18 所选「对，按业务发生地（推荐）」：「要货单、借用单建单时记所属项目（在 m 的经营项目里选，
+     * 只有一个时自动带）」）：所属项目须为接收方商户的经营项目（主项目加已批准的经营项目），不带且只有一个时自动带，否则 400；
+     * 须在建单人按 inventory.transfer_order.manage 可触及的范围内，否则 403。
+     */
+    private String transferOrderProject(String merchantId, String requested) {
+        List<String> operating = financeRepository.listMerchantOperatingProjectIds(merchantId);
+        String project = requested != null ? requested : operating.size() == 1 ? operating.getFirst() : null;
+        if (project == null || !operating.contains(project)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "所属项目（project_id）须在接收方商户的经营项目里选（只有一个时自动带）");
+        }
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), project, "inventory.transfer_order.manage")) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
+        }
+        return project;
     }
 
     public InventoryTransferOrderRecord shipTransferOrder(String orderId) {
@@ -3402,7 +3430,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
-                o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), repository.listTransferLinesByOrder(o.id()));
+                o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), o.projectId(), repository.listTransferLinesByOrder(o.id()));
     }
 
     public PageResponse<InventoryTransferOrderRecord> listTransferOrders() {
@@ -3441,7 +3469,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     private InventoryTransferOrderRecord withTransferStatus(InventoryTransferOrderRecord o, String status) {
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), status, o.operatorNote(),
-                o.createdBy(), o.createdAt(), Instant.now(), o.returnDueAt(), o.lines());
+                o.createdBy(), o.createdAt(), Instant.now(), o.returnDueAt(), o.projectId(), o.lines());
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "inventory.supplier.manage")
@@ -4210,7 +4238,25 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
             String businessType,
             Supplier<T> action
     ) {
+        return executeWrite(operationId, idempotencyKey, request, responseType, successEvent, failureEvent, permissionCode,
+                businessType, () -> { }, action);
+    }
+
+    /** 复核（范围闸在幂等之前）：gate 在幂等之前跑，同号重放也先过它；失败照常留痕。 */
+    private <T> T executeWrite(
+            String operationId,
+            String idempotencyKey,
+            Object request,
+            Class<T> responseType,
+            String successEvent,
+            String failureEvent,
+            String permissionCode,
+            String businessType,
+            Runnable gate,
+            Supplier<T> action
+    ) {
         try {
+            gate.run();
             return idempotencyService.execute(
                     operationId,
                     idempotencyKey,

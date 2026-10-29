@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -92,13 +92,15 @@ public class FacilityEquipmentScrapService {
             if (r == null) {
                 throw invalid("请填写报废申请");
             }
+            // 第十八批 G 段 82b-R1⑤：范围闸在幂等之前（先无锁读一次设备项目），执行体内照旧取锁。
+            jdbc.queryForList("SELECT project_id FROM facility_equipment WHERE id=?", String.class, equipmentId)
+                    .forEach(project -> requireProject(project, PERM));
             return idempotency.execute("facilityEquipmentScrap:" + equipmentId, key, r, () -> {
                 Map<String, Object> e = jdbc.queryForList(
                         "SELECT name, status, project_id, merchant_id FROM facility_equipment WHERE id=? FOR UPDATE", equipmentId)
                         .stream().findFirst()
                         .orElseThrow(() -> ApiException.notFound("NOT_FOUND", "设施设备不存在或已被删除"));
                 String project = (String) e.get("project_id");
-                requireProject(project, PERM);
                 if ("retired".equals(e.get("status"))) {
                     throw ApiException.conflict("FACILITY_EQUIPMENT_RETIRED", "设备已报废");
                 }

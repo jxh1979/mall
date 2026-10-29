@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -682,7 +682,8 @@ class ContractJdbcIntegrationTests {
 
     /**
      * 18F 第 80 条（PGM:413「所有基础对象都要带“综合体项目归属”」；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：
-     * 合同工作台起草不提交所属综合体与铺位，合同项目为空；待生效后按前端请求形状（蛇形键）生效、绑项目 B 的铺位——
+     * 平台管理员起草不带所属综合体与铺位，合同项目为空（82b-R3 起项目员工起草即落项目，未带项目的合同只有平台管理员能办）；
+     * 待生效后按前端请求形状（蛇形键）生效、绑项目 B 的铺位——
      * 合同、铺位绑定、生效时预排的租金账单与租金应收都带项目 B。
      */
     @Test
@@ -702,7 +703,7 @@ class ContractJdbcIntegrationTests {
                     '{"baseRentCent":100000}'::jsonb, now(), now())""",
                 contractId, "f80_mch_" + s, "f80_subj_" + s, "f80_subj_" + s);
 
-        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/activate").with(staffWith(s, "staff", "contract.lifecycle.activate"))
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/activate").with(staffWith(s, "platform_admin", "contract.lifecycle.activate"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"f80_act_" + s + "\",\"space_ids\":[\"" + spaceB + "\"]}"))
                 .andExpect(status().isOk());

@@ -76,7 +76,9 @@ public class AmusementParkWideFaultService {
         String permission = permissionForRoleOrView(request == null ? null : request.role());
         try {
             String role = requireRoleWithPermission(request == null ? null : request.role());
-            String projectId = resolveProjectId(request.projectId());
+            // 第十八批 G 段 82b-R5：项目须在发起岗位权限码可触及的范围内（含可跨项目角色勾选的项目），不带取本人项目
+            String projectId = authorizationService.requireReachableProject(request.projectId(), permission,
+                    AuthorizationService.PROJECT_OUT_OF_REACH);
             String reason = requireText(request.reason(), "必须填写全园故障情形（全部游乐项目不可运行，或供电、消防、入口系统等公共关键设施故障）");
             return idempotencyService.execute("initiateParkWideFault", request.idempotencyKey(), request, () -> {
                 repository.findOpenByProject(projectId).ifPresent(open -> {
@@ -108,8 +110,8 @@ public class AmusementParkWideFaultService {
         String permission = permissionForRoleOrView(request == null ? null : request.role());
         try {
             String role = requireRoleWithPermission(request == null ? null : request.role());
+            AmusementParkWideFaultRecord fault = requireFaultInScope(faultId, permission);
             return idempotencyService.execute("confirmParkWideFaultActivation", request.idempotencyKey(), request, () -> {
-                AmusementParkWideFaultRecord fault = requireFaultInScope(faultId);
                 if (!STATUS_PENDING_ACTIVATION.equals(fault.status())) {
                     throw ApiException.conflict("PARK_WIDE_FAULT_NOT_PENDING_ACTIVATION",
                             "该全园故障状态不在待确认生效阶段（当前：" + statusLabel(fault.status()) + "）");
@@ -138,8 +140,8 @@ public class AmusementParkWideFaultService {
         try {
             String role = requireRoleWithPermission(request == null ? null : request.role());
             String reason = requireText(request.reason(), "必须填写解除依据（公共关键设施或游乐项目恢复情况）");
+            AmusementParkWideFaultRecord fault = requireFaultInScope(faultId, permission);
             return idempotencyService.execute("initiateParkWideFaultLift", request.idempotencyKey(), request, () -> {
-                AmusementParkWideFaultRecord fault = requireFaultInScope(faultId);
                 if (!STATUS_ACTIVE.equals(fault.status())) {
                     throw ApiException.conflict("PARK_WIDE_FAULT_NOT_ACTIVE",
                             "只有生效中的全园故障状态可以发起解除（当前：" + statusLabel(fault.status()) + "）");
@@ -165,8 +167,8 @@ public class AmusementParkWideFaultService {
         String permission = permissionForRoleOrView(request == null ? null : request.role());
         try {
             String role = requireRoleWithPermission(request == null ? null : request.role());
+            AmusementParkWideFaultRecord fault = requireFaultInScope(faultId, permission);
             return idempotencyService.execute("confirmParkWideFaultLift", request.idempotencyKey(), request, () -> {
-                AmusementParkWideFaultRecord fault = requireFaultInScope(faultId);
                 if (!STATUS_PENDING_LIFT.equals(fault.status())) {
                     throw ApiException.conflict("PARK_WIDE_FAULT_NOT_PENDING_LIFT",
                             "该全园故障状态不在待确认解除阶段（当前：" + statusLabel(fault.status()) + "）");
@@ -190,9 +192,7 @@ public class AmusementParkWideFaultService {
 
     public PageResponse<AmusementParkWideFaultRecord> list(String projectId, String status) {
         authorizationService.requirePermission(PERMISSION_VIEW);
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        String effectiveProject = scope != null ? scope : trimToNull(projectId);
-        List<AmusementParkWideFaultRecord> items = repository.list(effectiveProject, trimToNull(status));
+        List<AmusementParkWideFaultRecord> items = listInReach(projectId, project -> repository.list(project, trimToNull(status)));
         auditEventService.recordSuccess("amusement.park_fault.viewed", PERMISSION_VIEW, TARGET_TYPE, "list", null, null,
                 Map.of("count", items.size()));
         return new PageResponse<>(items, 1, Math.max(1, items.size()), items.size());
@@ -200,7 +200,7 @@ public class AmusementParkWideFaultService {
 
     public PageResponse<AmusementParkWideFaultActionRecord> listActions(String faultId) {
         authorizationService.requirePermission(PERMISSION_VIEW);
-        AmusementParkWideFaultRecord fault = requireFaultInScope(faultId);
+        AmusementParkWideFaultRecord fault = requireFaultInScope(faultId, PERMISSION_VIEW);
         List<AmusementParkWideFaultActionRecord> items = repository.listActions(fault.id());
         return new PageResponse<>(items, 1, Math.max(1, items.size()), items.size());
     }
@@ -250,29 +250,38 @@ public class AmusementParkWideFaultService {
         return ROLE_HEAD.equals(r) || ROLE_ENGINEERING_SAFETY.equals(r) ? permissionFor(r) : PERMISSION_VIEW;
     }
 
-    private AmusementParkWideFaultRecord requireFaultInScope(String faultId) {
+    /**
+     * 第十八批 G 段 82b-R5（PGM 第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：记录所在项目须在入口权限码
+     * 可触及的范围内（含可跨项目角色勾选的项目；平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN。写入口在幂等执行体之前调用。
+     */
+    private AmusementParkWideFaultRecord requireFaultInScope(String faultId, String permission) {
         AmusementParkWideFaultRecord fault = repository.findById(faultId)
                 .orElseThrow(() -> ApiException.notFound("PARK_WIDE_FAULT_NOT_FOUND", "全园故障状态记录不存在"));
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        if (scope != null && !scope.equals(fault.projectId())) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能操作当前综合体项目的全园故障状态");
+        if (!authorizationService.canReachProject(authorizationService.currentActor(), fault.projectId(), permission)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该全园故障状态不在本权限可触及的项目范围内");
         }
         return fault;
     }
 
-    private String resolveProjectId(String requestProjectId) {
-        String scope = authorizationService.currentProjectScopeQuietly().orElse(null);
-        String requested = trimToNull(requestProjectId);
-        if (scope != null) {
-            if (requested != null && !requested.equals(scope)) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "只能操作当前综合体项目的全园故障状态");
-            }
-            return scope;
+    /**
+     * 第十八批 G 段 82b-R5：全园故障与补偿批次列表按 amusement.park_fault.view 可触及的项目取——平台管理员照旧（带项目只看该项目、
+     * 不带看全部）；其余带项目的须可触及（否则 403 CROSS_PROJECT_FORBIDDEN），不带的取全部可触及项目。
+     * ponytail: 逐项目各查一次，可触及项目多到成为负担时改成一条 IN 查询。
+     */
+    <T> List<T> listInReach(String projectId, java.util.function.Function<String, List<T>> query) {
+        String requested = trimToNull(projectId);
+        if (authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+            return query.apply(requested);
         }
-        if (requested == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目");
+        AuthorizationService.ProjectReach reach = authorizationService.projectReach(authorizationService.currentActor(), PERMISSION_VIEW);
+        if (requested != null && !reach.covers(requested)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
         }
-        return requested;
+        if (requested != null) {
+            return query.apply(requested);
+        }
+        return reach.onlyOwnProject().map(query)
+                .orElseGet(() -> reach.organizationIds().stream().flatMap(project -> query.apply(project).stream()).toList());
     }
 
     private static String requireText(String value, String message) {

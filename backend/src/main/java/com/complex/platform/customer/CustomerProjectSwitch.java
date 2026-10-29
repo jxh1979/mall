@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.Strings;
 import com.complex.platform.gate.TerminalSwitchGuard;
@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
  * X-Project-Id），只在客人专用入口调用，写操作放在幂等之前。对象标识与 project_id 先去首尾空格（与业务层查对象同口径）再查。
  * 对象不存在、不属本人（按本人查的）或不属单一综合体（平台通用券、全局兑换项、不带卡范围）时取不到综合体，不判，交由原业务校验报错。
  * 带 capability 的入口（储值充值、入账、储值付票）另按该动作的模块能力码（与 StoredValueService 上 @GuardedAction 同码）在同一综合体判。
+ * 第十八批裁决 18（第 82 条）「客人端商户储值卡按发卡项目取开关」：商户卡取发卡项目——发卡（首笔充值建卡）时记在卡上的 project_id，
+ * 是发卡商户已批准的经营项目（merchant_projects，PGM 第 659 行「要经过审批才生效」）就取它，卡上不带项目或不是它的经营项目取商户主项目。
  */
 @Component
 class CustomerProjectSwitch {
@@ -39,6 +41,9 @@ class CustomerProjectSwitch {
             + " LEFT JOIN customer_points_redemptions r ON i.source_type = 'points_redemption' AND r.id = i.source_ref"
             + " LEFT JOIN customer_redemption_catalog_items c ON c.id = r.catalog_item_id WHERE i.id = ";
     private static final String MERCHANT_PROJECT = "SELECT project_id FROM merchants WHERE id = ?";
+    /** 商户卡的发卡项目（见类注释）：后接卡上的 project_id 与右括号，FROM 里须有发卡商户 m，与 m.project_id 一起放进 COALESCE。 */
+    private static final String OPERATING_PROJECT =
+            "(SELECT mp.project_id FROM merchant_projects mp WHERE mp.merchant_id = m.id AND mp.project_id = ";
 
     private final JdbcTemplate jdbc;
     private final TerminalSwitchGuard guard;
@@ -59,14 +64,17 @@ class CustomerProjectSwitch {
         at(MERCHANT_PROJECT, merchantId);
     }
 
-    /** 储值卡范围：商户卡取发卡商户的综合体，否则取综合体通用卡的 project_id。 */
+    /** 储值卡范围：商户卡取发卡项目（见类注释），否则取综合体通用卡的 project_id。 */
     void card(String projectId, String merchantId) {
         card(projectId, merchantId, null);
     }
 
     /** 储值充值：同 {@link #card(String, String)}，另按充值模块能力码判。 */
     void card(String projectId, String merchantId, String capability) {
-        project(Strings.trimToNull(merchantId) != null ? resolve(MERCHANT_PROJECT, merchantId) : projectId, capability);
+        project(Strings.trimToNull(merchantId) == null ? projectId : Strings.trimToNull(projectId) == null
+                ? resolve(MERCHANT_PROJECT, merchantId)
+                : resolve("SELECT COALESCE(" + OPERATING_PROJECT + "?), m.project_id) FROM merchants m WHERE m.id = ?",
+                        projectId, merchantId), capability);
     }
 
     /** 门票奖励规则公告：带 project_id 取它（即公告查询的过滤条件），只带票种时取票种所属综合体（与下单同口径）。 */
@@ -129,15 +137,17 @@ class CustomerProjectSwitch {
         at(MERCHANT_OF_VOUCHER + "(SELECT voucher_instance_id FROM voucher_transfers WHERE claim_code = ?)", claimCode);
     }
 
-    /** 本人储值卡：商户卡取发卡商户的综合体（与查卡、充值、入账同口径），否则取卡的 project_id。 */
+    /** 本人储值卡：商户卡取发卡项目（与查卡、充值、入账同口径），否则取卡的 project_id。 */
     void storedValueAccount(String accountId, String customerId) {
-        at("SELECT COALESCE(m.project_id, a.project_id) FROM customer_stored_value_accounts a LEFT JOIN merchants m ON m.id = a.merchant_id"
+        at("SELECT COALESCE(" + OPERATING_PROJECT + "a.project_id), m.project_id, a.project_id)"
+                + " FROM customer_stored_value_accounts a LEFT JOIN merchants m ON m.id = a.merchant_id"
                 + " WHERE a.id = ? AND a.customer_id = ?", accountId, customerId);
     }
 
-    /** 充值入账：按充值时服务端绑定到支付意向的卡范围（商户卡取发卡商户的综合体），另按充值模块能力码判。 */
+    /** 充值入账：按充值时服务端绑定到支付意向的卡范围（商户卡取发卡项目），另按充值模块能力码判。 */
     void topupIntent(String paymentIntentId, String customerId, String capability) {
-        project(resolve("SELECT COALESCE(m.project_id, i.project_id) FROM stored_value_topup_intents i"
+        project(resolve("SELECT COALESCE(" + OPERATING_PROJECT + "i.project_id), m.project_id, i.project_id)"
+                + " FROM stored_value_topup_intents i"
                 + " LEFT JOIN merchants m ON m.id = i.merchant_id WHERE i.payment_intent_id = ? AND i.customer_id = ?",
                 paymentIntentId, customerId), capability);
     }

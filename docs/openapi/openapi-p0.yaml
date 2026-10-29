@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.38
+  version: V0.39
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -6618,7 +6618,7 @@ paths:
         - "bar"
       operationId: "configureSavedBottleReminderPolicy"
       summary: "配置存酒到期提醒节点（按项目；出厂默认到期前第 14、7、3、1 天）"
-      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）；提醒节点与存酒有效期同一粒度配置，超出本次存酒实际有效期的节点自动跳过」：scope_id=global（出厂行）|project:<id>（缺行回落 global）；reminder_days 为到期前第 N 天（N≥1、不重复、至少一个），否则 400 VALIDATION_FAILED；商户账号 403 PLATFORM_SCOPE_REQUIRED，非平台管理员只能配置本项目（403 CROSS_PROJECT_FORBIDDEN）；落 saved_bottle_reminder_policy 并留痕 updated_by/updated_at。到期提醒作业按距到期日（北京日历日）每次只发已到达的最近一个节点，节点大于本次有效期（登记日至当前到期日天数）的跳过，幂等键＝瓶＋到期日＋节点。"
+      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）；提醒节点与存酒有效期同一粒度配置，超出本次存酒实际有效期的节点自动跳过」：scope_id=global（出厂行）|project:<id>（缺行回落 global）；reminder_days 为到期前第 N 天（N≥1、不重复、至少一个），否则 400 VALIDATION_FAILED；商户账号 403 PLATFORM_SCOPE_REQUIRED，非平台管理员只能配置 bar.saved_bottle.reminder_policy.manage 可触及的项目（含可跨项目角色勾选的项目），出厂行与不可触及的项目 403 CROSS_PROJECT_FORBIDDEN；落 saved_bottle_reminder_policy 并留痕 updated_by/updated_at。到期提醒作业按距到期日（北京日历日）每次只发已到达的最近一个节点，节点大于本次有效期（登记日至当前到期日天数）的跳过，幂等键＝瓶＋到期日＋节点。"
       x-permission: "bar.saved_bottle.reminder_policy.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -6646,7 +6646,7 @@ paths:
         - "bar"
       operationId: "listSavedBottleReminderPolicies"
       summary: "读存酒到期提醒节点（出厂行与各项目行；出厂默认到期前第 14、7、3、1 天）"
-      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）」：列出 saved_bottle_reminder_policy 的 scope_id（global 出厂行 | project:<id>）与 reminder_days（到期前第 N 天，降序）；没单独配置的项目沿用出厂行。商户账号 403 PLATFORM_SCOPE_REQUIRED；非平台管理员只返回出厂行与本项目行，没有项目归属 403 PROJECT_SCOPE_REQUIRED（范围闸在读之前）。"
+      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）」：列出 saved_bottle_reminder_policy 的 scope_id（global 出厂行 | project:<id>）与 reminder_days（到期前第 N 天，降序）；没单独配置的项目沿用出厂行。商户账号 403 PLATFORM_SCOPE_REQUIRED；非平台管理员只返回出厂行与该码可触及项目（含可跨项目角色勾选的项目）的行，没有项目归属 403 PROJECT_SCOPE_REQUIRED（范围闸在读之前）。"
       x-permission: "bar.saved_bottle.reminder_policy.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -7344,7 +7344,7 @@ paths:
       - inventory
       operationId: createTransferOrder
       summary: 新建跨主体流转单
-      description: V277 调拨（supply：平台供货主体→商户）与借调（lending：商户→商户，lending_mode 为 borrow 借用或 purchase 买断）建单。FS-019（BSM L1201「「借」只转移保管责任、不转移所有权（仅适用于不可消费物品；可消费物品的借用实质是调，交付时所有权随之转移）」「不可消费物品（设备、器具等）的借用必须约定归还时间」）：借用须带 return_due_at（应归还期限），否则 400 VALIDATION_FAILED；借用明细物料须为不可消费物品（inventory_items.non_consumable），可消费物品只能买断，否则 400 VALIDATION_FAILED。第十八批第 18 条（ENUM:162 库存流水「调拨」「借出」）：借调（lending，借用与买断）须带 from_location_id（出让方本商户出货库位，交货时从此扣库存），缺填 400 VALIDATION_FAILED。门店要货建单为草稿（draft），借调为 created。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      description: V277 调拨（supply：平台供货主体→商户）与借调（lending：商户→商户，lending_mode 为 borrow 借用或 purchase 买断）建单。FS-019（BSM L1201「「借」只转移保管责任、不转移所有权（仅适用于不可消费物品；可消费物品的借用实质是调，交付时所有权随之转移）」「不可消费物品（设备、器具等）的借用必须约定归还时间」）：借用须带 return_due_at（应归还期限），否则 400 VALIDATION_FAILED；借用明细物料须为不可消费物品（inventory_items.non_consumable），可消费物品只能买断，否则 400 VALIDATION_FAILED。第十八批第 18 条（ENUM:162 库存流水「调拨」「借出」）：借调（lending，借用与买断）须带 from_location_id（出让方本商户出货库位，交货时从此扣库存），缺填 400 VALIDATION_FAILED。第十八批 G 段 82-R18a（第十八批裁决 18「要货单、借用单建单时记所属项目（在 m 的经营项目里选，只有一个时自动带），之后办理、赔偿应付、逾期工单都按单上的项目」）：project_id 为所属项目，须为接收方商户的经营项目（主项目或已批准的经营项目），不带且只有一个时自动带，否则 400 VALIDATION_FAILED；须在建单人按 inventory.transfer_order.manage 可触及的项目范围内，否则 403 CROSS_PROJECT_FORBIDDEN。门店要货建单为草稿（draft），借调为 created。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
       x-permission: inventory.transfer_order.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -7430,6 +7430,10 @@ paths:
                   type: string
                   format: date-time
                   description: 借用（lending+borrow）必填：约定归还时间。
+                project_id:
+                  type: string
+                  maxLength: 64
+                  description: 所属项目：接收方商户的经营项目之一（主项目或已批准的经营项目）；只有一个时可不带、自动带上。
                 lines:
                   type: array
                   minItems: 1
@@ -7460,6 +7464,7 @@ paths:
       - VALIDATION_FAILED
       - SUPPLY_ENTITY_NOT_FOUND
       - INVENTORY_ITEM_NOT_FOUND
+      - CROSS_PROJECT_FORBIDDEN
   /api/v1/inventory/transfer-orders/{order_id}/ship:
     post:
       tags:
@@ -8133,7 +8138,7 @@ paths:
         - "inventory"
       operationId: "registerTransferDisposition"
       summary: "登记门店要货差异处理"
-      description: "FS-011（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库。供货、配送保管和收货方按交接证据确认差异，财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款」）：仅差异处理中（discrepancy）的门店要货单可登记，状态为待复核（pending_review），复核通过才生效。return_accepted 退回验收、loss 损失（须 responsible_party：supplier 供货主体、carrier 配送保管方、receiver 收货方；amount_cent 由服务按该行锁定单价×数量算出）针对 line_id 的 quantity 件，二者合计（未驳回）不超过该行发货－合格，同一件只能有一个结果，超出 409 TRANSFER_DISPOSITION_EXCEEDS_DISCREPANCY；reship 补发（trace_codes 为补发货随货溯源码）合计不超过发货－合格；payment_adjustment 货款调减 amount_cent（分），不超过当前签收货款应付的未付金额，否则 409 TRANSFER_ADJUSTMENT_EXCEEDS_UNPAID，无签收货款 409 TRANSFER_PAYABLE_NOT_FOUND。evidence_attachment_ids 必填：交接证据须已上传（business_type=inventory_transfer_order、business_id=本单），缺失 400 EVIDENCE_REQUIRED、绑定不符 400 EVIDENCE_BINDING_MISMATCH。商户账号只能办理本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非商户账号须能触及门店所属项目，否则 403 CROSS_PROJECT_FORBIDDEN；非差异处理中 409 TRANSFER_ORDER_STATUS_CONFLICT。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库。供货、配送保管和收货方按交接证据确认差异，财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款」）：仅差异处理中（discrepancy）的门店要货单可登记，状态为待复核（pending_review），复核通过才生效。return_accepted 退回验收、loss 损失（须 responsible_party：supplier 供货主体、carrier 配送保管方、receiver 收货方；amount_cent 由服务按该行锁定单价×数量算出）针对 line_id 的 quantity 件，二者合计（未驳回）不超过该行发货－合格，同一件只能有一个结果，超出 409 TRANSFER_DISPOSITION_EXCEEDS_DISCREPANCY；reship 补发（trace_codes 为补发货随货溯源码）合计不超过发货－合格；payment_adjustment 货款调减 amount_cent（分），不超过当前签收货款应付的未付金额，否则 409 TRANSFER_ADJUSTMENT_EXCEEDS_UNPAID，无签收货款 409 TRANSFER_PAYABLE_NOT_FOUND。evidence_attachment_ids 必填：交接证据须已上传（business_type=inventory_transfer_order、business_id=本单），缺失 400 EVIDENCE_REQUIRED、绑定不符 400 EVIDENCE_BINDING_MISMATCH。商户账号只能办理本商户（to_owner_id）的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN；非商户账号须能触及单上的所属项目，否则 403 CROSS_PROJECT_FORBIDDEN；非差异处理中 409 TRANSFER_ORDER_STATUS_CONFLICT。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: "inventory.transfer_order.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -8238,7 +8243,7 @@ paths:
         - "inventory"
       operationId: "reviewTransferDisposition"
       summary: "财务复核门店要货差异处理"
-      description: "FS-011（BSM L1212「财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款。全部数量处理完且库存、款项记录齐全后完成要货单」）：复核人须为持 finance.ar_ap.manage、能触及门店所属项目的非商户财务（商户账号含门店本店同事 403 FINANCE_REVIEW_ONLY，他项目 403 CROSS_PROJECT_FORBIDDEN）且不是登记人（403 SELF_REVIEW_FORBIDDEN），decision 为 approved 通过或 rejected 驳回，reason 必填。通过才生效：收货方担责的损失按该行锁定单价追加一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），供货主体或配送保管方担责只登记责任与金额、不形成应收应付；补发另开一张同供货主体、门店、物料与锁定单价的关联要货单（reship_order_id），从待拣配（pending_picking）起照常出库、配送、签收；货款调减按 V344 原应付行不动，追加严格取反的冲正行（reversal_item_id）与调减后的重述行（payable_item_id，全额调减则无）。拒收与短少的每一件都经通过的退回验收或损失有了结果、且无待复核项时，要货单 discrepancy→completed（写留痕）。已复核 409 TRANSFER_DISPOSITION_ALREADY_REVIEWED；商户账号只能办理本商户的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN。FS-019：借用物无法归还登记（disposition_type=unreturnable）经对方确认与主管复核后在此由财务复核；通过后一律按登记的赔偿金额（不低于数量×建单锁定内部结算价）形成借入方（to_owner_id）对借出方（from_owner_id）的应付（payable_item_id），之后在应收应付台账独立跟进直到清偿；借用单不在此完成，须借出方登记实物处置完成。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「财务复核金额后办理补发、退回、货款调整或责任损失，不重复收款。全部数量处理完且库存、款项记录齐全后完成要货单」）：复核人须为持 finance.ar_ap.manage、能触及单上的所属项目的非商户财务（商户账号含门店本店同事 403 FINANCE_REVIEW_ONLY，他项目 403 CROSS_PROJECT_FORBIDDEN）且不是登记人（403 SELF_REVIEW_FORBIDDEN），decision 为 approved 通过或 rejected 驳回，reason 必填。通过才生效：收货方担责的损失按该行锁定单价追加一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），供货主体或配送保管方担责只登记责任与金额、不形成应收应付；补发另开一张同供货主体、门店、物料与锁定单价的关联要货单（reship_order_id），从待拣配（pending_picking）起照常出库、配送、签收；货款调减按 V344 原应付行不动，追加严格取反的冲正行（reversal_item_id）与调减后的重述行（payable_item_id，全额调减则无）。拒收与短少的每一件都经通过的退回验收或损失有了结果、且无待复核项时，要货单 discrepancy→completed（写留痕）。已复核 409 TRANSFER_DISPOSITION_ALREADY_REVIEWED；商户账号只能办理本商户的要货单，否则 403 CROSS_MERCHANT_FORBIDDEN。FS-019：借用物无法归还登记（disposition_type=unreturnable）经对方确认与主管复核后在此由财务复核；通过后一律按登记的赔偿金额（不低于数量×建单锁定内部结算价）形成借入方（to_owner_id）对借出方（from_owner_id）的应付（payable_item_id），之后在应收应付台账独立跟进直到清偿；借用单不在此完成，须借出方登记实物处置完成。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: "finance.ar_ap.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -10238,7 +10243,7 @@ paths:
         - terminals
       operationId: listTerminalDevices
       summary: 终端设备台账
-      description: 平台后台设备台账（K16 改绑工作台数据源）：全量终端设备 + 商户归属列。设备未绑商户时，该设备上赠饮/餐饮类权益核销一律被 K16 fail-closed 拒绝。每行带设备型号 device_model 与安检 X 光设备最近一次登记故障时开的维修工单 repair_work_order_id（第 63 条）。
+      description: 平台后台设备台账（K16 改绑工作台数据源）：全量终端设备 + 商户归属列。设备未绑商户时，该设备上赠饮/餐饮类权益核销一律被 K16 fail-closed 拒绝。每行带设备型号 device_model 与安检 X 光设备最近一次登记故障时开的维修工单 repair_work_order_id（第 63 条）。第十八批 G 段第 82 条（82b-R5 ④、裁决 18）：只列本人能管的设备——平台管理员全部；带商户归属的员工只列本商户的；其余按 terminal.switch.view 可触及的项目（含可跨项目角色勾选的项目）列；设备属于哪个项目先看绑定空间所在项目，没绑空间的看所属商户的主项目，再没有的看持有员工的项目。
       x-auth-context: staff-token
       x-permission: terminal.switch.view
       x-data-scope: project-device
@@ -10261,7 +10266,7 @@ paths:
       operationId: updateTerminalDeviceMerchant
       summary: 设备商户归属设置/更换/解除
       description: K16 核销上下文写入面：设备归属决定核销记谁的账（A 吧的机器核 B 吧赠饮，月底两家都对不平）。merchant_id
-        传目标商户=设置/更换（商户须存在且未归档）；传空=解除绑定（该设备上赠饮/餐饮类权益将无法核销，fail-closed）。理由必填留痕，审计明细带改绑前后商户；终态设备（scrapped/blocked）拒改。
+        传目标商户=设置/更换（商户须存在且未归档）；传空=解除绑定（该设备上赠饮/餐饮类权益将无法核销，fail-closed）。理由必填留痕，审计明细带改绑前后商户；终态设备（scrapped/blocked）拒改。第十八批 G 段第 82 条（82b-R5 ④、裁决 18）：不带商户归属的员工按 terminal.device.lifecycle 可触及的项目判设备与改后归属（设备项目先看绑定空间所在项目、再看商户主项目、再看持有员工），不可触及 403 CROSS_PROJECT_FORBIDDEN。
       x-auth-context: staff-token
       x-permission: terminal.device.lifecycle
       x-data-scope: project-device
@@ -10366,9 +10371,9 @@ paths:
                   bound_space_id: project_p0
                   location_point_id: project_p0
                   status: bound
-                  updated_at: 2026-06-14T00:00:00Z
+                  updated_at: '2026-06-14T00:00:00Z'
                   device_token: kiosk_example_token_returned_once
-                timestamp: 2026-06-14T00:00:00Z
+                timestamp: '2026-06-14T00:00:00Z'
         "409":
           $ref: "#/components/responses/Error"
         "500":
@@ -12333,7 +12338,7 @@ paths:
                   maxLength: 64
                 merchant_id:
                   type: string
-                  description: "商户自采必须属于所选综合体；平台两模式不得指定商户货权"
+                  description: "商户自采须以所选综合体为主项目或已批准的经营项目（第十八批 G 段 82b-R8）；平台两模式不得指定商户货权"
                   maxLength: 64
                 contract_mode:
                   type: string
@@ -13047,7 +13052,7 @@ paths:
       summary: 分级查看企微会话消息（脱敏/原文，原文需审批+审计）
       description: R5 T8：分级查看。mode=redacted（默认，需 wecom.view）返回脱敏展示文本、rawContent 为空；mode=raw（需 wecom.view_raw 高敏权限 +
         approval_ref 审批引用）返回解密后的会话原文。调阅即写 wecom_access_audits（viewer + view_type + approval_ref）+ 事件
-        wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。
+        wecom.redacted_viewed / wecom.raw_viewed + sensitive.viewed；raw 无审批引用→WECOM_RAW_APPROVAL_REQUIRED 拒绝。第十八批 G 段 82b-R5：会话所在项目须在入口权限码（脱敏 wecom.view、原文 wecom.view_raw）可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: wecom.view_raw
       x-data-scope: project
       x-terminal-allowed:
@@ -13865,7 +13870,7 @@ paths:
         - customer
       operationId: customerStoredValueTopup
       summary: 客人储值充值（绑支付意图）
-      description: ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。客户端未回前台入账的，由服务端结算作业按充值绑定的卡范围查单入账。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所充卡的综合体（商户卡取发卡商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建支付意向；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判。
+      description: ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。客户端未回前台入账的，由服务端结算作业按充值绑定的卡范围查单入账。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所充卡的综合体（商户卡取发卡项目：卡上的 project_id 是发卡商户已批准的经营项目的取它，卡上不带项目或不是它的经营项目取该商户的主项目，第十八批裁决 18；否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建支付意向；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判。
       x-permission: customer.stored_value.topup
       x-data-scope: customer
       x-terminal-allowed:
@@ -13896,7 +13901,7 @@ paths:
         - customer
       operationId: customerStoredValueSettle
       summary: 客人储值充值入账（支付成功后）
-      description: CG-06a：入账时按项目赠送比例拆为本金（实付）与赠送金两段分别记账（ENUM「储值卡类型与收款主体」），余额＝本金＋赠送金；topup 流水记录两段拆分；商户级卡赠送金为 0。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以充值时服务端绑定的卡范围所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不入账；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判；服务端结算作业不经本接口。
+      description: CG-06a：入账时按项目赠送比例拆为本金（实付）与赠送金两段分别记账（ENUM「储值卡类型与收款主体」），余额＝本金＋赠送金；topup 流水记录两段拆分；商户级卡赠送金为 0。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以充值时服务端绑定的卡范围所属综合体（商户卡取发卡项目，同充值）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不入账；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判；服务端结算作业不经本接口。
       x-permission: customer.stored_value.topup
       x-data-scope: customer
       x-terminal-allowed:
@@ -13929,7 +13934,7 @@ paths:
         - customer
       operationId: customerStoredValueAccount
       summary: 客人储值账户查询
-      description: CG-06a：返回 principal_cent（未消费本金）与 bonus_cent（未使用赠送金）分列（BSM「我的余额」：含本金与赠送金分列），balance_cent 为两段之和。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取该商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；两者都为空不判。
+      description: CG-06a：返回 principal_cent（未消费本金）与 bonus_cent（未使用赠送金）分列（BSM「我的余额」：含本金与赠送金分列），balance_cent 为两段之和。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取发卡项目：project_id 是该商户已批准的经营项目的取它，为空或不是它的经营项目取该商户的主项目，第十八批裁决 18；否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；两者都为空不判。
       x-permission: customer.stored_value.view
       x-data-scope: customer
       x-terminal-allowed:
@@ -14050,7 +14055,7 @@ paths:
         - customer
       operationId: getCustomerStoredValueTopupRules
       summary: 充值前规则告知（扣款顺序、赠送金性质、退卡口径）
-      description: ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。bonus_bps 取此刻已审批、已生效的赠送比例版本（通用卡按项目 stored_value_bonus，商户级卡按发卡商户 merchant_card_bonus，第十八批第 11 条 V558），无生效版本为 0。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取该商户的综合体，否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
+      description: ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。bonus_bps 取此刻已审批、已生效的赠送比例版本（通用卡按项目 stored_value_bonus，商户级卡按发卡商户 merchant_card_bonus，第十八批第 11 条 V558），无生效版本为 0。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取发卡项目：project_id 是该商户已批准的经营项目的取它，为空或不是它的经营项目取该商户的主项目，第十八批裁决 18；否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -14090,7 +14095,7 @@ paths:
         - customer
       operationId: listCustomerStoredValueTransactions
       summary: 我的余额逐笔记录
-      description: ROOT-03-R30（BSM 第 868 行「每笔充值（时间、金额、本金与赠送金拆分、支付通路）、每笔扣款（商户、扣减的本金与赠送金各多少）、每笔退款与回冲（含回冲顺序结果）」）：只许本人卡（否则 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；每笔带 principal_cent/bonus_cent、充值行 payment_channel、扣款行 merchant_id/merchant_name（通票为空＝综合体）、回冲行 original_txn_id。page 从 1 起，size 1～100。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人储值卡所属综合体（商户卡取发卡商户的综合体）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
+      description: ROOT-03-R30（BSM 第 868 行「每笔充值（时间、金额、本金与赠送金拆分、支付通路）、每笔扣款（商户、扣减的本金与赠送金各多少）、每笔退款与回冲（含回冲顺序结果）」）：只许本人卡（否则 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；每笔带 principal_cent/bonus_cent、充值行 payment_channel、扣款行 merchant_id/merchant_name（通票为空＝综合体）、回冲行 original_txn_id。page 从 1 起，size 1～100。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人储值卡所属综合体（商户卡取发卡项目：卡上的 project_id 是发卡商户已批准的经营项目的取它，否则取该商户的主项目，第十八批裁决 18）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -14532,7 +14537,7 @@ paths:
         - name: project_id
           in: path
           required: true
-          description: 综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。
+          description: 综合体项目（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）。
           schema:
             type: string
             maxLength: 64
@@ -14563,7 +14568,7 @@ paths:
         - name: project_id
           in: path
           required: true
-          description: 综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。
+          description: 综合体项目（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）。
           schema:
             type: string
             maxLength: 64
@@ -14628,7 +14633,7 @@ paths:
         - name: project_id
           in: path
           required: true
-          description: 综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。
+          description: 综合体项目（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）。
           schema:
             type: string
             maxLength: 64
@@ -14659,7 +14664,7 @@ paths:
         - name: project_id
           in: path
           required: true
-          description: 综合体项目（项目范围账号只能是本项目，否则 403 CROSS_PROJECT_FORBIDDEN）。
+          description: 综合体项目（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）。
           schema:
             type: string
             maxLength: 64
@@ -14712,7 +14717,7 @@ paths:
         - customer
       operationId: getCustomerHomeContent
       summary: 查客人端首页已发布与待审批的综合体介绍与活动公告
-      description: ROOT-03 clients-R9（BSM 第 857 行）＋第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」：发布走现有准入审批（主管复核，一级上级）——首次提交建复核单并 409 ADMISSION_BLOCKED（提示复核单号），批准后原样再提交才写入，客人端 /api/v1/customer/projects 随即可见。返回已发布的 intro、announcement、published_by、published_at 与已提交待审批的原文 draft_intro、draft_announcement、draft_submitted_by、draft_submitted_at（审批人审批前据此核对，不盲批）；编辑人（customer.home_content.manage）与审批人（governance.supervisor_review.approve）可读，均限本项目（403 CROSS_PROJECT_FORBIDDEN）。都没有时 data 为空。
+      description: ROOT-03 clients-R9（BSM 第 857 行）＋第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」：发布走现有准入审批（主管复核，一级上级）——首次提交建复核单并 409 ADMISSION_BLOCKED（提示复核单号），批准后原样再提交才写入，客人端 /api/v1/customer/projects 随即可见。返回已发布的 intro、announcement、published_by、published_at 与已提交待审批的原文 draft_intro、draft_announcement、draft_submitted_by、draft_submitted_at（审批人审批前据此核对，不盲批）；编辑人（customer.home_content.manage）与审批人（governance.supervisor_review.approve）可读，项目须在各自权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。都没有时 data 为空。
       x-permission: customer.home_content.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -14742,7 +14747,7 @@ paths:
         - customer
       operationId: publishCustomerHomeContent
       summary: 提交发布客人端首页综合体介绍与活动公告（审批后生效）
-      description: ROOT-03 clients-R9（BSM 第 857 行）＋第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」：发布走现有准入审批（主管复核，一级上级）——首次提交建复核单并 409 ADMISSION_BLOCKED（提示复核单号），批准后原样再提交才写入，客人端 /api/v1/customer/projects 随即可见。每次提交先把本次原文存为待审原文（被拦下送审时照样留下，审批人在主管复核页可读），发布写入后删除待审原文；内容改了再提交仍被拦下送审。intro 必填，announcement 可空。项目范围账号只能是本项目（403 CROSS_PROJECT_FORBIDDEN）。
+      description: ROOT-03 clients-R9（BSM 第 857 行）＋第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」：发布走现有准入审批（主管复核，一级上级）——首次提交建复核单并 409 ADMISSION_BLOCKED（提示复核单号），批准后原样再提交才写入，客人端 /api/v1/customer/projects 随即可见。每次提交先把本次原文存为待审原文（被拦下送审时照样留下，审批人在主管复核页可读），发布写入后删除待审原文；内容改了再提交仍被拦下送审。intro 必填，announcement 可空。项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: customer.home_content.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -18462,7 +18467,7 @@ paths:
         - amusement
       operationId: listAmusementParkWideFaults
       summary: 查询全园故障状态记录
-      description: CG-08a（ENUM「全园故障与补偿通票」）：按综合体项目列出全园故障状态记录（待第二岗位确认生效 / 生效中 / 待第二岗位确认解除 / 已解除），含发起人、确认人、岗位与时点；有项目范围的账号只见本综合体。
+      description: CG-08a（ENUM「全园故障与补偿通票」）：按综合体项目列出全园故障状态记录（待第二岗位确认生效 / 生效中 / 待第二岗位确认解除 / 已解除），含发起人、确认人、岗位与时点；有项目范围的账号只见本综合体。第十八批 G 段 82b-R5：非平台管理员按 amusement.park_fault.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 CROSS_PROJECT_FORBIDDEN），不带取全部可触及项目。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -18502,7 +18507,7 @@ paths:
         - amusement
       operationId: initiateAmusementParkWideFault
       summary: 发起全园故障状态（第一岗位）
-      description: CG-08a（ENUM「全园故障与补偿通票」：「全园故障状态由游乐公司负责人和工程或安全岗位共同确认后生效」）：游乐公司负责人或工程/安全岗位任一方发起，记录为「待第二岗位确认生效」，须另一岗位、另一人确认后才生效。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验（x-permission 只能登记一个码，另一岗位权限码见 role 字段说明）。同综合体已有未解除记录 → 409 PARK_WIDE_FAULT_ALREADY_OPEN；无项目范围的账号必须传 project_id。全程留痕（amusement_park_wide_fault_actions）。
+      description: CG-08a（ENUM「全园故障与补偿通票」：「全园故障状态由游乐公司负责人和工程或安全岗位共同确认后生效」）：游乐公司负责人或工程/安全岗位任一方发起，记录为「待第二岗位确认生效」，须另一岗位、另一人确认后才生效。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验（x-permission 只能登记一个码，另一岗位权限码见 role 字段说明）。同综合体已有未解除记录 → 409 PARK_WIDE_FAULT_ALREADY_OPEN；无项目范围的账号必须传 project_id。全程留痕（amusement_park_wide_fault_actions）。第十八批 G 段 82b-R5：project_id 须在所用岗位权限码可触及的项目内（含可跨项目角色勾选的项目），不带取本人项目，否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.confirm_as_head
       x-data-scope: project
       x-terminal-allowed:
@@ -18561,7 +18566,7 @@ paths:
         - amusement
       operationId: confirmAmusementParkWideFaultActivation
       summary: 第二岗位确认全园故障状态生效
-      description: CG-08a：第二岗位确认后立即生效——自此停止所有纯游乐门票和所有包含游乐权益的通票的新销售（createTicketOrder 返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED；酒吧票、演出票不受影响）。确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN，同一人换岗位亦拒），且岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认生效阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_ACTIVATION。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      description: CG-08a：第二岗位确认后立即生效——自此停止所有纯游乐门票和所有包含游乐权益的通票的新销售（createTicketOrder 返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED；酒吧票、演出票不受影响）。确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN，同一人换岗位亦拒），且岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认生效阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_ACTIVATION。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.confirm_as_engineering_safety
       x-data-scope: project
       x-terminal-allowed:
@@ -18625,7 +18630,7 @@ paths:
         - amusement
       operationId: initiateAmusementParkWideFaultLift
       summary: 发起解除全园故障状态（第一岗位）
-      description: CG-08a（「全园故障状态的解除同样由游乐公司负责人和工程或安全岗位共同确认」）：仅生效中的记录可发起解除（否则 409 PARK_WIDE_FAULT_NOT_ACTIVE）；发起后进入「待第二岗位确认解除」，此阶段仍停售，直至另一岗位确认。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      description: CG-08a（「全园故障状态的解除同样由游乐公司负责人和工程或安全岗位共同确认」）：仅生效中的记录可发起解除（否则 409 PARK_WIDE_FAULT_NOT_ACTIVE）；发起后进入「待第二岗位确认解除」，此阶段仍停售，直至另一岗位确认。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.confirm_as_head
       x-data-scope: project
       x-terminal-allowed:
@@ -18690,7 +18695,7 @@ paths:
         - amusement
       operationId: confirmAmusementParkWideFaultLift
       summary: 第二岗位确认解除全园故障状态
-      description: CG-08a：第二岗位确认后解除，恢复纯游乐门票与含游乐权益通票的新销售。确认人须与解除发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN），岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认解除阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_LIFT。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      description: CG-08a：第二岗位确认后解除，恢复纯游乐门票与含游乐权益通票的新销售。确认人须与解除发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN），岗位须为发起方的另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）；记录不在待确认解除阶段 → 409 PARK_WIDE_FAULT_NOT_PENDING_LIFT。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.confirm_as_engineering_safety
       x-data-scope: project
       x-terminal-allowed:
@@ -18754,7 +18759,7 @@ paths:
         - amusement
       operationId: listAmusementParkWideFaultActions
       summary: 查询全园故障状态留痕
-      description: CG-08a：该记录的发起 / 确认生效 / 发起解除 / 确认解除逐条留痕（谁、以哪个岗位、何时、说明）。
+      description: CG-08a：该记录的发起 / 确认生效 / 发起解除 / 确认解除逐条留痕（谁、以哪个岗位、何时、说明）。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -18803,7 +18808,7 @@ paths:
           required: true
           schema:
             type: string
-            description: 综合体项目编号；__global__ 为出厂回落行
+            description: 综合体项目编号（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）；__global__ 为出厂回落行
             maxLength: 64
       responses:
         "200":
@@ -18838,7 +18843,7 @@ paths:
           required: true
           schema:
             type: string
-            description: 综合体项目编号；__global__ 为出厂回落行
+            description: 综合体项目编号（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）；__global__ 为出厂回落行
             maxLength: 64
       requestBody:
         required: true
@@ -18890,7 +18895,7 @@ paths:
         - amusement
       operationId: listAmusementFaultCompensationBatches
       summary: 查询某次全园故障的补偿批次
-      description: CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、补发人份数、补偿有效期截止。
+      description: CG-08b：列出该全园故障事件下的补偿批次（待确认 / 已发放），含发起人与确认人岗位、影响时间范围、承担主体、补发人份数、补偿有效期截止。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -18923,7 +18928,7 @@ paths:
         - amusement
       operationId: initiateAmusementFaultCompensationBatch
       summary: 发起全园故障补偿批次（第一岗位：快照受影响人份）
-      description: CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；TK-09（2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」）：故障期间没入场、持有效未核票的人份不进快照、不延期，原票照原有效期使用。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）；承担主体须为主体主数据（business_entities）中在用（active）的法律主体，否则 400 COMPENSATION_BEARER_ENTITY_INVALID（FS-012，ENUM「发放记录须明确该公司的具体法律主体」）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。
+      description: CG-08b（ENUM「全园故障与补偿通票」）：以全园故障发生时间（状态生效时点）与原票核销状态、有效期做快照——故障发生时已完成入场核销且本场次履约受影响的人份 → full_reissue（另补一次完整票面权益，含酒水、礼品）；TK-09（2026-10-21 操作员裁决补充第 3 条「没来的一律不延期」）：故障期间没入场、持有效未核票的人份不进快照、不延期，原票照原有效期使用。补偿不重新售票、仍在原票下办理；同一故障同一人份只补偿一次（已补偿的不再进入）。须填发放原因与决定发放补偿的域主管公司法律主体（bearer_company_id）；承担主体须为主体主数据（business_entities）中在用（active）的法律主体，否则 400 COMPENSATION_BEARER_ENTITY_INVALID（FS-012，ENUM「发放记录须明确该公司的具体法律主体」）。无可补偿人份 → 409 COMPENSATION_NO_ELIGIBLE_SHARES；已有待确认批次 → 409 COMPENSATION_BATCH_ALREADY_PENDING；故障未生效 → 409 PARK_WIDE_FAULT_NOT_ACTIVATED。批次须由另一岗位、另一人确认后才实际发放。role=engineering_safety 时按 amusement.park_fault.confirm_as_engineering_safety 校验。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.confirm_as_head
       x-data-scope: project
       x-terminal-allowed:
@@ -18992,7 +18997,7 @@ paths:
         - amusement
       operationId: confirmAmusementFaultCompensationBatch
       summary: 第二岗位确认并发放补偿
-      description: CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：full_reissue 人份在原票下按票种完整票面补发（TK-10：每条绑定按票面份数各补一行、人数不展开，只补受影响这一人份并沿用原座次；每行次数＝该绑定一个次份的次数，多次票按受影响原权益次数折算为单次份；标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。FS-012：补发各项权益每次实际履约逐笔记录，锁定履约时内部结算价目录生效价与目录行版本（无目录引用的权益不设内部结算价、只留履约记录）；价格大于 0 且提供方商户不属承担主体时，由承担主体对实际提供方追加补偿应付（ar_ap_items source_type=compensation_fulfillment，普通内部结算，到期日按该钱路财务指定付账日、次月出账日起的异议期与银行工作日推算并固化到 internal_payable_schedules，同 FS-021-R4）；补偿核销不写普通核销结算事实、补偿赠饮不挂平台赠饮应付；该次核销冲正时按 V344 追加严格取反的冲正行；已付部分再追加重述行承接，并另挂一笔对提供方的追收应收（source_type=compensation_fulfillment_recovery，幂等键取该次冲正 id，到期日按该钱路付账日规则推算），全部未付时只冲正。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。TK-18 场次提前结束批次（event_type=session_early_end，系统生成、无发起岗位）：第一次岗位确认只记为发起方并保持待确认，另一岗位、另一人再次确认才发放，并把该结束原件下已进批次的入场待办写回 compensation_issued。
+      description: CG-08b（「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」）：确认人须与发起人不同（403 PARK_WIDE_FAULT_SAME_PERSON_FORBIDDEN）且为另一岗位（409 PARK_WIDE_FAULT_ROLE_PAIR_REQUIRED）。确认即发放：full_reissue 人份在原票下按票种完整票面补发（TK-10：每条绑定按票面份数各补一行、人数不展开，只补受影响这一人份并沿用原座次；每行次数＝该绑定一个次份的次数，多次票按受影响原权益次数折算为单次份；标记补偿记录），有效期自发放之日起算。补偿补发权益核销时不重复产生原人份的积分与成长值，履约（核销记录、时点、内部结算价）锁定到补偿记录，用一次即用尽。FS-012：补发各项权益每次实际履约逐笔记录，锁定履约时内部结算价目录生效价与目录行版本（无目录引用的权益不设内部结算价、只留履约记录）；价格大于 0 且提供方商户不属承担主体时，由承担主体对实际提供方追加补偿应付（ar_ap_items source_type=compensation_fulfillment，普通内部结算，到期日按该钱路财务指定付账日、次月出账日起的异议期与银行工作日推算并固化到 internal_payable_schedules，同 FS-021-R4）；补偿核销不写普通核销结算事实、补偿赠饮不挂平台赠饮应付；该次核销冲正时按 V344 追加严格取反的冲正行；已付部分再追加重述行承接，并另挂一笔对提供方的追收应收（source_type=compensation_fulfillment_recovery，幂等键取该次冲正 id，到期日按该钱路付账日规则推算），全部未付时只冲正。非待确认 → 409 COMPENSATION_BATCH_NOT_PENDING。TK-18 场次提前结束批次（event_type=session_early_end，系统生成、无发起岗位）：第一次岗位确认只记为发起方并保持待确认，另一岗位、另一人再次确认才发放，并把该结束原件下已进批次的入场待办写回 compensation_issued。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.confirm_as_engineering_safety
       x-data-scope: project
       x-terminal-allowed:
@@ -19055,7 +19060,7 @@ paths:
         - amusement
       operationId: listAmusementFaultCompensationItems
       summary: 查询补偿批次的补偿记录
-      description: CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（完整补发）、状态（待确认 / 已发放 / 已使用）、补偿有效期至、补发权益行、履约核销与锁定结算价。
+      description: CG-08b：逐条补偿记录——原票权益、人份（父票与座次）、次份数、原场次、原入场核销、补偿方式（完整补发）、状态（待确认 / 已发放 / 已使用）、补偿有效期至、补发权益行、履约核销与锁定结算价。第十八批 G 段 82b-R5：记录所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -19089,7 +19094,7 @@ paths:
         - amusement
       operationId: listAmusementCompensationBatchesByEvent
       summary: 按事件类型查询补偿批次（含场次提前结束）
-      description: TK-18（2026-10-18 操作员裁决：已入场客人比照 ENUM「全园故障与补偿通票」规则补偿）：场次提前结束时已入场（已扣次）的人份由结束事务生成 event_type=session_early_end 的补偿批次（关联原场次与结束原件、费用游乐公司承担、原票下另补本次 1 次），无全园故障可查，故按事件类型列出（待确认在前）；发放前仍须游乐公司负责人与工程或安全岗位先后经同一确认入口确认。有项目范围的账号只见本综合体。
+      description: TK-18（2026-10-18 操作员裁决：已入场客人比照 ENUM「全园故障与补偿通票」规则补偿）：场次提前结束时已入场（已扣次）的人份由结束事务生成 event_type=session_early_end 的补偿批次（关联原场次与结束原件、费用游乐公司承担、原票下另补本次 1 次），无全园故障可查，故按事件类型列出（待确认在前）；发放前仍须游乐公司负责人与工程或安全岗位先后经同一确认入口确认。有项目范围的账号只见本综合体。第十八批 G 段 82b-R5：非平台管理员按 amusement.park_fault.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 CROSS_PROJECT_FORBIDDEN），不带取全部可触及项目。
       x-permission: amusement.park_fault.view
       x-data-scope: project
       x-terminal-allowed:
@@ -20410,7 +20415,7 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: true
-      x-audit-event-success: terminal.device.repair
+      x-audit-event-success: terminal.device.repaired
       x-audit-event-failure: terminal.device.repair_failed
       parameters:
         - name: id
@@ -20475,7 +20480,7 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: true
-      x-audit-event-success: terminal.device.scrap
+      x-audit-event-success: terminal.device.scrapped
       x-audit-event-failure: terminal.device.scrap_failed
       parameters:
         - name: id
@@ -20528,21 +20533,21 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/terminals/devices/security-xray:
+  /api/v1/terminals/devices/entry-devices:
     post:
       tags:
         - terminals
-      operationId: registerSecurityXrayDevice
-      summary: 登记安检 X 光设备
-      description: 第 63 条（BSM:800、PGM:618、PGM:623）：后台登记安检 X 光设备进设备台账——编号、型号、绑定点位（空间）、责任人（员工档案）四项必填，登记即在用（terminal_type=security_xray、status=bound）。不接设备接口、不发设备凭证、不产生按人记录；当班员工与班次由该点位的排班取得。同编号已登记返回 409 DEVICE_CODE_EXISTS；点位或责任人不在本人能管的项目返回 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN），范围闸先于幂等。员工端领用绑定（/devices/bind）不收该类型。故障走送修（即开维修工单），修好走修复完成，报废走报废。
+      operationId: registerEntryDevice
+      summary: 登记入场三道环节设备（安检 X 光、人脸扫描、检票闸机）
+      description: 第 63 条、第 82 条 82c-R1（BSM:800、PGM:618、PGM:623）：后台登记综合体入场三道环节设备（安检环节的 X 光设备 security_xray、年龄核验环节的人脸扫描设备 face_scanner、检票环节的检票闸机 ticket_gate）进设备台账——类型、编号、型号、绑定点位（空间）、责任人（员工档案）五项必填，登记即在用（status=bound）；类型不在这三类返回 400 VALIDATION_FAILED。不接设备接口、不发设备凭证、不产生按人记录；当班员工与班次由该点位的排班取得。同编号已登记返回 409 DEVICE_CODE_EXISTS；点位或责任人不在本人能管的项目返回 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN），范围闸先于幂等。员工端领用绑定（/devices/bind）不收这三类。故障走送修（只有安检 X 光设备送修即开维修工单），修好走修复完成，报废走报废。
       x-auth-context: staff-token
       x-permission: terminal.device.lifecycle
       x-data-scope: project-device
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: terminal.device.xray_registered
-      x-audit-event-failure: terminal.device.xray_register_failed
+      x-audit-event-success: terminal.device.entry_device_registered
+      x-audit-event-failure: terminal.device.entry_device_register_failed
       requestBody:
         required: true
         content:
@@ -20552,6 +20557,7 @@ paths:
               additionalProperties: false
               required:
                 - idempotency_key
+                - terminal_type
                 - device_code
                 - device_model
                 - bound_space_id
@@ -20561,6 +20567,14 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
+                terminal_type:
+                  type: string
+                  description: 设备类型：security_xray 安检 X 光设备、face_scanner 人脸扫描设备、ticket_gate 检票闸机。
+                  enum:
+                    - security_xray
+                    - face_scanner
+                    - ticket_gate
+                  maxLength: 64
                 device_code:
                   type: string
                   description: 设备编号；台账内唯一。
@@ -20593,8 +20607,8 @@ paths:
       tags:
         - terminals
       operationId: completeTerminalDeviceRepair
-      summary: 安检 X 光设备修复完成
-      description: 第 63 条：安检 X 光设备修好后恢复在用（repair → bound），原因必填、进设备状态流水；其他类型设备或不在维修中返回 409 INVALID_DEVICE_STATUS。
+      summary: 设备修复完成
+      description: 第 63 条、第 82 条 82c-R1、82c-R2：设备修好后登记修复完成，原因必填、进设备状态流水：入场三道环节设备（安检 X 光、人脸扫描、检票闸机）恢复在用（repair → bound）；工作手机、平板、一体机回待领用（repair → returned），之后照常经 /devices/bind 领用。不在维修中返回 409 INVALID_DEVICE_STATUS。
       x-auth-context: staff-token
       x-permission: terminal.device.lifecycle
       x-terminal-allowed:
@@ -20642,6 +20656,66 @@ paths:
                 reason:
                   type: string
                   description: 修复说明；进入留痕事件。
+                  maxLength: 4000
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/terminals/devices/{id}/responsible-staff:
+    post:
+      tags:
+        - terminals
+      operationId: changeTerminalDeviceResponsibleStaff
+      summary: 入场三道环节设备更换责任人
+      description: 第 82 条 82c-R3（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：入场三道环节设备（安检 X 光、人脸扫描、检票闸机）更换责任人（员工档案），只换责任人、设备状态不变，原因必填、进设备状态流水。范围闸先于幂等：设备须在本人能管的范围内，不带商户归属的员工填的新责任人所在项目须在 terminal.device.lifecycle 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN（带商户归属的员工 CROSS_MERCHANT_FORBIDDEN）。设备不存在 404 DEVICE_NOT_FOUND；终态设备 409 DEVICE_TERMINAL_STATUS；工作手机、平板、一体机（持有人随归还、领用更换）409 INVALID_DEVICE_STATUS；与原责任人相同 409 DEVICE_STAFF_UNCHANGED；并发变更 409 DEVICE_TRANSITION_CONFLICT。
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-data-scope: project-device
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.responsible_staff_changed
+      x-audit-event-failure: terminal.device.responsible_staff_change_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - staff_id
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                staff_id:
+                  type: string
+                  description: 新责任人（员工档案 ID）；须与原责任人不同。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 更换原因；进入留痕事件。
                   maxLength: 4000
       responses:
         "200":
@@ -23268,7 +23342,7 @@ paths:
       x-audit-event-success: leasing.intent.signed
       x-audit-event-failure: leasing.intent.sign_failed
       x-auth-context: staff-token
-      description: 仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。
+      description: 仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。第十八批 G 段（第 82 条）：意向须在 leasing.convert 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不受此限。
       parameters:
         - name: intent_id
           in: path
@@ -23357,6 +23431,7 @@ paths:
       x-audit-event-success: leasing.brand.blacklist_changed
       x-audit-event-failure: leasing.brand.blacklist_change_failed
       x-auth-context: staff-token
+      description: 第十八批 G 段（第 82 条）：拉黑与解黑的品牌须在 leasing.brand.blacklist 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不受此限。
       parameters:
         - name: brand_id
           in: path
@@ -23508,6 +23583,7 @@ paths:
         - contract
       operationId: listContracts
       summary: 合同清单
+      description: 第十八批 G 段 82b-R3：平台管理员看全部；其余账号只列 contract.draft.manage 可触及项目（本人项目与可跨项目角色勾选的项目）的合同，total 同口径。
       x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -23536,7 +23612,7 @@ paths:
       x-audit-event-success: contract.drafted
       x-audit-event-failure: contract.draft_failed
       x-auth-context: staff-token
-      description: V162 重建：手工或招商签约带入。租金/递增/免租/物业费放 rent_terms；抽成 4 模式可空、能源费分摊 4 模式。状态默认 drafting。
+      description: V162 重建：手工或招商签约带入。租金/递增/免租/物业费放 rent_terms；抽成 4 模式可空、能源费分摊 4 模式。状态默认 drafting。第十八批 G 段 82b-R3：所属项目＝请求 project_id → 第一个意向铺位（space_ids）所在项目 → 本人项目，须是项目且在 contract.draft.manage 可触及范围内（含可跨项目角色勾选的项目；城市项目公司员工本人归属是公司、不是项目，不带项目时也拒），否则 403 CROSS_PROJECT_FORBIDDEN（在幂等短路之前判）；平台管理员不带项目也不带铺位时可为空。招商签约起草带线索所在项目，按签约码 leasing.convert 核（不另要 contract.draft.manage）。
       requestBody:
         $ref: "#/components/requestBodies/ContractDraftRequest"
       responses:
@@ -23566,7 +23642,7 @@ paths:
       x-audit-event-success: contract.submitted
       x-audit-event-failure: contract.submit_failed
       x-auth-context: staff-token
-      description: 按所属综合体「新建」类审批流程模板开统一审批复核单(主线最终审批人默认模板配置,模板各平行线须逐线指定最终审批人),审批人在 approveSupervisorReview 逐节点裁决,全部通过→待生效,任一驳回→退回起草。模板未配则拒。第四轮裁决第 4 条：非纯提成合同月租为 0 或缺(每平米计租看单价)→ 400 CONTRACT_RENT_REQUIRED「请先在草稿上补录月租」(先经 editContractDraftRentTerms 补录)；纯提成合同约定押金缺或为 0 → 400 VALIDATION_FAILED。
+      description: 按所属综合体「新建」类审批流程模板开统一审批复核单(主线最终审批人默认模板配置,模板各平行线须逐线指定最终审批人),审批人在 approveSupervisorReview 逐节点裁决,全部通过→待生效,任一驳回→退回起草。模板未配则拒。第四轮裁决第 4 条：非纯提成合同月租为 0 或缺(每平米计租看单价)→ 400 CONTRACT_RENT_REQUIRED「请先在草稿上补录月租」(先经 editContractDraftRentTerms 补录)；纯提成合同约定押金缺或为 0 → 400 VALIDATION_FAILED。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -23604,7 +23680,7 @@ paths:
       x-audit-event-success: contract.activated
       x-audit-event-failure: contract.activate_failed
       x-auth-context: staff-token
-      description: 须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。
+      description: 须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -23634,6 +23710,7 @@ paths:
         - contract
       operationId: listContractChanges
       summary: 合同变更清单
+      description: 第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       x-permission: contract.change.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -23670,7 +23747,7 @@ paths:
       x-audit-event-success: contract.change_raised
       x-audit-event-failure: contract.change_raise_failed
       x-auth-context: staff-token
-      description: 6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。按「变更」类模板开统一审批复核单(final_approver_id/parallel_lines 同 submitContract)。
+      description: 6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。按「变更」类模板开统一审批复核单(final_approver_id/parallel_lines 同 submitContract)。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -23709,7 +23786,7 @@ paths:
       x-audit-event-failure: contract.scope_request_raise_failed
       x-auth-context: staff-token
       description: 下单被合同经营范围拦下后,就某品类提交申请(须填原因),进 contract_changes(type=scope_grant)
-        按「变更」类模板开统一审批复核单;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。
+        按「变更」类模板开统一审批复核单;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -23799,7 +23876,7 @@ paths:
       x-audit-event-success: contract.amendments_viewed
       x-audit-event-failure: contract.amendments_view_failed
       x-auth-context: staff-token
-      description: 列某合同派生的变更子合同(rent_terms.parentContractId 指向它;经营位置/面积变更子合同链)。
+      description: 列某合同派生的变更子合同(rent_terms.parentContractId 指向它;经营位置/面积变更子合同链)。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -23829,7 +23906,7 @@ paths:
       x-audit-event-success: contract.settled
       x-audit-event-failure: contract.settle_failed
       x-auth-context: staff-token
-      description: 按合同 settlement_rules 逐例算、只开单不落账；带 dispute_reason 则挂起「有争议」等主管裁决。HP-C02（BSM「退租、提前终止、合同到期等各种终止结算，都要经过多级审批」「审批全部通过后，系统按算好的结算清单自动落账，不再单设手动确认入口」）：trigger_type=expiry 开账即按「到期终止」类模板开统一审批复核单（final_approver_id/parallel_lines 同变更入参，缺项 400）并把 review_id 挂在结算单上；复核单全部通过→过齐单核对与非争议闸（未核对或缺单 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE、争议挂起 409 CONTRACT_SETTLEMENT_DISPUTED，随终审整笔回滚）后自动落账、合同到期，结算单按押金够不够分流：押金抵扣全部欠费后有余额要退→押金抵扣中（押金退还应付付清后已结清），押金不足抵扣→欠费追缴中（差额收齐后已结清），正好抵完→已结清；任一节点驳回→结算单作废。退租/提前终止的审批挂在退租变更上，终审通过自动落账。
+      description: 按合同 settlement_rules 逐例算、只开单不落账；带 dispute_reason 则挂起「有争议」等主管裁决。HP-C02（BSM「退租、提前终止、合同到期等各种终止结算，都要经过多级审批」「审批全部通过后，系统按算好的结算清单自动落账，不再单设手动确认入口」）：trigger_type=expiry 开账即按「到期终止」类模板开统一审批复核单（final_approver_id/parallel_lines 同变更入参，缺项 400）并把 review_id 挂在结算单上；复核单全部通过→过齐单核对与非争议闸（未核对或缺单 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE、争议挂起 409 CONTRACT_SETTLEMENT_DISPUTED，随终审整笔回滚）后自动落账、合同到期，结算单按押金够不够分流：押金抵扣全部欠费后有余额要退→押金抵扣中（押金退还应付付清后已结清），押金不足抵扣→欠费追缴中（差额收齐后已结清），正好抵完→已结清；任一节点驳回→结算单作废。退租/提前终止的审批挂在退租变更上，终审通过自动落账。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -23859,6 +23936,7 @@ paths:
         - contract
       operationId: listContractSettlements
       summary: 退租结算清单
+      description: 第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       x-permission: contract.settlement.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -23896,7 +23974,7 @@ paths:
       x-audit-event-success: contract.dispute_resolved
       x-audit-event-failure: contract.dispute_resolve_failed
       x-auth-context: staff-token
-      description: 主管裁决：有争议 → 写裁决结论；有争议，诉讼/仲裁 → 录入诉讼/仲裁结果。resolution_note 必填（结论追加落 dispute_resolution，记裁决人/时），按既有口径重算清单回待结算（合同仍生效），退租变更或到期终止复核单的最后审批随之可继续；非两种争议态 409 CONTRACT_SETTLEMENT_NOT_DISPUTED。
+      description: 主管裁决：有争议 → 写裁决结论；有争议，诉讼/仲裁 → 录入诉讼/仲裁结果。resolution_note 必填（结论追加落 dispute_resolution，记裁决人/时），按既有口径重算清单回待结算（合同仍生效），退租变更或到期终止复核单的最后审批随之可继续；非两种争议态 409 CONTRACT_SETTLEMENT_NOT_DISPUTED。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: settlement_id
           in: path
@@ -24057,7 +24135,7 @@ paths:
         - contract
       operationId: getContractDepositRefundWait
       summary: 查押金退还等待期(按项目)
-      description: BSM L1352／ENUM L252「等待期自最后一个审批完成之日起算，业务参数，按项目可配，出厂默认 30 日，须同时配置上下限」：读该项目生效的押金退还等待期；项目未配置时返回出厂行(project_id=__global__、30 日、min_value/max_value 为空)。项目范围账号缺省取本项目、不得读别的项目(403 CROSS_PROJECT_FORBIDDEN)；无项目范围须传 project_id。
+      description: BSM L1352／ENUM L252「等待期自最后一个审批完成之日起算，业务参数，按项目可配，出厂默认 30 日，须同时配置上下限」：读该项目生效的押金退还等待期；项目未配置时返回出厂行(project_id=__global__、30 日、min_value/max_value 为空)。第十八批 G 段 82b-R3：项目须在 contract.deposit_refund_wait.manage 可触及范围内（含可跨项目角色勾选的项目），不带取本人项目，不在范围内 403 CROSS_PROJECT_FORBIDDEN；平台管理员须传 project_id。
       x-permission: contract.deposit_refund_wait.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -24092,7 +24170,7 @@ paths:
         - contract
       operationId: saveContractDepositRefundWait
       summary: 配置押金退还等待期及上下限(按项目)
-      description: BSM L1352／ENUM L252「须同时配置上下限」：日数与上下限须同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限，否则 400 VALIDATION_FAILED；只作用于该项目，项目范围账号只能改本项目(403 CROSS_PROJECT_FORBIDDEN)。退租/提前终止/到期结算落账时押金退还应付到期日＝max(算账完成日, 最后审批完成日＋等待期)(所在地日期)，到期日前登记付款 409 DEPOSIT_REFUND_NOT_DUE。
+      description: BSM L1352／ENUM L252「须同时配置上下限」：日数与上下限须同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限，否则 400 VALIDATION_FAILED；只作用于该项目；第十八批 G 段 82b-R3：项目须在 contract.deposit_refund_wait.manage 可触及范围内（含可跨项目角色勾选的项目），不带取本人项目，不在范围内 403 CROSS_PROJECT_FORBIDDEN。退租/提前终止/到期结算落账时押金退还应付到期日＝max(算账完成日, 最后审批完成日＋等待期)(所在地日期)，到期日前登记付款 409 DEPOSIT_REFUND_NOT_DUE。
       x-permission: contract.deposit_refund_wait.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -24185,7 +24263,7 @@ paths:
         - contract
       operationId: listSpaceRentalStatus
       summary: 铺位平面图着色数据源(可租/已租/即将到期)
-      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在落账前的退租结算单——待结算/有争议/有争议，诉讼/仲裁，结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已落账结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已落账——押金抵扣中/欠费追缴中/已结清，铺位于终审落账时转空置——或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。
+      description: 六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在落账前的退租结算单——待结算/有争议/有争议，诉讼/仲裁，结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已落账结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已落账——押金抵扣中/欠费追缴中/已结清，铺位于终审落账时转空置——或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。第十八批 G 段 82b-R3：平台管理员照旧；其余账号只出 contract.draft.manage 可触及项目的铺位，带 project_id 时取它与可触及项目的交集（不在范围内返回空表）。
       x-permission: contract.draft.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24231,7 +24309,7 @@ paths:
       x-auth-context: staff-token
       description: 生效合同按 ContractRentMath 算该期租金应收 → 联动
         ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。 涉及抽成时锁定该账期实际采用的
-        turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。
+        turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -24269,7 +24347,7 @@ paths:
       x-audit-event-success: contract.settlement_documents_checked
       x-audit-event-failure: contract.settlement_documents_check_failed
       x-auth-context: staff-token
-      description: HP-C02（BSM「退租对应期间的全部相关单据收齐并核对完成后，才允许退租结算最后审批通过；缺单时保持待处理」、裁决 Q16A）：生效月→截止月（HP-C02-R6：退租/提前终止＝在审变更退租日所在月，到期＝到期日所在月；尚未发起退租变更则 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE 保持待处理）逐月核相关单据（租金、物业费按合同应收而无账单即缺；energy_fee_basis=by_contract 且商户有计量表时，该月每只表实际能源费须已登记并已出账）。缺项返回 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE 并在 message 列明细（yyyy-MM:fee_type），结算单保持原态；齐全则在结算单记核对人/时间/备注（resolutionNote）。仅待结算（落账前）可核对；落账后（押金抵扣中/欠费追缴中/已结清）及其他状态 409 CONTRACT_SETTLEMENT_NOT_OPEN。先锁合同行再重读结算单状态，与商户异议、主管裁决、终审落账串行。
+      description: HP-C02（BSM「退租对应期间的全部相关单据收齐并核对完成后，才允许退租结算最后审批通过；缺单时保持待处理」、裁决 Q16A）：生效月→截止月（HP-C02-R6：退租/提前终止＝在审变更退租日所在月，到期＝到期日所在月；尚未发起退租变更则 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE 保持待处理）逐月核相关单据（租金、物业费按合同应收而无账单即缺；energy_fee_basis=by_contract 且商户有计量表时，该月每只表实际能源费须已登记并已出账）。缺项返回 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE 并在 message 列明细（yyyy-MM:fee_type），结算单保持原态；齐全则在结算单记核对人/时间/备注（resolutionNote）。仅待结算（落账前）可核对；落账后（押金抵扣中/欠费追缴中/已结清）及其他状态 409 CONTRACT_SETTLEMENT_NOT_OPEN。先锁合同行再重读结算单状态，与商户异议、主管裁决、终审落账串行。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: settlement_id
           in: path
@@ -24307,7 +24385,7 @@ paths:
       x-audit-event-success: contract.attachments_added
       x-audit-event-failure: contract.attachments_add_failed
       x-auth-context: staff-token
-      description: 线下签后上传扫描件归档；去重合并到 attachment_ids。
+      description: 线下签后上传扫描件归档；去重合并到 attachment_ids。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -24345,7 +24423,7 @@ paths:
       x-audit-event-success: contract.draft_rent_terms_updated
       x-audit-event-failure: contract.draft_rent_terms_update_failed
       x-auth-context: staff-token
-      description: 第四轮裁决第 4 条「合同草稿可编辑补录」：只开放租金条款与纯提成合同约定押金。rent_terms 顶层蛇形键归一为驼峰后并入草稿 rent_terms(经营范围 businessScope/allowedCategories/scopeGrants 与变更链系统维护键 parentContractId/amendmentType/increaseFrom/depositAdjustment 不在此修改，带了 400 VALIDATION_FAILED；固定能源费同起草 400)；有月租的合同押金按「收取月数×月租」重算(每平米计租待生效按铺位面积固化月租后再算)，deposit_cent 可不填，填了须与公式一致(否则 400 CONTRACT_DEPOSIT_FORMULA_MISMATCH)；纯提成合同(rentBillingMode=turnover_only)必填约定押金且大于 0(否则 400 VALIDATION_FAILED)，不走月数公式。仅草拟中(含驳回退回起草)可编辑，否则 409 CONTRACT_NOT_DRAFTING。权限同起草：contract.draft.manage、商户账号 403 PLATFORM_SCOPE_REQUIRED、草稿所属项目不在本人可触及范围 403 CROSS_PROJECT_FORBIDDEN(范围校验在幂等之前)。
+      description: 第四轮裁决第 4 条「合同草稿可编辑补录」：只开放租金条款与纯提成合同约定押金。rent_terms 顶层蛇形键归一为驼峰后并入草稿 rent_terms(经营范围 businessScope/allowedCategories/scopeGrants 与变更链系统维护键 parentContractId/amendmentType/increaseFrom/depositAdjustment 不在此修改，带了 400 VALIDATION_FAILED；固定能源费同起草 400)；有月租的合同押金按「收取月数×月租」重算(每平米计租待生效按铺位面积固化月租后再算)，deposit_cent 可不填，填了须与公式一致(否则 400 CONTRACT_DEPOSIT_FORMULA_MISMATCH)；纯提成合同(rentBillingMode=turnover_only)必填约定押金且大于 0(否则 400 VALIDATION_FAILED)，不走月数公式。仅草拟中(含驳回退回起草)可编辑，否则 409 CONTRACT_NOT_DRAFTING。权限同起草：contract.draft.manage、商户账号 403 PLATFORM_SCOPE_REQUIRED、草稿所属项目不在本人可触及范围 403 CROSS_PROJECT_FORBIDDEN(范围校验在幂等之前)。第十八批 G 段 82b-R3：草稿未带项目的，非平台管理员同样 403 CROSS_PROJECT_FORBIDDEN。
       parameters:
         - name: contract_id
           in: path
@@ -24384,7 +24462,7 @@ paths:
       x-audit-event-failure: contract.period_bill_failed
       x-auth-context: staff-token
       description: 一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent)
-        应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。
+        应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
         - name: contract_id
           in: path
@@ -24414,6 +24492,7 @@ paths:
         - facility
       operationId: listFacilityEquipment
       summary: 设备台账列表
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24436,6 +24515,7 @@ paths:
         - facility
       operationId: createFacilityEquipment
       summary: 创建设备台账
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24467,6 +24547,7 @@ paths:
         - facility
       operationId: listFacilityMaintenanceDueEquipment
       summary: 查询维保到期设备
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24490,6 +24571,7 @@ paths:
         - facility
       operationId: updateFacilityEquipment
       summary: 更新设备台账
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24529,7 +24611,7 @@ paths:
         - facility
       operationId: changeFacilityEquipmentStatus
       summary: 变更设备状态/上报告警
-      description: 置 alarm/fault 发布设备告警事件自动转报修工单。不能经此接口直接置报废（409 FACILITY_EQUIPMENT_SCRAP_APPROVAL_REQUIRED，报废须走报废申请并经审批）；已报废设备不能改回其他状态（409 FACILITY_EQUIPMENT_RETIRED）。
+      description: 置 alarm/fault 发布设备告警事件自动转报修工单。不能经此接口直接置报废（409 FACILITY_EQUIPMENT_SCRAP_APPROVAL_REQUIRED，报废须走报废申请并经审批）；已报废设备不能改回其他状态（409 FACILITY_EQUIPMENT_RETIRED）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24569,7 +24651,7 @@ paths:
         - facility
       operationId: recordFacilityEquipmentMaintenanceDone
       summary: 记录设备维保完成
-      description: 维保完成回写：须带本次维保类型，台账记最近维保类型（last_maintenance_type），状态回正常并重算下次到期；已报废设备 409 FACILITY_EQUIPMENT_RETIRED。
+      description: 维保完成回写：须带本次维保类型，台账记最近维保类型（last_maintenance_type），状态回正常并重算下次到期；已报废设备 409 FACILITY_EQUIPMENT_RETIRED。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24626,7 +24708,7 @@ paths:
         - facility
       operationId: createFacilityEquipmentScrapRequest
       summary: 申请设备报废
-      description: BSM「楼宇机电设备」：楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证；残值或损失由财务记录并关联原设备；标记报废不等于实物处置或款项完成。提交报废原因与处置方式进统一审批（action_type=facility.equipment.scrap，发起人沿直接上级到其指定的最终审批人）；审批通过才把设备置报废并记批准人，驳回设备照常在用、可重新申请。设备已报废 409 FACILITY_EQUIPMENT_RETIRED；已有待审批申请 409 FACILITY_EQUIPMENT_SCRAP_PENDING。
+      description: BSM「楼宇机电设备」：楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证；残值或损失由财务记录并关联原设备；标记报废不等于实物处置或款项完成。提交报废原因与处置方式进统一审批（action_type=facility.equipment.scrap，发起人沿直接上级到其指定的最终审批人）；审批通过才把设备置报废并记批准人，驳回设备照常在用、可重新申请。设备已报废 409 FACILITY_EQUIPMENT_RETIRED；已有待审批申请 409 FACILITY_EQUIPMENT_SCRAP_PENDING。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.equipment.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24773,6 +24855,7 @@ paths:
         - facility
       operationId: listFacilityWorkOrders
       summary: 工单列表
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24795,7 +24878,7 @@ paths:
         - facility
       operationId: createFacilityWorkOrder
       summary: 创建维保/物业工单
-      description: 第十二批操作员裁决第 15 条：员工手工建的关联设备报修单（work_order_type=repair、带 equipment_id、reporter_type=staff）走主管验收＋提单方确认两道，提单员工＝建单的当前登录员工（reporter_type=staff 时服务端取当前登录账号记为 reporter_id，不取请求体里的 reporter_id），记为提单确认承接人 confirmer_id，只许其本人做提单确认；未带 project_id 的取设备台账的项目（承接人在岗按工单项目判）。
+      description: 第十二批操作员裁决第 15 条：员工手工建的关联设备报修单（work_order_type=repair、带 equipment_id、reporter_type=staff）走主管验收＋提单方确认两道，提单员工＝建单的当前登录员工（reporter_type=staff 时服务端取当前登录账号记为 reporter_id，不取请求体里的 reporter_id），记为提单确认承接人 confirmer_id，只许其本人做提单确认；未带 project_id 的取设备台账的项目（承接人在岗按工单项目判）。人工新建工单的所属项目＝请求 project_id，不带时取关联设备所在项目，再取空间所在项目，再取本人项目；须在 facility.work_order.manage 可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员四项都没有时项目为空（第 82 条 82b-R2）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24827,6 +24910,7 @@ paths:
         - facility
       operationId: listFacilityOverdueWorkOrders
       summary: 逾期工单列表
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24850,6 +24934,7 @@ paths:
         - facility
       operationId: getFacilityWorkOrder
       summary: 工单详情
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24883,7 +24968,7 @@ paths:
         - facility
       operationId: assignFacilityWorkOrder
       summary: 工单派单
-      description: 只有待派单的工单才能派单。BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」：设备告警自动生成的工单（source=equipment_alarm），其接警单仍待明确接手时拒绝派单（409 ALARM_TAKEOVER_REQUIRED，先由当班接警人员确认「已收到并接手」）。
+      description: 只有待派单的工单才能派单。BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」：设备告警自动生成的工单（source=equipment_alarm），其接警单仍待明确接手时拒绝派单（409 ALARM_TAKEOVER_REQUIRED，先由当班接警人员确认「已收到并接手」）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24923,7 +25008,7 @@ paths:
         - facility
       operationId: reassignFacilityWorkOrder
       summary: 工单转派
-      description: 第十二批操作员裁决第 9 条「补转派」：已派单或处理中的工单由物业主管改派给他人（只换处理人，状态不变）；处理时限不重算（响应／处理时限、派单时间与超时标记都不动，超时照常升级）；留痕原处理人、新处理人和原因（reason 必填）。其余状态 400 INVALID_STATE；改派给原处理人 400 VALIDATION_FAILED。
+      description: 第十二批操作员裁决第 9 条「补转派」：已派单或处理中的工单由物业主管改派给他人（只换处理人，状态不变）；处理时限不重算（响应／处理时限、派单时间与超时标记都不动，超时照常升级）；留痕原处理人、新处理人和原因（reason 必填）。其余状态 400 INVALID_STATE；改派给原处理人 400 VALIDATION_FAILED。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -24963,6 +25048,7 @@ paths:
         - facility
       operationId: startFacilityWorkOrder
       summary: 开始处理工单
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25002,6 +25088,7 @@ paths:
         - facility
       operationId: completeFacilityWorkOrder
       summary: 完成工单处理
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25041,6 +25128,7 @@ paths:
         - facility
       operationId: acceptFacilityWorkOrder
       summary: 主管验收工单
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25080,7 +25168,7 @@ paths:
         - facility
       operationId: reviewFacilityWorkOrder
       summary: 报修方回访工单
-      description: 持 facility.work_order.manage，或本人即设备告警自动生成的大型维修工单（主管验收＋提单方确认）的提单确认承接人（BSM L1385「由该设备或点位的在岗责任人承接提单确认」）、员工手工建的关联设备报修单的提单确认承接人（第十二批操作员裁决第 15 条：提单员工就是承接人）；承接人凭承接身份确认，不需另持 manage，非承接人且不持 manage 的 403 PERMISSION_DENIED。这两类单只许承接人本人做提单确认：持 manage 的旁人 403 CONFIRMER_MISMATCH，承接人不在岗或就是本次维修人 409 CONFIRMER_DESIGNATION_REQUIRED（由物业主管经 /confirmer 指定他人）。承接人可在员工自有手机「我的工单」里确认（第十二批操作员裁决第 13 条）。
+      description: 持 facility.work_order.manage，或本人即设备告警自动生成的大型维修工单（主管验收＋提单方确认）的提单确认承接人（BSM L1385「由该设备或点位的在岗责任人承接提单确认」）、员工手工建的关联设备报修单的提单确认承接人（第十二批操作员裁决第 15 条：提单员工就是承接人）；承接人凭承接身份确认，不需另持 manage，非承接人且不持 manage 的 403 PERMISSION_DENIED。这两类单只许承接人本人做提单确认：持 manage 的旁人 403 CONFIRMER_MISMATCH，承接人不在岗或就是本次维修人 409 CONFIRMER_DESIGNATION_REQUIRED（由物业主管经 /confirmer 指定他人）。承接人可在员工自有手机「我的工单」里确认（第十二批操作员裁决第 13 条）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25121,7 +25209,7 @@ paths:
         - facility
       operationId: reworkFacilityWorkOrder
       summary: 验收或提单确认不通过退回返工
-      description: 第十二批操作员裁决第 2 条：关联设备的报修单（主管验收＋提单方确认两道，裁决第 12 条）在待验收或已验收时，填不通过原因（note 必填）后回「处理中」由原维修人继续修；另一方已做的确认作废，修好后两方重新确认；处理时限不重算、超时照常升级。权限：持 facility.work_order.manage（主管验收不通过），或本人即设备告警自动工单、员工手工建的关联设备报修单（第十二批操作员裁决第 15 条）的提单确认承接人（提单确认不通过）；两者都不是的 403 PERMISSION_DENIED。第十二批操作员裁决第 16 条：设备告警自动工单与员工手工建的关联设备报修单在主管已验收（accepted）后只剩提单确认这一道，退回也只许承接人本人（同提单确认的承接人校验：旁人 403 CONFIRMER_MISMATCH，承接人不在岗或就是本次维修人 409 CONFIRMER_DESIGNATION_REQUIRED），被拒记 facility.work_order_rework_failed；待验收时主管验收不通过的退回照旧。承接人可在员工自有手机「我的工单」里退回返工（第十二批操作员裁决第 13 条）。
+      description: 第十二批操作员裁决第 2 条：关联设备的报修单（主管验收＋提单方确认两道，裁决第 12 条）在待验收或已验收时，填不通过原因（note 必填）后回「处理中」由原维修人继续修；另一方已做的确认作废，修好后两方重新确认；处理时限不重算、超时照常升级。权限：持 facility.work_order.manage（主管验收不通过），或本人即设备告警自动工单、员工手工建的关联设备报修单（第十二批操作员裁决第 15 条）的提单确认承接人（提单确认不通过）；两者都不是的 403 PERMISSION_DENIED。第十二批操作员裁决第 16 条：设备告警自动工单与员工手工建的关联设备报修单在主管已验收（accepted）后只剩提单确认这一道，退回也只许承接人本人（同提单确认的承接人校验：旁人 403 CONFIRMER_MISMATCH，承接人不在岗或就是本次维修人 409 CONFIRMER_DESIGNATION_REQUIRED），被拒记 facility.work_order_rework_failed；待验收时主管验收不通过的退回照旧。承接人可在员工自有手机「我的工单」里退回返工（第十二批操作员裁决第 13 条）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25162,7 +25250,7 @@ paths:
         - facility
       operationId: designateFacilityWorkOrderConfirmer
       summary: 指定提单确认人
-      description: BSM「物业服务」运营细则：自动生成的大型维修工单由设备或点位的在岗责任人承接提单确认；责任人不在岗或本人负责此次维修时，由物业主管指定其他人员并留痕；员工手工建的关联设备报修单（提单员工就是承接人）提单人就是本次维修人时同此（第十二批操作员裁决第 15 条）。仅在现承接人缺失、不在岗或就是本次维修人时可指定（否则 409 CONFIRMER_DESIGNATION_NOT_ALLOWED）；被指定人须为本项目在岗员工且不是本次维修人。
+      description: BSM「物业服务」运营细则：自动生成的大型维修工单由设备或点位的在岗责任人承接提单确认；责任人不在岗或本人负责此次维修时，由物业主管指定其他人员并留痕；员工手工建的关联设备报修单（提单员工就是承接人）提单人就是本次维修人时同此（第十二批操作员裁决第 15 条）。仅在现承接人缺失、不在岗或就是本次维修人时可指定（否则 409 CONFIRMER_DESIGNATION_NOT_ALLOWED）；被指定人须为本项目在岗员工且不是本次维修人。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25202,6 +25290,7 @@ paths:
         - facility
       operationId: suspendFacilityWorkOrder
       summary: 挂起工单
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25241,7 +25330,7 @@ paths:
         - facility
       operationId: resumeFacilityWorkOrder
       summary: 恢复工单
-      description: 恢复已挂起的工单：有处理人的回处理中；待派单时挂起、没有处理人的回待派单，派单仍走派单接口（设备告警自动生成的工单仍须接警单明确接手后才能派单，BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」）。
+      description: 恢复已挂起的工单：有处理人的回处理中；待派单时挂起、没有处理人的回待派单，派单仍走派单接口（设备告警自动生成的工单仍须接警单明确接手后才能派单，BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25281,6 +25370,7 @@ paths:
         - facility
       operationId: markFacilityWorkOrdersOverdue
       summary: 批量标记逾期工单
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25381,7 +25471,7 @@ paths:
         - facility
       operationId: listFacilityAlarms
       summary: 设备告警接警记录
-      description: HP-F01：接警单（待明确接手/已明确接手、响应时限与升级轮次、持有人、是否未覆盖、处置要求）带逐次联系（系统消息、短信、语音及结果）、明确接手明细与覆盖该设备的生效故障处置规则。
+      description: HP-F01：接警单（待明确接手/已明确接手、响应时限与升级轮次、持有人、是否未覆盖、处置要求）带逐次联系（系统消息、短信、语音及结果）、明确接手明细与覆盖该设备的生效故障处置规则。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.alarm.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25473,6 +25563,7 @@ paths:
         - facility
       operationId: listFacilityAlarmDuties
       summary: 接警值守安排列表
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.alarm.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25503,7 +25594,7 @@ paths:
         - facility
       operationId: assignFacilityAlarmDuty
       summary: 安排接警值守（挂已发布班次）
-      description: HP-F01：在已发布且未结束的班次上指定主接、备用、物业主管、项目负责人或专业处置人员及联系电话；项目取班次所属项目；同一班次同一角色只能有一条有效安排（ALARM_DUTY_DUPLICATE）。班次被顶班时由顶班人当班接警。
+      description: HP-F01：在已发布且未结束的班次上指定主接、备用、物业主管、项目负责人或专业处置人员及联系电话；项目取班次所属项目；同一班次同一角色只能有一条有效安排（ALARM_DUTY_DUPLICATE）。班次被顶班时由顶班人当班接警。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.alarm.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25535,6 +25626,7 @@ paths:
         - facility
       operationId: cancelFacilityAlarmDuty
       summary: 撤销接警值守安排
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.alarm.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25614,7 +25706,7 @@ paths:
         - facility
       operationId: listFacilityFaultRules
       summary: 设备故障处置规则列表
-      description: HP-F01：平台侧凭 facility.alarm.manage 查看，可按项目筛；维保单位（外包账号）凭 facility.fault_rule.confirm 只看本项目规则。
+      description: HP-F01：平台侧凭 facility.alarm.manage 查看，可按项目筛；维保单位（外包账号）凭 facility.fault_rule.confirm 只看本项目规则。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.alarm.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -25645,7 +25737,7 @@ paths:
         - facility
       operationId: createFacilityFaultRule
       summary: 登记设备故障处置规则
-      description: HP-F01：按单台设备（项目与分类取设备台账）或按项目×设备四组台账分类登记故障场景与处置要求；登记后待设备专业负责人与维保单位两方确认，确认前不覆盖任何告警。
+      description: HP-F01：按单台设备（项目与分类取设备台账）或按项目×设备四组台账分类登记故障场景与处置要求；登记后待设备专业负责人与维保单位两方确认，确认前不覆盖任何告警。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.alarm.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25677,7 +25769,7 @@ paths:
         - facility
       operationId: confirmFacilityFaultRule
       summary: 确认设备故障处置规则
-      description: HP-F01：外包维保账号确认的记维保单位一方（须本项目），平台员工确认的记设备专业负责人一方；两方都确认后生效（active）。同一方重复确认 FAULT_RULE_ALREADY_CONFIRMED，非待确认 FAULT_RULE_NOT_PENDING。
+      description: HP-F01：外包维保账号确认的记维保单位一方（须本项目），平台员工确认的记设备专业负责人一方；两方都确认后生效（active）。同一方重复确认 FAULT_RULE_ALREADY_CONFIRMED，非待确认 FAULT_RULE_NOT_PENDING。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.fault_rule.confirm
       x-data-scope: project
       x-terminal-allowed:
@@ -25717,7 +25809,7 @@ paths:
         - facility
       operationId: retireFacilityFaultRule
       summary: 停用设备故障处置规则
-      description: HP-F01：停用后不再覆盖新告警；已停用的再停用 FAULT_RULE_RETIRED。
+      description: HP-F01：停用后不再覆盖新告警；已停用的再停用 FAULT_RULE_RETIRED。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.alarm.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25757,6 +25849,7 @@ paths:
         - facility
       operationId: listFacilityInspectionTemplates
       summary: 巡检模板列表
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25779,6 +25872,7 @@ paths:
         - facility
       operationId: createFacilityInspectionTemplate
       summary: 创建巡检模板
+      description: 新建巡检模板的所属项目＝请求 project_id，不带取本人项目；须在 facility.inspection.manage 可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不带时项目为空（第 82 条 82b-R2）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25810,6 +25904,7 @@ paths:
         - facility
       operationId: listFacilityInspectionTasks
       summary: 巡检任务列表
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25832,6 +25927,7 @@ paths:
         - facility
       operationId: createFacilityInspectionTask
       summary: 创建巡检任务
+      description: 新建巡检任务的所属项目＝请求 project_id，不带时取模板的项目，再取空间所在项目，再取本人项目；须在 facility.inspection.manage 可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员都没有时项目为空（第 82 条 82b-R2）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25863,6 +25959,7 @@ paths:
         - facility
       operationId: getFacilityInspectionTask
       summary: 巡检任务详情
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25896,6 +25993,7 @@ paths:
         - facility
       operationId: startFacilityInspectionTask
       summary: 开始巡检任务
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25935,6 +26033,7 @@ paths:
         - facility
       operationId: listFacilityInspectionRecords
       summary: 巡检记录列表
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -25965,6 +26064,7 @@ paths:
         - facility
       operationId: submitFacilityInspectionRecord
       summary: 提交巡检记录
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -26004,6 +26104,7 @@ paths:
         - facility
       operationId: recheckFacilityInspectionTask
       summary: 复查整改后的巡检任务
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -26043,6 +26144,7 @@ paths:
         - facility
       operationId: confirmFacilityInspectionSupervisor
       summary: 主管确认巡检任务关闭
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -27291,7 +27393,7 @@ paths:
         - customer
       operationId: suspendCustomerAccount
       summary: 置为受限（只停自助订台与员工代订，到期自动恢复有效）
-      description: ROOT-03-R23（BSM「会员状态」条）：只对有效会员；客服主管填原因人工置入，截止＝此刻＋申请所在项目的受限时长（业务参数，按项目可配，出厂默认 90 天，值与上下限同配）。项目账号不传 project_id 即本项目，跨项目 403；非有效会员 409 CUSTOMER_NOT_ACTIVE。受限期内客人登录、购票等照常，自助订台 403 CUSTOMER_RESTRICTED。
+      description: ROOT-03-R23（BSM「会员状态」条）：只对有效会员；客服主管填原因人工置入，截止＝此刻＋申请所在项目的受限时长（业务参数，按项目可配，出厂默认 90 天，值与上下限同配）。不传 project_id 即本人项目，项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN；非有效会员 409 CUSTOMER_NOT_ACTIVE。受限期内客人登录、购票等照常，自助订台 403 CUSTOMER_RESTRICTED。
       x-permission: customer.account.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -27318,7 +27420,7 @@ paths:
                 project_id:
                   type: string
                   maxLength: 64
-                  description: 按哪个综合体项目的受限时长计算截止；项目账号不传即本项目，平台账号必填
+                  description: 按哪个综合体项目的受限时长计算截止；不传即本人项目（须在入口权限码可触及范围内（含可跨项目角色勾选的项目）），平台账号必填
                 reason:
                   type: string
                   maxLength: 500
@@ -27343,7 +27445,7 @@ paths:
         - customer
       operationId: requestCustomerBlacklistChange
       summary: 申请列入或解除黑名单（保安团队提交，待夜班值班经理与娱乐平台负责人两级批准）
-      description: ROOT-03-R23（ENUM「会员身份状态」条「将客人列入黑名单即为关闭其账户，黑名单全平台通用，由保安团队申请、夜班值班经理批准、娱乐平台负责人批准」；BSM「会员状态」条「解除黑名单须按列入时同级审批链……复核，填原因留痕」）。不再有直接拉黑入口。action=list 只对未关闭、未注销账号；release 只对已关闭且手机号未释放的账号，否则 409；同一客人已有待批申请 409 CUSTOMER_BLACKLIST_REQUEST_PENDING。项目＝申请所在综合体（决定第一级当班夜班值班经理），项目账号不传即本项目。
+      description: ROOT-03-R23（ENUM「会员身份状态」条「将客人列入黑名单即为关闭其账户，黑名单全平台通用，由保安团队申请、夜班值班经理批准、娱乐平台负责人批准」；BSM「会员状态」条「解除黑名单须按列入时同级审批链……复核，填原因留痕」）。不再有直接拉黑入口。action=list 只对未关闭、未注销账号；release 只对已关闭且手机号未释放的账号，否则 409；同一客人已有待批申请 409 CUSTOMER_BLACKLIST_REQUEST_PENDING。项目＝申请所在综合体（决定第一级当班夜班值班经理），不传即本人项目，项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: customer.blacklist.request
       x-data-scope: project
       x-terminal-allowed:
@@ -27549,7 +27651,7 @@ paths:
           required: true
           schema:
             type: string
-          description: 综合体项目 id
+          description: 综合体项目 id（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -27565,7 +27667,7 @@ paths:
         - customer
       operationId: configureCustomerRestrictionSetting
       summary: 配置本项目会员受限时长（天数与上下限同配）
-      description: ROOT-03-R23（BSM「会员状态」条「受限满后台配置时长（业务参数，按项目可配，出厂默认 90 天，须同时配置上下限）自动恢复有效」）：天数、下限、上限须同时填写且 1 ≤ 下限 ≤ 天数 ≤ 上限，否则 400；项目账号只能配本项目。变更留痕前后值。
+      description: ROOT-03-R23（BSM「会员状态」条「受限满后台配置时长（业务参数，按项目可配，出厂默认 90 天，须同时配置上下限）自动恢复有效」）：天数、下限、上限须同时填写且 1 ≤ 下限 ≤ 天数 ≤ 上限，否则 400；项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。变更留痕前后值。
       x-permission: customer.account.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -27579,7 +27681,7 @@ paths:
           required: true
           schema:
             type: string
-          description: 综合体项目 id
+          description: 综合体项目 id（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）
       requestBody:
         required: true
         content:
@@ -28230,7 +28332,7 @@ paths:
         - facility
       operationId: listFacilityWorkOrderCustomerMedia
       summary: 客人投诉附件清单
-      description: ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：按工单查看权限（facility.work_order.manage、平台范围）列出客人投诉附件（编号、类型、大小、上传时间），文件经 /customer-media/{media_id}/file 受控回读。
+      description: ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：按工单查看权限（facility.work_order.manage、平台范围）列出客人投诉附件（编号、类型、大小、上传时间），文件经 /customer-media/{media_id}/file 受控回读。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -28264,7 +28366,7 @@ paths:
         - facility
       operationId: readFacilityWorkOrderCustomerMedia
       summary: 回读客人投诉附件
-      description: ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：附件须属该工单（否则 404 COMPLAINT_MEDIA_NOT_FOUND），按服务端判定的类型流式返回照片、视频或语音。
+      description: ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：附件须属该工单（否则 404 COMPLAINT_MEDIA_NOT_FOUND），按服务端判定的类型流式返回照片、视频或语音。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.work_order.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -28635,6 +28737,7 @@ paths:
         - facility
       operationId: reportInspectionException
       summary: 外包对被指派巡检任务上报异常
+      description: 非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。
       x-permission: facility.inspection.report_exception_assigned
       x-data-scope: self
       x-terminal-allowed:
@@ -30680,7 +30783,7 @@ paths:
         - staff
       operationId: closeStaffCommissionSettlement
       summary: 提成月结拨付（酒吧 → 人员所属主体）
-      description: CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」「平台内部各主体之间的应收应付，每月有三个付账日」）：按（酒吧商户 → 人员所属主体 → 月）汇总派驻记录覆盖计提日的员工在该酒吧的提成（作废/取消的计提不计），每组生成一条内部结算应付（ar_ap_items：direction=payable、source_type=dispatch_commission_transfer、counterparty=所属主体、merchant=酒吧、会计期间=该月），金额为总额、收支两条线不轧差；到期日＝该月月末之后的第一个付账日（三个付账日取结算配置出厂行）。同（月, 酒吧, 主体）已月结的组不重复挂账（重复执行返回 settlements=0）。提成计提本身不再按单对员工本人挂应付。
+      description: CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」「平台内部各主体之间的应收应付，每月有三个付账日」）：按（酒吧商户 → 人员所属主体 → 月）汇总派驻记录覆盖计提日的员工在该酒吧的提成（作废/取消的计提不计），每组生成一条内部结算应付（ar_ap_items：direction=payable、source_type=dispatch_commission_transfer、counterparty=所属主体、merchant=酒吧、会计期间=该月），金额为总额、收支两条线不轧差；到期日＝该月月末之后的第一个付账日（三个付账日取结算配置出厂行）。同（月, 酒吧, 主体）已月结的组不重复挂账（重复执行返回 settlements=0）。提成计提本身不再按单对员工本人挂应付。第十八批 G 段（第 82 条）：只结本人授权范围内的组——平台管理员全部；商户账号只本商户；其余人员本公司人事结收款主体为本公司的组，经可跨项目角色持有本码的另结派驻项目在其可触及项目内的组；范围外的组留给有权的人结，同组不重复挂账不变。
       x-permission: staff.payroll.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -30726,7 +30829,7 @@ paths:
         - staff
       operationId: listStaffCommissionSettlements
       summary: 查询提成月结拨付记录（按月）
-      description: CG-07：返回该月各（酒吧 → 所属主体）的拨付金额、计提笔数、人数、到期付账日与对应应付台账项编号；项目口径只见本综合体。
+      description: CG-07：返回该月各（酒吧 → 所属主体）的拨付金额、计提笔数、人数、到期付账日与对应应付台账项编号；平台管理员看全部；商户账号只看本商户（酒吧）的行，含各经营项目；其余人员本公司人事看收款主体为本公司的行，经可跨项目角色持有本码的另看派驻项目在其可触及项目内的行（第十八批 G 段第 82 条）。
       x-permission: staff.payroll.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -32842,7 +32945,7 @@ paths:
         - dealer
       operationId: listDealers
       summary: 经销商清单
-      description: CG-11a（BSM:1216-1222）：经销商准入档案，状态五态 pending_submission 待提交 / under_review 审核中 / approved 已通过 / rejected 已驳回 / deactivated 已停用（ENUM:170）；portal_enabled 表示四项资料审核通过后已启用独立经销商门户。
+      description: CG-11a（BSM:1216-1222）：经销商准入档案，状态五态 pending_submission 待提交 / under_review 审核中 / approved 已通过 / rejected 已驳回 / deactivated 已停用（ENUM:170）；portal_enabled 表示四项资料审核通过后已启用独立经销商门户。第十八批 G 段 82b-R5：非平台管理员只出 dealer.view 可触及项目（含可跨项目角色勾选的项目）的经销商与项目为空的经销商；各经销商入口按各自权限码判经销商所在项目。
       x-permission: dealer.view
       x-data-scope: project
       x-auth-context: staff-token
@@ -32863,7 +32966,7 @@ paths:
         - dealer
       operationId: createDealer
       summary: 经销商建档（待提交）
-      description: 新建经销商档案，初始状态待提交；与商户、供应商、外部协作机构隔离建档。
+      description: 新建经销商档案，初始状态待提交；与商户、供应商、外部协作机构隔离建档。第十八批 G 段 82b-R5：project_id 可选，不带取本人项目（平台管理员不带不落项目），须在 dealer.manage 可触及的项目内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: dealer.manage
       x-data-scope: project
       x-auth-context: staff-token
@@ -32904,6 +33007,10 @@ paths:
                   type: string
                   description: 联系电话
                   maxLength: 40
+                project_id:
+                  type: string
+                  description: 所属项目（可选，第十八批 G 段 82b-R5）；不带取本人项目，须在 dealer.manage 可触及的项目内
+                  maxLength: 64
               required:
                 - idempotency_key
                 - dealer_name
@@ -38562,7 +38669,7 @@ paths:
         - settlement
       operationId: listMediaPerformanceShows
       summary: 逐场演出合同记录列表
-      description: TK-29：按项目 / 商户范围列出逐场演出合同记录（商户用户只见自己是酒吧方或传媒方的场次）。
+      description: TK-29：按项目 / 商户范围列出逐场演出合同记录（商户用户只见自己是酒吧方或传媒方的场次）。第十八批 G 段 82b-R5：非商户、非平台管理员按 media.performance.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 PROJECT_SCOPE_MISMATCH）；商户账号照旧只看本人项目里本商户的场次。
       x-auth-context: staff-token
       x-permission: media.performance.view
       x-data-scope: project
@@ -38584,7 +38691,7 @@ paths:
         - settlement
       operationId: createMediaPerformanceShow
       summary: 新建逐场演出合同记录（草案）
-      description: TK-29（BSM L1145「按演出合同可以同时存在三种情形……并在后台配置页面逐场填写、随合同固化版本」；操作员裁决 2026-10-20「逐场填每张加价×已核销张数」）。三种情形各自可空；自办场次不得填固定费/酒水提成/门票加价分成（400 MEDIA_SHOW_SELF_HOSTED_NO_BAR_PAYABLE）；酒吧 / 传媒商户须属该场项目（400 MEDIA_SHOW_MERCHANT_PROJECT_MISMATCH）；同号同体重放返回第一次结果、异体 409。
+      description: TK-29（BSM L1145「按演出合同可以同时存在三种情形……并在后台配置页面逐场填写、随合同固化版本」；操作员裁决 2026-10-20「逐场填每张加价×已核销张数」）。三种情形各自可空；自办场次不得填固定费/酒水提成/门票加价分成（400 MEDIA_SHOW_SELF_HOSTED_NO_BAR_PAYABLE）；酒吧 / 传媒商户须以该场项目为主项目或已批准的经营项目（第十八批 G 段 82b-R8；400 MEDIA_SHOW_MERCHANT_PROJECT_MISMATCH）；同号同体重放返回第一次结果、异体 409。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.contract.manage
       x-data-scope: project
@@ -38669,7 +38776,7 @@ paths:
         - settlement
       operationId: getMediaPerformanceShow
       summary: 逐场演出合同详情（含履约事实与三项结算）
-      description: TK-29：合同记录 + 实际履约记录 + 三项结算行（pending/posted/adjusted）。
+      description: TK-29：合同记录 + 实际履约记录 + 三项结算行（pending/posted/adjusted）。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.view
       x-data-scope: project
@@ -38699,7 +38806,7 @@ paths:
         - settlement
       operationId: updateMediaPerformanceShow
       summary: 修改草案合同记录
-      description: TK-29：只允许草案；已锁定 → 409 MEDIA_SHOW_LOCKED（改动须新建版本）。
+      description: TK-29：只允许草案；已锁定 → 409 MEDIA_SHOW_LOCKED（改动须新建版本）。酒吧 / 传媒商户须以该场项目为主项目或已批准的经营项目（第十八批 G 段 82b-R8；400 MEDIA_SHOW_MERCHANT_PROJECT_MISMATCH）。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.contract.manage
       x-data-scope: project
@@ -38790,7 +38897,7 @@ paths:
         - settlement
       operationId: lockMediaPerformanceShow
       summary: 锁定合同版本
-      description: TK-29「随合同固化版本」：锁定后数值不可改，结算只读锁定行；同组旧版本置 superseded（旧行保留）；该场已有出账结算时 409 MEDIA_SHOW_SETTLED_USE_ADJUST。
+      description: TK-29「随合同固化版本」：锁定后数值不可改，结算只读锁定行；同组旧版本置 superseded（旧行保留）；该场已有出账结算时 409 MEDIA_SHOW_SETTLED_USE_ADJUST。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.contract.manage
       x-data-scope: project
@@ -38832,7 +38939,7 @@ paths:
         - settlement
       operationId: createMediaPerformanceShowVersion
       summary: 从锁定版本新建合同版本草案
-      description: TK-29：contract_version+1，旧行保留；项目 / 场次类型 / 传媒商户沿用原版本；酒吧商户须属该场项目与操作者范围；该场已有出账结算时 409 MEDIA_SHOW_SETTLED_USE_ADJUST（合同变更改走结算调整）。
+      description: TK-29：contract_version+1，旧行保留；项目 / 场次类型 / 传媒商户沿用原版本；酒吧商户须属该场项目与操作者范围；该场已有出账结算时 409 MEDIA_SHOW_SETTLED_USE_ADJUST（合同变更改走结算调整）。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.contract.manage
       x-data-scope: project
@@ -38919,7 +39026,7 @@ paths:
         - settlement
       operationId: recordMediaPerformanceFulfillment
       summary: 传媒经办登记实际履约
-      description: TK-29（BSM L1145「由传媒经办人在现有逐场合同记录中登记实际履约时间、已完成和未完成内容及依据」）：合同须已锁定（409 MEDIA_SHOW_NOT_LOCKED），登记人须属该传媒商户范围，一场一条。
+      description: TK-29（BSM L1145「由传媒经办人在现有逐场合同记录中登记实际履约时间、已完成和未完成内容及依据」）：合同须已锁定（409 MEDIA_SHOW_NOT_LOCKED），登记人须属该传媒商户范围，一场一条。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.fulfillment.record
       x-data-scope: project
@@ -38977,7 +39084,7 @@ paths:
         - settlement
       operationId: confirmMediaPerformanceFulfillment
       summary: 确认实际履约
-      description: TK-29：到酒吧演出由该酒吧范围的现场责任人确认（否则 403）；自办场次由该传媒范围、非登记人本人的主管确认（本人 → 409 MEDIA_FULFILLMENT_SELF_CONFIRM）。
+      description: TK-29：到酒吧演出由该酒吧范围的现场责任人确认（否则 403）；自办场次由该传媒范围、非登记人本人的主管确认（本人 → 409 MEDIA_FULFILLMENT_SELF_CONFIRM）。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.fulfillment.confirm
       x-data-scope: project
@@ -39019,7 +39126,7 @@ paths:
         - settlement
       operationId: disputeMediaPerformanceFulfillment
       summary: 对实际履约提出争议
-      description: TK-29：确认方同一范围；挂起 disputed，相关结算保持待处理。
+      description: TK-29：确认方同一范围；挂起 disputed，相关结算保持待处理。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.fulfillment.confirm
       x-data-scope: project
@@ -39064,7 +39171,7 @@ paths:
         - settlement
       operationId: resolveMediaPerformanceDispute
       summary: 主管裁决履约争议
-      description: TK-29：结论必填、裁决人 / 时间留痕（范式同 contract.settlement.dispute.resolve）；裁决后事实回到可结算态。
+      description: TK-29：结论必填、裁决人 / 时间留痕（范式同 contract.settlement.dispute.resolve）；裁决后事实回到可结算态。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.dispute.resolve
       x-data-scope: project
@@ -39109,7 +39216,7 @@ paths:
         - settlement
       operationId: settleMediaPerformanceShow
       summary: 按锁定合同结算三项费用
-      description: TK-29（BSM L1145「共同引用该场已确认的实际履约事实，分别按该场已锁定合同的适用条款结算……保持待处理，不默认全额、半价或零额」）：事实未确认 / 争议 / 合同未约定 → pending 行不出账；已确认 → 分别挂应付传媒公司（②③付方酒吧、①付方娱乐平台公司）；重跑幂等。按场次项目 / 商户范围校验（不符 403）；同号同体重放返回第一次结果。
+      description: TK-29（BSM L1145「共同引用该场已确认的实际履约事实，分别按该场已锁定合同的适用条款结算……保持待处理，不默认全额、半价或零额」）：事实未确认 / 争议 / 合同未约定 → pending 行不出账；已确认 → 分别挂应付传媒公司（②③付方酒吧、①付方娱乐平台公司）；重跑幂等。按场次项目 / 商户范围校验（不符 403）；同号同体重放返回第一次结果。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.settle
       x-data-scope: project
@@ -39151,7 +39258,7 @@ paths:
         - settlement
       operationId: adjustMediaPerformanceSettlement
       summary: 调整已出账结算
-      description: TK-29（BSM L1145「关联原记录并按既有历史调整规则办理，不覆盖原结果」）：新行回指原行、原行置 adjusted；原应付 V344 红冲取反、新额另挂。按场次项目 / 商户范围校验（不符 403）；同号同体重放返回第一次结果、异体 409。
+      description: TK-29（BSM L1145「关联原记录并按既有历史调整规则办理，不覆盖原结果」）：新行回指原行、原行置 adjusted；原应付 V344 红冲取反、新额另挂。按场次项目 / 商户范围校验（不符 403）；同号同体重放返回第一次结果、异体 409。第十八批 G 段 82b-R5：场次所在项目须在入口权限码可触及的项目内（含可跨项目角色勾选的项目），否则 403 PROJECT_SCOPE_MISMATCH；商户账号照旧只到本人项目。
       x-auth-context: staff-token
       x-permission: media.performance.settle
       x-data-scope: project
@@ -41193,7 +41300,7 @@ paths:
         - settlement
       operationId: getSettlementObjectionPeriod
       summary: 查非积分商户账单异议期(按项目)
-      description: BSM L1597：非积分类商户账单异议期按项目可配，出厂默认 10 个工作日；项目未配置返回出厂行(project_id=__global__)。项目范围账号缺省取本项目、不得读别的项目。
+      description: BSM L1597：非积分类商户账单异议期按项目可配，出厂默认 10 个工作日；项目未配置返回出厂行(project_id=__global__)。不带 project_id 取本人项目；项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: settlement.config.view
       x-data-scope: project
       x-terminal-allowed:
@@ -41206,7 +41313,7 @@ paths:
         - name: project_id
           in: query
           required: false
-          description: 综合体项目 id(项目范围账号可空＝本项目)。
+          description: 综合体项目 id(可空＝本人项目；须在入口权限码可触及范围内（含可跨项目角色勾选的项目）)。
           schema:
             type: string
             maxLength: 64
@@ -41225,7 +41332,7 @@ paths:
       operationId: saveSettlementObjectionPeriod
       summary: 配置非积分商户账单异议期及上下限(按项目)
       description: BSM L1597「须同时配置上下限」：工作日数与上下限同时填写，0 ≤ 下限 ≤ 日数 ≤ 上限，否则 400 VALIDATION_FAILED；保存时以上限复核付账日顺序(400
-        PAY_DAY_ORDER_UNSATISFIABLE)；项目范围账号只能改本项目。
+        PAY_DAY_ORDER_UNSATISFIABLE)；不带 project_id 取本人项目，项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: settlement.config.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -53030,7 +53137,7 @@ paths:
         - parking
       operationId: registerParkingStaffVehicle
       summary: 所属主体登记员工车辆
-      description: BSM「停车场」L1437「员工车辆由所属主体登记车牌后，按后台配置免费或折扣」：商户账号只能登记本商户员工，非商户账号只能登记同一归属下不属任何商户的员工（403 PARKING_STAFF_NOT_OWNED），平台管理员不受限；员工须在职（409 PARKING_STAFF_INACTIVE）；同项目同车牌只有一条有效（409 PARKING_PLATE_ALREADY_REGISTERED）。在职员工的有效车牌随配置下发，优惠取本项目 staff_discount_bp。
+      description: BSM「停车场」L1437「员工车辆由所属主体登记车牌后，按后台配置免费或折扣」：商户账号只能登记本商户员工，非商户账号只能登记同一归属下不属任何商户的员工（403 PARKING_STAFF_NOT_OWNED），平台管理员不受限；员工须在职（409 PARKING_STAFF_INACTIVE）；同项目同车牌只有一条有效（409 PARKING_PLATE_ALREADY_REGISTERED）。在职员工的有效车牌随配置下发，优惠取本项目 staff_discount_bp。第十八批 G 段 82b-R5：非商户账号可登记 parking.vehicle.manage 可触及（含可跨项目角色勾选的项目）、不属任何商户的员工。
       x-permission: parking.vehicle.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -57343,6 +57450,8 @@ components:
             - tablet
             - kiosk
             - security_xray
+            - face_scanner
+            - ticket_gate
           maxLength: 64
         device_code:
           type: string
@@ -73281,8 +73390,15 @@ components:
             type: object
         merchants:
           type: array
+          description: 主项目或已批准的经营项目任一在可见项目内的有效商户（第十八批 G 段 82b-R8）
           items:
             type: object
+            properties:
+              operating_project_ids:
+                type: array
+                description: 商户的主项目与已批准的经营项目（merchant_projects）
+                items:
+                  type: string
         suppliers:
           type: array
           items:

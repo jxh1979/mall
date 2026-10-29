@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,7 +28,7 @@ class FacilityEquipmentServiceTests {
 
     private final InMemoryFacilityRepository repo = new InMemoryFacilityRepository();
     private final FacilityEquipmentService service =
-            new FacilityEquipmentService(repo, mock(AuditEventService.class), mock(AuthorizationService.class),
+            new FacilityEquipmentService(repo, mock(AuditEventService.class), FacilityWorkOrderServiceTests.anyProjectAuth(),
                     mock(ApplicationEventPublisher.class));
 
     private FacilityEquipmentRequest req(String type, Integer cycle, LocalDate install) {

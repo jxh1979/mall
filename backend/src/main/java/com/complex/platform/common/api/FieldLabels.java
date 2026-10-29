@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -97,6 +97,7 @@ public final class FieldLabels {
         // ── 组织 / 主体 ──────────────────────────────────────────────
         p("project_id", "项目");
         p("project_name", "项目名称");
+        p("operating_project_ids", "经营项目");
         p("merchant_id", "商户");
         p("merchant_ids", "商户");
         p("merchant_name", "商户名称");

@@ -1,4 +1,4 @@
-# 招商获客业务域 PRD（V1.09·据需求重建）
+# 招商获客业务域 PRD（V1.10·据需求重建）
 
 > 2026-07-04 逻辑一致性修订：对齐 `merchant-space-contract-model-v0.1.md` 当前实现模型（四类主体绑定落点=`business_entity_bindings`，非 merchants 三列）+ 明确「后续可拆」的可拆边界与不强一致口径；最终业务解释仍以三份业务 HTML 为准。
 >
@@ -78,6 +78,7 @@
 - `leasing.brand.manage`（品牌库维护，medium）
 - `leasing.brand.blacklist`（拉黑/解黑品牌，high·需审批——属高危授权范围「提权/敏感」之外的业务高危，走主管复核）
 - `leasing.convert`（签约转商户，high·需审批）
+- 签约意向与拉黑/解黑品牌按对象所在项目判（第十八批 G 段第 82 条，PGM L528、L659）：意向须在操作人按 `leasing.convert`、品牌须在按 `leasing.brand.blacklist` 可触及的项目内，否则 403 `CROSS_PROJECT_FORBIDDEN`；平台管理员不受此限。签约起草合同草稿的所属项目按同一码 `leasing.convert` 核，不另要 `contract.draft.manage`。
 - 主管确认/审批复用现有 supervisor_review 机制。
 - 黑名单例外放行必须是单独授予的权限，不以 `leasing.brand.blacklist` 或一般主管确认替代；第十八批第 30 条落地为 `leasing.brand.blacklist_exception`（见 §4）。
 
@@ -116,6 +117,8 @@
 
 | 日期 | 类型 | 章节 | 内容 |
 |---|---|---|---|
+| 2026-10-29 | 改 | §7 | V1.10 同版续记：18G 复核修正——签约起草合同草稿的所属项目按 `leasing.convert` 核，不另要 `contract.draft.manage`（PGM L659） |
+| 2026-10-29 | 改 | 版本、§7 | 版本升至 V1.10：第十八批 G 段第 82 条——签约意向按 `leasing.convert`、拉黑/解黑品牌按 `leasing.brand.blacklist` 判对象所在项目，不可触及 403 `CROSS_PROJECT_FORBIDDEN`，平台管理员不受此限（PGM L528、L659） |
 | 2026-10-28 | 改 | 版本、§2、§3、§4、§7、§9 | 版本升至 V1.09：第十八批第 30 条——拉黑前既有线索转意向拦截、黑名单例外放行（单独授予权限、按层级主管审批、禁止自审、全字段留痕）、意向不得向前跳级、进入方案报价与商务谈判经主管复核确认后才生效（PGM「招商运营细则」），各节「待实现」改为落地记录 |
 | 2026-10-26 | 改 | 版本、§10 | 版本升至 V1.08：第十六批第 37、38 条——招商工作台意向阶段补「初步接触」，线索状态中文按 ENUM「招商线索状态」改为洽谈中／已流失／已搁置（含操作结果区）；`method` 字段名由「支付方式」改为「方式」（PGM「全局原则 · 界面全中文（所有终端零英文）」） |
 | 2026-10-17 | 改 | §2、§3、§6A | 版本升至 V1.05：CG-01 招商线索「已签约」改到合同生效时（PGM「招商运营细则」）——签约只起草合同并绑定来源意向（V442 `leasing_intents.contract_id`），合同生效后置已签约并留痕 `leasing.lead.signed`；审批驳回不置；已签约线索改其他状态 409 `LEASING_LEAD_ALREADY_SIGNED`。登记 `createIntent` 仍可回写线索的残余缺口。 |

@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.38
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.39
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1196 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1197 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 417 | 人工权限矩阵正文未覆盖 316 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2392 | 人工事件矩阵正文未覆盖 2347 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1196 | 人工任务映射正文未逐项覆盖 1190 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 718 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2394 | 人工事件矩阵正文未覆盖 2349 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1197 | 人工任务映射正文未逐项覆盖 1191 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 719 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -404,7 +404,7 @@
 | `staff.tax_bracket.manage` | staff-token | platform, project | 5 | upsertPayrollTaxBracket, draftPayrollTaxVersion, submitPayrollTaxVersion, draftPayrollTaxAssessment, submitPayrollTaxAssessment | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 5 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks, registerTerminalDeviceSigningKey | 已在权限矩阵正文出现 |
-| `terminal.device.lifecycle` | staff-token | -, project-device | 7 | updateTerminalDeviceMerchant, markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap, registerSecurityXrayDevice, completeTerminalDeviceRepair | OpenAPI 补充，以本附录为准 |
+| `terminal.device.lifecycle` | staff-token | -, project-device | 8 | updateTerminalDeviceMerchant, markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap, registerEntryDevice, completeTerminalDeviceRepair, changeTerminalDeviceResponsibleStaff | OpenAPI 补充，以本附录为准 |
 | `terminal.device.unbind` | staff-token | project-device | 1 | unbindDevice | 已在权限矩阵正文出现 |
 | `terminal.switch.manage` | staff-token | project-device | 4 | upsertTerminalCanaryRollout, addTerminalCanaryTarget, archiveTerminalCanaryTarget, updateCapabilitySwitch | 已在权限矩阵正文出现 |
 | `terminal.switch.view` | staff-token | project-device | 3 | listTerminalCanaryRollouts, listCapabilitySwitches, listTerminalDevices | 已在权限矩阵正文出现 |
@@ -2626,28 +2626,30 @@
 | `terminal.access_rejected` | failure | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.device.bind_failed` | failure | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.bound` | success | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
+| `terminal.device.entry_device_register_failed` | failure | `registerEntryDevice` | `POST` | `/api/v1/terminals/devices/entry-devices` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.entry_device_registered` | success | `registerEntryDevice` | `POST` | `/api/v1/terminals/devices/entry-devices` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.found` | success | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.found_failed` | failure | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.lost` | success | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.lost_failed` | failure | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.merchant_change_failed` | failure | `updateTerminalDeviceMerchant` | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.merchant_changed` | success | `updateTerminalDeviceMerchant` | `PUT` | `/api/v1/terminals/devices/{id}/merchant` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
-| `terminal.device.repair` | success | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.repair_complete_failed` | failure | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.repair_completed` | success | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.repair_failed` | failure | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.repaired` | success | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.responsible_staff_change_failed` | failure | `changeTerminalDeviceResponsibleStaff` | `POST` | `/api/v1/terminals/devices/{id}/responsible-staff` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.responsible_staff_changed` | success | `changeTerminalDeviceResponsibleStaff` | `POST` | `/api/v1/terminals/devices/{id}/responsible-staff` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.returned` | success | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.returned_failed` | failure | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
-| `terminal.device.scrap` | success | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.scrap_failed` | failure | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.scrapped` | success | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.signing_key_register_failed` | failure | `registerTerminalDeviceSigningKey` | `POST` | `/api/v1/terminals/devices/{id}/signing-key` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.signing_key_registered` | success | `registerTerminalDeviceSigningKey` | `POST` | `/api/v1/terminals/devices/{id}/signing-key` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.unbind_failed` | failure | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | TERM-终端设备 | `terminal.device.unbind` | 接口级事件，以本附录为准 |
 | `terminal.device.unbound` | success | `unbindDevice` | `POST` | `/api/v1/terminals/devices/{id}/unbind` | TERM-终端设备 | `terminal.device.unbind` | 接口级事件，以本附录为准 |
 | `terminal.device.view_failed` | failure | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
 | `terminal.device.viewed` | success | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
-| `terminal.device.xray_register_failed` | failure | `registerSecurityXrayDevice` | `POST` | `/api/v1/terminals/devices/security-xray` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
-| `terminal.device.xray_registered` | success | `registerSecurityXrayDevice` | `POST` | `/api/v1/terminals/devices/security-xray` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_config_viewed` | success | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_heartbeat` | success | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
 | `terminal.kiosk_heartbeat_failed` | failure | `kioskHeartbeat` | `POST` | `/api/v1/terminals/kiosks/{device_id}/heartbeat` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -3968,7 +3970,8 @@
 | TERM-终端设备 | `addTerminalCanaryTarget` | `POST` | `/api/v1/terminals/canary-rollouts/{id}/targets` | 加入灰度白名单 | `terminal.switch.manage` | `terminal_canary.target_added` / `terminal_canary.target_add_failed` | web | operation 级补充 |
 | TERM-终端设备 | `archiveTerminalCanaryTarget` | `POST` | `/api/v1/terminals/canary-targets/{id}/archive` | 移出灰度白名单（软删除） | `terminal.switch.manage` | `terminal_canary.target_archived` / `terminal_canary.target_archive_failed` | web | operation 级补充 |
 | TERM-终端设备 | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | 设备绑定 | `terminal.device.bind` | `terminal.device.bound` / `terminal.device.bind_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
-| TERM-终端设备 | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | 安检 X 光设备修复完成 | `terminal.device.lifecycle` | `terminal.device.repair_completed` / `terminal.device.repair_complete_failed` | web | operation 级补充 |
+| TERM-终端设备 | `changeTerminalDeviceResponsibleStaff` | `POST` | `/api/v1/terminals/devices/{id}/responsible-staff` | 入场三道环节设备更换责任人 | `terminal.device.lifecycle` | `terminal.device.responsible_staff_changed` / `terminal.device.responsible_staff_change_failed` | web | operation 级补充 |
+| TERM-终端设备 | `completeTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | 设备修复完成 | `terminal.device.lifecycle` | `terminal.device.repair_completed` / `terminal.device.repair_complete_failed` | web | operation 级补充 |
 | TERM-终端设备 | `detectMdmViolations` | `POST` | `/api/v1/terminals/mdm/violations/detect` | 服务端检测设备违规 | `mdm.device.manage` | `mdm.violation.detect` / `mdm.violation.detect_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `enrollMdmDevice` | `POST` | `/api/v1/terminals/mdm/devices/enroll` | MDM 设备纳管/策略同步 | `mdm.device.manage` | `mdm.policy_checked` / `mdm.policy_check_failed` | web | operation 级补充 |
 | TERM-终端设备 | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | 一体机配置，含售票型与非售票型模式 | `not_applicable` | `terminal.kiosk_config_viewed` / `terminal.access_rejected` | kiosk | operation 级补充 |
@@ -3983,9 +3986,9 @@
 | TERM-终端设备 | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | 终端设备台账 | `terminal.switch.view` | `terminal.device.viewed` / `terminal.device.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | 标记设备找回 | `terminal.device.lifecycle` | `terminal.device.found` / `terminal.device.found_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | 标记设备挂失 | `terminal.device.lifecycle` | `terminal.device.lost` / `terminal.device.lost_failed` | web, mobile_admin | operation 级补充 |
-| TERM-终端设备 | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | 设备送修 | `terminal.device.lifecycle` | `terminal.device.repair` / `terminal.device.repair_failed` | web, mobile_admin | operation 级补充 |
-| TERM-终端设备 | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | 设备报废 | `terminal.device.lifecycle` | `terminal.device.scrap` / `terminal.device.scrap_failed` | web, mobile_admin | operation 级补充 |
-| TERM-终端设备 | `registerSecurityXrayDevice` | `POST` | `/api/v1/terminals/devices/security-xray` | 登记安检 X 光设备 | `terminal.device.lifecycle` | `terminal.device.xray_registered` / `terminal.device.xray_register_failed` | web | operation 级补充 |
+| TERM-终端设备 | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | 设备送修 | `terminal.device.lifecycle` | `terminal.device.repaired` / `terminal.device.repair_failed` | web, mobile_admin | operation 级补充 |
+| TERM-终端设备 | `markTerminalDeviceScrap` | `POST` | `/api/v1/terminals/devices/{id}/scrap` | 设备报废 | `terminal.device.lifecycle` | `terminal.device.scrapped` / `terminal.device.scrap_failed` | web, mobile_admin | operation 级补充 |
+| TERM-终端设备 | `registerEntryDevice` | `POST` | `/api/v1/terminals/devices/entry-devices` | 登记入场三道环节设备（安检 X 光、人脸扫描、检票闸机） | `terminal.device.lifecycle` | `terminal.device.entry_device_registered` / `terminal.device.entry_device_register_failed` | web | operation 级补充 |
 | TERM-终端设备 | `registerTerminalDeviceSigningKey` | `POST` | `/api/v1/terminals/devices/{id}/signing-key` | 登记或轮换已绑定设备签名公钥 | `terminal.device.bind` | `terminal.device.signing_key_registered` / `terminal.device.signing_key_register_failed` | web, staff_work_phone, tablet, kiosk | operation 级补充 |
 | TERM-终端设备 | `reportMdmPolicyViolation` | `POST` | `/api/v1/terminals/mdm/violations` | 上报 MDM 设备违规 | `mdm.device.manage` | `device.policy_violation` / `device.policy_violation_failed` | web | operation 级补充 |
 | TERM-终端设备 | `returnTerminalDevice` | `POST` | `/api/v1/terminals/devices/return` | 归还终端设备 | `terminal.device.bind` | `terminal.device.returned` / `terminal.device.returned_failed` | staff_work_phone, tablet, kiosk, web | operation 级补充 |

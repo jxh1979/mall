@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -154,6 +154,30 @@ describe("DealerAdmissionCatalogPage 经销商准入与价格目录（ADM-DLR-00
     fireEvent.click(screen.getByTestId("contract-handler-designate-dct_1"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers/contracts/dct_1/designated-handler", expect.objectContaining({ handlerUserId: "usr_8f3a21" })));
     expect(api.post).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ handlerUserId: "zhangsan" }));
+  });
+
+  // 第十八批 G 段第 82 条 82b-R5（答复 5 第 16 条「角色能看哪些项目，就能在哪些项目新建记录」）：能看到两个以上项目时建档可选所属项目，选了才带 projectId。
+  it("第 82 条：两个项目时出现所属项目下拉，选 B 后建档请求带 projectId", async () => {
+    const api = makeApi(); const oldGet = api.get;
+    api.get = vi.fn(async (url: string) => url === "/api/v1/platform/projects" ? [{ id: "prj_a", name: "A 项目" }, { id: "prj_b", name: "B 项目" }] : oldGet(url)) as AdminApiClient["get"];
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("dealer-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dealer-project"), { target: { value: "prj_b" } });
+    fireEvent.change(screen.getByTestId("dealer-name-input"), { target: { value: "B 经销" } });
+    fireEvent.click(screen.getByTestId("dealer-create"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers", expect.objectContaining({ dealerName: "B 经销", projectId: "prj_b" })));
+  });
+
+  // 复核：角色只勾了 B、只看得到 B 一个项目（不是本人项目 A）时也出所属项目下拉，选 B 后建档带 projectId（修复前不出下拉、建档落 A 被 403）。
+  it("第 82 条：只看得到一个且不是本人项目时也出所属项目下拉", async () => {
+    const api = makeApi(); const oldGet = api.get;
+    api.get = vi.fn(async (url: string) => url === "/api/v1/platform/projects" ? [{ id: "prj_b", name: "B 项目" }] : oldGet(url)) as AdminApiClient["get"];
+    render(<DealerAdmissionCatalogPage api={api} user={{ id: "u2", username: "lisi", accountType: "staff", organizationId: "prj_a" }} setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.queryByTestId("dealer-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dealer-project"), { target: { value: "prj_b" } });
+    fireEvent.change(screen.getByTestId("dealer-name-input"), { target: { value: "B 经销" } });
+    fireEvent.click(screen.getByTestId("dealer-create"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/dealers", expect.objectContaining({ dealerName: "B 经销", projectId: "prj_b" })));
   });
 
 });

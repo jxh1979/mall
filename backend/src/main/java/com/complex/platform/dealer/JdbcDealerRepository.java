@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -108,6 +108,14 @@ public class JdbcDealerRepository {
             return jdbc.query("SELECT * FROM dealers ORDER BY created_at DESC", Map.of(), this::mapDealer);
         }
         return jdbc.query("SELECT * FROM dealers WHERE project_id = :p OR project_id IS NULL ORDER BY created_at DESC", Map.of("p", projectScope), this::mapDealer);
+    }
+
+    /** 第十八批 G 段 82b-R5：给定项目集合内的经销商，加项目为空的经销商。 */
+    public List<DealerRecord> listDealersIn(java.util.Collection<String> projectIds) {
+        return projectIds.isEmpty()
+                ? jdbc.query("SELECT * FROM dealers WHERE project_id IS NULL ORDER BY created_at DESC", Map.of(), this::mapDealer)
+                : jdbc.query("SELECT * FROM dealers WHERE project_id IN (:p) OR project_id IS NULL ORDER BY created_at DESC",
+                        Map.of("p", projectIds), this::mapDealer);
     }
 
     private DealerRecord mapDealer(ResultSet rs, int i) throws SQLException {

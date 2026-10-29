@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -12,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -115,13 +116,24 @@ class JdbcContractRepository implements ContractRepository {
 
     @Override
     public com.complex.platform.common.api.PageResponse<ContractRecord> listContractsPaged(int page, int size) {
+        return listContractsPaged(page, size, null);
+    }
+
+    /** 第十八批 G 段 82b-R3：projectIds 为 null＝全量（平台管理员），否则只列这些项目的合同，COUNT 同条件。 */
+    @Override
+    public com.complex.platform.common.api.PageResponse<ContractRecord> listContractsPaged(int page, int size,
+            Collection<String> projectIds) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 500 : Math.min(size, 500);
-        MapSqlParameterSource params = new MapSqlParameterSource();
-        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contracts", params, Long.class);
+        if (projectIds != null && projectIds.isEmpty()) {
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        }
+        String where = projectIds == null ? "" : " WHERE project_id IN (:project_ids)";
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("project_ids", projectIds);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contracts" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<ContractRecord> items = jdbcTemplate.query("SELECT " + CONTRACT_COLS
-                + " FROM contracts ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapContract);
+                + " FROM contracts" + where + " ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapContract);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 

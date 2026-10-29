@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PurchaseWorkbenchPage } from "./PurchaseWorkbenchPage";
@@ -10,7 +10,7 @@ const grants = ["inventory.purchase_request.view", "inventory.purchase_request.m
 const contract = { id: "sc_1", contract_no: "合同一", supplier_id: "supplier_1", project_id: "p_1", contract_mode: "platform_self_use", purchasable_scope: ["item_A_01"], approval_status: "approved", status: "active", valid_from: "2026-01-01", valid_to: "2099-12-31" };
 const purchase = { id: "pur_1", request_no: "采购一", supplier_id: "supplier_1", item_id: "item_A_01", quantity: 100, status: "arrived", supply_contract_id: "sc_1" };
 const receipt = { id: "receipt_1", arrived_quantity: 80, accepted_quantity: 70, rejected_quantity: 10, received_at: "2026-01-10T02:00:00Z", warehouse_id: "wh_1", location_id: "loc_1", unit_cost_cent: 100, payable_id: "ap_1" };
-function setup(config: { permissions?: string[]; detail?: Record<string, unknown>; contract?: Record<string, unknown>; contractTerms?: Record<string, unknown>; optionsFail?: boolean; failOnce?: string } = {}) {
+function setup(config: { permissions?: string[]; detail?: Record<string, unknown>; contract?: Record<string, unknown>; contractTerms?: Record<string, unknown>; optionsFail?: boolean; failOnce?: string; merchants?: Record<string, unknown>[] } = {}) {
   const posts: { path: string; body: Record<string, unknown> }[] = [], uploads: FormData[] = [];
   let failed = false;
   const actualContract = { ...contract, ...config.contract };
@@ -25,7 +25,7 @@ function setup(config: { permissions?: string[]; detail?: Record<string, unknown
       data = path.endsWith("/purchase-requests") ? { id: "pur_1" } : { id: "result_1" };
     } else if (path.endsWith("/purchase-workbench-options")) {
       if (config.optionsFail) return new Response(JSON.stringify({ code: "FORBIDDEN", message: "目录读取范围不足" }), { status: 403 });
-      data = { projects: [{ id: "p_1", name: "长沙综合体" }], suppliers: [{ id: "supplier_1", supplier_name: "真实供应商" }], inventory_items: [{ id: "item_A_01", item_name: "瓶装饮品", unit: "瓶", status: "active" }], entities: [{ id: "entity_1", entity_name: "项目采购公司", project_id: "p_1" }], merchants: [], warehouses: [{ id: "wh_1", name: "中心仓", project_id: "p_1", status: "active" }], contracts: [actualContract] };
+      data = { projects: [{ id: "p_1", name: "长沙综合体" }], suppliers: [{ id: "supplier_1", supplier_name: "真实供应商" }], inventory_items: [{ id: "item_A_01", item_name: "瓶装饮品", unit: "瓶", status: "active" }], entities: [{ id: "entity_1", entity_name: "项目采购公司", project_id: "p_1" }], merchants: config.merchants ?? [], warehouses: [{ id: "wh_1", name: "中心仓", project_id: "p_1", status: "active" }], contracts: [actualContract] };
     } else if (path.endsWith("/purchase-requests")) data = { items: [purchase] };
     else if (path.endsWith("/purchase-requests/pur_1")) data = detail;
     else if (path.endsWith("/supply-contracts/sc_1/terms")) data = { contract: actualContract, terms: config.contractTerms };
@@ -63,6 +63,13 @@ it("普通只读采购账号不依赖合同维护或财务权限读取原件，�
   setup({ permissions: ["inventory.purchase_request.view"], detail: { payables: undefined } }); await selectPurchase();
   expect(screen.getByRole("button", { name: "登记本次验收" })).toBeDisabled();
   expect(screen.getByText("当前无本采购财务查看权限，款项并非零元或已结清。")).toBeInTheDocument();
+});
+it("第 82 条 82b-R8：主项目在别处、已批准在所选项目经营的商户可选为自采商户", async () => {
+  setup({ merchants: [{ id: "m_1", merchant_name: "跨项目经营商户", project_id: "p_0", operating_project_ids: ["p_0", "p_1"] }, { id: "m_2", merchant_name: "别的项目商户", project_id: "p_0", operating_project_ids: ["p_0"] }] });
+  await waitFor(() => expect(screen.getByText("合同一")).toBeInTheDocument());
+  click("新建供货合同"); fill("合同综合体", "p_1"); fill("采购模式", "merchant_self_purchase");
+  await waitFor(() => expect(Array.from((screen.getByLabelText("自采商户") as HTMLSelectElement).options, o => o.textContent)).toContain("跨项目经营商户"));
+  expect(Array.from((screen.getByLabelText("自采商户") as HTMLSelectElement).options, o => o.textContent)).not.toContain("别的项目商户");
 });
 it("新建采购只提交所选批准合同的一种商品，供应商来自该合同", async () => {
   const { posts } = setup(); await screen.findByText("合同一"); click("新建采购申请"); fill("已批准供货合同", "sc_1"); fill("采购商品", "item_A_01"); fill("采购数量", "15"); fill("预计到货日", "2026-02-01"); fill("申请依据", "门店补货"); click("确认新建采购申请");

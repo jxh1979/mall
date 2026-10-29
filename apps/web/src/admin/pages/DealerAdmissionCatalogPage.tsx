@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -6,7 +6,7 @@ import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton, useCan } from "../security/Can";
 import { shortId } from "../format/ids";
-import type { AccessUserRow, AdminPageProps } from "../types";
+import type { AccessUserRow, AdminPageProps, GovernanceProjectRow } from "../types";
 
 /**
  * 经销商准入与价格目录（ADM-DLR-001，CG-11a）。
@@ -71,6 +71,9 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
   const [uscc, setUscc] = React.useState("");
   const [contactName, setContactName] = React.useState("");
   const [contactPhone, setContactPhone] = React.useState("");
+  // 第十八批 G 段 82b-R5：建档可选所属项目；能看到本人项目以外的项目就显示（复核：角色只勾了 B、只看得到 B 一个时也显示），不选＝后端按本人所在项目落。
+  const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
+  const [dealerProjectId, setDealerProjectId] = React.useState("");
   // 审核
   const [reviewFlags, setReviewFlags] = React.useState({ companyProfileReviewed: false, contractReviewed: false, invoiceReviewed: false, bankReviewed: false });
   const [reviewNote, setReviewNote] = React.useState("");
@@ -95,6 +98,7 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
       const rows = await api.get<DealerRow[]>("/api/v1/dealers");
       setDealers(rows ?? []);
       try { setStaffUsers((await api.get<AccessUserRow[]>("/api/v1/access/users")) ?? []); } catch { setStaffUsers([]); }
+      try { setProjects((await api.get<GovernanceProjectRow[]>("/api/v1/platform/projects")) ?? []); } catch { setProjects([]); }
     },
     { onError: setGlobalError, fallbackMessage: "经销商列表读取失败", onStart: () => setGlobalError(null) },
   );
@@ -173,8 +177,8 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
 
   const createDealer = () => run("dealer_created", async () => {
     if (!dealerName.trim()) throw new Error("经销商名称必填");
-    const d = await api.post<DealerRow>("/api/v1/dealers", { idempotencyKey: key(), dealerName: dealerName.trim(), unifiedSocialCreditCode: uscc.trim() || undefined, contactName: contactName.trim() || undefined, contactPhone: contactPhone.trim() || undefined });
-    setDealerName(""); setUscc(""); setContactName(""); setContactPhone("");
+    const d = await api.post<DealerRow>("/api/v1/dealers", { idempotencyKey: key(), dealerName: dealerName.trim(), unifiedSocialCreditCode: uscc.trim() || undefined, contactName: contactName.trim() || undefined, contactPhone: contactPhone.trim() || undefined, ...(dealerProjectId ? { projectId: dealerProjectId } : {}) });
+    setDealerName(""); setUscc(""); setContactName(""); setContactPhone(""); setDealerProjectId("");
     await reload();
     return { 经销商: d?.id, 状态: "待提交" };
   });
@@ -331,6 +335,7 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
         <label>统一社会信用代码<input data-testid="dealer-uscc-input" value={uscc} onChange={(e) => setUscc(e.target.value)} /></label>
         <label>联系人<input value={contactName} onChange={(e) => setContactName(e.target.value)} /></label>
         <label>联系电话<input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} /></label>
+        {projects.some((x) => x.id !== user?.organizationId) ? <label>所属项目<select data-testid="dealer-project" value={dealerProjectId} onChange={(e) => setDealerProjectId(e.target.value)}><option value="">本人所在项目</option>{projects.map((x) => <option key={x.id} value={x.id}>{x.name ?? x.id}</option>)}</select></label> : null}
         <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.manage"]} data-testid="dealer-create" onClick={() => void createDealer()}>建档（待提交）</PermissionButton>
       </div>
 

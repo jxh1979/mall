@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -73,12 +73,14 @@ public class MediaPerformanceService {
     @Transactional
     public ShowRecord createShow(ShowRequest request) {
         authorizationService.requirePermission(PERM_CONTRACT);
+        AuthorizationService.ProjectReach reach = reach(PERM_CONTRACT);
         ShowRequest actual = requireRequest(request);
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
-        return audited("media_show.created", "media_show.create_failed", PERM_CONTRACT, null, key, actual, ShowRecord.class, () -> {
+        return audited("media_show.created", "media_show.create_failed", PERM_CONTRACT, null, key, actual, ShowRecord.class,
+                () -> requireProjectInReach(actual.projectId(), reach), () -> {
             AccessActor actor = authorizationService.currentActor();
             ShowRecord show = validate(actual, "ms_" + UUID.randomUUID(), null, 1, actor.id(), Instant.now());
-            requireScope(show);
+            requireScope(show, reach);
             return repository.insertShow(show);
         });
     }
@@ -87,17 +89,19 @@ public class MediaPerformanceService {
     @Transactional
     public ShowRecord updateShow(String showId, ShowRequest request) {
         authorizationService.requirePermission(PERM_CONTRACT);
+        AuthorizationService.ProjectReach reach = reach(PERM_CONTRACT);
         ShowRequest actual = requireRequest(request);
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
-        return audited("media_show.updated", "media_show.update_failed", PERM_CONTRACT, showId, key, actual, ShowRecord.class, () -> {
+        return audited("media_show.updated", "media_show.update_failed", PERM_CONTRACT, showId, key, actual, ShowRecord.class,
+                () -> requireScope(requireShow(showId), reach), () -> {
             ShowRecord existing = requireShowForUpdate(showId);
-            requireScope(existing);
+            requireScope(existing, reach);
             if (!"draft".equals(existing.status())) {
                 throw ApiException.conflict("MEDIA_SHOW_LOCKED", "该场合同已锁定版本，数值不可修改；如需变更请新建合同版本");
             }
             ShowRecord updated = validate(actual, existing.id(), existing.showGroupId(), existing.contractVersion(),
                     existing.createdBy(), existing.createdAt());
-            requireScope(updated);
+            requireScope(updated, reach);
             return repository.updateShowValues(updated);
         });
     }
@@ -106,10 +110,12 @@ public class MediaPerformanceService {
     @Transactional
     public ShowRecord lockShow(String showId, ActionRequest request) {
         authorizationService.requirePermission(PERM_CONTRACT);
+        AuthorizationService.ProjectReach reach = reach(PERM_CONTRACT);
         String key = requireText(requireRequest(request).idempotencyKey(), "idempotency_key");
-        return audited("media_show.locked", "media_show.lock_failed", PERM_CONTRACT, showId, key, request, ShowRecord.class, () -> {
+        return audited("media_show.locked", "media_show.lock_failed", PERM_CONTRACT, showId, key, request, ShowRecord.class,
+                () -> requireScope(requireShow(showId), reach), () -> {
             ShowRecord existing = requireShowForUpdate(showId);
-            requireScope(existing);
+            requireScope(existing, reach);
             if ("locked".equals(existing.status())) {
                 return existing;
             }
@@ -133,12 +139,13 @@ public class MediaPerformanceService {
     @Transactional
     public ShowRecord createVersion(String showId, ShowRequest request) {
         authorizationService.requirePermission(PERM_CONTRACT);
+        AuthorizationService.ProjectReach reach = reach(PERM_CONTRACT);
         ShowRequest actual = requireRequest(request);
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
         return audited("media_show.version_created", "media_show.version_create_failed", PERM_CONTRACT, showId, key, actual,
-                ShowRecord.class, () -> {
+                ShowRecord.class, () -> requireScope(requireShow(showId), reach), () -> {
             ShowRecord source = requireShowForUpdate(showId);
-            requireScope(source);
+            requireScope(source, reach);
             if ("draft".equals(source.status())) {
                 throw ApiException.conflict("MEDIA_SHOW_NOT_LOCKED", "草案直接修改即可，不必新建版本");
             }
@@ -155,7 +162,7 @@ public class MediaPerformanceService {
                     actual.drinkCommissionBps(), actual.drinkBaseTemplate());
             ShowRecord created = validate(pinned, "ms_" + UUID.randomUUID(), source.showGroupId(), nextVersion,
                     authorizationService.currentActor().id(), Instant.now());
-            requireScope(created);
+            requireScope(created, reach);
             return repository.insertShow(created);
         });
     }
@@ -164,9 +171,22 @@ public class MediaPerformanceService {
     public List<ShowRecord> listShows(String projectId, String merchantId) {
         try {
             authorizationService.requirePermission(PERM_VIEW);
-            String project = authorizationService.currentProjectScopeQuietly().orElse(trimToNull(projectId));
-            String merchant = authorizationService.currentMerchantIdQuietly().orElse(trimToNull(merchantId));
-            List<ShowRecord> shows = repository.listShows(project, merchant);
+            String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
+            String requested = trimToNull(projectId);
+            List<ShowRecord> shows;
+            if (merchant != null || authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
+                // 商户账号照旧只看本人项目里本商户是酒吧方或传媒方的场次；平台管理员照旧
+                shows = repository.listShows(authorizationService.currentProjectScopeQuietly().orElse(requested),
+                        merchant != null ? merchant : trimToNull(merchantId));
+            } else {
+                // 第十八批 G 段 82b-R5：其余按 media.performance.view 可触及的项目取；带项目的须可触及
+                AuthorizationService.ProjectReach reach = reach(PERM_VIEW);
+                if (requested != null && !reach.covers(requested)) {
+                    throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "所选项目不在本权限可触及的项目范围内");
+                }
+                shows = requested != null ? repository.listShows(requested, trimToNull(merchantId))
+                        : repository.listShowsIn(reach.organizationIds(), trimToNull(merchantId));
+            }
             auditEventService.recordSuccess("media_show.listed", PERM_VIEW, BUSINESS_TYPE, null, null, null, Map.of("count", shows.size()));
             return shows;
         } catch (ApiException failure) {
@@ -180,7 +200,7 @@ public class MediaPerformanceService {
         try {
             authorizationService.requirePermission(PERM_VIEW);
             ShowRecord show = requireShow(showId);
-            requireScope(show);
+            requireScope(show, reach(PERM_VIEW));
             ShowDetail detail = new ShowDetail(show, repository.findFulfillmentByShow(show.id()).orElse(null),
                     repository.listSettlements(show.id()));
             auditEventService.recordSuccess("media_show.viewed", PERM_VIEW, BUSINESS_TYPE, show.id(), null, null, Map.of());
@@ -197,12 +217,13 @@ public class MediaPerformanceService {
     @Transactional
     public FulfillmentRecord recordFulfillment(String showId, FulfillmentRequest request) {
         authorizationService.requirePermission(PERM_RECORD);
+        AuthorizationService.ProjectReach reach = reach(PERM_RECORD);
         FulfillmentRequest actual = requireRequest(request);
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
         return audited("media_fulfillment.recorded", "media_fulfillment.record_failed", PERM_RECORD, showId, key, actual,
-                FulfillmentRecord.class, () -> {
+                FulfillmentRecord.class, () -> requireScope(requireShow(showId), reach), () -> {
             ShowRecord show = requireShowForUpdate(showId);
-            requireScope(show);
+            requireScope(show, reach);
             if (!"locked".equals(show.status())) {
                 throw ApiException.conflict("MEDIA_SHOW_NOT_LOCKED", "合同版本尚未锁定，不能登记实际履约");
             }
@@ -228,12 +249,13 @@ public class MediaPerformanceService {
     @Transactional
     public FulfillmentRecord confirmFulfillment(String showId, ActionRequest request) {
         authorizationService.requirePermission(PERM_CONFIRM);
+        AuthorizationService.ProjectReach reach = reach(PERM_CONFIRM);
         String key = requireText(requireRequest(request).idempotencyKey(), "idempotency_key");
         return audited("media_fulfillment.confirmed", "media_fulfillment.confirm_failed", PERM_CONFIRM, showId, key, request,
-                FulfillmentRecord.class, () -> {
+                FulfillmentRecord.class, () -> requireScope(requireShow(showId), reach), () -> {
             ShowRecord show = requireShowForUpdate(showId);
             FulfillmentRecord f = requireRecorded(show);
-            AccessActor actor = requireConfirmer(show, f);
+            AccessActor actor = requireConfirmer(show, f, reach);
             Instant now = Instant.now();
             return repository.updateFulfillment(new FulfillmentRecord(f.id(), f.showId(), f.actualStartAt(), f.actualEndAt(),
                     f.completedContent(), f.uncompletedContent(), f.basis(), f.recordedBy(), f.recordedAt(), "confirmed",
@@ -245,13 +267,14 @@ public class MediaPerformanceService {
     @Transactional
     public FulfillmentRecord disputeFulfillment(String showId, DisputeRequest request) {
         authorizationService.requirePermission(PERM_CONFIRM);
+        AuthorizationService.ProjectReach reach = reach(PERM_CONFIRM);
         DisputeRequest actual = requireRequest(request);
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
         return audited("media_fulfillment.disputed", "media_fulfillment.dispute_failed", PERM_CONFIRM, showId, key, actual,
-                FulfillmentRecord.class, () -> {
+                FulfillmentRecord.class, () -> requireScope(requireShow(showId), reach), () -> {
             ShowRecord show = requireShowForUpdate(showId);
             FulfillmentRecord f = requireRecorded(show);
-            AccessActor actor = requireConfirmer(show, f);
+            AccessActor actor = requireConfirmer(show, f, reach);
             String reason = requireText(actual.disputeReason(), "dispute_reason");
             Instant now = Instant.now();
             return repository.updateFulfillment(new FulfillmentRecord(f.id(), f.showId(), f.actualStartAt(), f.actualEndAt(),
@@ -264,12 +287,13 @@ public class MediaPerformanceService {
     @Transactional
     public FulfillmentRecord resolveDispute(String showId, ResolveRequest request) {
         authorizationService.requirePermission(PERM_RESOLVE);
+        AuthorizationService.ProjectReach reach = reach(PERM_RESOLVE);
         ResolveRequest actual = requireRequest(request);
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
         return audited("media_fulfillment.dispute_resolved", "media_fulfillment.dispute_resolve_failed", PERM_RESOLVE, showId, key,
-                actual, FulfillmentRecord.class, () -> {
+                actual, FulfillmentRecord.class, () -> requireScope(requireShow(showId), reach), () -> {
             ShowRecord show = requireShowForUpdate(showId);
-            requireScope(show);
+            requireScope(show, reach);
             FulfillmentRecord f = repository.findFulfillmentByShow(show.id())
                     .orElseThrow(() -> ApiException.notFound("MEDIA_FULFILLMENT_NOT_FOUND", "该场尚未登记实际履约"));
             if (!"disputed".equals(f.status())) {
@@ -296,9 +320,9 @@ public class MediaPerformanceService {
     }
 
     /** 确认 / 争议的主体规则：bar_show → 酒吧范围；self_hosted → 传媒范围且非登记人本人。 */
-    private AccessActor requireConfirmer(ShowRecord show, FulfillmentRecord f) {
+    private AccessActor requireConfirmer(ShowRecord show, FulfillmentRecord f, AuthorizationService.ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
-        requireScope(show);
+        requireScope(show, reach);
         if (show.selfHosted()) {
             requireMerchant(actor, show.mediaMerchantId(), "自办场次须由该传媒公司指定主管确认");
             if (actor.id().equals(f.recordedBy())) {
@@ -331,15 +355,23 @@ public class MediaPerformanceService {
         }
     }
 
-    /** 项目范围 + 商户范围（商户用户只能碰自己是酒吧方或传媒方的场次）；结算域复用（复核 authz B1）。 */
-    void requireScope(ShowRecord show) {
-        AccessActor actor = authorizationService.currentActor();
-        if (authorizationService.isPlatformAdmin(actor)) {
+    /** 第十八批 G 段 82b-R5：入口权限码可触及的项目范围（含可跨项目角色勾选的项目），在幂等与取锁之前算好；结算域复用。 */
+    AuthorizationService.ProjectReach reach(String permission) {
+        return authorizationService.projectReach(authorizationService.currentActor(), permission);
+    }
+
+    /**
+     * 项目范围 + 商户范围（商户用户只能碰自己是酒吧方或传媒方的场次）；结算域复用（复核 authz B1）。
+     * 第十八批 G 段 82b-R5：项目按入口已算好的 reach 判（商户账号的 reach 只到本人项目，与原先一致）。
+     */
+    void requireScope(ShowRecord show, AuthorizationService.ProjectReach reach) {
+        if (reach.platformAdmin()) {
             return;
         }
-        if (!authorizationService.requireProjectScope(actor).equals(show.projectId())) {
-            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该演出场次不属于当前项目范围");
+        if (!reach.covers(show.projectId())) {
+            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该演出场次不在本权限可触及的项目范围内");
         }
+        AccessActor actor = authorizationService.currentActor();
         String own = actor.merchantId();
         if (own != null && !own.isBlank() && !own.equals(show.barMerchantId()) && !own.equals(show.mediaMerchantId())) {
             throw ApiException.forbidden("MEDIA_PERFORMANCE_SCOPE_DENIED", "该演出场次不属于当前商户范围");
@@ -431,9 +463,9 @@ public class MediaPerformanceService {
                 r.fixedFeeCent(), r.drinkCommissionBps(), template, "draft", null, null, createdBy, createdAt, Instant.now());
     }
 
-    /** 复核 authz M2：场次的酒吧 / 传媒商户须属于该场项目。 */
+    /** 复核 authz M2：场次的酒吧 / 传媒商户须属于该场项目；第十八批 G 段 82b-R8：以该场项目为主项目或已批准的经营项目均可（PGM:659）。 */
     private void requireMerchantInProject(String merchantId, String projectId) {
-        if (!projectId.equals(repository.merchantProject(merchantId).orElse(null))) {
+        if (!repository.merchantOperatesIn(merchantId, projectId)) {
             throw ApiException.badRequest("MEDIA_SHOW_MERCHANT_PROJECT_MISMATCH", "商户 " + merchantId + " 不属于该场项目");
         }
     }
@@ -448,13 +480,23 @@ public class MediaPerformanceService {
                 .orElseThrow(() -> ApiException.notFound("MEDIA_SHOW_NOT_FOUND", "演出场次不存在"));
     }
 
+    /** 复核：新建按请求 project_id 先判可触及（没带项目由体内校验报 400）。 */
+    private static void requireProjectInReach(String projectId, AuthorizationService.ProjectReach reach) {
+        String project = trimToNull(projectId);
+        if (project != null && !reach.covers(project)) {
+            throw ApiException.forbidden("PROJECT_SCOPE_MISMATCH", "该演出场次不在本权限可触及的项目范围内");
+        }
+    }
+
     /**
      * 成功事件随事务提交；失败事件独立事务留痕后原样抛出。复核 authz I1：主体包在 {@link IdempotencyService#execute} 里——
-     * 同号同体返回第一次结果（不重复执行、不重复记成功），同号异体 409。
+     * 同号同体返回第一次结果（不重复执行、不重复记成功），同号异体 409。复核（范围闸在幂等之前）：gate 在幂等之前跑，同号重放也先过它；
+     * 体内按锁重读后照旧再核。
      */
     private <T> T audited(String successEvent, String failureEvent, String permission, String businessId, String key,
-                          Object request, Class<T> responseType, Supplier<T> body) {
+                          Object request, Class<T> responseType, Runnable gate, Supplier<T> body) {
         try {
+            gate.run();
             return idempotencyService.execute(successEvent + ":" + (businessId == null ? "" : businessId), key, request, () -> {
                 T result = body.get();
                 String id = businessId != null ? businessId : idOf(result);

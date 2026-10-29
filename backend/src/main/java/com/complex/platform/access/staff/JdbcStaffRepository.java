@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -428,12 +428,12 @@ public class JdbcStaffRepository {
         return n > 0;
     }
 
-    public List<BarCommissionSettlementRecord> listCommissionSettlements(String month, String projectScope) {
+    /** 该月全部提成月结记录；可见范围由 StaffService 按本人范围过滤（第十八批 G 段 82a-R2）。 */
+    public List<BarCommissionSettlementRecord> listCommissionSettlements(String month) {
         return jdbcTemplate.query(SETTLEMENT_SELECT + """
-                 WHERE month = :month AND (:project_scope::text IS NULL OR project_id = :project_scope)
+                 WHERE month = :month
                  ORDER BY merchant_id, company_id
-                """, new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
-                .addValue("month", month).addValue("project_scope", projectScope), this::mapSettlement);
+                """, Map.of("month", month), this::mapSettlement);
     }
 
     private BarCommissionSettlementRecord mapSettlement(java.sql.ResultSet rs, int n) throws java.sql.SQLException {

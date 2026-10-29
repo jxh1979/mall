@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -17,7 +17,7 @@ function envelope(data: unknown): Response {
 
 type CapturedPost = { url: string; body: Record<string, unknown> };
 
-function makeApi(posts?: CapturedPost[], contracts?: unknown[]): AdminApi {
+function makeApi(posts?: CapturedPost[], contracts?: unknown[], projects?: unknown[]): AdminApi {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (init?.method === "POST" && posts) {
@@ -29,6 +29,7 @@ function makeApi(posts?: CapturedPost[], contracts?: unknown[]): AdminApi {
     if (url.includes("/contracts/space-rental-status")) return Promise.resolve(envelope([]));
     if (url.includes("/platform/business-entities")) return Promise.resolve(envelope([{ id: "subject-1", entityName: "测试主体1" }]));
     if (url.includes("/platform/merchants")) return Promise.resolve(envelope([{ id: "merchant-1", displayName: "测试商户1" }]));
+    if (url.includes("/platform/projects")) return Promise.resolve(envelope(projects ?? []));
     if (url.includes("/changes") || url.includes("/settlements")) return Promise.resolve(envelope([]));
     if (url.endsWith("/api/v1/contracts")) return Promise.resolve(envelope(contracts ?? []));
     return Promise.resolve(envelope([]));
@@ -107,6 +108,53 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     const body = posts.find((p) => p.url.endsWith("/api/v1/contracts"))!.body;
     expect(body.deposit_cent).toBe(500000);
     expect((body.rent_terms as Record<string, unknown>).rent_billing_mode).toBe("turnover_only");
+  });
+
+  // 第十八批 G 段 82b-R3（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：能看到两个项目时
+  // 起草弹窗出「所属项目」下拉，选 B 后起草载荷带 project_id；只看得到本人项目时不显示（后端按本人所在项目落）；
+  // 复核：只看得到一个且不是本人项目（角色只勾了 B）时也显示（修复前不显示、落本人项目被 403）。
+  it("起草所属项目：两个项目时可选 B、载荷带 project_id", async () => {
+    const posts: CapturedPost[] = [];
+    const props = baseProps();
+    props.api = makeApi(posts, [], [{ id: "prj-a", name: "项目A" }, { id: "prj-b", name: "项目B" }]);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-draft-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-draft-open"));
+    await waitFor(() => expect(screen.queryByTestId("contract-draft-project")).not.toBeNull());
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试商户1/ })).toBeTruthy());
+    fireEvent.change(screen.getByTestId("contract-draft-project"), { target: { value: "prj-b" } });
+    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "merchant-1" } });
+    fireEvent.change(screen.getByLabelText("合同主体 id"), { target: { value: "subject-1" } });
+    for (const [label, day] of [["生效日期", "1"], ["到期日期", "28"]] as const) {
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      fireEvent.click(within(screen.getByRole("dialog", { name: label })).getByRole("button", { name: day }));
+    }
+    fireEvent.click(screen.getByTestId("contract-draft-next"));
+    await waitFor(() => expect(screen.queryByTestId("contract-draft-summary")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("contract-draft-create"));
+    await waitFor(() => expect(posts.some((p) => p.url.endsWith("/api/v1/contracts"))).toBe(true));
+    expect(posts.find((p) => p.url.endsWith("/api/v1/contracts"))!.body.project_id).toBe("prj-b");
+  });
+
+  it("起草所属项目：只看得到一个且不是本人项目时也显示", async () => {
+    const props = baseProps();
+    props.user = { ...props.user, organizationId: "prj-a" };
+    props.api = makeApi(undefined, [], [{ id: "prj-b", name: "项目B" }]);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-draft-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-draft-open"));
+    await waitFor(() => expect(screen.queryByTestId("contract-draft-project")).not.toBeNull());
+  });
+
+  it("起草所属项目：只看得到本人项目时不显示", async () => {
+    const props = baseProps();
+    props.user = { ...props.user, organizationId: "prj-a" };
+    props.api = makeApi(undefined, [], [{ id: "prj-a", name: "项目A" }]);
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-draft-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-draft-open"));
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试商户1/ })).toBeTruthy());
+    expect(screen.queryByTestId("contract-draft-project")).toBeNull();
   });
 
   it("起草弹窗含「经营范围」类目勾选组（既有词表），可勾选/取消", async () => {

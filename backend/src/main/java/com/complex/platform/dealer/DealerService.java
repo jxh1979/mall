@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -83,14 +83,17 @@ public class DealerService {
 
     public PageResponse<DealerRecord> listDealers() {
         authorization.requirePermission(VIEW);
-        List<DealerRecord> items = repository.listDealers(projectScope());
+        // 第十八批 G 段 82b-R5：非平台管理员按 dealer.view 可触及的项目取（含可跨项目角色勾选的项目），项目为空的经销商照旧都出
+        String scope = projectScope();
+        List<DealerRecord> items = scope == null ? repository.listDealers((String) null)
+                : repository.listDealersIn(authorization.projectReach(authorization.currentActor(), VIEW).organizationIds());
         audit.recordSuccess("dealer.viewed", VIEW, "dealer", "list", null, null, Map.of("count", items.size()));
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
     }
 
     public DealerRecord getDealer(String id) {
         authorization.requirePermission(VIEW);
-        return requireDealer(id);
+        return requireDealer(id, VIEW);
     }
 
     @Transactional
@@ -100,9 +103,14 @@ public class DealerService {
             if (request == null || request.dealerName() == null || request.dealerName().isBlank()) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "经销商名称必填");
             }
+            // 第十八批 G 段 82b-R5（答复 5 第 16 条「角色能看哪些项目，就能在哪些项目新建记录」）：落地项目＝所选项目，不选取本人项目，
+            // 须在 dealer.manage 可触及的范围内（否则 403 CROSS_PROJECT_FORBIDDEN）；平台管理员不选照旧不落项目。在幂等之前算好。
+            String requested = trim(request.projectId());
+            String project = requested == null && projectScope() == null ? null
+                    : authorization.requireReachableProject(requested, MANAGE, AuthorizationService.PROJECT_OUT_OF_REACH);
             return idempotency.execute("dealerCreate", request.idempotencyKey(), request, () -> {
                 Instant now = Instant.now();
-                DealerRecord dealer = new DealerRecord("dlr_" + UUID.randomUUID(), projectScope(), request.dealerName().trim(),
+                DealerRecord dealer = new DealerRecord("dlr_" + UUID.randomUUID(), project, request.dealerName().trim(),
                         trim(request.unifiedSocialCreditCode()), trim(request.legalRepresentative()), trim(request.contactName()), trim(request.contactPhone()),
                         PENDING_SUBMISSION, false, false, false, false, false, null, null, null, null, null, null, actorId(), now, now);
                 repository.saveDealer(dealer);
@@ -119,7 +127,7 @@ public class DealerService {
     public DealerAdmissionRecord getAdmission(String id) {
         authorization.requirePermission(VIEW);
         try {
-            requireDealer(id);
+            requireDealer(id, VIEW);
             DealerAdmissionRecord submission = repository.findAdmission(id).orElse(null);
             audit.recordSuccess("dealer.admission_viewed", VIEW, "dealer", id, null, null, Map.of("has_submission", submission != null));
             return submission;
@@ -134,7 +142,7 @@ public class DealerService {
     public DealerRecord submitDealer(String id, DealerAdmissionSubmitRequest request) {
         authorization.requirePermission(MANAGE);
         try {
-            requireDealer(id);
+            requireDealer(id, MANAGE);
             if (request == null) throw ApiException.badRequest("VALIDATION_FAILED", "准入资料必填");
             return idempotency.execute("dealerSubmit:" + id, request.idempotencyKey(), request, () -> {
                 DealerRecord dealer = repository.lockDealer(id).orElseThrow();
@@ -160,7 +168,7 @@ public class DealerService {
     /** CG-11d 门户自助注册资料提交：更新法人 / 联系人 / 联系电话后送审（待提交或已驳回 → 审核中）。调用方已核验门户权限。 */
     DealerRecord submitProfile(String id, com.complex.platform.dealer.dto.DealerPortalProfileRequest request, String permission) {
         try {
-            DealerRecord dealer = requireDealer(id);
+            DealerRecord dealer = requireDealer(id, permission);
             if (!PENDING_SUBMISSION.equals(dealer.status()) && !REJECTED.equals(dealer.status())) {
                 throw ApiException.conflict("DEALER_STATUS_INVALID", "只有待提交或已驳回的经销商可以提交资料送审");
             }
@@ -188,7 +196,7 @@ public class DealerService {
     public DealerRecord reviewDealer(String id, DealerReviewRequest request) {
         authorization.requirePermission(REVIEW);
         try {
-            requireDealer(id);
+            requireDealer(id, REVIEW);
             DealerRecord dealer = repository.lockDealer(id).orElseThrow();
             DealerAdmissionRecord submission = repository.findAdmission(id).orElse(null);
             if (Objects.equals(actorId(), dealer.createdBy()) || (submission != null && Objects.equals(actorId(), submission.submittedBy()))) {
@@ -236,7 +244,7 @@ public class DealerService {
     public DealerRecord deactivateDealer(String id, DealerDeactivateRequest request) {
         authorization.requirePermission(MANAGE);
         try {
-            DealerRecord dealer = requireDealer(id);
+            DealerRecord dealer = requireDealer(id, MANAGE);
             if (!APPROVED.equals(dealer.status())) {
                 throw ApiException.conflict("DEALER_STATUS_INVALID", "只有已通过的经销商可以停用");
             }
@@ -268,7 +276,7 @@ public class DealerService {
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     PageResponse<DealerContractRecord> listContracts(String dealerId, String permission) {
-        requireDealer(dealerId);
+        requireDealer(dealerId, permission);
         List<DealerContractRecord> items = repository.listContracts(dealerId);
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
     }
@@ -277,7 +285,7 @@ public class DealerService {
     public DealerContractRecord createContract(String dealerId, DealerContractRequest request) {
         authorization.requirePermission(MANAGE);
         try {
-            DealerRecord dealer = requireDealer(dealerId);
+            DealerRecord dealer = requireDealer(dealerId, MANAGE);
             if (!APPROVED.equals(dealer.status())) {
                 throw ApiException.conflict("DEALER_NOT_APPROVED", "只有准入已通过的经销商可以登记经销合同");
             }
@@ -315,7 +323,7 @@ public class DealerService {
     public DealerContractRecord designateHandler(String contractId, DealerDesignatedHandlerRequest request) {
         authorization.requirePermission(MANAGE);
         try {
-            DealerContractRecord contract = requireContract(contractId);
+            DealerContractRecord contract = requireContract(contractId, MANAGE);
             String handler = requireText(request == null ? null : request.handlerUserId(), "handler_user_id");
             return idempotency.execute("dealerContractHandler:" + contractId, request.idempotencyKey(), request, () -> {
                 repository.designateHandler(contractId, handler, actorId(), Instant.now());
@@ -334,14 +342,14 @@ public class DealerService {
 
     public PageResponse<DealerPriceCatalogRecord> listCatalogs(String contractId) {
         authorization.requirePermission(VIEW);
-        requireContract(contractId);
+        requireContract(contractId, VIEW);
         List<DealerPriceCatalogRecord> items = repository.listCatalogs(contractId);
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
     }
 
     public PageResponse<DealerPriceCatalogLineRecord> listCatalogLines(String catalogId) {
         authorization.requirePermission(VIEW);
-        requireCatalog(catalogId);
+        requireCatalog(catalogId, VIEW);
         List<DealerPriceCatalogLineRecord> items = repository.listCatalogLines(catalogId);
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
     }
@@ -351,8 +359,8 @@ public class DealerService {
     public DealerPriceCatalogRecord createCatalogDraft(String contractId, DealerCatalogDraftRequest request) {
         authorization.requirePermission(CATALOG_EDIT);
         try {
-            DealerContractRecord contract = requireContract(contractId);
-            requireActiveDealer(contract.dealerId());
+            DealerContractRecord contract = requireContract(contractId, CATALOG_EDIT);
+            requireActiveDealer(contract.dealerId(), CATALOG_EDIT);
             if (request == null || request.lines() == null || request.lines().isEmpty()) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "价格目录至少包含一条商品价格");
             }
@@ -389,7 +397,7 @@ public class DealerService {
     public DealerPriceCatalogRecord submitCatalog(String catalogId, String idempotencyKey) {
         authorization.requirePermission(CATALOG_EDIT);
         try {
-            DealerPriceCatalogRecord catalog = requireCatalog(catalogId);
+            DealerPriceCatalogRecord catalog = requireCatalog(catalogId, CATALOG_EDIT);
             if (!"draft".equals(catalog.status())) {
                 throw ApiException.conflict("CATALOG_STATUS_INVALID", "只有草稿目录可以提交审批");
             }
@@ -413,7 +421,7 @@ public class DealerService {
     public DealerPriceCatalogRecord decideCatalog(String catalogId, DealerCatalogDecisionRequest request) {
         authorization.requirePermission(CATALOG_APPROVE);
         try {
-            DealerPriceCatalogRecord catalog = requireCatalog(catalogId);
+            DealerPriceCatalogRecord catalog = requireCatalog(catalogId, CATALOG_APPROVE);
             if (!"pending_approval".equals(catalog.status())) {
                 throw ApiException.conflict("CATALOG_STATUS_INVALID", "只有待审批目录可以审批");
             }
@@ -457,7 +465,7 @@ public class DealerService {
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     PageResponse<DealerInquiryRecord> listInquiries(String dealerId, String permission) {
-        requireDealer(dealerId);
+        requireDealer(dealerId, permission);
         List<DealerInquiryRecord> items = repository.listInquiries(dealerId);
         return new PageResponse<>(items, 1, Math.max(items.size(), 1), items.size());
     }
@@ -472,9 +480,9 @@ public class DealerService {
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     DealerInquiryRecord createInquiry(String dealerId, DealerInquiryRequest request, String permission) {
         try {
-            requireActiveDealer(dealerId);
+            requireActiveDealer(dealerId, permission);
             String contractId = requireText(request == null ? null : request.dealerContractId(), "dealer_contract_id");
-            DealerContractRecord contract = requireContract(contractId);
+            DealerContractRecord contract = requireContract(contractId, permission);
             if (!contract.dealerId().equals(dealerId)) {
                 throw ApiException.badRequest("CONTRACT_DEALER_MISMATCH", "合同不属于该经销商");
             }
@@ -509,7 +517,7 @@ public class DealerService {
     public DealerInquiryRecord quoteInquiry(String inquiryId, DealerQuoteRequest request) {
         authorization.requirePermission(INQUIRY_QUOTE);
         try {
-            DealerInquiryRecord inquiry = requireInquiry(inquiryId);
+            DealerInquiryRecord inquiry = requireInquiry(inquiryId, INQUIRY_QUOTE);
             if (!"pending_quote".equals(inquiry.status())) {
                 throw ApiException.conflict("INQUIRY_STATUS_INVALID", "只有待报价的询价可以报价");
             }
@@ -537,7 +545,7 @@ public class DealerService {
     public DealerInquiryRecord decideQuote(String inquiryId, DealerQuoteDecisionRequest request) {
         authorization.requirePermission(INQUIRY_APPROVE);
         try {
-            DealerInquiryRecord inquiry = requireInquiry(inquiryId);
+            DealerInquiryRecord inquiry = requireInquiry(inquiryId, INQUIRY_APPROVE);
             if (!"quote_approval".equals(inquiry.status())) {
                 throw ApiException.conflict("INQUIRY_STATUS_INVALID", "只有报价审批中的询价可以审批");
             }
@@ -569,7 +577,7 @@ public class DealerService {
     public DealerInquiryRecord expireInquiry(String inquiryId, String idempotencyKey) {
         authorization.requirePermission(INQUIRY_QUOTE);
         try {
-            DealerInquiryRecord inquiry = requireInquiry(inquiryId);
+            DealerInquiryRecord inquiry = requireInquiry(inquiryId, INQUIRY_QUOTE);
             if (!"quoted".equals(inquiry.status())) {
                 throw ApiException.conflict("INQUIRY_STATUS_INVALID", "只有已报价的询价可以置为已失效");
             }
@@ -602,7 +610,7 @@ public class DealerService {
 
     /** 门户 / 内部共用实现：调用方已完成权限核验，permission 只用于审计留痕。 */
     PageResponse<DealerExternalStockRecord> externalStock(String contractId, String permission) {
-        DealerContractRecord contract = requireContract(contractId);
+        DealerContractRecord contract = requireContract(contractId, permission);
         List<DealerExternalStockRecord> rows = new ArrayList<>();
         Optional<DealerPriceCatalogRecord> effective = repository.findEffectiveCatalog(contractId);
         if (effective.isPresent()) {
@@ -627,18 +635,15 @@ public class DealerService {
 
     // ── helpers ──
 
-    private DealerRecord requireDealer(String id) {
+    private DealerRecord requireDealer(String id, String permission) {
         DealerRecord dealer = repository.findDealer(requireText(id, "dealer_id"))
                 .orElseThrow(() -> ApiException.notFound("DEALER_NOT_FOUND", "经销商不存在"));
-        String scope = projectScope();
-        if (scope != null && dealer.projectId() != null && !scope.equals(dealer.projectId())) {
-            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "无权访问其他项目的经销商");
-        }
+        DealerPortalAccountService.requireDealerInReach(authorization, dealer, permission);
         return dealer;
     }
 
-    private DealerRecord requireActiveDealer(String id) {
-        DealerRecord dealer = requireDealer(id);
+    private DealerRecord requireActiveDealer(String id, String permission) {
+        DealerRecord dealer = requireDealer(id, permission);
         if (DEACTIVATED.equals(dealer.status())) {
             throw ApiException.conflict("DEALER_DEACTIVATED", "经销商已停用，禁止新询价、新目录与新交易");
         }
@@ -648,24 +653,24 @@ public class DealerService {
         return dealer;
     }
 
-    private DealerContractRecord requireContract(String id) {
+    private DealerContractRecord requireContract(String id, String permission) {
         DealerContractRecord contract = repository.findContract(requireText(id, "contract_id"))
                 .orElseThrow(() -> ApiException.notFound("DEALER_CONTRACT_NOT_FOUND", "经销合同不存在"));
-        requireDealer(contract.dealerId());
+        requireDealer(contract.dealerId(), permission);
         return contract;
     }
 
-    private DealerPriceCatalogRecord requireCatalog(String id) {
+    private DealerPriceCatalogRecord requireCatalog(String id, String permission) {
         DealerPriceCatalogRecord catalog = repository.findCatalog(requireText(id, "catalog_id"))
                 .orElseThrow(() -> ApiException.notFound("PRICE_CATALOG_NOT_FOUND", "价格目录不存在"));
-        requireContract(catalog.dealerContractId());
+        requireContract(catalog.dealerContractId(), permission);
         return catalog;
     }
 
-    private DealerInquiryRecord requireInquiry(String id) {
+    private DealerInquiryRecord requireInquiry(String id, String permission) {
         DealerInquiryRecord inquiry = repository.findInquiry(requireText(id, "inquiry_id"))
                 .orElseThrow(() -> ApiException.notFound("INQUIRY_NOT_FOUND", "询价不存在"));
-        requireDealer(inquiry.dealerId());
+        requireDealer(inquiry.dealerId(), permission);
         return inquiry;
     }
 

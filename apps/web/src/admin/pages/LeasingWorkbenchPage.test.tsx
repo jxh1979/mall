@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -73,7 +73,8 @@ function renderPage(overrides: Partial<AdminPageProps> = {}, contactPhone?: () =
 }
 
 // 第十八批 E 段第 19 条（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
-// 能看到两个以上项目时，新建线索、录入品牌两个弹窗各出现「所属项目」，选了才提交 project_id。
+// 能看到本人项目以外的项目时，新建线索、录入品牌两个弹窗各出现「所属项目」，选了才提交 project_id；只看得到本人项目时不显示。
+// 18G 同根补扫：角色只勾了 B、只看得到 B 一个（不是本人项目 A）时也显示（修复前不显示、落本人项目 A 被 403）。
 describe("LeasingWorkbenchPage 新建线索与品牌选所属项目", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -82,13 +83,13 @@ describe("LeasingWorkbenchPage 新建线索与品牌选所属项目", () => {
 
   const TWO_PROJECTS = [{ id: "p-1", name: "项目一", status: "active" }, { id: "p-2", name: "项目二", status: "active" }];
 
-  function renderWithProjects(projects: unknown[]) {
+  function renderWithProjects(projects: unknown[], organizationId?: string) {
     const api = makeApi();
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     const fallback = fetchMock.getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
       String(input).includes("/platform/projects") ? Promise.resolve(envelope(projects)) : fallback(input, init));
-    render(<LeasingWorkbenchPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+    render(<LeasingWorkbenchPage api={api} user={organizationId ? { id: "u2", username: "staff", accountType: "staff", organizationId } : { id: "u1", username: "admin", accountType: "platform_admin" }}
       setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
   }
 
@@ -121,8 +122,31 @@ describe("LeasingWorkbenchPage 新建线索与品牌选所属项目", () => {
     await waitFor(() => expect(postBody("/api/v1/leasing/leads").project_id).toBe("p-2"));
   });
 
-  it("只有一个项目：两个弹窗都不显示「所属项目」", async () => {
-    renderWithProjects([TWO_PROJECTS[0]]);
+  it("只看得到一个且不是本人项目：录入品牌出现「所属项目」，选 B 按 project_id 提交", async () => {
+    renderWithProjects([TWO_PROJECTS[1]], "p-1");
+    await waitFor(() => expect(screen.getByTestId("leasing-brand-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-brand-create-open"));
+    await waitFor(() => expect(screen.queryByTestId("leasing-brand-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("leasing-brand-name"), { target: { value: "跨项目品牌" } });
+    fireEvent.change(screen.getByTestId("leasing-brand-project"), { target: { value: "p-2" } });
+    fireEvent.click(screen.getByTestId("leasing-brand-flow-next"));
+    fireEvent.click(screen.getByTestId("leasing-brand-create"));
+    await waitFor(() => expect(postBody("/api/v1/leasing/brands").project_id).toBe("p-2"));
+  });
+
+  it("只看得到一个且不是本人项目：新建线索出现「所属项目」，选 B 按 project_id 提交", async () => {
+    renderWithProjects([TWO_PROJECTS[1]], "p-1");
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-create-open"));
+    await waitFor(() => expect(screen.queryByTestId("leasing-lead-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("leasing-lead-project"), { target: { value: "p-2" } });
+    fireEvent.click(screen.getByTestId("leasing-lead-flow-next"));
+    fireEvent.click(screen.getByTestId("leasing-lead-create"));
+    await waitFor(() => expect(postBody("/api/v1/leasing/leads").project_id).toBe("p-2"));
+  });
+
+  it("只看得到本人项目：两个弹窗都不显示「所属项目」", async () => {
+    renderWithProjects([TWO_PROJECTS[0]], "p-1");
     await waitFor(() => expect(screen.getByTestId("leasing-brand-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("leasing-brand-create-open"));
     expect(screen.queryByTestId("leasing-brand-project")).toBeNull();

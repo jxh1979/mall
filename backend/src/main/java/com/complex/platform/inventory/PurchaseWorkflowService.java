@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -56,8 +56,13 @@ public class PurchaseWorkflowService {
         var projects=jdbc.queryForList("SELECT id,name FROM projects WHERE status='active' ORDER BY name,id").stream()
                 .filter(row->optionVisible((String)row.get("id"),owner.orElse(null))).toList();
         var projectIds=projects.stream().map(row->(String)row.get("id")).collect(java.util.stream.Collectors.toSet());
+        // 第十八批 G 段 82b-R8（PGM:659「一个商户要在别的项目经营的……加经营项目，要经过审批才生效」）：商户带主项目与已批准的经营项目，任一在可见项目内即列出。
+        var operating=new HashMap<Object,List<Object>>();
+        jdbc.queryForList("SELECT merchant_id,project_id FROM merchant_projects ORDER BY project_id")
+                .forEach(row->operating.computeIfAbsent(row.get("merchant_id"),k->new ArrayList<>()).add(row.get("project_id")));
         var merchants=jdbc.queryForList("SELECT id,merchant_name,project_id,business_entity_id FROM merchants WHERE status='active' ORDER BY merchant_name,id").stream()
-                .filter(row->projectIds.contains(row.get("project_id"))&&(owner.isEmpty()||owner.get().equals(row.get("id")))).toList();
+                .map(row->{var ids=new ArrayList<Object>();ids.add(row.get("project_id"));ids.addAll(operating.getOrDefault(row.get("id"),List.of()));row.put("operating_project_ids",ids);return row;})
+                .filter(row->((List<?>)row.get("operating_project_ids")).stream().anyMatch(projectIds::contains)&&(owner.isEmpty()||owner.get().equals(row.get("id")))).toList();
         var merchantIds=merchants.stream().map(row->(String)row.get("id")).collect(java.util.stream.Collectors.toSet());
         var result=new LinkedHashMap<String,Object>();result.put("projects",projects);result.put("merchants",merchants);
         result.put("entities",jdbc.queryForList("SELECT e.id,e.entity_name,p.project_id FROM business_entities e JOIN business_entity_projects p ON p.business_entity_id=e.id WHERE e.status='active' ORDER BY e.entity_name,e.id").stream()
@@ -597,7 +602,7 @@ public class PurchaseWorkflowService {
     private void requirePurchaser(SupplyContractRecord c,PurchaseContractTerms terms) {
         if(count("SELECT count(*) FROM business_entities e JOIN business_entity_projects p ON p.business_entity_id=e.id WHERE e.id=? AND e.status='active' AND p.project_id=?",terms.purchaserEntityId(),c.projectId())!=1)
             throw invalid("合同我方主体须为该综合体已关联的有效公司");
-        if(c.merchantId()!=null&&count("SELECT count(*) FROM merchants WHERE id=? AND project_id=? AND business_entity_id=?",c.merchantId(),c.projectId(),terms.purchaserEntityId())!=1)
+        if(c.merchantId()!=null&&count("SELECT count(*) FROM merchants m WHERE m.id=? AND m.business_entity_id=? AND (m.project_id=? OR EXISTS(SELECT 1 FROM merchant_projects mp WHERE mp.merchant_id=m.id AND mp.project_id=?))",c.merchantId(),terms.purchaserEntityId(),c.projectId(),c.projectId())!=1)
             throw invalid("商户自采主体与商户及项目归属不一致");
     }
 
@@ -618,8 +623,9 @@ public class PurchaseWorkflowService {
         if(rows.isEmpty()||!"active".equals(rows.getFirst().get("status")))throw invalid("供应商不存在或未启用");
         if(rows.getFirst().get("merchant_id")!=null&&!Objects.equals(owner,rows.getFirst().get("merchant_id")))throw invalid("供应商不在采购货权范围");
     }
+    /** 第十八批 G 段 82b-R8：商户须以该项目为主项目或已批准的经营项目（merchant_projects 只在审批通过后写入）。 */
     private void requireOwner(String project,String merchant) {
-        if(merchant!=null&&count("SELECT count(*) FROM merchants WHERE id=? AND project_id=?",merchant,project)!=1)throw invalid("商户不属于该综合体");
+        if(merchant!=null&&count("SELECT count(*) FROM merchants m WHERE m.id=? AND (m.project_id=? OR EXISTS(SELECT 1 FROM merchant_projects mp WHERE mp.merchant_id=m.id AND mp.project_id=?))",merchant,project,project)!=1)throw invalid("商户不属于该综合体");
     }
     private SupplyContractRecord contract(String id,String permission) {
         var c=inventory.findSupplyContractByIdForUpdate(requireText(id,"supply_contract_id")).orElseThrow(()->ApiException.notFound("SUPPLY_CONTRACT_NOT_FOUND","供货合同不存在"));

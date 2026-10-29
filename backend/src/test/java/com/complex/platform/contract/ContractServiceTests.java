@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -77,6 +77,15 @@ class ContractServiceTests {
     void setUp() {
         when(authz.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
+        // 82b-R3：模拟授权服务把上面的平台管理员当平台管理员（合同项目闸放行）；等待期项目判定按真实口径（不带 400、带了原样返回）。
+        when(authz.isPlatformAdmin(any())).thenReturn(true);
+        when(authz.requireReachableProject(any(), eq("contract.deposit_refund_wait.manage"), any())).thenAnswer(invocation -> {
+            String project = invocation.getArgument(0);
+            if (project == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目");
+            }
+            return project;
+        });
         when(reviews.evaluate(any())).thenAnswer(invocation -> {
             SupervisorReviewEvaluateRequest request = invocation.getArgument(0);
             evaluated.add(request);
@@ -2426,7 +2435,8 @@ class ContractServiceTests {
         assertThat(saved).isEqualTo(new DepositRefundWaitSettingRecord("proj_1", 45, 30, 60));
         assertThat(service.getDepositRefundWaitSetting("proj_1")).isEqualTo(saved);
         assertThat(service.getDepositRefundWaitSetting("proj_2").value()).isEqualTo(30);
-        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("proj_2"));
+        when(authz.requireReachableProject(eq("proj_1"), eq("contract.deposit_refund_wait.manage"), any()))
+                .thenThrow(ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "所选项目不在本权限可触及的项目范围内"));
         assertThatThrownBy(() -> service.saveDepositRefundWaitSetting(
                 new DepositRefundWaitSettingRequest("k_rw_x", "proj_1", 50, 30, 60, "调整")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
@@ -2445,7 +2455,8 @@ class ContractServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
         verify(audit).recordFailure("contract.deposit_months_config_failed", "contract.deposit_months.manage",
                 "contract_deposit_policy", "global", null, "k_dm_f", "VALIDATION_FAILED");
-        when(authz.currentProjectScopeQuietly()).thenReturn(Optional.of("proj_2"));
+        when(authz.requireReachableProject(eq("proj_1"), eq("contract.deposit_refund_wait.manage"), any()))
+                .thenThrow(ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "所选项目不在本权限可触及的项目范围内"));
         assertThatThrownBy(() -> service.saveDepositRefundWaitSetting(
                 new DepositRefundWaitSettingRequest("k_rw_f", "proj_1", 45, 30, 60, "调整")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
@@ -2945,6 +2956,7 @@ class ContractServiceTests {
         assertThatThrownBy(() -> service.editDraftRentTerms(d.id(), rentTermsEdit("k_r4_s2", rent, null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
         org.mockito.Mockito.doNothing().when(authz).requirePlatformScope();
+        when(authz.isPlatformAdmin(any())).thenReturn(false);
         when(authz.canReachProject(any(), eq("proj_a"), eq("contract.draft.manage"))).thenReturn(false);
         assertThatThrownBy(() -> service.editDraftRentTerms(d.id(), rentTermsEdit("k_r4_s3", rent, null)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));

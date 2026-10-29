@@ -1,10 +1,11 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +22,13 @@ public interface ContractRepository {
     // AUD-005 真分页: 默认内存切片(测试双子); Jdbc 覆写 SQL COUNT + LIMIT/OFFSET。
     default com.complex.platform.common.api.PageResponse<ContractRecord> listContractsPaged(int page, int size) {
         return com.complex.platform.common.api.PageResponse.of(listContracts(), page, size);
+    }
+
+    /** 第十八批 G 段 82b-R3：只列给定项目的合同（空集合＝空页）。默认内存过滤供测试双子；Jdbc 覆写 SQL。 */
+    default com.complex.platform.common.api.PageResponse<ContractRecord> listContractsPaged(int page, int size,
+            Collection<String> projectIds) {
+        return com.complex.platform.common.api.PageResponse.of(listContracts().stream()
+                .filter(c -> c.projectId() != null && projectIds.contains(c.projectId())).toList(), page, size);
     }
 
     Optional<ContractRecord> findContractById(String id);
@@ -125,6 +133,12 @@ public interface ContractRepository {
      * CG-09：推导口径见 {@link SpaceRentalDerivationSql}（退租结算完成即转空置，结算单开立起已退租）。
      */
     List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf);
+
+    /** 第十八批 G 段 82b-R3：给定多个项目的铺位租赁状态（空集合＝空表）。 */
+    default List<SpaceRentalStatusRecord> listSpaceRentalRaw(Collection<String> projectIds, LocalDate asOf) {
+        // ponytail: 逐项目各查一次单项目口径；可触及项目多到成为负担时改成 WHERE s.project_id IN (:ids) 一次取
+        return projectIds.stream().sorted().flatMap(p -> listSpaceRentalRaw(p, asOf).stream()).toList();
+    }
 
     /** 该 (合同,期,费目) 是否已挂账（幂等依据）；已作废（V501 voided_at 非空）的账单不算已挂账。 */
     boolean rentBillExists(String contractId, String period, String feeType);

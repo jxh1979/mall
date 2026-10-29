@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -95,7 +95,7 @@ function kpiFocusTitle(focus: KpiFocus): string {
   return focus.status ? `本页商户档案（${formatOrganizationStatus(focus.status)}）` : "商户档案";
 }
 
-export function OrganizationMerchantPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
+export function OrganizationMerchantPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, focusObjectId }: AdminPageProps) {
   // M012-006：不预填验收默认值；商户名/联系人/电话/合作形式均由用户填写或选择。
   const [merchantName, setMerchantName] = React.useState("");
   // 业态必填 → 不预选，逼招商自己选；选错＝通票分账份额拆给错的业态。
@@ -107,7 +107,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const [supervisingCompanyId, setSupervisingCompanyId] = React.useState("");
   const [supervisingCompanyReason, setSupervisingCompanyReason] = React.useState("");
   // 第十八批 E 段第 19 条（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：
-  // 能看到两个以上项目时选所属项目；不选＝后端按本人所在项目落。
+  // 能看到本人项目以外的项目就选所属项目（18G 同根补扫：角色只勾了 B、只看得到 B 一个时也显示）；不选＝后端按本人所在项目落。
   const [merchantProjectId, setMerchantProjectId] = React.useState("");
   const [formError, setFormError] = React.useState("");
   // 引导式创建流（一期范式）：主按钮 → 分步弹窗 → 确认创建。
@@ -181,6 +181,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
   const entities = entityRows.rows;
   const merchants = merchantRows.rows;
   const projects = projectRows.rows;
+  const pickProject = projects.some((row) => row.id !== user?.organizationId);
   // FS-024：主管公司候选＝在用的城市项目公司／域主管公司；列表与详情按 id 回显主体名称。
   const supervisingCandidates = entities.filter((row) => row.status === "active" && SUPERVISING_COMPANY_ROLES.includes(row.entityRole ?? ""));
   function supervisingCompanyName(id?: string | null) {
@@ -672,7 +673,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
             content: (
               <>
                 <label>商户名称<input data-testid="organization-merchant-name" value={merchantName} onChange={(event) => setMerchantName(event.target.value)} /></label>
-                {projects.length > 1 ? <label>所属项目<select data-testid="organization-merchant-project" value={merchantProjectId} onChange={(event) => setMerchantProjectId(event.target.value)}><option value="">本人所在项目</option>{projects.map((row) => <option key={row.id} value={row.id}>{display(row.name)}</option>)}</select></label> : null}
+                {pickProject ? <label>所属项目<select data-testid="organization-merchant-project" value={merchantProjectId} onChange={(event) => setMerchantProjectId(event.target.value)}><option value="">本人所在项目</option>{projects.map((row) => <option key={row.id} value={row.id}>{display(row.name)}</option>)}</select></label> : null}
                 <label>业态<select data-testid="organization-merchant-type" value={merchantType} onChange={(event) => setMerchantType(event.target.value)}><option value="">请选择业态</option>{MERCHANT_TYPES.map((type) => <option key={type} value={type}>{formatBusinessStatus(type)}</option>)}</select></label>
                 {merchantType === "other" ? (
                   <>
@@ -704,7 +705,7 @@ export function OrganizationMerchantPage({ api, setActionResult, setGlobalError,
         ]}
         summary={[
           { label: "商户名称", value: merchantName },
-          ...(projects.length > 1 ? [{ label: "所属项目", value: merchantProjectId ? display(projects.find((row) => row.id === merchantProjectId)?.name) : "本人所在项目" }] : []),
+          ...(pickProject ? [{ label: "所属项目", value: merchantProjectId ? display(projects.find((row) => row.id === merchantProjectId)?.name) : "本人所在项目" }] : []),
           { label: "业态", value: merchantType ? formatBusinessStatus(merchantType) : "未选择" },
           ...(merchantType === "other" ? [{ label: "主管公司", value: supervisingCompanyName(supervisingCompanyId) }, { label: "指定理由", value: supervisingCompanyReason }] : []),
           { label: "联系人", value: contactName },

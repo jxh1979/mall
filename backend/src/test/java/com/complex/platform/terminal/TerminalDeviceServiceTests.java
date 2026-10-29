@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -58,6 +58,11 @@ class TerminalDeviceServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 auditEventService);
         merchants.clear();
+        // 第十八批 G 段 82b-R5 ④：入口权限码可触及的项目桩成平台管理员（全部设备都能管），与范围方法默认给空同一语义
+        var authorization = org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
+        org.mockito.Mockito.when(authorization.projectReach(org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(String[].class)))
+                .thenReturn(new com.complex.platform.access.AuthorizationService.ProjectReach(true, true, null, true, java.util.Set.of()));
         service = new TerminalDeviceService(
                 deviceRepository,
                 new IdempotencyService(idempotencyRepository, new ObjectMapper()),
@@ -66,7 +71,7 @@ class TerminalDeviceServiceTests {
                 org.mockito.Mockito.mock(DeviceSigningKeyStore.class),
                 id -> Optional.ofNullable(merchants.get(id)),
                 // M723-F21：桩对返回 Optional 的范围方法默认给空＝平台管理员（全部设备都能管），既有用例语义不变
-                org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class)
+                authorization
         );
         org.springframework.test.util.ReflectionTestUtils.setField(service,"workPhoneAttendance",
                 org.mockito.Mockito.mock(com.complex.platform.access.staff.StaffWorkPhoneAttendanceService.class));

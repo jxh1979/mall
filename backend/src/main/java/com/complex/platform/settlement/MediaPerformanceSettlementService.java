@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -91,12 +91,13 @@ public class MediaPerformanceSettlementService {
     public List<SettlementRecord> settleShow(String showId, String idempotencyKey) {
         authorizationService.requirePermission(PERM_SETTLE);
         String key = requireText(idempotencyKey, "idempotency_key");
+        AuthorizationService.ProjectReach reach = showService.reach(PERM_SETTLE);
         ShowRecord show = repository.findShowForUpdate(requireText(showId, "show_id"))
                 .orElseThrow(() -> ApiException.notFound("MEDIA_SHOW_NOT_FOUND", "演出场次不存在"));
         try {
+            showService.requireScope(show, reach); // 复核：范围闸在幂等之前（同号重放也先过它）
             return java.util.Arrays.asList(idempotencyService.execute("media_settlement.settled:" + show.id(), key,
                     Map.of("show_id", show.id()), () -> {
-                        showService.requireScope(show);
                         List<SettlementRecord> rows = settleInternal(show);
                         auditEventService.recordSuccess("media_settlement.settled", PERM_SETTLE, MediaPerformanceService.BUSINESS_TYPE,
                                 show.id(), null, key, Map.of("rows", rows.size()));
@@ -135,9 +136,11 @@ public class MediaPerformanceSettlementService {
             throw ApiException.badRequest("VALIDATION_FAILED", "请求体不能为空");
         }
         String key = requireText(request.idempotencyKey(), "idempotency_key");
+        AuthorizationService.ProjectReach reach = showService.reach(PERM_SETTLE);
         ShowRecord show = repository.findShowForUpdate(requireText(showId, "show_id"))
                 .orElseThrow(() -> ApiException.notFound("MEDIA_SHOW_NOT_FOUND", "演出场次不存在"));
         try {
+            showService.requireScope(show, reach); // 复核：范围闸在幂等之前（同号重放也先过它）
             return idempotencyService.execute("media_settlement.adjusted:" + show.id() + ":" + settlementId, key, request,
                     () -> adjustInternal(show, settlementId, request, key), SettlementRecord.class);
         } catch (ApiException failure) {
@@ -148,7 +151,6 @@ public class MediaPerformanceSettlementService {
     }
 
     private SettlementRecord adjustInternal(ShowRecord show, String settlementId, AdjustRequest request, String key) {
-        showService.requireScope(show);
         SettlementRecord original = repository.findSettlement(requireText(settlementId, "settlement_id"))
                 .filter(s -> s.showId().equals(show.id()))
                 .orElseThrow(() -> ApiException.notFound("MEDIA_SETTLEMENT_NOT_FOUND", "结算行不存在"));

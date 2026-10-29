@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -115,5 +115,58 @@ describe("FacilityWorkbenchPage 引导式新增设备", () => {
     fireEvent.click(screen.getByTestId("facility-equipment-create"));
     await waitFor(() => expect(postSpy).toHaveBeenCalledWith("/api/v1/facility/equipment", expect.objectContaining({ projectId: "prj_own" })));
     expect(vi.mocked(api.get).mock.calls.some((call) => call[0] === "/api/v1/platform/projects")).toBe(false);
+  });
+
+  // 第十八批 G 段 82b-R2（治理地图第 659 行「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：能看到两个以上项目时，
+  // 建工单、巡检模板、巡检任务都可选所属项目，选了才在请求体带 projectId；默认不选（后端按设备、空间或模板所在项目，否则本人项目）。
+  it("两个项目时建工单、巡检模板、巡检任务出现所属项目下拉，选了才带 projectId", async () => {
+    const postSpy = vi.fn(async (_path: string, _body?: unknown) => ({}) as unknown);
+    renderPage(postSpy, "prj_a");
+    await waitFor(() => expect(screen.queryByTestId("facility-work-order-project")).not.toBeNull());
+    expect(screen.getByTestId("facility-inspection-template-project")).toBeTruthy();
+    expect(screen.getByTestId("facility-inspection-task-project")).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId("facility-work-order-title"), { target: { value: "灯坏" } });
+    fireEvent.change(screen.getByTestId("facility-work-order-project"), { target: { value: "prj_b" } });
+    fireEvent.click(screen.getByTestId("facility-work-order-create"));
+    await waitFor(() => expect(postSpy).toHaveBeenCalledWith("/api/v1/facility/work-orders", expect.objectContaining({ projectId: "prj_b" })));
+
+    fireEvent.change(screen.getByTestId("facility-inspection-template-name"), { target: { value: "日巡" } });
+    fireEvent.change(screen.getByTestId("facility-inspection-template-project"), { target: { value: "prj_b" } });
+    fireEvent.click(screen.getByTestId("facility-inspection-template-create"));
+    await waitFor(() => expect(postSpy).toHaveBeenCalledWith("/api/v1/facility/inspections/templates", expect.objectContaining({ projectId: "prj_b" })));
+
+    fireEvent.change(screen.getByTestId("facility-inspection-task-title"), { target: { value: "夜巡" } });
+    fireEvent.change(screen.getByTestId("facility-inspection-task-project"), { target: { value: "prj_b" } });
+    fireEvent.click(screen.getByTestId("facility-inspection-task-create"));
+    await waitFor(() => expect(postSpy).toHaveBeenCalledWith("/api/v1/facility/inspections/tasks", expect.objectContaining({ projectId: "prj_b" })));
+  });
+
+  // 复核：角色只勾了 B、只看得到 B 一个项目（不是本人项目 A）时三处也出所属项目下拉，选 B 后请求体带 projectId（修复前不出下拉、落 A 被 403）。
+  it("只看得到一个且不是本人项目时也出所属项目下拉，选了带 projectId", async () => {
+    const postSpy = vi.fn(async (_path: string, _body?: unknown) => ({}) as unknown);
+    renderPage(postSpy, "prj_a", [{ id: "prj_b", name: "二号综合体" }]);
+    await waitFor(() => expect(screen.queryByTestId("facility-work-order-project")).not.toBeNull());
+    expect(screen.getByTestId("facility-inspection-template-project")).toBeTruthy();
+    expect(screen.getByTestId("facility-inspection-task-project")).toBeTruthy();
+    fireEvent.change(screen.getByTestId("facility-inspection-template-name"), { target: { value: "日巡" } });
+    fireEvent.change(screen.getByTestId("facility-inspection-template-project"), { target: { value: "prj_b" } });
+    fireEvent.click(screen.getByTestId("facility-inspection-template-create"));
+    await waitFor(() => expect(postSpy).toHaveBeenCalledWith("/api/v1/facility/inspections/templates", expect.objectContaining({ projectId: "prj_b" })));
+  });
+
+  it("只看得到本人项目时不显示所属项目下拉，请求体不带 projectId", async () => {
+    const postSpy = vi.fn(async (_path: string, _body?: unknown) => ({}) as unknown);
+    renderPage(postSpy, "prj_a", [{ id: "prj_a", name: "一号综合体" }]);
+    await waitFor(() => expect(screen.getByTestId("facility-work-order-create-form")).toBeTruthy());
+    expect(screen.queryByTestId("facility-work-order-project")).toBeNull();
+    expect(screen.queryByTestId("facility-inspection-template-project")).toBeNull();
+    expect(screen.queryByTestId("facility-inspection-task-project")).toBeNull();
+
+    fireEvent.change(screen.getByTestId("facility-work-order-title"), { target: { value: "灯坏" } });
+    fireEvent.click(screen.getByTestId("facility-work-order-create"));
+    await waitFor(() => expect(postSpy).toHaveBeenCalledWith("/api/v1/facility/work-orders", expect.anything()));
+    const body = postSpy.mock.calls.find((call) => call[0] === "/api/v1/facility/work-orders")?.[1] as Record<string, unknown>;
+    expect(body).not.toHaveProperty("projectId");
   });
 });

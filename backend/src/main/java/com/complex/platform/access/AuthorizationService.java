@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -885,6 +885,29 @@ public class AuthorizationService implements CallerScopeResolver {
     /** M736：某归属（项目，或城市项目公司、域主管公司）是否在操作人按入口权限码可触及的范围内。 */
     public boolean canReachProject(AccessActor actor, String organizationId, String... permissionCodes) {
         return projectReach(actor, permissionCodes).covers(organizationId);
+    }
+
+    /** 第十八批 G 段 82b-R4：{@link #requireReachableProject} 拒绝时各按项目配置入口共用的提示。 */
+    public static final String PROJECT_OUT_OF_REACH = "所选项目不在本权限可触及的项目范围内";
+
+    /**
+     * 第十八批 G 段 82b-R4（PGM 第 659 行「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」；
+     * 第 528 行「不受第④类「别的项目」限制」）：按入口权限码取一个项目。先核该码；不带项目取本人项目（平台管理员没有本人项目，
+     * 400 VALIDATION_FAILED「必须指定综合体项目」；没有项目归属的其余账号 403 PROJECT_SCOPE_REQUIRED）；项目不在该码可触及范围内
+     * （{@link #canReachProject}：含可跨项目角色勾选的项目；只经「只勾了别的项目」的角色持码时本人项目也不在内）403 CROSS_PROJECT_FORBIDDEN。
+     * 返回去掉首尾空白的项目编号。
+     */
+    public String requireReachableProject(String requested, String permission, String deniedMessage) {
+        requirePermission(permission);
+        String project = requested == null || requested.isBlank() ? null : requested.trim();
+        if (project == null) {
+            project = currentProjectScopeQuietly()
+                    .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "必须指定综合体项目"));
+        }
+        if (!canReachProject(currentActor(), project, permission)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", deniedMessage);
+        }
+        return project;
     }
 
     /**
