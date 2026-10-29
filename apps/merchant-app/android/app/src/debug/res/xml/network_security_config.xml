@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 文件版本：V0.01 -->
+<!-- 调试包网络策略：不许明文 http；只对 192.168.88.160 这一台多信任它的自签证书（与员工端同一张公有证书 @raw/complex160），其余只认系统证书。
+     本文件与证书只在 debug 源集，发行包不含。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config>
+        <domain includeSubdomains="false">192.168.88.160</domain>
+        <trust-anchors>
+            <certificates src="@raw/complex160" />
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { apiErrorFromResponse } from "../../shared/apiError";
 import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
 import type { DownloadedFile } from "../types";
@@ -108,6 +108,40 @@ function normalizeRequestBody(body: JsonBody): JsonValue {
   return mapKeys({ ...body, idempotencyKey: body.idempotencyKey ?? nextIdempotencyKey() }, toSnakeCaseKey);
 }
 
+/**
+ * 第 25 条 25-R3：商户手机应用（apps/merchant-app）的令牌与设备编号存放处（App 的系统安全存储，第十八批裁决 19）。
+ * tokens()/deviceId() 同步读内存；clearTokens 只清令牌、设备编号保留（裁决 19：卸载重装或清除应用数据才算新设备）。
+ */
+export type MerchantAppTokens = { accessToken: string; refreshToken: string };
+export type MerchantAppStore = {
+  tokens(): MerchantAppTokens | null;
+  deviceId(): string | null;
+  save(tokens: MerchantAppTokens, deviceId: string | null): Promise<void>;
+  clearTokens(): Promise<void>;
+};
+
+let merchantApp: { store: MerchantAppStore; clientVersion: string } | null = null;
+
+/** 只由 apps/merchant-app 入口调用（网页入口 main.tsx 不调用，网页版行为不变）：此后终端报 merchant_app，请求改带访问令牌与 App 版本号、不走 Cookie。 */
+export function configureMerchantAppMode(store: MerchantAppStore, clientVersion: string): void {
+  merchantApp = { store, clientVersion };
+}
+
+export function isMerchantAppMode(): boolean {
+  return merchantApp !== null;
+}
+
+export function merchantAppStore(): MerchantAppStore | null {
+  return merchantApp?.store ?? null;
+}
+
+function credentialsMode(): RequestCredentials {
+  return merchantApp ? "omit" : "include";
+}
+
+// App 内不做文件导出（BSM:1886 商户 App 未列导出；WebView 里存不下文件）：这几类下载在 App 里不发请求，免得生成导出、扣掉单次授权却拿不到文件。
+const MERCHANT_APP_EXPORT_ENDPOINTS = new Set(["export", "monthly-export", "editable-copy"]);
+
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 // 第 23 条 23-R2、23-R5：外壳自发的页面打开留痕。不是用户的一次操作，不进操作编号登记、不撤下「已完成」提示（M725-F03），每次带新编号。
@@ -119,8 +153,8 @@ export class AdminApi {
   /** 3.19 二期：当前所在菜单模块（AdminApp 路由切换时更新），随请求带 X-Module-Code 供终端开关按模块闸。 */
   moduleCode: string | null = null;
 
-  /** 商户专区（3.18 方案A）：merchant 归属账号按 merchant_portal 终端上报，受 V197 商户门户总开关约束；员工/平台账号仍为 web。 */
-  terminalType: string = "web";
+  /** 商户专区（3.18 方案A）：merchant 归属账号按 merchant_portal 终端上报，受 V197 商户门户总开关约束；员工/平台账号仍为 web。商户手机应用里一律 merchant_app（第 25 条 25-R3）。 */
+  terminalType: string = merchantApp ? "merchant_app" : "web";
 
   /** 会话失效回调（AdminApp 清会话回登录页，提示「登录已过期」）。 */
   onSessionExpired: (() => void) | null = null;
@@ -170,8 +204,8 @@ export class AdminApi {
       const headers = new Headers();
       headers.set("x-terminal-type", this.terminalType);
       if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
-      this.applyCsrf(headers, "POST");
-      return { method: "POST", headers, body: form, credentials: "include" };
+      this.applyAuth(headers, "POST");
+      return { method: "POST", headers, body: form, credentials: credentialsMode() };
     };
     let response = await fetch(`${this.apiBaseUrl}${path}`, buildInit());
     if (response.status === 401 && !path.includes("/auth/")) {
@@ -190,6 +224,9 @@ export class AdminApi {
    * 下载文件名取 Content-Disposition 的 UTF-8 文件名。
    */
   async getFile(path: string): Promise<DownloadedFile> {
+    if (merchantApp && MERCHANT_APP_EXPORT_ENDPOINTS.has(path.split("?")[0]!.split("/").pop() ?? "")) {
+      throw new Error("导出文件请在商户网页门户办理");
+    }
     let response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit("GET", undefined));
     if (response.status === 401) {
       if (await this.tryRefresh()) {
@@ -202,8 +239,14 @@ export class AdminApi {
     return { blob: await response.blob(), fileName: name ? decodeURIComponent(name) : "导出文件.pdf" };
   }
 
-  /** 写请求带 CSRF 双提交头（X-XSRF-TOKEN = XSRF-TOKEN Cookie）；读请求不需要。 */
-  private applyCsrf(headers: Headers, method: string): void {
+  /** 写请求带 CSRF 双提交头（X-XSRF-TOKEN = XSRF-TOKEN Cookie）；读请求不需要。商户手机应用不用 Cookie 与 CSRF，改带访问令牌与 App 版本号（PGM:736 版本档）。 */
+  private applyAuth(headers: Headers, method: string): void {
+    if (merchantApp) {
+      const tokens = merchantApp.store.tokens();
+      if (tokens) headers.set("authorization", `Bearer ${tokens.accessToken}`);
+      headers.set("x-client-version", merchantApp.clientVersion);
+      return;
+    }
     if (SAFE_METHODS.has(method)) return;
     const csrf = readCookie("XSRF-TOKEN");
     if (csrf) headers.set("x-xsrf-token", csrf);
@@ -214,9 +257,9 @@ export class AdminApi {
     // 3.19 二期：声明终端后后端按 terminal.enabled 逐请求强制（矩阵页关端/关模块=接口硬拒）。
     headers.set("x-terminal-type", this.terminalType);
     if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
-    this.applyCsrf(headers, method);
-    // 令牌在 HttpOnly Cookie 里，浏览器自动携带（credentials:include 覆盖同源/跨源），JS 不再手动加 Authorization 头。
-    const init: RequestInit = { method, headers, credentials: "include" };
+    this.applyAuth(headers, method);
+    // 令牌在 HttpOnly Cookie 里，浏览器自动携带（credentials:include 覆盖同源/跨源），JS 不再手动加 Authorization 头；商户手机应用除外（见 applyAuth）。
+    const init: RequestInit = { method, headers, credentials: credentialsMode() };
     if (body) {
       headers.set("content-type", "application/json");
       init.body = JSON.stringify(normalizeRequestBody(body));
@@ -290,9 +333,10 @@ export class AdminApi {
 
   private async doRefresh(): Promise<boolean> {
     try {
+      if (merchantApp) return await this.refreshMerchantApp(merchantApp.store);
       // 刷新令牌在 HttpOnly Cookie 里（浏览器自动携带）；空体即可，后端从 Cookie 取。带 CSRF 头 + credentials。
       const headers = new Headers({ "content-type": "application/json", "x-terminal-type": this.terminalType });
-      this.applyCsrf(headers, "POST");
+      this.applyAuth(headers, "POST");
       const response = await fetch(`${this.apiBaseUrl}/api/v1/auth/refresh`, {
         method: "POST",
         headers,
@@ -304,5 +348,27 @@ export class AdminApi {
     } catch {
       return false;
     }
+  }
+
+  /** 商户手机应用：头带旧访问令牌，体带刷新令牌与设备编号（绑定设备编号的会话刷新须同号）；成功存新令牌，失败只清令牌、设备编号保留，随后回登录页。 */
+  private async refreshMerchantApp(store: MerchantAppStore): Promise<boolean> {
+    const tokens = store.tokens();
+    if (tokens) {
+      const headers = new Headers({ "content-type": "application/json", "x-terminal-type": this.terminalType });
+      this.applyAuth(headers, "POST");
+      const response = await fetch(`${this.apiBaseUrl}/api/v1/auth/refresh`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(normalizeRequestBody({ refreshToken: tokens.refreshToken, deviceId: store.deviceId() ?? undefined })),
+        credentials: "omit",
+      });
+      const renewed = response.ok ? (unwrap(await response.json()) as { accessToken?: string; refreshToken?: string; deviceId?: string } | null) : null;
+      if (renewed?.accessToken) {
+        await store.save({ accessToken: renewed.accessToken, refreshToken: renewed.refreshToken ?? tokens.refreshToken }, renewed.deviceId ?? store.deviceId());
+        return true;
+      }
+    }
+    await store.clearTokens();
+    return false;
   }
 }

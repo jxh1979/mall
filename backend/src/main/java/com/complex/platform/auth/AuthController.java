@@ -29,12 +29,18 @@ public class AuthController {
             @RequestBody @jakarta.validation.Valid AuthService.LoginRequest request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
-        AuthService.LoginResponse result = authService.login(request);
+        // 第 25 条 25-R2（第十八批裁决 19「第一次登录时系统发一个设备编号，存进 App 的系统安全存储并在后台登记」）：商户手机应用登录用
+        // App 带来的编号（已登记沿用，没有或未登记发新号）作会话设备号，登录成功后登记；不发浏览器编号 Cookie。
+        String appDeviceNo = AuthService.MERCHANT_APP.equals(request.terminalType()) ? browserDevices.appDevice(request.deviceId()) : null;
+        AuthService.LoginResponse result = authService.login(appDeviceNo == null ? request
+                : new AuthService.LoginRequest(request.loginName(), request.password(), request.otpCode(), appDeviceNo, request.terminalType()));
         // 后台 Web：令牌种入 HttpOnly Cookie（JS 读不到）+ 下发 CSRF 令牌。设备端仍读响应体令牌，行为不变。
         AuthCookies.writeSession(httpRequest, httpResponse,
                 result.accessToken(), result.refreshToken(), AuthCookies.newCsrfToken());
-        // 第 23 条 23-R1（第十八批裁决 6）：网页登录发浏览器设备编号并登记；带 device_id 或报设备绑定型终端的设备端不发（见 browserLogin）。
-        if (BrowserDeviceRegistry.browserLogin(httpRequest, request.deviceId())) {
+        if (appDeviceNo != null) {
+            browserDevices.register(appDeviceNo, result.user().id());
+        } else if (BrowserDeviceRegistry.browserLogin(httpRequest, request.deviceId())) {
+            // 第 23 条 23-R1（第十八批裁决 6）：网页登录发浏览器设备编号并登记；带 device_id 或报设备绑定型终端的设备端不发（见 browserLogin）。
             browserDevices.ensure(httpRequest, httpResponse, result.user().id());
         }
         return ApiResponse.ok(result);

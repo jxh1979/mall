@@ -253,6 +253,24 @@ class AuthServiceTests {
         ));
     }
 
+    // 第 25 条 25-R1（BSM:1884-1886 商户 App「商户侧的手机端」）：dev/test 登录同口径——商户手机应用只接受商户账号；
+    // 平台账号挂了商户（种子 p0_admin 即 platform_admin＋seed-merchant）与无商户归属员工都拒，失败留痕。
+    @Test
+    void merchantAppLoginOnlyAcceptsMerchantAccounts() {
+        service.provisionUser("usr_b30_staff", "b30_staff", "Pw-1!", "staff", "org-1", null, "active");
+        service.provisionUser("usr_b30_shop", "b30_shop", "Pw-1!", "staff", "org-1", "mch-1", "active");
+
+        assertThatThrownBy(() -> service.login(new AuthService.LoginRequest("p0_admin", "secret", null, null, "merchant_app")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MERCHANT_APP_ACCOUNT_REQUIRED"));
+        assertThatThrownBy(() -> service.login(new AuthService.LoginRequest("b30_staff", "Pw-1!", null, null, "merchant_app")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("MERCHANT_APP_ACCOUNT_REQUIRED"));
+        assertThat(service.login(new AuthService.LoginRequest("b30_shop", "Pw-1!", null, null, "merchant_app")).user().id())
+                .isEqualTo("usr_b30_shop");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .containsExactly("auth.login.failed", "auth.login.failed", "auth.login.succeeded");
+    }
+
     // XM-D029-006：网页后台登录与刷新都不带设备号——未绑定设备的会话照常续期；带设备号登录的会话，刷新缺或错设备号都拒。
     @Test
     void webSessionRefreshesWithoutDeviceButDeviceBoundSessionNeedsTheSameDevice() {

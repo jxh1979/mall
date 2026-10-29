@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -259,4 +259,12 @@ export function accountFormHint(route: AdminRoute): string {
   if (route.accountForms?.includes("vendor")) return "此页面供外包机构账号使用，当前账号无需使用。";
   if (route.accountForms?.includes("merchant")) return "此页面供商户账号使用，当前账号无需使用。";
   return "此页面不适用于当前账号形态。";
+}
+
+/**
+ * 第 25 条 25-R3：商户手机应用里不开的页面。BSM:1886 商户 App「在授权业务范围内移动处理本商户经营、对账、结算和看板」，
+ * 比 BSM:1881 商户侧页面少「供应/库存」与「员工」：库存与经销、账号权限、人事、员工车辆在 App 里不显示、不进入。
+ */
+export function merchantAppExcluded(route: AdminRoute): boolean {
+  return route.group === "inventory" || route.group === "access" || route.module === "人事" || route.pageId === "ADM-MER-009";
 }
