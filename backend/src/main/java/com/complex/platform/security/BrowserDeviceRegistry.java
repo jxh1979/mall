@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.security;
 
 import com.complex.platform.gate.DeviceCredentialVerifier;
@@ -21,6 +21,9 @@ import org.springframework.web.util.WebUtils;
  *
  * <p>编号存在 HttpOnly Cookie {@value #COOKIE}（Path=/、SameSite=Strict，Secure 按请求是否 https，同 {@code AuthCookies}），
  * 登记在 browser_devices。登出不清此 Cookie（{@code AuthCookies.clearSession} 只清三个会话 Cookie），否则每次重新登录都成了新设备。
+ *
+ * <p>第 25 条 25-R2（第十八批裁决 19「同网页端发编号」）：商户手机应用的编号同表登记、不发 Cookie——App 存进系统安全存储，
+ * 登录请求体 device_id 带回（{@link #appDevice}、{@link #register}）；编号即该会话 device_id，每请求经会话派生的可信终端取到（{@link #current}）。
  */
 @Component
 public class BrowserDeviceRegistry {
@@ -63,7 +66,22 @@ public class BrowserDeviceRegistry {
     }
 
     /**
-     * 当前请求的设备编号：员工手机经设备凭证验签的取其登记设备号；否则取浏览器 Cookie 里、且在 browser_devices 登记过的编号；
+     * 第 25 条 25-R2：商户手机应用登录的设备编号——请求体带来的编号已登记就沿用，没有或查不到就发 WB＋12 位新号（此时不登记，登录成功后
+     * {@link #register}）。卸载重装或清除应用数据后 App 带不来旧号，即发新号（裁决 19「算新设备」）。
+     */
+    public String appDevice(String candidate) {
+        return candidate != null && !candidate.isBlank() && known(candidate) ? candidate : newDeviceNo();
+    }
+
+    /** 第 25 条 25-R2：商户手机应用登录成功后登记编号；已登记的不重复写。 */
+    public void register(String deviceNo, String userId) {
+        jdbcTemplate.update("INSERT INTO browser_devices (device_no, first_user_id) VALUES (?, ?) ON CONFLICT (device_no) DO NOTHING",
+                deviceNo, userId);
+    }
+
+    /**
+     * 当前请求的设备编号：员工手机经设备凭证验签的取其登记设备号、商户手机应用取会话设备编号（同为已验证的派生终端）；
+     * 否则取浏览器 Cookie 里、且在 browser_devices 登记过的编号；
      * 都没有为空（调用方按「请重新登录后再打开」处理）。
      */
     public Optional<String> current(HttpServletRequest request) {
@@ -85,9 +103,12 @@ public class BrowserDeviceRegistry {
         if (value == null || value.isBlank()) {
             return Optional.empty();
         }
-        Boolean known = jdbcTemplate.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM browser_devices WHERE device_no = ?)", Boolean.class, value);
-        return Boolean.TRUE.equals(known) ? Optional.of(value) : Optional.empty();
+        return known(value) ? Optional.of(value) : Optional.empty();
+    }
+
+    private boolean known(String deviceNo) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM browser_devices WHERE device_no = ?)", Boolean.class, deviceNo));
     }
 
     private static String newDeviceNo() {

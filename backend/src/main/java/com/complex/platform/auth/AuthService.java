@@ -1,6 +1,6 @@
 package com.complex.platform.auth;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -25,6 +25,9 @@ import org.springframework.stereotype.Service;
 @Service
 @Profile({"local", "dev", "test"})
 public class AuthService implements SessionIssuer {
+
+    /** 第 25 条：商户手机应用（受控十一端之一，ENUM:233）的终端码。 */
+    public static final String MERCHANT_APP = "merchant_app";
 
     private final ConcurrentMap<String, UserRecord> usersByUsername = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, UserRecord> usersById = new ConcurrentHashMap<>();
@@ -141,6 +144,15 @@ public class AuthService implements SessionIssuer {
         });
     }
 
+    /**
+     * 第 25 条 25-R1（BSM:1884-1886 商户 App「商户侧的手机端」）：商户手机应用只接受商户账号——带商户归属、且不是平台账号或外包机构账号
+     * （与后台前端 adminRoutes.ts accountFormOf 判商户形态同口径：平台账号即便挂了商户也算平台形态）。
+     */
+    static boolean merchantAppAccount(String accountType, String merchantId) {
+        return merchantId != null && !merchantId.isBlank()
+                && !"platform_admin".equals(accountType) && !"outsourced_vendor".equals(accountType);
+    }
+
     public LoginResponse login(LoginRequest request) {
         try {
             requireText(request == null ? null : request.loginName(), "login_name");
@@ -154,6 +166,9 @@ public class AuthService implements SessionIssuer {
             }
             if (!"active".equals(user.status()) || employmentBlocked(user.id())) {
                 throw ApiException.unauthorized("USER_NOT_ACTIVE", "该账号已停用");
+            }
+            if (MERCHANT_APP.equals(request.terminalType()) && !merchantAppAccount(user.accountType(), user.merchantId())) {
+                throw ApiException.forbidden("MERCHANT_APP_ACCOUNT_REQUIRED", "商户手机应用只接受商户账号登录");
             }
 
             SessionRecord session = createSession(user, request.deviceId(), request.terminalType());
@@ -327,6 +342,8 @@ public class AuthService implements SessionIssuer {
         }
         request.setAttribute("auth.sessionId", session.id());
         request.setAttribute("auth.deviceId", session.deviceId());
+        // 第 25 条 25-R1：会话锁定的登录端，设备凭证拦截器据此认商户手机应用（不看自报 X-Terminal-Type）。
+        request.setAttribute("auth.terminalType", session.terminalType());
     }
 
     @Override
@@ -452,7 +469,8 @@ public class AuthService implements SessionIssuer {
                 session.refreshToken(),
                 session.id(),
                 "Bearer",
-                user.toApiUser()
+                user.toApiUser(),
+                session.deviceId()
         );
     }
 
@@ -482,12 +500,14 @@ public class AuthService implements SessionIssuer {
     ) {
     }
 
+    /** deviceId：本次会话的设备编号（第 25 条 25-R2：商户手机应用存进系统安全存储、下次登录与刷新带回）。 */
     public record LoginResponse(
             String accessToken,
             String refreshToken,
             String sessionId,
             String tokenType,
-            ApiUser user
+            ApiUser user,
+            String deviceId
     ) {
     }
 

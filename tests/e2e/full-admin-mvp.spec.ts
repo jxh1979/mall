@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -40,12 +40,17 @@ test.describe("full admin MVP acceptance", () => {
     await adminLogin(page, "/admin/access/users");
 
     await expect(page.getByTestId("admin-page-title")).toContainText("员工账号");
-    // 引导式流程一期：主按钮打开分步弹窗 → 账号信息 → 归属与授权 → 状态与权限 → 确认页创建。
+    // 两条路径：员工默认走注册申请（BSM:1463）；外部协作机构账号由管理员开通并赋权（PGM:681）。
     await page.getByTestId("access-user-create-open").click();
+    await page.getByTestId("access-user-name").fill("张三");
+    await page.getByTestId("access-user-flow-next").click();
+    await page.getByTestId("access-user-create").click();
+    await expect(page.getByTestId("admin-action-result")).toContainText("员工注册申请已提交");
+    // 提交后弹窗已关闭、姓名已清空：重新打开，先选外部协作账号类型（密码框才渲染），再填账号与初始密码。
+    await page.getByTestId("access-user-create-open").click();
+    await page.getByTestId("access-user-account-type").selectOption("outsourced_vendor");
     await page.getByTestId("access-user-name").fill("new-staff");
     await page.getByTestId("access-user-password").fill("ChangeMe@123");
-    await page.getByTestId("access-user-phone").fill("13800000001");
-    await page.getByTestId("access-user-account-type").selectOption("sales");
     await page.getByTestId("access-user-org").fill("org-1");
     await page.getByTestId("access-user-merchant").selectOption("merchant-1");
     await page.getByTestId("access-user-consent").fill("consent-staff-001");
@@ -122,6 +127,7 @@ test.describe("full admin MVP acceptance", () => {
 
     await page.getByTestId("bar-session-select-session-1").check();
     await page.getByTestId("bar-transfer-target-table").fill("table-2");
+    await page.getByTestId("bar-transfer-target-staff").fill("staff-2");
     await page.getByTestId("bar-transfer-submit").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("状态：已转移");
 

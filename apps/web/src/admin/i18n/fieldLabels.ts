@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3213,7 +3213,7 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   ref_type: { lead: "线索", intent: "意向" },
   method: { phone: "电话", visit: "拜访", wechat: "微信" },
   brand_type: { intentional: "意向品牌", prospective: "潜在品牌", partner: "合作品牌", blacklist: "黑名单" },
-  reported_channel: { web_admin: "后台网页", merchant_portal: "商户门户" },
+  reported_channel: { web_admin: "后台网页", merchant_portal: "商户门户", merchant_app: "商户手机应用" },
   owner_department: { property: "物业" },
   fee_event: { rent: "租金", utilities: "能耗", property: "物业" },
   cooperation_form: { self_operated: "自营", lease: "租赁", joint_operation: "联营", managed_operation: "代运营", service_provider: "服务商接入", other: "其他" },

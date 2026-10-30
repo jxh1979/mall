@@ -1,0 +1,41 @@
+{
+  "name": "apps-merchant-app",
+  "private": true,
+  "version": "0.1.0",
+  "documentVersion": "V0.01",
+  "description": "商户手机应用（Android/iPhone）的构建入口：原生壳挂 apps/web 的后台外壳，只许商户账号登录，本地打包页面资源。",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5175",
+    "build": "npm run typecheck && vite build",
+    "build:android-debug": "npm run typecheck && vite build --mode android-debug",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.5.2",
+    "@aparajita/capacitor-secure-storage": "8.0.1",
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@complex/customer-core": "0.1.0",
+    "antd": "^5.22.5",
+    "dayjs": "^1.11.21",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.7.2",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
+  }
+}

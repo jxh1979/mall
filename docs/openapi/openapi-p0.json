@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.41",
+    "version": "V0.42",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -3001,13 +3001,14 @@
         ],
         "operationId": "login",
         "summary": "员工或商户员工登录",
-        "description": "第 23 条 23-R1（第十八批裁决 6）：网页登录（请求体不带 device_id）成功时另下发 Set-Cookie complex_device_no——浏览器设备编号（WB＋12 位），HttpOnly、SameSite=Strict、Path=/、Max-Age 400 天；Cookie 里的编号已在后台登记的沿用并续期，没有或未登记的发新号并登记；退出登录不清此 Cookie。请求体带 device_id、或请求头 X-Terminal-Type 报员工工作手机、员工私人手机、平板、一体机（设备绑定型终端）的设备端登录不下发、不登记。导出密码与页面暗纹用这个编号。",
+        "description": "第 23 条 23-R1（第十八批裁决 6）：网页登录（请求体不带 device_id）成功时另下发 Set-Cookie complex_device_no——浏览器设备编号（WB＋12 位），HttpOnly、SameSite=Strict、Path=/、Max-Age 400 天；Cookie 里的编号已在后台登记的沿用并续期，没有或未登记的发新号并登记；退出登录不清此 Cookie。请求体带 device_id、或请求头 X-Terminal-Type 报员工工作手机、员工私人手机、平板、一体机（设备绑定型终端）的设备端登录不下发、不登记。导出密码与页面暗纹用这个编号。第 25 条 25-R1：terminal_type=merchant_app 只接受商户账号登录，否则 403 MERCHANT_APP_ACCOUNT_REQUIRED（商户手机应用只接受商户账号）。第 25 条 25-R2：terminal_type=merchant_app 的登录不下发 complex_device_no Cookie；请求体 device_id 为本 App 上次拿到的设备编号，已登记的沿用，没有或未登记的发新号并在登录成功后登记；响应 device_id 返回本次会话设备编号（第十八批裁决 19）。",
         "security": [],
         "x-permission": "public",
         "x-data-scope": "none",
         "x-terminal-allowed": [
           "web",
           "merchant_portal",
+          "merchant_app",
           "staff_work_phone",
           "tablet",
           "kiosk"
@@ -3026,6 +3027,9 @@
             "$ref": "#/components/responses/Error"
           },
           "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -3047,6 +3051,7 @@
         "x-terminal-allowed": [
           "web",
           "merchant_portal",
+          "merchant_app",
           "staff_work_phone",
           "tablet",
           "kiosk"
@@ -3083,6 +3088,7 @@
         "x-terminal-allowed": [
           "web",
           "merchant_portal",
+          "merchant_app",
           "staff_work_phone",
           "tablet",
           "kiosk"
@@ -11763,7 +11769,8 @@
         "x-terminal-allowed": [
           "web",
           "mobile_admin",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "merchant_service.listMerchantServiceWorkOrders.succeeded",
@@ -11793,7 +11800,8 @@
         "x-terminal-allowed": [
           "web",
           "mobile_admin",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "merchant_service.createMerchantServiceWorkOrder.succeeded",
@@ -11907,7 +11915,8 @@
         "x-terminal-allowed": [
           "web",
           "mobile_admin",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "merchant_service.addMerchantServiceWorkOrderAction.succeeded",
@@ -11963,7 +11972,8 @@
         "x-terminal-allowed": [
           "web",
           "mobile_admin",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "merchant_service.assignMerchantServiceWorkOrder.succeeded",
@@ -12019,7 +12029,8 @@
         "x-terminal-allowed": [
           "web",
           "mobile_admin",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "merchant_service.closeMerchantServiceWorkOrder.succeeded",
@@ -12355,7 +12366,8 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "merchant.viewed",
@@ -13004,7 +13016,8 @@
         "x-data-scope": "project-merchant-space",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "space.viewed",
@@ -14620,7 +14633,8 @@
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "ticket_refund.viewed",
@@ -14647,7 +14661,8 @@
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "ticket_refund.requested",
@@ -14768,7 +14783,8 @@
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "ticket_safety_event.viewed",
@@ -14796,7 +14812,8 @@
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "ticket_safety_event.requested",
@@ -15519,7 +15536,8 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "merchant_billing.bill.viewed",
@@ -37920,7 +37938,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -37954,7 +37973,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "merchant_portal.payee_account.approved",
@@ -38037,7 +38057,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -38068,7 +38089,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "merchant_portal.fee_statement.viewed",
@@ -38115,7 +38137,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "merchant_portal.contract.viewed",
@@ -38146,7 +38169,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "merchant_portal.settlement.viewed",
@@ -38177,7 +38201,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "merchant_portal.settlement.disputed",
@@ -38254,7 +38279,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "merchant_portal.settlement.resolution_rejected",
@@ -49725,7 +49751,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "dividend.plans_listed",
@@ -49914,7 +49941,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "dividend.statements_listed",
@@ -50023,7 +50051,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "dividend.statement_viewed",
@@ -50372,7 +50401,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "dividend.reserve_ledger_listed",
@@ -74442,7 +74472,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -74471,7 +74502,8 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "stored_value.exit_notice_published",
@@ -74953,6 +74985,7 @@
         "x-terminal-allowed": [
           "web",
           "merchant_portal",
+          "merchant_app",
           "staff_work_phone",
           "staff_private_phone"
         ],
@@ -75101,7 +75134,8 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "security.my_exports.viewed",
@@ -75214,7 +75248,8 @@
         "x-data-scope": "self",
         "x-terminal-allowed": [
           "web",
-          "merchant_portal"
+          "merchant_portal",
+          "merchant_app"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "security.export.editable_requested",
@@ -79336,7 +79371,7 @@
           },
           "device_id": {
             "type": "string",
-            "description": "设备唯一 ID；必须来自设备绑定档案，不允许临时文本代替。",
+            "description": "设备唯一 ID；必须来自设备绑定档案，不允许临时文本代替。商户手机应用填本 App 保存的设备编号。",
             "maxLength": 64
           },
           "terminal_type": {
@@ -79345,6 +79380,7 @@
             "enum": [
               "web",
               "merchant_portal",
+              "merchant_app",
               "staff_work_phone",
               "tablet",
               "kiosk"
@@ -79368,7 +79404,7 @@
           },
           "device_id": {
             "type": "string",
-            "description": "设备唯一 ID；必须来自设备绑定档案，不允许临时文本代替。",
+            "description": "设备唯一 ID；必须来自设备绑定档案，不允许临时文本代替。商户手机应用填本 App 保存的设备编号。",
             "maxLength": 64
           }
         }
@@ -85386,6 +85422,7 @@
             "enum": [
               "web",
               "merchant_portal",
+              "merchant_app",
               "phone",
               "wechat",
               "offline"

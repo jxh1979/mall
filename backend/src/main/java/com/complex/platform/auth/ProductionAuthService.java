@@ -1,6 +1,6 @@
 package com.complex.platform.auth;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -162,6 +162,11 @@ public class ProductionAuthService implements SessionIssuer {
             if (!passwordEncoder.matches(request.password(), credential.passwordHash())) {
                 registerFailedLogin(credential, now);
                 throw ApiException.unauthorized("INVALID_CREDENTIALS", "账号或密码不正确");
+            }
+            // 第 25 条 25-R1：商户手机应用只接受商户账号（口令错仍先报 401；被拒经下方 catch 留 auth.login.failed）。
+            if (AuthService.MERCHANT_APP.equals(request.terminalType())
+                    && !AuthService.merchantAppAccount(credential.accountType(), credential.merchantId())) {
+                throw ApiException.forbidden("MERCHANT_APP_ACCOUNT_REQUIRED", "商户手机应用只接受商户账号登录");
             }
 
             resetFailedLogin(credential.userId(), now);
@@ -332,6 +337,8 @@ public class ProductionAuthService implements SessionIssuer {
         findActiveSessionByAccessToken(token).ifPresent(session -> {
             request.setAttribute("auth.sessionId", session.id());
             request.setAttribute("auth.deviceId", session.deviceId());
+            // 第 25 条 25-R1：会话锁定的登录端，设备凭证拦截器据此认商户手机应用（不看自报 X-Terminal-Type）。
+            request.setAttribute("auth.terminalType", session.terminalType());
         });
     }
 
@@ -666,7 +673,8 @@ public class ProductionAuthService implements SessionIssuer {
                 session.refreshToken(),
                 session.id(),
                 "Bearer",
-                user
+                user,
+                session.deviceId()
         );
     }
 

@@ -1,12 +1,12 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
 import "antd/dist/reset.css";
-import { AdminApi } from "./client/adminClient";
-import { SENSITIVE_PAGE_IDS, accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, routeAllowsAccountForm } from "./adminRoutes";
+import { AdminApi, isMerchantAppMode, merchantAppStore } from "./client/adminClient";
+import { SENSITIVE_PAGE_IDS, accountFormHint, accountFormOf, adminRoutes, findAdminRoute, groupedAdminRoutes, merchantAppExcluded, routeAllowsAccountForm } from "./adminRoutes";
 import { stripBase, withBase } from "../basePath";
 import { forgetWriteOperations } from "../shared/operationKey";
 import { ReplayedNotice } from "../shared/ReplayedNotice";
@@ -187,6 +187,8 @@ type LoginResponse = {
   accessToken: string;
   refreshToken?: string;
   sessionId?: string;
+  /** 本次会话设备编号（商户手机应用，第十八批裁决 19）。 */
+  deviceId?: string;
   tokenType?: string;
   user: AdminUser;
 };
@@ -499,10 +501,12 @@ export default function AdminApp() {
 
   const api = React.useMemo(() => {
     const instance = new AdminApi();
-    // 商户专区(3.18 方案A):merchant 归属账号整个后台会话按 merchant_portal 终端上报(V197 总开关+V199 模块开关约束)。
-    instance.terminalType = user?.merchantId ? "merchant_portal" : "web";
+    // 商户专区(3.18 方案A):merchant 归属账号整个后台会话按 merchant_portal 终端上报(V197 总开关+V199 模块开关约束)；商户手机应用里报 merchant_app（第 25 条 25-R3）。
+    instance.terminalType = isMerchantAppMode() ? "merchant_app" : user?.merchantId ? "merchant_portal" : "web";
     // 会话续期：401 → /auth/refresh（Cookie 自动携带刷新令牌）→ 重放原请求一次；刷新失败清会话回登录视图。
     instance.onSessionExpired = () => {
+      // 商户手机应用：只清令牌，设备编号保留（第十八批裁决 19）。
+      void merchantAppStore()?.clearTokens().catch(() => undefined);
       saveStoredSession(null);
       setUser(null);
       setSessionId(null);
@@ -519,6 +523,19 @@ export default function AdminApp() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // 第 25 条 25-R3：App 用令牌、不带浏览器 Cookie，附件原件链接（/api/v1/…）在 App 里打不开还会跳离当前页，拦下并提示；/admin/ 整页链接照常。
+  React.useEffect(() => {
+    if (!isMerchantAppMode()) return;
+    const onClick = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest("a") : null;
+      if (!link || !stripBase(link.pathname).startsWith("/api/v1/")) return;
+      event.preventDefault();
+      setGlobalError("附件原件请在商户网页门户查看");
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
   }, []);
 
   React.useEffect(() => {
@@ -601,6 +618,11 @@ export default function AdminApp() {
 
   // 菜单按账号形态隐藏（用户裁决）：外包/商户专用页对不匹配形态不渲染、不导航。
   const accountForm = accountFormOf(user);
+  // 第 25 条 25-R3（BSM:1886）：商户手机应用里另不开库存、经销、人事、账号权限与员工车辆（见 merchantAppExcluded）。
+  const inMerchantApp = isMerchantAppMode();
+  function routeAllowedHere(target: AdminRoute) {
+    return routeAllowsAccountForm(target, accountForm) && !(inMerchantApp && merchantAppExcluded(target));
+  }
 
   // M002-F34（依据 M002-F08 裁决「本人可以直接解除，不会卡死」）：最高权限本人给自己设了拒绝（含 access.role.assign）后，
   // 导航与直链仍能进访问治理工作台去解除；页内只放行「移除本人显式拒绝」，其余路由门禁不变。
@@ -632,7 +654,7 @@ export default function AdminApp() {
   const [watermarkCode, setWatermarkCode] = React.useState<string | null>(null);
   const [openedPageId, setOpenedPageId] = React.useState<string | null>(null);
   const sensitivePage = SENSITIVE_PAGE_IDS.has(route.pageId);
-  const routeOpen = !!user && routeAllowsAccountForm(route, accountForm)
+  const routeOpen = !!user && routeAllowedHere(route)
     && hasPermissions(routePermissionState(route), routePermissions(route));
   React.useEffect(() => {
     if (!user) {
@@ -694,7 +716,7 @@ export default function AdminApp() {
     if (!hasPermissions(routePermissionState(nextRoute), routePermissions(nextRoute))) {
       return;
     }
-    if (!routeAllowsAccountForm(nextRoute, accountForm)) {
+    if (!routeAllowedHere(nextRoute)) {
       return;
     }
     // 3.19 二期：被终端开关关闭的模块不导航（菜单已隐藏，此处兜底直链/历史记录）。
@@ -723,7 +745,7 @@ export default function AdminApp() {
     if (!target || !hasPermissions(routePermissionState(target), routePermissions(target))) {
       return;
     }
-    if (!routeAllowsAccountForm(target, accountForm)) {
+    if (!routeAllowedHere(target)) {
       return;
     }
     setFocusObjectId(objectId);
@@ -745,7 +767,12 @@ export default function AdminApp() {
     try {
       const loginApi = new AdminApi();
       // 令牌由服务端以 HttpOnly Cookie 下发（响应体令牌前端不再读取/落盘）；仅取展示身份 + 登出用 sessionId。
-      const response = await loginApi.post<LoginResponse>("/api/v1/auth/login", { login_name: username, password });
+      // 商户手机应用（25-R3）：报 merchant_app、带上次拿到的设备编号，响应里的令牌与设备编号存进 App 的系统安全存储（第十八批裁决 19）。
+      const store = merchantAppStore();
+      const response = await loginApi.post<LoginResponse>("/api/v1/auth/login", store
+        ? { login_name: username, password, terminal_type: "merchant_app", device_id: store.deviceId() ?? undefined }
+        : { login_name: username, password });
+      if (store) await store.save({ accessToken: response.accessToken, refreshToken: response.refreshToken ?? "" }, response.deviceId ?? store.deviceId());
       // M725-F02：上一个人没拿到结果的请求编号不沿用到这个人身上；同一个人重新登录照常沿用。
       forgetWriteOperations(response.user.id);
       setUser(response.user);
@@ -761,6 +788,8 @@ export default function AdminApp() {
   function logout() {
     // 令牌在 HttpOnly Cookie 里，JS 清不掉——必须调后端登出以 Set-Cookie 过期 Cookie 并吊销会话（尽力而为，失败也清本地态）。
     if (sessionId) void api.post("/api/v1/auth/logout", { session_id: sessionId }).catch(() => undefined);
+    // 商户手机应用：登出请求已带着令牌发出，再清令牌；设备编号保留（第十八批裁决 19）。
+    void merchantAppStore()?.clearTokens().catch(() => undefined);
     saveStoredSession(null);
     setUser(null);
     setSessionId(null);
@@ -812,7 +841,7 @@ export default function AdminApp() {
         </div>
         <nav data-testid="admin-nav">
           {groupedAdminRoutes()
-            .map((group) => ({ ...group, routes: group.routes.filter((item) => routeAllowsAccountForm(item, accountForm)) }))
+            .map((group) => ({ ...group, routes: group.routes.filter((item) => routeAllowedHere(item)) }))
             .filter((group) => !hiddenGroups.has(group.key) && group.routes.length > 0)
             .map((group) => {
             const collapsed = collapsedGroups[group.key] ?? false;
@@ -899,9 +928,9 @@ export default function AdminApp() {
           {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
           {/* M725-F03：重复提交返回第一次的结果时提示已完成。 */}
           <ReplayedNotice />
-          {!routeAllowsAccountForm(route, accountForm) ? (
-            // 形态不匹配（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
-            <div className="admin-denied" data-testid="admin-account-form-mismatch">{accountFormHint(route)}</div>
+          {!routeAllowedHere(route) ? (
+            // 形态不匹配或商户手机应用不开的页（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
+            <div className="admin-denied" data-testid="admin-account-form-mismatch">{routeAllowsAccountForm(route, accountForm) ? "此功能请在商户网页门户办理" : accountFormHint(route)}</div>
           ) : (
           <PermissionGate permissionsState={routePermissionState(route)} permissions={routePermissions(route)}>
             {/* lazy 页面用 Suspense 包裹；fallback 故意为 null（轻量占位，

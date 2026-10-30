@@ -2,13 +2,14 @@
   "name": "entertainment-complex-management",
   "private": true,
   "version": "0.1.0",
-  "documentVersion": "V0.04",
+  "documentVersion": "V0.05",
   "type": "module",
   "workspaces": [
     "packages/customer-core",
     "apps/web",
     "apps/customer-app",
-    "apps/customer-miniapp"
+    "apps/customer-miniapp",
+    "apps/merchant-app"
   ],
   "scripts": {
     "dev": "npm run dev:backend",
@@ -59,6 +60,8 @@
     "customer-android:apk": "npm run build:android-debug --workspace apps/customer-app && npm exec --workspace apps/customer-app -- cap sync android && gradle -p apps/customer-app/android --console=plain :app:assembleDebug",
     "verify:customer-android": "node --test tools/customer-android.test.mjs",
     "verify:customer-ios": "node --test tools/customer-ios.test.mjs",
+    "merchant-android:apk": "npm run build:android-debug --workspace apps/merchant-app && npm exec --workspace apps/merchant-app -- cap sync android && gradle -p apps/merchant-app/android --console=plain :app:assembleDebug",
+    "verify:merchant-app": "node --test tools/merchant-app.test.mjs",
     "release:package": "node tools/release/build-release-package.mjs",
     "verify:release-package": "node --test tools/release/release-package.test.mjs",
     "verify:p0": "npm run verify:coding-host-protection && npm run verify:p0-contract && npm run verify:security-baseline && npm run test:backend && npm run build && npm run verify:android-env && npm run android:p0:build && npm run verify:android-p0-smoke-wrapper && npm run android:p0:smoke && npm run android:p0:apk",

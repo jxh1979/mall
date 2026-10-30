@@ -1,4 +1,5 @@
 import React from "react";
+import { isMerchantAppMode } from "../client/adminClient";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { AuditTrailHint } from "../components/AuditTrailHint";
@@ -158,7 +159,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
       priority,
       title,
       description,
-      reportedChannel: "merchant_portal",
+      reportedChannel: isMerchantAppMode() ? "merchant_app" : "merchant_portal",
     };
     const ok = await runAction("merchant_zone_work_order_submitted", request, () => api.post("/api/v1/merchant-service/work-orders", request));
     // 成功才关弹窗并清空标题/描述；失败留弹窗内显错（formError 已由 runAction 置）。

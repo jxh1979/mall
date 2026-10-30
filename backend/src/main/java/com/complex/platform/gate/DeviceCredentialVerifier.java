@@ -1,8 +1,9 @@
 package com.complex.platform.gate;
 
 import com.complex.platform.auth.AuthCookies;
+import com.complex.platform.auth.AuthService;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -64,6 +65,9 @@ import org.springframework.web.util.WebUtils;
  * <p>ROOT-03-R2 客人两端（PGM 第 745 行「客人手机应用、客人小程序、Web 前端（业务人员，客人无网页端）」）：客人路径上带有效客人会话时，
  * 会话锁定的登录端（app/miniapp）即可信终端，自报类型与之不符一律拒；没有客人会话的 app/miniapp 写请求只放行取码、登录、注册、登出，
  * 其余 enforce 下拒、grace 下留痕放行。公司设备凭证不适用于客人自己的手机。
+ *
+ * <p>第 25 条 25-R1 商户手机应用（PGM:744「前端隐藏只是辅助，后端接口必须独立校验」）：请求带商户手机应用会话时（登录只许商户账号），
+ * 会话锁定的登录端即可信终端、不看自报类型，设备取会话设备编号（第十八批裁决 19）；无会话的请求照下方原分支。
  *
  * <p>分级强制 {@code off|grace|enforce}（默认 grace=生产安全态）。读请求不因缺签名被拒。
  * <b>实际翻 enforce 依赖客户端实现签名 + 登记密钥（客户端侧工作，本 PR 不含）；本 PR 让服务端 ready-to-enforce。</b>
@@ -183,6 +187,14 @@ public class DeviceCredentialVerifier {
                 reject(claimed, deviceId, "terminal_session_mismatch");
             }
             return new TerminalIdentityHolder.VerifiedTerminal(session.scene(), null, true);
+        }
+
+        // 第 25 条 25-R1：商户手机应用会话 → 会话锁定的登录端即可信终端（同上客人会话口径），改报 merchant_portal/web 也按 merchant_app
+        // 判总开关、模块开关与灰度；设备＝会话设备编号（裁决 19，暗纹与导出密码用它）。请求属性由令牌过滤器 attachSession 先放好。
+        if (AuthService.MERCHANT_APP.equals(request.getAttribute("auth.terminalType"))) {
+            Object sessionDevice = request.getAttribute("auth.deviceId");
+            return new TerminalIdentityHolder.VerifiedTerminal(AuthService.MERCHANT_APP,
+                    sessionDevice instanceof String appDevice ? appDevice : null, true);
         }
 
         // 服务端反查优先：登记类型压过自报头（不发头 / 改报 web 都不能绕过设备绑定型验签）。

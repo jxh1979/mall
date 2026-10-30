@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { test, expect, type Page } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -188,13 +188,13 @@ test.describe("full admin UI hardening acceptance", () => {
     await adminLogin(page, "/admin/governance/organizations");
     await openNav(page, "ADM-GOV-002");
 
-    // 引导式流程一期：主按钮打开分步弹窗；非法手机号在「联系人」步被拦截，不发任何写请求。
+    // 联系电话为空时在「联系人」步被拦截，不发任何写请求。
     await page.getByTestId("organization-merchant-create-open").click();
+    await page.getByTestId("organization-merchant-name").fill("硬化测试商户");
     await page.getByTestId("organization-merchant-type").selectOption("retail");
     await page.getByTestId("organization-merchant-contact-name").fill("王经理");
-    await page.getByTestId("organization-merchant-contact-phone").fill("12345");
     await page.getByTestId("organization-merchant-flow-next").click();
-    await expect(page.getByTestId("organization-merchant-flow-error")).toContainText("手机号");
+    await expect(page.getByTestId("organization-merchant-flow-error")).toContainText("联系电话不能为空");
     await expect(page.getByTestId("admin-action-result")).toHaveCount(0);
 
     // Valid input flows the matrix key_fields (type/contact) into the create request

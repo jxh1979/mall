@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,7 +31,8 @@ class MasterAuthorityServiceTests {
     });
     private final AuthService.LoginResponse stubResponse = new AuthService.LoginResponse(
             "acc", "ref", "sess-1", "Bearer",
-            new AuthService.ApiUser("usr_master_authority", "master-authority", SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null));
+            new AuthService.ApiUser("usr_master_authority", "master-authority", SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null),
+            null);
     private final SessionIssuer issuer = deviceId -> stubResponse;
     private final KeyPair keyPair = generateKeyPair();
 

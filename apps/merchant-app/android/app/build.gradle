@@ -1,0 +1,66 @@
+// 文件版本：V0.01
+// 商户手机应用（Android，第 25 条）。调试包：包名 com.complex.merchant.dev、中文名「综合体商户端（开发）」，接口指 160。
+// 正式包名、中文名、签名与上架属外部资料，到位前只出调试包；本工程不带发行包配置与检查。
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "com.complex.merchant.dev"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.complex.merchant.dev"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        // 与 apps/merchant-app/package.json 的 version 同值（请求头 X-Client-Version，按版本关停用；tools/merchant-app.test.mjs 断言）。
+        versionName "0.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        resValue "string", "app_name", "综合体商户端（开发）"
+        resValue "string", "title_activity_main", "综合体商户端（开发）"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+    // 与客人 App 解析版本一致，离线缓存已有（appcompat 默认解析到的低版本在 160 离线缓存里没有 aar）。
+    constraints {
+        implementation "androidx.emoji2:emoji2:1.4.0"
+        implementation "androidx.emoji2:emoji2-views-helper:1.4.0"
+        implementation "androidx.lifecycle:lifecycle-process:2.9.0"
+    }
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
