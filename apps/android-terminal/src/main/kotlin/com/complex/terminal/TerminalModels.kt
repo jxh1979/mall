@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -58,6 +58,9 @@ data class BindDeviceRequest(
   /** U07-001：工作手机领用即绑定持有员工（员工档案编号），验签按 device.staffId 收口。 */
   @SerialName("staff_id")
   val staffId: String? = null,
+  /** 第 96 条 96-R1（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态。」）：设备型号，领用时带本机型号；不传后端沿用台账原值。 */
+  @SerialName("device_model")
+  val deviceModel: String? = null,
   @SerialName("idempotency_key")
   val idempotencyKey: String = "",
 )

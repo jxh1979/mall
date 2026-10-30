@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -197,6 +197,8 @@ class BarSalesBackfillJdbcTests {
         approve(manager, review, "approved").andExpect(status().isOk());
 
         assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_table_sessions WHERE id=?", String.class, s)).isEqualTo(user("sales"));
+        // 第十八批 K 段 95-R1：补记销售即营销带客（来源与销售成对写）。
+        assertThat(jdbc.queryForObject("SELECT guest_source FROM bar_table_sessions WHERE id=?", String.class, s)).isEqualTo("marketing");
         assertThat(jdbc.queryForObject("SELECT session_version FROM bar_table_sessions WHERE id=?", Long.class, s)).isEqualTo(2L);
         assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_orders WHERE id=?", String.class, paidOrder)).isNull();
         assertThat(jdbc.queryForMap("SELECT sales_staff_id, sales_role_type FROM bar_bills WHERE id=?", paidBill))
@@ -219,6 +221,7 @@ class BarSalesBackfillJdbcTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].status").value("approved"))
                 .andExpect(jsonPath("$.data[0].proposed.sales_staff_id").value(user("sales")))
+                .andExpect(jsonPath("$.data[0].original_snapshot.guest_source").value("walk_in"))
                 .andExpect(jsonPath("$.data[0].original_snapshot.orders.length()").value(3))
                 .andExpect(jsonPath("$.data[0].original_snapshot.bills.length()").value(2));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='bar.sales_backfill_applied' AND business_id=?",

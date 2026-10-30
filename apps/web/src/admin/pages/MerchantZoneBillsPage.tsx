@@ -48,8 +48,9 @@ function lineSummary(row: MerchantZoneBillRow) {
 
 // 18E 第 21 条（BSM:1323「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，
 // 把当期各名目的费用汇总列示」）：放在 AdminDataState 外面，没有账单时也显示；月份不选时由后端取当月（计费自然月）。
-function FeeStatementSection({ api }: Pick<AdminPageProps, "api">) {
-  const [month, setMonth] = React.useState("");
+function FeeStatementSection({ api, focusObjectId }: Pick<AdminPageProps, "api" | "focusObjectId">) {
+  // 第 92 条：从首页未读账单提醒带账期进来时直接打开该月（后端随即记该月账单已读）。
+  const [month, setMonth] = React.useState(() => (focusObjectId && /^\d{4}-\d{2}$/.test(focusObjectId) ? focusObjectId : ""));
   const [data, setData] = React.useState<MerchantFeeStatement | null>(null);
   const [error, setError] = React.useState("");
   React.useEffect(() => {
@@ -113,7 +114,7 @@ function focusTitle(subset: KpiFocus["subset"]): string {
   return "账单";
 }
 
-export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
+export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo, focusObjectId }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantZoneBillRow[]>([]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 -> 该账单完整字段（账期/到期中文·金额¥·费用构成·来源合同 TraceLink）。
@@ -211,7 +212,7 @@ export function MerchantZoneBillsPage({ api, setGlobalError, navigateTo }: Admin
     <section data-testid="merchant-zone-bills-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <AuditTrailHint event="merchant_billing.bill.viewed" />
-      <FeeStatementSection api={api} />
+      <FeeStatementSection api={api} focusObjectId={focusObjectId} />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

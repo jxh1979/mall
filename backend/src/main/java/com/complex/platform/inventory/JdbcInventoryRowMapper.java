@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -373,7 +373,8 @@ final class JdbcInventoryRowMapper {
                 resultSet.getString("current_segment"),
                 readList(resultSet.getString("evidence_attachment_ids")),
                 instant(resultSet, "created_at"),
-                resultSet.getString("merchant_id")
+                resultSet.getString("merchant_id"),
+                resultSet.getString("order_id")
         );
     }
 

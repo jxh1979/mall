@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import kotlinx.serialization.Serializable
 
@@ -52,7 +52,18 @@ data class TraceHandoverChain(
 data class TraceHandoverCreateRequest(
   val idempotencyKey: String,
   val traceCode: String,
+  val orderId: String,
   val deviceId: String,
+)
+
+/** 第十八批 K 段第 94 条 94-R2：库管出库可选的酒吧订单（含该物品按瓶出品、待出品的明细；数量为这些明细之和）。 */
+@Serializable
+data class TraceOutboundOrder(
+  val orderId: String,
+  val tableName: String? = null,
+  val productName: String? = null,
+  val quantity: Int = 0,
+  val createdAt: String? = null,
 )
 
 @Serializable

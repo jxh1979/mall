@@ -35,13 +35,13 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                     id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
                     mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
                     staff_id, status, bound_at, returned_at, unbound_at, return_reason,
-                    unbind_reason, created_at, updated_at
+                    unbind_reason, created_at, updated_at, device_model
                 )
                 VALUES (
                     :id, :device_id, :device_code, :terminal_type, :binding_scope, :bound_space_id,
                     :mdm_device_ref, :kiosk_mode, :merchant_id, :venue_id, :area_id, :location_point_id,
                     :staff_id, :status, :bound_at, :returned_at, :unbound_at, :return_reason,
-                    :unbind_reason, :created_at, :updated_at
+                    :unbind_reason, :created_at, :updated_at, :device_model
                 )
                 ON CONFLICT (device_id) DO UPDATE SET
                     device_code = EXCLUDED.device_code,
@@ -61,7 +61,8 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                     unbound_at = EXCLUDED.unbound_at,
                     return_reason = EXCLUDED.return_reason,
                     unbind_reason = EXCLUDED.unbind_reason,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    device_model = EXCLUDED.device_model
                 """, deviceParameters(device));
         return device;
     }
@@ -138,6 +139,21 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
                   FROM terminal_devices
                  WHERE id = :id
                 """, Map.of("id", id), this::mapDevice).stream().findFirst();
+    }
+
+    // 第 96 条 96-R2：员工名下在用的设备（停岗、离职生效时转待归还）
+    @Override
+    public List<TerminalDeviceRecord> findBoundByStaffId(String staffProfileId) {
+        return jdbcTemplate.query("""
+                SELECT id, device_id, device_code, terminal_type, binding_scope, bound_space_id,
+                       mdm_device_ref, kiosk_mode, merchant_id, venue_id, area_id, location_point_id,
+                       staff_id, status, bound_at, returned_at, unbound_at, return_reason,
+                       unbind_reason, created_at, updated_at, device_model, repair_work_order_id
+                  FROM terminal_devices
+                 WHERE staff_id = :staff_id
+                   AND status = 'bound'
+                 ORDER BY id
+                """, Map.of("staff_id", staffProfileId), this::mapDevice);
     }
 
     @Override

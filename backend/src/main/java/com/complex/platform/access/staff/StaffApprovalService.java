@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest;
@@ -34,6 +34,8 @@ public class StaffApprovalService {
     static final String HR_PERMISSION = "staff.hr.review";
 
     @org.springframework.beans.factory.annotation.Autowired private org.springframework.context.ApplicationEventPublisher events;
+    // 第 96 条 96-R2（第十八批裁决 23）：停岗、离职生效时名下在用的设备转待归还
+    @org.springframework.beans.factory.annotation.Autowired private com.complex.platform.terminal.TerminalDeviceService terminalDevices;
     private final JdbcStaffRepository repository;
     private final SupervisorReviewService reviews;
     private final AuthorizationService authorization;
@@ -188,6 +190,9 @@ public class StaffApprovalService {
         if (java.util.Set.of("suspended", "departed").contains(after)) {
             access.revokeEmploymentGrants(profile.userId(), reviewId, String.valueOf(row.get("initiated_by")), checkedAt);
             sessions.revokeUserSessions(profile.userId());
+            // 第 96 条 96-R2（ENUM:240、PGM:581 设备交接继续办理；第十八批裁决 23「停岗离职转待归还」）
+            terminalDevices.markHeldDevicesPendingReturn(profileId, reviewId,
+                    "suspended".equals(after) ? "员工停岗生效" : "员工离职生效", checkedAt);
         }
         repository.markEmploymentStatusRevisionApplied(reviewId);
         audit.recordSuccess("staff.profile.employment_status_changed", "staff.profile.review", "staff_profile", profileId, null, null,

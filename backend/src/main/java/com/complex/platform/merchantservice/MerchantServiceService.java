@@ -49,7 +49,8 @@ public class MerchantServiceService {
     // 系统操作者标识：SLA 自动升级无登录用户，留痕 operator_user_id 用此系统标识。
     private static final String SYSTEM_OPERATOR = "system";
     private static final String BUSINESS_TYPE = "merchant_service_work_order";
-    private static final Set<String> TYPES = Set.of("repair", "complaint", "rectification", "service");
+    // 第 93 条 93-R1：报修/保洁/投诉/其他服务请求（BSM:1323、BSM:1385；裁决 D-12 不含整改、含保洁）；与 V582 CHECK 一致。
+    private static final Set<String> TYPES = Set.of("repair", "cleaning", "complaint", "service");
     private static final Set<String> PRIORITIES = Set.of("low", "medium", "high", "critical");
     private static final Set<String> ACTION_TARGET_STATUSES = Set.of("assigned", "processing", "pending_merchant", "resolved");
     private static final Set<String> TERMINAL_STATUSES = Set.of("closed", "cancelled");
@@ -67,7 +68,7 @@ public class MerchantServiceService {
     // 77-R2 超时通知用的中文名：类型与优先级同后台页选项，状态同 ENUM:264（升级只扫未处理完的四种状态）。
     private static final String ASSIGN_PERMISSION = "merchant.service_work_order.assign";
     private static final Map<String, String> TYPE_NAMES =
-            Map.of("repair", "报修", "complaint", "投诉", "rectification", "整改", "service", "服务");
+            Map.of("repair", "报修", "cleaning", "保洁", "complaint", "投诉", "service", "其他服务请求");
     private static final Map<String, String> PRIORITY_NAMES = Map.of("low", "低", "medium", "中", "high", "高", "critical", "紧急");
     private static final Map<String, String> STATUS_NAMES =
             Map.of("created", "已提交", "assigned", "已派单", "processing", "处理中", "pending_merchant", "待商户确认");
@@ -106,9 +107,14 @@ public class MerchantServiceService {
 
     /** V264：includeArchived=false（默认）排除已存档工单；true 时含存档（供后台管理存档件）。 */
     public PageResponse<MerchantWorkOrderRecord> listWorkOrders(boolean includeArchived) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        List<MerchantWorkOrderRecord> records =
-                repository.findWorkOrdersByScope(scope, includeArchived, DEFAULT_PAGE_LIMIT);
+        List<MerchantWorkOrderRecord> records;
+        try {
+            records = repository.findWorkOrdersByScope(authorizationService.currentMerchantScope(), includeArchived, DEFAULT_PAGE_LIMIT);
+        } catch (ApiException exception) {
+            Set<String> projects = staffReach(exception, "merchant.service_work_order.view").organizationIds();
+            records = projects.isEmpty() ? List.of()
+                    : repository.findWorkOrdersByMerchantProjects(projects, includeArchived, DEFAULT_PAGE_LIMIT);
+        }
         auditEventService.recordSuccess(
                 "merchant_service.work_order.viewed",
                 "merchant.service_work_order.view",
@@ -148,7 +154,7 @@ public class MerchantServiceService {
                 workOrderId,
                 () -> {
                     validateAssignRequest(request);
-                    ensureWorkOrderCanChange(workOrderId);
+                    ensureWorkOrderCanChange(workOrderId, "merchant.service_work_order.assign");
                 },
                 () -> assignWorkOrderOnce(workOrderId, request)
         );
@@ -166,7 +172,7 @@ public class MerchantServiceService {
                 workOrderId,
                 () -> {
                     validateActionRequest(request);
-                    ensureWorkOrderCanChange(workOrderId);
+                    ensureWorkOrderCanChange(workOrderId, "merchant.service_work_order.process");
                 },
                 () -> addActionOnce(workOrderId, request)
         );
@@ -184,7 +190,7 @@ public class MerchantServiceService {
                 workOrderId,
                 () -> {
                     validateCloseRequest(request);
-                    ensureWorkOrderCanChange(workOrderId);
+                    ensureWorkOrderCanChange(workOrderId, "merchant.service_work_order.close");
                 },
                 () -> closeWorkOrderOnce(workOrderId, request)
         );
@@ -517,7 +523,7 @@ public class MerchantServiceService {
     @Transactional
     public MerchantWorkOrderRecord archiveWorkOrder(String id, boolean archive, String reason) {
         MerchantWorkOrderRecord order = findWorkOrder(id);
-        checkMerchantOwnership(order.merchantId());
+        checkMerchantOwnership(order.merchantId(), "merchant.service_work_order.close");
         String r = archive ? requireText(reason, "reason") : null;
         Instant now = Instant.now();
         MerchantWorkOrderRecord updated = archive
@@ -535,7 +541,7 @@ public class MerchantServiceService {
     @Transactional
     public MerchantWorkOrderRecord requestDeleteWorkOrder(String id, MerchantWorkOrderDeleteRequest request) {
         MerchantWorkOrderRecord order = findWorkOrder(id);
-        checkMerchantOwnership(order.merchantId());
+        checkMerchantOwnership(order.merchantId(), "merchant.service_work_order.close");
         if (order.archivedAt() == null) {
             throw ApiException.badRequest("WORK_ORDER_NOT_ARCHIVED", "工单必须先存档才能申请删除");
         }
@@ -554,7 +560,7 @@ public class MerchantServiceService {
     @Transactional
     public MerchantWorkOrderDeleteDecision approveDeleteWorkOrder(String id, MerchantWorkOrderDeleteApprovalRequest request) {
         MerchantWorkOrderRecord order = findWorkOrder(id);
-        checkMerchantOwnership(order.merchantId());
+        checkMerchantOwnership(order.merchantId(), "merchant.service_work_order.approve");
         if (!"pending".equals(order.deleteStatus())) {
             throw ApiException.badRequest("WORK_ORDER_DELETE_NOT_PENDING", "该工单没有待审批的删除申请");
         }
@@ -588,20 +594,43 @@ public class MerchantServiceService {
                 .orElseThrow(() -> ApiException.notFound("WORK_ORDER_NOT_FOUND", "商户服务工单不存在或已被删除"));
     }
 
-    private void ensureWorkOrderCanChange(String id) {
+    private void ensureWorkOrderCanChange(String id, String permissionCode) {
         MerchantWorkOrderRecord existing = findWorkOrder(id);
         rejectTerminal(existing);
-        checkMerchantOwnership(existing.merchantId());
+        checkMerchantOwnership(existing.merchantId(), permissionCode);
     }
 
-    private void checkMerchantOwnership(String recordMerchantId) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
+    private void checkMerchantOwnership(String recordMerchantId, String permissionCode) {
+        Optional<String> scope;
+        try {
+            scope = authorizationService.currentMerchantScope();
+        } catch (ApiException exception) {
+            AuthorizationService.ProjectReach reach = staffReach(exception, permissionCode);
+            List<String> projects = platformRepository == null ? List.of() : platformRepository.listMerchantOperatingProjectIds(recordMerchantId);
+            if (projects.stream().noneMatch(reach::covers)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该工单所属商户不在本权限可触及的项目范围内");
+            }
+            return;
+        }
         if (scope.isEmpty()) {
             return; // platform admin sees all merchants
         }
         if (!scope.get().equals(recordMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的工单");
         }
+    }
+
+    /**
+     * 第 93 条 93-R3：平台管理员（不限，D-032）与商户账号（本商户）照 currentMerchantScope 判；它对其余账号抛的 MERCHANT_SCOPE_REQUIRED
+     * 到这里改判：外包账号照旧 403（requirePlatformScope，与 77-R2 收件人、时限入口同一口径），其余平台员工（BSM:1385「工单由客户关怀部负责处理」）
+     * 返回入口权限码可触及的项目，按工单所属商户的经营项目判（裁决 M737-iter7；含可跨项目角色勾选的项目，PGM:528）。
+     */
+    private AuthorizationService.ProjectReach staffReach(ApiException exception, String permissionCode) {
+        if (!"MERCHANT_SCOPE_REQUIRED".equals(exception.code())) {
+            throw exception;
+        }
+        authorizationService.requirePlatformScope();
+        return authorizationService.projectReach(authorizationService.currentActor(), permissionCode);
     }
 
     private void validateCreateRequest(MerchantWorkOrderCreateRequest request) {

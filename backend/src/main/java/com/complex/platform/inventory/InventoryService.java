@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -2955,6 +2955,37 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         }
     }
 
+    /**
+     * 第十八批 K 段 97-R3（BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」；BSM:1068「出品后退品按是否回库处理」；
+     * ENUM:187 营业日）：期间吧台消耗按酒吧、销售形式、套餐、酒吧商品汇总。期间参数与营业日窗口同本页出库成本汇总（getCostSummary）；
+     * 范围同 listCostLedger：商户员工看本商户，项目员工看本项目的酒吧，平台管理员全量。
+     */
+    public List<BarConsumptionStatRecord> listBarConsumptionStats(String periodStart, String periodEnd) {
+        try {
+            LocalDate start = requireIsoDate(periodStart, "period_start");
+            LocalDate end = requireIsoDate(periodEnd, "period_end");
+            if (end.isBefore(start)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
+            }
+            String merchantId = authorizationService.currentMerchantScope().orElse(null);
+            String projectId = merchantId != null ? null
+                    : authorizationService.currentProjectScopeQuietly().orElse(null);
+            String bar = days().barOfMerchant(merchantId);
+            String dayProject = bar != null ? null : merchantId != null ? days().projectOfMerchant(merchantId) : projectId;
+            List<BarConsumptionStatRecord> rows = repository.listBarConsumptionStats(merchantId, projectId,
+                    days().start(dayProject, bar, start), days().end(dayProject, bar, end));
+            auditEventService.recordSuccess(
+                    "inventory.bar_consumption_stats.viewed", "inventory.stock.view", "bar_order_item",
+                    "all", null, null, Map.of("count", rows.size()));
+            return rows;
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(
+                    "inventory.bar_consumption_stats.view_failed", "inventory.stock.view", "bar_order_item",
+                    "all", null, null, codeOf(exception));
+            throw exception;
+        }
+    }
+
     private LocalDate requireIsoDate(String value, String fieldName) {
         String trimmed = trimToNull(value);
         if (trimmed == null) {
@@ -3532,10 +3563,10 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     String handoverId = "trace_" + slug(actual.idempotencyKey());
                     String traceCode = requireText(actual.credentialPayload(), "credential_payload");
                     String deviceId = requireText(actual.deviceId(), "device_id");
-                    String itemId = trimToNull(textFromMap(context, "item_id", "itemId"));
+                    String orderId = trimToNull(textFromMap(context, "order_id", "orderId"));
                     String fromStaffId = trimToNull(textFromMap(context, "from_staff_id", "fromStaffId"));
                     String toStaffId = trimToNull(textFromMap(context, "to_staff_id", "toStaffId"));
-                    return createHandoverChain(handoverId, traceCode, itemId, deviceId, fromStaffId, toStaffId, "chain_started");
+                    return createHandoverChain(handoverId, traceCode, orderId, deviceId, fromStaffId, toStaffId, "chain_started");
                 }
         );
     }
@@ -3558,9 +3589,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     String handoverId = "trace_" + slug(actual.idempotencyKey());
                     String traceCode = requireText(actual.traceCode(), "trace_code");
                     String deviceId = requireText(actual.deviceId(), "device_id");
-                    String itemId = trimToNull(actual.itemId());
                     TraceHandoverRecord header =
-                            createHandoverChain(handoverId, traceCode, itemId, deviceId, null, null, "chain_started");
+                            createHandoverChain(handoverId, traceCode, actual.orderId(), deviceId, null, null, "chain_started");
                     return chainView(header.id());
                 }
         );
@@ -3623,8 +3653,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 request == null ? null : request.idempotencyKey(),
                 request,
                 TraceHandoverChainView.class,
-                "inventory.handover_segment_scanned",
-                "inventory.handover_segment_scan_failed",
+                // 第十八批 K 段第 94 条 94-R3：落 OpenAPI 声明的机器人上报事件（BSM:1579 被动留痕，不记成员工扫码）。
+                "inventory.handover_robot_reported",
+                "inventory.handover_robot_report_failed",
                 "inventory.handover.scan",
                 "inventory_trace_handover_step",
                 () -> {
@@ -3681,7 +3712,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 request,
                 TraceHandoverExceptionRecord.class,
                 "inventory.handover_exception_resolved",
-                "inventory.handover_exception_resolve_failed",
+                // 第十八批 K 段第 94 条 94-R3：失败事件落 OpenAPI 声明的名。
+                "inventory.handover_exception_review_failed",
                 "inventory.handover.review",
                 "inventory_trace_handover_exception",
                 () -> {
@@ -3717,6 +3749,17 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     /** 14-R2：交接链视图——原扫码五段、异常、人工补录单并列（BSM:1201「补录记录与原始扫码记录并列展示、互不覆盖」）。 */
     public TraceHandoverChainView getTraceHandover(String handoverId) {
         return chainView(requireOwnedHandover(requireText(handoverId, "handover_id")).id());
+    }
+
+    /**
+     * 第十八批 K 段第 94 条 94-R1：库管出库可选的酒吧订单——含该溯源码登记物品按瓶出品、待出品明细的订单（商户账号只列本商户），下单早的在前。
+     * 范围同 listCostLedger 商户优先：有商户范围时不再按项目过滤（自营酒吧员工归属公司，BSM 第 1463 行）。
+     */
+    public List<TraceOutboundOrderRecord> listTraceOutboundOrders(String traceCodeId) {
+        InventoryTraceCodeRecord code = loadTraceCodeScoped(requireText(traceCodeId, "trace_code_id"));
+        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        return repository.listTraceOutboundOrders(code.itemId(), null, merchantId,
+                merchantId != null ? null : authorizationService.currentProjectScopeQuietly().orElse(null));
     }
 
     /** 14-R2：交接缺段人工补录（BSM:1201「扫码缺失的可事后人工补录，但一律须附证据……并经主管复核后方生效」），走通用补录主链。 */
@@ -3766,15 +3809,27 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 backfill.responsibleStaffId(), backfill.occurredAt());
     }
 
+    /**
+     * 第十八批 K 段第 94 条 94-R1（BSM:1197「出库须同时核验订单和物品码」；BSM:1620「酒水或物品从库房出库、订单核验……」）：溯源码须已登记且
+     * 属本商户（404 TRACE_CODE_NOT_FOUND／403 CROSS_MERCHANT_FORBIDDEN），订单须含该码登记物品按瓶出品、待出品的明细（409
+     * HANDOVER_ORDER_ITEM_MISMATCH）；表头物品取码登记的物品并记订单。
+     */
     private TraceHandoverRecord createHandoverChain(
-            String handoverId, String traceCode, String itemId, String deviceId,
+            String handoverId, String traceCode, String requestedOrderId, String deviceId,
             String fromStaffId, String toStaffId, String handoverResult) {
-        Instant now = Instant.now();
+        InventoryTraceCodeRecord code = loadTraceCodeScoped(traceCode);
+        String orderId = requireText(requestedOrderId, "order_id");
         // 2e 溯源归属：创建交接链时记录归属商户（currentMerchantScope），供三方法跨租户校验。
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        if (repository.listTraceOutboundOrders(code.itemId(), orderId, merchantId,
+                merchantId != null ? null : authorizationService.currentProjectScopeQuietly().orElse(null)).isEmpty()) {
+            throw ApiException.conflict("HANDOVER_ORDER_ITEM_MISMATCH", "该订单没有待出品的此物品，不能出库");
+        }
+        String itemId = code.itemId();
+        Instant now = Instant.now();
         TraceHandoverRecord header = repository.saveTraceHandover(new TraceHandoverRecord(
-                handoverId, traceCode, itemId, fromStaffId, toStaffId, deviceId,
-                handoverResult, "in_progress", HANDOVER_SEGMENTS.getFirst(), List.of(), now, merchantId));
+                handoverId, code.traceCode(), itemId, fromStaffId, toStaffId, deviceId,
+                handoverResult, "in_progress", HANDOVER_SEGMENTS.getFirst(), List.of(), now, merchantId, orderId));
         for (int i = 0; i < HANDOVER_SEGMENTS.size(); i++) {
             String segment = HANDOVER_SEGMENTS.get(i);
             boolean robot = ROBOT_SEGMENT.equals(segment);
@@ -3987,7 +4042,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     private TraceHandoverRecord withOverall(TraceHandoverRecord h, String overall, String currentSegment) {
         TraceHandoverRecord updated = new TraceHandoverRecord(
                 h.id(), h.traceCode(), h.itemId(), h.fromStaffId(), h.toStaffId(), h.deviceId(),
-                h.handoverResult(), overall, currentSegment, h.evidenceAttachmentIds(), h.createdAt(), h.merchantId());
+                h.handoverResult(), overall, currentSegment, h.evidenceAttachmentIds(), h.createdAt(), h.merchantId(), h.orderId());
         if ("exception".equals(overall)) {
             auditEventService.recordSuccess(
                     "inventory.handover_exception_raised", "inventory.handover.scan",

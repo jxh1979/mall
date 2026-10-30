@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -326,6 +326,10 @@ class TerminalApiClient(
   /** 按扫到的溯源码查交接单（新建在前）。 */
   fun listTraceHandovers(traceCode: String): List<TraceHandoverRecord> =
     get("/api/v1/inventory/trace-handovers?trace_code=${urlEncode(traceCode)}")
+
+  /** 第十八批 K 段第 94 条 94-R2（BSM 第 1197 行「出库须同时核验订单和物品码」）：库管出库前按溯源码列含该物品待出品明细的酒吧订单。 */
+  fun listOutboundOrders(code: String): List<TraceOutboundOrder> =
+    get("/api/v1/inventory/trace-codes/${urlEncode(code)}/outbound-orders")
 
   /** 交接链：表头、五段原扫码记录与人工补录单并列。 */
   fun getTraceHandover(id: String): TraceHandoverChain = get("/api/v1/inventory/trace-handovers/${urlEncode(id)}")

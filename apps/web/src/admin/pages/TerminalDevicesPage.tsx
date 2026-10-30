@@ -53,7 +53,8 @@ const REGISTERABLE_TYPES = [...FIXED_ENTRY_TYPES, SCANNER, "other_site_device"];
 // 工作手机、平板、一体机修好后回待领用再走领用。82c-R3（PGM:623「记录编号、型号、点位、责任人和状态」）：入场设备更换责任人。
 // 第 89 条 89-R1（PGM:624）：入场三道环节设备与在用工作手机以外的设备在本页挂失（BSM:1478 在用手机班中不可用走换机）。
 // 89-R2（第十八批裁决 20「回待领用」）：挂失的设备在本页找回，原因必填，与修好同一去路（其他现场设备回在用，其余回待领用）。
-type LifecycleAction = "repair" | "repair-complete" | "scrap" | "responsible-staff" | "lost" | "found";
+// 第 96 条 96-R3（ENUM:241「归档」；第十八批裁决 24「报废后可归档」）：已报废的设备行填原因归档，归档后只显示、不能再操作。
+type LifecycleAction = "repair" | "repair-complete" | "scrap" | "responsible-staff" | "lost" | "found" | "archive";
 const XRAY_ACTION_CODES: Record<LifecycleAction, string> = {
   repair: "terminal_device_xray_fault_reported",
   "repair-complete": "terminal_device_xray_repair_completed",
@@ -61,6 +62,7 @@ const XRAY_ACTION_CODES: Record<LifecycleAction, string> = {
   "responsible-staff": "terminal_device_responsible_staff_changed",
   lost: "terminal_device_lost_reported",
   found: "terminal_device_found",
+  archive: "terminal_device_archived",
 };
 // 其他设备的送修、修复完成、报废用通用结果码（不开维修工单）
 const DEVICE_ACTION_CODES: Record<LifecycleAction, string> = {
@@ -70,24 +72,30 @@ const DEVICE_ACTION_CODES: Record<LifecycleAction, string> = {
   "responsible-staff": "terminal_device_responsible_staff_changed",
   lost: "terminal_device_lost_reported",
   found: "terminal_device_found",
+  archive: "terminal_device_archived",
 };
-// 89-R1：markDeviceLost 的前态
-const LOSABLE_STATUSES = new Set(["bound", "returned", "repair", "unbound"]);
+// 89-R1：markDeviceLost 的前态；第 96 条 96-R2（第十八批裁决 23「收不回的在后台挂失」）：含待归还
+const LOSABLE_STATUSES = new Set(["bound", "returned", "repair", "unbound", "pending_return"]);
+// 第 96 条 96-R2（ENUM:241「待归还」；第十八批裁决 23）：员工停岗、离职生效时名下在用的设备转待归还；本页收回办归还（回待领用）或挂失，
+// 不给送修、报废
+const PENDING_RETURN = "pending_return";
 const EMPTY_XRAY = { terminalType: SECURITY_XRAY, deviceCode: "", deviceModel: "", boundSpaceId: "", staffId: "" };
 
 const STATUS_LABELS: Record<string, string> = {
   bound: "已绑定（在用）",
   returned: "待领用",
+  pending_return: "待归还",
   unbound: "已解绑",
   repair: "维修中",
   lost: "已挂失",
   found: "已找回",
   scrapped: "已报废",
   blocked: "已封禁",
+  archived: "已归档",
 };
 
 // 终态设备（报废/封禁）不可改归属，与后端 DEVICE_TERMINAL_STATUS 口径一致，前端直接不给入口。
-const TERMINAL_STATUSES = new Set(["scrapped", "blocked"]);
+const TERMINAL_STATUSES = new Set(["scrapped", "blocked", "archived"]);
 
 const REBIND_PERMISSIONS = ["terminal.device.lifecycle"];
 
@@ -287,16 +295,18 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
             {entry ? "登记故障" : "送修"}
           </button>
         ) : null}
-        <HighRiskConfirm
-          label="报废"
-          impact={`「${row.deviceCode}」报废后不可恢复，${fixed ? "不能再登记故障或恢复在用" : "不能再领用"}`}
-          precheck={() => hasReason(row)}
-          disabled={submitting}
-          permissionsState={effectivePermissions}
-          permissions={REBIND_PERMISSIONS}
-          data-testid={`terminal-xray-scrap-${row.id}`}
-          onConfirm={() => void runLifecycleAction(row, "scrap")}
-        />
+        {row.status === PENDING_RETURN ? null : (
+          <HighRiskConfirm
+            label="报废"
+            impact={`「${row.deviceCode}」报废后不可恢复，${fixed ? "不能再登记故障或恢复在用" : "不能再领用"}`}
+            precheck={() => hasReason(row)}
+            disabled={submitting}
+            permissionsState={effectivePermissions}
+            permissions={REBIND_PERMISSIONS}
+            data-testid={`terminal-xray-scrap-${row.id}`}
+            onConfirm={() => void runLifecycleAction(row, "scrap")}
+          />
+        )}
         {!entry && LOSABLE_STATUSES.has(row.status) ? (
           <button
             type="button"
@@ -338,7 +348,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
             </button>
           </>
         ) : null}
-        {row.terminalType === SCANNER && row.status === "bound" ? (
+        {(row.terminalType === SCANNER && row.status === "bound") || row.status === PENDING_RETURN ? (
           <button
             type="button"
             className="admin-secondary-button"
@@ -493,7 +503,28 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
                     <td>{row.updatedAt ? new Date(row.updatedAt).toLocaleString("zh-CN") : "—"}</td>
                     <td>
                       {TERMINAL_STATUSES.has(row.status) ? (
-                        <span>{FIXED_ENTRY_TYPES.has(row.terminalType) ? "终态设备" : "终态设备不可改绑"}</span>
+                        <>
+                          <span>{FIXED_ENTRY_TYPES.has(row.terminalType) ? "终态设备" : "终态设备不可改绑"}</span>
+                          {row.status === "scrapped" ? (
+                            <div className="admin-form-row">
+                              <input
+                                value={reasons[row.id] ?? ""}
+                                placeholder="原因（必填）"
+                                data-testid={`terminal-xray-reason-${row.id}`}
+                                onChange={(event) => setReasons((current) => ({ ...current, [row.id]: event.target.value }))}
+                              />
+                              <button
+                                type="button"
+                                className="admin-secondary-button"
+                                disabled={submitting}
+                                data-testid={`terminal-device-archive-${row.id}`}
+                                onClick={() => void runLifecycleAction(row, "archive")}
+                              >
+                                归档
+                              </button>
+                            </div>
+                          ) : null}
+                        </>
                       ) : FIXED_ENTRY_TYPES.has(row.terminalType) ? (
                         lifecycleActions(row)
                       ) : (

@@ -33,6 +33,13 @@ public interface TerminalDeviceRepository {
     Optional<TerminalDeviceRecord> findByDeviceId(String deviceId);
 
     /**
+     * 第 96 条 96-R2（第十八批裁决 23）：持有员工（员工档案 id）名下在用（bound）的设备。内存实现没有持有关系可查，默认空。
+     */
+    default List<TerminalDeviceRecord> findBoundByStaffId(String staffProfileId) {
+        return List.of();
+    }
+
+    /**
      * 平台后台设备台账：全量列出终端设备（含商户归属列，K16 改绑工作台数据源）。
      * ponytail: 平铺无分页（设备是实物台账，量级有限），到上千台再补分页。
      */

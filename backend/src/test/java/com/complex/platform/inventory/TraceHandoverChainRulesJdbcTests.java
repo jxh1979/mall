@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -62,6 +62,7 @@ class TraceHandoverChainRulesJdbcTests {
     private final String merchant = "mch_thr_" + suffix;
     private RequestPostProcessor clerk;
     private RequestPostProcessor mid;
+    private String order;
 
     @BeforeEach
     void seed() {
@@ -69,6 +70,7 @@ class TraceHandoverChainRulesJdbcTests {
                 project, "交接规则项目 " + suffix);
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id) "
                 + "VALUES (?, ?, 'bar', 'active', now(), now(), ?)", merchant, "交接规则商户 " + suffix, project);
+        order = TraceHandoverOutboundOrderJdbcTests.seedBottleOrder(jdbc, "thr_" + suffix, merchant, "TRC-R-" + suffix, "TRC-P-" + suffix);
         String role = "role_thr_" + suffix;
         jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'交接规则回归','project','active',now())", role, role);
         jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code IN("
@@ -179,7 +181,7 @@ class TraceHandoverChainRulesJdbcTests {
                 device, Base64.getEncoder().encodeToString(keys.getPublic().getEncoded()));
 
         String created = phonePost(device, keys, "/api/v1/inventory/trace-handovers", "{\"idempotency_key\":\"thr-pc-" + suffix
-                + "\",\"trace_code\":\"TRC-P-" + suffix + "\",\"device_id\":\"" + device + "\"}")
+                + "\",\"trace_code\":\"TRC-P-" + suffix + "\",\"order_id\":\"" + order + "\",\"device_id\":\"" + device + "\"}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String id = JsonPath.read(created, "$.data.handover.id");
         phoneScan(device, keys, id, "out_verify").andExpect(status().isOk());
@@ -210,11 +212,41 @@ class TraceHandoverChainRulesJdbcTests {
         assertThat(backfilled.get("device_id")).isNull();
     }
 
+    /**
+     * 第十八批 K 段第 94 条 94-R3（PGM 第 899 行「平台治理层要保证每个重要动作能追溯」；BSM 第 1579 行「机器人到达是被动留痕：由机器人上报的任务状态
+     * 自动记录时间和点位。」；openapi-p0 reportRobotSegment、reviewTraceHandoverException 声明的审计事件）：机器人上报落
+     * inventory.handover_robot_reported／inventory.handover_robot_report_failed，不记成员工扫码；异常复核失败落
+     * inventory.handover_exception_review_failed。失败事件独立事务、不随测试回滚，一律按本次请求幂等键查。
+     */
+    @Test
+    void robotReportsAndFailedExceptionReviewsUseTheDeclaredAuditEvents() throws Exception {
+        String id = createChain();
+        String off = "rr1-" + suffix;
+        robotReport(id, off).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(events("inventory.handover_robot_report_failed", off)).isEqualTo(1);
+        assertThat(events("inventory.handover_segment_scan_failed", off)).isZero();
+
+        jdbc.update("UPDATE terminal_capability_switches SET enabled=TRUE WHERE capability_code='integration.robot.sync'");
+        String scannedOfChain = "SELECT count(*) FROM audit_events WHERE event_name='inventory.handover_segment_scanned' AND business_id=?";
+        Integer scannedBefore = jdbc.queryForObject(scannedOfChain, Integer.class, id);
+        String on = "rr2-" + suffix;
+        robotReport(id, on).andExpect(status().isOk());
+        assertThat(events("inventory.handover_robot_reported", on)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(scannedOfChain, Integer.class, id)).isEqualTo(scannedBefore);
+
+        String review = "rv1-" + suffix;
+        send(mid, post("/api/v1/inventory/trace-handovers/exceptions/exc_none_" + suffix + "/review"),
+                "{\"idempotency_key\":\"" + review + "\",\"decision\":\"approved\",\"reason\":\"核对\"}")
+                .andExpect(status().isNotFound());
+        assertThat(events("inventory.handover_exception_review_failed", review)).isEqualTo(1);
+        assertThat(events("inventory.handover_exception_resolve_failed", review)).isZero();
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     private String createChain() throws Exception {
         String body = send(clerk, post("/api/v1/inventory/trace-handovers"), "{\"idempotency_key\":\"thr-c-" + suffix
-                + "\",\"trace_code\":\"TRC-R-" + suffix + "\",\"device_id\":\"dev_thr_" + suffix + "\"}")
+                + "\",\"trace_code\":\"TRC-R-" + suffix + "\",\"order_id\":\"" + order + "\",\"device_id\":\"dev_thr_" + suffix + "\"}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         return JsonPath.read(body, "$.data.handover.id");
     }
@@ -222,6 +254,16 @@ class TraceHandoverChainRulesJdbcTests {
     private ResultActions scan(String id, String segment, String key) throws Exception {
         return send(clerk, post("/api/v1/inventory/trace-handovers/" + id + "/scan-segment"), "{\"idempotency_key\":\"thr-s-" + segment
                 + "-" + key + "-" + suffix + "\",\"segment\":\"" + segment + "\"}");
+    }
+
+    private ResultActions robotReport(String id, String key) throws Exception {
+        return send(clerk, post("/api/v1/inventory/trace-handovers/" + id + "/robot-report"), "{\"idempotency_key\":\"" + key
+                + "\",\"robot_task_ref\":\"task_1\",\"status\":\"delivered\"}");
+    }
+
+    private int events(String eventName, String idempotencyKey) {
+        return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name=? AND idempotency_key=?", Integer.class,
+                eventName, idempotencyKey);
     }
 
     private Map<String, Object> stepRow(String id, String segment) {

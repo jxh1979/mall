@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -388,6 +388,7 @@ final class JdbcBarParameterSource {
                 .addValue("allowed_pass_free_guest_count_snapshot", session.allowedPassFreeGuestCountSnapshot())
                 .addValue("sales_staff_id", session.salesStaffId())
                 .addValue("service_staff_id", session.serviceStaffId())
+                .addValue("guest_source", session.guestSource())
                 .addValue("status", session.status())
                 .addValue("opened_at", timestampWithTimeZone(session.openedAt()))
                 .addValue("closed_at", timestampWithTimeZone(session.closedAt()))

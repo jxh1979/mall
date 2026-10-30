@@ -1,8 +1,8 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
-import { BarSalesBackfillPanel } from "./BarSessionBackfill";
+import { BarSalesBackfillPanel, guestSourceLabel } from "./BarSessionBackfill";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -21,10 +21,9 @@ import type { AdminPageProps, BarReservationRow, BarStaffBookingSuspensionRow, B
 const BAR_CHECKIN_PERMISSION = "bar.table.guest_checkin";
 const BAR_TRANSFER_PERMISSION = "bar.table_session.transfer";
 const BAR_MERGE_PERMISSION = "bar.table_session.merge";
-const BAR_RENEW_PERMISSION = "bar.table_session.renew";
 // 第十批 TK-27-R3（BSM L1079「拆台：由授权岗位操作」）。
 const BAR_SPLIT_PERMISSION = "bar.table_session.split";
-type SessionActionKind = "transfer" | "merge" | "renew" | "split";
+type SessionActionKind = "transfer" | "merge" | "split";
 
 /** 人工订单归属文本：每行「订单ID=会话ID」，空行忽略。 */
 function parseOrderAssignments(text: string): { orderId: string; sessionId: string }[] {
@@ -41,10 +40,6 @@ const BAR_SESSION_CREATE_PERMISSION = "bar.table_session.create";
 const BAR_TABLE_OPEN_CLOSE_PERMISSION = "bar.table.open_close";
 // 第十八批 C 段第 15 条（BSM L1468「……自动停用其代订权限，由店长复核后恢复」）。
 const BAR_STAFF_BOOKING_RESTORE_PERMISSION = "bar.staff_booking.restore";
-
-function nextRenewedUntil(minutes: number) {
-  return new Date(Date.now() + minutes * 60_000).toISOString();
-}
 
 /** 本地日期时间（datetime-local）→ UTC 时刻串；同一输入总得同一串，重复提交时请求内容逐字不变。 */
 function localDateTimeToUtc(value: string) {
@@ -80,7 +75,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [targetTableId, setTargetTableId] = React.useState("");
   const [targetServiceStaffId, setTargetServiceStaffId] = React.useState("");
   const [mergedSessionId, setMergedSessionId] = React.useState("");
-  const [renewMinutes, setRenewMinutes] = React.useState("60");
   // 拆台（BSM L1079）：拆台方式 / 单独拆出的原台会话 / 并台期间无法自动确认归属的订单的人工归属。
   const [splitMode, setSplitMode] = React.useState<"last_merge" | "single" | "all">("last_merge");
   const [splitSessionId, setSplitSessionId] = React.useState("");
@@ -89,7 +83,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
   const [barError, setBarError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
-  // 引导式流程 phase-5：新建卡座收起为主按钮 + 分步引导弹窗（订台/开台/转合续等操作流不动）。
+  // 引导式流程 phase-5：新建卡座收起为主按钮 + 分步引导弹窗（订台/开台/转合拆等操作流不动）。
   const [tableCreateOpen, setTableCreateOpen] = React.useState(false);
   const [tableCreateError, setTableCreateError] = React.useState("");
   // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
@@ -109,7 +103,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         { label: "所属酒吧", value: row.barId ?? "—" },
         { label: "营业日", value: cnDate(row.businessDate) },
         { label: "人数", value: row.guestCount ?? "—" },
-        { label: "销售", value: row.salesStaffId ?? "无销售（自来客）" },
+        // 第十八批 K 段 95-R1（BSM:1021「自来客由该来源记录定义」）：来源与销售分列，销售为空不再一律显示成自来客。
+        { label: "客人来源", value: guestSourceLabel(row.guestSource) },
+        { label: "销售", value: row.salesStaffId ?? "无" },
         { label: "服务员", value: row.serviceStaffId ?? "—" },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "版本", value: row.sessionVersion ?? "—" },
@@ -194,7 +190,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
 
   function validateSessionAction(kind: SessionActionKind) {
     if (!selectedSession?.id) return fail("请先选择要操作的开台会话。");
-    if (!actionReason.trim()) return fail("转卡、合并、续卡、拆台必须填写原因。 ");
+    if (!actionReason.trim()) return fail("转卡、合并、拆台必须填写原因。");
     if (kind === "transfer") {
       if (!targetTableId.trim()) return fail("请输入目标卡座 ID。");
       if (!targetServiceStaffId.trim()) return fail("请明确目标卡座的实际当班接手人，不能默认原人跟随客人。");
@@ -203,10 +199,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     if (kind === "merge") {
       if (!mergedSessionId.trim()) return fail("请输入要合并的目标会话 ID。");
       if (mergedSessionId.trim() === selectedSession.id) return fail("不能把会话合并到自身。");
-    }
-    if (kind === "renew") {
-      const minutes = Number(renewMinutes);
-      if (!Number.isFinite(minutes) || minutes <= 0) return fail("续卡分钟数必须大于 0。");
     }
     if (kind === "split") {
       if (splitMode === "single" && !splitSessionId.trim()) return fail("任选一台拆出时请填写要拆出的原台会话 ID。");
@@ -247,11 +239,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         ? { targetTableId: targetTableId.trim(), targetServiceStaffId: targetServiceStaffId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 }
         : kind === "merge"
           ? { mergedSessionId: mergedSessionId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1, mergedSessionVersion: 1 }
-          : kind === "split"
-            ? { mode: splitMode, splitSessionId: splitMode === "single" ? splitSessionId.trim() : undefined, orderAssignments: parseOrderAssignments(splitAssignments), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1 }
-            : { renewedUntil: nextRenewedUntil(Number(renewMinutes)), additionalMinConsumptionCent: 0, additionalDepositAmountCent: 0, additionalServiceFeeCent: 0, reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 };
+          : { mode: splitMode, splitSessionId: splitMode === "single" ? splitSessionId.trim() : undefined, orderAssignments: parseOrderAssignments(splitAssignments), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1 };
       const result = await api.post(`/api/v1/bar/table-sessions/${encodeURIComponent(selectedSession.id)}/${kind}`, body);
-      setActionResult({ action: `bar_table_session_${kind}`, status: kind === "transfer" ? "transferred" : kind === "merge" ? "merged" : kind === "split" ? "split" : "renewed", sessionId: selectedSession.id, result });
+      setActionResult({ action: `bar_table_session_${kind}`, status: kind === "transfer" ? "transferred" : kind === "merge" ? "merged" : "split", sessionId: selectedSession.id, result });
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "卡座会话操作失败";
@@ -484,11 +474,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       {focusObjectId && (
         <div className="admin-state" data-testid="bar-table-sessions-focus">已从下钻定位到桌位：{focusObjectId}</div>
       )}
-      <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并、续卡必须受结账与审批约束。" />
+      <AdminPageHeader title="卡座与订台" description="卡座只免预定卡座所在酒吧、限定人数入场；转卡、合并必须受结账与审批约束。" />
       <BarServiceResponsibilityPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} session={selectedSession} onChanged={reload} />
       {/* 第十八批 F 段第 14 条 14-R7（BSM:1642、BSM:1021）：本场销售归属与人工补录并列。 */}
       <BarSalesBackfillPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} session={selectedSession}
-        reservation={reservations.find((row) => row.id === selectedSession?.reservationId)} />
+        reservation={reservations.find((row) => row.id === selectedSession?.reservationId)} onChanged={reload} />
 
       {/* 从零起单入口：即便零数据也常驻可见（放在空态短路之外），支持新建卡座 / 新建订台（代客）/ 开台。 */}
       <h3>从零起单</h3>
@@ -589,15 +579,13 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             irreversible={false}
             data-testid="bar-checkin-submit"
           />
-          <label>转/合/续原因<input data-testid="bar-session-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="必填，留痕用" /></label>
+          <label>转/合/拆原因<input data-testid="bar-session-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="必填，留痕用" /></label>
           <label>目标卡座<input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="转入的卡座 ID" /></label>
           <label>目标卡座当班接手人<input data-testid="bar-transfer-target-staff" aria-label="目标卡座当班接手人" value={targetServiceStaffId} onChange={event => setTargetServiceStaffId(event.target.value)} placeholder="真实接手员工账号" /></label>
           <p>按目标工作点位已发布的排班或真实顶班记录核实接手人；原台服务责任截至实际转台时刻。</p>
           <HighRiskConfirm label="转卡" impact="将把选中开台会话转移到目标卡座，必须确认未结账约束和主管审批。" disabled={submitting} precheck={() => validateSessionAction("transfer")} onConfirm={() => void runSessionAction("transfer")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-submit" />
           <label>合并目标会话<input data-testid="bar-merge-target-session" value={mergedSessionId} onChange={(event) => setMergedSessionId(event.target.value)} placeholder="被并入的会话 ID" /></label>
           <HighRiskConfirm label="合并" impact="将把选中会话与目标会话合并，账单和责任链必须留痕。" disabled={submitting} precheck={() => validateSessionAction("merge")} onConfirm={() => void runSessionAction("merge")} permissionsState={effectivePermissions} permissions={[BAR_MERGE_PERMISSION]} data-testid="bar-merge-submit" />
-          <label>续卡时长（分钟）<input data-testid="bar-renew-minutes" type="number" min={1} value={renewMinutes} onChange={(event) => setRenewMinutes(event.target.value)} placeholder="续卡分钟" /></label>
-          <HighRiskConfirm label="续卡" impact="将延长选中会话并记录追加低消/服务费快照。" disabled={submitting} precheck={() => validateSessionAction("renew")} onConfirm={() => void runSessionAction("renew")} permissionsState={effectivePermissions} permissions={[BAR_RENEW_PERMISSION]} data-testid="bar-renew-submit" />
         </div>
         <div className="admin-form-row" data-testid="bar-split-form">
           <label>拆台方式

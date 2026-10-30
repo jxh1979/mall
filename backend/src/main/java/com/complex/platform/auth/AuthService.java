@@ -1,6 +1,6 @@
 package com.complex.platform.auth;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -147,8 +147,9 @@ public class AuthService implements SessionIssuer {
     /**
      * 第 25 条 25-R1（BSM:1884-1886 商户 App「商户侧的手机端」）：商户手机应用只接受商户账号——带商户归属、且不是平台账号或外包机构账号
      * （与后台前端 adminRoutes.ts accountFormOf 判商户形态同口径：平台账号即便挂了商户也算平台形态）。
+     * 第 91 条 91-R1：设备凭证验签器按同一口径把商户账号的网页请求定为商户网页门户。
      */
-    static boolean merchantAppAccount(String accountType, String merchantId) {
+    public static boolean merchantAppAccount(String accountType, String merchantId) {
         return merchantId != null && !merchantId.isBlank()
                 && !"platform_admin".equals(accountType) && !"outsourced_vendor".equals(accountType);
     }

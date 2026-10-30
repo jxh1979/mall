@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -669,13 +669,14 @@ public class BarController {
         return ApiResponse.ok(service.splitTableSessions(sessionId, request));
     }
 
-    @PostMapping("/table-sessions/{session_id}/renew")
-    public ApiResponse<BarTableSessionAdjustmentRecord> renewTableSession(
+    /** 第十八批 K 段 95-R2（BSM 第 1021 行「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」）：店长持权限改派。 */
+    @PostMapping("/table-sessions/{session_id}/attribution-reassign")
+    public ApiResponse<BarTableSessionRecord> reassignTableSessionAttribution(
             @PathVariable("session_id") String sessionId,
-            @RequestBody(required = false) @jakarta.validation.Valid BarTableRenewRequest request
+            @RequestBody(required = false) BarTableSessionAttributionReassignRequest request
     ) {
-        authorizationService.requirePermission("bar.table_session.renew");
+        authorizationService.requirePermission("bar.table_session.attribution_reassign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.renewTableSession(sessionId, request));
+        return ApiResponse.ok(service.reassignTableSessionAttribution(sessionId, request));
     }
 }

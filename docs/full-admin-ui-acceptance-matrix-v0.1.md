@@ -51,7 +51,7 @@
 | UI-ADM-INV-001 | 库存台账 | 仓库账号登录 | 入库、出库、盘点、调整 | 不允许负库存；差异处理需原因；高价值在线核销 | inventory ledger | 覆盖负库存和盘点差异 |
 | UI-ADM-FIN-001 | 应收应付台账 | 财务账号登录 | 生成应收、部分核销、调整、导出 | 原金额、已核销、余额正确；调整和导出留痕 | finance ledger | 覆盖部分核销、逾期、导出审计 |
 | UI-ADM-FIN-002 | 对账差异 | 存在第三方账单 | 导入对账、匹配、处理差异、填写关闭原因并正式关闭 | 差异原因必填；正式关闭必须有 `close_reason`、幂等键和证据附件引用；关闭后不可无痕改写；重复关闭返回同一处理结果 | finance/reconciliation batches + differences + close | 覆盖金额不一致、重复账单、关闭原因缺失、附件引用、幂等关闭和关闭后只读 |
-| UI-ADM-MER-001 | 商户服务工单 | 商户运营登录 | 创建维修/投诉/整改，派单，关闭 | 逾期提醒；整改关闭需证据 | merchant service work orders | 覆盖附件缺失和超时提醒 |
+| UI-ADM-MER-001 | 商户服务工单 | 商户运营登录 | 派单、处理、关闭、配置处理时限 | 逾期提醒 | merchant service work orders | 覆盖附件缺失和超时提醒 |
 | UI-ADM-MER-002 | 商户授权工作台 | merchant_operator 账号 | 查看授权工单/账单、确认授权范围、尝试进入平台财务页 | 授权范围内数据可见；商户角色只显示自身 merchant_id；平台财务页显示权限不足；确认动作产生留痕结果 | merchant-service/work-orders + merchant-billing/bills | 覆盖授权工单/账单分表、空状态、越权拦截、确认留痕；后端数据范围策略是安全边界 |
 | UI-ADM-MER-003 | 商户专区·我的账单 | 商户形态账号（`accountForms: ["merchant"]`）登录，权限 `merchant.billing.view` | 打开 `/admin/merchant-zone/bills`，查看账单汇总与明细 | 请求头 `x-terminal-type = merchant_portal`；汇总区出现「账单总数」；明细表出现本商户账单号与金额（现有断言：`MBILL-1` / `120,000.00`） | `merchant-zone-bills-page` / `merchant-zone-bills-summary` / `merchant-zone-bills-table` | 只看本商户；平台形态账号在该路由不可见（账号形态裁决：商户专区内容验收已从平台会话移到商户会话） |
 | UI-ADM-MER-004 | 商户专区·我的工单 | 同上，权限 `merchant.service_work_order.view` | 打开 `/admin/merchant-zone/work-orders`，查看工单并自助提单 | 汇总区出现「工单总数」；明细表出现本商户工单（现有断言：`空调漏水`）；自助提单表单可见 | `merchant-zone-work-orders-summary` / `merchant-zone-work-orders-table` / `merchant-zone-work-order-form` | 商户侧自助提单入口，与平台侧 UI-ADM-MER-001 是同一工单域的两端 |

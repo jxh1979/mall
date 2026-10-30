@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -84,6 +84,17 @@ class TerminalRequestSerializationTest {
     assertFalse("deviceCode" in body)
     assertFalse("device_code" in body)
     assertFalse("deviceType" in body)
+  }
+
+  @Test
+  fun bindDeviceRequestCarriesDeviceModel() {
+    // 第 96 条 96-R1（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态。」）：领用工作手机、平板时带本机型号 device_model；
+    // 不给型号时不带该键（explicitNulls=false），后端沿用台账原值。
+    val req = api.json.decodeFromString<BindDeviceRequest>("""{"device_id":"P0-1","device_model":"Pixel 8"}""")
+    val body = api.json.parseToJsonElement(api.json.encodeToString(req)).jsonObject
+    assertEquals("Pixel 8", body["device_model"]?.toString()?.trim('"'))
+    val none = api.json.parseToJsonElement(api.json.encodeToString(BindDeviceRequest(deviceId = "P0-1"))).jsonObject
+    assertFalse(none.containsKey("device_model"))
   }
 
   @Test

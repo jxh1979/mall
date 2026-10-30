@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -424,6 +424,7 @@ final class JdbcBarRowMapper {
                 resultSet.getInt("allowed_pass_free_guest_count_snapshot"),
                 resultSet.getString("sales_staff_id"),
                 resultSet.getString("service_staff_id"),
+                resultSet.getString("guest_source"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "opened_at"),
                 nullableInstant(resultSet, "closed_at"),

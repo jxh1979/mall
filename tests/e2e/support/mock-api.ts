@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -530,7 +530,7 @@ function effectivePermissionsFor(options: MockOptions) {
     };
   }
   // 其它受限账号（如 bar_operator）：仅授予自身域读权限，不含平台财务等。
-  return { grants: ["bar.table_session.view", "bar.table.view", "bar.reservation.view", "bar.order.view", "bar.table.guest_checkin", "bar.table_session.transfer", "bar.table_session.merge", "bar.table_session.renew"], denies: [], wildcard: false, computedAt: now };
+  return { grants: ["bar.table_session.view", "bar.table.view", "bar.reservation.view", "bar.order.view", "bar.table.guest_checkin", "bar.table_session.transfer", "bar.table_session.merge"], denies: [], wildcard: false, computedAt: now };
 }
 
 export async function installMockApi(page: Page, options: MockOptions = {}) {
@@ -657,7 +657,7 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
     const targetUserIds = (bodyValue(body, "targetUserIds", "target_user_ids") as string[] | undefined) ?? [];
     return json(route, { status: mode === "single_use" ? "single_use_applied" : "applied", singleUse: mode === "single_use", targetCount: targetUserIds.length });
   }
-  const tableSessionAction = pathname.match(/^\/api\/v1\/bar\/table-sessions\/([^/]+)\/(transfer|merge|renew)$/);
+  const tableSessionAction = pathname.match(/^\/api\/v1\/bar\/table-sessions\/([^/]+)\/(transfer|merge)$/);
   if (tableSessionAction) {
     const [, sessionId, action] = tableSessionAction;
     const session = state.barTableSessions.find((item) => item.id === sessionId);
@@ -672,8 +672,6 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
       session.sessionVersion = Number(session.sessionVersion ?? 1) + 1;
       return json(route, { id: `adj-${action}-1`, sessionId, targetSessionId: bodyValue(body, "mergedSessionId", "merged_session_id"), adjustmentType: "merge", status: "merged" });
     }
-    session.sessionVersion = Number(session.sessionVersion ?? 1) + 1;
-    return json(route, { id: `adj-${action}-1`, sessionId, renewedUntil: bodyValue(body, "renewedUntil", "renewed_until"), adjustmentType: "renew", status: "renewed" });
   }
   if (pathname === "/api/v1/platform/business-entities") return json(route, { id: "org-created", name: "Created Org", orgType: "platform", status: "active", createdAt: now });
   if (pathname === "/api/v1/customer-accounts/lookup") {

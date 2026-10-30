@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -207,6 +207,7 @@ public final class FieldLabels {
         p("recipient_name", "接收人姓名");
         p("recipient_phone", "接收人手机号");
         p("guest_count", "客人人数");
+        p("guest_source", "客人来源");
         p("crew_count", "人员数量");
         p("level_code", "等级编码");
         p("level_name", "等级名称");
@@ -682,6 +683,10 @@ public final class FieldLabels {
         p("purpose", "用途");
         p("scope", "范围");
         p("period_start", "期初");
+        // 第十八批 K 段 97-R3 吧台消耗统计（同前端 fieldLabels.ts）。
+        p("period_end", "期末");
+        p("sale_form", "销售形式");
+        p("pour_volume_ml", "出酒量（毫升）");
         p("subject_entity_id", "主体");
         p("actor_id", "操作人");
         p("event_name", "事件名称");

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -295,7 +295,7 @@ class BarScanOrderCustomerJdbcIntegrationTests {
     private String openSession(String tag, String table) {
         Instant now = Instant.now();
         return bars.saveTableSession(new BarTableSessionRecord("session_scan_" + tag + "_" + f.suffix, merchant, merchant,
-                LocalDate.now(), table, null, null, 2, 0L, 0, null, null, "open", now, null, null, 1L, now, now)).id();
+                LocalDate.now(), table, null, null, 2, 0L, 0, null, null, "walk_in", "open", now, null, null, 1L, now, now)).id();
     }
 
     private ResultActions anonymousGet(String path) throws Exception {

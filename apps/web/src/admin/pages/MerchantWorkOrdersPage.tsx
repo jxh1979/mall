@@ -13,15 +13,16 @@ import { useSortedRows } from "../components/useSortedRows";
 import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
-import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { MERCHANT_WORK_ORDER_TYPE_LABELS } from "./MerchantZoneWorkOrdersPage";
 
-const WO_CREATE = ["merchant.service_work_order.create"];
 const WO_ASSIGN = ["merchant.service_work_order.assign"];
 const WO_PROCESS = ["merchant.service_work_order.process"];
 const WO_CLOSE = ["merchant.service_work_order.close"];
 const POLICIES = "/api/v1/merchant-service/work-order-policies";
-const TYPE_OPTIONS: Array<[string, string]> = [["repair", "报修"], ["complaint", "投诉"], ["rectification", "整改"], ["service", "服务"]];
+const TYPE_OPTIONS = Object.entries(MERCHANT_WORK_ORDER_TYPE_LABELS);
+// 第 93 条 93-R1：类型用商户工单自己的四类中文名（service＝其他服务请求，不用共享字典的「服务」）。
+const typeName = (code?: string | null) => MERCHANT_WORK_ORDER_TYPE_LABELS[code ?? ""] ?? formatBusinessStatus(code);
 const PRIORITY_OPTIONS: Array<[string, string]> = [["low", "低"], ["medium", "中"], ["high", "高"], ["critical", "紧急"]];
 
 // 第 77 条 77-R3：处理时限按「工单类型×优先级」后台配置（BSM:1385），商户单只有处理时限、没有响应时限。
@@ -29,25 +30,22 @@ type MerchantWorkOrderPolicyRow = { workOrderType: string; priority: string; han
 
 const TEXT = {
   title: "商户服务工单",
-  description: "覆盖商户维修、投诉、整改和服务类工单的创建、派单、处理和关闭闭环，所有写动作必须带幂等键、操作原因和附件证据。",
-  evidence: "接口证据：读取/创建 /api/v1/merchant-service/work-orders；派单 POST /api/v1/merchant-service/work-orders/{id}/assign；处理 POST /api/v1/merchant-service/work-orders/{id}/actions；关闭 POST /api/v1/merchant-service/work-orders/{id}/close。",
+  description: "商户在商户专区自助提报修、保洁、投诉和其他服务请求；本页派单、处理、关闭并配置处理时限",
+  evidence: "接口证据：读取 /api/v1/merchant-service/work-orders；派单 POST /api/v1/merchant-service/work-orders/{id}/assign；处理 POST /api/v1/merchant-service/work-orders/{id}/actions；关闭 POST /api/v1/merchant-service/work-orders/{id}/close。",
   loadFailed: "商户服务工单读取失败",
   actionFailed: "商户服务工单操作失败",
   noWorkOrder: "当前没有可操作工单。",
-  titleRequired: "创建工单必须填写标题。",
   processNoteRequired: "处理动作必须填写处理说明。",
   resolutionRequired: "关闭工单必须填写处理结论。",
   workOrderCount: "工单总数",
   pending: "待处理",
   highPriority: "高优先级",
   selected: "选中工单",
-  boundary: "维修 / 投诉 / 整改 / 服务均走统一工单；派单、处理、关闭必须留痕，生产附件与逾期提醒仍按生产证据台账回填。",
-  create: "创建工单",
+  boundary: "商户服务工单由商户在商户专区发起；平台发起的整改与巡检走物业工单",
   assign: "派单",
   process: "追加处理",
   close: "关闭工单",
   workOrderTitle: "工单标题",
-  descriptionLabel: "问题描述",
   type: "类型",
   priority: "优先级",
   merchant: "商户",
@@ -113,10 +111,6 @@ function makeResult(action: string, request: Record<string, unknown>, result: un
 export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<MerchantWorkOrderRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
-  const [title, setTitle] = React.useState("空调漏水复查");
-  const [description, setDescription] = React.useState("商户反馈维修后仍需复查");
-  const [workOrderType, setWorkOrderType] = React.useState("repair");
-  const [priority, setPriority] = React.useState("high");
   const [ownerDepartment, setOwnerDepartment] = React.useState("property");
   const [ownerUserId, setOwnerUserId] = React.useState("staff_owner");
   const [processNote, setProcessNote] = React.useState("已到场处理，等待商户确认");
@@ -127,8 +121,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该工单完整字段（枚举中文·截止时间中文·引用 TraceLink）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
-  // 引导式流程 phase-4：新建工单收起为主按钮 + 分步引导弹窗（派单/处理/关闭动作表单不变）。
-  const [createOpen, setCreateOpen] = React.useState(false);
   const [policies, setPolicies] = React.useState<MerchantWorkOrderPolicyRow[]>([]);
   const [policyForm, setPolicyForm] = React.useState({ workOrderType: "repair", priority: "high", handleMinutes: "" });
   const canSetPolicy = useCan(effectivePermissions, WO_ASSIGN);
@@ -189,29 +181,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     makeResult,
     fallbackMessage: TEXT.actionFailed,
   });
-
-  async function createWorkOrder() {
-    if (!title.trim()) {
-      setFormError(TEXT.titleRequired);
-      return;
-    }
-    const request = {
-      idempotencyKey: nextKey("merchant-work-order-create"),
-      operatorNote: "完整后台创建商户服务工单",
-      evidenceAttachmentIds: ["att-merchant-work-order-create"],
-      merchantId: "merchant-1",
-      spaceId: "area-1",
-      contractId: "contract-1",
-      workOrderType,
-      priority,
-      title,
-      description,
-      reportedByUserId: "staff_reporter",
-      reportedChannel: "web_admin",
-    };
-    const ok = await runAction("merchant_work_order_created", request, () => api.post("/api/v1/merchant-service/work-orders", request));
-    if (ok) setCreateOpen(false);
-  }
 
   async function assignWorkOrder() {
     if (!selected) {
@@ -289,7 +258,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       fields: [
         { label: TEXT.workOrderTitle, value: row.title ?? row.id },
         { label: TEXT.merchant, value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> },
-        { label: TEXT.type, value: formatBusinessStatus(row.workOrderType) },
+        { label: TEXT.type, value: typeName(row.workOrderType) },
         { label: TEXT.priority, value: formatBusinessStatus(row.priority) },
         { label: TEXT.status, value: formatBusinessStatus(row.status) },
         { label: TEXT.ownerDepartment, value: row.ownerDepartment || "-" },
@@ -304,7 +273,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="merchant_service.work_order.viewed / created / assigned / action_added / closed" />
+      <AuditTrailHint event="merchant_service.work_order.viewed / assigned / action_added / closed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="merchant-work-orders-kpi-focus-banner">
@@ -320,51 +289,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.title ?? "-"}>{selected?.title ?? "-"}</strong><small>{selected?.status ?? "-"}</small></div>
         </div>
 
-        <div data-testid="merchant-work-order-create-form">
-          <div className="admin-form-row">
-            <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid="merchant-work-order-create-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ {TEXT.create}</PermissionButton>
-            <span className="admin-muted-action" data-testid="merchant-work-orders-boundary">{TEXT.boundary}</span>
-          </div>
-          <GuidedFlowModal
-            open={createOpen}
-            title={TEXT.create}
-            testId="merchant-work-order-guided"
-            submitTestId="merchant-work-order-create"
-            submitLabel={TEXT.create}
-            submitting={busyAction !== ""}
-            error={formError || undefined}
-            onClose={() => setCreateOpen(false)}
-            onSubmit={() => void createWorkOrder()}
-            steps={[
-              {
-                title: "工单信息",
-                description: "填写工单标题与问题描述。",
-                validate: () => (title.trim() ? null : TEXT.titleRequired),
-                content: (
-                  <>
-                    <label>{TEXT.workOrderTitle}<input data-testid="merchant-work-order-title" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-                    <label>{TEXT.descriptionLabel}<input data-testid="merchant-work-order-description" value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-                  </>
-                ),
-              },
-              {
-                title: "分类与优先级",
-                description: "选择工单类型与优先级。",
-                content: (
-                  <>
-                    <label>{TEXT.type}<select data-testid="merchant-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}><option value="repair">报修</option><option value="complaint">投诉</option><option value="rectification">整改</option><option value="service">服务</option></select></label>
-                    <label>{TEXT.priority}<select data-testid="merchant-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="critical">紧急</option></select></label>
-                  </>
-                ),
-              },
-            ]}
-            summary={[
-              { label: TEXT.workOrderTitle, value: title.trim() || "未填写" },
-              { label: TEXT.descriptionLabel, value: description.trim() || "未填写" },
-              { label: TEXT.type, value: formatBusinessStatus(workOrderType) },
-              { label: TEXT.priority, value: formatBusinessStatus(priority) },
-            ]}
-          />
+        <div className="admin-form-row">
+          <span className="admin-muted-action" data-testid="merchant-work-orders-boundary">{TEXT.boundary}</span>
         </div>
 
         <div className="admin-form-grid" data-testid="merchant-work-order-action-form">
@@ -395,7 +321,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <div className="admin-table-scroll">
             <table className="admin-table" data-testid="merchant-work-order-policies-table">
               <thead><tr><th>{TEXT.type}</th><th>{TEXT.priority}</th><th>{TEXT.handleMinutes}</th></tr></thead>
-              <tbody>{policies.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} data-testid={`merchant-work-order-policy-${row.workOrderType}-${row.priority}`}><td>{formatBusinessStatus(row.workOrderType)}</td><td>{formatBusinessStatus(row.priority)}</td><td>{row.handleMinutes}</td></tr>)}</tbody>
+              <tbody>{policies.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} data-testid={`merchant-work-order-policy-${row.workOrderType}-${row.priority}`}><td>{typeName(row.workOrderType)}</td><td>{formatBusinessStatus(row.priority)}</td><td>{row.handleMinutes}</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -420,7 +346,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
                   <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此工单 ${row.id}`} data-testid={`merchant-work-order-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
                   <td>{row.title ?? row.id}<br /><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></span></td>
-                  <td>{formatBusinessStatus(row.workOrderType)}</td>
+                  <td>{typeName(row.workOrderType)}</td>
                   <td>{formatBusinessStatus(row.priority)}</td>
                   <td>{formatBusinessStatus(row.status)}</td>
                   <td>{row.ownerDepartment || "-"}</td>

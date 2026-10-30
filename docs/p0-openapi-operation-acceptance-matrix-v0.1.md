@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.42
+# P0 OpenAPI Operation 验收矩阵 V0.43
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1206 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1210 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -457,9 +457,9 @@
 | bar | `POST` | `/api/v1/bar/table-sessions` | `createBarTableSession` | 创建酒水台位会话（开台） | `object` | `bar.table_session.create` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table_session.create` | `bar.table_session.create_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | `mergeBarTableSession` | 合并酒水台位会话 | `object` | `bar.table_session.merge` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table_session.merge` | `bar.table_session.merge_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | `splitBarTableSession` | 拆分酒水台位会话（拆台） | `object` | `bar.table_session.split` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table.split` | `bar.table.split_failed` |
-| bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | `renewBarTableSession` | 续台（延长台位会话） | `object` | `bar.table_session.renew` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table_session.renew` | `bar.table_session.renew_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | `transferBarTableSession` | 转台（台位会话转移） | `object` | `bar.table_session.transfer` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.table_session.transfer` | `bar.table_session.transfer_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | `submitBarTableSessionSalesBackfill` | 补录台位会话销售归属（人工补录，店长复核） | `object` | `bar.table_session.create` | `staff-token` | `project-bar-table` | web | 是 | `evidence.manual_backfill_submitted` | `evidence.manual_backfill_submit_failed` |
+| bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/attribution-reassign` | `reassignBarTableSessionAttribution` | 改派开台客人来源与销售人员（店长办理） | `object` | `bar.table_session.attribution_reassign` | `staff-token` | `project-bar-table` | web | 是 | `bar.table_session.attribution_reassigned` | `bar.table_session.attribution_reassign_failed` |
 | bar | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | `listBarBillOperations` | 查询酒水账单拆并操作记录 | `-` | `bar.bill.split_merge` | `staff-token` | `project-bar-table` | tablet, web | 否 | `bar.bill_operation.list` | `bar.bill_operation.list_failed` |
 | bar | `GET` | `/api/v1/bar/bills/{bill_id}/rewards` | `listBarBillMerchantRewards` | 查询酒水账单产生的商户消费积分与成长值 | `-` | `bar.order.view` | `staff-token` | `project-bar-table` | tablet, web | 否 | `bar.bill_rewards.viewed` | `bar.bill_rewards.view_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/adjustments` | `adjustBarBill` | 对酒水账单应用调整 | `object` | `bar.bill.adjust` | `staff-token` | `project-bar-table` | tablet, web | 是 | `bar.bill.adjust` | `bar.bill.adjust_failed` |
@@ -527,6 +527,7 @@
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/lost` | `markTerminalDeviceLost` | 标记设备挂失 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.lost` | `terminal.device.lost_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/repair` | `markTerminalDeviceRepair` | 设备送修 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.repaired` | `terminal.device.repair_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/scrap` | `markTerminalDeviceScrap` | 设备报废 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.scrapped` | `terminal.device.scrap_failed` |
+| terminals | `POST` | `/api/v1/terminals/devices/{id}/archive` | `markTerminalDeviceArchived` | 报废设备归档 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.archived` | `terminal.device.archive_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/entry-devices` | `registerEntryDevice` | 后台登记设备进台账（入场三道环节设备、扫码设备、其他现场设备） | `object` | `terminal.device.lifecycle` | `staff-token` | `project-device` | web | 是 | `terminal.device.entry_device_registered` | `terminal.device.entry_device_register_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/repair-complete` | `completeTerminalDeviceRepair` | 设备修复完成 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web | 是 | `terminal.device.repair_completed` | `terminal.device.repair_complete_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/responsible-staff` | `changeTerminalDeviceResponsibleStaff` | 入场三道环节设备与其他现场设备更换责任人 | `object` | `terminal.device.lifecycle` | `staff-token` | `project-device` | web | 是 | `terminal.device.responsible_staff_changed` | `terminal.device.responsible_staff_change_failed` |
@@ -551,6 +552,7 @@
 | inventory | `GET` | `/api/v1/inventory/trace-codes` | `listInventoryTraceCodes` | 查询溯源码主数据列表 | `-` | `inventory.trace_code.view` | `staff-token` | `project` | web | 否 | `inventory.trace_code.listed` | `inventory.trace_code.list_failed` |
 | inventory | `POST` | `/api/v1/inventory/trace-codes` | `registerInventoryTraceCode` | 贴码登记溯源码（入库） | `RegisterTraceCodeRequest` | `inventory.trace_code.register` | `staff-token` | `project` | web | 是 | `inventory.trace_code.registered` | `inventory.trace_code.register_failed` |
 | inventory | `GET` | `/api/v1/inventory/trace-codes/{id}` | `getInventoryTraceCode` | 查询溯源码责任链（按 id 或 trace_code） | `-` | `inventory.trace_code.view` | `staff-token` | `project` | web | 否 | `inventory.trace_code.viewed` | `inventory.trace_code.view_failed` |
+| inventory | `GET` | `/api/v1/inventory/trace-codes/{id}/outbound-orders` | `listTraceCodeOutboundOrders` | 库管出库可选的酒吧订单（按溯源码） | `-` | `inventory.handover.scan` | `staff-token` | `project-warehouse-bar` | staff_work_phone | 否 | `not_applicable` | `not_applicable` |
 | inventory | `POST` | `/api/v1/inventory/trace-codes/{id}/print` | `printInventoryTraceCode` | 出库打印溯源码（registered→printed） | `PrintTraceCodeRequest` | `inventory.trace_code.print` | `staff-token` | `project` | web | 是 | `inventory.trace_code.printed` | `inventory.trace_code.print_failed` |
 | amusement | `GET` | `/api/v1/amusement/entitlement-sessions` | `listAmusementEntitlementSessions` | 查询权益会话列表（merchant scope） | `-` | `amusement.entitlement_session.view` | `staff-token` | `merchant` | web, kiosk | 否 | `amusement.entitlement_session.listed` | `amusement.entitlement_session.list_failed` |
 | amusement | `POST` | `/api/v1/amusement/entitlement-sessions` | `initiateAmusementEntitlementSession` | 发起权益会话（工作手机扫附赠权益码） | `InitiateEntitlementSessionRequest` | `amusement.entitlement_session.initiate` | `staff-token` | `merchant` | staff_work_phone, web | 是 | `amusement.entitlement_session.initiated` | `amusement.entitlement_session.initiate_failed` |
@@ -744,6 +746,7 @@
 | merchant-portal | `POST` | `/api/v1/merchant-portal/ticket-settlements/{ar_ap_item_id}/account-change` | `approveMerchantPortalPayeeAccountChange` | 收款方财务负责人审批更换收款账户 | `object` | `merchant.portal.payee_account.approve` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 是 | `merchant_portal.payee_account.approved` | `merchant_portal.payee_account.approve_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/notices` | `listMerchantPortalNotices` | 商户专区·通告(本商户) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/fee-statement` | `getMerchantPortalFeeStatement` | 商户专区·费用总表与当期综合账单(本商户) | `-` | `merchant.billing.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `merchant_portal.fee_statement.viewed` | `merchant_portal.fee_statement.view_failed` |
+| merchant-portal | `GET` | `/api/v1/merchant-portal/unread-bills` | `getMerchantPortalUnreadBills` | 商户专区·首页未读账单提醒(本商户) | `-` | `merchant.billing.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/contracts` | `listMerchantPortalContracts` | 商户专区·我的合同(只读关键信息) | `-` | `contract.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `merchant_portal.contract.viewed` | `merchant_portal.contract.view_failed` |
 | merchant-portal | `GET` | `/api/v1/merchant-portal/settlements` | `listMerchantPortalSettlements` | 商户专区·我的对账(结算单只读) | `-` | `merchant.portal.settlement.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `merchant_portal.settlement.viewed` | `merchant_portal.settlement.view_failed` |
 | merchant-portal | `POST` | `/api/v1/merchant-portal/settlements/{settlement_id}/dispute` | `submitMerchantPortalSettlementDispute` | 商户专区·结算单异议留言 | `object` | `merchant.portal.settlement.dispute` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 是 | `merchant_portal.settlement.disputed` | `merchant_portal.settlement.dispute_failed` |
@@ -906,6 +909,7 @@
 | dealer | `POST` | `/api/v1/dealers/{id}/portal-accounts` | `createDealerPortalAccount` | 开通经销商门户账号 | `object` | `dealer.portal_account.manage` | `staff-token` | `project` | web | 是 | `dealer.portal_account.created` | `dealer.portal_account.create_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-ledger` | `listInventoryCostLedger` | 查询库存成本流水（移动加权） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_ledger.viewed` | `inventory.cost_ledger.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/cost-summary` | `getInventoryCostSummary` | 期间出库成本汇总（分红成本侧取数点） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone, tablet | 否 | `inventory.cost_summary.viewed` | `inventory.cost_summary.view_failed` |
+| inventory | `GET` | `/api/v1/inventory/bar-consumption-stats` | `listBarConsumptionStats` | 期间吧台消耗统计（按杯、按瓶、套餐） | `-` | `inventory.stock.view` | `staff-token` | `project-warehouse` | web | 否 | `inventory.bar_consumption_stats.viewed` | `inventory.bar_consumption_stats.view_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/plans` | `listDividendPlans` | 分红方案列表（商户 scope 账号只见本商户） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `dividend.plans_listed` | `dividend.plans_list_failed` |
 | finance | `POST` | `/api/v1/finance/dividends/plans` | `createDividendPlan` | 新建分红方案（比例/税率/周期/基数构成全可配，80/20 仅默认值） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_created` | `dividend.plan_create_failed` |
 | finance | `PUT` | `/api/v1/finance/dividends/plans/{id}` | `updateDividendPlan` | 修改分红方案（改动审计留痕；历史分红单按单内快照追溯，不受影响） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_updated` | `dividend.plan_update_failed` |

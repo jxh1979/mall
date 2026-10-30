@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -142,7 +142,6 @@ class BarJdbcIntegrationTests {
                 "bar.table_session.create",
                 "bar.table_session.transfer",
                 "bar.table_session.merge",
-                "bar.table_session.renew",
                 "bar.table_session.split"
         );
         assertThat(platformAdminPermissionCodes()).contains(
@@ -160,10 +159,29 @@ class BarJdbcIntegrationTests {
                 "bar.table_session.create",
                 "bar.table_session.transfer",
                 "bar.table_session.merge",
-                "bar.table_session.renew",
                 "bar.reservation.manage",
                 "bar.deposit_rule.manage"
         );
+    }
+
+    // 第十八批 K 段第 98 条（BSM 第 1079 行「平台不提供续卡、续时类产品。」，裁决 XM-M725-O）：续卡权限码停用且不留任何授予来源，
+    // 能力开关显式行删除；会话调整记录表保留（转台、并台、拆台共用）。
+    @Test
+    void renewPermissionIsRetiredAndGrantedToNobody() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM permissions WHERE permission_code = 'bar.table_session.renew'", String.class))
+                .isEqualTo("retired");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT (SELECT count(*) FROM role_permissions WHERE permission_code = 'bar.table_session.renew')
+                     + (SELECT count(*) FROM permission_template_items WHERE permission_code = 'bar.table_session.renew')
+                     + (SELECT count(*) FROM user_permission_overrides WHERE permission_code = 'bar.table_session.renew')
+                     + (SELECT count(*) FROM temporary_permission_grants
+                         WHERE permission_code = 'bar.table_session.renew' AND status = 'active')
+                """, Long.class)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM terminal_capability_switches WHERE capability_code = 'bar.table_session.renew'", Long.class))
+                .isZero();
+        assertThat(regclass("bar_table_session_adjustments")).isEqualTo("bar_table_session_adjustments");
     }
 
     @Test
@@ -571,6 +589,7 @@ class BarJdbcIntegrationTests {
                 2,
                 "staff_sales",
                 "staff_service",
+                "marketing",
                 "open",
                 now,
                 null,
@@ -582,7 +601,7 @@ class BarJdbcIntegrationTests {
         repository.saveTableSessionAdjustment(new BarTableSessionAdjustmentRecord(
                 "adjustment_jdbc",
                 "session_jdbc",
-                "renew",
+                "transfer",
                 null,
                 null,
                 "table_session_jdbc",
@@ -592,16 +611,16 @@ class BarJdbcIntegrationTests {
                 LocalDate.parse("2026-06-20"),
                 50000L,
                 50000L,
-                Instant.parse("2026-06-21T02:00:00Z"),
-                20000L,
+                null,
                 0L,
-                1000L,
+                0L,
+                0L,
                 "guest extends time",
                 "supervisor_1",
                 false,
                 "applied",
-                "renew-jdbc",
-                List.of("att_renew"),
+                "transfer-jdbc",
+                List.of("att_transfer"),
                 "{\"session_version_before\":1}",
                 now
         ));
@@ -621,7 +640,7 @@ class BarJdbcIntegrationTests {
                         BarTableSessionAdjustmentRecord::additionalMinConsumptionCent,
                         BarTableSessionAdjustmentRecord::additionalServiceFeeCent
                 )
-                .contains(tuple("adjustment_jdbc", "renew", 20000L, 1000L));
+                .contains(tuple("adjustment_jdbc", "transfer", 0L, 0L));
     }
 
     @Test
@@ -713,7 +732,7 @@ class BarJdbcIntegrationTests {
                 8, 2, 50000L, "CNY", "active", now, now));
         BarTableSessionRecord saved = repository.saveTableSession(new BarTableSessionRecord(
                 "session_platform_open", "bar_jdbc", "__platform__", LocalDate.parse("2026-06-20"),
-                "table_platform_open", null, null, 2, 50000L, 2, null, null, "open",
+                "table_platform_open", null, null, 2, 50000L, 2, null, null, "walk_in", "open",
                 now, null, null, 1L, now, now));
         assertThat(saved.merchantId()).isEqualTo("__platform__");
         Integer count = jdbcTemplate.queryForObject(
@@ -731,7 +750,7 @@ class BarJdbcIntegrationTests {
                 8, 2, 50000L, "CNY", "active", now, now));
         assertThatThrownBy(() -> repository.saveTableSession(new BarTableSessionRecord(
                 "session_null_merchant", "bar_jdbc", null, LocalDate.parse("2026-06-20"),
-                "table_null_merchant", null, null, 2, 50000L, 2, null, null, "open",
+                "table_null_merchant", null, null, 2, 50000L, 2, null, null, "walk_in", "open",
                 now, null, null, 1L, now, now)))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
@@ -758,7 +777,7 @@ class BarJdbcIntegrationTests {
         repository.saveTable(new BarTableRecord(tableId, merchant, merchant, "T-" + tableId, tableId, "card_seat",
                 6, 2, minSnapshot, "CNY", "opened", now, now));
         return repository.saveTableSession(new BarTableSessionRecord(id, merchant, merchant,
-                LocalDate.parse("2026-06-20"), tableId, null, null, 2, minSnapshot, 2, null, null, status,
+                LocalDate.parse("2026-06-20"), tableId, null, null, 2, minSnapshot, 2, null, null, "walk_in", status,
                 now, null, sourceSessionId, 1L, now, now));
     }
 
@@ -946,7 +965,7 @@ class BarJdbcIntegrationTests {
         repository.saveReservation(new BarReservationRecord("resv_cls5", merchant, merchant, "table_cls5_b", "customer_cls5",
                 now, 2, 2, 20000L, "paid", "staff", null, "reserved", "web", null, List.of(), now, now, null));
         BarTableSessionRecord b = repository.saveTableSession(new BarTableSessionRecord("sess_cls5_b", merchant, merchant,
-                LocalDate.parse("2026-06-20"), "table_cls5_b", "resv_cls5", "customer_cls5", 2, 50000L, 2, null, null, "open",
+                LocalDate.parse("2026-06-20"), "table_cls5_b", "resv_cls5", "customer_cls5", 2, 50000L, 2, null, null, "walk_in", "open",
                 now, null, null, 1L, now, now));
         assertThat(open.status()).isEqualTo("closed");
 

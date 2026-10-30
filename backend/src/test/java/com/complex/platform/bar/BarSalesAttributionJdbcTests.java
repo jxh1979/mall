@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.common.money.MoneyRounding;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -40,6 +41,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 以上都不命中的直接到店开台默认记自来客——此时现场可人工补选营销带客并选定销售人员，不补选即维持自来客」；第 1070 行「一张账单的提成只计一次、只归帮该客人
  * 预订的那个人；自来客不产生销售提成；协助服务、加单、送达等其他经手人只留责任痕迹、不产生销售提成」；第 1077 行「主责服务提供人按当日该场次排班指派到该卡座，
  * 同一卡座在不同场次可以更换」；第 1468 行「业绩记名人与销售提成归属人始终是同一人——都是帮该客人预订的那个人」。
+ * 第十八批 K 段第 95 条 95-R1：BSM 第 1021 行「经平台自有渠道订台或购票到店的，自动记平台自有渠道；由有销售归属的订台开台的，自动记营销带客……
+ * 以上都不命中的直接到店开台默认记自来客」，裁决 21「开台记来源只看有没有订台、订台从哪里来；开台时不对客人的门票」。
+ * 95-R2：BSM 第 1021 行「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」；第 1468 行「销售归属改派后，业绩随提成归属一起改」。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -53,6 +57,7 @@ class BarSalesAttributionJdbcTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private BarRepository bars;
+    @Autowired private BarCommissionRateConfigPort rates;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "prj_bsa_" + suffix;
@@ -62,6 +67,7 @@ class BarSalesAttributionJdbcTests {
     private final AtomicInteger seq = new AtomicInteger();
     private RequestPostProcessor salesA;
     private RequestPostProcessor clerkB;
+    private RequestPostProcessor managerM;
 
     @BeforeEach
     void seed() {
@@ -72,15 +78,18 @@ class BarSalesAttributionJdbcTests {
         jdbc.update("INSERT INTO business_entity_projects(business_entity_id,project_id) VALUES(?,?)", company, project);
         jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,contract_entity_id,settlement_entity_id,project_id,status,"
                 + "created_at,updated_at) VALUES(?,'销售归属酒吧','bar',?,?,?,?,'active',now(),now())", merchant, company, company, company, project);
-        String staffRole = role("'bar.reservation.create','bar.table_session.create','bar.table_session.view','bar.order.create',"
-                + "'bar.table_commission.calculate','bar.payroll.view'");
+        String staffPermissions = "'bar.reservation.create','bar.table_session.create','bar.table_session.view','bar.order.create',"
+                + "'bar.table_commission.calculate','bar.payroll.view','bar.table_session.transfer'";
+        String staffRole = role("st", staffPermissions);
+        String managerRole = role("mg", staffPermissions + ",'bar.table_session.attribution_reassign','bar.table_session.merge'");
         salesA = account("a", staffRole);
         clerkB = account("b", staffRole);
-        for (String worker : List.of("s", "t", "u")) {
+        managerM = account("m", managerRole);
+        for (String worker : List.of("s", "t", "u", "c")) {
             account(worker, staffRole);
         }
         profile("a", true);
-        for (String worker : List.of("b", "s", "t", "u")) {
+        for (String worker : List.of("b", "s", "t", "u", "c")) {
             profile(worker, false);
         }
         Instant now = Instant.now();
@@ -101,8 +110,10 @@ class BarSalesAttributionJdbcTests {
         String table = table("card_seat");
         String reservation = reserve(salesA, table);
         open(clerkB, table, reservation, user("b"), null).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.sales_staff_id").value(user("a")));
+                .andExpect(jsonPath("$.data.sales_staff_id").value(user("a")))
+                .andExpect(jsonPath("$.data.guest_source").value("marketing"));
         assertThat(sessionOf(table, "sales_staff_id")).isEqualTo(user("a"));
+        assertThat(sessionOf(table, "guest_source")).isEqualTo("marketing");
     }
 
     /** 直接到店开台：现场补选营销带客并选定销售人员 B，按补选记 B。 */
@@ -110,20 +121,24 @@ class BarSalesAttributionJdbcTests {
     void walkInSessionTakesTheOnSitePick() throws Exception {
         String table = table("card_seat");
         open(clerkB, table, null, user("b"), null).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.sales_staff_id").value(user("b")));
+                .andExpect(jsonPath("$.data.sales_staff_id").value(user("b")))
+                .andExpect(jsonPath("$.data.guest_source").value("marketing"));
         assertThat(sessionOf(table, "sales_staff_id")).isEqualTo(user("b"));
+        assertThat(sessionOf(table, "guest_source")).isEqualTo("marketing");
     }
 
-    /** 客人自助订台（订台上没有销售）开台：不按现场填写的销售记，会话销售为空。 */
+    /** 客人自助订台（订台来源为登录端 app、订台上没有销售）开台：记平台自有渠道，不按现场填写的销售记，会话销售为空。 */
     @Test
     void selfBookedReservationOpensWithoutSalesEvenIfOneIsFilled() throws Exception {
         String table = table("card_seat");
         String reservation = "rsv_bsa_" + suffix + "_" + seq.incrementAndGet();
         jdbc.update("INSERT INTO bar_reservations(id,bar_id,merchant_id,table_id,reserved_at,guest_count,deposit_status,order_source,sales_staff_id,"
-                + "status,created_at,updated_at) VALUES(?,?,?,?,now(),2,'paid','customer',NULL,'reserved',now(),now())",
+                + "status,created_at,updated_at) VALUES(?,?,?,?,now(),2,'paid','app',NULL,'reserved',now(),now())",
                 reservation, merchant, merchant, table);
-        open(clerkB, table, reservation, user("b"), null).andExpect(status().isOk());
+        open(clerkB, table, reservation, user("b"), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.guest_source").value("platform_own"));
         assertThat(sessionOf(table, "sales_staff_id")).isNull();
+        assertThat(sessionOf(table, "guest_source")).isEqualTo("platform_own");
     }
 
     // ── 86-R1：订单销售取开台会话销售，不再取下单人 ─────────────────────────────────────────────────
@@ -152,7 +167,10 @@ class BarSalesAttributionJdbcTests {
     @Test
     void walkInWithoutPickHasNoOrderSalesAndNoCommission() throws Exception {
         String table = table("loose_table");
-        open(clerkB, table, null, null, null).andExpect(status().isOk());
+        open(clerkB, table, null, null, null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.guest_source").value("walk_in"));
+        assertThat(sessionOf(table, "guest_source")).isEqualTo("walk_in");
+        assertThat(sessionOf(table, "sales_staff_id")).isNull();
         String orderId = JsonPath.read(order(clerkB, table).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
         assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_orders WHERE id=?", String.class, orderId)).isNull();
@@ -161,6 +179,142 @@ class BarSalesAttributionJdbcTests {
         commission(clerkB, bill).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("BAR_COMMISSION_NO_SALES"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_commission_calculations WHERE bill_id=?", Integer.class, bill)).isZero();
+    }
+
+    // ── 95-R1：来源随客人走（BSM 第 1079 行「销售提成跟客人走……与台位无关」）────────────────────────────
+
+    /** A 代订、B 开台记营销带客；按后台转台请求（蛇形键）转到另一散台后，该场仍为营销带客、销售仍为 A。 */
+    @Test
+    void guestSourceFollowsTheGuestAcrossATransfer() throws Exception {
+        String table = table("loose_table");
+        String session = JsonPath.read(open(clerkB, table, reserve(salesA, table), null, null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.guest_source").value("marketing"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        String target = table("loose_table");
+        shift("t", spaceOf(target));
+        Long version = jdbc.queryForObject("SELECT session_version FROM bar_table_sessions WHERE id=?", Long.class, session);
+        String body = "{\"idempotency_key\":\"bsa-t-" + suffix + "\",\"target_table_id\":\"" + target + "\",\"target_service_staff_id\":\""
+                + user("t") + "\",\"reason\":\"客人换到靠窗散台\",\"requested_by_user_id\":\"admin-web\",\"session_version\":" + version + "}";
+        mockMvc.perform(post("/api/v1/bar/table-sessions/" + session + "/transfer").with(clerkB).contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForMap("SELECT table_id, guest_source, sales_staff_id FROM bar_table_sessions WHERE id=?", session))
+                .containsEntry("table_id", target).containsEntry("guest_source", "marketing").containsEntry("sales_staff_id", user("a"));
+    }
+
+    // ── 95-R2：来源与销售人员的事后改派（店长持权限办理并留痕，只限账单结清前；提成随归属改）───────────────────────
+
+    /** A 代订、B 开台点单开单计提后，店长 M 改派营销带客 C：会话、订单、账单与提成行都归 C（岗位档、费率按 C 的档案），写操作审计留前 A 后 C。 */
+    @Test
+    void storeManagerReassignMovesSessionBillsAndCommissionToTheNewSales() throws Exception {
+        String[] seated = seatedWithCommission();
+        String session = seated[0], orderId = seated[1], bill = seated[2];
+        reassign(managerM, session, "marketing", user("c")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sales_staff_id").value(user("c")))
+                .andExpect(jsonPath("$.data.guest_source").value("marketing"));
+        assertThat(jdbc.queryForMap("SELECT guest_source, sales_staff_id FROM bar_table_sessions WHERE id=?", session))
+                .containsEntry("guest_source", "marketing").containsEntry("sales_staff_id", user("c"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_orders WHERE id=?", String.class, orderId)).isEqualTo(user("c"));
+        assertThat(jdbc.queryForMap("SELECT sales_staff_id, sales_role_type FROM bar_bills WHERE id=?", bill))
+                .containsEntry("sales_staff_id", user("c")).containsEntry("sales_role_type", "non_sales");
+        assertCommission(bill, user("c"), "non_sales", "calculated");
+        assertThat(jdbc.queryForMap("SELECT metadata->>'sales_staff_id_before' AS before, metadata->>'sales_staff_id_after' AS after, "
+                + "metadata->>'guest_source_after' AS source FROM audit_events WHERE event_name='bar.table_session.attribution_reassigned' AND business_id=?", session))
+                .containsEntry("before", user("a")).containsEntry("after", user("c")).containsEntry("source", "marketing");
+    }
+
+    /** 不持改派权限的员工 B 按同一请求改派：403，库内归属不变。 */
+    @Test
+    void reassignWithoutPermissionIsForbidden() throws Exception {
+        String[] seated = seatedWithCommission();
+        reassign(clerkB, seated[0], "marketing", user("c")).andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_table_sessions WHERE id=?", String.class, seated[0])).isEqualTo(user("a"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_commission_calculations WHERE bill_id=?", String.class, seated[2]))
+                .isEqualTo(user("a"));
+    }
+
+    /** 账单全部结清后（BSM 第 1021 行「只能在该账单结清前办理」）：409，库内不变。 */
+    @Test
+    void reassignAfterTheBillIsSettledIsRefused() throws Exception {
+        String[] seated = seatedWithCommission();
+        jdbc.update("UPDATE bar_bills SET settlement_status='settled', payment_status='paid', paid_amount_cent=payable_amount_cent WHERE id=?", seated[2]);
+        reassign(managerM, seated[0], "marketing", user("c")).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_BILL_ALREADY_SETTLED"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_table_sessions WHERE id=?", String.class, seated[0])).isEqualTo(user("a"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_bills WHERE id=?", String.class, seated[2])).isEqualTo(user("a"));
+    }
+
+    /** 直接到店不补选（自来客）：改营销带客属补记销售、走补录 409；改平台自有渠道 200，销售仍为空。 */
+    @Test
+    void walkInToMarketingGoesThroughBackfillButPlatformOwnIsReassigned() throws Exception {
+        String table = table("loose_table");
+        String session = JsonPath.read(open(clerkB, table, null, null, null).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        reassign(managerM, session, "marketing", user("c")).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_SALES_BACKFILL_REQUIRED"));
+        assertThat(sessionOf(table, "guest_source")).isEqualTo("walk_in");
+        reassign(managerM, session, "platform_own", null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.guest_source").value("platform_own"));
+        assertThat(sessionOf(table, "guest_source")).isEqualTo("platform_own");
+        assertThat(sessionOf(table, "sales_staff_id")).isNull();
+    }
+
+    /** 改自来客：会话、订单、未结清账单销售置空（岗位档非销售）、提成行作废；再改回营销带客 A（其订台有销售，不属补录）：提成行恢复、归 A。 */
+    @Test
+    void reassignToWalkInVoidsCommissionAndBackToMarketingRestoresIt() throws Exception {
+        String[] seated = seatedWithCommission();
+        String session = seated[0], orderId = seated[1], bill = seated[2];
+        reassign(managerM, session, "walk_in", null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.guest_source").value("walk_in"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_table_sessions WHERE id=?", String.class, session)).isNull();
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_orders WHERE id=?", String.class, orderId)).isNull();
+        assertThat(jdbc.queryForMap("SELECT sales_staff_id, sales_role_type FROM bar_bills WHERE id=?", bill))
+                .containsEntry("sales_staff_id", null).containsEntry("sales_role_type", "non_sales");
+        assertThat(jdbc.queryForObject("SELECT status FROM bar_commission_calculations WHERE bill_id=?", String.class, bill)).isEqualTo("void");
+        reassign(managerM, session, "marketing", user("a")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sales_staff_id").value(user("a")));
+        assertCommission(bill, user("a"), "sales", "calculated");
+    }
+
+    /** 营销带客不带销售 400；来源不是三类之一 400。 */
+    @Test
+    void reassignValidatesSourceAndSales() throws Exception {
+        String[] seated = seatedWithCommission();
+        reassign(managerM, seated[0], "marketing", null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        reassign(managerM, seated[0], "vip_guest", null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_table_sessions WHERE id=?", String.class, seated[0])).isEqualTo(user("a"));
+    }
+
+    /**
+     * 18K 复核：A 代订 T1、B 代订 T2，两台各自开台点单开单计提后并台（T2 并入 T1）；店长改派主台营销带客 C：只改主台这一方客人的会话、订单、账单与提成，
+     * 并入台客人的订单、账单与提成行仍归 B（BSM 第 1079 行「并台：……销售提成归属不变，仍跟各自的客人走」）。
+     */
+    @Test
+    void reassignOnAMergedPrimaryLeavesTheMergedGuestsOrdersBillsAndCommission() throws Exception {
+        String[] first = seatedWithCommission();
+        String table2 = table("loose_table");
+        String session2 = JsonPath.read(open(clerkB, table2, reserve(clerkB, table2), null, null).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        String order2 = JsonPath.read(order(clerkB, table2).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        String bill2 = JsonPath.read(bill(clerkB, order2).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        commission(clerkB, bill2).andExpect(status().isOk());
+        String body = "{\"idempotency_key\":\"bsa-m-" + suffix + "\",\"merged_session_id\":\"" + session2 + "\",\"reason\":\"两桌朋友拼台\","
+                + "\"requested_by_user_id\":\"admin-web\",\"primary_session_version\":" + version(first[0])
+                + ",\"merged_session_version\":" + version(session2) + "}";
+        mockMvc.perform(post("/api/v1/bar/table-sessions/" + first[0] + "/merge").with(managerM).contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk());
+        reassign(managerM, first[0], "marketing", user("c")).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_orders WHERE id=?", String.class, first[1])).isEqualTo(user("c"));
+        assertCommission(first[2], user("c"), "non_sales", "calculated");
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_table_sessions WHERE id=?", String.class, session2)).isEqualTo(user("b"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_orders WHERE id=?", String.class, order2)).isEqualTo(user("b"));
+        assertThat(jdbc.queryForObject("SELECT sales_staff_id FROM bar_bills WHERE id=?", String.class, bill2)).isEqualTo(user("b"));
+        assertCommission(bill2, user("b"), "non_sales", "calculated");
     }
 
     // ── 86-R3：卡座开台主责服务人按当日该场次排班指派 ─────────────────────────────────────────────
@@ -232,6 +386,26 @@ class BarSalesAttributionJdbcTests {
                 .andExpect(jsonPath("$.data.service_staff_id").value(user("t")));
     }
 
+    // ── 第十八批 K 段第 98 条：续卡接口已删除（BSM 第 1079 行「平台不提供续卡、续时类产品。」，裁决 XM-M725-O）──────────────
+
+    /** 按原卡座页经 adminClient 转出的蛇形键请求续卡：路由已不存在（404），会话版本不变、不落续卡调整记录。 */
+    @Test
+    void renewEndpointIsGone() throws Exception {
+        String table = table("card_seat");
+        String session = JsonPath.read(open(salesA, table, null, user("a"), null).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        Long version = jdbc.queryForObject("SELECT session_version FROM bar_table_sessions WHERE id=?", Long.class, session);
+        String body = "{\"idempotency_key\":\"bsa-renew-" + suffix + "\",\"renewed_until\":\"" + Instant.now().plus(Duration.ofHours(1))
+                + "\",\"additional_min_consumption_cent\":0,\"additional_deposit_amount_cent\":0,\"additional_service_fee_cent\":0,"
+                + "\"reason\":\"主管审批通过\",\"requested_by_user_id\":\"admin-web\",\"session_version\":" + version + "}";
+        mockMvc.perform(post("/api/v1/bar/table-sessions/" + session + "/renew").with(salesA).contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("SELECT session_version FROM bar_table_sessions WHERE id=?", Long.class, session)).isEqualTo(version);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_table_session_adjustments WHERE session_id=? AND adjustment_type='renew'",
+                Integer.class, session)).isZero();
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     private String reserve(RequestPostProcessor who, String table) throws Exception {
@@ -267,6 +441,42 @@ class BarSalesAttributionJdbcTests {
     private ResultActions commission(RequestPostProcessor who, String bill) throws Exception {
         return mockMvc.perform(post("/api/v1/bar/bills/" + bill + "/commissions/calculate").with(who).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idempotency_key\":\"bsa-c-" + seq.incrementAndGet() + "-" + suffix + "\",\"include_only_table_sales\":true}"));
+    }
+
+    /** A 代订、B 开台（带订台）、B 点单开单并计提，返回 {会话, 订单, 账单}。 */
+    private String[] seatedWithCommission() throws Exception {
+        String table = table("loose_table");
+        String session = JsonPath.read(open(clerkB, table, reserve(salesA, table), null, null).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        String orderId = JsonPath.read(order(clerkB, table).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        String bill = JsonPath.read(bill(clerkB, orderId).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        commission(clerkB, bill).andExpect(status().isOk());
+        return new String[]{session, orderId, bill};
+    }
+
+    private ResultActions reassign(RequestPostProcessor who, String session, String source, String sales) throws Exception {
+        String body = "{\"idempotency_key\":\"bsa-ra-" + seq.incrementAndGet() + "-" + suffix + "\""
+                + (source == null ? "" : ",\"guest_source\":\"" + source + "\"")
+                + (sales == null ? "" : ",\"sales_staff_id\":\"" + sales + "\"") + "}";
+        return mockMvc.perform(post("/api/v1/bar/table-sessions/" + session + "/attribution-reassign").with(who)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    /** 提成行：归属人、岗位档、费率按该档配置、金额＝基数×费率（四舍五入到分）、状态。 */
+    private void assertCommission(String bill, String sales, String roleType, String status) {
+        var row = jdbc.queryForMap("SELECT sales_staff_id, sales_role_type, commission_base_cent, commission_rate_bp, commission_amount_cent, status "
+                + "FROM bar_commission_calculations WHERE bill_id=?", bill);
+        int rate = rates.findCommissionRateBp(project, merchant, roleType);
+        assertThat(row).containsEntry("sales_staff_id", sales).containsEntry("sales_role_type", roleType).containsEntry("status", status)
+                .containsEntry("commission_rate_bp", rate);
+        assertThat(((Number) row.get("commission_amount_cent")).longValue())
+                .isEqualTo(MoneyRounding.bpsOf(((Number) row.get("commission_base_cent")).longValue(), rate));
+    }
+
+    private Long version(String session) {
+        return jdbc.queryForObject("SELECT session_version FROM bar_table_sessions WHERE id=?", Long.class, session);
     }
 
     private String sessionOf(String table, String column) {
@@ -307,8 +517,8 @@ class BarSalesAttributionJdbcTests {
         return id;
     }
 
-    private String role(String permissions) {
-        String role = "role_bsa_" + suffix;
+    private String role(String tag, String permissions) {
+        String role = "role_bsa_" + tag + "_" + suffix;
         jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'销售归属回归','project','active',now())", role, role);
         jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code IN("
                 + permissions + ")", role);

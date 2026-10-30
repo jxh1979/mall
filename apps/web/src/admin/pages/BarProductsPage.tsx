@@ -4,7 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
-import type { AdminPageProps, BarProductRow, BarProductCategoryRow } from "../types";
+import type { AdminPageProps, BarProductRow, BarProductCategoryRow, InventoryItemRow, StockBalanceRow } from "../types";
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
@@ -48,9 +48,22 @@ type ProductForm = {
   category: string;
   priceYuan: string;
   catalogItemCode: string;
+  // 第十八批 K 段 97-R2（BSM:1065「按杯按标准出酒量扣库存、超出记损耗」；BSM:1049「连接供应链库存，扣减吧台售卖消耗」）。
+  stockDeductionRequired: boolean;
+  inventoryItemId: string;
+  stockLocationId: string;
+  standardPourVolume: string;
 };
 
-const EMPTY_FORM: ProductForm = { barId: "", productName: "", category: "spirit", priceYuan: "", catalogItemCode: "" };
+const EMPTY_FORM: ProductForm = {
+  barId: "", productName: "", category: "spirit", priceYuan: "", catalogItemCode: "",
+  stockDeductionRequired: false, inventoryItemId: "", stockLocationId: "", standardPourVolume: "",
+};
+
+/** 库存商品规格下拉与确认摘要：名称＋规格容量（按杯扣库存须有容量，没登记的照列、由后端拦）。 */
+function inventoryItemLabel(item: InventoryItemRow): string {
+  return `${item.itemName ?? item.id}（${item.specVolumeMl ? `${item.specVolumeMl} 毫升` : "未登记容量"}）`;
+}
 
 type CategoryForm = { barId: string; categoryName: string; sortOrder: string };
 const EMPTY_CATEGORY_FORM: CategoryForm = { barId: "", categoryName: "", sortOrder: "0" };
@@ -68,6 +81,9 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("bar_product", rows), [rows, reportViewedObjects]);
   const [categories, setCategories] = React.useState<BarProductCategoryRow[]>([]);
+  // 97-R2：新建商品挂库存用的库存商品规格与已入库余额行（库位无主表，只能取余额行）；读不到不影响商品列表。
+  const [inventoryItems, setInventoryItems] = React.useState<InventoryItemRow[]>([]);
+  const [stockBalances, setStockBalances] = React.useState<StockBalanceRow[]>([]);
   const [form, setForm] = React.useState<ProductForm>(EMPTY_FORM);
   const [categoryForm, setCategoryForm] = React.useState<CategoryForm>(EMPTY_CATEGORY_FORM);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -99,6 +115,10 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         { label: "售价（元）", value: `¥${yuan(row.priceCent)}` },
         { label: "内部结算价（元）", value: row.internalSettlementPriceCent === null || row.internalSettlementPriceCent === undefined ? "未录入" : `¥${yuan(row.internalSettlementPriceCent)}` },
         { label: "图片", value: row.imageUrl ? row.imageUrl : "未上传" },
+        { label: "需要扣减库存", value: row.stockDeductionRequired ? "是" : "否" },
+        { label: "库存商品规格", value: row.inventoryItemId ? (inventoryItems.find((item) => item.id === row.inventoryItemId)?.itemName ?? row.inventoryItemId) : "未挂" },
+        { label: "库位", value: row.stockLocationId ?? "未挂" },
+        { label: "标准出酒量（毫升）", value: row.standardPourVolume ? String(row.standardPourVolume) : "未填（按瓶）" },
         { label: "状态", value: row.soldOut ? "沽清" : formatBusinessStatus(row.status) },
       ],
     });
@@ -113,6 +133,17 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         setCategories(Array.isArray(cats) ? cats : []);
       } catch {
         setCategories([]);
+      }
+      try {
+        const [itemRows, balanceRows] = await Promise.all([
+          api.get<InventoryItemRow[]>("/api/v1/inventory/items"),
+          api.get<StockBalanceRow[]>("/api/v1/inventory/stock-balances"),
+        ]);
+        setInventoryItems(Array.isArray(itemRows) ? itemRows : []);
+        setStockBalances(Array.isArray(balanceRows) ? balanceRows : []);
+      } catch {
+        setInventoryItems([]);
+        setStockBalances([]);
       }
     },
     { onError: setGlobalError, fallbackMessage: "商品列表读取失败" },
@@ -197,7 +228,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`${prefix}-actions-${row.id}`} />;
   }
 
-  function setField(key: keyof ProductForm, value: string) {
+  function setField(key: Exclude<keyof ProductForm, "stockDeductionRequired">, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
   }
   function setCategoryField(key: keyof CategoryForm, value: string) {
@@ -250,6 +281,10 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         priceCent,
         status: "active",
         catalogItemCode: catalogItemCode || null,
+        stockDeductionRequired: form.stockDeductionRequired,
+        inventoryItemId: form.stockDeductionRequired ? form.inventoryItemId : null,
+        stockLocationId: form.stockDeductionRequired ? form.stockLocationId : null,
+        standardPourVolume: form.standardPourVolume.trim() ? Number(form.standardPourVolume.trim()) : null,
       });
       setForm(EMPTY_FORM);
       setProductOpen(false);
@@ -291,12 +326,14 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
 
   // 可指派分类：启用、未存档、非待删（引用侧守卫的前端同口径；后端 BAR_CATEGORY_NOT_ASSIGNABLE 兜底）。
   const activeCategories = categories.filter((c) => c.status !== "archived" && !c.archivedAt && (c.deleteStatus ?? "none") === "none");
+  const selectedInventoryItem = inventoryItems.find((item) => item.id === form.inventoryItemId);
+  const itemBalances = stockBalances.filter((row) => row.itemId === form.inventoryItemId && row.locationId);
 
   return (
     <section data-testid="bar-products-page">
       <AdminPageHeader
         title="商品管理"
-        description="酒吧商品目录：维护可配置分类、给商品挂分类与上传图片、录入售价与内部结算价。分类供平板图形化点单按分类分屏列菜；图片存服务器本地。内部结算价是平台↔酒吧成本结算价基，留空表示不参与结算/提成扣减。"
+        description="酒吧商品目录：维护可配置分类、给商品挂分类与上传图片、录入售价与内部结算价；新建商品可挂库存商品规格与库位、填标准出酒量（按杯按标准出酒量扣库存）。分类供平板图形化点单按分类分屏列菜；图片存服务器本地。内部结算价是平台↔酒吧成本结算价基，留空表示不参与结算/提成扣减。"
       />
 
       <div className="admin-form" data-testid="bar-category-create-form">
@@ -413,6 +450,34 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                 </>
               ),
             },
+            {
+              title: "库存与出酒量",
+              description: "售出要扣库存的勾选「需要扣减库存」，再选所挂的库存商品规格与库位（库位取该规格已入库的库存）。按杯卖的填标准出酒量（毫升），按杯按标准出酒量扣库存、超出记损耗；按瓶卖的留空。",
+              validate: () => {
+                if (form.stockDeductionRequired && (!form.inventoryItemId || !form.stockLocationId)) return "需要扣减库存时，须选库存商品规格与库位";
+                if (form.standardPourVolume.trim() !== "" && !/^[1-9]\d*$/.test(form.standardPourVolume.trim())) return "标准出酒量须为正整数（毫升），按瓶卖的留空";
+                return null;
+              },
+              content: (
+                <>
+                  <label className="admin-inline-check"><input type="checkbox" data-testid="bar-product-stock-deduction" checked={form.stockDeductionRequired} onChange={(e) => setForm((current) => ({ ...current, stockDeductionRequired: e.target.checked }))} />需要扣减库存</label>
+                  {form.stockDeductionRequired ? (
+                    <>
+                      <label><span>库存商品规格</span><select data-testid="bar-product-inventory-item" value={form.inventoryItemId} onChange={(e) => setForm((current) => ({ ...current, inventoryItemId: e.target.value, stockLocationId: "" }))}>
+                        <option value="">请选择库存商品规格</option>
+                        {inventoryItems.map((item) => <option key={item.id} value={item.id}>{inventoryItemLabel(item)}</option>)}
+                      </select></label>
+                      <label><span>库位</span><select data-testid="bar-product-stock-location" value={form.stockLocationId} onChange={(e) => setField("stockLocationId", e.target.value)}>
+                        <option value="">请选择库位</option>
+                        {itemBalances.map((row) => <option key={row.id} value={row.locationId}>{`${row.locationId}（现有 ${row.quantity ?? 0} ${selectedInventoryItem?.unit ?? ""}）`}</option>)}
+                      </select></label>
+                      {form.inventoryItemId && itemBalances.length === 0 ? <div className="admin-preview" data-testid="bar-product-stock-location-empty">该商品规格还没有入库</div> : null}
+                    </>
+                  ) : null}
+                  <label><span>标准出酒量（毫升，按杯卖才填）</span><input data-testid="bar-product-standard-pour" type="number" min="1" step="1" value={form.standardPourVolume} onChange={(e) => setField("standardPourVolume", e.target.value)} /></label>
+                </>
+              ),
+            },
           ]}
           summary={[
             { label: "酒吧 ID", value: form.barId.trim() || "未填写" },
@@ -420,6 +485,10 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
             { label: "类别", value: categoryLabel(form.category) },
             { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },
             { label: "内部结算价目录条目", value: form.catalogItemCode.trim() || "不引用（不参与结算/提成扣减）" },
+            { label: "需要扣减库存", value: form.stockDeductionRequired ? "是" : "否" },
+            { label: "库存商品规格", value: form.stockDeductionRequired ? (selectedInventoryItem ? inventoryItemLabel(selectedInventoryItem) : "未选择") : "不挂" },
+            { label: "库位", value: form.stockDeductionRequired ? form.stockLocationId || "未选择" : "不挂" },
+            { label: "标准出酒量（毫升）", value: form.standardPourVolume.trim() || "不填（按瓶）" },
           ]}
         />
       </div>

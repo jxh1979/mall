@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -134,10 +134,6 @@ test.describe("full admin MVP acceptance", () => {
     await page.getByTestId("bar-merge-target-session").fill("session-2");
     await page.getByTestId("bar-merge-submit").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("状态：已合并");
-
-    await page.getByTestId("bar-renew-minutes").fill("60");
-    await page.getByTestId("bar-renew-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已续期");
   });
 
   test("ADM-MVP-05 finance ledger requires adjustment reason and supports partial payment", async ({ page }) => {

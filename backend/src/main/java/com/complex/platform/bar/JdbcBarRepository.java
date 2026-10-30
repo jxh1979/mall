@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -759,6 +759,13 @@ class JdbcBarRepository implements BarRepository {
         return item;
     }
 
+    // 第十八批 K 段 97-R3（V580）：套餐来源单独一条 UPDATE，不进 saveOrderItem 的 upsert，出品、退品重存明细都不动它。
+    @Override
+    public void markOrderItemsCombo(List<String> orderItemIds, String comboId) {
+        jdbcTemplate.update("UPDATE bar_order_items SET combo_id = :combo_id WHERE id IN (:ids)",
+                Map.of("combo_id", comboId, "ids", orderItemIds));
+    }
+
     @Override
     public List<BarOrderItemRecord> listOrderItems(String orderId) {
         return jdbcTemplate.query("""
@@ -1426,14 +1433,14 @@ class JdbcBarRepository implements BarRepository {
                 INSERT INTO bar_table_sessions (
                     id, bar_id, merchant_id, business_date, table_id, reservation_id,
                     customer_id, guest_count, min_consumption_snapshot_cent,
-                    allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id,
+                    allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id, guest_source,
                     status, opened_at, closed_at, source_session_id, session_version,
                     created_at, updated_at
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :business_date, :table_id, :reservation_id,
                     :customer_id, :guest_count, :min_consumption_snapshot_cent,
-                    :allowed_pass_free_guest_count_snapshot, :sales_staff_id, :service_staff_id,
+                    :allowed_pass_free_guest_count_snapshot, :sales_staff_id, :service_staff_id, :guest_source,
                     :status, :opened_at, :closed_at, :source_session_id, :session_version,
                     :created_at, :updated_at
                 )
@@ -1449,6 +1456,7 @@ class JdbcBarRepository implements BarRepository {
                     allowed_pass_free_guest_count_snapshot = EXCLUDED.allowed_pass_free_guest_count_snapshot,
                     sales_staff_id = EXCLUDED.sales_staff_id,
                     service_staff_id = EXCLUDED.service_staff_id,
+                    guest_source = EXCLUDED.guest_source,
                     status = EXCLUDED.status,
                     opened_at = EXCLUDED.opened_at,
                     closed_at = EXCLUDED.closed_at,
@@ -1459,7 +1467,7 @@ class JdbcBarRepository implements BarRepository {
         return session;
     }
 
-    // 2c-5 卡座并发：DB 级乐观锁 CAS。WHERE session_version = expected 序列化并发 transfer/merge/renew，
+    // 2c-5 卡座并发：DB 级乐观锁 CAS。WHERE session_version = expected 序列化并发 transfer/merge/split，
     // 返回 false 表示版本已被并发改动（saveTableSession 的 ON CONFLICT 无版本条件，内存比对在并发下被覆盖绕过）。
     @Override
     public boolean updateTableSessionIfVersionMatches(BarTableSessionRecord session, long expectedVersion) {
@@ -1469,7 +1477,7 @@ class JdbcBarRepository implements BarRepository {
                     table_id = :table_id, reservation_id = :reservation_id, customer_id = :customer_id,
                     guest_count = :guest_count, min_consumption_snapshot_cent = :min_consumption_snapshot_cent,
                     allowed_pass_free_guest_count_snapshot = :allowed_pass_free_guest_count_snapshot,
-                    sales_staff_id = :sales_staff_id, service_staff_id = :service_staff_id,
+                    sales_staff_id = :sales_staff_id, service_staff_id = :service_staff_id, guest_source = :guest_source,
                     status = :status, opened_at = :opened_at, closed_at = :closed_at,
                     source_session_id = :source_session_id, session_version = :session_version,
                     updated_at = :updated_at
@@ -1485,7 +1493,7 @@ class JdbcBarRepository implements BarRepository {
             return jdbcTemplate.query("""
                     SELECT id, bar_id, merchant_id, business_date, table_id, reservation_id,
                            customer_id, guest_count, min_consumption_snapshot_cent,
-                           allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id,
+                           allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id, guest_source,
                            status, opened_at, closed_at, source_session_id, session_version,
                            created_at, updated_at
                       FROM bar_table_sessions
@@ -1495,7 +1503,7 @@ class JdbcBarRepository implements BarRepository {
         return jdbcTemplate.query("""
                 SELECT id, bar_id, merchant_id, business_date, table_id, reservation_id,
                        customer_id, guest_count, min_consumption_snapshot_cent,
-                       allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id,
+                       allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id, guest_source,
                        status, opened_at, closed_at, source_session_id, session_version,
                        created_at, updated_at
                   FROM bar_table_sessions
@@ -1509,7 +1517,7 @@ class JdbcBarRepository implements BarRepository {
         return jdbcTemplate.query("""
                 SELECT id, bar_id, merchant_id, business_date, table_id, reservation_id,
                        customer_id, guest_count, min_consumption_snapshot_cent,
-                       allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id,
+                       allowed_pass_free_guest_count_snapshot, sales_staff_id, service_staff_id, guest_source,
                        status, opened_at, closed_at, source_session_id, session_version,
                        created_at, updated_at
                   FROM bar_table_sessions

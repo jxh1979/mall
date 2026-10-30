@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,10 +8,10 @@ import type { AdminApiClient, AdminPageProps, BarTableSessionRow } from "../type
 // 第十八批 F 段第 14 条 14-R7：后台酒吧页发起销售归属补录（14-R3）与服务责任区间补录（14-R6），补录行与原记录并列、标「人工补录」。
 // BSM:1642「补录记录与原始记录并列展示，标明“人工补录”」「以通话录音为凭证的，录音起始时间必须早于客人到店时间、且早于客人开卡时间达到后台配置的时长」；
 // BSM:1021「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」；BSM:1613「卡座或桌台由谁主责服务……是否中途换人」。
-const SESSION: BarTableSessionRow = { id: "s-1", tableId: "t-1", barId: "bar-1", status: "open", sessionVersion: 2, openedAt: "2026-10-28T12:00:00Z" };
+const SESSION: BarTableSessionRow = { id: "s-1", tableId: "t-1", barId: "bar-1", status: "open", guestSource: "walk_in", sessionVersion: 2, openedAt: "2026-10-28T12:00:00Z" };
 const BACKFILLS = "/api/v1/evidence/manual-backfills";
 const salesRow = (status: string) => ({ id: "mb-1", targetType: "bar_session_sales", targetId: "s-1", proposed: { salesStaffId: "u-sales" },
-  originalSnapshot: { sessionSales: null, reservationId: null, reservationSales: null, orders: [], bills: [] }, reason: "前台漏登记",
+  originalSnapshot: { guestSource: "walk_in", sessionSales: null, reservationId: null, reservationSales: null, orders: [], bills: [] }, reason: "前台漏登记",
   responsibleStaffId: "u-desk", evidenceAttachmentIds: ["att-9"], recordingStartedAt: "2026-10-28T10:00:00Z", reviewId: "rev-1", status });
 const HISTORY = [
   { id: "r-1", tableId: "t-1", userId: "u-a", payerCompanyId: "co-1", startedAt: "2026-10-28T12:30:00Z", reason: "开台后首次交接" },
@@ -61,7 +61,7 @@ describe("卡座与订台页人工补录（第十八批 F 段第 14 条 14-R7）
     expect(row).toContain("u-sales");
     expect(row).toContain("待复核");
     expect(row).toContain("rev-1");
-    expect(screen.getByTestId("bar-sales-current").textContent).toContain("无销售（自来客）");
+    expect(screen.getByTestId("bar-sales-current").textContent).toContain("客人来源：自来客；销售：无");
     expect(screen.getByTestId("bar-sales-current").textContent).not.toContain("人工补录");
   });
 

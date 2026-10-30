@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 // 第 63 条（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」；BSM:800「仅记设备状态、故障事件与维修工单留痕」）：
 // 后台登记安检 X 光设备、登记故障（即开维修工单）、修复完成、报废。
 // 第 82 条 82c-R1（PGM:618 综合体入场三道环节设备）：人脸扫描设备、检票闸机与 X 光设备共用登记入口 /devices/entry-devices（带 terminalType）。
@@ -7,6 +7,8 @@
 // 89-R2（第十八批裁决 20「回待领用」）：挂失行给「找回」，原因必填，找回后回待领用；returned 显示「待领用」（ENUM:241）。
 // 89-R3（PGM:618「……扫码设备……和其他现场设备」；PGM:379 扫码设备领还）：扫码设备、其他现场设备在本页登记进台账；扫码设备在本页归还、领用，
 // 其他现场设备与入场设备一样更换责任人，两者都可挂商户、挂失。
+// 第 96 条 96-R2（ENUM:241「待归还」；第十八批裁决 23「停岗离职转待归还」）：待归还的设备行在本页办归还（回待领用）或挂失，不给送修、报废。
+// 96-R3（ENUM:241「归档」；第十八批裁决 24「报废后可归档」）：已报废的设备行填原因归档；已归档的设备只显示、没有任何操作。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +32,9 @@ const TABLET_LOST = { ...TABLET_BOUND, id: "dev_tb_l", deviceId: "TB-L", deviceC
 const SCANNER_BOUND = { ...XRAY_BOUND, id: "dev_sc_1", deviceId: "SC-1", deviceCode: "SC-1", terminalType: "scanner", deviceModel: "NL-2100" };
 const SCANNER_RETURNED = { ...SCANNER_BOUND, id: "dev_sc_2", deviceId: "SC-2", deviceCode: "SC-2", status: "returned" };
 const OTHER_BOUND = { ...XRAY_BOUND, id: "dev_os_1", deviceId: "OS-1", deviceCode: "OS-1", terminalType: "other_site_device", deviceModel: "LED-55" };
+const PHONE_PENDING = { ...PHONE_RETURNED, id: "dev_ph_9", deviceId: "PH-9", deviceCode: "PH-9", status: "pending_return" };
+const TABLET_SCRAPPED = { ...TABLET_BOUND, id: "dev_x", deviceId: "TB-S", deviceCode: "TB-S", status: "scrapped" };
+const TABLET_ARCHIVED = { ...TABLET_BOUND, id: "dev_ar", deviceId: "TB-A", deviceCode: "TB-A", status: "archived" };
 
 function makeApi(post = vi.fn().mockResolvedValue({}), rows: unknown[] = [XRAY_BOUND, XRAY_REPAIR]): AdminApiClient {
   const get = vi.fn((path: string) =>
@@ -249,5 +254,51 @@ describe("TerminalDevicesPage 设备挂失、找回，扫码设备与其他现�
     expect(screen.queryByTestId("terminal-device-lost-dev_sc_1")).not.toBeNull();
     expect(screen.queryByTestId("terminal-device-rebind-dev_sc_1")).not.toBeNull();
     expect(screen.queryByTestId("terminal-device-staff-submit-dev_sc_1")).toBeNull();
+  });
+});
+
+describe("TerminalDevicesPage 设备待归还、归档（第 96 条）", () => {
+  it("96-R2：待归还的工作手机行显示待归还、有归还与挂失，没有送修与报废", async () => {
+    renderPage(makeApi(vi.fn().mockResolvedValue({}), [PHONE_PENDING]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-row-dev_ph_9")?.textContent ?? "").toContain("待归还"));
+    expect(screen.queryByTestId("terminal-device-return-dev_ph_9")?.textContent).toBe("归还");
+    expect(screen.queryByTestId("terminal-device-lost-dev_ph_9")?.textContent).toBe("挂失");
+    expect(screen.queryByTestId("terminal-xray-fault-dev_ph_9")).toBeNull();
+    expect(screen.queryByTestId("terminal-xray-scrap-dev_ph_9")).toBeNull();
+  });
+
+  it("96-R2：待归还的工作手机填原因点归还，调归还入口、用归还结果码", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [PHONE_PENDING]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-return-dev_ph_9")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("terminal-xray-reason-dev_ph_9"), { target: { value: "离职交回" } });
+    fireEvent.click(screen.getByTestId("terminal-device-return-dev_ph_9"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/terminals/devices/return", { deviceCode: "PH-9", reason: "离职交回" }));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith({ action: "terminal_device_returned", id: "dev_ph_9" }));
+  });
+
+  it("96-R3：已报废的设备填原因点归档，调归档入口、用归档结果码", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [TABLET_SCRAPPED]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-archive-dev_x")?.textContent).toBe("归档"));
+    fireEvent.change(screen.getByTestId("terminal-xray-reason-dev_x"), { target: { value: "报废设备归档" } });
+    fireEvent.click(screen.getByTestId("terminal-device-archive-dev_x"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/terminals/devices/dev_x/archive", { reason: "报废设备归档" }));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith({ action: "terminal_device_archived", id: "dev_x" }));
+  });
+
+  it("96-R3：不填原因点归档，提示原因必填、不发请求", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    const props = renderPage(makeApi(post, [TABLET_SCRAPPED]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-archive-dev_x")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("terminal-device-archive-dev_x"));
+    expect(props.setGlobalError).toHaveBeenCalledWith("请填写原因（留痕必填）");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("96-R3：已归档的设备行显示已归档、没有任何按钮", async () => {
+    renderPage(makeApi(vi.fn().mockResolvedValue({}), [TABLET_ARCHIVED]));
+    await waitFor(() => expect(screen.queryByTestId("terminal-device-row-dev_ar")?.textContent ?? "").toContain("已归档"));
+    expect(screen.getByTestId("terminal-device-row-dev_ar").querySelectorAll("button")).toHaveLength(0);
   });
 });

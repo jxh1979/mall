@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1076,13 +1076,14 @@ class InventoryServiceTests {
                 "13800138000",
                 "active"
         ));
+        registerTraceForOrder(item.id(), "TRACE-1", "order_1");
         TraceHandoverRecord handover = service.scanTraceCodeHandover(new VerificationRequest(
                 "trace-create",
                 "manual",
                 "TRACE-1",
                 "device_1",
                 "bar_1",
-                Map.of("item_id", item.id(), "from_staff_id", "staff_a", "to_staff_id", "staff_b")
+                Map.of("order_id", "order_1", "from_staff_id", "staff_a", "to_staff_id", "staff_b")
         ));
 
         assertThat(supplier.supplierName()).isEqualTo("Supplier A");
@@ -1102,9 +1103,10 @@ class InventoryServiceTests {
     @Test
     void traceHandoverFullChainWritesThreeLayerProcessStepsAndCompletes() {
         InventoryItemRecord item = createItem("trace-chain-item");
+        registerTraceForOrder(item.id(), "TRACE-CHAIN", "order_chain");
         TraceHandoverChainView created = service.createTraceHandover(
                 new com.complex.platform.inventory.dto.TraceHandoverCreateRequest(
-                        "chain-create", "TRACE-CHAIN", item.id(), "device_chain", List.of()));
+                        "chain-create", "TRACE-CHAIN", "order_chain", "device_chain", List.of()));
         String handoverId = created.handover().id();
 
         // 五段：out_verify(员工) → dispatch(机器人) → kitchen_receive → staff_pickup → deliver_customer。
@@ -2022,9 +2024,10 @@ class InventoryServiceTests {
     @Test
     void traceHandoverExceptionDoubleWritesToUnifiedRiskAlerts() {
         InventoryItemRecord item = createItem("dw-handover-item");
+        registerTraceForOrder(item.id(), "TRACE-DW", "order_dw");
         TraceHandoverChainView created = service.createTraceHandover(
                 new com.complex.platform.inventory.dto.TraceHandoverCreateRequest(
-                        "dw-h-create", "TRACE-DW", item.id(), "device_dw", List.of()));
+                        "dw-h-create", "TRACE-DW", "order_dw", "device_dw", List.of()));
         String handoverId = created.handover().id();
         // 先正常完成 out_verify 段
         service.scanTraceSegment(handoverId, new com.complex.platform.inventory.dto.TraceScanSegmentRequest(
@@ -2630,6 +2633,14 @@ class InventoryServiceTests {
     }
 
     /** 普通物品：进货价 10 元（低于默认阈值 5000 元）⇒ 归一口径下为低价值。 */
+    /** 94-R1：建链前登记溯源码（平台级，不挂商户），并给该物品桩一张待出品的酒吧订单。 */
+    private void registerTraceForOrder(String itemId, String traceCode, String orderId) {
+        inventoryRepository.saveTraceCode(new InventoryTraceCodeRecord("tc_" + traceCode, traceCode, itemId, null, null, "registered",
+                null, null, null, Instant.now(), Instant.now()));
+        inventoryRepository.outboundOrders.computeIfAbsent(itemId, key -> new ArrayList<>())
+                .add(new TraceOutboundOrderRecord(orderId, "卡座 K1", "整瓶", 1, Instant.now()));
+    }
+
     private InventoryItemRecord createItem(String idempotencyKey) {
         InventoryItemRecord item = createItemRaw(idempotencyKey);
         inventoryRepository.seedCost(item.id(), 1_000L);
@@ -4043,6 +4054,11 @@ class InventoryServiceTests {
 
         // ── V128 / REQ-39：溯源码主数据写入侧内存替身。 ──
         final Map<String, InventoryTraceCodeRecord> traceCodes = new LinkedHashMap<>();
+        final Map<String, List<TraceOutboundOrderRecord>> outboundOrders = new HashMap<>();
+
+        @Override public List<TraceOutboundOrderRecord> listTraceOutboundOrders(String itemId, String orderId, String merchantId, String projectId) {
+            return outboundOrders.getOrDefault(itemId, List.of()).stream().filter(o -> orderId == null || orderId.equals(o.orderId())).toList();
+        }
 
         @Override public InventoryTraceCodeRecord saveTraceCode(InventoryTraceCodeRecord traceCode) {
             traceCodes.put(traceCode.id(), traceCode);

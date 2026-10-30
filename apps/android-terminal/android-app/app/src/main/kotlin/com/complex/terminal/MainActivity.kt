@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import android.app.Activity
 import android.content.Intent
@@ -325,6 +325,8 @@ class MainActivity : Activity() {
               bindingScope = "space",
               boundSpaceId = space,
               staffId = holder,
+              // 第 96 条 96-R1（PGM:623）：领用即带本机型号进设备台账
+              deviceModel = android.os.Build.MODEL,
             ),
           )
           api.registerDeviceSigningKey(d, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString())
@@ -749,7 +751,8 @@ class MainActivity : Activity() {
   // ---------------------------------------------------------------------------
   // 第十八批 I 段第 84 条 84-R2 酒水与物品交接扫码（BSM:1891 工作手机「库房和酒水交接扫码」；PGM:633「记录出库、后厨接收、服务员取走和送达」；
   // BSM:1201「每一步都必须扫码」「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）并经主管复核后方生效」）。
-  // 扫溯源码查进行中的交接单：没有就由库管建单并确认出库；有就只给下一个人工段一个确认按钮。每次扫码只确认一段——确认成功回到扫码页，
+  // 扫溯源码查进行中的交接单：没有就由库管先选该物品所属的待出品酒吧订单（第十八批 K 段第 94 条 94-R2，BSM:1197「出库须同时核验订单和物品码」），
+  // 再建单并确认出库；有就只给下一个人工段一个确认按钮。每次扫码只确认一段——确认成功回到扫码页，
   // 下一段须重新扫码才出现按钮。机器人配送段被动留痕、不在手机上扫。
   // ---------------------------------------------------------------------------
 
@@ -789,26 +792,36 @@ class MainActivity : Activity() {
     actions.removeAllViews()
     if (chain == null) {
       chainView.visibility = View.GONE
-      status.text = "溯源码 $code 没有进行中的交接单"
-      actions.addView(button("库管出库：建交接单并确认出库") {
-        val device = api.deviceId
-        if (device == null) { status.text = "请先绑定设备"; return@button }
-        val createScope = "create:$code"
-        val createKey = traceKey(createScope)
-        status.text = "正在建交接单并确认出库…"
-        runBackground(
-          action = {
-            val id = api.createTraceHandover(TraceHandoverCreateRequest(createKey, code, device)).handover.id
-            api.scanTraceSegment(id, TraceScanSegmentRequest(traceKey("$id:out_verify"), "out_verify"))
-          },
-          onSuccess = { done ->
-            traceKeys.remove(createScope)
-            traceKeys.remove("${done.handover.id}:out_verify")
-            showTraceHandover("已确认：库管出库。下一段请重新扫码")
-          },
-          onError = { status.text = "出库确认失败：${friendly(it)}" },
-        )
-      })
+      status.text = "正在查询待出品的酒吧订单…"
+      runBackground(
+        action = { api.listOutboundOrders(code) },
+        onSuccess = { orders ->
+          status.text = if (orders.isEmpty()) "没有待出品的酒吧订单含此物品，不能出库" else "溯源码 $code 没有进行中的交接单，请选出库给哪张订单"
+          orders.forEach { order ->
+            val label = "出库给：${order.tableName ?: "—"} ${order.createdAt?.let { traceTime(it) } ?: ""} ${order.productName ?: ""}×${order.quantity}"
+            actions.addView(button(label) {
+              val device = api.deviceId
+              if (device == null) { status.text = "请先绑定设备"; return@button }
+              val createScope = "create:$code:${order.orderId}"
+              val createKey = traceKey(createScope)
+              status.text = "正在建交接单并确认出库…"
+              runBackground(
+                action = {
+                  val id = api.createTraceHandover(TraceHandoverCreateRequest(createKey, code, order.orderId, device)).handover.id
+                  api.scanTraceSegment(id, TraceScanSegmentRequest(traceKey("$id:out_verify"), "out_verify"))
+                },
+                onSuccess = { done ->
+                  traceKeys.remove(createScope)
+                  traceKeys.remove("${done.handover.id}:out_verify")
+                  showTraceHandover("已确认：库管出库。下一段请重新扫码")
+                },
+                onError = { status.text = "出库确认失败：${friendly(it)}" },
+              )
+            })
+          }
+        },
+        onError = { status.text = "查询订单失败：${friendly(it)}" },
+      )
       return
     }
     val handover = chain.handover
@@ -1895,6 +1908,8 @@ class MainActivity : Activity() {
               terminalType = "tablet",
               bindingScope = "space",
               boundSpaceId = bar,
+              // 第 96 条 96-R1（PGM:623）：领用即带本机型号进设备台账
+              deviceModel = android.os.Build.MODEL,
             ),
           )
           api.registerDeviceSigningKey(dev, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString())

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { TechDetails } from "../components/TechDetails";
@@ -6,9 +6,11 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { formatLocation, KNOWN_LOCATIONS } from "../i18n/locationLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { FormModal } from "../components/FormModal";
+import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { PermissionButton, useCan } from "../security/Can";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -25,7 +27,7 @@ const HIGH_VALUE_MARK_PERMISSION = "inventory.high_value.review";
 const TEXT = {
   title: "库存台账",
   description: "集中查看物料、库存余额和库存流水，支持按 OpenAPI 契约登记库存移动；负库存禁止，高价值酒水保持在线核销。",
-  evidence: "接口证据：读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements、/api/v1/inventory/cost-summary；登记 POST /api/v1/inventory/stock-movements；修改安全库存 POST /api/v1/inventory/items/{id}/safety-stock。",
+  evidence: "接口证据：读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements、/api/v1/inventory/cost-summary；吧台消耗统计 GET /api/v1/inventory/bar-consumption-stats；登记 POST /api/v1/inventory/stock-movements；新建库存商品规格 POST /api/v1/inventory/items；修改安全库存 POST /api/v1/inventory/items/{id}/safety-stock。",
   loadFailed: "库存台账读取失败",
   actionFailed: "库存移动登记失败",
   quantityInvalid: "移动数量必须大于 0，禁止负库存调整。",
@@ -64,6 +66,30 @@ const TEXT = {
   pourVolume: "出酒量（毫升）",
   lossVolume: "损耗量（毫升）",
 };
+
+// 第十八批 K 段 97-R1（ENUM:161「物品大类：酒类、消耗品、礼品、其他物料」；ENUM:79「定价、库存、结算、对账一律按商品规格逐项进行」）：
+// 新建库存商品规格，大类提交值即中文大类名；按杯卖的酒登记规格容量（毫升），按杯按容量扣库存（BSM:1168）。
+const ITEM_CATEGORIES = ["酒类", "消耗品", "礼品", "其他物料"];
+type ItemForm = { itemName: string; category: string; unit: string; minQuantity: string; specVolumeMl: string };
+const EMPTY_ITEM_FORM: ItemForm = { itemName: "", category: "酒类", unit: "", minQuantity: "", specVolumeMl: "" };
+
+function validateItemForm(form: ItemForm): string | null {
+  if (!form.itemName.trim() || !form.unit.trim()) return "商品规格名称、单位必填。";
+  if (form.minQuantity.trim() !== "" && !/^\d+$/.test(form.minQuantity.trim())) return "安全库存须为不小于 0 的整数。";
+  if (form.specVolumeMl.trim() !== "" && !/^[1-9]\d*$/.test(form.specVolumeMl.trim())) return "规格容量须为正整数（毫升）；不按容量扣库存的留空。";
+  return null;
+}
+
+const optionalInt = (value: string): number | null => (value.trim() === "" ? null : Number(value.trim()));
+
+// 第十八批 K 段 97-R4（BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」）：吧台消耗统计一行。
+type BarConsumptionRow = {
+  barId: string; barName?: string | null; saleForm: string; comboId?: string | null; comboName?: string | null;
+  productId: string; productName?: string | null; inventoryItemId?: string | null; itemName?: string | null;
+  quantity: number; pourVolumeMl?: number | null; lossVolumeMl: number;
+};
+// 数量单位：按杯记杯数、按瓶记瓶数；套餐记套餐明细件数（套餐内件数×份数，可能是按杯商品），记「份」。
+const SALE_FORM_UNIT: Record<string, string> = { by_glass: "杯", by_bottle: "瓶", combo: "份" };
 
 // V296：成本金额展示（整数分 → 元）；null/缺省 = 无成本基准（存量库存未录进货价，不编造数字）。
 function fmtCostCent(value: unknown): string {
@@ -145,6 +171,18 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [stockValue, setStockValue] = React.useState("");
   const [stockError, setStockError] = React.useState("");
   const [stockSaving, setStockSaving] = React.useState(false);
+  // 第十八批 K 段 97-R1：新建库存商品规格（权限同库存移动 inventory.stock.move，即 POST /items 的后端码）。
+  const [itemCreateOpen, setItemCreateOpen] = React.useState(false);
+  const [itemForm, setItemForm] = React.useState<ItemForm>(EMPTY_ITEM_FORM);
+  const [itemCreateError, setItemCreateError] = React.useState("");
+  const [itemCreating, setItemCreating] = React.useState(false);
+  // 第十八批 K 段 97-R4：吧台消耗统计（起止日期填齐点查询才请求）。
+  const canViewConsumption = useCan(effectivePermissions, ["inventory.stock.view"]);
+  const [consumptionStart, setConsumptionStart] = React.useState("");
+  const [consumptionEnd, setConsumptionEnd] = React.useState("");
+  const [consumptionRows, setConsumptionRows] = React.useState<BarConsumptionRow[] | null>(null);
+  const [consumptionError, setConsumptionError] = React.useState("");
+  const [consumptionLoading, setConsumptionLoading] = React.useState(false);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -284,6 +322,46 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     }
   }
 
+  async function submitInventoryItem() {
+    const requestBody = {
+      idempotency_key: `admin-inventory-item-${Date.now()}`,
+      item_name: itemForm.itemName.trim(),
+      category: itemForm.category,
+      unit: itemForm.unit.trim(),
+      min_quantity: optionalInt(itemForm.minQuantity),
+      spec_volume_ml: optionalInt(itemForm.specVolumeMl),
+    };
+    setItemCreating(true);
+    setItemCreateError("");
+    try {
+      const result = await api.post("/api/v1/inventory/items", requestBody);
+      setActionResult({ action: "inventory_item_created", requestBody, result });
+      setItemCreateOpen(false);
+      setItemForm(EMPTY_ITEM_FORM);
+      await reload();
+    } catch (actionError) {
+      setItemCreateError(actionError instanceof Error ? actionError.message : "库存商品规格新建失败");
+    } finally {
+      setItemCreating(false);
+    }
+  }
+
+  async function queryConsumption() {
+    setConsumptionLoading(true);
+    setConsumptionError("");
+    try {
+      setConsumptionRows(await api.get<BarConsumptionRow[]>(`/api/v1/inventory/bar-consumption-stats?period_start=${consumptionStart}&period_end=${consumptionEnd}`));
+    } catch (queryError) {
+      setConsumptionError(queryError instanceof Error ? queryError.message : "吧台消耗统计读取失败");
+    } finally {
+      setConsumptionLoading(false);
+    }
+  }
+
+  function setItemField(key: keyof ItemForm, value: string) {
+    setItemForm((current) => ({ ...current, [key]: value }));
+  }
+
   function openItemDetail(item: InventoryItemRow) {
     setDetail({
       title: `${TEXT.items} · ${item.itemName ?? item.itemCode ?? item.id}`,
@@ -333,6 +411,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     <>
       {/* 引导式：登记库存移动收起为入口按钮，先在下方物料表选中物料，再点开分步引导（位置→数量→确认）。 */}
       <div className="admin-form-row" data-testid="inventory-movement-form">
+        <PermissionButton permissionsState={effectivePermissions} permissions={[STOCK_MOVE_PERMISSION]} data-testid="inventory-item-create-open" onClick={() => { setItemCreateError(""); setItemCreateOpen(true); }}>＋ 新建库存商品规格</PermissionButton>
         <PermissionButton permissionsState={effectivePermissions} permissions={[STOCK_MOVE_PERMISSION]} data-testid="inventory-movement-open" onClick={() => { setFormError(""); setCreateOpen(true); }}>＋ {TEXT.submit}</PermissionButton>
         <span className="admin-muted-action" data-testid="inventory-ledger-boundary">{TEXT.boundary}</span>
       </div>
@@ -361,6 +440,42 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         <label>{TEXT.traceCode}<input data-testid="inventory-movement-trace" value={traceCode} onChange={(event) => setTraceCode(event.target.value)} /></label>
         <label>{TEXT.note}<input data-testid="inventory-movement-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
       </FormModal>
+      <GuidedFlowModal
+        open={itemCreateOpen}
+        title="新建库存商品规格"
+        testId="inventory-item-create-guided"
+        submitTestId="inventory-item-create-submit"
+        submitLabel="新建库存商品规格"
+        submitting={itemCreating}
+        error={itemCreateError || undefined}
+        onClose={() => setItemCreateOpen(false)}
+        onSubmit={() => void submitInventoryItem()}
+        steps={[
+          {
+            title: "商品规格信息",
+            description: "商品规格＝商品名加型号规格，例如「某某威士忌 700 毫升瓶装」。按杯卖的酒须填规格容量（每瓶毫升数），按杯按标准容量扣库存；不按容量扣库存的留空。",
+            validate: () => validateItemForm(itemForm),
+            content: (
+              <>
+                <label><span>商品规格名称</span><input data-testid="inventory-item-create-name" value={itemForm.itemName} onChange={(event) => setItemField("itemName", event.target.value)} /></label>
+                <label><span>物品大类</span><select data-testid="inventory-item-create-category" value={itemForm.category} onChange={(event) => setItemField("category", event.target.value)}>
+                  {ITEM_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select></label>
+                <label><span>{TEXT.unit}</span><input data-testid="inventory-item-create-unit" value={itemForm.unit} onChange={(event) => setItemField("unit", event.target.value)} placeholder="例如 瓶、罐、包" /></label>
+                <label><span>安全库存（可空）</span><input data-testid="inventory-item-create-min-quantity" type="number" min="0" step="1" value={itemForm.minQuantity} onChange={(event) => setItemField("minQuantity", event.target.value)} /></label>
+                <label><span>{TEXT.specVolume}（可空）</span><input data-testid="inventory-item-create-spec-volume" type="number" min="1" step="1" value={itemForm.specVolumeMl} onChange={(event) => setItemField("specVolumeMl", event.target.value)} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "商品规格名称", value: itemForm.itemName.trim() || "未填写" },
+          { label: "物品大类", value: itemForm.category },
+          { label: TEXT.unit, value: itemForm.unit.trim() || "未填写" },
+          { label: "安全库存", value: itemForm.minQuantity.trim() || "0" },
+          { label: TEXT.specVolume, value: itemForm.specVolumeMl.trim() || "不登记（不按容量扣库存）" },
+        ]}
+      />
       <FormModal
         open={markTarget !== null}
         title={markTarget?.manualHighValue ? "取消高价值标记" : "手工标记为高价值"}
@@ -427,6 +542,26 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     </>
   );
 
+  const consumptionSection = (
+    <>
+      <h3>吧台消耗统计</h3>
+      <div className="admin-form-row" data-testid="inventory-bar-consumption-form">
+        <label>开始日期<input type="date" data-testid="inventory-bar-consumption-start" value={consumptionStart} onChange={(event) => setConsumptionStart(event.target.value)} /></label>
+        <label>结束日期<input type="date" data-testid="inventory-bar-consumption-end" value={consumptionEnd} onChange={(event) => setConsumptionEnd(event.target.value)} /></label>
+        <button type="button" data-testid="inventory-bar-consumption-query" disabled={!consumptionStart || !consumptionEnd || consumptionLoading} onClick={() => void queryConsumption()}>查询</button>
+      </div>
+      {consumptionError ? <div className="admin-inline-error" data-testid="inventory-bar-consumption-error">{consumptionError}</div> : null}
+      {consumptionRows ? (
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="inventory-bar-consumption-table">
+            <thead><tr><th>酒吧</th><th>销售形式</th><th>套餐</th><th>酒吧商品</th><th>库存商品规格</th><th>{TEXT.quantity}</th><th>{TEXT.pourVolume}</th><th>{TEXT.lossVolume}</th></tr></thead>
+            <tbody>{consumptionRows.map((row, index) => <tr key={index} data-testid={`inventory-bar-consumption-row-${index}`}><td>{row.barName ?? row.barId}</td><td>{KEY_VALUE_LABELS.sale_form?.[row.saleForm] ?? row.saleForm}</td><td>{row.comboName ?? "-"}</td><td>{row.productName ?? row.productId}</td><td>{row.itemName ?? "-"}</td><td>{row.quantity} {SALE_FORM_UNIT[row.saleForm] ?? ""}</td><td>{row.pourVolumeMl ?? "-"}</td><td>{row.lossVolumeMl}</td></tr>)}</tbody>
+          </table>
+        </div>
+      ) : null}
+    </>
+  );
+
   const focusCount = kpiFocus ? (kpiFocus.table === "items" ? items.length : kpiFocus.table === "balances" ? balances.length : movements.length) : 0;
 
   return (
@@ -477,6 +612,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
             {itemsSection}
             {balancesSection}
             {movementsSection}
+            {canViewConsumption ? consumptionSection : null}
           </>
         )}
       </AdminDataState>

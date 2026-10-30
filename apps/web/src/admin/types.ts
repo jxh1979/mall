@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 export type AdminUser = {
   id: string;
   username: string;
@@ -341,6 +341,8 @@ export type BarTableSessionRow = {
   status?: string;
   salesStaffId?: string;
   serviceStaffId?: string;
+  // 第十八批 K 段 95-R1（BSM:1021）：客人来源 platform_own／marketing／walk_in。
+  guestSource?: string;
   openedAt?: string;
   closedAt?: string | null;
   sessionVersion?: number;
@@ -433,6 +435,11 @@ export type BarProductRow = {
   /** V262 存档/删除范式：archivedAt 非空=已存档；deleteStatus none|pending|approved。 */
   archivedAt?: string | null;
   deleteStatus?: string;
+  /** 第十八批 K 段 97-R2（BSM:1065「按杯按标准出酒量扣库存」）：所挂库存商品规格与库位、是否扣库存、按杯的标准出酒量（毫升）。 */
+  inventoryItemId?: string | null;
+  stockLocationId?: string | null;
+  stockDeductionRequired?: boolean;
+  standardPourVolume?: number | null;
 };
 
 /** V256 酒吧商品分类（图形化点单 POS 阶段1）。 */
@@ -953,6 +960,13 @@ export type MerchantFeeStatement = {
     paidAmountCent?: number;
     unpaidAmountCent?: number;
   };
+};
+
+// 第 92 条（BSM:1597）：商户专区首页未读账单提醒；没持对应查看码的那组为空。
+export type MerchantUnreadBills = {
+  billMonths?: { month: string; unreadCount: number }[] | null;
+  ticketSettlementUnreadCount?: number | null;
+  dividendStatements?: { id: string; periodLabel: string; kind?: string }[] | null;
 };
 
 export type MerchantZoneBillRow = {

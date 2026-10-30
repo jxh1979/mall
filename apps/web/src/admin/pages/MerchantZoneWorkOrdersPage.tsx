@@ -15,7 +15,7 @@ const WO_CREATE = ["merchant.service_work_order.create"];
 
 const TEXT = {
   title: "我的工单",
-  description: "提交本商户的报修 / 投诉 / 整改 / 服务工单并跟踪进展;派单与处理由平台侧闭环,本页只见本商户工单。",
+  description: "提交本商户的报修 / 保洁 / 投诉 / 其他服务请求工单并跟踪进展;派单与处理由平台侧闭环,本页只见本商户工单。",
   loadFailed: "工单读取失败",
   actionFailed: "工单提交失败",
   titleRequired: "提交工单必须填写标题。",
@@ -40,11 +40,12 @@ function kpiFocusTitle(focus: KpiFocus): string {
   return focus.table === "open" ? "进行中工单" : "全部工单";
 }
 
-const TYPE_LABELS: Record<string, string> = {
+// 第 93 条 93-R1：商户服务工单类型＝BSM:1323「报修/保洁/投诉/其他服务请求」（裁决 D-12 不含整改、含保洁）；后台工单页与商户授权工作台共用这一张。
+export const MERCHANT_WORK_ORDER_TYPE_LABELS: Record<string, string> = {
   repair: "报修",
+  cleaning: "保洁",
   complaint: "投诉",
-  rectification: "整改",
-  service: "服务",
+  service: "其他服务请求",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -93,7 +94,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
       title: `工单明细 · ${row.title ?? row.id}`,
       fields: [
         { label: "标题", value: row.title ?? "—" },
-        { label: "类型", value: TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "—" },
+        { label: "类型", value: MERCHANT_WORK_ORDER_TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "—" },
         { label: "优先级", value: PRIORITY_LABELS[row.priority ?? ""] ?? row.priority ?? "—" },
         { label: "状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—" },
         { label: "问题描述", value: row.description ?? "—" },
@@ -211,7 +212,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
                   onClick={() => openWorkOrderDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}>
                   <td>{row.title ?? row.id}</td>
-                  <td>{TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "-"}</td>
+                  <td>{MERCHANT_WORK_ORDER_TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "-"}</td>
                   <td>{PRIORITY_LABELS[row.priority ?? ""] ?? row.priority ?? "-"}</td>
                   <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
                   <td>{cnDate(row.dueAt)}</td>
@@ -247,7 +248,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
             content: (
               <>
                 <label>类型<select data-testid="merchant-zone-work-order-type" value={workOrderType} onChange={(event) => setWorkOrderType(event.target.value)}>
-                  {Object.entries(TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  {Object.entries(MERCHANT_WORK_ORDER_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select></label>
                 <label>优先级<select data-testid="merchant-zone-work-order-priority" value={priority} onChange={(event) => setPriority(event.target.value)}>
                   {Object.entries(PRIORITY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -259,7 +260,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
           },
         ]}
         summary={[
-          { label: "类型", value: TYPE_LABELS[workOrderType] ?? workOrderType },
+          { label: "类型", value: MERCHANT_WORK_ORDER_TYPE_LABELS[workOrderType] ?? workOrderType },
           { label: "优先级", value: PRIORITY_LABELS[priority] ?? priority },
           { label: "标题", value: title.trim() || "未填写" },
           { label: "问题描述", value: description.trim() || "未填写" },

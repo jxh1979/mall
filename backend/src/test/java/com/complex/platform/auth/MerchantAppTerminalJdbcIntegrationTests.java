@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,10 +13,12 @@ import com.complex.platform.contract.ContractSettlementRecord;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.Cookie;
 import java.security.KeyPairGenerator;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,6 +48,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 25-R2：第十八批裁决 19「第一次登录时系统发一个设备编号，存进 App 的系统安全存储并在后台登记，暗纹和导出密码用它」。
  * 走真实生产登录链与授权链（prod 档 ProductionAuthController → ProductionAuthService → auth_credentials；令牌过滤器 → 设备凭证拦截器 → 终端总开关），
  * 按 App 请求形状：蛇形键、Authorization: Bearer、X-Terminal-Type: merchant_app、不带浏览器 Cookie。
+ * 第 91 条 91-R1：商户账号的网页请求（浏览器 Cookie 会话＋X-XSRF-TOKEN，同后台网页登录 {login_name, password}）除设备绑定型外按 merchant_portal 判，
+ * 改报 web 或不带终端头不再绕过商户网页门户总开关与商户专区模块开关（PGM:719、PGM:737、PGM:744）。
  */
 @AutoConfigureMockMvc
 @ActiveProfiles("prod")
@@ -67,6 +71,7 @@ import org.springframework.transaction.annotation.Transactional;
 class MerchantAppTerminalJdbcIntegrationTests {
 
     private static final String APP = "merchant_app";
+    private static final String PORTAL = "merchant_portal";
     private static final String DEVICE_COOKIE = "complex_device_no";
     private static final String DEVICE_NO = "WB[A-HJKMNP-Z2-9]{12}";
 
@@ -184,14 +189,71 @@ class MerchantAppTerminalJdbcIntegrationTests {
     void sessionDecidesTerminalSoSelfReportCannotBypassMerchantAppSwitch() throws Exception {
         String token = accessToken(appLogin(shop, password, null).andExpect(status().isOk()).andReturn());
         jdbc.update("UPDATE terminal_capability_switches SET enabled = FALSE WHERE id = 'tcs_term_merchant_app'");
-        int before = switchRejections();
+        int before = switchRejections(APP);
 
         for (String claimed : List.of(APP, "merchant_portal", "web")) {
             mockMvc.perform(app(get("/api/v1/merchant-portal/settlements"), token, claimed))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
         }
-        assertThat(switchRejections()).isEqualTo(before + 3);
+        assertThat(switchRejections(APP)).isEqualTo(before + 3);
+    }
+
+    /** 91-R1 (a)：商户网页门户总开关关闭——商户账号同一网页会话报 merchant_portal、改报 web、不带终端头都 403 TERMINAL_DISABLED，留痕终端都是
+     *  merchant_portal；改报 web 的异议也被拒、不落异议留痕。 */
+    @Test
+    void merchantAccountSelfReportCannotBypassMerchantPortalSwitch() throws Exception {
+        Cookie[] session = webSession(shop);
+        jdbc.update("UPDATE terminal_capability_switches SET enabled = FALSE WHERE id = 'tcs_term_merchant_portal'");
+        int before = switchRejections(PORTAL);
+
+        for (String claimed : Arrays.asList(PORTAL, "web", null)) {
+            mockMvc.perform(web(get("/api/v1/merchant-portal/settlements"), session, claimed))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        }
+        assertThat(switchRejections(PORTAL)).isEqualTo(before + 3);
+
+        int disputed = disputes();
+        mockMvc.perform(webDispute(ownSettlement, session, "web"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(disputes()).isEqualTo(disputed);
+    }
+
+    /** 91-R1 (b)：商户专区模块开关（V199 tcs_mp_mod_merchant）关闭——商户账号改报 web 并带 X-Module-Code: merchant 也 403 TERMINAL_DISABLED。 */
+    @Test
+    void merchantAccountSelfReportedWebCannotBypassMerchantModuleSwitch() throws Exception {
+        Cookie[] session = webSession(shop);
+        jdbc.update("UPDATE terminal_capability_switches SET enabled = FALSE WHERE id = 'tcs_mp_mod_merchant'");
+
+        mockMvc.perform(web(get("/api/v1/merchant-portal/settlements"), session, "web").header("X-Module-Code", "merchant"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+    }
+
+    /** 91-R1 (c)：开关全开时商户账号改报 web 照常使用，只看到本商户结算单。 */
+    @Test
+    void merchantAccountSelfReportedWebWorksWhenSwitchesOn() throws Exception {
+        Cookie[] session = webSession(shop);
+
+        JsonNode items = body(mockMvc.perform(web(get("/api/v1/merchant-portal/settlements"), session, "web"))
+                .andExpect(status().isOk()).andReturn()).at("/data/items");
+        List<String> ids = new ArrayList<>();
+        items.forEach(item -> ids.add(item.path("id").asText()));
+        assertThat(ids).containsExactly(ownSettlement);
+    }
+
+    /** 91-R1 (d)：无商户归属的员工不按商户网页门户判——该端总开关关闭时，其报 web 的请求不因此被拒。 */
+    @Test
+    void nonMerchantStaffIsNotJudgedByMerchantPortalSwitch() throws Exception {
+        String staff = "usr_b31st_" + suffix;
+        account(staff, "staff", null);
+        Cookie[] session = webSession(staff);
+        jdbc.update("UPDATE terminal_capability_switches SET enabled = FALSE WHERE id = 'tcs_term_merchant_portal'");
+
+        MvcResult result = mockMvc.perform(web(get("/api/v1/merchant-portal/settlements"), session, "web")).andReturn();
+        assertThat(body(result).path("detail_code").asText()).isNotEqualTo("TERMINAL_DISABLED");
     }
 
     /** 25-R2：页面暗纹记 App 的设备编号（裁决 19「暗纹和导出密码用它」）；刷新带同号续期、响应仍是该号，带错号 401。 */
@@ -231,6 +293,27 @@ class MerchantAppTerminalJdbcIntegrationTests {
                 .header("X-Terminal-Type", APP)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json(request)));
+    }
+
+    /** 后台网页登录（AdminApp 登录体只有 login_name、password），取浏览器会话 Cookie 与 CSRF Cookie。 */
+    private Cookie[] webSession(String loginName) throws Exception {
+        MvcResult login = mockMvc.perform(post("/api/v1/auth/login")
+                        .header("X-Terminal-Type", "web")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("login_name", loginName, "password", password))))
+                .andExpect(status().isOk()).andReturn();
+        return new Cookie[] {login.getResponse().getCookie("admin_access_token"), login.getResponse().getCookie("XSRF-TOKEN")};
+    }
+
+    private MockHttpServletRequestBuilder web(MockHttpServletRequestBuilder request, Cookie[] session, String claimed) {
+        request.cookie(session).header("X-XSRF-TOKEN", session[1].getValue());
+        return claimed == null ? request : request.header("X-Terminal-Type", claimed);
+    }
+
+    private MockHttpServletRequestBuilder webDispute(String settlementId, Cookie[] session, String claimed) throws Exception {
+        return web(post("/api/v1/merchant-portal/settlements/" + settlementId + "/dispute"), session, claimed)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(Map.of("idempotency_key", "b31mp-dispute-" + settlementId, "reason", "租金与合同约定不符")));
     }
 
     private MockHttpServletRequestBuilder app(MockHttpServletRequestBuilder request, String token, String claimed) {
@@ -308,11 +391,16 @@ class MerchantAppTerminalJdbcIntegrationTests {
                 """, Integer.class);
     }
 
-    private int switchRejections() {
+    private int switchRejections(String terminal) {
         return jdbc.queryForObject("""
                 SELECT count(*) FROM audit_events WHERE event_name = 'terminal.access_rejected'
-                   AND metadata->>'terminal_type' = 'merchant_app' AND metadata->>'capability' = 'terminal.enabled'
-                """, Integer.class);
+                   AND metadata->>'terminal_type' = ? AND metadata->>'capability' = 'terminal.enabled'
+                """, Integer.class, terminal);
+    }
+
+    private int disputes() {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = 'merchant_portal.settlement.disputed'", Integer.class);
     }
 
     private String json(Object value) throws Exception {

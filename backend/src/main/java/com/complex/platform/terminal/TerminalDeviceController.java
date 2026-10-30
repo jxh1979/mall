@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -145,6 +145,17 @@ public class TerminalDeviceController {
         authorizationService.requirePermission("terminal.device.lifecycle");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.scrapDevice(id, request));
+    }
+
+    // 第 96 条 96-R3（ENUM:241「归档」；第十八批裁决 24「报废后可归档」）：已报废的设备归档，原因必填，归档后不能再恢复或领用。
+    @PostMapping("/devices/{id}/archive")
+    public ApiResponse<DeviceBindingResponse> archiveDevice(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid DeviceLifecycleRequest request
+    ) {
+        authorizationService.requirePermission("terminal.device.lifecycle");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveDevice(id, request));
     }
 
     // 第 63 条、第 82 条 82c-R1（PGM:618、PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」）：后台登记入场三道环节设备

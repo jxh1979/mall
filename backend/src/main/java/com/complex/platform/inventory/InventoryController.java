@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -612,6 +612,15 @@ public class InventoryController {
         return ApiResponse.ok(service.getCostSummary(merchantId, periodStart, periodEnd));
     }
 
+    // 第十八批 K 段 97-R3（BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」）：期间吧台消耗统计。
+    @GetMapping("/bar-consumption-stats")
+    public ApiResponse<java.util.List<BarConsumptionStatRecord>> listBarConsumptionStats(
+            @RequestParam(value = "period_start", required = false) String periodStart,
+            @RequestParam(value = "period_end", required = false) String periodEnd) {
+        authorizationService.requirePermission("inventory.stock.view");
+        return ApiResponse.ok(service.listBarConsumptionStats(periodStart, periodEnd));
+    }
+
     // I-2(V296)：无 inventory.cost.view 权限的调用方，库存流水响应成本列脱敏置 null（店员端/终端不可见）。
     // ── P0-A/GAP-07 供应商联系人手机号展示脱敏（V339）。同上 cost 脱敏范式，放 controller 层。 ──
     private InventorySupplierRecord maskSupplierPhoneForUnauthorized(InventorySupplierRecord record) {
@@ -945,6 +954,13 @@ public class InventoryController {
     public ApiResponse<TraceHandoverChainView> getTraceHandover(@PathVariable String id) {
         authorizationService.requirePermission("inventory.handover.scan");
         return ApiResponse.ok(service.getTraceHandover(id));
+    }
+
+    /** 第十八批 K 段第 94 条 94-R1（BSM:1197「出库须同时核验订单和物品码」）：库管出库前按溯源码列可出库的酒吧订单。 */
+    @GetMapping("/trace-codes/{id}/outbound-orders")
+    public ApiResponse<java.util.List<TraceOutboundOrderRecord>> listTraceCodeOutboundOrders(@PathVariable String id) {
+        authorizationService.requirePermission("inventory.handover.scan");
+        return ApiResponse.ok(service.listTraceOutboundOrders(id));
     }
 
     @PostMapping("/trace-handovers/{id}/segments/{segment}/backfill")

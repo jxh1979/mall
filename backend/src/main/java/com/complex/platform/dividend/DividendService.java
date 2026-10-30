@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -120,6 +120,11 @@ public class DividendService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     @org.springframework.context.annotation.Lazy
     com.complex.platform.merchantbilling.MerchantAmountChangeNotifier merchantAmountNotifier;
+
+    // 第 92 条（BSM:1597 首页未读账单提醒）：商户账号在我的分红读到审批通过后的分红单即记已读。@Lazy 防初始化环；为 null（单测手工构造）＝不记。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.merchantportal.MerchantUnreadBillService merchantUnreadBills;
 
     private void notifyMerchantAmount(String merchantId, String event, long amountCent, String reason, Instant visibleAt, String refKey) {
         if (merchantAmountNotifier != null) {
@@ -669,8 +674,14 @@ public class DividendService {
                             blankToNull(scopeMerchant(merchantId)), blankToNull(kind),
                             blankToNull(periodLabel), blankToNull(status), safePage, safeSize);
                     // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。
-                    if (authorizationService.currentMerchantScope().isEmpty()) {
+                    Optional<String> scoped = authorizationService.currentMerchantScope();
+                    if (scoped.isEmpty()) {
                         return pageResult;
+                    }
+                    if (merchantUnreadBills != null) {
+                        merchantUnreadBills.markDividendsRead(scoped.get(), pageResult.items().stream()
+                                .filter(s -> "approved".equals(s.status()) || "paid".equals(s.status()))
+                                .map(DividendStatementRecord::id).toList());
                     }
                     return new PageResponse<>(
                             pageResult.items().stream().map(DividendStatementRecord::forMerchantView).toList(),
