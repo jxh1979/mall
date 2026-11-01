@@ -396,6 +396,36 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
     }
 
     @Override
+    public String findCloseMethod(String workOrderType) {
+        return jdbcTemplate.queryForObject("SELECT close_method FROM merchant_service_work_order_close_methods WHERE work_order_type = :type",
+                Map.of("type", workOrderType), String.class);
+    }
+
+    @Override
+    public List<MerchantWorkOrderCloseMethodRecord> listCloseMethods() {
+        return jdbcTemplate.query("""
+                SELECT work_order_type, close_method, updated_by, updated_at
+                  FROM merchant_service_work_order_close_methods
+                 ORDER BY work_order_type
+                """, (rs, n) -> new MerchantWorkOrderCloseMethodRecord(rs.getString("work_order_type"), rs.getString("close_method"),
+                rs.getString("updated_by"), rs.getTimestamp("updated_at").toInstant()));
+    }
+
+    @Override
+    public MerchantWorkOrderCloseMethodRecord saveCloseMethod(MerchantWorkOrderCloseMethodRecord closeMethod) {
+        jdbcTemplate.update("""
+                UPDATE merchant_service_work_order_close_methods
+                   SET close_method = :close_method, updated_by = :updated_by, updated_at = :updated_at
+                 WHERE work_order_type = :type
+                """, new MapSqlParameterSource()
+                .addValue("type", closeMethod.workOrderType())
+                .addValue("close_method", closeMethod.closeMethod())
+                .addValue("updated_by", closeMethod.updatedBy())
+                .addValue("updated_at", timestampWithTimeZone(closeMethod.updatedAt())));
+        return closeMethod;
+    }
+
+    @Override
     public void setWorkOrderArchiveReason(String id, String reason) {
         jdbcTemplate.update("UPDATE merchant_service_work_orders SET archive_reason = :reason WHERE id = :id",
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("reason", reason).addValue("id", id));

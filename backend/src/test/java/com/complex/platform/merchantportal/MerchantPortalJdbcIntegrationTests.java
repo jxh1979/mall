@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -178,7 +178,7 @@ class MerchantPortalJdbcIntegrationTests {
     void feeStatementPutsEveryReversalOfASingleBarMonthIntoItsBillingMonth() throws Exception {
         String m = merchant("mch_fsr_" + sfx, "两次退票店");
         String orig = item("fsr0_" + sfx, m, m, "single_bar_service_fee", 800, 0, "2026-10-20", "2026-10", null);
-        schedule(orig, m, "2026-09-01");
+        schedule(orig, m, "2026-09-01", "now()");
         item("fsr1c_" + sfx, m, m, "single_bar_service_fee", -800, 0, "2026-10-20", "2026-10", orig);
         String restated = item("fsr1b_" + sfx, m, m, "single_bar_service_fee", 700, 0, "2026-10-20", "2026-10", orig);
         item("fsr2c_" + sfx, m, m, "single_bar_service_fee", -700, 0, "2026-10-20", "2026-10", restated);
@@ -193,20 +193,7 @@ class MerchantPortalJdbcIntegrationTests {
     @Test
     void feeStatementNetsRefundDueOfAPaidSingleBarMonthIntoItsBillingMonth() throws Exception {
         String m = merchant("mch_fsd_" + sfx, "付清后退票店");
-        String orig = item("fsd0_" + sfx, m, m, "single_bar_service_fee", 800, 800, "2026-10-20", "2026-10", null);
-        schedule(orig, m, "2026-09-01");
-        String monthId = "sbfm_fsd_" + sfx;
-        jdbc.update("INSERT INTO single_bar_service_fee_months (id, project_id, bar_merchant_id, billing_month, ar_ap_item_id)"
-                + " VALUES (?, 'proj_fs', ?, DATE '2026-09-01', ?)", monthId, m, orig);
-        String due = "fsd1_" + sfx;
-        jdbc.update("INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,"
-                + " unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at)"
-                + " VALUES (?, ?, 'payable', ?, 'single_bar_service_fee', ?, 100, 0, 100, 'CNY', DATE '2026-12-20', '2026-11',"
-                + " 'pending_payment', now(), now())", due, due, m, "rf_fsd_" + sfx);
-        schedule(due, m, "2026-11-01");
-        jdbc.update("INSERT INTO single_bar_service_fee_adjustments (refund_id, month_id, accounting_period, before_cent, after_cent,"
-                + " pending_cut_cent, refund_due_cent, refund_due_item_id) VALUES (?, ?, '2026-11', 800, 700, 0, 100, ?)",
-                "rf_fsd_" + sfx, monthId, due);
+        paidMonthWithRefundDue(m, "fsd", "now()");
 
         RequestPostProcessor shop = new StaffRequestFixture(jdbc).staff("usr_fsd_" + sfx, "staff", null, m, "merchant.billing.view");
         JsonNode september = feeStatement(shop, "2026-09");
@@ -216,6 +203,44 @@ class MerchantPortalJdbcIntegrationTests {
         assertThat(line.path("paid_amount_cent").asLong()).isEqualTo(800);
         assertThat(line.path("unpaid_amount_cent").asLong()).isEqualTo(-100);
         assertThat(ticketFee(feeStatement(shop, "2026-11"))).isZero();
+    }
+
+    /**
+     * 第 101 条（BSM:1597「异议期自该账单在商户专区可查看之日的次日起算」、BSM:1673「月结定格 → 账单出账 → 异议期届满 → 付账日」、DEC-R8-55）：
+     * 应退按自身出账日（visible_at）才从原计费月净额扣除，出账日前综合账单仍是原额。
+     */
+    @Test
+    void feeStatementNetsRefundDueOnlyFromItsStatementDay() throws Exception {
+        String m = merchant("mch_fsv_" + sfx, "应退未出账店");
+        String due = paidMonthWithRefundDue(m, "fsv", "now() + interval '1 day'");
+        RequestPostProcessor shop = new StaffRequestFixture(jdbc).staff("usr_fsv_" + sfx, "staff", null, m, "merchant.billing.view");
+        JsonNode before = feeStatement(shop, "2026-09");
+        assertThat(ticketFee(before)).as("应退出账日未到，不扣").isEqualTo(800);
+        assertThat(before.path("bill").path("unpaid_amount_cent").asLong()).isZero();
+
+        jdbc.update("UPDATE internal_payable_schedules SET visible_at = now() - interval '1 minute' WHERE ar_ap_item_id = ?", due);
+        JsonNode after = feeStatement(shop, "2026-09");
+        assertThat(ticketFee(after)).isEqualTo(700);
+        assertThat(after.path("bill").path("unpaid_amount_cent").asLong()).isEqualTo(-100);
+    }
+
+    /** 2026-09 门票综合服务费 800 已付清，2026-11 退票挂应退 100（payable，计费月按退票当月）；应退可查看时刻按 refundVisibleAt 表达式。返回应退行。 */
+    private String paidMonthWithRefundDue(String m, String tag, String refundVisibleAt) {
+        String orig = item(tag + "0_" + sfx, m, m, "single_bar_service_fee", 800, 800, "2026-10-20", "2026-10", null);
+        schedule(orig, m, "2026-09-01", "now()");
+        String monthId = "sbfm_" + tag + "_" + sfx;
+        jdbc.update("INSERT INTO single_bar_service_fee_months (id, project_id, bar_merchant_id, billing_month, ar_ap_item_id)"
+                + " VALUES (?, 'proj_fs', ?, DATE '2026-09-01', ?)", monthId, m, orig);
+        String due = tag + "1_" + sfx;
+        jdbc.update("INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,"
+                + " unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'payable', ?, 'single_bar_service_fee', ?, 100, 0, 100, 'CNY', DATE '2026-12-20', '2026-11',"
+                + " 'pending_payment', now(), now())", due, due, m, "rf_" + tag + "_" + sfx);
+        schedule(due, m, "2026-11-01", refundVisibleAt);
+        jdbc.update("INSERT INTO single_bar_service_fee_adjustments (refund_id, month_id, accounting_period, before_cent, after_cent,"
+                + " pending_cut_cent, refund_due_cent, refund_due_item_id) VALUES (?, ?, '2026-11', 800, 700, 0, 100, ?)",
+                "rf_" + tag + "_" + sfx, monthId, due);
+        return due;
     }
 
     private JsonNode feeStatement(RequestPostProcessor shop, String month) throws Exception {
@@ -233,14 +258,14 @@ class MerchantPortalJdbcIntegrationTests {
         throw new AssertionError("费用总表缺门票综合服务费");
     }
 
-    /** 内部应付计划一行（计费月＝billingStart 所在月），付账日规则随行新建。 */
-    private void schedule(String itemId, String counterparty, String billingStart) {
+    /** 内部应付计划一行（计费月＝billingStart 所在月，可查看时刻按 visibleAt 表达式），付账日规则随行新建。 */
+    private void schedule(String itemId, String counterparty, String billingStart, String visibleAt) {
         String rule = "ipdr_" + itemId;
         jdbc.update("INSERT INTO internal_pay_day_rules (id, kind, day_1, day_2, day_3, effective_from, status, reason, submitted_by, decided_by)"
                 + " VALUES (?, 'pay_days', 5, 15, 25, DATE '2026-01-01', 'approved', '费用总表回归', 'usr_fs_a', 'usr_fs_b')", rule);
         jdbc.update("INSERT INTO internal_payable_schedules (ar_ap_item_id, route, counterparty_id, billing_period_start, visible_at,"
                 + " objection_deadline, designated_pay_day, scheduled_due_date, pay_days_rule_id, route_rule_id, objection_working_days)"
-                + " VALUES (?, 'single_bar_service_fee', ?, CAST(? AS date), now(), DATE '2026-10-10', DATE '2026-10-20',"
+                + " VALUES (?, 'single_bar_service_fee', ?, CAST(? AS date), " + visibleAt + ", DATE '2026-10-10', DATE '2026-10-20',"
                 + " DATE '2026-10-20', ?, ?, 3)", itemId, counterparty, billingStart, rule, rule);
     }
 

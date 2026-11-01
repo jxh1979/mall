@@ -21,12 +21,14 @@
 | `created` | 已创建未派单 | assign, action, close |
 | `assigned` | 已派责任部门/人员 | action, close |
 | `processing` | 处理中 | action, close |
-| `pending_merchant` | 等商户确认或补充材料 | action, close |
-| `resolved` | 已解决待关闭 | action, close |
+| `pending_merchant` | 等商户确认或补充材料 | action, merchant-confirm（关单方式为须商户确认的单，商户确认即 `closed`） |
+| `resolved` | 已处理待关闭 | action, close, merchant-confirm（同上） |
 | `closed` | 已关闭 | 不允许修改 |
 | `cancelled` | 已取消 | 不允许修改 |
 
 规则：`closed` 和 `cancelled` 为终态，后续不得派单、处理或关闭。
+
+按类型关单（第十八批 L 段第 102 条；BSM:1385；第十八批裁决 26）：保洁处理人标 `resolved` 即 `closed`；投诉由商户确认即关闭，商户未确认的由客户关怀部在 `resolved` 后带 `close_reason` 关单；报修、其他服务请求按 V585 `merchant_service_work_order_close_methods` 配置——`handler` 处理人标 `resolved` 即 `closed`、`staff_acceptance` 员工在 `resolved` 后关单、`merchant_confirm` 只能由商户确认关闭（员工关单 409 `MERCHANT_CONFIRM_REQUIRED`）。
 
 ## 3. 接口
 
@@ -34,9 +36,13 @@
 |---|---|---|---|---|
 | `GET` | `/api/v1/merchant-service/work-orders` | `merchant.service_work_order.view` | 否 | 查询工单列表 |
 | `POST` | `/api/v1/merchant-service/work-orders` | `merchant.service_work_order.create` | 是 | 创建商户服务工单 |
-| `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | `merchant.service_work_order.assign` | 是 | 派单 |
+| `GET` | `/api/v1/merchant-service/work-orders/{id}/owner-candidates` | `merchant.service_work_order.assign` | 否 | 派单负责人候选：在岗、持处理码且处理码可触及该商户经营项目的平台员工（102-R1） |
+| `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | `merchant.service_work_order.assign` | 是 | 派单；负责人不在候选口径内 400 `WORK_ORDER_OWNER_INVALID`（102-R1） |
 | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | `merchant.service_work_order.process` | 是 | 追加处理动作 |
 | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | `merchant.service_work_order.close` | 是 | 关闭工单 |
+| `POST` | `/api/v1/merchant-service/work-orders/{id}/merchant-confirm` | `merchant.service_work_order.create` | 是 | 商户确认已解决即关闭，只本商户账号（102-R2） |
+| `GET` | `/api/v1/merchant-service/work-order-close-methods` | `merchant.service_work_order.view` | 否 | 报修、其他服务请求的关单方式（102-R3） |
+| `PUT` | `/api/v1/merchant-service/work-order-close-methods` | `merchant.service_work_order.assign` | 是 | 改报修或其他服务请求的关单方式，平台口径（102-R3） |
 
 ## 4. 字段
 
@@ -87,8 +93,9 @@
 | `operator_note` | 否 | string | 为空时使用 `closed` |
 | `evidence_attachment_ids` | 否 | string[] | 证据引用 |
 | `resolution` | 是 | string | 解决方案 |
-| `satisfaction_score` | 否 | integer | 1-5 |
+| `satisfaction_score` | 否 | integer | 1-5，不填为空（不替提单方默认评分） |
 | `operator_user_id` | 是 | string | 操作人 |
+| `close_reason` | 投诉必填 | string | 关闭缘由，记入关闭动作说明与留痕（102-R2） |
 
 ## 5. 事件
 

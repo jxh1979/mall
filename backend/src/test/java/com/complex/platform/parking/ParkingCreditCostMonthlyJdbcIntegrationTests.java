@@ -1,17 +1,26 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.support.InternalPayDayFixtures;
+import com.complex.platform.support.StaffRequestFixture;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +31,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -95,6 +106,68 @@ class ParkingCreditCostMonthlyJdbcIntegrationTests {
         assertThat(receivables()).hasSize(2);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM parking_credit_cost_months WHERE project_id=?", Integer.class, f.project))
                 .isEqualTo(2);
+    }
+
+    /**
+     * 第 101 条（BSM:1597「异议期自该账单在商户专区可查看之日的次日起算」、BSM:1673「月结定格 → 账单出账 → 异议期届满 → 付账日」、DEC-R8-55）：
+     * 停车抵免成本到出账日（internal_payable_schedules.visible_at）才列入商户专区综合账单与未读月份，与门票分账、异议截止日同一时刻；没列出不记已读。
+     */
+    @Test
+    void merchantPortalListsCostFromStatementDayOnly() throws Exception {
+        job.run(Instant.now());
+        String item = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type='parking_credit_cost' AND project_id=? AND counterparty_id=?",
+                String.class, f.project, a[0]);
+        String month = YearMonth.now(LocalZone.ID).minusMonths(1).toString();
+        RequestPostProcessor shop = new StaffRequestFixture(jdbc).staff("usr_pcm_" + f.suffix, "staff", null, a[0],
+                "merchant.billing.view", "merchant.portal.settlement.view");
+
+        // 出账日未到（夹具出账日为 1 日，改配置造未来出账日会随当天日期漂移，故直接改 visible_at）。
+        jdbc.update("UPDATE internal_payable_schedules SET visible_at = now() + interval '1 day' WHERE ar_ap_item_id=?", item);
+        JsonNode before = portal(get("/api/v1/merchant-portal/fee-statement").param("month", month), shop);
+        assertThat(cost(before)).as("出账日未到，综合账单不列").isZero();
+        assertThat(before.path("bill").path("lines").findValuesAsText("fee_name")).doesNotContain("停车抵免成本");
+        assertThat(portal(get("/api/v1/merchant-portal/ticket-settlements"), shop).findValuesAsText("ar_ap_item_id")).doesNotContain(item);
+        assertThat(billMonths(shop)).doesNotContainKey(month);
+        assertThat(reads(item)).as("没列出不记已读").isZero();
+
+        // 出账日到。
+        jdbc.update("UPDATE internal_payable_schedules SET visible_at = now() - interval '1 minute' WHERE ar_ap_item_id=?", item);
+        assertThat(billMonths(shop)).containsExactly(entry(month, 1L));
+        JsonNode after = portal(get("/api/v1/merchant-portal/fee-statement").param("month", month), shop);
+        long aShare = share(a[0]);
+        assertThat(cost(after)).isEqualTo(aShare);
+        assertThat(after.path("bill").path("total_amount_cent").asLong()).isEqualTo(aShare);
+        JsonNode listed = portal(get("/api/v1/merchant-portal/ticket-settlements"), shop);
+        assertThat(listed.findValuesAsText("ar_ap_item_id")).containsExactly(item);
+        assertThat(listed.get(0).hasNonNull("objection_deadline")).isTrue();
+        assertThat(billMonths(shop)).isEmpty();
+        assertThat(reads(item)).isEqualTo(1);
+    }
+
+    private JsonNode portal(MockHttpServletRequestBuilder request, RequestPostProcessor who) throws Exception {
+        String body = mockMvc.perform(request.with(who)).andExpect(status().isOk()).andReturn().getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        return new ObjectMapper().readTree(body).path("data");
+    }
+
+    private Map<String, Long> billMonths(RequestPostProcessor who) throws Exception {
+        Map<String, Long> months = new LinkedHashMap<>();
+        portal(get("/api/v1/merchant-portal/unread-bills"), who).path("bill_months")
+                .forEach(n -> months.put(n.path("month").asText(), n.path("unread_count").asLong()));
+        return months;
+    }
+
+    private static long cost(JsonNode statement) {
+        for (JsonNode fee : statement.path("fee_items")) {
+            if ("停车抵免成本".equals(fee.path("fee_name").asText())) {
+                return fee.path("amount_cent").asLong();
+            }
+        }
+        throw new AssertionError("费用总表缺停车抵免成本");
+    }
+
+    private int reads(String item) {
+        return jdbc.queryForObject("SELECT count(*) FROM merchant_bill_reads WHERE merchant_id=? AND bill_id=?", Integer.class, a[0], item);
     }
 
     private void used(String tag, List<Map.Entry<String, Long>> bills, String plate) throws Exception {

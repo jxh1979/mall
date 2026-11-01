@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -25,6 +25,11 @@ const VIEW_PERMS = ["customer.voucher.view"];
 const MANAGE_PERMS = ["customer.voucher.manage"];
 const REDEEM_PERMS = ["customer.voucher.redeem"];
 const PAGE_SIZE = 20;
+
+// 第十八批 L 段 103-R1：物品码逐件扫，空格、逗号或分号分隔（同调拨收货扫码），去重。
+function splitTraceCodes(raw: string): string[] {
+  return Array.from(new Set(raw.split(/[\s,，;；]+/).map((code) => code.trim()).filter(Boolean)));
+}
 
 const KIND_LABELS: Record<string, string> = {
   merchant_discount: "商户折扣券",
@@ -128,6 +133,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
   // 作废理由 / 核销备注
   const [revokeReason, setRevokeReason] = React.useState("");
   const [redeemNote, setRedeemNote] = React.useState("");
+  const [redeemTraceCodes, setRedeemTraceCodes] = React.useState("");
 
   const definitionsResource = useAdminResource(
     async () => {
@@ -303,6 +309,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
   function openRedeem(row: VoucherInstanceRow) {
     setFormError("");
     setRedeemNote("");
+    setRedeemTraceCodes("");
     setRedeemTarget(row);
   }
 
@@ -313,6 +320,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
       voucherInstanceId: redeemTarget.id,
       note: redeemNote.trim() || null,
     };
+    if (redeemNeedsCodes) request.traceCodes = redeemCodes;
     const ok = await runAction("voucher_redeemed", request,
       () => api.post("/api/v1/vouchers/redemptions", request));
     if (ok) {
@@ -325,6 +333,13 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
   function definitionName(definitionId: string | undefined): string {
     return definitions.find((d) => d.id === definitionId)?.name ?? definitionId ?? "—";
   }
+
+  // 第十八批 L 段 103-R1（BSM:1197「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」；ENUM:81「到店由店员核销领取时才实扣」）：
+  // 店内实物券核销逐件填物品码，去重后个数须等于每张券件数。
+  const redeemDefinition = definitions.find((d) => d.id === redeemTarget?.definitionId);
+  const redeemNeedsCodes = redeemDefinition?.voucherKind === "in_store_goods";
+  const redeemPieces = redeemDefinition?.stockQuantity ?? 1;
+  const redeemCodes = splitTraceCodes(redeemTraceCodes);
 
   // 操作员裁决 2026-10-20 第三轮第 9 条「非酒吧保留独立核销」：只有酒吧商户（merchantType=bar）的折扣券须在结账时抵扣。
   function requiresBillDeduction(definitionId: string | undefined): boolean {
@@ -675,9 +690,14 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
           {
             title: "核销确认",
             description: "商户折扣券＝结账抵扣不结算；店内实物券＝核销即出库、按内部结算价挂应付（如该券定义启用内部结算）。每张券只能核销一次，商户账号只能核自家可核的券。",
-            validate: () => null,
+            validate: () => (redeemNeedsCodes && redeemCodes.length !== redeemPieces ? `须逐件扫 ${redeemPieces} 个物品码` : null),
             content: (
-              <label>备注（选填）<textarea data-testid="voucher-redeem-note" value={redeemNote} onChange={(event) => setRedeemNote(event.target.value)} placeholder="如：客人到店领取" /></label>
+              <>
+                {redeemNeedsCodes ? (
+                  <label>物品码（逐件扫，多个用空格或逗号分隔）<textarea data-testid="voucher-redeem-trace-codes" value={redeemTraceCodes} onChange={(event) => setRedeemTraceCodes(event.target.value)} placeholder={`每张券 ${redeemPieces} 件，逐件扫码`} /></label>
+                ) : null}
+                <label>备注（选填）<textarea data-testid="voucher-redeem-note" value={redeemNote} onChange={(event) => setRedeemNote(event.target.value)} placeholder="如：客人到店领取" /></label>
+              </>
             ),
           },
         ]}
@@ -686,6 +706,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
           { label: "核销码", value: redeemTarget?.code ?? "—" },
           { label: "券定义", value: definitionName(redeemTarget?.definitionId) },
           { label: "持有客人", value: redeemTarget?.customerId ?? "—" },
+          ...(redeemNeedsCodes ? [{ label: "物品码", value: redeemCodes.join("、") }] : []),
           { label: "备注", value: redeemNote.trim() || "无" },
         ]}
       />

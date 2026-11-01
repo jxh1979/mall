@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -592,11 +592,6 @@ export default function AdminApp() {
       cancelled = true;
     };
   }, [api, user]);
-
-  // 3.19 二期：当前菜单模块随路由更新，请求头 X-Module-Code 让后端按模块闸。
-  React.useEffect(() => {
-    api.moduleCode = route?.group ?? null;
-  }, [api, route]);
 
   const hiddenGroups = React.useMemo(
     () => hiddenGroupKeys(disabledSwitchRows, groupedAdminRoutes().map((group) => group.key)),

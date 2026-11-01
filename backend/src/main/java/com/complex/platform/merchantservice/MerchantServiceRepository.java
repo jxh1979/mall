@@ -72,4 +72,19 @@ public interface MerchantServiceRepository {
     default MerchantWorkOrderPolicyRecord savePolicy(MerchantWorkOrderPolicyRecord policy) {
         throw new UnsupportedOperationException("savePolicy");
     }
+
+    /** 第 102 条 102-R3：报修或其他服务请求的关单方式（V585 出厂预置）。默认员工验收后关闭（内存桩没有配置表，照旧由员工关单）。 */
+    default String findCloseMethod(String workOrderType) {
+        return "staff_acceptance";
+    }
+
+    /** 102-R3：报修、其他服务请求的关单方式，按类型排序。 */
+    default List<MerchantWorkOrderCloseMethodRecord> listCloseMethods() {
+        return List.of();
+    }
+
+    /** 102-R3：改一类工单的关单方式。 */
+    default MerchantWorkOrderCloseMethodRecord saveCloseMethod(MerchantWorkOrderCloseMethodRecord closeMethod) {
+        throw new UnsupportedOperationException("saveCloseMethod");
+    }
 }

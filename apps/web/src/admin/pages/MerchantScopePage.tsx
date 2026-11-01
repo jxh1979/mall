@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -8,7 +8,7 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
-import { MERCHANT_WORK_ORDER_TYPE_LABELS } from "./MerchantZoneWorkOrdersPage";
+import { MERCHANT_WORK_ORDER_STATUS_LABELS, MERCHANT_WORK_ORDER_TYPE_LABELS } from "./MerchantZoneWorkOrdersPage";
 
 // M023-001：行类型按后端真实返回收口（MerchantWorkOrderRecord / MerchantBillRecord），不读后端不存在的字段。
 type WorkOrderRow = { id: string; merchantId?: string; workOrderType?: string; priority?: string; status?: string; title?: string };
@@ -138,7 +138,7 @@ export function MerchantScopePage({ api, user, setGlobalError }: AdminPageProps)
         { label: "类型", value: (MERCHANT_WORK_ORDER_TYPE_LABELS[row.workOrderType ?? ""] ?? zh(row.workOrderType)) },
         { label: "标题", value: display(row.title) },
         { label: "优先级", value: zh(row.priority) },
-        { label: "状态", value: zh(row.status) },
+        { label: "状态", value: MERCHANT_WORK_ORDER_STATUS_LABELS[row.status ?? ""] ?? zh(row.status) },
       ],
     });
   }
@@ -161,7 +161,7 @@ export function MerchantScopePage({ api, user, setGlobalError }: AdminPageProps)
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="merchant-scope-work-orders-table">
           <thead><tr><th>商户</th><th>类型</th><th>标题</th><th>优先级</th><th>状态</th><th>详情</th></tr></thead>
-          <tbody>{workOrders.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-scope-work-order-row-${row.id}`} onClick={() => openWorkOrderDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}><td>{display(row.merchantId)}</td><td>{(MERCHANT_WORK_ORDER_TYPE_LABELS[row.workOrderType ?? ""] ?? zh(row.workOrderType))}</td><td>{display(row.title)}</td><td>{zh(row.priority)}</td><td>{zh(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看授权工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+          <tbody>{workOrders.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`merchant-scope-work-order-row-${row.id}`} onClick={() => openWorkOrderDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openWorkOrderDetail(row); } }}><td>{display(row.merchantId)}</td><td>{(MERCHANT_WORK_ORDER_TYPE_LABELS[row.workOrderType ?? ""] ?? zh(row.workOrderType))}</td><td>{display(row.title)}</td><td>{zh(row.priority)}</td><td>{MERCHANT_WORK_ORDER_STATUS_LABELS[row.status ?? ""] ?? zh(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看授权工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>

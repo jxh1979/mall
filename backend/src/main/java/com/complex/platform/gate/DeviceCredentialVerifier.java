@@ -3,7 +3,7 @@ package com.complex.platform.gate;
 import com.complex.platform.auth.AuthCookies;
 import com.complex.platform.auth.AuthService;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -73,6 +73,10 @@ import org.springframework.web.util.WebUtils;
  * {@code merchant_portal} 判总开关、模块开关与灰度，改报 web、其他终端码或不带终端头都一样；设备绑定型照设备登记与验签判定
  * （商户员工在工作手机、平板、私人手机上作业，BSM:1889-1890、BSM:1899-1901）。
  *
+ * <p>第 100 条 100-R2（PGM:744；PGM:745「Web 前端（业务人员，客人无网页端）」；BSM:1874-1875）：无商户归属的员工账号（不是经销商、客人）
+ * 带终端头的请求，除设备绑定型外一律按 {@code web} 判总开关、模块开关与灰度，改报商户网页门户、商户手机应用、经销商门户、移动管理端、
+ * 客人端都一样（与后台网页无商户归属报 web 同口径）；不带终端头的维持未识别终端。
+ *
  * <p>分级强制 {@code off|grace|enforce}（默认 grace=生产安全态）。读请求不因缺签名被拒。
  * <b>实际翻 enforce 依赖客户端实现签名 + 登记密钥（客户端侧工作，本 PR 不含）；本 PR 让服务端 ready-to-enforce。</b>
  */
@@ -86,6 +90,7 @@ public class DeviceCredentialVerifier {
     public static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", STAFF_PRIVATE_PHONE);
     private static final String STAFF_WORK_PHONE = "staff_work_phone";
     private static final String MERCHANT_PORTAL = "merchant_portal";
+    private static final String WEB = "web";
     /** #553：登录请求此时还没有会话 Cookie，web/经销商门户不能因缺 Cookie 拒登录。 */
     private static final String WEB_LOGIN_PATH = "/api/v1/auth/login";
     static final String CUSTOMER_PATH_PREFIX = "/api/v1/customer/";
@@ -125,13 +130,14 @@ public class DeviceCredentialVerifier {
             @Value("${access.device_credential.enforcement.staff_work_phone:}") String staffWorkPhoneMode,
             @Value("${access.device_credential.enforcement.tablet:}") String tabletMode,
             @Value("${access.device_credential.enforcement.kiosk:}") String kioskMode,
+            @Value("${access.device_credential.enforcement.staff_private_phone:}") String staffPrivatePhoneMode,
             @Value("${access.device_credential.enforcement.web:}") String webMode,
             @Value("${access.device_credential.enforcement.app:}") String appMode,
             @Value("${access.device_credential.enforcement.miniapp:}") String miniappMode,
             @Value("${access.device_credential.timestamp_tolerance_seconds:300}") long toleranceSeconds) {
         this(deviceRepository, staffRepository, deviceSigningKeyStore, authorizationService, auditEventService,
-                customerRepository, Clock.systemUTC(), defaultMode, staffWorkPhoneMode, tabletMode, kioskMode, webMode,
-                appMode, miniappMode, toleranceSeconds);
+                customerRepository, Clock.systemUTC(), defaultMode, staffWorkPhoneMode, tabletMode, kioskMode,
+                staffPrivatePhoneMode, webMode, appMode, miniappMode, toleranceSeconds);
     }
 
     DeviceCredentialVerifier(
@@ -146,6 +152,7 @@ public class DeviceCredentialVerifier {
             String staffWorkPhoneMode,
             String tabletMode,
             String kioskMode,
+            String staffPrivatePhoneMode,
             String webMode,
             String appMode,
             String miniappMode,
@@ -162,6 +169,7 @@ public class DeviceCredentialVerifier {
         putIfSet("staff_work_phone", staffWorkPhoneMode);
         putIfSet("tablet", tabletMode);
         putIfSet("kiosk", kioskMode);
+        putIfSet(STAFF_PRIVATE_PHONE, staffPrivatePhoneMode);
         putIfSet("web", webMode);
         putIfSet("app", appMode);
         putIfSet("miniapp", miniappMode);
@@ -213,6 +221,10 @@ public class DeviceCredentialVerifier {
         AccessActor actor = terminalType != null && DEVICE_BOUND_TYPES.contains(terminalType) ? null : currentActorQuietly();
         if (actor != null && AuthService.merchantAppAccount(actor.accountType(), actor.merchantId())) {
             terminalType = MERCHANT_PORTAL;
+        } else if (actor != null && terminalType != null && (actor.merchantId() == null || actor.merchantId().isBlank())
+                && !"dealer".equals(actor.accountType()) && !"customer".equals(actor.accountType())) {
+            // 第 100 条 100-R2：无商户归属的员工账号带终端头的非设备绑定型请求按 Web 前端判。
+            terminalType = WEB;
         }
 
         if (terminalType != null && DEVICE_BOUND_TYPES.contains(terminalType)) {

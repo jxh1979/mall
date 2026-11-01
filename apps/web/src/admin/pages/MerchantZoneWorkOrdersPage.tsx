@@ -9,18 +9,20 @@ import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { FormModal } from "../components/FormModal";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 
 const WO_CREATE = ["merchant.service_work_order.create"];
 
 const TEXT = {
   title: "我的工单",
-  description: "提交本商户的报修 / 保洁 / 投诉 / 其他服务请求工单并跟踪进展;派单与处理由平台侧闭环,本页只见本商户工单。",
+  description: "提交本商户的报修 / 保洁 / 投诉 / 其他服务请求工单并跟踪进展;派单与处理由平台侧闭环,本页只见本商户工单。投诉（以及平台配成须商户确认的报修、其他服务请求）到待商户确认或已处理待关闭时，点「确认已解决」即关闭，可同时打满意度。",
   loadFailed: "工单读取失败",
   actionFailed: "工单提交失败",
   titleRequired: "提交工单必须填写标题。",
   descriptionRequired: "提交工单必须填写问题描述。",
   submit: "提交工单",
+  confirm: "确认已解决",
   focusClear: "清除筛选，返回全部",
 };
 
@@ -55,15 +57,19 @@ const PRIORITY_LABELS: Record<string, string> = {
   critical: "紧急",
 };
 
-const STATUS_LABELS: Record<string, string> = {
+// 第 102 条 102-R2：ENUM:264 七态（第五态 resolved＝已处理待关闭）；后台工单页与商户授权工作台共用这一张，不走共享字典的「商户待处理」「已解决」。
+export const MERCHANT_WORK_ORDER_STATUS_LABELS: Record<string, string> = {
   created: "已提交",
   assigned: "已派单",
   processing: "处理中",
   pending_merchant: "待商户确认",
-  resolved: "已解决",
+  resolved: "已处理待关闭",
   closed: "已关闭",
   cancelled: "已取消",
 };
+
+// 第 102 条 102-R3（裁决 26）：报修、其他服务请求的关单方式；投诉照 BSM:1385 须商户确认。
+type CloseMethodRow = { workOrderType: string; closeMethod: string };
 
 function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
@@ -88,6 +94,10 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-8：新建工单收起为主按钮 + 分步引导弹窗（派单/处理等由平台侧闭环，不改）。
   const [createOpen, setCreateOpen] = React.useState(false);
+  // 第 102 条 102-R2：商户确认已解决（可选满意度 1～5，BSM:1385「满意度在回访/验收时由提单方评分」）。
+  const [closeMethods, setCloseMethods] = React.useState<Record<string, string>>({});
+  const [confirmTarget, setConfirmTarget] = React.useState<MerchantWorkOrderRow | null>(null);
+  const [confirmScore, setConfirmScore] = React.useState("");
 
   function openWorkOrderDetail(row: MerchantWorkOrderRow) {
     setDetail({
@@ -96,7 +106,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
         { label: "标题", value: row.title ?? "—" },
         { label: "类型", value: MERCHANT_WORK_ORDER_TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "—" },
         { label: "优先级", value: PRIORITY_LABELS[row.priority ?? ""] ?? row.priority ?? "—" },
-        { label: "状态", value: STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—" },
+        { label: "状态", value: MERCHANT_WORK_ORDER_STATUS_LABELS[row.status ?? ""] ?? row.status ?? "—" },
         { label: "问题描述", value: row.description ?? "—" },
         { label: "截止时间", value: cnDate(row.dueAt) },
         { label: "处理结论", value: row.resolution ?? "—" },
@@ -132,6 +142,8 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   const { loading, error, reload } = useAdminResource(
     async () => {
       setRows(await api.get<MerchantWorkOrderRow[]>("/api/v1/merchant-service/work-orders"));
+      const methods = await api.get<CloseMethodRow[]>("/api/v1/merchant-service/work-order-close-methods");
+      setCloseMethods(Object.fromEntries(methods.map((method) => [method.workOrderType, method.closeMethod])));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -171,6 +183,23 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
     }
   }
 
+  // 102-R2／R3：关单方式为「须商户确认」的单（投诉；配成须商户确认的报修、其他服务请求）在待商户确认、已处理待关闭时由商户确认关闭。
+  function confirmable(row: MerchantWorkOrderRow) {
+    return ["pending_merchant", "resolved"].includes(row.status ?? "")
+      && (row.workOrderType === "complaint" || closeMethods[row.workOrderType ?? ""] === "merchant_confirm");
+  }
+
+  async function confirmWorkOrder() {
+    if (!confirmTarget) return;
+    const request = {
+      idempotencyKey: nextKey("merchant-zone-work-order-confirm"),
+      satisfactionScore: confirmScore ? Number(confirmScore) : null,
+    };
+    const ok = await runAction("merchant_zone_work_order_confirmed", request,
+      () => api.post(`/api/v1/merchant-service/work-orders/${confirmTarget.id}/merchant-confirm`, request));
+    if (ok) setConfirmTarget(null);
+  }
+
   const openCount = rows.filter(nonTerminal).length;
   // 聚焦时按 KPI 子集收窄再分页；非聚焦=全量。
   const baseRows = kpiFocus?.table === "open" ? rows.filter(nonTerminal) : rows;
@@ -179,7 +208,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   return (
     <section data-testid="merchant-zone-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_service.work_order.viewed / merchant_service.work_order.created" />
+      <AuditTrailHint event="merchant_service.work_order.viewed / merchant_service.work_order.created / merchant_service.work_order.merchant_confirmed" />
       <div className="admin-form-row" data-testid="merchant-zone-work-order-form">
         <PermissionButton
           permissionsState={effectivePermissions}
@@ -214,11 +243,16 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
                   <td>{row.title ?? row.id}</td>
                   <td>{MERCHANT_WORK_ORDER_TYPE_LABELS[row.workOrderType ?? ""] ?? row.workOrderType ?? "-"}</td>
                   <td>{PRIORITY_LABELS[row.priority ?? ""] ?? row.priority ?? "-"}</td>
-                  <td>{STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
+                  <td>{MERCHANT_WORK_ORDER_STATUS_LABELS[row.status ?? ""] ?? row.status ?? "-"}</td>
                   <td>{cnDate(row.dueAt)}</td>
                   <td>{row.resolution ?? "-"}</td>
                   <td>{cnDate(row.createdAt)}</td>
-                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
+                <td className="admin-row-detail-cell" onClick={(event) => event.stopPropagation()}>
+                  {confirmable(row) ? (
+                    <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid={`merchant-zone-work-order-confirm-${row.id}`}
+                      disabled={busyAction !== ""} onClick={() => { setFormError(""); setConfirmScore(""); setConfirmTarget(row); }}>{TEXT.confirm}</PermissionButton>
+                  ) : null}
+                  <button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={() => openWorkOrderDetail(row)}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -226,6 +260,23 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
         </div>
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      <FormModal
+        open={confirmTarget !== null}
+        title="确认工单已解决"
+        description={`确认「${confirmTarget?.title ?? confirmTarget?.id ?? ""}」已解决后工单即关闭；满意度可不填。`}
+        testId="merchant-zone-work-order-confirm-form"
+        submitTestId="merchant-zone-work-order-confirm-submit"
+        submitLabel={TEXT.confirm}
+        submitting={busyAction === "merchant_zone_work_order_confirmed"}
+        error={formError || undefined}
+        onClose={() => setConfirmTarget(null)}
+        onSubmit={() => void confirmWorkOrder()}
+      >
+        <label>满意度<select data-testid="merchant-zone-work-order-confirm-score" value={confirmScore} onChange={(event) => setConfirmScore(event.target.value)}>
+          <option value="">不评分</option>
+          {["5", "4", "3", "2", "1"].map((score) => <option key={score} value={score}>{score} 分</option>)}
+        </select></label>
+      </FormModal>
       <GuidedFlowModal
         open={createOpen}
         title="新建工单"

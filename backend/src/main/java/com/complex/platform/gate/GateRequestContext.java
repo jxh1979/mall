@@ -9,10 +9,14 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.util.UrlPathHelper;
 
 /**
  * 从当前 HTTP 请求头解析终端类型与 scope 上下文（R5 T2）。
  * 无请求上下文时回退到全局默认（terminal_type 视为通配，仅 global 维度）。
+ *
+ * <p>第 100 条 100-R1（PGM:744「前端隐藏只是辅助，后端接口必须独立校验」）：Web 前端与商户网页门户的 module 维度由服务端按
+ * 所调接口定（{@link ServerModuleRoutes}），不看客户端自报的 {@code X-Module-Code}；其他终端仍读该头。
  */
 final class GateRequestContext {
 
@@ -40,7 +44,7 @@ final class GateRequestContext {
         // 2026-08-03:device scope 与 deviceId() 收敛到同一条读取路径(优先服务端派生身份),不再另读原始头。
         scopes.put("device", deviceId());
         scopes.put("version", header("X-Client-Version"));
-        scopes.put("module", header("X-Module-Code"));
+        scopes.put("module", moduleCode());
         scopes.put("business_system", header("X-Business-System"));
         // C1 修复（数据隔离规格§2：scope 注入只能来自安全 token，绝不取请求参数）：merchant 维度一律以登录令牌为准——
         // 令牌带 merchant（商户主体）→ 强制用令牌值、忽略可伪造的 X-Merchant-Id（防商户改/删头绕过本商户关停开关）；
@@ -78,8 +82,18 @@ final class GateRequestContext {
         return blankToNull(header("X-Business-System"));
     }
 
-    /** 当前请求的 module_code（X-Module-Code 头），无=null。 */
+    /**
+     * 当前请求的 module_code：Web 前端与商户网页门户按所调接口定（第 100 条 100-R1），其他终端取 X-Module-Code 头；无=null。
+     * 按应用内路径定（与 Spring MVC 路由同一口径，去掉 contextPath 含 X-Forwarded-Prefix 转发前缀），不用原始 getRequestURI()，
+     * 否则客户端加一个 X-Forwarded-Prefix 头就能让模块开关不判。
+     */
     static String moduleCode() {
+        String terminal = terminalType();
+        if ("web".equals(terminal) || "merchant_portal".equals(terminal)) {
+            HttpServletRequest request = currentRequest();
+            return request == null ? null
+                    : ServerModuleRoutes.moduleOf(terminal, UrlPathHelper.defaultInstance.getPathWithinApplication(request));
+        }
         return blankToNull(header("X-Module-Code"));
     }
 

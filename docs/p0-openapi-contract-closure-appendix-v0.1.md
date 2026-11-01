@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.43
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.44
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1210 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1214 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 419 | 人工权限矩阵正文未覆盖 318 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2420 | 人工事件矩阵正文未覆盖 2375 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1210 | 人工任务映射正文未逐项覆盖 1204 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 725 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2428 | 人工事件矩阵正文未覆盖 2383 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1214 | 人工任务映射正文未逐项覆盖 1208 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 727 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -348,11 +348,11 @@
 | `merchant.portal.settlement.view` | staff-token | merchant | 3 | listMerchantPortalTicketSettlements, listMerchantPortalNotices, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
 | `merchant.profile.manage` | staff-token | project, project-merchant | 6 | createMerchant, updateMerchant, configureMerchantPendingClearAlert, configureMerchantStaffBookingNoShowLimit, configureMerchantPourLossRate, requestMerchantOperatingProject | 已在权限矩阵正文出现 |
 | `merchant.profile.view` | staff-token | project-merchant | 5 | listMerchants, getMerchantPendingClearAlert, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate, getMerchantOperatingProjects | 已在权限矩阵正文出现 |
-| `merchant.service_work_order.assign` | staff-token | platform, project-merchant | 3 | listMerchantServiceWorkOrderPolicies, saveMerchantServiceWorkOrderPolicy, assignMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
+| `merchant.service_work_order.assign` | staff-token | platform, project-merchant | 5 | listMerchantServiceWorkOrderPolicies, saveMerchantServiceWorkOrderPolicy, saveMerchantServiceWorkOrderCloseMethod, assignMerchantServiceWorkOrder, listMerchantServiceWorkOrderOwnerCandidates | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.close` | staff-token | project-merchant | 1 | closeMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
-| `merchant.service_work_order.create` | staff-token | project-merchant | 1 | createMerchantServiceWorkOrder | OpenAPI 补充，以本附录为准 |
+| `merchant.service_work_order.create` | staff-token | merchant, project-merchant | 2 | createMerchantServiceWorkOrder, confirmMerchantServiceWorkOrderByMerchant | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.process` | staff-token | project-merchant | 1 | addMerchantServiceWorkOrderAction | OpenAPI 补充，以本附录为准 |
-| `merchant.service_work_order.view` | staff-token | project-merchant | 1 | listMerchantServiceWorkOrders | OpenAPI 补充，以本附录为准 |
+| `merchant.service_work_order.view` | staff-token | platform, project-merchant | 2 | listMerchantServiceWorkOrders, listMerchantServiceWorkOrderCloseMethods | OpenAPI 补充，以本附录为准 |
 | `not_applicable` | customer-token, device-credential, open-app-credential, public, staff-token, webhook-signature | customer, customer-project-bar, open-endpoint, platform, project-device, public-project-bar, self | 75 | getOpenEventResult, receiveOpenWebhook, getCustomerSession, listCustomerBarReservationOptions, listMyCustomerBarReservations, createCustomerBarReservation, confirmCustomerBarInvitation, getCustomerBarInvitation, previewCustomerBarInvitation, removeCustomerBarInvitationMember, getCustomerBarInvitationEntryCode, createCustomerConsent ... | 已在权限矩阵正文出现 |
 | `ops.production_readiness.check` | staff-token | project | 1 | createProductionReadinessCheck | 已在权限矩阵正文出现 |
 | `ops.production_readiness.manage` | staff-token | project | 1 | updateProductionReadinessItem | 已在权限矩阵正文出现 |
@@ -2072,8 +2072,12 @@
 | `merchant_service.listMerchantServiceWorkOrderPolicies.succeeded` | success | `listMerchantServiceWorkOrderPolicies` | `GET` | `/api/v1/merchant-service/work-order-policies` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
 | `merchant_service.listMerchantServiceWorkOrders.failed` | failure | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
 | `merchant_service.listMerchantServiceWorkOrders.succeeded` | success | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
+| `merchant_service.work_order_close_method_save_failed` | failure | `saveMerchantServiceWorkOrderCloseMethod` | `PUT` | `/api/v1/merchant-service/work-order-close-methods` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
+| `merchant_service.work_order_close_method_saved` | success | `saveMerchantServiceWorkOrderCloseMethod` | `PUT` | `/api/v1/merchant-service/work-order-close-methods` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
 | `merchant_service.work_order_policy_save_failed` | failure | `saveMerchantServiceWorkOrderPolicy` | `PUT` | `/api/v1/merchant-service/work-order-policies` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
 | `merchant_service.work_order_policy_saved` | success | `saveMerchantServiceWorkOrderPolicy` | `PUT` | `/api/v1/merchant-service/work-order-policies` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
+| `merchant_service.work_order.merchant_confirm_failed` | failure | `confirmMerchantServiceWorkOrderByMerchant` | `POST` | `/api/v1/merchant-service/work-orders/{id}/merchant-confirm` | P0-待归类 | `merchant.service_work_order.create` | 接口级事件，以本附录为准 |
+| `merchant_service.work_order.merchant_confirmed` | success | `confirmMerchantServiceWorkOrderByMerchant` | `POST` | `/api/v1/merchant-service/work-orders/{id}/merchant-confirm` | P0-待归类 | `merchant.service_work_order.create` | 接口级事件，以本附录为准 |
 | `merchant.billing.confirm` | success | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | P0-待归类 | `merchant.billing.confirm` | 接口级事件，以本附录为准 |
 | `merchant.billing.confirm_failed` | failure | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | P0-待归类 | `merchant.billing.confirm` | 接口级事件，以本附录为准 |
 | `merchant.billing.create` | success | `createMerchantBill` | `POST` | `/api/v1/merchant-billing/bills` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
@@ -2186,6 +2190,10 @@
 | `not_applicable` | failure | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | P0-待归类 | `merchant.portal.settlement.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listMerchantServiceWorkOrderCloseMethods` | `GET` | `/api/v1/merchant-service/work-order-close-methods` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listMerchantServiceWorkOrderCloseMethods` | `GET` | `/api/v1/merchant-service/work-order-close-methods` | P0-待归类 | `merchant.service_work_order.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listMerchantServiceWorkOrderOwnerCandidates` | `GET` | `/api/v1/merchant-service/work-orders/{id}/owner-candidates` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listMerchantServiceWorkOrderOwnerCandidates` | `GET` | `/api/v1/merchant-service/work-orders/{id}/owner-candidates` | P0-待归类 | `merchant.service_work_order.assign` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listMyMerchantCardExitNotices` | `GET` | `/api/v1/merchant-portal/card-exit-notices` | P0-待归类 | `merchant.portal.card_exit_notice.publish` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listMyMerchantCardExitNotices` | `GET` | `/api/v1/merchant-portal/card-exit-notices` | P0-待归类 | `merchant.portal.card_exit_notice.publish` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listParkingCredits` | `GET` | `/api/v1/parking/credits` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
@@ -3590,6 +3598,7 @@
 | P0-待归类 | `confirmFacilityInspectionSupervisor` | `POST` | `/api/v1/facility/inspections/tasks/{task_id}/supervisor-confirm` | 主管确认巡检任务关闭 | `facility.inspection.manage` | `facility.inspection_task_closed` / `facility.inspection_task_close_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmMediaPerformanceFulfillment` | `POST` | `/api/v1/settlement/media-shows/{id}/fulfillment/confirm` | 确认实际履约 | `media.performance.fulfillment.confirm` | `media_fulfillment.confirmed` / `media_fulfillment.confirm_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
+| P0-待归类 | `confirmMerchantServiceWorkOrderByMerchant` | `POST` | `/api/v1/merchant-service/work-orders/{id}/merchant-confirm` | 商户确认工单已解决并关闭 | `merchant.service_work_order.create` | `merchant_service.work_order.merchant_confirmed` / `merchant_service.work_order.merchant_confirm_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `confirmTicketPointsBillUnchanged` | `POST` | `/api/v1/loyalty/ticket-points-billing/objections/{id}/confirm-unchanged` | 申请复核月结原金额无误 | `ticket.points.billing.manage` | `ticket.points.billing.objection.resolution.submitted` / `ticket.points.billing.objection.resolution.submitted.failed` | web | operation 级补充 |
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractDraft` | `POST` | `/api/v1/contracts` | 起草合同(草拟) | `contract.draft.manage` | `contract.drafted` / `contract.draft_failed` | web | operation 级补充 |
@@ -3750,6 +3759,8 @@
 | P0-待归类 | `listMerchantPortalNotices` | `GET` | `/api/v1/merchant-portal/notices` | 商户专区·通告(本商户) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `listMerchantPortalSettlements` | `GET` | `/api/v1/merchant-portal/settlements` | 商户专区·我的对账(结算单只读) | `merchant.portal.settlement.view` | `merchant_portal.settlement.viewed` / `merchant_portal.settlement.view_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `listMerchantPortalTicketSettlements` | `GET` | `/api/v1/merchant-portal/ticket-settlements` | 商户专区·门票分账(本商户内部结算往来与待付状态) | `merchant.portal.settlement.view` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
+| P0-待归类 | `listMerchantServiceWorkOrderCloseMethods` | `GET` | `/api/v1/merchant-service/work-order-close-methods` | 商户服务工单关单方式（报修、其他服务请求） | `merchant.service_work_order.view` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
+| P0-待归类 | `listMerchantServiceWorkOrderOwnerCandidates` | `GET` | `/api/v1/merchant-service/work-orders/{id}/owner-candidates` | 商户服务工单派单负责人候选 | `merchant.service_work_order.assign` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrderPolicies` | `GET` | `/api/v1/merchant-service/work-order-policies` | 商户服务工单处理时限列表（工单类型×优先级） | `merchant.service_work_order.assign` | `merchant_service.listMerchantServiceWorkOrderPolicies.succeeded` / `merchant_service.listMerchantServiceWorkOrderPolicies.failed` | web | operation 级补充 |
 | P0-待归类 | `listMerchantServiceWorkOrders` | `GET` | `/api/v1/merchant-service/work-orders` | List merchant service work orders | `merchant.service_work_order.view` | `merchant_service.listMerchantServiceWorkOrders.succeeded` / `merchant_service.listMerchantServiceWorkOrders.failed` | web, mobile_admin, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `listMyFacilityAlarms` | `GET` | `/api/v1/facility/alarms/mine` | 我的接警 | `facility.alarm.take_over` | `facility.alarm_mine.viewed` / `facility.alarm_mine.view_failed` | web, staff_work_phone, staff_private_phone | operation 级补充 |
@@ -3848,6 +3859,7 @@
 | P0-待归类 | `saveFacilityAlarmResponsePolicy` | `POST` | `/api/v1/facility/alarms/policies` | 保存设备告警响应时限（告警类型×优先级一格） | `facility.alarm.manage` | `facility.alarm_policy_saved` / `facility.alarm_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFacilityWorkOrderPolicy` | `POST` | `/api/v1/facility/work-orders/policies` | 保存工单 SLA/验收策略 | `facility.work_order.manage` | `facility.work_order_policy_saved` / `facility.work_order_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | 保存平面图图形 | `floor_plan.manage` | `floor_plan.shape.save` / `floor_plan.shape.save_failed` | web | operation 级补充 |
+| P0-待归类 | `saveMerchantServiceWorkOrderCloseMethod` | `PUT` | `/api/v1/merchant-service/work-order-close-methods` | 保存报修或其他服务请求的关单方式 | `merchant.service_work_order.assign` | `merchant_service.work_order_close_method_saved` / `merchant_service.work_order_close_method_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveMerchantServiceWorkOrderPolicy` | `PUT` | `/api/v1/merchant-service/work-order-policies` | 保存商户服务工单处理时限（工单类型×优先级一格） | `merchant.service_work_order.assign` | `merchant_service.work_order_policy_saved` / `merchant_service.work_order_policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveParkingPolicy` | `PUT` | `/api/v1/parking/policies/{project_id}` | 配置本项目停车业务参数（值与上下限同配） | `parking.config.manage` | `parking.policy_saved` / `parking.policy_save_failed` | web | operation 级补充 |
 | P0-待归类 | `saveSettlementObjectionPeriod` | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | 配置非积分商户账单异议期及上下限(按项目) | `settlement.config.manage` | `settlement.objection_period.configured` / `settlement.objection_period.config_failed` | web | operation 级补充 |

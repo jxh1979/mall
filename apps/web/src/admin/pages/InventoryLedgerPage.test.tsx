@@ -1,8 +1,9 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InventoryLedgerPage } from "./InventoryLedgerPage";
+import { formatActionResult } from "../components/ActionResultView";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
 const ITEMS = [
@@ -379,5 +380,44 @@ describe("InventoryLedgerPage 吧台消耗统计（第十八批 K 段 97-R4）",
     expect(cells(0)).toEqual(["一号酒吧", "按杯", "-", "某某威士忌（按杯）", "某某威士忌 700 毫升瓶装", "2 杯", "50", "4"]);
     expect(cells(1)).toEqual(["一号酒吧", "按瓶", "-", "某某红酒（整瓶）", "-", "1 瓶", "-", "0"]);
     expect(cells(2)).toEqual(["一号酒吧", "套餐", "整瓶畅饮套餐", "某某红酒（整瓶）", "-", "2 份", "-", "0"]);
+  });
+});
+
+// 第十八批 L 段 105-R1（BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」）：
+// 库房区块只对持 inventory.warehouse.manage（列表与新建同一权限码）的账号挂载。
+describe("InventoryLedgerPage 库房区块（第十八批 L 段 105-R1）", () => {
+  it("持库房管理码的账号显示「库房」区块", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId("inventory-warehouse-panel")).not.toBeNull());
+  });
+
+  it("没有 inventory.warehouse.manage 的账号不渲染库房区块", async () => {
+    render(<InventoryLedgerPage api={makeApi()} user={{ id: "u4", username: "库管", accountType: "staff" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()}
+      effectivePermissions={{ status: "ready", value: { grants: ["inventory.stock.view", "inventory.stock.move"], denies: [], wildcard: false } }} />);
+    await waitFor(() => expect(screen.queryByTestId("inventory-ledger-items-table")).not.toBeNull());
+    expect(screen.queryByTestId("inventory-warehouse-panel")).toBeNull();
+  });
+});
+
+// 第十八批 L 段 103-R2（BSM:1197「酒水/礼品/高价值物料贴平台唯一二维码」；BSM:1166「……可以入库贴码，也可以出库打印码」）：物料行登记物品码。
+describe("InventoryLedgerPage 登记物品码（第十八批 L 段 103-R2）", () => {
+  it("没填码点提交被拦不发请求；填码后 POST /api/v1/inventory/trace-codes 带 item_id 与 trace_code，结果区显示「物品码已登记」", async () => {
+    const api = makeApi();
+    const setActionResult = vi.fn();
+    render(<InventoryLedgerPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={setActionResult} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.queryByTestId("inventory-item-trace-code-i-1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("inventory-item-trace-code-i-1"));
+    fireEvent.click(screen.getByTestId("inventory-trace-code-submit"));
+    expect(screen.getByTestId("inventory-trace-code-error").textContent).toContain("物品码");
+    expect(api.post).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId("inventory-trace-code-input"), { target: { value: " TRC-001 " } });
+    fireEvent.click(screen.getByTestId("inventory-trace-code-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/inventory/trace-codes",
+      expect.objectContaining({ item_id: "i-1", trace_code: "TRC-001", idempotency_key: expect.any(String) })));
+    await waitFor(() => expect(setActionResult).toHaveBeenCalled());
+    expect(formatActionResult(setActionResult.mock.calls[0]![0])).toContain("物品码已登记");
   });
 });

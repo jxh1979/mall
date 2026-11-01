@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -444,6 +444,7 @@ public final class FieldLabels {
         p("batch_no", "批次号");
         p("trace_code", "溯源码");
         p("trace_code_id", "溯源码");
+        p("trace_codes", "溯源码");
         p("expected_count", "应有数量");
         p("actual_count", "实际数量");
         p("source_count", "来源数量");
@@ -550,6 +551,7 @@ public final class FieldLabels {
         p("approval_note", "审批意见");
         p("archive_reason", "归档原因");
         p("close_reason", "关闭原因");
+        p("close_method", "关单方式");
         p("handle_minutes", "处理时长");
         p("response_minutes", "响应时长");
         p("remind_minutes", "最晚到店前提醒分钟数");

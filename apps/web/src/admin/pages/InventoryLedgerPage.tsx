@@ -1,6 +1,7 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
+import { InventoryWarehousePanel } from "./InventoryWarehousePanel";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -23,11 +24,14 @@ const STOCK_MOVE_PERMISSION = "inventory.stock.move";
 // 第十八批第 24 条 24-R5（ENUM:164「或由库房主管以上岗位手工标记为高价值，标记与取消标记都必须填写理由并留痕，一线库管无此权限」）：
 // 标记与取消走 POST /api/v1/inventory/items/{id}/high-value-mark，持库房主管复核码。
 const HIGH_VALUE_MARK_PERMISSION = "inventory.high_value.review";
+// 第十八批 L 段 103-R2（BSM:1197「酒水/礼品/高价值物料贴平台唯一二维码」；BSM:1166「……可以入库贴码，也可以出库打印码」）：
+// 物料行登记物品码走 POST /api/v1/inventory/trace-codes（入库贴码）。
+const TRACE_CODE_REGISTER_PERMISSION = "inventory.trace_code.register";
 
 const TEXT = {
   title: "库存台账",
   description: "集中查看物料、库存余额和库存流水，支持按 OpenAPI 契约登记库存移动；负库存禁止，高价值酒水保持在线核销。",
-  evidence: "接口证据：读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements、/api/v1/inventory/cost-summary；吧台消耗统计 GET /api/v1/inventory/bar-consumption-stats；登记 POST /api/v1/inventory/stock-movements；新建库存商品规格 POST /api/v1/inventory/items；修改安全库存 POST /api/v1/inventory/items/{id}/safety-stock。",
+  evidence: "接口证据：读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements、/api/v1/inventory/cost-summary；吧台消耗统计 GET /api/v1/inventory/bar-consumption-stats；登记 POST /api/v1/inventory/stock-movements；新建库存商品规格 POST /api/v1/inventory/items；修改安全库存 POST /api/v1/inventory/items/{id}/safety-stock；库房 GET/POST /api/v1/inventory/warehouses（列表与新建）；登记物品码 POST /api/v1/inventory/trace-codes。",
   loadFailed: "库存台账读取失败",
   actionFailed: "库存移动登记失败",
   quantityInvalid: "移动数量必须大于 0，禁止负库存调整。",
@@ -141,6 +145,8 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [balances, setBalances] = React.useState<StockBalanceRow[]>([]);
   const canReadQuarantine = useCan(effectivePermissions, ["inventory.stock.view"]);
   const canManageQuarantine = useCan(effectivePermissions, ["inventory.stock.adjust", "evidence.attachment.create"]);
+  // 第十八批 L 段 105-R1（BSM:1162「管理库房和库位……」）：库房区块（列表与新建同一权限码）。
+  const canManageWarehouse = useCan(effectivePermissions, ["inventory.warehouse.manage"]);
   const [movements, setMovements] = React.useState<StockMovementRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("inventory_item", items), [items, reportViewedObjects]);
@@ -171,6 +177,11 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const [stockValue, setStockValue] = React.useState("");
   const [stockError, setStockError] = React.useState("");
   const [stockSaving, setStockSaving] = React.useState(false);
+  // 第十八批 L 段 103-R2：物料行登记物品码。
+  const [traceTarget, setTraceTarget] = React.useState<InventoryItemRow | null>(null);
+  const [traceValue, setTraceValue] = React.useState("");
+  const [traceError, setTraceError] = React.useState("");
+  const [traceSaving, setTraceSaving] = React.useState(false);
   // 第十八批 K 段 97-R1：新建库存商品规格（权限同库存移动 inventory.stock.move，即 POST /items 的后端码）。
   const [itemCreateOpen, setItemCreateOpen] = React.useState(false);
   const [itemForm, setItemForm] = React.useState<ItemForm>(EMPTY_ITEM_FORM);
@@ -319,6 +330,26 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       setStockError(actionError instanceof Error ? actionError.message : "安全库存修改失败");
     } finally {
       setStockSaving(false);
+    }
+  }
+
+  async function submitTraceCode() {
+    if (!traceTarget) return;
+    const requestBody = {
+      idempotency_key: `admin-trace-code-${traceTarget.id}-${Date.now()}`,
+      item_id: traceTarget.id,
+      trace_code: traceValue.trim(),
+    };
+    setTraceSaving(true);
+    setTraceError("");
+    try {
+      const result = await api.post("/api/v1/inventory/trace-codes", requestBody);
+      setActionResult({ action: "inventory_trace_code_registered", requestBody, result });
+      setTraceTarget(null);
+    } catch (actionError) {
+      setTraceError(actionError instanceof Error ? actionError.message : "物品码登记失败");
+    } finally {
+      setTraceSaving(false);
     }
   }
 
@@ -506,11 +537,26 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       >
         <label>安全库存<input data-testid="inventory-safety-stock-input" type="number" min="0" step="1" value={stockValue} onChange={(event) => setStockValue(event.target.value)} /></label>
       </FormModal>
+      <FormModal
+        open={traceTarget !== null}
+        title="登记物品码"
+        description={traceTarget ? `物料：${traceTarget.itemName ?? traceTarget.itemCode ?? traceTarget.id}。扫贴在实物上的平台唯一二维码，一件一码。` : undefined}
+        testId="inventory-trace-code"
+        submitTestId="inventory-trace-code-submit"
+        submitLabel="登记物品码"
+        submitting={traceSaving}
+        error={traceError || undefined}
+        validate={() => (traceValue.trim() === "" ? "请扫码或填写物品码。" : null)}
+        onClose={() => setTraceTarget(null)}
+        onSubmit={() => void submitTraceCode()}
+      >
+        <label>物品码<input data-testid="inventory-trace-code-input" value={traceValue} onChange={(event) => setTraceValue(event.target.value)} /></label>
+      </FormModal>
       <h3>{TEXT.items}</h3>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="inventory-ledger-items-table">
-          <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th><th>安全库存</th><th>高价值标记</th><th>详情</th></tr></thead>
-          <tbody>{items.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-item-row-${item.id}`} onClick={() => openItemDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openItemDetail(item); } }}><td onClick={(event) => event.stopPropagation()}>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td><td onClick={(event) => event.stopPropagation()}><span data-testid={`inventory-item-min-quantity-${item.id}`}>{item.minQuantity ?? 0}</span> <PermissionButton permissionsState={effectivePermissions} permissions={[STOCK_MOVE_PERMISSION]} data-testid={`inventory-item-safety-stock-${item.id}`} onClick={() => { setStockValue(String(item.minQuantity ?? 0)); setStockError(""); setStockTarget(item); }}>修改安全库存</PermissionButton></td><td onClick={(event) => event.stopPropagation()}>{item.manualHighValue ? "已手工标记" : "未标记"} <PermissionButton permissionsState={effectivePermissions} permissions={[HIGH_VALUE_MARK_PERMISSION]} data-testid={`inventory-item-high-value-mark-${item.id}`} onClick={() => { setMarkReason(""); setMarkError(""); setMarkTarget(item); }}>{item.manualHighValue ? "取消标记" : "标记高价值"}</PermissionButton></td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看物料详情" onClick={(event) => { event.stopPropagation(); openItemDetail(item); }}>查看详情</button></td></tr>)}</tbody>
+          <thead><tr><th>{TEXT.itemCode}</th><th>{TEXT.itemName}</th><th>{TEXT.category}</th><th>{TEXT.unit}</th><th>{TEXT.status}</th><th>安全库存</th><th>高价值标记</th><th>物品码</th><th>详情</th></tr></thead>
+          <tbody>{items.map((item) => <tr key={item.id} className="admin-row-clickable" tabIndex={0} data-testid={`inventory-item-row-${item.id}`} onClick={() => openItemDetail(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openItemDetail(item); } }}><td onClick={(event) => event.stopPropagation()}>{item.itemCode ?? item.id} <input type="radio" aria-label={`选择物料 ${item.itemCode ?? item.id}`} checked={selectedItemId === item.id} onChange={() => setSelectedItemId(item.id)} /></td><td>{item.itemName ?? "-"}</td><td>{item.category ?? "-"}</td><td>{item.unit ?? "-"}</td><td>{formatBusinessStatus(item.status)}</td><td onClick={(event) => event.stopPropagation()}><span data-testid={`inventory-item-min-quantity-${item.id}`}>{item.minQuantity ?? 0}</span> <PermissionButton permissionsState={effectivePermissions} permissions={[STOCK_MOVE_PERMISSION]} data-testid={`inventory-item-safety-stock-${item.id}`} onClick={() => { setStockValue(String(item.minQuantity ?? 0)); setStockError(""); setStockTarget(item); }}>修改安全库存</PermissionButton></td><td onClick={(event) => event.stopPropagation()}>{item.manualHighValue ? "已手工标记" : "未标记"} <PermissionButton permissionsState={effectivePermissions} permissions={[HIGH_VALUE_MARK_PERMISSION]} data-testid={`inventory-item-high-value-mark-${item.id}`} onClick={() => { setMarkReason(""); setMarkError(""); setMarkTarget(item); }}>{item.manualHighValue ? "取消标记" : "标记高价值"}</PermissionButton></td><td onClick={(event) => event.stopPropagation()}><PermissionButton permissionsState={effectivePermissions} permissions={[TRACE_CODE_REGISTER_PERMISSION]} data-testid={`inventory-item-trace-code-${item.id}`} onClick={() => { setTraceValue(""); setTraceError(""); setTraceTarget(item); }}>登记物品码</PermissionButton></td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看物料详情" onClick={(event) => { event.stopPropagation(); openItemDetail(item); }}>查看详情</button></td></tr>)}</tbody>
         </table>
       </div>
     </>
@@ -570,6 +616,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       <TechDetails><div className="admin-generic-evidence" data-testid="inventory-ledger-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="inventory.item.viewed / inventory.stock_balance.viewed / inventory.outbound_verified" />
       <InventoryQuarantinePanel api={api} canRead={canReadQuarantine} canManage={canManageQuarantine} onChanged={error ? undefined : reload} />
+      {canManageWarehouse ? <InventoryWarehousePanel api={api} setActionResult={setActionResult} /> : null}
       <AdminDataState loading={loading} error={error} empty={items.length === 0 && balances.length === 0 && movements.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

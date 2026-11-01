@@ -15,11 +15,14 @@ import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.governance.PlatformRepository;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderActionRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderAssignRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseMethodRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteApprovalRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteDecision;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderMerchantConfirmRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderOwnerCandidate;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderPolicyRequest;
 import java.time.Duration;
 import java.time.Instant;
@@ -67,6 +70,12 @@ public class MerchantServiceService {
 
     // 77-R2 超时通知用的中文名：类型与优先级同后台页选项，状态同 ENUM:264（升级只扫未处理完的四种状态）。
     private static final String ASSIGN_PERMISSION = "merchant.service_work_order.assign";
+    private static final String PROCESS_PERMISSION = "merchant.service_work_order.process";
+    // 第 102 条 102-R3（裁决 26）：可配关单方式的类型与三种关单方式（V585 CHECK 同）；保洁、投诉照 BSM:1385 写死。
+    private static final Set<String> CLOSE_METHOD_TYPES = Set.of("repair", "service");
+    private static final Set<String> CLOSE_METHODS = Set.of("handler", "staff_acceptance", "merchant_confirm");
+    // 102-R2：商户能确认关闭的状态＝ENUM:264「待商户确认、已处理待关闭」。
+    private static final Set<String> MERCHANT_CONFIRM_STATUSES = Set.of("pending_merchant", "resolved");
     private static final Map<String, String> TYPE_NAMES =
             Map.of("repair", "报修", "cleaning", "保洁", "complaint", "投诉", "service", "其他服务请求");
     private static final Map<String, String> PRIORITY_NAMES = Map.of("low", "低", "medium", "中", "high", "高", "critical", "紧急");
@@ -197,11 +206,44 @@ public class MerchantServiceService {
     }
 
     /**
+     * 第十八批 L 段第 102 条 102-R2：商户在商户专区确认已解决即关闭（BSM:1385「商户投诉须由商户确认投诉已解决」「未点击关闭」；
+     * ENUM:264「待商户确认、已处理待关闭」）。只有本商户账号能确认：平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED，别的商户 403 CROSS_MERCHANT_FORBIDDEN，
+     * 闸在幂等之前。102-R3：只对关单方式为「须商户确认」的单（投诉；配成须商户确认的报修、其他服务请求，裁决 26）。
+     */
+    @Transactional
+    public MerchantWorkOrderRecord confirmByMerchant(String id, MerchantWorkOrderMerchantConfirmRequest request) {
+        String workOrderId = requireText(id, "id");
+        return executeWrite(
+                "confirmMerchantWorkOrder:" + workOrderId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                "merchant_service.work_order.merchant_confirm_failed",
+                "merchant.service_work_order.create",
+                workOrderId,
+                () -> {
+                    if (request == null) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+                    }
+                    requireText(request.idempotencyKey(), "idempotency_key");
+                    validateSatisfactionScore(request.satisfactionScore());
+                    MerchantWorkOrderRecord existing = findWorkOrder(workOrderId);
+                    rejectTerminal(existing);
+                    String merchantId = authorizationService.currentMerchantScope()
+                            .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "只有提单商户能确认工单已解决"));
+                    if (!merchantId.equals(existing.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的工单");
+                    }
+                },
+                () -> confirmByMerchantOnce(workOrderId, request)
+        );
+    }
+
+    /**
      * SLA 自动超时升级（可直接调用，供 @Scheduled 薄包装与单测调用）：
      * 扫描 due_at 已过、未完成（status 非 resolved/closed/cancelled）且尚未升级（escalated_at IS NULL）的工单，
      * 逐单打标 sla_breached + escalated_at（markSlaBreached，不改 status），并写一条 'escalated' 动作留痕。
      * 留痕的 from/to status 一致（升级不迁移状态），operator 用系统标识（无登录上下文）。
-     * 第十八批 I 段 77-R2：赢得升级的单同时通知主管（ENUM:265「超时自动升级通知主管」）——见 {@link #dispatchers()}。
+     * 第十八批 I 段 77-R2：赢得升级的单同时通知主管（ENUM:265「超时自动升级通知主管」）——见 {@link #staff(String)}。
      * 一次调用最多处理 escalateBatchLimit 条；返回本次升级的工单数。
      *
      * @param now 参照时刻（due_at &lt;= now 视为已超时）
@@ -213,7 +255,7 @@ public class MerchantServiceService {
         }
         List<MerchantWorkOrderRecord> overdue = repository.findOverdueOpenWorkOrders(now, ESCALATE_BATCH_LIMIT);
         int escalated = 0;
-        List<Dispatcher> dispatchers = null; // 本轮有单升级时才算一次
+        List<Staff> dispatchers = null; // 本轮有单升级时才算一次
         for (MerchantWorkOrderRecord record : overdue) {
             // 并发护栏：条件 UPDATE WHERE escalated_at IS NULL，受影响行数==1 才算本调用赢得升级。
             // 行数==0 表示已被其它并发事务（定时 vs 手动触发）抢先升级，跳过留痕/审计避免双重升级、双留痕。
@@ -231,7 +273,7 @@ public class MerchantServiceService {
                     List.of()
             ));
             if (dispatchers == null) {
-                dispatchers = dispatchers();
+                dispatchers = staff(ASSIGN_PERMISSION);
             }
             int notified = notifyDispatchers(record, dispatchers, now);
             auditEventService.recordSuccess(
@@ -248,44 +290,88 @@ public class MerchantServiceService {
         return escalated;
     }
 
-    /** 77-R2 候选收件人：员工档案编号与其派单码可触及的项目范围。 */
-    private record Dispatcher(String staffProfileId, AuthorizationService.ProjectReach reach) {
+    /** 77-R2 超时收件人、102-R1 派单负责人：账号、员工档案与其该权限码可触及的项目范围。 */
+    private record Staff(AccessUser user, StaffProfileRecord profile, AuthorizationService.ProjectReach reach) {
     }
 
     /**
      * 77-R2：主管＝在用、平台口径（无商户归属、非外包账号，与入口 requirePlatformScope 同口径，PGM:528④）、
      * 有效持派单权限（派单是客户关怀部主管动作，BSM:1385）、有员工档案的账号；各算一次派单码可触及的项目（没有项目归属的跳过）。
+     * 102-R1：派单负责人同一口径，按处理权限码取（BSM:1380「派单到具体人员或班组」）。
      */
-    private List<Dispatcher> dispatchers() {
+    private List<Staff> staff(String permissionCode) {
         if (accessRepository == null || staffRepository == null || platformRepository == null) {
             return List.of();
         }
-        List<Dispatcher> result = new ArrayList<>();
+        List<Staff> result = new ArrayList<>();
         for (AccessUser user : accessRepository.listUsers()) {
-            AccessActor actor = new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(),
-                    user.merchantId(), user.status());
-            if (!"active".equals(user.status()) || trimToNull(user.merchantId()) != null
-                    || authorizationService.isOutsourcedVendor(actor)
-                    || !authorizationService.hasEffectivePermission(actor, ASSIGN_PERMISSION)) {
-                continue;
-            }
-            Optional<StaffProfileRecord> profile = staffRepository.findProfileByUserId(user.id());
-            if (profile.isEmpty()) {
-                continue;
-            }
-            try {
-                result.add(new Dispatcher(profile.get().id(), authorizationService.projectReach(actor, ASSIGN_PERMISSION)));
-            } catch (ApiException noProjectScope) {
-                // 没有项目归属，够不到任何项目
-            }
+            staff(user, permissionCode).ifPresent(result::add);
         }
         return result;
+    }
+
+    private Optional<Staff> staff(AccessUser user, String permissionCode) {
+        AccessActor actor = new AccessActor(user.id(), user.username(), user.accountType(), user.organizationId(),
+                user.merchantId(), user.status());
+        if (!"active".equals(user.status()) || trimToNull(user.merchantId()) != null
+                || authorizationService.isOutsourcedVendor(actor)
+                || !authorizationService.hasEffectivePermission(actor, permissionCode)) {
+            return Optional.empty();
+        }
+        Optional<StaffProfileRecord> profile = staffRepository.findProfileByUserId(user.id());
+        if (profile.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new Staff(user, profile.get(), authorizationService.projectReach(actor, permissionCode)));
+        } catch (ApiException noProjectScope) {
+            return Optional.empty(); // 没有项目归属，够不到任何项目
+        }
+    }
+
+    /**
+     * 第十八批 L 段第 102 条 102-R1：可派的负责人＝{@link #staff} 按处理码取、处理码可触及该单商户任一经营项目的平台员工（照 listPolicies 不记审计）。
+     * 读闸同派单：平台管理员不限、商户账号只本商户、其余平台员工按派单码可触及该商户经营项目。
+     */
+    public List<MerchantWorkOrderOwnerCandidate> listOwnerCandidates(String id) {
+        MerchantWorkOrderRecord order = findWorkOrder(requireText(id, "id"));
+        checkMerchantOwnership(order.merchantId(), ASSIGN_PERMISSION);
+        List<Staff> candidates = staff(PROCESS_PERMISSION);
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        List<String> projects = platformRepository.listMerchantOperatingProjectIds(order.merchantId());
+        return candidates.stream()
+                .filter(candidate -> projects.stream().anyMatch(candidate.reach()::covers))
+                .map(candidate -> new MerchantWorkOrderOwnerCandidate(candidate.user().id(), candidate.user().username(), candidate.profile().name()))
+                .toList();
+    }
+
+    /** 102-R1：负责人须为在岗、持商户工单处理权限、处理码可触及该单商户任一经营项目的平台员工；查不到即不行。 */
+    private boolean canOwn(String userId, MerchantWorkOrderRecord order) {
+        if (accessRepository == null || staffRepository == null || platformRepository == null) {
+            return false;
+        }
+        List<String> projects = platformRepository.listMerchantOperatingProjectIds(order.merchantId());
+        return accessRepository.findUserById(userId)
+                .flatMap(user -> staff(user, PROCESS_PERMISSION))
+                .filter(owner -> projects.stream().anyMatch(owner.reach()::covers))
+                .isPresent();
+    }
+
+    /** 第 102 条 102-R3：关单方式。保洁＝处理人完成即结束、投诉＝须商户确认（BSM:1385 写死）；报修、其他服务请求按后台配置（裁决 26）。 */
+    private String closeMethod(String workOrderType) {
+        return switch (workOrderType) {
+            case "cleaning" -> "handler";
+            case "complaint" -> "merchant_confirm";
+            default -> repository.findCloseMethod(workOrderType);
+        };
     }
 
     /**
      * 77-R2：给派单码可触及该单商户任一经营项目（主项目或追加的经营项目，裁决 M737-iter7）的主管各发一条员工系统通知；返回通知人数。
      */
-    private int notifyDispatchers(MerchantWorkOrderRecord record, List<Dispatcher> dispatchers, Instant now) {
+    private int notifyDispatchers(MerchantWorkOrderRecord record, List<Staff> dispatchers, Instant now) {
         if (dispatchers.isEmpty()) {
             return 0;
         }
@@ -299,10 +385,10 @@ public class MerchantServiceService {
                 + DUE_TEXT.format(record.dueAt()) + "，北京时间）仍未处理完，当前状态"
                 + STATUS_NAMES.getOrDefault(record.status(), record.status()) + "。";
         int notified = 0;
-        for (Dispatcher dispatcher : dispatchers) {
+        for (Staff dispatcher : dispatchers) {
             if (projects.stream().anyMatch(dispatcher.reach()::covers)) {
                 staffRepository.saveNotice(new EmployeeNoticeRecord(
-                        "notice_" + UUID.randomUUID().toString().replace("-", ""), dispatcher.staffProfileId(), "system_notice",
+                        "notice_" + UUID.randomUUID().toString().replace("-", ""), dispatcher.profile().id(), "system_notice",
                         title, body, false, "pending", null, SYSTEM_OPERATOR, now, now));
                 notified++;
             }
@@ -374,9 +460,13 @@ public class MerchantServiceService {
         if (!"created".equals(existing.status())) {
             throw ApiException.conflict("INVALID_STATE", "只有新建状态的工单才能派单");
         }
+        String ownerUserId = requireText(request.ownerUserId(), "owner_user_id");
+        if (!canOwn(ownerUserId, existing)) {
+            throw ApiException.badRequest("WORK_ORDER_OWNER_INVALID", "负责人须为在岗、持商户工单处理权限且能管到该商户经营项目的员工");
+        }
         MerchantWorkOrderRecord assigned = repository.saveWorkOrder(existing.assign(
                 requireText(request.ownerDepartment(), "owner_department"),
-                requireText(request.ownerUserId(), "owner_user_id"),
+                ownerUserId,
                 Instant.now()
         ));
         repository.saveAction(action(
@@ -411,8 +501,15 @@ public class MerchantServiceService {
         if (targetStatus != null) {
             targetStatus = normalizeAllowed(targetStatus, "target_status", ACTION_TARGET_STATUSES);
             requireValidActionTransition(existing.status(), targetStatus);
-            saved = repository.saveWorkOrder(existing.transitionTo(targetStatus, Instant.now()));
-            actionType = existing.status().equals(targetStatus) ? "commented" : "status_changed";
+            if ("resolved".equals(targetStatus) && !"resolved".equals(existing.status())
+                    && "handler".equals(closeMethod(existing.workOrderType()))) {
+                // 102-R3：处理人完成即结束（BSM:1385「保洁等无争议类由处理人完成即结束」；报修、其他服务请求按裁决 26 配置），处理说明即处理结论
+                saved = repository.saveWorkOrder(existing.close(operatorNote, null, Instant.now()));
+                actionType = "closed";
+            } else {
+                saved = repository.saveWorkOrder(existing.transitionTo(targetStatus, Instant.now()));
+                actionType = existing.status().equals(targetStatus) ? "commented" : "status_changed";
+            }
         }
         repository.saveAction(action(
                 id,
@@ -446,6 +543,13 @@ public class MerchantServiceService {
         }
         String resolution = requireText(request.resolution(), "resolution");
         validateSatisfactionScore(request.satisfactionScore());
+        // 102-R2：商户未确认的投诉，客户关怀部记关闭缘由后可以关闭（BSM:1385）；102-R3：配成「须商户确认」的报修、其他服务请求员工不能关（裁决 26）。
+        String closeReason = null;
+        if ("complaint".equals(existing.workOrderType())) {
+            closeReason = requireText(request.closeReason(), "close_reason");
+        } else if ("merchant_confirm".equals(closeMethod(existing.workOrderType()))) {
+            throw ApiException.conflict("MERCHANT_CONFIRM_REQUIRED", "该类工单按后台配置须商户确认后关闭");
+        }
         MerchantWorkOrderRecord closed = repository.saveWorkOrder(existing.close(
                 resolution,
                 request.satisfactionScore(),
@@ -457,7 +561,7 @@ public class MerchantServiceService {
                 existing.status(),
                 "closed",
                 authorizationService.currentActor().id(),
-                defaultNote(request.operatorNote(), "closed"),
+                closeReason != null ? closeReason : defaultNote(request.operatorNote(), "closed"),
                 evidenceIds(request.evidenceAttachmentIds())
         ));
         auditEventService.recordSuccess(
@@ -467,7 +571,31 @@ public class MerchantServiceService {
                 closed.id(),
                 requestId(),
                 request.idempotencyKey(),
-                Map.of("status", closed.status())
+                closeReason == null ? Map.of("status", closed.status()) : Map.of("status", closed.status(), "close_reason", closeReason)
+        );
+        return closed;
+    }
+
+    private MerchantWorkOrderRecord confirmByMerchantOnce(String id, MerchantWorkOrderMerchantConfirmRequest request) {
+        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        rejectTerminal(existing);
+        if (!MERCHANT_CONFIRM_STATUSES.contains(existing.status())) {
+            throw ApiException.conflict("INVALID_STATE", "只有待商户确认或已处理待关闭的工单才能由商户确认");
+        }
+        if (!"merchant_confirm".equals(closeMethod(existing.workOrderType()))) {
+            throw ApiException.conflict("MERCHANT_CONFIRM_NOT_APPLICABLE", "该类工单不由商户确认关闭");
+        }
+        MerchantWorkOrderRecord closed = repository.saveWorkOrder(existing.close(existing.resolution(), request.satisfactionScore(), Instant.now()));
+        repository.saveAction(action(id, "closed", existing.status(), "closed", authorizationService.currentActor().id(), "商户确认已解决", List.of()));
+        auditEventService.recordSuccess(
+                "merchant_service.work_order.merchant_confirmed",
+                "merchant.service_work_order.create",
+                BUSINESS_TYPE,
+                closed.id(),
+                requestId(),
+                request.idempotencyKey(),
+                request.satisfactionScore() == null ? Map.of("status", closed.status())
+                        : Map.of("status", closed.status(), "satisfaction_score", request.satisfactionScore())
         );
         return closed;
     }
@@ -503,6 +631,39 @@ public class MerchantServiceService {
         } catch (RuntimeException exception) {
             auditEventService.recordFailure("merchant_service.work_order_policy_save_failed", "merchant.service_work_order.assign",
                     "merchant_service_work_order_policy", null, requestId(), request == null ? null : request.idempotencyKey(),
+                    errorCode(exception));
+            throw exception;
+        }
+    }
+
+    // ================= 第十八批 L 段第 102 条 102-R3 关单方式（报修、其他服务请求；裁决 26） =================
+
+    public List<MerchantWorkOrderCloseMethodRecord> listCloseMethods() {
+        return repository.listCloseMethods();
+    }
+
+    /** 改报修或其他服务请求的关单方式（平台口径；商户账号与外包账号拒绝）。按单子当时的类型配置判，已在途的单也照新配置关。 */
+    @Transactional
+    public MerchantWorkOrderCloseMethodRecord saveCloseMethod(MerchantWorkOrderCloseMethodRequest request) {
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            String type = normalizeAllowed(request.workOrderType(), "work_order_type", CLOSE_METHOD_TYPES);
+            String closeMethod = normalizeAllowed(request.closeMethod(), "close_method", CLOSE_METHODS);
+            return idempotencyService.execute("saveMerchantWorkOrderCloseMethod:" + type, request.idempotencyKey(), request,
+                    () -> {
+                        MerchantWorkOrderCloseMethodRecord saved = repository.saveCloseMethod(
+                                new MerchantWorkOrderCloseMethodRecord(type, closeMethod, actorId(), Instant.now()));
+                        auditEventService.recordSuccess("merchant_service.work_order_close_method_saved", ASSIGN_PERMISSION,
+                                "merchant_service_work_order_close_method", type, requestId(), request.idempotencyKey(),
+                                Map.of("close_method", closeMethod));
+                        return saved;
+                    }, MerchantWorkOrderCloseMethodRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("merchant_service.work_order_close_method_save_failed", ASSIGN_PERMISSION,
+                    "merchant_service_work_order_close_method", null, requestId(), request == null ? null : request.idempotencyKey(),
                     errorCode(exception));
             throw exception;
         }

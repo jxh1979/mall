@@ -4,11 +4,18 @@ import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.access.staff.JdbcStaffRepository;
+import com.complex.platform.access.staff.StaffProfileRecord;
+import com.complex.platform.governance.PlatformRepository;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
 import com.complex.platform.common.idempotency.IdempotencyRepository;
@@ -53,6 +60,19 @@ class MerchantServiceServiceTests {
                 .thenReturn(new AccessActor("user_test", "test", "merchant", null, "mch_1", "active"));
         when(authorizationService.currentMerchantScope())
                 .thenReturn(Optional.of("mch_1"));
+        // 第 102 条 102-R1：派单负责人须为在岗、持处理权限、能管到该商户经营项目的平台员工——给 staff_owner 配上这些事实（mch_1 经营项目 prj_1）。
+        service.accessRepository = mock(AccessRepository.class);
+        service.staffRepository = mock(JdbcStaffRepository.class);
+        service.platformRepository = mock(PlatformRepository.class);
+        when(service.accessRepository.findUserById("staff_owner"))
+                .thenReturn(Optional.of(new AccessUser("staff_owner", "staff_owner", "staff", "prj_1", null, "active", Instant.now())));
+        when(service.staffRepository.findProfileByUserId("staff_owner")).thenReturn(Optional.of(new StaffProfileRecord(
+                "stf_owner", "prj_1", null, "staff_owner", "负责人", null, null, null, "approved", null, null, null, "active",
+                Instant.now(), Instant.now())));
+        when(service.platformRepository.listMerchantOperatingProjectIds("mch_1")).thenReturn(List.of("prj_1"));
+        when(authorizationService.hasEffectivePermission(any(), eq("merchant.service_work_order.process"))).thenReturn(true);
+        when(authorizationService.projectReach(any(), eq("merchant.service_work_order.process")))
+                .thenReturn(AuthorizationService.ProjectReach.ownOnly("prj_1"));
     }
 
     @Test
@@ -197,7 +217,8 @@ class MerchantServiceServiceTests {
                 List.of(),
                 " ",
                 5,
-                "staff_ops"
+                "staff_ops",
+                null
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
 
@@ -207,7 +228,8 @@ class MerchantServiceServiceTests {
                 List.of(),
                 "Fixed and merchant confirmed",
                 6,
-                "staff_ops"
+                "staff_ops",
+                null
         ))).isInstanceOfSatisfying(ApiException.class, exception ->
                 assertThat(exception.code()).isEqualTo("VALIDATION_FAILED"));
     }
@@ -711,7 +733,8 @@ class MerchantServiceServiceTests {
                 List.of("att-close"),
                 "Fixed and merchant confirmed",
                 5,
-                "staff_ops"
+                "staff_ops",
+                null
         );
     }
 
