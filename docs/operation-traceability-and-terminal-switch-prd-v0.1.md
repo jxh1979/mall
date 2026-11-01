@@ -1,4 +1,4 @@
-# 全链路操作留痕与终端开关 PRD V0.06
+# 全链路操作留痕与终端开关 PRD V0.07
 
 > **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
 
@@ -447,6 +447,9 @@ flowchart TD
 | `terminal.device.lost` | facility | 终端设备挂失（V107）。`TerminalDeviceService` |
 | `terminal.device.found` | facility | 终端设备找回（V107）。`TerminalDeviceService` |
 | `terminal.device.scrapped` | facility | 终端设备报废（V107）。`TerminalDeviceService` |
+| `terminal.device.pending_return` | facility | 终端设备转待归还（第 96 条 96-R2，V584；员工停岗、离职生效时名下在用的领用类设备）。`TerminalDeviceService.markHeldDevicesPendingReturn` |
+| `terminal.device.archived` | facility | 报废设备归档（第 96 条 96-R3，V584）。`TerminalDeviceService.archiveDevice` |
+| `terminal.device.archive_failed` | facility | 报废设备归档失败（第 96 条 96-R3）。`TerminalDeviceService.archiveDevice` |
 | `mdm.violation.handled` | facility | MDM 受管设备违规处置闭环（V107 disposition：acknowledged/device_blocked/dismissed）。`MdmService` |
 | `merchant_service.work_order.escalated` | service | 物业工单 SLA 自动超时升级（V120 sla_breached/escalated_at）。`MerchantServiceService` |
 | `bar.order_item_void_decided` | bar | 退菜退酒审批决策（approved/rejected，V117 回写 + V124 驳回反向冲销 waiver_reversal/refund_reversal）。`BarWriteOperation.DECIDE_ORDER_ITEM_VOID` |
@@ -838,6 +841,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-10-29 | 增 | 版本、§4.1.6 新功能事件登记 | V0.07：第十八批 K 段第 96 条——登记 `terminal.device.pending_return`（96-R2）、`terminal.device.archived`／`terminal.device.archive_failed`（96-R3） | ENUM:241「设备状态」「待领用、在用、待归还、维修中、挂失、报废、归档」；第十八批裁决 23、24 |
 | 2026-10-29 | 改 | 版本、顶部横幅 AUD-010 | V0.06：第十八批 I 段第 84 条 84-R1——multipart 签名请求不再被 1MB 体缓存包装，摘要取部件规范串、体积按 Spring multipart 上限；工作手机可签名上传照片、录音、录像证据 | BSM 第 1201 行「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）」；BSM 第 1891 行工作手机「补录……库房和酒水交接扫码」 |
 | 2026-10-26 | 改 | 版本、顶部横幅、§5.7 实现现状 | V0.05：第十八批第 6 条——能力开关缺行默认关闭（opt-in）落地：`TerminalSwitchGuard` 缺行即拒绝（`reason=not_configured`）；短信域/事件开关、MDM 自有侧、一体机售票设备开关、渠道售票状态缺行即关；V554 给 113 个 `@GuardedAction` 在用能力、13 个已接触发点的短信域/事件与跨端 `'*'` 终端总开关补 `'*'`/global `enabled=TRUE` 显式行，短信开关页同步可见 | PGM「开关默认取值」（L742）；BSM 已拍板规则（L2030）；DEC-R6-07 |
 | 2026-10-21 | 改 | 版本、能力开关消费形态 | V0.04：第十三批 ROOT-03-R33——退役 V097 `customer.native_client.enabled`（无消费点、关着不拒任何请求），客人两端开关以 V197 `terminal.enabled`（app、miniapp）为唯一口径；同批客人两端改为以已验证客人会话作终端证明、会话锁定登录端、生产翻强制校验，客人端可匿名读本端已关闭开关行（`GET /api/v1/customer/terminal-switches/effective`） | PGM「受控的十类终端」；PGM「关闭后菜单不可见或不可点，接口也要拒绝业务动作」 |

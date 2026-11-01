@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.65
+文档版本：V0.66
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3925,6 +3925,11 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 18 | **第 82 条 跨项目经营商户不带项目的单据、设备、储值卡按哪个项目**（题面：「第 82 条：商户 m（主项目 A）经审批加了经营项目 B 后，有三类东西本身不带项目，现在一律按主项目 A 算：m 在 B 门店的要货单和借用单、m 放在 B 门店的终端设备、客人在 m 用商户储值卡（开关按 A 取）。结果 B 的员工办不了 B 门店的单，A 的员工反倒能办。我理解为应按业务发生地算，对吗？」）—— 操作员选「对，按业务发生地（推荐）」：要货单、借用单建单时记所属项目（在 m 的经营项目里选，只有一个时自动带），之后办理、赔偿应付、逾期工单都按单上的项目。设备绑了空间的按空间所在项目，没绑的仍按主项目（这会改 10-06 M723 裁决（四）「先看所属商户的项目」的顺序）。客人端商户储值卡按发卡项目取开关。 | 第 82 条，18G 实现。 |
 | 19 | **第 25 条 商户手机应用的设备编号**（题面：「第 25 条商户手机应用：商户在手机 App 里打开账单、对账等页面时，暗纹和导出密码里的「设备」用什么编号？网页端你已定「系统给浏览器发编号」，手机 App 还没定；不定的话，App 里这些页面出不了暗纹。」）—— 操作员选「同网页端发编号（推荐）」：第一次登录时系统发一个设备编号，存进 App 的系统安全存储并在后台登记，暗纹和导出密码用它；卸载重装或清除应用数据算新设备。 | 第 25 条，18J 实现。 |
 | 20 | **第 89 条 挂失设备找回后的状态**（题面：「第 89 条设备挂失：工作手机、平板、一体机、扫码设备挂失后又找到了，设备回到哪个状态？HTML 的七种设备状态里没写找回后去哪，现在后台和安卓端都没有找回按钮，挂失的设备也领不了。（答复记进决策台账，不改 HTML。）」）—— 操作员选「回待领用（推荐）」：后台挂失行给「找回」按钮，原因必填，挂失→待领用，之后照常领用；和修好的设备回待领用是同一条路。 | 第 89 条，18I 实现。 |
+| 21 | **第 95 条 开台时客人来源怎么判**（首问题面「第 95 条酒吧客人来源：客人自己买了本酒吧门票（App／小程序自购，或美团、抖音团购票）后直接到店开台，系统凭什么认出他是「购票到店」？」被操作员驳回，原话：「你这个问题乱七八糟的，买了门票和开台，这本来就是只要一个就行了。你仔细把这个html文件读一遍。」重读后确认题题面：「第 95 条，重读 HTML 后的做法：客人进酒吧凭订台（订台带卡座免通票入场名额，BSM:1036、ENUM:36）或凭门票，有一个就行。开台记来源就只看订台：客人在 App／小程序自助订的记平台自有渠道；带销售的订台记营销带客；第三方预订记回流渠道，随团购接入一起做；没有订台、直接开的台默认自来客，现场可补选营销带客和销售。开台时不再去对客人的门票。这样对吗？」）—— 操作员选「对，按这个做（推荐）」：开台记来源只看有没有订台、订台从哪里来；开台时不对客人的门票。 | 第 95 条，18K 实现。 |
+| 22 | **第 95 条 来源枚举项按项目可配指什么**（题面：「第 95 条：HTML 写「来源枚举项为业务参数，按项目可配」，各项目能配的是哪些？（自动判定规则直接引用回流渠道、平台自有渠道、营销带客、自来客四类。）」）—— 操作员选「只配回流平台（推荐）」：四类来源和判定规则固定、名称不改；按项目可配的只是回流渠道下接了哪些平台（出厂美团点评、抖音），随第三方团购接入（清单第 47 条）一起做，本段不做配置。 | 第 95 条，18K 实现（配置随第 47 条）。 |
+| 23 | **第 96 条 设备「待归还」**（题面：「第 96 条设备状态「待归还」什么时候进入、谁办归还、之后去哪？HTML 只列了状态名。现在员工停岗或离职生效时只撤权限，名下的工作手机、扫码设备仍显示「在用」、持有人还是这个人；收回手机只能按「本班手机归还」办，会给已离职的人记一次下班。」）—— 操作员选「停岗离职转待归还（推荐）」：员工停岗或离职生效时，名下还在用的工作手机、扫码设备等自动转「待归还」并留痕；设备管理员收回实物后在后台办归还，回「待领用」，不给该员工记下班；收不回的在后台挂失。平常下班没还的仍显示在用。 | 第 96 条，18K 实现。 |
+| 24 | **第 96 条 设备「归档」**（题面：「第 96 条设备状态「归档」什么时候进入？进入后还能不能再出来？HTML 只列了状态名。现在报废是最后一步，已报废的设备一直留在台账里、不能再做任何操作。」）—— 操作员选「报废后可归档（推荐）」：设备管理员对已报废的设备办理归档，原因必填；归档后台账里仍可查、显示「已归档」，不能再恢复或领用。 | 第 96 条，18K 实现。 |
+| 25 | **第 99 条 真实后端界面验收**（题面：「第 99 条刷新运行验收证据：其中「真实后端界面验收」要临时起一个后端连数据库，得写一个和现有后端测试脚本同样的脚本：从 160 的 /etc/complex/complex.env 只取 3 个数据库连接变量（不打印），新建一次性空库，跑完就停进程、删库；正在运行的服务和生产库都不碰。允许吗？」）—— 操作员选「不跑这一项（推荐）」：其余几步照跑并重生成证据：后端全量、前端构建、常规界面验收，都不需要口令。证据如实记「真实后端界面验收未跑、运行验收未就绪」。这项检查会转绿；交付门禁总链还有另外三项过期，仍然是红的。 | 第 99 条，18K 实现。 |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -4193,3 +4198,98 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 18J 落地位置补记·第 25 条 25-R5 ②：apps/merchant-app/android/app/build.gradle 的 dependencies 加 constraints，把 androidx.emoji2:emoji2、androidx.emoji2:emoji2-views-helper 对齐到 1.4.0，androidx.lifecycle:lifecycle-process 对齐到 2.9.0。这是客人 App 调试包实际解析的版本，160 离线缓存里已有 aar。160 镜像离线构建商户 App 调试包 BUILD SUCCESSFUL，产物 app-debug.apk 5373584 字节，包名 com.complex.merchant.dev，名称「综合体商户端（开发）」。
 - 18J 落地位置补记·第 25 条 25-R6（文档同步；依据 ENUM 第 233 行「终端十一端……商户网页门户、商户手机应用……」、PGM 第 745 行「受控的十一类终端……商户网页门户、商户手机应用……」，BSM 第 1884-1886 行商户 App「商户侧的手机端，在授权业务范围内移动处理本商户经营、对账、结算和看板，不看平台全局。」，BSM 第 1597 行「短信与商户手机应用推送均为提醒手段，发与不发、成功与否都不影响异议期的起算与届满。」，上表第 19 条即第十八批裁决 19）：只改四份文档，不改代码、接口、HTML 与页面矩阵 CSV，不加迁移。`docs/merchant-portal-zone-prd-v0.1.md` V0.20→V0.21：§1「商户手机应用尚未落地」改写为现实现（`apps/merchant-app` 用 Capacitor 8.5.3 原生壳挂 `apps/web` 同一后台外壳与页面；只许商户账号登录，否则 403 `MERCHANT_APP_ACCOUNT_REQUIRED`；会话决定终端为 `merchant_app`，开关与灰度按会话判；页面范围按 BSM「商户 App」字面，不含库存与经销、账号权限、人事与员工车辆）；§2 暗纹段补 App 设备编号来源（裁决 19：首次登录发 WB＋12 位编号、登记 `browser_devices`、随登录响应 `device_id` 下发并存系统安全存储，退出与会话过期只清令牌，新装或清除应用数据先清安全存储、Android 关自动备份即成新设备）；§9 删「商户手机应用」，改列推送（通道未接，BSM 第 1597 行只是提醒）与发行、签名、上架（B/D 类）、App 内导出文件与打开附件原件（提示到商户网页门户办理或查看）两行；§10「终端」行改为手机应用终端以会话为准；§11 当前实现补 `apps/merchant-app`。`docs/web-mobile-app-terminal-extension-product-prd-v0.1.md` V0.2→V0.21：§7.5 原 P1+ 预留口径改为已落地并指向商户 PRD，§9 改为十端逐端可验、`merchant_app` 端能力验收指向商户 PRD §10，§12 加一行。`docs/terminal-display-layer-spec-v0.2.md` V0.2→V0.21（原文件 CRLF，照原样）：§3 终端总览映射说明改列商户手机应用→`merchant_app`（已落地），§7 变更日志加一行。`docs/platform-governance-prd-v0.1.md` V0.75→V0.76：§15A.2 新增「实现现状（第 25 条 25-R2，2026-10-29，无迁移）」，§16 加一行。
 - 18J 落地位置补记·第 78 条 78-R4：只改测试与基线，页面不动。tests/e2e/full-admin-visual.spec.ts-snapshots 下四张 *-chromium-linux.png 按 18J 最终工作树重拍（文件名与张数不变），与 33aa5716 网页模式参照逐张 md5 相同；五份后台 spec chromium 33/33 连跑两次通过。
+
+18K 落地位置补记（2026-10-29）：第十八批 K 段（batch31）按待开发清单第 91～98 条（含上表第 21～24 条，即第十八批裁决 21～24）实现；第 99 条（上表第 25 条）的运行验收证据在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.65→V0.66 与裁决表新增第 21～25 行外，其他历史字节保持。
+
+- 第 91 条 91-R1（商户网页门户由服务端定终端）：落地 backend/src/main/java/com/complex/platform/gate/DeviceCredentialVerifier.java V0.07 verify，位置在「登记设备类型压过自报」之后。当前登录主体是商户账号时（AuthService.merchantAppAccount，V0.04 改为 public，口径同 25-R1：带商户归属、且不是 platform_admin、outsourced_vendor），只要派生终端不是设备绑定型（staff_work_phone、tablet、kiosk、staff_private_phone），就定为 merchant_portal。改报 web、其他终端码或不带终端头，都按商户网页门户总开关 tcs_term_merchant_portal、V199 商户专区模块行 tcs_mp_mod_merchant 与灰度判。设备绑定型照设备登记与验签，商户员工在工作手机、平板上作业不受影响。依据：PGM:744「……前端隐藏只是辅助，后端接口必须独立校验。」；PGM:719「所有端都要有后台开关。开关关闭时，端或模块就不能用；……」；PGM:728「商户侧 App/Web。」；PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；设备绑定型不改判的依据为 BSM:1889-1890 与 BSM:1899-1901「工作人员平板 App｜酒吧现场工作人员、服务员」。无新裁决：按 18K 核对结果 g91 的 91-R1，承 18J 第 25 条会话定终端口径。回归：MerchantAppTerminalJdbcIntegrationTests V0.02 新增四条，走网页 Cookie 会话真实登录链；DeviceCredentialVerifierTests V0.06 新增三条。PRD：docs/merchant-portal-zone-prd-v0.1.md V0.22 §10「终端」行。
+- 18K 落地位置补记·第 98 条（续卡入口删除）
+
+  依据：
+  - BSM L1079「平台不提供续卡、续时类产品。」，ENUM L114 同句；
+  - 登记册 XM-M725-O 所选选项「续卡按钮和接口违反 HTML，应删除」，由卡座页面与开台会话后端前后端一起删；
+  - 决策台账 DEC-SEAT-NO-RENEW-001、APPENDIX-A2-2026-07-28。
+  本条无新裁决号。
+
+  落地：
+  - 98-R1：后端删 BarController 的 POST /api/v1/bar/table-sessions/{session_id}/renew、BarService.renewTableSession（@GuardedAction bar.table_session.renew）、BarTableSessionService.renewTableSession、BarTableRenewRequest.java、BarWriteOperation.RENEW_TABLE_SESSION。
+  - 98-R2：迁移 V578__retire_bar_table_session_renew.sql 把权限码 bar.table_session.renew 停用为 retired，清掉 role_permissions、permission_template_items、user_permission_overrides 里的授予，撤销 active 临时授予，删除 terminal_capability_switches 的显式开启行。
+  - 98-R3：后台「卡座与订台」页 BarTableSessionsPage.tsx 删续卡时长与续卡按钮，文案改为转卡、合并、拆台；fieldLabels.ts 删 bar_table_session_renew、renewed；e2e full-admin-mvp.spec.ts 与 mock-api.ts 删续卡步骤。
+  - 98-R4：OpenAPI yaml/json 删 renewBarTableSession；full-admin-mvp-coding-package-v0.1.md 三句去掉续卡；酒吧 PRD V0.22 §7.3A.3 加实现现状，§13 加一行。
+
+  保留：bar_table_session_adjustments 表、renewed_until 与 additional_* 列、V521 类型约束里的 'renew'（转台、并台、拆台共用）。
+
+  回归：
+  - BarSalesAttributionJdbcTests.renewEndpointIsGone；
+  - BarJdbcIntegrationTests.renewPermissionIsRetiredAndGrantedToNobody；
+  - BarTableSessionsPage.split.test.tsx「会话操作区没有续卡时长与续卡按钮」。
+- 18K 落地位置补记·第 94 条
+  - 依据：BSM:1197「出库须同时核验订单和物品码」；BSM:1620「酒水或物品从库房出库、订单核验、机器人取货、后厨接收、服务员送达客人。」；BSM:1153「每一瓶需要追责的酒从库房到客人的交接过程」（只认按瓶出品的明细）；BSM:1579「机器人到达是被动留痕」；PGM:633「工作手机还负责酒水和物品交接扫码，记录出库、后厨接收、服务员取走和送达。」；PGM:899「平台治理层要保证每个重要动作能追溯。」
+  - 裁决：没有新裁决号（核对阶段 blocked 为空）；事件名按本台账「18I 落地位置补记·第 90 条」的先例：代码落 OpenAPI 声明的事件，OpenAPI 不改。
+  - 94-R1：建交接链核验订单和物品码，落在 InventoryService.createHandoverChain，由 createTraceHandover 和 scanTraceCodeHandover 共用；后者的订单取 business_context.order_id。溯源码须已登记且属本商户；订单须含该码登记物品按瓶出品、待出品的明细，否则 409 HANDOVER_ORDER_ITEM_MISMATCH。表头物品取码登记的物品，订单记 inventory_trace_handovers.order_id（迁移 V581）。库管可选订单：GET /api/v1/inventory/trace-codes/{id}/outbound-orders（JdbcInventoryRepository.listTraceOutboundOrders）。补货进吧台走门店要货，不进本链。
+  - 94-R2：工作手机库管出库先选该物品所属的待出品酒吧订单，落在 MainActivity.renderTrace 和两份 TerminalApiClient.listOutboundOrders。
+  - 94-R3：InventoryService.reportRobotSegment 改落 inventory.handover_robot_reported／inventory.handover_robot_report_failed；reviewException 的失败事件改落 inventory.handover_exception_review_failed。
+- 18K 落地位置补记·第 92 条 92-R1（依据 BSM 第 1597 行「商户专区首页保留未读账单提醒，该提醒不因异议期届满而消失。」，决策台账 DEC-CFG-2026-08-03-08「商户未登录不顺延，但未读账单提醒不因异议期届满而消失」；本条没有新裁决）：迁移 V583__merchant_bill_reads.sql 新表 merchant_bill_reads（merchant_id、bill_kind 只能是 ar_ap_item 或 dividend_statement、bill_id VARCHAR(128)，对齐 ar_ap_items.id、read_at；主键是前三列；首次已读时间不改，不设任何按时间清除）。MerchantFeeStatementService 把综合账单取行抽成 BILL_ROWS，汇总不变；GET /api/v1/merchant-portal/fee-statement 读到即记该月所列本商户台账行已读，unreadMonths 按计费自然月数未读。InternalPayableExecutionService.merchantTicketSettlements（GET /api/v1/merchant-portal/ticket-settlements）列出的往来即记已读。DividendService.listStatements 商户范围读到审批通过（含已发放）的分红单即记已读，平台账号不记。新 MerchantUnreadBillService 与 MerchantPortalController 的 GET /api/v1/merchant-portal/unread-bills（getMerchantPortalUnreadBills）：bill_months 持 merchant.billing.view 才返回；ticket_settlement_unread_count 只数已可查看、应付本商户的往来，持 merchant.portal.settlement.view 才返回；dividend_statements 持 finance.dividend.view 才返回；三个码都没有 403，无商户归属 403 MERCHANT_SCOPE_REQUIRED。已读按商户记（同商户任一账号看过即算），登录不算读。
+- 18K 落地位置补记·第 92 条 92-R2（依据同上）：新组件 apps/web/src/admin/components/MerchantUnreadBillsReminder.tsx；AdminApp.tsx 在商户形态账号落地页 ADM-OV-001 内容区最上方、页面门禁之外渲染（终端开关读回且商户专区模块未关时才渲染、才请求）。提醒每个计费月一行「YYYY 年 M 月账单 N 笔未读」，点「查看」进 ADM-MER-003 并带该月（MerchantZoneBillsPage 以 focusObjectId＝YYYY-MM 作账期初值）；门票分账一行进 ADM-MER-005；每张未读分红单一行进 ADM-MER-008。文档同步：docs/merchant-portal-zone-prd-v0.1.md 的 §6.2、§8、§10；docs/prd-audit/html-prd-coverage.csv 的 BSM-0336 行；docs/full-admin-page-permission-field-matrix-v0.1.csv 的 ADM-OV-001、ADM-MER-003 行；apps/web/src/admin/i18n/fieldLabels.ts 补 bill_months、unread_count、ticket_settlement_unread_count、dividend_statements 四个中文名。
+- 第十八批 K 段第 96 条 18K 落地位置补记（裁决 23、24）：
+  - 96-R1（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态。」）：领用请求 DeviceBindRequest 加 device_model（可空，不传沿用台账原值）；TerminalDeviceService.bind 按 firstNonBlank(请求值, 台账原值) 写入，JdbcTerminalDeviceRepository.save 的 INSERT 与 ON CONFLICT 写 device_model；安卓 TerminalModels.BindDeviceRequest.deviceModel，MainActivity 工作手机、平板领用带 android.os.Build.MODEL；OpenAPI DeviceBindRequest.device_model。
+  - 96-R2（ENUM:241「设备状态」「待领用、在用、待归还、维修中、挂失、报废、归档」；ENUM:240「停岗、离职生效后的撤权、未结事项交接及设备与工资后续办理，按《平台治理地图》“员工和手机”中的停岗、离职规则执行。」；PGM:581「……设备交接、工资核算及依法结清分别继续办理，不因交接未完保留业务操作权限。」；裁决 23「停岗离职转待归还」）：
+    - V584 设备状态加 pending_return，工作手机领用结束原因加 employment_ended。
+    - StaffApprovalService.applyEmploymentStatus 停岗、离职生效时同一事务调用 TerminalDeviceService.markHeldDevicesPendingReturn：名下在用的工作手机、平板、一体机、扫码设备 bound→pending_return，状态流水与留痕 terminal.device.pending_return；入场三道环节设备与其他现场设备不转。
+    - 待归还设备领用 409 INVALID_DEVICE_STATUS。
+    - POST /api/v1/terminals/devices/return 收待归还设备，回 returned（待领用）；工作手机走 StaffWorkPhoneAttendanceService.closeOnEmploymentEnd，不写下班考勤。
+    - POST /api/v1/terminals/devices/{id}/lost 前态加待归还。
+    - 后台 TerminalDevicesPage（ADM-TER-002）待归还行给「归还」「挂失」，不给送修、报废。
+  - 96-R3（ENUM:241「归档」；裁决 24「报废后可归档」）：
+    - V584 设备状态加 archived。
+    - 新接口 POST /api/v1/terminals/devices/{id}/archive（operationId markTerminalDeviceArchived，权限 terminal.device.lifecycle，前态只收 scrapped，原因必填，留痕 terminal.device.archived／archive_failed）；archived 为终态，之后找回、挂失、领用都 409。
+    - 后台报废行给「归档」，已归档行显示「已归档」、没有操作。
+- 18K 落地位置补记（第 93 条，K3）
+
+  ① 93-R1 商户服务工单类型闭集改为报修 repair／保洁 cleaning／投诉 complaint／其他服务请求 service，整改不再归商户自助。
+  - 依据：BSM:1323「我的工单（报修/保洁/投诉/其他服务请求自己发起、进度自己看，超时自动升级催办）」；BSM:1385「商户侧可自助提报修、保洁、投诉和其他服务请求，整改与巡检类工单由平台发起」；裁决 D-12（以 1384 为准：不含整改、含保洁）、D-13（独立成链：商户专区自助提的单走 ENUM 商户服务工单链）。
+  - 落地位置：
+    - backend/src/main/resources/db/migration/V582__merchant_service_work_order_types.sql：工单表、处理时限表两处 CHECK；
+    - MerchantServiceService.TYPES 与 TYPE_NAMES；
+    - apps/web MerchantZoneWorkOrdersPage.MERCHANT_WORK_ORDER_TYPE_LABELS（MerchantWorkOrdersPage、MerchantScopePage 共用）；
+    - OpenAPI MerchantWorkOrderCreateRequest、MerchantWorkOrderPolicyRequest 的 work_order_type 枚举；
+    - docs/merchant-portal-zone-prd-v0.1.md §3.2、§4、§10；
+    - docs/p1-merchant-service-work-order-api-contract-v0.1.md。
+  - 回归：MerchantServiceJdbcIntegrationTests 的 merchantZoneCreatesCleaningAndRejectsRectification、cleaningHandleMinutesPolicyAppliesAndRectificationPolicyRejected、databaseRejectsRectificationWorkOrderType。
+
+  ② 93-R2 后台 ADM-MER-001 去掉代商户建单入口，不加商户/空间/合同选择器。
+  - 依据：ENUM:264「商户服务工单状态｜……（商户专区发起；超过时限自动升级并标记）」；BSM:1372「商户自己在商户专区报的单，按枚举速查表「商户服务工单状态」那条的状态走」；BSM:1385「整改与巡检类工单由平台发起」；裁决 D-13。
+  - 落地位置：
+    - apps/web/src/admin/pages/MerchantWorkOrdersPage.tsx：删掉建单按钮、引导弹窗，以及写死 merchant-1/area-1/contract-1 的 createWorkOrder；
+    - 页面矩阵 ADM-MER-001 行去掉 merchant.service_work_order.create 与 POST /api/v1/merchant-service/work-orders。
+  - 回归：MerchantWorkOrdersPage.test.tsx「93-R2：全套权限也没有建单入口；派单只调 /{id}/assign」。
+
+  ③ 93-R3 非平台管理员的平台员工按入口权限码可触及的项目读、处理商户服务工单，按工单所属商户的经营项目（主项目或追加的经营项目）判；越范围 403 CROSS_PROJECT_FORBIDDEN，外包账号 403，平台管理员不限，商户账号只见本商户。
+  - 依据：BSM:1385「工单由客户关怀部负责处理」；PGM:502「设客户关怀部……并负责工单处理」；PGM:528「④看不到别的商户和别的项目的数据」「持有可跨项目角色的员工在该角色所含权限内查看、处理该角色可查看项目的数据，不受第④类「别的项目」限制」；裁决 DEC-R4-2026-08-04-09、M737-iter7「商户服务工单按商户的经营项目（主项目或追加的经营项目在可触及项目内）」、D-032；控制席 18K 判定「93-R3 保留」。
+  - 落地位置：
+    - MerchantServiceService：staffReach、listWorkOrders、checkMerchantOwnership（各入口按控制器同码传入，闸在幂等之前）；
+    - MerchantServiceRepository／JdbcMerchantServiceRepository.findWorkOrdersByMerchantProjects；
+    - OpenAPI listMerchantServiceWorkOrders、assignMerchantServiceWorkOrder、addMerchantServiceWorkOrderAction、closeMerchantServiceWorkOrder 的 description；
+    - docs/merchant-portal-zone-prd-v0.1.md §4。
+  - 回归：MerchantServiceJdbcIntegrationTests.projectStaffReachMerchantWorkOrdersThroughTheMerchantsOperatingProjects。
+- 第 95 条（第十八批 K 段裁决 21、22；BSM 第 1021 行「开台时系统自动判定并记录客人来源……经平台自有渠道订台或购票到店的，自动记平台自有渠道；由有销售归属的订台开台的，自动记营销带客并带出该销售人员；以上都不命中的直接到店开台默认记自来客……来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理。」、第 1468 行「销售归属改派后，业绩随提成归属一起改」；DEC-R8-97-28、DEC-R8-97-15）：95-R1 迁移 V579 bar_table_sessions.guest_source（platform_own 平台自有渠道／marketing 营销带客／walk_in 自来客，CHECK chk_bar_table_sessions_guest_source，默认 walk_in）；BarTableSessionService.createTableSession 按裁决 21 只看有没有订台、订台从哪里来——带订台且订台不是员工代订记平台自有渠道，否则有销售记营销带客，否则自来客，开台不对门票；转台、并台、拆台原样带来源；BarSessionSalesBackfillTarget.apply 补录批准同时记营销带客、原快照加 guest_source；后台 ADM-BAR-001（BarTableSessionsPage 会话明细、BarSessionBackfill 本场销售归属面板）分列「客人来源」与「销售」。95-R2 V579 权限码 bar.table_session.attribution_reassign（授 role_platform_admin，由运营分配给店长角色）；POST /api/v1/bar/table-sessions/{session_id}/attribution-reassign（BarController → BarService.reassignTableSessionAttribution → BarSessionSalesBackfillTarget.reassign／applyAttribution；写操作审计 bar.table_session.attribution_reassigned 留改派前后来源与销售）：只限开台中且台组账单未全部结清（409 BAR_BILL_ALREADY_SETTLED），营销带客须在岗销售、其余来源销售置空，会话与其订台原都没有销售的补记销售 409 BAR_SALES_BACKFILL_REQUIRED、仍走 18F 销售归属补录；台组未结清账单（岗位档重取）及其订单、未开单订单随改，已结清不动、订台不改；未结清账单的提成行随归属按新档重取费率重算或作废，工资单待定置 resolved；后台 BarSalesBackfillPanel「改派来源与销售」。回流渠道与按项目配置回流平台随清单第 47 条第三方团购接入（裁决 22），本段未做。
+- 第 97 条 97-R1（BSM:1163「管理酒类、吧台消耗、客人存酒和常用消耗品」；ENUM:79「定价、库存、结算、对账一律按商品规格逐项进行」；ENUM:161「物品大类：酒类、消耗品、礼品、其他物料」）：后台库存台账「＋新建库存商品规格」落在 apps/web/src/admin/pages/InventoryLedgerPage.tsx（submitInventoryItem，POST /api/v1/inventory/items，权限 inventory.stock.move；大类提交中文大类名；规格容量可空，填则正整数），结果动作码 inventory_item_created；矩阵 ADM-INV-001 已同步。97-R2（BSM:1065「按杯、按瓶、套餐；按杯按标准出酒量扣库存、超出记损耗」；BSM:1049「连接供应链库存，扣减吧台售卖消耗」）：商品管理新建商品引导弹窗「库存与出酒量」步落在 apps/web/src/admin/pages/BarProductsPage.tsx（勾选需要扣减库存后选库存商品规格与库位，库位取 GET /api/v1/inventory/stock-balances 中该规格的余额行；标准出酒量可空正整数；提交 stock_deduction_required、inventory_item_id、stock_location_id、standard_pour_volume），后端不改；矩阵 ADM-BAR-005 已同步。真实流程回归 BarPourVolumeStockJdbcIntegrationTests.itemAndProductCreatedWithAdminPageKeysDeductStandardPourAndFactoryLoss（未配阈值按出厂 5%，标准损耗口径沿用第十八批裁决 4）。本条无新裁决。
+- 18K 第 97 条 97-R3、97-R4 落地位置：
+  - 迁移 V580__bar_order_item_combo_source.sql：bar_order_items.combo_id，套餐下单展开出的明细记所属套餐（BarOrderService.createOrderInternal → BarRepository.markOrderItemsCombo）。
+  - 接口 GET /api/v1/inventory/bar-consumption-stats（InventoryController.listBarConsumptionStats，inventory.stock.view）：
+    - 期间参数与营业日窗口同 InventoryService.getCostSummary，范围同 listCostLedger；
+    - JdbcInventoryRepository.listBarConsumptionStats 按酒吧、销售形式（by_glass 按杯、by_bottle 按瓶、combo 套餐）、套餐、酒吧商品汇总出品的售卖酒水的数量、出酒量、损耗量；
+    - 赠送与小吃不计，回库退品不计数量与出酒量，损耗不退；
+    - 审计 inventory.bar_consumption_stats.viewed／view_failed。
+  - 后台「库存台账」页「吧台消耗统计」区块（InventoryLedgerPage.tsx）。
+
+  依据：
+  - BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」；
+  - BSM:1065 点酒方式「按杯、按瓶、套餐」；
+  - BSM:1068「出品后退品按是否回库处理」；
+  - ENUM:187「全系统的钱账统一按「营业日」归集」。
+
+  对应裁决：无新裁决（控制席 18K 核实判定照 g97 plan 实现，blocked 为空）。损耗率超阈值转核查工单、吧台采集设备标记界面按 g97 not_doing 不做，随出酒量采集设备对接一起做。
+- 18K 落地位置补记·复核修正（2026-10-30；复核意见经独立反驳核实仍成立，无新裁决）：
+  - 第 95 条（BSM:1079「并台：……销售提成归属不变，仍跟各自的客人走」「销售提成跟客人走，由帮该客人预订的人取得，与台位无关」；BSM:1468「业绩记名人与销售提成归属人始终是同一人——都是帮该客人预订的那个人」）：BarSessionSalesBackfillTarget.applyAttribution（店长改派与 18F 销售归属补录共用）的写入集合改为只取本会话自己的订单及本会话开台以来本台位上无会话归属的订单（Ledger.ownOrders／ownBills），并台并入的子会话（含整体转台前旧链）的订单、账单与提成行不动；结清判定仍按台组（Ledger.settled）；补录原快照同取本会话。OpenAPI reassignBarTableSessionAttribution、submitBarTableSessionSalesBackfill 的 description 同步，改派描述删去「已关台或」（关台先回 409 BAR_TABLE_SESSION_NOT_ACTIVE）；酒吧 PRD §7.1、§11 实现现状与变更日志、html-prd-coverage.csv BSM-0151 同步。回归 BarSalesAttributionJdbcTests.reassignOnAMergedPrimaryLeavesTheMergedGuestsOrdersBillsAndCommission（两台各有销售、按蛇形键并台后改派主台）。
+  - 第 94 条（BSM:1017「酒吧的合作方式可以是自营、联营、租赁、代运营、服务商接入或其他。」；BSM:1463、PGM:580「在商户档案上标注为自营的商户视同公司自有，其员工按公司自有员工路径办理。」；BSM:1197「出库须同时核验订单和物品码」）：InventoryService.listTraceOutboundOrders 与 createHandoverChain 的订单核验改为商户优先（同 listCostLedger）：有商户范围时不再按项目过滤，自营酒吧员工（归属公司）、追加经营项目员工也能列订单、建交接链。回归 TraceHandoverOutboundOrderJdbcTests.selfOperatedBarClerkUnderTheCompanyListsOrdersAndCreatesTheChain。
+  - 第 93 条（BSM:1323「我的工单（报修/保洁/投诉/其他服务请求自己发起……）」；BSM:1385；裁决 D-12）：apps/web/src/admin/i18n/fieldLabels.ts KEY_VALUE_LABELS 加 work_order_type.service「其他服务请求」，结果区与表格、抽屉同名（物业工单类型闭集无 service，不受影响）。回归 ActionResultView.test.tsx V0.03「商户服务工单结果：工单类型 service 显示为「其他服务请求」」。

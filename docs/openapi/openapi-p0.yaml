@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.42
+  version: V0.43
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -8736,6 +8736,9 @@ paths:
         - bar
       operationId: scanTraceCodeHandover
       summary: 物品追踪码扫码交接
+      description: 第十八批 K 段第 94 条（BSM 第 1197 行「出库须同时核验订单和物品码」）：credential_payload 为溯源码，business_context.order_id 为出库核验的酒吧订单，
+        规则同 POST /api/v1/inventory/trace-handovers（码未登记 404 TRACE_CODE_NOT_FOUND，属别的商户 403 CROSS_MERCHANT_FORBIDDEN，不带订单 400 VALIDATION_FAILED，
+        订单没有该码登记物品按瓶出品、待出品的明细 409 HANDOVER_ORDER_ITEM_MISMATCH）。
       x-permission: inventory.handover.scan
       x-data-scope: project-warehouse-bar
       x-terminal-allowed:
@@ -8751,6 +8754,10 @@ paths:
           $ref: "#/components/responses/Success"
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
         "500":
@@ -8762,6 +8769,9 @@ paths:
         - inventory
       operationId: createTraceHandover
       summary: 创建扫码交接任务(五段链)
+      description: 第十八批 K 段第 94 条（BSM 第 1197 行「出库须同时核验订单和物品码」；第 1620 行「酒水或物品从库房出库、订单核验、机器人取货、后厨接收、服务员送达客人。」）：
+        溯源码须已登记（未登记 404 TRACE_CODE_NOT_FOUND）且属本商户（否则 403 CROSS_MERCHANT_FORBIDDEN）；order_id 必填，须是含该码登记物品按瓶出品（商品没有标准出酒量）、
+        待出品明细的酒吧订单（可选订单见 GET /api/v1/inventory/trace-codes/{id}/outbound-orders），否则 409 HANDOVER_ORDER_ITEM_MISMATCH；表头物品取码登记的物品并记订单 order_id。
       x-permission: inventory.handover.scan
       x-data-scope: project-warehouse-bar
       x-terminal-allowed:
@@ -8778,10 +8788,38 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - idempotency_key
+                - trace_code
+                - order_id
+                - device_id
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键；重复提交返回第一次的结果。
+                trace_code:
+                  type: string
+                  maxLength: 128
+                  description: 已登记的溯源码（物品取该码登记的物品）。
+                order_id:
+                  type: string
+                  maxLength: 64
+                  description: 出库核验的酒吧订单号（须含该物品按瓶出品、待出品的明细）。
+                device_id:
+                  type: string
+                  maxLength: 128
+                  description: 建单设备号（工作手机为本机登记设备号）。
       responses:
         "200":
           $ref: "#/components/responses/Success"
         "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -9072,7 +9110,7 @@ paths:
       operationId: listMerchantServiceWorkOrders
       summary: List merchant service work orders
       description: List merchant service work orders. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence.
+        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只见本商户；其余平台员工只见入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单；外包账号 403。
       x-permission: merchant.service_work_order.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9182,7 +9220,7 @@ paths:
       operationId: addMerchantServiceWorkOrderAction
       summary: Append merchant service work order action
       description: Append merchant service work order action. This P1 merchant service workflow must enforce server-side
-        permissions, idempotent writes, and audit evidence.
+        permissions, idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。
       x-permission: merchant.service_work_order.process
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9224,7 +9262,7 @@ paths:
       operationId: assignMerchantServiceWorkOrder
       summary: Assign merchant service work order
       description: Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence.
+        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。
       x-permission: merchant.service_work_order.assign
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9266,7 +9304,7 @@ paths:
       operationId: closeMerchantServiceWorkOrder
       summary: Close merchant service work order
       description: Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence.
+        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。
       x-permission: merchant.service_work_order.close
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -10409,6 +10447,7 @@ paths:
         - terminals
       operationId: bindDevice
       summary: 设备绑定
+      description: 第 96 条 96-R1（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态。」）：员工端安卓领用工作手机、平板时带本机型号 device_model 写进设备台账，不传沿用台账原值。96-R2（第十八批裁决 23）：待归还的设备不能领用（409 INVALID_DEVICE_STATUS），须先在后台办归还。
       x-permission: terminal.device.bind
       x-data-scope: project-device
       x-terminal-allowed:
@@ -10459,7 +10498,7 @@ paths:
         - terminals
       operationId: returnTerminalDevice
       summary: 归还终端设备
-      description: 用于归还终端设备。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于归还终端设备。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第 96 条 96-R2（第十八批裁决 23「停岗离职转待归还」）：在用或待归还的设备可归还；待归还的工作手机由设备管理员在后台收回办理，不要求本人收尾检查确认、不形成下班记录，归还后回待领用。
       x-permission: terminal.device.bind
       x-data-scope: project
       x-terminal-allowed:
@@ -17004,7 +17043,7 @@ paths:
         - bar
       operationId: createBarTableSession
       summary: 创建酒水台位会话（开台）
-      description: ROOT-03-R19（ENUM 第 100 行「排他锁，不是展示标记」）：台位正被有效预留占着时，只有带上占台的那笔订台号（reservation_id）才能开台，散客开台或带别的订台号 409 BAR_TABLE_ALREADY_RESERVED；带了即到店开台，该订台退出占台（含定金未付的订台），超时作业不再按爽约处理、已付定金不被没收。第十八批 I 段第 86 条（BSM 第 1021、1077 行）：带订台开台的会话销售取该订台的销售归属，sales_staff_id 只作直接到店开台的现场补选；卡座与 VIP 包坐的主责服务人按该卡座点位当日该场次排班指派——带了不在此刻已发布排班或真实顶班里的人 409 BAR_SERVICE_STAFF_NOT_SCHEDULED、不开台，不填时当班恰好一人即指派该人，多人或无人留空。
+      description: ROOT-03-R19（ENUM 第 100 行「排他锁，不是展示标记」）：台位正被有效预留占着时，只有带上占台的那笔订台号（reservation_id）才能开台，散客开台或带别的订台号 409 BAR_TABLE_ALREADY_RESERVED；带了即到店开台，该订台退出占台（含定金未付的订台），超时作业不再按爽约处理、已付定金不被没收。第十八批 I 段第 86 条（BSM 第 1021、1077 行）：带订台开台的会话销售取该订台的销售归属，sales_staff_id 只作直接到店开台的现场补选；卡座与 VIP 包坐的主责服务人按该卡座点位当日该场次排班指派——带了不在此刻已发布排班或真实顶班里的人 409 BAR_SERVICE_STAFF_NOT_SCHEDULED、不开台，不填时当班恰好一人即指派该人，多人或无人留空。第十八批 K 段第 95 条 95-R1（BSM 第 1021 行；第十八批 K 段裁决 21「开台记来源只看有没有订台、订台从哪里来；开台时不对客人的门票」）：开台自动判定并记录客人来源 guest_source——带订台且该订台不是员工代订（客人在 App／小程序自助订台）记 platform_own（平台自有渠道）；否则会话有销售记 marketing（营销带客）；否则 walk_in（自来客）。来源与销售成对（营销带客⇔有销售），转台、并台、拆台随客人走；回流渠道随第三方团购接入（清单第 47 条）再加。事后改派见 reassignBarTableSessionAttribution。
       x-auth-context: staff-token
       x-permission: bar.table_session.create
       x-data-scope: project-bar-table
@@ -17263,94 +17302,6 @@ paths:
         - BAR_SPLIT_HISTORICAL_CHAIN
         - BAR_SPLIT_NOTHING_TO_SPLIT
         - BAR_TABLE_SESSION_VERSION_CONFLICT
-  /api/v1/bar/table-sessions/{session_id}/renew:
-    post:
-      tags:
-        - bar
-      operationId: renewBarTableSession
-      summary: 续台（延长台位会话）
-      x-auth-context: staff-token
-      x-permission: bar.table_session.renew
-      x-data-scope: project-bar-table
-      x-terminal-allowed:
-        - tablet
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: bar.table_session.renew
-      x-audit-event-failure: bar.table_session.renew_failed
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          schema:
-            type: string
-            maxLength: 64
-          description: 台位会话 ID。
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-              required:
-                - idempotency_key
-              properties:
-                idempotency_key:
-                  type: string
-                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
-                  maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
-                renewed_until:
-                  type: string
-                  format: date-time
-                  description: 续台至时间。
-                additional_min_consumption_cent:
-                  type: integer
-                  description: 追加最低消费。（单位：分，禁止浮点）
-                  minimum: 0
-                  maximum: 999999999999
-                additional_deposit_amount_cent:
-                  type: integer
-                  description: 追加押金。（单位：分，禁止浮点）
-                  minimum: 0
-                  maximum: 999999999999
-                additional_service_fee_cent:
-                  type: integer
-                  description: 追加服务费。（单位：分，禁止浮点）
-                  minimum: 0
-                  maximum: 999999999999
-                reason:
-                  type: string
-                  description: 续台原因。
-                  maxLength: 4000
-                requested_by_user_id:
-                  type: string
-                  description: 发起人。
-                  maxLength: 64
-                session_version:
-                  type: integer
-                  description: 会话版本号。
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
   /api/v1/bar/table-sessions/{session_id}/transfer:
     post:
       tags:
@@ -17437,7 +17388,7 @@ paths:
         - bar
       operationId: submitBarTableSessionSalesBackfill
       summary: 补录台位会话销售归属（人工补录，店长复核）
-      description: 第十八批 F 段第 14 条 14-R3（BSM 第 1642 行「以通话录音为凭证的，录音起始时间必须早于客人到店时间、且早于客人开卡时间达到后台配置的时长……涉及金额、销售归属、提成或责任认定的补录，须由被影响方之外的主管复核」；第 1021 行「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」）：开台与其订台都没有销售归属（自来客）时补录销售人员，已有归属 409 SALES_ATTRIBUTION_PRESENT；已关台或台组账单已全部结清 409 BAR_BILL_ALREADY_SETTLED；拟归属人须有员工档案且在岗（可为别的酒吧员工，BSM 第 1070 行），否则 400 VALIDATION_FAILED。其余同人工补录（见 listManualBackfills）：必写原因与责任人、必附经 business_type=manual_backfill 上传的凭证、在补录时限内；以通话录音为凭证的，录音起始须早于到店（开台时刻）与开卡（订台时刻，直接到店开台取开台时刻）达录音提前量。提交即进主管复核（动作 bar.sales.backfill：直接上级之后由经角色持有 bar.sales_backfill.review 的店长复核，拟归属人不得复核），复核通过才生效：会话、台组未结清账单（销售岗位档按拟归属人员工档案重取）及其订单、尚未开单的订单改归拟归属人，已结清账单与其订单不动；批准时已有归属或已结清 409 MANUAL_BACKFILL_TARGET_CHANGED、整笔批准不生效。台位须在操作人可触及项目、商户账号只到本商户，否则 403 BAR_PAYROLL_SCOPE_MISMATCH；会话不存在 404 BAR_TABLE_SESSION_NOT_FOUND。
+      description: 第十八批 F 段第 14 条 14-R3（BSM 第 1642 行「以通话录音为凭证的，录音起始时间必须早于客人到店时间、且早于客人开卡时间达到后台配置的时长……涉及金额、销售归属、提成或责任认定的补录，须由被影响方之外的主管复核」；第 1021 行「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」）：开台与其订台都没有销售归属（自来客）时补录销售人员，已有归属 409 SALES_ATTRIBUTION_PRESENT；已关台或台组账单已全部结清 409 BAR_BILL_ALREADY_SETTLED；拟归属人须有员工档案且在岗（可为别的酒吧员工，BSM 第 1070 行），否则 400 VALIDATION_FAILED。其余同人工补录（见 listManualBackfills）：必写原因与责任人、必附经 business_type=manual_backfill 上传的凭证、在补录时限内；以通话录音为凭证的，录音起始须早于到店（开台时刻）与开卡（订台时刻，直接到店开台取开台时刻）达录音提前量。提交即进主管复核（动作 bar.sales.backfill：直接上级之后由经角色持有 bar.sales_backfill.review 的店长复核，拟归属人不得复核），复核通过才生效：会话、本会话未结清账单（销售岗位档按拟归属人员工档案重取）及其订单、尚未开单的订单改归拟归属人，已结清账单与其订单、并入本台的台位会话及其订单与账单不动（销售提成仍跟各自的客人走，BSM 第 1079 行）；批准时已有归属或已结清 409 MANUAL_BACKFILL_TARGET_CHANGED、整笔批准不生效。台位须在操作人可触及项目、商户账号只到本商户，否则 403 BAR_PAYROLL_SCOPE_MISMATCH；会话不存在 404 BAR_TABLE_SESSION_NOT_FOUND。
       x-auth-context: staff-token
       x-permission: bar.table_session.create
       x-data-scope: project-bar-table
@@ -17499,6 +17450,65 @@ paths:
                   type: string
                   maxLength: 64
                   description: 可选：指定最终审批人（店长），须在发起人直接上级链上且经角色持有 bar.sales_backfill.review；不填则直接上级之后由店长角色复核。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/table-sessions/{session_id}/attribution-reassign:
+    post:
+      tags:
+        - bar
+      operationId: reassignBarTableSessionAttribution
+      summary: 改派开台客人来源与销售人员（店长办理）
+      description: 第十八批 K 段第 95 条 95-R2（BSM 第 1021 行「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」；第 1468 行「销售归属改派后，业绩随提成归属一起改」）：店长持本权限本人办理，写操作审计留改派前后的来源与销售。guest_source 须为 platform_own（平台自有渠道）、marketing（营销带客）、walk_in（自来客）之一，否则 400 VALIDATION_FAILED；营销带客须带 sales_staff_id，且其有员工档案、在岗（可为别的酒吧员工，BSM 第 1070 行），否则 400 VALIDATION_FAILED；其余来源销售置空。会话不在开台中 409 BAR_TABLE_SESSION_NOT_ACTIVE；会话与其订台原都没有销售时补记销售属记录缺失、走销售归属补录（submitBarTableSessionSalesBackfill），409 BAR_SALES_BACKFILL_REQUIRED；台组账单已全部结清 409 BAR_BILL_ALREADY_SETTLED。生效后会话、本会话未结清账单（销售岗位档按新归属重取）及其订单、尚未开单的订单改归新销售，已结清账单与其订单、并入本台的台位会话及其订单与账单不动（销售提成仍跟各自的客人走，BSM 第 1079 行），订台不改；未结清账单上已计提的提成随归属改——有新销售即按其岗位档重取费率、重算提成额，改为无销售即提成作废，工资单为其挂的待定一并结清。台位须在操作人可触及项目、商户账号只到本商户，否则 403 BAR_PAYROLL_SCOPE_MISMATCH；会话不存在 404 BAR_TABLE_SESSION_NOT_FOUND。返回改派后的台位会话。
+      x-auth-context: staff-token
+      x-permission: bar.table_session.attribution_reassign
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table_session.attribution_reassigned
+      x-audit-event-failure: bar.table_session.attribution_reassign_failed
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 台位会话 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - guest_source
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键；重复提交返回第一次的结果。
+                guest_source:
+                  type: string
+                  maxLength: 32
+                  description: 改派后的客人来源：platform_own 平台自有渠道、marketing 营销带客、walk_in 自来客。
+                sales_staff_id:
+                  type: string
+                  maxLength: 64
+                  description: 营销带客时必填：改派后的销售人员（员工账号），须有员工档案且在岗；其余来源不采用。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -20427,6 +20437,7 @@ paths:
         - terminals
       operationId: markTerminalDeviceLost
       summary: 标记设备挂失
+      description: 在用、待领用、维修中、已解绑的设备可挂失（第 89 条 89-R1）；第 96 条 96-R2（第十八批裁决 23「收不回的在后台挂失」）：待归还的设备也可挂失。
       x-auth-context: staff-token
       x-permission: terminal.device.lifecycle
       x-terminal-allowed:
@@ -20566,6 +20577,72 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: terminal.device.scrapped
       x-audit-event-failure: terminal.device.scrap_failed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 终端设备 ID。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required:
+                - idempotency_key
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                operator_note:
+                  type: string
+                  description: 操作留痕备注；进入审计。
+                  maxLength: 1000
+                evidence_attachment_ids:
+                  type: array
+                  description: 证据附件 ID 列表；进入审计留痕。
+                  items:
+                    type: string
+                    maxLength: 64
+                staff_id:
+                  type: string
+                  description: 关联员工 ID。
+                  maxLength: 64
+                reason:
+                  type: string
+                  description: 流转原因；进入留痕事件。
+                  maxLength: 4000
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/terminals/devices/{id}/archive:
+    post:
+      tags:
+        - terminals
+      operationId: markTerminalDeviceArchived
+      summary: 报废设备归档
+      description: 第 96 条 96-R3（ENUM:241「归档」；第十八批裁决 24「报废后可归档」）：设备管理员对已报废的设备办理归档，原因必填；归档后台账里仍可查、显示「已归档」，不能再恢复或领用（终态）。非报废设备 409 INVALID_DEVICE_STATUS；设备不在本人能管的范围内 403。
+      x-auth-context: staff-token
+      x-permission: terminal.device.lifecycle
+      x-terminal-allowed:
+        - web
+        - mobile_admin
+      x-idempotency-required: true
+      x-audit-event-success: terminal.device.archived
+      x-audit-event-failure: terminal.device.archive_failed
       parameters:
         - name: id
           in: path
@@ -21586,6 +21663,35 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: inventory.trace_code.viewed
       x-audit-event-failure: inventory.trace_code.view_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 路径参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/inventory/trace-codes/{id}/outbound-orders:
+    get:
+      tags:
+        - inventory
+      operationId: listTraceCodeOutboundOrders
+      summary: 库管出库可选的酒吧订单（按溯源码）
+      description: 第十八批 K 段第 94 条（BSM 第 1197 行「出库须同时核验订单和物品码」）：按溯源码（id 或码值）列含该码登记物品按瓶出品（商品没有标准出酒量）、待出品明细的酒吧订单，
+        每单返回订单号 order_id、桌台 table_name、商品 product_name、待出品数量 quantity、下单时刻 created_at，下单早的在前；商户账号只列本商户订单。
+        溯源码未登记 404 TRACE_CODE_NOT_FOUND，属别的商户 403 CROSS_MERCHANT_FORBIDDEN。
+      x-permission: inventory.handover.scan
+      x-data-scope: project-warehouse-bar
+      x-terminal-allowed:
+        - staff_work_phone
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - $ref: "#/components/parameters/Id"
@@ -28911,7 +29017,7 @@ paths:
       summary: 商户专区·门票分账(本商户内部结算往来与待付状态)
       description: BSM
         L1597/L1683：本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来(项目范围按付款时点固化的项目判定)，含金额、异议截止日、财务指定付账日、当前付款日与执行状态(待付/付款失败待处理及原因与预计重付时间/已结清)；顺延不逐笔通知，以状态可见代替。无商户归属
-        403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。
+        403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。商户账号读到即记所列往来已读(首页未读账单提醒，第 92 条)。
       x-permission: merchant.portal.settlement.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -29022,7 +29128,7 @@ paths:
         - merchant-portal
       operationId: getMerchantPortalFeeStatement
       summary: 商户专区·费用总表与当期综合账单(本商户)
-      description: 18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、工单用料费(商户承担)、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。
+      description: 18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、工单用料费(商户承担)、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。商户账号读到即记该月所列台账行已读(首页未读账单提醒，第 92 条)。
       x-permission: merchant.billing.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -29046,6 +29152,30 @@ paths:
           $ref: "#/components/responses/Success"
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/merchant-portal/unread-bills:
+    get:
+      tags:
+        - merchant-portal
+      operationId: getMerchantPortalUnreadBills
+      summary: 商户专区·首页未读账单提醒(本商户)
+      description: 第 92 条(BSM L1597「商户专区首页保留未读账单提醒，该提醒不因异议期届满而消失。」)。bill_months＝当期综合账单所列本商户台账行中商户还没看过的，按计费自然月计笔数(month、unread_count，新月在前)，商户打开我的账单该月即算已读，持 merchant.billing.view 才返回；ticket_settlement_unread_count＝我的对账门票分账里已可查看、应付本商户、商户还没看过的笔数，商户打开门票分账即算已读，持 merchant.portal.settlement.view 才返回；dividend_statements＝审批通过后商户还没在我的分红看到的分红单(id、period_label、kind)，持 finance.dividend.view 才返回；没持对应查看码的那组为 null。已读按商户记(同商户任一账号看过即算)，登录不算读，提醒不因异议期届满而消失。三个码都没有 403；无商户归属 403 MERCHANT_SCOPE_REQUIRED。
+      x-permission: merchant.billing.view
+      x-data-scope: merchant
+      x-terminal-allowed:
+        - web
+        - merchant_portal
+        - merchant_app
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
         "403":
           $ref: "#/components/responses/Error"
         "500":
@@ -37624,6 +37754,45 @@ paths:
         period_start/period_end 必填（yyyy-MM-dd，窗口=[period_start 经营日起, period_end+1 经营日起)，与财务日结同切分基准）；merchant_id
         可选，仅对平台/项目管理员生效，商户员工强制按自身商户。返回 outbound_total_cost_cent 出库成本合计、outbound_movement_count 出库笔数、no_cost_basis_count
         无成本基准笔数（提示合计存在低估）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+  /api/v1/inventory/bar-consumption-stats:
+    get:
+      tags:
+        - inventory
+      operationId: listBarConsumptionStats
+      summary: 期间吧台消耗统计（按杯、按瓶、套餐）
+      x-permission: inventory.stock.view
+      x-data-scope: project-warehouse
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: inventory.bar_consumption_stats.viewed
+      x-audit-event-failure: inventory.bar_consumption_stats.view_failed
+      parameters:
+        - name: period_start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: 期间开始营业日（yyyy-MM-dd）。
+        - name: period_end
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: 期间结束营业日（yyyy-MM-dd），不得早于开始日期。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+      description: 第十八批 K 段 97-R3（BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」）：按酒吧、销售形式（sale_form＝by_glass 按杯、by_bottle 按瓶、combo 套餐）、套餐、酒吧商品汇总期间内出品的售卖明细。查询参数 period_start、period_end 必填（yyyy-MM-dd，营业日窗口与库存台账本月出库成本 cost-summary 同一切分），结束日期早于开始日期 400 VALIDATION_FAILED；商户员工只看本商户，平台管理员看全量。赠送明细与小吃不计；回库退品的数量与出酒量不计，损耗不退。返回 bar_id、bar_name、sale_form、combo_id、combo_name、product_id、product_name、inventory_item_id、item_name、quantity、pour_volume_ml、loss_volume_ml。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
   /api/v1/finance/dividends/plans:
     get:
       tags:
@@ -37765,6 +37934,7 @@ paths:
         - finance
       operationId: listDividendStatements
       summary: 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口）
+      description: 商户 scope 账号读到即记本页审批通过(含已发放)的分红单已读(首页未读账单提醒，第 92 条，BSM L1597)；平台账号看列表不记已读。
       x-auth-context: staff-token
       x-permission: finance.dividend.view
       x-data-scope: merchant
@@ -57913,6 +58083,10 @@ components:
           type: string
           description: 持有员工档案编号；terminal_type=staff_work_phone 时必填（领用即绑定，验签按该员工收口 U07-001）；平板/一体机按点位或商户绑定可空
           maxLength: 64
+        device_model:
+          type: string
+          description: 设备型号（第 96 条 96-R1，PGM:623）；员工端安卓领用工作手机、平板时取本机型号自动带上；不传沿用台账原值
+          maxLength: 128
     DeviceBindingResponse:
       type: object
       description: 设备绑定响应；kiosk 新建绑定时 device_token 仅在本响应一次性返回，服务端只保存 SHA-256 哈希。
@@ -62030,8 +62204,8 @@ components:
           type: string
           enum:
             - repair
+            - cleaning
             - complaint
-            - rectification
             - service
           maxLength: 64
           description: Work order type.
@@ -62086,11 +62260,11 @@ components:
           maxLength: 128
         work_order_type:
           type: string
-          description: 工单类型（报修/投诉/整改/服务）。
+          description: 工单类型（报修/保洁/投诉/其他服务请求）。
           enum:
             - repair
+            - cleaning
             - complaint
-            - rectification
             - service
         priority:
           type: string

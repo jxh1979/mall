@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.CustomerProjectSwitchRequests.keyed;
 import static com.complex.platform.support.CustomerProjectSwitchRequests.rejected;
@@ -176,7 +176,7 @@ class BarCustomerProjectSwitchJdbcIntegrationTests {
             looseTable = table("loose", "loose_table", "opened");
             bars.assignTableSpace(looseTable, "space_b16_" + s);
             bars.saveTableSession(new BarTableSessionRecord("session_b16_" + s, barId, barId, LocalDate.now(), looseTable, null, null,
-                    2, 0L, 0, null, null, "open", now, null, null, 1L, now, now));
+                    2, 0L, 0, null, null, "walk_in", "open", now, null, null, 1L, now, now));
             product = "product_b16_" + s;
             bars.saveProduct(new BarProductRecord(product, barId, barId, "精酿啤酒", "beer", 3800L, "CNY", null, null, false, "active",
                     now, now, null, null, null, false, null, null, null));

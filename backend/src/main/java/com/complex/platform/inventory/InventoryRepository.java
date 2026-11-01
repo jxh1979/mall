@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.time.Instant;
 import java.util.List;
@@ -127,6 +127,11 @@ public interface InventoryRepository {
     default InventoryCostSummaryRecord sumOutboundCost(
             String merchantId, String projectId, String periodStart, String periodEnd, Instant from, Instant to) {
         return new InventoryCostSummaryRecord(merchantId, periodStart, periodEnd, 0L, 0L, 0L);
+    }
+
+    /** 第十八批 K 段 97-R3：[from, to) 内出品的吧台售卖消耗按酒吧、销售形式、套餐、酒吧商品汇总；merchantId、projectId 为空即不限。 */
+    default List<BarConsumptionStatRecord> listBarConsumptionStats(String merchantId, String projectId, Instant from, Instant to) {
+        return List.of();
     }
 
     List<StockMovementRecord> listStockMovements();
@@ -360,6 +365,14 @@ public interface InventoryRepository {
     /** 14-R2：按溯源码列交接单，新建在前；merchantId 非空只列该商户的。 */
     default List<TraceHandoverRecord> listTraceHandoversByTraceCode(String traceCode, String merchantId) {
         throw new UnsupportedOperationException("trace handover lookup not supported");
+    }
+
+    /**
+     * 第十八批 K 段第 94 条 94-R1（BSM:1197「出库须同时核验订单和物品码」）：含该物品按瓶出品、待出品明细的酒吧订单，下单早的在前；
+     * orderId、merchantId（订单商户）、projectId（酒吧所属项目）各自为空就不过滤。
+     */
+    default List<TraceOutboundOrderRecord> listTraceOutboundOrders(String itemId, String orderId, String merchantId, String projectId) {
+        return List.of();
     }
 
     /** T14 关联：机器人段被动留痕写入 integration_robot_task_events(handover_id)。 */

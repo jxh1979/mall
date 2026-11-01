@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -324,5 +324,60 @@ describe("InventoryLedgerPage 修改物料安全库存（第十八批第 33 条�
       effectivePermissions={{ status: "ready", value: { grants: ["inventory.stock.view"], denies: [], wildcard: false } }} />);
     await waitFor(() => expect(screen.queryByTestId("inventory-item-safety-stock-i-1")).not.toBeNull());
     expect((screen.getByTestId("inventory-item-safety-stock-i-1") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+// 第十八批 K 段 97-R1（BSM:1163「管理酒类、吧台消耗、客人存酒和常用消耗品」；ENUM:79「定价、库存、结算、对账一律按商品规格逐项进行」；
+// ENUM:161 物品大类「酒类、消耗品、礼品、其他物料」）：后台新建库存商品规格，按杯卖的酒登记每瓶容量。
+describe("InventoryLedgerPage 新建库存商品规格（第十八批 K 段 97-R1）", () => {
+  it("容量填 0 当步提示不提交；改填 700 后提交 POST /api/v1/inventory/items 带名称、大类、单位、容量与提交编号", async () => {
+    const api = makeApi();
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("inventory-item-create-open")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("inventory-item-create-open"));
+    fireEvent.change(screen.getByTestId("inventory-item-create-name"), { target: { value: "某某威士忌 700 毫升瓶装" } });
+    fireEvent.change(screen.getByTestId("inventory-item-create-category"), { target: { value: "酒类" } });
+    fireEvent.change(screen.getByTestId("inventory-item-create-unit"), { target: { value: "瓶" } });
+    fireEvent.change(screen.getByTestId("inventory-item-create-spec-volume"), { target: { value: "0" } });
+    fireEvent.click(screen.getByTestId("inventory-item-create-guided-next"));
+    expect(screen.getByTestId("inventory-item-create-guided-error").textContent).toContain("规格容量");
+    expect(screen.queryByTestId("inventory-item-create-submit")).toBeNull();
+
+    fireEvent.change(screen.getByTestId("inventory-item-create-spec-volume"), { target: { value: "700" } });
+    fireEvent.click(screen.getByTestId("inventory-item-create-guided-next"));
+    fireEvent.click(screen.getByTestId("inventory-item-create-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/inventory/items", expect.objectContaining({
+      item_name: "某某威士忌 700 毫升瓶装", category: "酒类", unit: "瓶", spec_volume_ml: 700, idempotency_key: expect.any(String),
+    })));
+    expect(api.post).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 第十八批 K 段 97-R4（BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」）：库存台账「吧台消耗统计」区块。
+describe("InventoryLedgerPage 吧台消耗统计（第十八批 K 段 97-R4）", () => {
+  const STATS = [
+    { barId: "bar-1", barName: "一号酒吧", saleForm: "by_glass", comboId: null, comboName: null, productId: "p-glass", productName: "某某威士忌（按杯）", inventoryItemId: "i-1", itemName: "某某威士忌 700 毫升瓶装", quantity: 2, pourVolumeMl: 50, lossVolumeMl: 4 },
+    { barId: "bar-1", barName: "一号酒吧", saleForm: "by_bottle", comboId: null, comboName: null, productId: "p-bottle", productName: "某某红酒（整瓶）", inventoryItemId: null, itemName: null, quantity: 1, pourVolumeMl: null, lossVolumeMl: 0 },
+    { barId: "bar-1", barName: "一号酒吧", saleForm: "combo", comboId: "combo-1", comboName: "整瓶畅饮套餐", productId: "p-bottle", productName: "某某红酒（整瓶）", inventoryItemId: null, itemName: null, quantity: 2, pourVolumeMl: null, lossVolumeMl: 0 },
+  ];
+
+  it("起止日期填齐点查询才请求；按杯、按瓶、套餐三行显示中文销售形式、数量单位、出酒量与损耗量", async () => {
+    const base = getResolver();
+    const get = vi.fn((path: string) => (path.startsWith("/api/v1/inventory/bar-consumption-stats") ? Promise.resolve(STATS) : base(path)));
+    const api = makeApi(get);
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("inventory-bar-consumption-start")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("inventory-bar-consumption-start"), { target: { value: "2026-10-01" } });
+    fireEvent.click(screen.getByTestId("inventory-bar-consumption-query"));
+    expect(get.mock.calls.some(([path]) => String(path).includes("bar-consumption-stats"))).toBe(false);
+
+    fireEvent.change(screen.getByTestId("inventory-bar-consumption-end"), { target: { value: "2026-10-31" } });
+    fireEvent.click(screen.getByTestId("inventory-bar-consumption-query"));
+    await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/inventory/bar-consumption-stats?period_start=2026-10-01&period_end=2026-10-31"));
+    await waitFor(() => expect(screen.queryByTestId("inventory-bar-consumption-row-2")).not.toBeNull());
+    const cells = (index: number) => Array.from(screen.getByTestId(`inventory-bar-consumption-row-${index}`).querySelectorAll("td")).map((cell) => cell.textContent);
+    expect(cells(0)).toEqual(["一号酒吧", "按杯", "-", "某某威士忌（按杯）", "某某威士忌 700 毫升瓶装", "2 杯", "50", "4"]);
+    expect(cells(1)).toEqual(["一号酒吧", "按瓶", "-", "某某红酒（整瓶）", "-", "1 瓶", "-", "0"]);
+    expect(cells(2)).toEqual(["一号酒吧", "套餐", "整瓶畅饮套餐", "某某红酒（整瓶）", "-", "2 份", "-", "0"]);
   });
 });

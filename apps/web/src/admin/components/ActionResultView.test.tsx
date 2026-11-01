@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ActionResultView, formatActionResult } from "./ActionResultView";
@@ -54,6 +54,14 @@ describe("后台结果区中文展示", () => {
   it("招商跟进结果的 method 显示为「方式：拜访」，不叫支付方式", async () => {
     render(<ActionResultView value={{ refType: "lead", method: "visit", content: "上门洽谈" }} />);
     await waitFor(() => expect(screen.getByTestId("admin-action-result").textContent).toBe(["关联单据类型：线索", "方式：拜访", "内容：上门洽谈"].join("\n")));
+  });
+
+  // 18K 复核（BSM:1323「我的工单（报修/保洁/投诉/其他服务请求自己发起……）」；裁决 D-12）：结果区与表格、抽屉同名。
+  it("商户服务工单结果：工单类型 service 显示为「其他服务请求」", async () => {
+    render(<ActionResultView value={{ action: "merchant_work_order_created", result: { workOrderType: "service" } }} />);
+    await waitFor(() => expect(screen.getByTestId("admin-action-result").textContent).toBe(
+      ["操作：商户工单已创建", "结果：", "  工单类型：其他服务请求"].join("\n"),
+    ));
   });
 
   it("页面已给中文键名的原样用；字符串结果照旧；字典外的英文字段名不上屏，编号类键原样", () => {

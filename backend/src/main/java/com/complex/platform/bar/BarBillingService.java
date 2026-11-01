@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -839,7 +839,8 @@ public class BarBillingService {
         return roleType;
     }
 
-    private int requireCommissionRateBp(String merchantId, String roleType) {
+    /** 第十八批 K 段 95-R2：销售归属改派时未结清账单上的提成行按新档重取费率，复用本方法（包级可见）。 */
+    int requireCommissionRateBp(String merchantId, String roleType) {
         if (commissionRateConfigPort == null) {
             throw ApiException.badRequest("COMMISSION_RATE_CONFIG_UNAVAILABLE",
                     "提成费率配置不可用，无法计提；请先在结算配置中心配置卡座提成费率并复核转正");

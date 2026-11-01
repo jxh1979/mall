@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -11,6 +11,7 @@ import com.complex.platform.evidence.TraceabilityResponsibilityRecord;
 import com.complex.platform.evidence.TraceabilityService;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -221,6 +222,8 @@ public class BarOrderService {
         // 合同经营范围拦截：收集本单全部商品粗类别（含套餐展开 SKU），保存前一次性比对，越界整单拒。
         Set<String> scopeCategories = new LinkedHashSet<>();
         int lineSeq = 0;
+        // 第十八批 K 段 97-R3（BSM:1168「支持按杯、按瓶、按套餐或其他形式统计」）：套餐展开出的明细 id，落库后记套餐来源（V580）。
+        Map<String, List<String>> comboItemIds = new LinkedHashMap<>();
         for (Map<String, Object> item : requireItems(actual.items(), "items")) {
             String comboId = optionalItemText(item, "combo_id", "comboId");
             if (comboId != null) {
@@ -228,11 +231,12 @@ public class BarOrderService {
                 //（最大余数法保证拆分后合计=套餐售价×份数，不多不少）；每 SKU 仍落独立 order_item，
                 // 平台↔酒吧结算与提成扣减照既有按 SKU 内部结算价的逻辑自然生效（见 BarBillingService）。
                 // ponytail: 套餐层 internal_settlement_price_cent 目前无独立读取口径（结算按 SKU 内部价逐项派生），
-                // 故不额外记套餐级结算行；若日后要按套餐口径对账，再加 combo_id 列与读取路径。
+                // 故不额外记套餐级结算行。明细已记套餐来源 combo_id（V580，吧台消耗统计用），按套餐口径对账时再加读取路径。
                 for (BarOrderItemRecord expanded : expandCombo(comboId, item, merchantId, barId, orderId, lineSeq, now,
                         scopeCategories)) {
                     total += expanded.amountCent();
                     orderItems.add(expanded);
+                    comboItemIds.computeIfAbsent(comboId, key -> new ArrayList<>()).add(expanded.id());
                 }
                 lineSeq++;
                 continue;
@@ -297,6 +301,7 @@ public class BarOrderService {
         ));
         if (session != null) serviceResponsibilities.recordOrder(order, session);
         orderItems.forEach(repository::saveOrderItem);
+        comboItemIds.forEach((combo, ids) -> repository.markOrderItemsCombo(ids, combo));
         // 出品票据双驱动（业务HTML 983 行口径）：吧台直点即点即取不走流转；独立餐饮出品在第三方系统、
         // 平台只拿回流不建票；卡座点酒/扫码点单/后厨自营小吃走「接单→制作→备好→送达」完整留痕。
         // 无票订单的送达/退菜路径均已容错（markProductionTicketDelivered 按存在处理）。

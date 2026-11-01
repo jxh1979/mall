@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.42
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.43
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1206 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1210 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 419 | 人工权限矩阵正文未覆盖 318 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2412 | 人工事件矩阵正文未覆盖 2367 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1206 | 人工任务映射正文未逐项覆盖 1200 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 724 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2420 | 人工事件矩阵正文未覆盖 2375 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1210 | 人工任务映射正文未逐项覆盖 1204 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 725 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -143,9 +143,9 @@
 | `bar.shift.manage` | staff-token | project-bar-table | 2 | listBarShifts, openBarShift | OpenAPI 补充，以本附录为准 |
 | `bar.staff_booking.restore` | staff-token | project-bar | 2 | listBarStaffBookingSuspensions, restoreBarStaffBookingSuspension | OpenAPI 补充，以本附录为准 |
 | `bar.table_commission.calculate` | staff-token | project-bar | 1 | calculateBarTableCommission | 已在权限矩阵正文出现 |
+| `bar.table_session.attribution_reassign` | staff-token | project-bar-table | 1 | reassignBarTableSessionAttribution | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.create` | staff-token | project-bar-table | 2 | createBarTableSession, submitBarTableSessionSalesBackfill | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.merge` | staff-token | project-bar-table | 1 | mergeBarTableSession | OpenAPI 补充，以本附录为准 |
-| `bar.table_session.renew` | staff-token | project-bar-table | 1 | renewBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.split` | staff-token | project-bar-table | 1 | splitBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.transfer` | staff-token | project-bar-table, project-merchant | 3 | transferBarTableSession, handoverBarServiceResponsibility, submitBarTableSessionServiceBackfill | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.view` | staff-token | project-bar-table | 1 | listBarTableSessions | OpenAPI 补充，以本附录为准 |
@@ -292,7 +292,7 @@
 | `integration.video.view` | staff-token | project | 1 | listIntegrationVideoAnchors | OpenAPI 补充，以本附录为准 |
 | `inventory.cost.view` | staff-token | project-warehouse | 2 | listInventoryCostLedger, getInventoryCostSummary | OpenAPI 补充，以本附录为准 |
 | `inventory.handover.review` | staff-token | project-warehouse-bar | 1 | reviewTraceHandoverException | OpenAPI 补充，以本附录为准 |
-| `inventory.handover.scan` | staff-token | project-warehouse-bar | 7 | scanTraceCodeHandover, listTraceHandovers, createTraceHandover, getTraceHandover, backfillTraceHandoverSegment, scanTraceSegment, reportRobotSegment | OpenAPI 补充，以本附录为准 |
+| `inventory.handover.scan` | staff-token | project-warehouse-bar | 8 | scanTraceCodeHandover, listTraceHandovers, createTraceHandover, getTraceHandover, backfillTraceHandoverSegment, scanTraceSegment, reportRobotSegment, listTraceCodeOutboundOrders | OpenAPI 补充，以本附录为准 |
 | `inventory.high_value.review` | staff-token | project, project-bar-customer, project-warehouse-bar | 4 | markInventoryItemHighValue, listHighValueReviews, reviewHighValue, approveSavedBottleRemedy | OpenAPI 补充，以本附录为准 |
 | `inventory.purchase_request.manage` | staff-token | project-merchant | 11 | createPurchaseRequest, approvePurchaseRequest, orderPurchaseRequest, arrivePurchaseRequest, receivePurchaseRequest, getPurchaseSuggestions, resolvePurchaseQuantity, registerPurchaseConsignmentSale, requestPurchaseReturn, handoverPurchaseReturn, requestPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
 | `inventory.purchase_request.view` | staff-token | project-merchant | 3 | listPurchaseRequests, getPurchaseWorkbenchOptions, getPurchaseWorkflowDetail | 已在权限矩阵正文出现 |
@@ -302,7 +302,7 @@
 | `inventory.stock.adjust` | staff-token | project-merchant, project-warehouse | 3 | createStockAdjustment, requestQuarantineDisposition, completeQuarantineDisposition | 已在权限矩阵正文出现 |
 | `inventory.stock.batch.manage` | staff-token | warehouse | 1 | createInventoryStockBatch | OpenAPI 补充，以本附录为准 |
 | `inventory.stock.move` | staff-token | project, project-warehouse | 9 | createInventoryItem, updateInventoryItemSafetyStock, createStockIn, createStockMovement, transferStockMovement, createTypedStockMovement, createDamageStockAdjustment, createLossStockAdjustment, createWasteStockAdjustment | 已在权限矩阵正文出现 |
-| `inventory.stock.view` | staff-token | project, project-merchant, project-warehouse, warehouse | 7 | listInventoryItems, listStockBalances, listStockMovements, listInventoryStockBatches, listQuarantineWarehouses, listInventoryQuarantine, listQuarantineDispositions | 已在权限矩阵正文出现 |
+| `inventory.stock.view` | staff-token | project, project-merchant, project-warehouse, warehouse | 8 | listInventoryItems, listStockBalances, listStockMovements, listInventoryStockBatches, listBarConsumptionStats, listQuarantineWarehouses, listInventoryQuarantine, listQuarantineDispositions | 已在权限矩阵正文出现 |
 | `inventory.stocktake.create` | staff-token | project | 1 | createInventoryStocktake | OpenAPI 补充，以本附录为准 |
 | `inventory.stocktake.variance_record` | staff-token | project | 1 | recordInventoryStocktakeVariance | OpenAPI 补充，以本附录为准 |
 | `inventory.stocktake.variance_review` | staff-token | project | 1 | reviewInventoryStocktakeVariance | OpenAPI 补充，以本附录为准 |
@@ -339,7 +339,7 @@
 | `merchant.billing.dispute.submit` | staff-token | - | 1 | submitMerchantBillDispute | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.dunning.record` | staff-token | - | 1 | recordMerchantBillDunning | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.manage` | staff-token | - | 1 | createMerchantBill | OpenAPI 补充，以本附录为准 |
-| `merchant.billing.view` | staff-token | merchant, project-merchant | 2 | listMerchantBills, getMerchantPortalFeeStatement | OpenAPI 补充，以本附录为准 |
+| `merchant.billing.view` | staff-token | merchant, project-merchant | 3 | listMerchantBills, getMerchantPortalFeeStatement, getMerchantPortalUnreadBills | OpenAPI 补充，以本附录为准 |
 | `merchant.penalty.bounds.manage` | staff-token | project | 1 | saveMerchantPenaltyBounds | OpenAPI 补充，以本附录为准 |
 | `merchant.penalty.record` | staff-token | project | 2 | listMerchantPenalties, recordMerchantPenalty | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.card_exit_notice.publish` | staff-token | merchant | 2 | listMyMerchantCardExitNotices, publishMerchantCardExitNotice | OpenAPI 补充，以本附录为准 |
@@ -406,7 +406,7 @@
 | `staff.tax_bracket.manage` | staff-token | platform, project | 5 | upsertPayrollTaxBracket, draftPayrollTaxVersion, submitPayrollTaxVersion, draftPayrollTaxAssessment, submitPayrollTaxAssessment | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
 | `terminal.device.bind` | staff-token | project, project-device | 5 | bindDevice, returnTerminalDevice, getTerminalOfflineEntitlements, syncTerminalTasks, registerTerminalDeviceSigningKey | 已在权限矩阵正文出现 |
-| `terminal.device.lifecycle` | staff-token | -, project-device | 8 | updateTerminalDeviceMerchant, markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap, registerEntryDevice, completeTerminalDeviceRepair, changeTerminalDeviceResponsibleStaff | OpenAPI 补充，以本附录为准 |
+| `terminal.device.lifecycle` | staff-token | -, project-device | 9 | updateTerminalDeviceMerchant, markTerminalDeviceFound, markTerminalDeviceLost, markTerminalDeviceRepair, markTerminalDeviceScrap, markTerminalDeviceArchived, registerEntryDevice, completeTerminalDeviceRepair, changeTerminalDeviceResponsibleStaff | OpenAPI 补充，以本附录为准 |
 | `terminal.device.unbind` | staff-token | project-device | 1 | unbindDevice | 已在权限矩阵正文出现 |
 | `terminal.switch.manage` | staff-token | project-device | 4 | upsertTerminalCanaryRollout, addTerminalCanaryTarget, archiveTerminalCanaryTarget, updateCapabilitySwitch | 已在权限矩阵正文出现 |
 | `terminal.switch.view` | staff-token | project-device | 3 | listTerminalCanaryRollouts, listCapabilitySwitches, listTerminalDevices | 已在权限矩阵正文出现 |
@@ -960,14 +960,14 @@
 | `bar.table_guest.entry_allowance_verified` | success | `verifyBarReservationEntryAllowance` | `POST` | `/api/v1/bar/reservations/{id}/entry-allowance/verify` | BAR-酒吧经营 | `bar.table.guest_checkin` | 接口级事件，以本附录为准 |
 | `bar.table_guest.entry_allowance_verify_failed` | failure | `verifyBarReservationEntryAllowance` | `POST` | `/api/v1/bar/reservations/{id}/entry-allowance/verify` | BAR-酒吧经营 | `bar.table.guest_checkin` | 接口级事件，以本附录为准 |
 | `bar.table_guest.rejected` | failure | `checkInBarReservationGuest` | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | BAR-酒吧经营 | `bar.table.guest_checkin` | 已在事件矩阵正文出现 |
+| `bar.table_session.attribution_reassign_failed` | failure | `reassignBarTableSessionAttribution` | `POST` | `/api/v1/bar/table-sessions/{session_id}/attribution-reassign` | BAR-酒吧经营 | `bar.table_session.attribution_reassign` | 接口级事件，以本附录为准 |
+| `bar.table_session.attribution_reassigned` | success | `reassignBarTableSessionAttribution` | `POST` | `/api/v1/bar/table-sessions/{session_id}/attribution-reassign` | BAR-酒吧经营 | `bar.table_session.attribution_reassign` | 接口级事件，以本附录为准 |
 | `bar.table_session.create` | success | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
 | `bar.table_session.create_failed` | failure | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.create` | 接口级事件，以本附录为准 |
 | `bar.table_session.list` | success | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.view` | 接口级事件，以本附录为准 |
 | `bar.table_session.list_failed` | failure | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | BAR-酒吧经营 | `bar.table_session.view` | 接口级事件，以本附录为准 |
 | `bar.table_session.merge` | success | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | BAR-酒吧经营 | `bar.table_session.merge` | 接口级事件，以本附录为准 |
 | `bar.table_session.merge_failed` | failure | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | BAR-酒吧经营 | `bar.table_session.merge` | 接口级事件，以本附录为准 |
-| `bar.table_session.renew` | success | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | BAR-酒吧经营 | `bar.table_session.renew` | 接口级事件，以本附录为准 |
-| `bar.table_session.renew_failed` | failure | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | BAR-酒吧经营 | `bar.table_session.renew` | 接口级事件，以本附录为准 |
 | `bar.table_session.transfer` | success | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `bar.table_session.transfer_failed` | failure | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `bar.table_space_backlog.view_failed` | failure | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
@@ -1779,6 +1779,8 @@
 | `inventory.adjustment_failed` | failure | `createLossStockAdjustment` | `POST` | `/api/v1/inventory/stock-movements/loss` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.adjustment_failed` | failure | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | INV-库存存酒 | `inventory.stock.adjust` | 接口级事件，以本附录为准 |
 | `inventory.adjustment_failed` | failure | `createWasteStockAdjustment` | `POST` | `/api/v1/inventory/stock-movements/waste` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
+| `inventory.bar_consumption_stats.view_failed` | failure | `listBarConsumptionStats` | `GET` | `/api/v1/inventory/bar-consumption-stats` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
+| `inventory.bar_consumption_stats.viewed` | success | `listBarConsumptionStats` | `GET` | `/api/v1/inventory/bar-consumption-stats` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
 | `inventory.cost_ledger.view_failed` | failure | `listInventoryCostLedger` | `GET` | `/api/v1/inventory/cost-ledger` | INV-库存存酒 | `inventory.cost.view` | 接口级事件，以本附录为准 |
 | `inventory.cost_ledger.viewed` | success | `listInventoryCostLedger` | `GET` | `/api/v1/inventory/cost-ledger` | INV-库存存酒 | `inventory.cost.view` | 接口级事件，以本附录为准 |
 | `inventory.cost_summary.view_failed` | failure | `getInventoryCostSummary` | `GET` | `/api/v1/inventory/cost-summary` | INV-库存存酒 | `inventory.cost.view` | 接口级事件，以本附录为准 |
@@ -2136,6 +2138,8 @@
 | `not_applicable` | failure | `getManualBackfillPolicy` | `GET` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | EVD-事件证据 | `evidence.manual_backfill.policy.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getMerchantCardExitNoticePolicy` | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getMerchantCardExitNoticePolicy` | `GET` | `/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getMerchantPortalUnreadBills` | `GET` | `/api/v1/merchant-portal/unread-bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getMerchantPortalUnreadBills` | `GET` | `/api/v1/merchant-portal/unread-bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getMyStudentCertification` | `GET` | `/api/v1/customer/student-certifications/current` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getMyStudentCertification` | `GET` | `/api/v1/customer/student-certifications/current` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
@@ -2192,6 +2196,8 @@
 | `not_applicable` | failure | `listParkingMonthlyVehicles` | `GET` | `/api/v1/parking/monthly-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listTraceCodeOutboundOrders` | `GET` | `/api/v1/inventory/trace-codes/{id}/outbound-orders` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listTraceCodeOutboundOrders` | `GET` | `/api/v1/inventory/trace-codes/{id}/outbound-orders` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
@@ -2644,6 +2650,8 @@
 | `terminal_switch.view_failed` | failure | `listCapabilitySwitches` | `GET` | `/api/v1/terminals/capability-switches` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
 | `terminal_switch.viewed` | success | `listCapabilitySwitches` | `GET` | `/api/v1/terminals/capability-switches` | TERM-终端设备 | `terminal.switch.view` | 接口级事件，以本附录为准 |
 | `terminal.access_rejected` | failure | `getKioskConfig` | `GET` | `/api/v1/terminals/kiosks/{device_id}/config` | TERM-终端设备 | `not_applicable` | 接口级事件，以本附录为准 |
+| `terminal.device.archive_failed` | failure | `markTerminalDeviceArchived` | `POST` | `/api/v1/terminals/devices/{id}/archive` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
+| `terminal.device.archived` | success | `markTerminalDeviceArchived` | `POST` | `/api/v1/terminals/devices/{id}/archive` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
 | `terminal.device.bind_failed` | failure | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.bound` | success | `bindDevice` | `POST` | `/api/v1/terminals/devices/bind` | TERM-终端设备 | `terminal.device.bind` | 接口级事件，以本附录为准 |
 | `terminal.device.entry_device_register_failed` | failure | `registerEntryDevice` | `POST` | `/api/v1/terminals/devices/entry-devices` | TERM-终端设备 | `terminal.device.lifecycle` | 接口级事件，以本附录为准 |
@@ -3110,8 +3118,8 @@
 | BAR-酒吧经营 | `placeBarScanOrder` | `POST` | `/api/v1/bar/table-sessions/{session_id}/scan-orders` | 扫码点单（绑桌台会话） | `bar.order.create` | `bar.scan_order_created` / `bar.scan_order_create_failed` | miniapp, tablet | operation 级补充 |
 | BAR-酒吧经营 | `raiseBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly` | 登记账单争议（置异常） | `bar.bill.adjust` | `bar.bill_anomaly_raised` / `bar.bill_anomaly_raise_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `readBarBusinessDayConfigOriginal` | `GET` | `/api/v1/bar-business-day-configs/{id}` | 逐笔查看酒吧营业日配置审批原件 | `governance.supervisor_review.view` | `bar.business_day.original_viewed` / `bar.business_day.original_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, tablet, web | operation 级补充 |
+| BAR-酒吧经营 | `reassignBarTableSessionAttribution` | `POST` | `/api/v1/bar/table-sessions/{session_id}/attribution-reassign` | 改派开台客人来源与销售人员（店长办理） | `bar.table_session.attribution_reassign` | `bar.table_session.attribution_reassigned` / `bar.table_session.attribution_reassign_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `redeemBarDrinkEntitlement` | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | 酒水权益兑换承接 | `bar.entitlement.redeem` | `bar.entitlement_redeemed` / `bar.entitlement_redeem_failed` | staff_work_phone, tablet, web | operation 级补充 |
-| BAR-酒吧经营 | `renewBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/renew` | 续台（延长台位会话） | `bar.table_session.renew` | `bar.table_session.renew` / `bar.table_session.renew_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | tablet, web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | 主管处置异常账单 | `bar.bill.anomaly.resolve` | `bar.bill_anomaly_resolved` / `bar.bill_anomaly_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `restoreBarStaffBookingSuspension` | `POST` | `/api/v1/bar/staff-booking-suspensions/{id}/restore` | 店长复核恢复员工代订权限 | `bar.staff_booking.restore` | `bar.staff_booking_restored` / `bar.staff_booking_restore_failed` | web | operation 级补充 |
@@ -3471,6 +3479,7 @@
 | INV-库存存酒 | `handoverPurchaseReturn` | `POST` | `/api/v1/inventory/purchase-returns/{id}/handover` | 登记批准退供的实际交接并出库 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | staff_work_phone, tablet, web, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `handoverSavedBottlesToPlatform` | `POST` | `/api/v1/inventory/saved-bottles/handover` | 门店退出存酒交所属娱乐平台公司（平台操作者办理；该门店有效期内未结存酒须全部清点；指定领取地点、原有效期与原取酒规则不变；毁损与实收为 0 的短少走作废路径，部分短少按差额） | `bar.saved_bottle.manage` | `bar.saved_bottle.handed_over` / `bar.saved_bottle.handover_failed` | tablet, web | operation 级补充 |
 | INV-库存存酒 | `initiateSavedBottleManualPickup` | `POST` | `/api/v1/inventory/saved-bottles/{id}/manual-pickups` | 人工例外取酒①店长发起（消费历史条件按项目配置，走客人查询专门通道留痕） | `bar.saved_bottle.manual_pickup.initiate` | `bar.saved_bottle.manual_pickup_initiated` / `bar.saved_bottle.manual_pickup_initiate_failed` | web, tablet, staff_work_phone | operation 级补充 |
+| INV-库存存酒 | `listBarConsumptionStats` | `GET` | `/api/v1/inventory/bar-consumption-stats` | 期间吧台消耗统计（按杯、按瓶、套餐） | `inventory.stock.view` | `inventory.bar_consumption_stats.viewed` / `inventory.bar_consumption_stats.view_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listHighValueReviews` | `GET` | `/api/v1/inventory/high-value-reviews` | 查询库存域高价值复核单(报损/盘点差异/存酒作废) | `inventory.high_value.review` | `inventory.high_value_review.viewed` / `inventory.high_value_review.view_failed` | web, tablet, mobile_admin | operation 级补充 |
 | INV-库存存酒 | `listInventoryCostLedger` | `GET` | `/api/v1/inventory/cost-ledger` | 查询库存成本流水（移动加权） | `inventory.cost.view` | `inventory.cost_ledger.viewed` / `inventory.cost_ledger.view_failed` | web, staff_work_phone, tablet | operation 级补充 |
 | INV-库存存酒 | `listInventoryItems` | `GET` | `/api/v1/inventory/items` | 查询库存明细 | `inventory.stock.view` | `inventory.item.viewed` / `inventory.item.viewed_failed` | web | operation 级补充 |
@@ -3494,6 +3503,7 @@
 | INV-库存存酒 | `listSupplierReconciliations` | `GET` | `/api/v1/inventory/supplier-reconciliations` | 查询供应商对账列表 | `inventory.supplier.reconcile` | `inventory.supplier_reconciliation.list` / `inventory.supplier_reconciliation.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSupplierSettlementMethods` | `GET` | `/api/v1/inventory/supplier-settlement-methods` | 查询供应商结算档列表 | `inventory.supplier.settlement.manage` | `inventory.supplier_settlement_method.list` / `inventory.supplier_settlement_method.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `listSupplyContracts` | `GET` | `/api/v1/inventory/supply-contracts` | 查询供应合同列表 | `inventory.supply_contract.manage` | `inventory.supply_contract.viewed` / `inventory.supply_contract.view_failed` | web | operation 级补充 |
+| INV-库存存酒 | `listTraceCodeOutboundOrders` | `GET` | `/api/v1/inventory/trace-codes/{id}/outbound-orders` | 库管出库可选的酒吧订单（按溯源码） | `inventory.handover.scan` | `not_applicable` / `not_applicable` | staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `listTraceHandovers` | `GET` | `/api/v1/inventory/trace-handovers` | 按溯源码查交接单 | `inventory.handover.scan` | `not_applicable` / `not_applicable` | staff_work_phone, web | operation 级补充 |
 | INV-库存存酒 | `listWarehouses` | `GET` | `/api/v1/inventory/warehouses` | 查询库房列表 | `inventory.warehouse.manage` | `inventory.warehouse.list` / `inventory.warehouse.list_failed` | web | operation 级补充 |
 | INV-库存存酒 | `lookupSavedBottlesByPhone` | `POST` | `/api/v1/inventory/saved-bottles/lookup` | 按手机号检索存酒（检索只能输入手机号，姓名与昵称不得用于检索；手机号走请求体不进 URL） | `bar.saved_bottle.manage` | `bar.saved_bottle.viewed` / `bar.saved_bottle.view_failed` | web, tablet, staff_work_phone | operation 级补充 |
@@ -3670,6 +3680,7 @@
 | P0-待归类 | `getLeasingLeadContactPhone` | `GET` | `/api/v1/leasing/leads/{lead_id}/contact-phone` | 查看某一条招商线索的完整联系人手机号 | `leasing.lead.manage` | `leasing.lead.contact_phone_viewed` / `leasing.lead.contact_phone_view_failed` | web | operation 级补充 |
 | P0-待归类 | `getMediaPerformanceShow` | `GET` | `/api/v1/settlement/media-shows/{id}` | 逐场演出合同详情（含履约事实与三项结算） | `media.performance.view` | `media_show.viewed` / `media_show.view_failed` | web | operation 级补充 |
 | P0-待归类 | `getMerchantPortalFeeStatement` | `GET` | `/api/v1/merchant-portal/fee-statement` | 商户专区·费用总表与当期综合账单(本商户) | `merchant.billing.view` | `merchant_portal.fee_statement.viewed` / `merchant_portal.fee_statement.view_failed` | web, merchant_portal, merchant_app | operation 级补充 |
+| P0-待归类 | `getMerchantPortalUnreadBills` | `GET` | `/api/v1/merchant-portal/unread-bills` | 商户专区·首页未读账单提醒(本商户) | `merchant.billing.view` | `not_applicable` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | 在场与出场记录及车位占用 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | 查看本项目停车业务参数 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | 公司统一收款码(下单出示用) | `service.order.create` | `service.pay_config.viewed` / `service.pay_config.view_failed` | staff_private_phone, web, tablet | operation 级补充 |
@@ -4013,6 +4024,7 @@
 | TERM-终端设备 | `listMdmSiteWhitelist` | `GET` | `/api/v1/terminals/mdm/site-whitelist` | 查询 MDM 网站白名单 | `mdm.policy.manage` | `mdm.site_whitelist.viewed` / `mdm.site_whitelist.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `listTerminalCanaryRollouts` | `GET` | `/api/v1/terminals/canary-rollouts` | 查询终端开关灰度试点 | `terminal.switch.view` | `terminal_canary.viewed` / `terminal_canary.view_failed` | web | operation 级补充 |
 | TERM-终端设备 | `listTerminalDevices` | `GET` | `/api/v1/terminals/devices` | 终端设备台账 | `terminal.switch.view` | `terminal.device.viewed` / `terminal.device.view_failed` | web | operation 级补充 |
+| TERM-终端设备 | `markTerminalDeviceArchived` | `POST` | `/api/v1/terminals/devices/{id}/archive` | 报废设备归档 | `terminal.device.lifecycle` | `terminal.device.archived` / `terminal.device.archive_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceFound` | `POST` | `/api/v1/terminals/devices/{id}/found` | 标记设备找回 | `terminal.device.lifecycle` | `terminal.device.found` / `terminal.device.found_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceLost` | `POST` | `/api/v1/terminals/devices/{id}/lost` | 标记设备挂失 | `terminal.device.lifecycle` | `terminal.device.lost` / `terminal.device.lost_failed` | web, mobile_admin | operation 级补充 |
 | TERM-终端设备 | `markTerminalDeviceRepair` | `POST` | `/api/v1/terminals/devices/{id}/repair` | 设备送修 | `terminal.device.lifecycle` | `terminal.device.repaired` / `terminal.device.repair_failed` | web, mobile_admin | operation 级补充 |

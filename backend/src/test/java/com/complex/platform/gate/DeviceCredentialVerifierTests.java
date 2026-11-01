@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -480,6 +480,37 @@ class DeviceCredentialVerifierTests {
         TerminalIdentityHolder.VerifiedTerminal vt = verifier("grace").verify(deviceIdOnly("web"));
         assertThat(vt.terminalType()).isEqualTo("kiosk");
         assertThat(vt.verified()).isFalse();
+    }
+
+    // ---- 第 91 条 91-R1：商户账号的请求除设备绑定型外按商户网页门户判 ----
+
+    /** (f) 商户账号报 web、不带设备号：派生终端为 merchant_portal（改报 web 不能换判 Web 前端的开关）。 */
+    @Test
+    void merchantAccountSelfReportedWebIsJudgedAsMerchantPortal() {
+        when(authz.currentActor()).thenReturn(new AccessActor("u1", "user", "staff", "org", "m1", "active"));
+        MockHttpServletRequest r = new MockHttpServletRequest("GET", "/api/v1/merchant-portal/settlements");
+        r.addHeader("X-Terminal-Type", "web");
+        assertThat(verifier("grace").verify(r).terminalType()).isEqualTo("merchant_portal");
+    }
+
+    /** (e) 商户员工在工作手机上作业：已签名的工作手机请求仍为 staff_work_phone、已验签、设备为登记设备号（设备绑定型不改判）。 */
+    @Test
+    void merchantStaffSignedWorkPhoneIsNotReclassified() throws Exception {
+        when(authz.currentActor()).thenReturn(new AccessActor("u1", "user", "staff", "org", "m1", "active"));
+        TerminalIdentityHolder.VerifiedTerminal vt =
+                verifier("enforce").verify(signedRequest("POST", NOW, "n1", sign("POST", NOW, "n1")));
+        assertThat(vt.terminalType()).isEqualTo("staff_work_phone");
+        assertThat(vt.verified()).isTrue();
+        assertThat(vt.deviceId()).isEqualTo(DEVICE);
+    }
+
+    /** (g) 平台账号挂了商户不改判，仍按自报 web（与商户手机应用登录同口径：平台账号即便挂了商户也算平台形态）。 */
+    @Test
+    void platformAdminWithMerchantStaysWeb() {
+        when(authz.currentActor()).thenReturn(new AccessActor("u1", "admin", "platform_admin", "org", "m1", "active"));
+        MockHttpServletRequest r = new MockHttpServletRequest("GET", "/api/v1/merchant-portal/settlements");
+        r.addHeader("X-Terminal-Type", "web");
+        assertThat(verifier("grace").verify(r).terminalType()).isEqualTo("web");
     }
 
     /** 84-R1 交叉向量：与终端 DeviceRequestHeadersTest 同一组输入（business_type=manual_backfill；file 字段 a.jpg、字节 abc）摘要逐字相同。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -28,9 +28,11 @@ enum BarWriteOperation implements AuditedOperation {
     CREATE_TABLE_SESSION("bar.table_session.created", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
     TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
     MERGE_TABLE_SESSIONS("bar.table.merged", "bar.table.merge_failed", "bar.table_session.merge", "bar_table_session_adjustment"),
-    RENEW_TABLE_SESSION("bar.table.renewed", "bar.table.renew_failed", "bar.table_session.renew", "bar_table_session_adjustment"),
     // 第十批 TK-27-R3：拆台（BSM L1079）。
     SPLIT_TABLE_SESSIONS("bar.table.split", "bar.table.split_failed", "bar.table_session.split", "bar_table_session_adjustment"),
+    // 第十八批 K 段 95-R2（BSM 第 1021 行「来源与销售人员的事后改派须店长复核并留痕」）。
+    REASSIGN_TABLE_SESSION_ATTRIBUTION("bar.table_session.attribution_reassigned", "bar.table_session.attribution_reassign_failed",
+            "bar.table_session.attribution_reassign", "bar_table_session"),
     CREATE_BILL_PAY_INTENT("payment.intent_created", "payment.intent_failed", "finance.payment_intent.create", "finance_payment_intent"),
     SETTLE_BILL("bar.bill.settled", "bar.bill.settle_failed", "finance.payment.register", "bar_bill"),
     APPLY_BILL_ADJUSTMENT("bar.bill.adjusted", "bar.bill.adjust_failed", "bar.bill.adjust", "bar_bill_adjustment"),

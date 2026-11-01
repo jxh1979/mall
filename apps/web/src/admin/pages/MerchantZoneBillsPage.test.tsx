@@ -188,3 +188,39 @@ describe("MerchantZoneBillsPage 费用总表与当期综合账单", () => {
       url.includes("/api/v1/merchant-portal/fee-statement?month=2026-08"))).toBe(true));
   });
 });
+
+// 第 92 条（BSM:1597 首页未读账单提醒）：从提醒带账期进入（focusObjectId＝YYYY-MM）直接打开该月。
+describe("MerchantZoneBillsPage 从未读账单提醒带账期进入", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant-zone/bills");
+  });
+
+  function renderWithFocus(focusObjectId: string) {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(envelope([])));
+    vi.stubGlobal("fetch", fetchMock);
+    const props: AdminPageProps = {
+      api: new AdminApi("test-token"),
+      user: { id: "u1", username: "merchant", accountType: "merchant_admin" },
+      setActionResult: vi.fn(),
+      setGlobalError: vi.fn(),
+      effectivePermissions: ADMIN_PERMS,
+      navigateTo: vi.fn(),
+      focusObjectId,
+    };
+    render(<MerchantZoneBillsPage {...props} />);
+    return () => fetchMock.mock.calls.map((call) => String(call[0])).filter((url) => url.includes("/api/v1/merchant-portal/fee-statement"));
+  }
+
+  it("focusObjectId 是月份：首次读费用总表就带该月", async () => {
+    const feeCalls = renderWithFocus("2026-08");
+    await waitFor(() => expect(feeCalls().length).toBeGreaterThan(0));
+    expect(feeCalls()[0]).toContain("/api/v1/merchant-portal/fee-statement?month=2026-08");
+  });
+
+  it("focusObjectId 不是月份：照旧不带 month", async () => {
+    const feeCalls = renderWithFocus("c-1");
+    await waitFor(() => expect(feeCalls().length).toBeGreaterThan(0));
+    expect(feeCalls()[0]).not.toContain("month=");
+  });
+});

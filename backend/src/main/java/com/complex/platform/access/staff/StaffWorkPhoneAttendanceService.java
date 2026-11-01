@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AccessRepository;
@@ -308,6 +308,15 @@ public class StaffWorkPhoneAttendanceService {
         audit.recordSuccess(swap?"staff.attendance.phone_swap_returned":"staff.attendance.phone_returned","terminal.device.bind",
                 "staff_work_phone_context",context.id(),null,null,Map.of("user_id",context.userId(),"device_id",device.deviceId()));
         return context;
+    }
+
+    /**
+     * 第 96 条 96-R2（第十八批裁决 23「设备管理员收回实物后在后台办归还，回「待领用」，不给该员工记下班」）：待归还的工作手机后台收回时
+     * 结束该次领用（employment_ended），不写下班考勤。仅由设备归还事务调用。
+     */
+    public void closeOnEmploymentEnd(TerminalDeviceRecord device, Instant at) {
+        jdbc.update("UPDATE staff_work_phone_contexts SET closed_at=:at,close_reason='employment_ended' WHERE device_id=:device AND closed_at IS NULL",
+                new MapSqlParameterSource().addValue("at",ts(at)).addValue("device",device.deviceId()));
     }
 
     public Context requireSwapContext(TerminalDeviceRecord device) {

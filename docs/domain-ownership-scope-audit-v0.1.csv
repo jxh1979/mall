@@ -300,6 +300,7 @@ media_performance_shows,direct,project_id,project_id column on media_performance
 merchant_bill_disputes,direct,merchant_id,merchant_id column on merchant_bill_disputes,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_bill_dunning_records,direct,merchant_id,merchant_id column on merchant_bill_dunning_records,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_bill_lines,inherited,bill_id,bill_id -> merchant_bills -> merchant_id,must join through scope path before multi-complex rollout,V0.07,covered
+merchant_bill_reads,direct,merchant_id,merchant_id column on merchant_bill_reads,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_bills,direct,merchant_id,merchant_id column on merchant_bills,ready for project/merchant scoped query enforcement,V0.07,covered
 merchant_card_exit_notice_policy,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 merchant_card_exit_notices,direct,project_id,project_id column on merchant_card_exit_notices,ready for project/merchant scoped query enforcement,V0.07,covered

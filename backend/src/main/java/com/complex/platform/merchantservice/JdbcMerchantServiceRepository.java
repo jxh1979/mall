@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -81,6 +82,25 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
         }
         sql.append(" ORDER BY created_at DESC, id LIMIT :limit");
         return jdbcTemplate.query(sql.toString(), params, this::mapWorkOrder);
+    }
+
+    /** 93-R3：商户经营项目口径同 JdbcAnalyticsRepository.MERCHANTS_OPERATING_IN_PROJECTS（主项目加 merchant_projects）。 */
+    @Override
+    public List<MerchantWorkOrderRecord> findWorkOrdersByMerchantProjects(Set<String> projectIds, boolean includeArchived, int limit) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
+                       title, description, reported_by_user_id, reported_channel, owner_department,
+                       owner_user_id, due_at, closed_at, resolution, satisfaction_score,
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by,
+                       delete_requested_at, delete_reason
+                  FROM merchant_service_work_orders
+                 WHERE delete_status <> 'approved'
+                   AND merchant_id IN (SELECT m.id FROM merchants m
+                                        WHERE m.project_id IN (:project_ids)
+                                           OR m.id IN (SELECT mp.merchant_id FROM merchant_projects mp WHERE mp.project_id IN (:project_ids)))
+                """ + (includeArchived ? "" : " AND archived_at IS NULL") + " ORDER BY created_at DESC, id LIMIT :limit",
+                new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("limit", limit), this::mapWorkOrder);
     }
 
     @Override

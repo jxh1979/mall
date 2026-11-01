@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiRequests;
 import com.complex.platform.common.api.ApiResponse;
@@ -26,12 +26,20 @@ public class MerchantPortalController {
     private final MerchantPortalService service;
     private final MerchantZoneNoticeService notices;
     private final MerchantFeeStatementService feeStatements;
+    private final MerchantUnreadBillService unreadBills;
 
     public MerchantPortalController(MerchantPortalService service, MerchantZoneNoticeService notices,
-            MerchantFeeStatementService feeStatements) {
+            MerchantFeeStatementService feeStatements, MerchantUnreadBillService unreadBills) {
         this.service = service;
         this.notices = notices;
         this.feeStatements = feeStatements;
+        this.unreadBills = unreadBills;
+    }
+
+    /** 第 92 条（BSM:1597「商户专区首页保留未读账单提醒，该提醒不因异议期届满而消失。」）：本商户未读账单，只读。 */
+    @GetMapping("/unread-bills")
+    public ApiResponse<MerchantUnreadBillService.UnreadBills> unreadBills() {
+        return ApiResponse.ok(unreadBills.unread());
     }
 
     /** 18E 第 21 条（BSM:1323）：本商户费用总表与当期（计费自然月）综合账单，只读；month 缺省取当月。 */

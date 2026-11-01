@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -677,6 +677,53 @@ class JdbcInventoryRepository implements InventoryRepository {
                         rs.getLong("no_basis_count"))).getFirst();
     }
 
+    // 第十八批 K 段 97-R3（BSM:1168、BSM:1065、BSM:1068）：酒吧＝商户（V267，同 findBarProjectId）。只计售卖的酒水：赠送明细与小吃不计；
+    // 回库退品的数量与出酒量记 0、损耗不退；销售形式＝有套餐来源为套餐，否则有标准出酒量为按杯，否则按瓶（BSM:1065 点酒方式只有这三种）。
+    @Override
+    public List<BarConsumptionStatRecord> listBarConsumptionStats(String merchantId, String projectId, Instant from, Instant to) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_id", projectId, java.sql.Types.VARCHAR)
+                .addValue("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+                .addValue("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC));
+        return jdbcTemplate.query("""
+                SELECT s.bar_id, MAX(s.bar_name) AS bar_name, s.sale_form, s.combo_id, MAX(s.combo_name) AS combo_name,
+                       s.product_id, MAX(s.product_name) AS product_name, s.inventory_item_id, MAX(s.item_name) AS item_name,
+                       SUM(s.quantity) AS quantity, SUM(s.pour_volume) AS pour_volume_ml, SUM(s.loss_volume) AS loss_volume_ml
+                  FROM (
+                        SELECT o.bar_id, m.merchant_name AS bar_name,
+                               CASE WHEN i.combo_id IS NOT NULL THEN 'combo'
+                                    WHEN p.standard_pour_volume IS NOT NULL THEN 'by_glass'
+                                    ELSE 'by_bottle' END AS sale_form,
+                               i.combo_id, c.combo_name, i.product_id, p.product_name, p.inventory_item_id, ii.item_name,
+                               CASE WHEN i.voided AND i.return_to_stock THEN 0 ELSE i.quantity END AS quantity,
+                               CASE WHEN i.voided AND i.return_to_stock THEN 0 ELSE i.actual_pour_volume END AS pour_volume,
+                               i.loss_volume
+                          FROM bar_order_items i
+                          JOIN bar_orders o ON o.id = i.order_id
+                          JOIN bar_products p ON p.id = i.product_id
+                          JOIN merchants m ON m.id = o.bar_id
+                          LEFT JOIN bar_combos c ON c.id = i.combo_id
+                          LEFT JOIN inventory_items ii ON ii.id = p.inventory_item_id
+                         WHERE i.delivered_at >= :from
+                           AND i.delivered_at < :to
+                           AND i.is_gift = FALSE
+                           AND p.product_type <> 'snack'
+                           AND (CAST(:merchant_id AS VARCHAR) IS NULL OR o.merchant_id = :merchant_id)
+                           AND (CAST(:project_id AS VARCHAR) IS NULL OR m.project_id = :project_id)
+                       ) s
+                 GROUP BY s.bar_id, s.sale_form, s.combo_id, s.product_id, s.inventory_item_id
+                 ORDER BY s.bar_id, s.sale_form, s.combo_id NULLS FIRST, s.product_id
+                """, params, (rs, n) -> new BarConsumptionStatRecord(
+                        rs.getString("bar_id"), rs.getString("bar_name"), rs.getString("sale_form"),
+                        rs.getString("combo_id"), rs.getString("combo_name"),
+                        rs.getString("product_id"), rs.getString("product_name"),
+                        rs.getString("inventory_item_id"), rs.getString("item_name"),
+                        rs.getLong("quantity"),
+                        rs.getObject("pour_volume_ml") == null ? null : rs.getLong("pour_volume_ml"),
+                        rs.getLong("loss_volume_ml")));
+    }
+
     @Override
     public List<StockMovementRecord> listStockMovements() {
         return jdbcTemplate.query("""
@@ -897,11 +944,11 @@ class JdbcInventoryRepository implements InventoryRepository {
         jdbcTemplate.update("""
                 INSERT INTO inventory_trace_handovers (
                     id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
-                    handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id
+                    handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id, order_id
                 )
                 VALUES (
                     :id, :trace_code, :item_id, :from_staff_id, :to_staff_id, :device_id,
-                    :handover_result, :overall_status, :current_segment, CAST(:evidence_attachment_ids AS jsonb), :created_at, :merchant_id
+                    :handover_result, :overall_status, :current_segment, CAST(:evidence_attachment_ids AS jsonb), :created_at, :merchant_id, :order_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     trace_code = EXCLUDED.trace_code,
@@ -921,7 +968,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<TraceHandoverRecord> findTraceHandoverByIdForUpdate(String id) {
         return jdbcTemplate.query("""
                 SELECT id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
-                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id
+                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id, order_id
                   FROM inventory_trace_handovers
                  WHERE id = :id
                    FOR UPDATE
@@ -1020,12 +1067,40 @@ class JdbcInventoryRepository implements InventoryRepository {
     public List<TraceHandoverRecord> listTraceHandoversByTraceCode(String traceCode, String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, trace_code, item_id, from_staff_id, to_staff_id, device_id,
-                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id
+                       handover_result, overall_status, current_segment, evidence_attachment_ids, created_at, merchant_id, order_id
                   FROM inventory_trace_handovers
                  WHERE trace_code = :trace_code
                 """ + (merchantId == null ? "" : " AND merchant_id = :merchant_id") + " ORDER BY created_at DESC, id",
                 new MapSqlParameterSource("trace_code", traceCode).addValue("merchant_id", merchantId),
                 rowMapper::mapTraceHandover);
+    }
+
+    /** 第十八批 K 段第 94 条 94-R1：同 countValidTableOrders 直读酒吧表；按杯商品（有标准出酒量）出品时按容量扣同一物料，不是整瓶送到客人，不列。 */
+    @Override
+    public List<TraceOutboundOrderRecord> listTraceOutboundOrders(String itemId, String orderId, String merchantId, String projectId) {
+        return jdbcTemplate.query("""
+                SELECT o.id AS order_id, t.table_name, string_agg(DISTINCT i.product_name, '、') AS product_name,
+                       SUM(i.quantity) AS quantity, o.created_at
+                  FROM bar_orders o
+                  JOIN bar_order_items i ON i.order_id = o.id
+                  JOIN bar_products p ON p.id = i.product_id
+                  JOIN bar_tables t ON t.id = o.table_id
+                  LEFT JOIN merchants m ON m.id = o.bar_id
+                 WHERE p.inventory_item_id = :item_id
+                   AND p.standard_pour_volume IS NULL
+                   AND i.delivery_status = 'pending'
+                   AND (CAST(:order_id AS VARCHAR) IS NULL OR o.id = :order_id)
+                   AND (CAST(:merchant_id AS VARCHAR) IS NULL OR o.merchant_id = :merchant_id)
+                   AND (CAST(:project_id AS VARCHAR) IS NULL OR m.project_id = :project_id)
+                 GROUP BY o.id, t.table_name, o.created_at
+                 ORDER BY o.created_at, o.id
+                """, new MapSqlParameterSource()
+                .addValue("item_id", itemId)
+                .addValue("order_id", orderId)
+                .addValue("merchant_id", merchantId)
+                .addValue("project_id", projectId),
+                (rs, n) -> new TraceOutboundOrderRecord(rs.getString("order_id"), rs.getString("table_name"),
+                        rs.getString("product_name"), rs.getInt("quantity"), toInstant(rs, "created_at")));
     }
 
     @Override
@@ -2042,7 +2117,8 @@ class JdbcInventoryRepository implements InventoryRepository {
                 .addValue("current_segment", handover.currentSegment())
                 .addValue("evidence_attachment_ids", writeList(handover.evidenceAttachmentIds()))
                 .addValue("created_at", offset(handover.createdAt()))
-                .addValue("merchant_id", handover.merchantId());
+                .addValue("merchant_id", handover.merchantId())
+                .addValue("order_id", handover.orderId());
     }
 
     private MapSqlParameterSource traceHandoverStepParameters(TraceHandoverStepRecord step) {

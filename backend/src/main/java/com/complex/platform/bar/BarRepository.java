@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -186,6 +186,10 @@ public interface BarRepository {
     Optional<BarOrderRecord> findOrderById(String id);
 
     BarOrderItemRecord saveOrderItem(BarOrderItemRecord item);
+
+    /** 第十八批 K 段 97-R3（V580）：套餐下单展开出的明细记所属套餐，吧台消耗统计据此分出「套餐」；内存替身不记。 */
+    default void markOrderItemsCombo(List<String> orderItemIds, String comboId) {
+    }
 
     List<BarOrderItemRecord> listOrderItems(String orderId);
 

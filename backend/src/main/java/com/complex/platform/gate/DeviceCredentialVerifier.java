@@ -3,7 +3,7 @@ package com.complex.platform.gate;
 import com.complex.platform.auth.AuthCookies;
 import com.complex.platform.auth.AuthService;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -69,6 +69,10 @@ import org.springframework.web.util.WebUtils;
  * <p>第 25 条 25-R1 商户手机应用（PGM:744「前端隐藏只是辅助，后端接口必须独立校验」）：请求带商户手机应用会话时（登录只许商户账号），
  * 会话锁定的登录端即可信终端、不看自报类型，设备取会话设备编号（第十八批裁决 19）；无会话的请求照下方原分支。
  *
+ * <p>第 91 条 91-R1 商户网页门户（PGM:728「商户侧 App/Web。」、PGM:744）：商户账号（与商户手机应用登录同口径）的请求，除设备绑定型外一律按
+ * {@code merchant_portal} 判总开关、模块开关与灰度，改报 web、其他终端码或不带终端头都一样；设备绑定型照设备登记与验签判定
+ * （商户员工在工作手机、平板、私人手机上作业，BSM:1889-1890、BSM:1899-1901）。
+ *
  * <p>分级强制 {@code off|grace|enforce}（默认 grace=生产安全态）。读请求不因缺签名被拒。
  * <b>实际翻 enforce 依赖客户端实现签名 + 登记密钥（客户端侧工作，本 PR 不含）；本 PR 让服务端 ready-to-enforce。</b>
  */
@@ -81,6 +85,7 @@ public class DeviceCredentialVerifier {
     static final String STAFF_PRIVATE_PHONE = "staff_private_phone";
     public static final Set<String> DEVICE_BOUND_TYPES = Set.of("staff_work_phone", "tablet", "kiosk", STAFF_PRIVATE_PHONE);
     private static final String STAFF_WORK_PHONE = "staff_work_phone";
+    private static final String MERCHANT_PORTAL = "merchant_portal";
     /** #553：登录请求此时还没有会话 Cookie，web/经销商门户不能因缺 Cookie 拒登录。 */
     private static final String WEB_LOGIN_PATH = "/api/v1/auth/login";
     static final String CUSTOMER_PATH_PREFIX = "/api/v1/customer/";
@@ -204,6 +209,11 @@ public class DeviceCredentialVerifier {
         String terminalType = device != null && device.terminalType() != null && !device.terminalType().isBlank()
                 ? device.terminalType().trim()
                 : claimed;
+        // 第 91 条 91-R1：商户账号的非设备绑定型请求由服务端定为商户网页门户，自报头不再改变判哪个端的开关。
+        AccessActor actor = terminalType != null && DEVICE_BOUND_TYPES.contains(terminalType) ? null : currentActorQuietly();
+        if (actor != null && AuthService.merchantAppAccount(actor.accountType(), actor.merchantId())) {
+            terminalType = MERCHANT_PORTAL;
+        }
 
         if (terminalType != null && DEVICE_BOUND_TYPES.contains(terminalType)) {
             Mode mode = modeFor(terminalType);

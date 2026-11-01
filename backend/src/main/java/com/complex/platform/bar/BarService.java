@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -25,6 +25,10 @@ public class BarService {
     private final BarOrderService orderService;
     private final BarEntryService entryService;
     private final AuthorizationService authorizationService;
+    // 第十八批 K 段 95-R2：来源与销售的事后改派共用销售归属补录的台账、结清判定、在岗校验与写入（字段注入免改构造点；
+    // 控制器切片测试的上下文没有该组件，同 BarTableSessionService 的可选字段注入）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarSessionSalesBackfillTarget salesAttribution;
 
     public BarService(
             BarRepository repository,
@@ -654,6 +658,26 @@ public class BarService {
         );
     }
 
+    /**
+     * 第十八批 K 段 95-R2（BSM 第 1021 行「来源与销售人员的事后改派须店长复核并留痕，只能在该账单结清前办理」；第 1468 行「销售归属改派后，
+     * 业绩随提成归属一起改」）：店长持权限本人办理；范围闸在幂等之前；写操作审计留改派前后的来源与销售。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.create")
+    @Transactional
+    public BarTableSessionRecord reassignTableSessionAttribution(String sessionId, BarTableSessionAttributionReassignRequest request) {
+        String id = operations.requireText(sessionId, "session_id");
+        BarTableSessionRecord before = salesAttribution.requireReassignScope(id);
+        String source = request.guestSource();
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("guest_source_before", before.guestSource());
+        detail.put("sales_staff_id_before", before.salesStaffId() == null ? "" : before.salesStaffId());
+        detail.put("guest_source_after", source == null ? "" : source);
+        detail.put("sales_staff_id_after", "marketing".equals(source) && request.salesStaffId() != null ? request.salesStaffId().trim() : "");
+        return operations.executeWrite("reassignBarTableSessionAttribution:" + id, request.idempotencyKey(), request,
+                BarTableSessionRecord.class, BarWriteOperation.REASSIGN_TABLE_SESSION_ATTRIBUTION, detail,
+                () -> salesAttribution.reassign(id, source, request.salesStaffId()));
+    }
+
     /** 第十批 TK-27-R3：拆台（BSM L1079「由授权岗位操作」），整笔事务一次性成功或整体失败（DEC-R8-95）。 */
     @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.split")
     @Transactional
@@ -666,20 +690,6 @@ public class BarService {
                 BarTableSessionAdjustmentRecord.class,
                 BarWriteOperation.SPLIT_TABLE_SESSIONS,
                 () -> tableSessionService.splitTableSessions(id, request)
-        );
-    }
-
-    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.renew")
-    @Transactional
-    public BarTableSessionAdjustmentRecord renewTableSession(String sessionId, BarTableRenewRequest request) {
-        String id = operations.requireText(sessionId, "session_id");
-        return operations.executeWrite(
-                "renewBarTableSession:" + id,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                BarTableSessionAdjustmentRecord.class,
-                BarWriteOperation.RENEW_TABLE_SESSION,
-                () -> tableSessionService.renewTableSession(id, request)
         );
     }
 

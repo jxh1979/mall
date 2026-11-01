@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -31,7 +31,6 @@ import com.complex.platform.support.InMemoryIdempotencyRepository;
 import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -337,7 +336,7 @@ class BarServiceTests {
         Instant now = Instant.now();
         barRepository.saveTableSession(new BarTableSessionRecord(
                 "session_scan", "bar_1", null, LocalDate.parse("2026-06-24"), table.id(), null, null,
-                4, 0L, 0, null, null, "open", now, null, null, 1L, now, now));
+                4, 0L, 0, null, null, "walk_in", "open", now, null, null, 1L, now, now));
         barOrderService.scanOrderEnabled = true;
 
         BarOrderRecord order = service.placeScanOrder("session_scan", new BarOrderRequest(
@@ -356,7 +355,7 @@ class BarServiceTests {
         Instant now = Instant.now();
         barRepository.saveTableSession(new BarTableSessionRecord(
                 "session_scan_off", "bar_1", null, LocalDate.parse("2026-06-24"), "table_x", null, null,
-                2, 0L, 0, null, null, "open", now, null, null, 1L, now, now));
+                2, 0L, 0, null, null, "walk_in", "open", now, null, null, 1L, now, now));
         assertThatThrownBy(() -> service.placeScanOrder("session_scan_off", new BarOrderRequest(
                 "scan-off", "x", List.of(), null, null, null,
                 List.of(Map.of("product_id", "p", "quantity", 1)), List.of(), "app")))
@@ -2126,7 +2125,7 @@ class BarServiceTests {
         barRepository.saveTableSession(new BarTableSessionRecord(session.id(), session.barId(), session.merchantId(),
                 session.businessDate(), session.tableId(), session.reservationId(), session.customerId(),
                 session.guestCount(), session.minConsumptionSnapshotCent(), session.allowedPassFreeGuestCountSnapshot(),
-                session.salesStaffId(), session.serviceStaffId(), "closed", session.openedAt(), closedAt,
+                session.salesStaffId(), session.serviceStaffId(), session.guestSource(), "closed", session.openedAt(), closedAt,
                 session.sourceSessionId(), session.sessionVersion() + 1, session.createdAt(), closedAt));
         assertThat(barRepository.findOrderById(order.id())).get()
                 .extracting(BarOrderRecord::status).isNotEqualTo("delivered");
@@ -2836,45 +2835,6 @@ class BarServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains("bar.table.merged");
-    }
-
-    @Test
-    void renewTableSessionAppendsRenewalAdjustmentAndIncrementsVersion() {
-        BarTableRecord table = createTable("renew", "bar_1", "active", 50000L);
-        BarTableSessionRecord session = createSession("renew", table.id(), "bar_1", "merchant_1");
-        Instant renewedUntil = Instant.now().plus(Duration.ofHours(6));
-
-        BarTableSessionAdjustmentRecord adjustment = service.renewTableSession(
-                session.id(),
-                new BarTableRenewRequest(
-                        "renew-once",
-                        "guest extends time",
-                        List.of("att_renew"),
-                        renewedUntil,
-                        20000L,
-                        0L,
-                        1000L,
-                        "guest extends time",
-                        "supervisor_1",
-                        session.sessionVersion()
-                )
-        );
-
-        assertThat(adjustment)
-                .extracting(
-                        BarTableSessionAdjustmentRecord::adjustmentType,
-                        BarTableSessionAdjustmentRecord::renewedUntil,
-                        BarTableSessionAdjustmentRecord::additionalMinConsumptionCent,
-                        BarTableSessionAdjustmentRecord::additionalServiceFeeCent
-                )
-                .containsExactly("renew", renewedUntil, 20000L, 1000L);
-        assertThat(barRepository.findTableSessionById(session.id()))
-                .get()
-                .extracting(BarTableSessionRecord::sessionVersion, BarTableSessionRecord::status)
-                .containsExactly(2L, "open");
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("bar.table.renewed");
     }
 
     @Test

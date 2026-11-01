@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -92,7 +92,6 @@ class BarControllerTests {
         when(service.createTableSession(any(BarTableSessionRequest.class))).thenReturn(tableSession());
         when(service.transferTableSession(eq("session_1"), any(BarTableTransferRequest.class))).thenReturn(adjustment("transfer"));
         when(service.mergeTableSessions(eq("session_1"), any(BarTableMergeRequest.class))).thenReturn(adjustment("merge"));
-        when(service.renewTableSession(eq("session_1"), any(BarTableRenewRequest.class))).thenReturn(adjustment("renew"));
         when(service.splitTableSessions(eq("session_1"), any(BarTableSplitRequest.class))).thenReturn(adjustment("split"));
         when(redemptionService.redeemDrink(any(BarEntitlementDrinkRedemptionRequest.class))).thenReturn(giftRedemption());
         when(redemptionService.listRedemptions()).thenReturn(new PageResponse<>(List.of(giftRedemption()), 1, 50, 1));
@@ -133,7 +132,6 @@ class BarControllerTests {
             "POST,/api/v1/bar/table-sessions,bar.table_session.create",
             "POST,/api/v1/bar/table-sessions/session_1/transfer,bar.table_session.transfer",
             "POST,/api/v1/bar/table-sessions/session_1/merge,bar.table_session.merge",
-            "POST,/api/v1/bar/table-sessions/session_1/renew,bar.table_session.renew",
             "POST,/api/v1/bar/table-sessions/session_1/split,bar.table_session.split",
             "POST,/api/v1/bar/entitlement-redemptions/drink,bar.entitlement.redeem",
             "GET,/api/v1/bar/entitlement-redemptions,bar.entitlement.read"
@@ -179,7 +177,6 @@ class BarControllerTests {
             "/api/v1/bar/table-sessions",
             "/api/v1/bar/table-sessions/session_1/transfer",
             "/api/v1/bar/table-sessions/session_1/merge",
-            "/api/v1/bar/table-sessions/session_1/renew",
             "/api/v1/bar/table-sessions/session_1/split",
             "/api/v1/bar/entitlement-redemptions/drink"
     })
@@ -322,11 +319,6 @@ class BarControllerTests {
         if (path.contains("table-sessions") && path.endsWith("/merge")) {
             return "{" + idempotency + """
                     "merged_session_id":"session_2","reason":"two groups joined","requested_by_user_id":"supervisor_1","primary_session_version":1,"merged_session_version":1}
-                    """;
-        }
-        if (path.contains("table-sessions") && path.endsWith("/renew")) {
-            return "{" + idempotency + """
-                    "renewed_until":"2026-06-21T02:00:00Z","additional_min_consumption_cent":20000,"additional_deposit_amount_cent":0,"additional_service_fee_cent":1000,"reason":"guest extends time","requested_by_user_id":"supervisor_1","session_version":1}
                     """;
         }
         if (path.endsWith("/table-sessions")) {
@@ -570,6 +562,7 @@ class BarControllerTests {
                 2,
                 "staff_sales",
                 "staff_service",
+                "marketing",
                 "open",
                 now,
                 null,
@@ -595,10 +588,10 @@ class BarControllerTests {
                 LocalDate.parse("2026-06-20"),
                 50000L,
                 "transfer".equals(type) ? 80000L : 50000L,
-                "renew".equals(type) ? Instant.parse("2026-06-21T02:00:00Z") : null,
-                "renew".equals(type) ? 20000L : 0L,
+                null,
                 0L,
-                "renew".equals(type) ? 1000L : 0L,
+                0L,
+                0L,
                 "reason",
                 "supervisor_1",
                 false,

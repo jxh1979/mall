@@ -8,7 +8,7 @@
 
 | 能力 | P1 本次包含 | 本次不包含 |
 |---|---|---|
-| 工单创建 | 商户服务、维修、投诉、整改四类工单 | 第三方客服系统自动同步 |
+| 工单创建 | 商户在商户专区提报修、保洁、投诉、其他服务请求四类工单（第 93 条 93-R1） | 第三方客服系统自动同步 |
 | 派单 | 指定责任部门、责任人，状态进入 `assigned` | 排班、自动派单、SLA 自动升级 |
 | 处理 | 追加处理说明、证据引用，可变更到处理中/待商户/已解决 | 复杂协同子任务 |
 | 关闭 | 记录解决方案、满意度、关闭时间和证据 | 商户重开、赔付审批 |
@@ -50,7 +50,7 @@
 | `merchant_id` | 是 | string | 关联商户 |
 | `space_id` | 否 | string | 关联空间/铺位 |
 | `contract_id` | 否 | string | 关联合同 |
-| `work_order_type` | 是 | enum | `repair`/`complaint`/`rectification`/`service` |
+| `work_order_type` | 是 | enum | `repair`/`cleaning`/`complaint`/`service`（报修/保洁/投诉/其他服务请求，第 93 条 93-R1） |
 | `priority` | 是 | enum | `low`/`medium`/`high`/`critical` |
 | `title` | 是 | string | 1-160 字符 |
 | `description` | 是 | string | 1-2000 字符 |
@@ -161,7 +161,7 @@
 | `merchant_id` | uuid | 关联商户（必填，承接 §4.1） |
 | `space_id` | uuid | 关联空间/铺位，可空 |
 | `contract_id` | uuid | 关联合同，可空 |
-| `work_order_type` | varchar | `repair`（报修）/`complaint`（投诉）/`rectification`（整改）/`inspection`（巡检）/`service`（商户服务），CHECK 约束；`inspection` 为物业巡检工单（R6 新增，承接业务侧"巡检"工单类型） |
+| `work_order_type` | varchar | `repair`（报修）/`cleaning`（保洁）/`complaint`（投诉）/`service`（其他服务请求），CHECK 约束（V582）；整改与巡检由平台发起、落 V166 物业工单 |
 | `priority` | varchar | `low`/`medium`/`high`/`critical` |
 | `status` | varchar | `created`/`assigned`/`processing`/`pending_merchant`/`resolved`/`closed`/`cancelled`，CHECK 约束（与 §2 一致） |
 | `title` | varchar(160) | 标题 |
@@ -229,7 +229,7 @@ SLA 落地：创建/派单时按 `priority` 与业务配置写 `due_at`；处理
 | 项 | 验收点 |
 |---|---|
 | 表落地 | `work_orders`、`work_order_actions` 两表迁移建成，含 CHECK 约束与唯一索引 |
-| 类型覆盖 | `work_order_type` 支持 `repair/complaint/rectification/inspection/service`，巡检工单可创建并流转 |
+| 类型覆盖 | `work_order_type` 支持 `repair/cleaning/complaint/service`，整改、巡检被拒（400 `VALIDATION_FAILED`） |
 | 状态闭环 | created→assigned→processing→resolved(=done)→closed 全链可走通，终态拒绝再修改（复用 §6/MS-UT-004） |
 | 责任人/SLA | 派单写责任部门/责任人；`due_at` 超时置 `sla_breached` 并留痕时间 |
 | 双写留痕 | 每次写操作主表 + `work_order_actions` 双写，幂等键去重（复用 MS-UT-006） |

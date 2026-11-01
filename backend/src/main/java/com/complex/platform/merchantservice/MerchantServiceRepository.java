@@ -3,6 +3,7 @@ package com.complex.platform.merchantservice;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface MerchantServiceRepository {
     List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, int limit);
@@ -10,6 +11,14 @@ public interface MerchantServiceRepository {
     /** V264：列表按 scope，includeArchived=false 时默认排除已存档/已审批删除的工单。默认委托旧签名（内存桩无存档概念）。 */
     default List<MerchantWorkOrderRecord> findWorkOrdersByScope(Optional<String> merchantScope, boolean includeArchived, int limit) {
         return findWorkOrdersByScope(merchantScope, limit);
+    }
+
+    /**
+     * 第 93 条 93-R3：在这些项目经营的商户（主项目或追加的经营项目，裁决 M737-iter7）的工单，供非平台管理员的平台员工列表用；
+     * projectIds 非空。默认空（内存桩没有经营项目表）。
+     */
+    default List<MerchantWorkOrderRecord> findWorkOrdersByMerchantProjects(Set<String> projectIds, boolean includeArchived, int limit) {
+        return List.of();
     }
 
     Optional<MerchantWorkOrderRecord> findWorkOrderById(String id);

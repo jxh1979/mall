@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -201,6 +201,38 @@ class BarPourVolumeStockJdbcIntegrationTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_products WHERE bar_id = ?", Integer.class, bar)).isZero();
+    }
+
+    /**
+     * 第十八批 K 段 97-R1／97-R2（BSM:1163「管理酒类、吧台消耗、客人存酒和常用消耗品」；BSM:1065「按杯按标准出酒量扣库存、超出记损耗」）：
+     * 按后台库存台账「新建库存商品规格」与商品管理「库存与出酒量」两页经客户端发出的蛇形键建物料与商品；本酒吧未配损耗率阈值按出厂 5%、
+     * 吧台未配设备：出品 2 杯 25ml 开一瓶（10→9 瓶），余 700−50−标准损耗 3＝647ml。
+     */
+    @Test
+    void itemAndProductCreatedWithAdminPageKeysDeductStandardPourAndFactoryLoss() throws Exception {
+        jdbc.update("UPDATE merchants SET pour_loss_rate_pct = NULL, pour_loss_rate_min_pct = NULL, pour_loss_rate_max_pct = NULL WHERE id = ?", bar);
+        String pageItem = json.readTree(mockMvc.perform(post("/api/v1/inventory/items").with(staff()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"pvs-page-item-" + s + "\",\"item_name\":\"某某威士忌 700 毫升瓶装\",\"category\":\"酒类\","
+                                + "\"unit\":\"瓶\",\"min_quantity\":null,\"spec_volume_ml\":700}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.spec_volume_ml").value(700))
+                .andReturn().getResponse().getContentAsString()).path("data").path("id").asText();
+        String pageBalance = "pvs_page_bal_" + s;
+        jdbc.update("INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id, warehouse_id)"
+                + " VALUES (?, ?, ?, 10, 0, 10, now(), ?, ?)", pageBalance, pageItem, location, bar, counter);
+        String product = json.readTree(mockMvc.perform(post("/api/v1/bar/products").with(staff()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"pvs-page-product-" + s + "\",\"bar_id\":\"" + bar + "\",\"product_name\":\"某某威士忌（按杯）\","
+                                + "\"category\":\"spirit\",\"price_cent\":5800,\"status\":\"active\",\"catalog_item_code\":null,"
+                                + "\"stock_deduction_required\":true,\"inventory_item_id\":\"" + pageItem + "\",\"stock_location_id\":\"" + location + "\","
+                                + "\"standard_pour_volume\":25}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.stock_deduction_required").value(true))
+                .andExpect(jsonPath("$.data.standard_pour_volume").value(25))
+                .andReturn().getResponse().getContentAsString()).path("data").path("id").asText();
+
+        deliver(order("page", product), null).andExpect(status().isOk());
+        assertThat(jdbc.queryForMap("SELECT quantity, opened_volume_ml FROM inventory_stock_balances WHERE id = ?", pageBalance))
+                .containsEntry("quantity", 9).containsEntry("opened_volume_ml", 647);
     }
 
     // ---------- helpers ----------

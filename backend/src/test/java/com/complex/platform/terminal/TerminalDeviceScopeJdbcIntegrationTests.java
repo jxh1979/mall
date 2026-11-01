@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -464,6 +464,87 @@ class TerminalDeviceScopeJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.status").value("bound"));
     }
 
+    // 第 96 条 96-R1（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态。」；PGM:618「设备包括工作手机、平板、一体机……」）：
+    // 员工端领用平板时带本机型号 device_model 写进台账；归还后不带型号再领用，沿用台账原型号；设备列表显示型号。
+    // 修复前领用请求不认 device_model（400）或型号为空（第一处 200 的断言即红）。
+    @Test
+    void tabletBindRecordsModelAndKeepsItAcrossReturnAndRebind() throws Exception {
+        send(projectStaff, "POST", DEVICES + "/bind", """
+                {"idempotency_key": "%s", "device_id": "%s", "terminal_type": "tablet", "binding_scope": "space",
+                 "bound_space_id": "%s", "device_model": "SM-X710"}
+                """.formatted(key("md-bind"), deviceId("md"), spaceA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.device_model").value("SM-X710"));
+        assertThat(modelOf("md")).isEqualTo("SM-X710");
+
+        send(projectStaff, "POST", DEVICES + "/return", """
+                {"idempotency_key": "%s", "device_code": "%s", "reason": "交班"}
+                """.formatted(key("md-return"), deviceId("md")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("returned"));
+
+        send(projectStaff, "POST", DEVICES + "/bind", """
+                {"idempotency_key": "%s", "device_id": "%s", "terminal_type": "tablet", "binding_scope": "space",
+                 "bound_space_id": "%s"}
+                """.formatted(key("md-rebind"), deviceId("md"), spaceA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("bound"));
+        assertThat(modelOf("md")).isEqualTo("SM-X710");
+        assertThat(listedModel(projectStaff, "md")).isEqualTo("SM-X710");
+    }
+
+    // 第 96 条 96-R1：工作手机领用（持有员工必填）同样带本机型号进台账。修复前型号为空（断言即红）。
+    @Test
+    void workPhoneBindRecordsModel() throws Exception {
+        send(projectStaff, "POST", DEVICES + "/bind", """
+                {"idempotency_key": "%s", "device_id": "%s", "terminal_type": "staff_work_phone", "binding_scope": "space",
+                 "bound_space_id": "%s", "staff_id": "%s", "device_model": "Pixel 8"}
+                """.formatted(key("mp-bind"), deviceId("mp"), spaceA, holderA))
+                .andExpect(status().isOk());
+        assertThat(modelOf("mp")).isEqualTo("Pixel 8");
+    }
+
+    // 第 96 条 96-R3（ENUM:241「设备状态」「……报废、归档」；第十八批裁决 24「报废后可归档」：设备管理员对已报废的设备办理归档，原因必填；
+    // 归档后台账里仍可查、显示「已归档」，不能再恢复或领用）：项目员工把本项目已报废的平板归档 → archived，留状态流水与成功留痕；之后找回、
+    // 挂失、领用都 409；在用的设备不能归档（409、不写）；别的项目的设备不能归档（403、不写）。修复前没有归档入口（200 的断言即红）。
+    @Test
+    void scrappedTabletArchivedAndStaysArchived() throws Exception {
+        String id = device("ar", "scrapped", null, spaceA, holderA);
+        send(projectStaff, "POST", DEVICES + "/" + id + "/archive", """
+                {"idempotency_key": "%s", "reason": "报废设备归档"}
+                """.formatted(key("ar")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("archived"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM terminal_device_status_events WHERE device_id = ? "
+                        + "AND event_type = 'terminal.device.archived' AND status = 'archived'", Integer.class, id))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE event_name = 'terminal.device.archived' "
+                        + "AND event_result = 'success' AND idempotency_key = ?", Integer.class, key("ar"))).isEqualTo(1);
+        for (String action : List.of("found", "lost")) {
+            send(projectStaff, "POST", DEVICES + "/" + id + "/" + action, reasonJson(key("ar-" + action)))
+                    .andExpect(status().isConflict());
+        }
+        send(projectStaff, "POST", DEVICES + "/bind", bindJson(key("ar-bind"), "ar", null, spaceA))
+                .andExpect(status().isConflict());
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM terminal_devices WHERE id = ?", String.class, id))
+                .isEqualTo("archived");
+
+        String inUse = device("ab", "bound", null, spaceA, holderA);
+        String before = deviceRow(inUse);
+        send(projectStaff, "POST", DEVICES + "/" + inUse + "/archive", reasonJson(key("ab")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("INVALID_DEVICE_STATUS"));
+        assertThat(deviceRow(inUse)).isEqualTo(before);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM terminal_device_status_events WHERE device_id = ?", Integer.class, inUse)).isZero();
+
+        String foreign = device("af", "scrapped", null, spaceB, null);
+        expectRejectedWithoutWrite(projectStaff, "POST", DEVICES + "/" + foreign + "/archive", key("af"),
+                reasonJson(key("af")), "CROSS_PROJECT_FORBIDDEN", foreign);
+    }
+
     // ── 带商户归属的员工：范围内成功的代表用例 ─────────────────────────────────────────
 
     // 守护（修复前后都通过）：商户甲员工归还本商户的设备 200；登记一台新设备、所属商户填本商户 200。
@@ -660,6 +741,25 @@ class TerminalDeviceScopeJdbcIntegrationTests {
                   FROM terminal_devices
                  WHERE id = ?
                 """, String.class, rowId);
+    }
+
+    // 第 96 条 96-R1：库里这台设备的型号（按设备号）。
+    private String modelOf(String tag) {
+        return jdbcTemplate.queryForObject("SELECT device_model FROM terminal_devices WHERE device_id = ?", String.class,
+                deviceId(tag));
+    }
+
+    // 第 96 条 96-R1：设备列表里这台设备的型号。
+    private String listedModel(String user, String tag) throws Exception {
+        String body = mockMvc.perform(get(DEVICES).with(session(user)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        for (JsonNode item : new ObjectMapper().readTree(body).get("data").get("items")) {
+            if (deviceId(tag).equals(item.path("device_id").asText())) {
+                return item.path("device_model").asText(null);
+            }
+        }
+        return null;
     }
 
     // 设备列表里各行的记录 id。

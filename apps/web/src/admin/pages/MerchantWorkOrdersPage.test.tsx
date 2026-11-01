@@ -43,7 +43,7 @@ describe("MerchantWorkOrdersPage KPI 聚焦视图", () => {
     window.history.replaceState({}, "", "/admin/merchant/work-orders");
   });
 
-  it("点“高优先级”数字 → ?kpi=high，聚焦横幅+表只剩高优先级子集(2)，KPI 卡/创建表单隐藏", async () => {
+  it("点“高优先级”数字 → ?kpi=high，聚焦横幅+表只剩高优先级子集(2)，KPI 卡隐藏、无建单表单", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-work-orders-kpi-high")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-work-orders-kpi-high"));
@@ -67,14 +67,14 @@ describe("MerchantWorkOrdersPage KPI 聚焦视图", () => {
     expect(text).not.toContain("工单乙");
   });
 
-  it("「返回全部」→ 恢复 KPI 卡+创建表单+全量表", async () => {
+  it("「返回全部」→ 恢复 KPI 卡+全量表（无建单表单）", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-work-orders-kpi-high")).toBeTruthy());
     fireEvent.click(screen.getByTestId("merchant-work-orders-kpi-high"));
     fireEvent.click(screen.getByTestId("merchant-work-orders-kpi-focus-clear"));
     expect(window.location.search).not.toContain("kpi=");
     expect(screen.getByTestId("merchant-work-orders-summary")).toBeTruthy();
-    expect(screen.getByTestId("merchant-work-order-create-form")).toBeTruthy();
+    expect(screen.queryByTestId("merchant-work-order-create-form")).toBeNull();
     expect(screen.getByTestId("merchant-work-orders-table").textContent).toContain("工单乙");
   });
 
@@ -84,6 +84,49 @@ describe("MerchantWorkOrdersPage KPI 聚焦视图", () => {
     await waitFor(() => expect(screen.getByTestId("merchant-work-orders-kpi-focus-banner")).toBeTruthy());
     expect(screen.queryByTestId("merchant-work-orders-summary")).toBeNull();
     expect(screen.getByTestId("merchant-work-orders-table")).toBeTruthy();
+  });
+});
+
+// 第 93 条 93-R2：ENUM:264「商户服务工单状态｜……（商户专区发起；……）」、BSM:1372「商户自己在商户专区报的单」——后台不代商户建单，
+// 只派单、处理、关闭；不再提交写死的 merchant-1 / area-1 / contract-1。
+describe("MerchantWorkOrdersPage 无建单入口", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/work-orders");
+  });
+
+  it("93-R2：全套权限也没有建单入口；派单只调 /{id}/assign", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(envelope(ROWS)));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MerchantWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-row-wo-1")).toBeTruthy());
+    expect(screen.queryByTestId("merchant-work-order-create-open")).toBeNull();
+    fireEvent.click(screen.getByTestId("merchant-work-order-select-wo-1"));
+    fireEvent.click(screen.getByTestId("merchant-work-order-assign"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders/wo-1/assign"))).toBe(true));
+    expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders"))).toBe(false);
+    const text = screen.getByTestId("merchant-work-orders-page").textContent ?? "";
+    for (const fixed of ["merchant-1", "area-1", "contract-1"]) expect(text).not.toContain(fixed);
+  });
+});
+
+// 第 93 条 93-R1：商户服务工单类型＝报修/保洁/投诉/其他服务请求（BSM:1323、裁决 D-12），service 显示「其他服务请求」而不是共享字典的「服务」。
+describe("MerchantWorkOrdersPage 工单类型", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/work-orders");
+  });
+
+  it("93-R1：时限类型下拉是四类；service 行与抽屉显示「其他服务请求」", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-row-wo-2").textContent).toContain("其他服务请求"));
+    const select = screen.getByTestId("merchant-work-order-policy-type") as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => [option.value, option.textContent])).toEqual([
+      ["repair", "报修"], ["cleaning", "保洁"], ["complaint", "投诉"], ["service", "其他服务请求"],
+    ]);
+    fireEvent.click(screen.getByTestId("merchant-work-order-row-wo-2"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("其他服务请求");
   });
 });
 
@@ -115,7 +158,7 @@ describe("MerchantWorkOrdersPage 行明细抽屉", () => {
 });
 
 // 第 77 条 77-R3：BSM:1385「响应/处理时限按「工单类型×优先级」矩阵后台配置」「商户服务工单不设首次响应环节」——
-// 建单不再由页面写死截止时间（由后端按处理时限算）；处理时限按类型×优先级保存（PUT，蛇形键）并列出已配置行。
+// 处理时限按类型×优先级保存（PUT，蛇形键）并列出已配置行。
 describe("MerchantWorkOrdersPage 处理时限", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -126,14 +169,13 @@ describe("MerchantWorkOrdersPage 处理时限", () => {
       { status: 200, headers: { "content-type": "application/json" } });
   }
 
-  it("列出已配置时限；保存发 PUT（work_order_type/priority/handle_minutes）；建单请求不带 due_at", async () => {
+  it("列出已配置时限；保存发 PUT（work_order_type/priority/handle_minutes）", async () => {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
       if (String(url).includes("/work-order-policies") && method === "GET") {
         return Promise.resolve(json([{ work_order_type: "complaint", priority: "low", handle_minutes: 240 }]));
       }
       if (method === "PUT") return Promise.resolve(json({ work_order_type: "repair", priority: "critical", handle_minutes: 90 }));
-      if (method === "POST") return Promise.resolve(json({ id: "wo-new" }));
       return Promise.resolve(envelope(ROWS));
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -150,15 +192,5 @@ describe("MerchantWorkOrdersPage 处理时限", () => {
     const [putUrl, putInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
     expect(String(putUrl)).toContain("/api/v1/merchant-service/work-order-policies");
     expect(JSON.parse(String(putInit.body))).toMatchObject({ work_order_type: "repair", priority: "critical", handle_minutes: 90 });
-
-    await waitFor(() => expect((screen.getByTestId("merchant-work-order-policy-save") as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByTestId("merchant-work-order-create-open"));
-    fireEvent.click(screen.getByTestId("merchant-work-order-guided-next"));
-    fireEvent.click(screen.getByTestId("merchant-work-order-create"));
-    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders"))).toBe(true));
-    const [, postInit] = fetchMock.mock.calls.find(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders"))!;
-    const created = JSON.parse(String(postInit.body));
-    expect(created).toMatchObject({ work_order_type: "repair", priority: "high" });
-    expect(created).not.toHaveProperty("due_at");
   });
 });

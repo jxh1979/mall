@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -238,13 +238,17 @@ public class InternalPayableExecutionService {
         auth.requirePermission(PORTAL_VIEW);
         String merchant = auth.currentMerchantIdQuietly()
                 .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行"));
-        return jdbc.queryForList("""
+        List<Execution> listed = jdbc.queryForList("""
                         SELECT ar_ap_item_id, project_id FROM internal_payable_schedules WHERE counterparty_id=? AND visible_at<=now()
                          ORDER BY visible_at DESC, ar_ap_item_id
                         """, merchant).stream()
                 .map(row -> repository.findArApItemById((String) row.get("ar_ap_item_id")).orElseThrow())
                 .map(item -> view(item, schedule(item.id())))
                 .toList();
+        // 第 92 条（BSM:1597 首页未读账单提醒）：列出的就是商户看过的，按商户记已读，首次已读时间不改。
+        jdbc.batchUpdate("INSERT INTO merchant_bill_reads (merchant_id, bill_kind, bill_id) VALUES (?, 'ar_ap_item', ?) ON CONFLICT DO NOTHING",
+                listed.stream().map(e -> new Object[] {merchant, e.arApItemId()}).toList());
+        return listed;
     }
 
     // ─── 内部 ───────────────────────────────────────────

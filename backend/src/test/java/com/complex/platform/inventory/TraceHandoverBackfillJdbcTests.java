@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -63,6 +63,7 @@ class TraceHandoverBackfillJdbcTests {
     private RequestPostProcessor clerk;
     private RequestPostProcessor mid;
     private RequestPostProcessor outsider;
+    private String order;
 
     @BeforeEach
     void seed() {
@@ -72,6 +73,7 @@ class TraceHandoverBackfillJdbcTests {
             jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id) "
                     + "VALUES (?, ?, 'bar', 'active', now(), now(), ?)", m, "交接补录商户 " + m, project);
         }
+        order = TraceHandoverOutboundOrderJdbcTests.seedBottleOrder(jdbc, "thb_" + suffix, merchant, "TRC-" + suffix);
         String role = "role_thb_" + suffix;
         jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'交接补录回归','project','active',now())", role, role);
         jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code IN("
@@ -205,7 +207,7 @@ class TraceHandoverBackfillJdbcTests {
     /** 建链 → 扫库管出库，跳过后厨接收（链停在后厨接收）。 */
     private String chainSkippingKitchen() throws Exception {
         String body = send(clerk, post("/api/v1/inventory/trace-handovers"), "{\"idempotency_key\":\"thc-" + suffix
-                + "\",\"trace_code\":\"TRC-" + suffix + "\",\"device_id\":\"dev_thb_" + suffix + "\"}")
+                + "\",\"trace_code\":\"TRC-" + suffix + "\",\"order_id\":\"" + order + "\",\"device_id\":\"dev_thb_" + suffix + "\"}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String id = JsonPath.read(body, "$.data.handover.id");
         scan(id, "out_verify");

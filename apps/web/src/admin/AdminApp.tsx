@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -11,6 +11,7 @@ import { stripBase, withBase } from "../basePath";
 import { forgetWriteOperations } from "../shared/operationKey";
 import { ReplayedNotice } from "../shared/ReplayedNotice";
 import { ActionResultView } from "./components/ActionResultView";
+import { MerchantUnreadBillsReminder } from "./components/MerchantUnreadBillsReminder";
 import { PageWatermark } from "./components/PageWatermark";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
@@ -570,6 +571,8 @@ export default function AdminApp() {
 
   // 3.19 二期：终端开关菜单 gating——[]=无关闭项/加载中(不闪隐藏)，null=拉取失败→兜底关(留自救组)。
   const [disabledSwitchRows, setDisabledSwitchRows] = React.useState<DisabledSwitchRow[] | null>([]);
+  // 第 92 条：开关读回之前不出商户首页提醒（模块被关时连请求也不发）。
+  const [switchRowsLoaded, setSwitchRowsLoaded] = React.useState(false);
 
   React.useEffect(() => {
     if (!user) return;
@@ -581,6 +584,9 @@ export default function AdminApp() {
       })
       .catch(() => {
         if (!cancelled) setDisabledSwitchRows(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSwitchRowsLoaded(true);
       });
     return () => {
       cancelled = true;
@@ -928,6 +934,9 @@ export default function AdminApp() {
           {globalError ? <div className="admin-inline-error" role="alert" aria-live="assertive" data-testid="global-error">{globalError}</div> : null}
           {/* M725-F03：重复提交返回第一次的结果时提示已完成。 */}
           <ReplayedNotice />
+          {/* 第 92 条（BSM:1597「商户专区首页保留未读账单提醒」）：商户形态账号落地页顶部，在页面门禁之外（没有驾驶舱权限也显示）；商户专区模块被终端开关关闭时不显示。 */}
+          {accountForm === "merchant" && route.pageId === "ADM-OV-001" && switchRowsLoaded && !hiddenGroups.has("merchant")
+            ? <MerchantUnreadBillsReminder api={api} navigateTo={navigateTo} /> : null}
           {!routeAllowedHere(route) ? (
             // 形态不匹配或商户手机应用不开的页（直链/历史进入）：给业务化提示，不渲染页面、不放请求打 403/400。
             <div className="admin-denied" data-testid="admin-account-form-mismatch">{routeAllowsAccountForm(route, accountForm) ? "此功能请在商户网页门户办理" : accountFormHint(route)}</div>

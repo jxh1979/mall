@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AuthorizationService.ProjectReach;
@@ -45,10 +45,12 @@ public class TerminalDeviceService {
     private static final String LIFECYCLE_PERMISSION = "terminal.device.lifecycle";
     // 商户归属改绑影响资金核销路径（K16），从严沿用设备治理权限（高危·需审批·仅平台管理员）。
     private static final String MERCHANT_PERMISSION = "terminal.device.lifecycle";
-    // P0#9 设备生命周期：终态（不可再流转、拒绝任何业务动作/领用）。
-    private static final Set<String> TERMINAL_STATUSES = Set.of("scrapped", "blocked");
+    // P0#9 设备生命周期：终态（不可再流转、拒绝任何业务动作/领用）。第 96 条 96-R3（第十八批裁决 24）：已归档同为终态
+    private static final Set<String> TERMINAL_STATUSES = Set.of("scrapped", "blocked", "archived");
     // P0#9：挂失/报废/送修/封禁设备拒绝领用（绑定）与高风险业务动作。
-    private static final Set<String> NON_OPERATIONAL_STATUSES = Set.of("lost", "scrapped", "repair", "blocked");
+    // 第 96 条 96-R2（第十八批裁决 23）：待归还的设备也拒领用，须先在后台办归还
+    private static final Set<String> NON_OPERATIONAL_STATUSES =
+            Set.of("lost", "scrapped", "repair", "blocked", "pending_return", "archived");
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_PAGE_SIZE = 50;
     // 第 89 条 89-R3（PGM:379「管理工作手机、平板、一体机和扫码设备的台账、领还……」）：扫码设备 scanner 也走领用绑定与归还
@@ -196,6 +198,40 @@ public class TerminalDeviceService {
         );
     }
 
+    /**
+     * 第 96 条 96-R2（ENUM:241「待归还」；ENUM:240、PGM:581「……设备交接、工资核算及依法结清分别继续办理，不因交接未完保留业务操作权限。」；
+     * 第十八批裁决 23「停岗离职转待归还」）：员工停岗或离职生效时，名下还在用的工作手机、平板、一体机、扫码设备自动转待归还并留痕；
+     * 设备管理员收回实物后在后台办归还回待领用（不给该员工记下班），收不回的挂失。入场三道环节设备与其他现场设备按点位与责任人管
+     * （走更换责任人），不转。只由员工状态生效事务内部调用，不另核权限；不撤凭证（非在用设备的签名请求本就被拒）。
+     */
+    public void markHeldDevicesPendingReturn(String staffProfileId, String reviewId, String reason, Instant at) {
+        for (TerminalDeviceRecord device : repository.findBoundByStaffId(staffProfileId)) {
+            if (!TERMINAL_TYPES.contains(device.terminalType())) {
+                continue;
+            }
+            TerminalDeviceRecord updated = new TerminalDeviceRecord(device.id(), device.deviceId(), device.deviceCode(),
+                    device.terminalType(), device.bindingScope(), device.boundSpaceId(), device.mdmDeviceRef(), device.kioskMode(),
+                    device.merchantId(), device.venueId(), device.areaId(), device.locationPointId(), device.staffId(),
+                    "pending_return", device.boundAt(), device.returnedAt(), device.unboundAt(), device.returnReason(),
+                    device.unbindReason(), device.createdAt(), at, device.deviceModel(), device.repairWorkOrderId());
+            if (repository.compareAndSetStatus(device.id(), "bound", updated) == 0) {
+                continue;
+            }
+            repository.saveStatusEvent(new TerminalDeviceStatusEventRecord(
+                    "dev_evt_" + UUID.randomUUID().toString().replace("-", ""),
+                    updated.id(),
+                    updated.deviceCode(),
+                    "terminal.device.pending_return",
+                    updated.status(),
+                    reason,
+                    updated.staffId(),
+                    at
+            ));
+            auditEventService.recordSuccess("terminal.device.pending_return", "staff.profile.review", "terminal_device",
+                    updated.id(), null, null, Map.of("staff_id", staffProfileId, "review_id", reviewId));
+        }
+    }
+
     /** BSM:1478：夜班值班经理交付故障替换机，旧机归还、新机领用与原班次在同一事务。 */
     @Transactional
     public DeviceBindingResponse swapWorkPhone(com.complex.platform.terminal.dto.DeviceSwapRequest request) {
@@ -289,7 +325,7 @@ public class TerminalDeviceService {
     @Transactional
     public DeviceBindingResponse markDeviceLost(String id, DeviceLifecycleRequest request) {
         return transitionLifecycle(
-                id, request, "lost", Set.of("bound", "returned", "repair", "unbound"),
+                id, request, "lost", Set.of("bound", "returned", "repair", "unbound", "pending_return"),
                 "terminal.device.lost", "terminal.device.lost_failed");
     }
 
@@ -307,6 +343,15 @@ public class TerminalDeviceService {
         return transitionLifecycle(
                 id, request, "scrapped", Set.of("bound", "returned", "unbound", "repair", "lost", "found"),
                 "terminal.device.scrapped", "terminal.device.scrap_failed");
+    }
+
+    // 第 96 条 96-R3（ENUM:241「归档」；第十八批裁决 24「报废后可归档」）：设备管理员对已报废的设备办理归档，原因必填；
+    // 归档后台账里仍可查、显示「已归档」，不能再恢复或领用（archived 是终态）
+    @Transactional
+    public DeviceBindingResponse archiveDevice(String id, DeviceLifecycleRequest request) {
+        return transitionLifecycle(
+                id, request, "archived", Set.of("scrapped"),
+                "terminal.device.archived", "terminal.device.archive_failed");
     }
 
     /**
@@ -488,8 +533,8 @@ public class TerminalDeviceService {
         String reason = requireText(actual.reason(), "reason");
         TerminalDeviceRecord existing = repository.findById(id)
                 .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
-        // 终态（scrapped/blocked）封锁：不可再流转。
-        if (TERMINAL_STATUSES.contains(existing.status())) {
+        // 终态（scrapped/blocked/archived）封锁：不可再流转；第 96 条 96-R3：只有归档放行（前态仍只收 scrapped）。
+        if (TERMINAL_STATUSES.contains(existing.status()) && !"archived".equals(targetStatus)) {
             throw ApiException.conflict("DEVICE_TERMINAL_STATUS",
                     "设备处于终态 " + existing.status() + "，不能再流转");
         }
@@ -1084,6 +1129,9 @@ public class TerminalDeviceService {
                 || !java.util.Objects.equals(existingDevice.staffId(), staffId))) {
             throw ApiException.conflict("WORK_PHONE_RETURN_REQUIRED", "在用工作手机须先实际归还，不能直接改领用人或终端类型");
         }
+        // 第 96 条 96-R1（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态。」）：领用带的型号（员工端安卓取本机型号）写进台账；
+        // 不传沿用台账原值，归还后再领用不抹型号
+        String deviceModel = firstNonBlank(actual.deviceModel(), existingDevice == null ? null : existingDevice.deviceModel());
         Instant now = Instant.now();
         TerminalDeviceRecord record = new TerminalDeviceRecord(
                 "dev_" + slug(deviceId),
@@ -1106,7 +1154,9 @@ public class TerminalDeviceService {
                 null,
                 null,
                 now,
-                now
+                now,
+                deviceModel,
+                existingDevice == null ? null : existingDevice.repairWorkOrderId()
         );
         String deviceToken = "kiosk".equals(record.terminalType()) ? generateDeviceToken() : null;
         TerminalDeviceRecord saved = repository.save(record);
@@ -1144,16 +1194,23 @@ public class TerminalDeviceService {
         }
         TerminalDeviceRecord existing = repository.findByDeviceCode(deviceCode)
                 .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "设备不存在或已被删除"));
-        if (!"bound".equals(existing.status())) {
-            throw ApiException.conflict("INVALID_DEVICE_STATUS", "只有已绑定的设备才能归还");
+        // 第 96 条 96-R2（第十八批裁决 23）：待归还的设备由设备管理员收回后在后台办归还，回待领用
+        boolean pendingReturn = "pending_return".equals(existing.status());
+        if (!"bound".equals(existing.status()) && !pendingReturn) {
+            throw ApiException.conflict("INVALID_DEVICE_STATUS", "只有在用或待归还的设备才能归还");
         }
         Instant now = Instant.now();
         if ("staff_work_phone".equals(existing.terminalType())) {
             if (!java.util.Objects.equals(existing.staffId(), firstNonBlank(actual.staffId(), existing.staffId())))
                 throw ApiException.conflict("WORK_PHONE_OWNER_CHANGED", "归还不能改写原手机持有人");
-            if (!swap && !Boolean.FALSE.equals(actual.hasPendingTasks()))
-                throw ApiException.conflict("RETURN_CHECK_REQUIRED", "须确认本人当班工作及收尾检查均已完成");
-            workPhoneAttendance.returned(existing, now, swap);
+            if (pendingReturn) {
+                // 裁决 23「不给该员工记下班」：只结束这次领用，不要求本人收尾检查确认、不形成下班记录
+                workPhoneAttendance.closeOnEmploymentEnd(existing, now);
+            } else {
+                if (!swap && !Boolean.FALSE.equals(actual.hasPendingTasks()))
+                    throw ApiException.conflict("RETURN_CHECK_REQUIRED", "须确认本人当班工作及收尾检查均已完成");
+                workPhoneAttendance.returned(existing, now, swap);
+            }
         }
         TerminalDeviceRecord returned = new TerminalDeviceRecord(
                 existing.id(),

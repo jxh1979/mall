@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -866,7 +866,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("merchant-work-orders-evidence")).toContainText("/api/v1/merchant-service/work-orders");
         await expect(page.getByTestId("merchant-work-orders-summary")).toContainText("待处理");
         await expect(page.getByTestId("merchant-work-orders-table")).toContainText("空调漏水");
-        await expect(page.getByTestId("merchant-work-orders-boundary")).toContainText("维修 / 投诉 / 整改 / 服务");
+        await expect(page.getByTestId("merchant-work-orders-boundary")).toContainText("商户服务工单由商户在商户专区发起");
         continue;
       }
       if (spec.pageId === "ADM-AMU-003") {
@@ -1194,14 +1194,9 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("证据附件");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-001")!);
-    await page.getByTestId("merchant-work-order-create-open").click();
-    await page.getByTestId("merchant-work-order-title").fill("排水异味投诉");
-    await page.getByTestId("merchant-work-order-guided-next").click();
-    await page.getByTestId("merchant-work-order-create").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已创建");
-    await expect(page.getByTestId("admin-action-result")).toContainText("提交编号");
     await page.getByTestId("merchant-work-order-assign").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已分派");
+    await expect(page.getByTestId("admin-action-result")).toContainText("提交编号");
     await page.getByTestId("merchant-work-order-process-note").fill("已到场排查，等待商户确认");
     await page.getByTestId("merchant-work-order-process").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已处理");

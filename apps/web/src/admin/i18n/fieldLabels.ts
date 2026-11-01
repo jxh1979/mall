@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -138,6 +138,7 @@ export const FIELD_LABELS: Record<string, string> = {
   recipient_name: "接收人姓名",
   recipient_phone: "接收人手机号",
   guest_count: "客人人数",
+  guest_source: "客人来源",
   crew_count: "人员数量",
   level_code: "等级编码",
   level_name: "等级名称",
@@ -2301,6 +2302,9 @@ export const FIELD_LABELS: Record<string, string> = {
   stage: "阶段",
   standard_daily_minutes: "标准日工时（分钟）",
   standard_pour_volume: "标准出酒量",
+  // 第十八批 K 段 97-R3 吧台消耗统计（同后端 FieldLabels.java）。
+  sale_form: "销售形式",
+  pour_volume_ml: "出酒量（毫升）",
   standard_weekly_minutes: "标准周工时（分钟）",
   start: "开始",
   start_at: "开始时间",
@@ -2446,6 +2450,11 @@ export const FIELD_LABELS: Record<string, string> = {
   unit_cost_cents: "单位成本",
   unit_price_cent: "单价",
   unpaid_amount_cent: "未收或未付金额",
+  // 第十八批 K 段第 92 条：商户专区首页未读账单提醒（GET /api/v1/merchant-portal/unread-bills）。
+  bill_months: "未读账单月份",
+  unread_count: "未读笔数",
+  ticket_settlement_unread_count: "门票分账未读笔数",
+  dividend_statements: "未读分红单",
   unresolved_sources: "未解决来源",
   updated_at: "更新时间",
   updated_by: "更新人",
@@ -2765,7 +2774,6 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_table_session_create: "开台",
   bar_table_session_transfer: "转台",
   bar_table_session_merge: "并台",
-  bar_table_session_renew: "续时",
   bar_table_session_split: "拆台",
   bar_invitation_issue: "签发邀请函",
   bar_invitation_revoke: "撤销邀请函",
@@ -2870,6 +2878,7 @@ export const VALUE_LABELS: Record<string, string> = {
   inventory_stock_movement_created: "出入库已登记",
   inventory_item_high_value_marked: "高价值标记已更新",
   inventory_item_safety_stock_updated: "安全库存已修改",
+  inventory_item_created: "库存商品规格已新建",
   inventory_high_value_review_decided: "高价值复核已处理",
   inventory_trace_backfill_submitted: "交接缺扫码补录已提交，待主管复核",
   inventory_trace_exception_reviewed: "交接异常已复核",
@@ -2939,6 +2948,7 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_pour_loss_rate_configured: "酒吧损耗率阈值已配置",
   bar_staff_booking_restored: "员工代订权限已恢复",
   bar_sales_backfill_submitted: "销售归属补录已提交，待店长复核",
+  bar_table_session_attribution_reassigned: "客人来源与销售已改派",
   bar_service_backfill_submitted: "服务责任区间补录已提交，待主管复核",
   merchant_penalty_recorded: "商户处罚已登记",
   merchant_penalty_bounds_saved: "单次扣分上下限已保存",
@@ -3006,6 +3016,7 @@ export const VALUE_LABELS: Record<string, string> = {
   terminal_device_found: "设备已找回",
   terminal_device_returned: "设备已归还",
   terminal_device_checked_out: "设备已领用",
+  terminal_device_archived: "设备已归档",
   terminal_switch_toggled: "终端开关已切换",
   terminal_canary_rollout_saved: "终端灰度发布已保存",
   terminal_canary_target_added: "灰度对象已添加",
@@ -3066,7 +3077,6 @@ export const VALUE_LABELS: Record<string, string> = {
   transferred: "已转移",
   merged: "已合并",
   split: "已拆分",
-  renewed: "已续期",
   cleared: "已清台",
   opened: "已开台",
   partial: "部分收付",
@@ -3171,6 +3181,7 @@ export const VALUE_LABELS: Record<string, string> = {
   received: "已收到",
   returned: "已退回",
   lost: "已丢失",
+  pending_return: "待归还",
   signed: "已签署",
   shipped: "已发出",
   posted: "已入账",
@@ -3231,5 +3242,11 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   settlement_mode: { none: "不结算", internal_price: "内部结算价挂应付" },
   movement_type: { outbound: "出库", redeem_consume: "兑换核销出库" },
   table_type: { card_seat: "卡座", bar_counter: "吧台位", vip: "贵宾包坐", loose_table: "散台" },
+  // 第十八批 K 段 95-R1（BSM:1021）：开台客人来源；回流渠道随第三方团购接入（清单第 47 条）再加。
+  guest_source: { platform_own: "平台自有渠道", marketing: "营销带客", walk_in: "自来客" },
+  // 第十八批 K 段 97-R3（BSM:1065「按杯、按瓶、套餐」）：吧台消耗统计的销售形式。
+  sale_form: { by_glass: "按杯", by_bottle: "按瓶", combo: "套餐" },
+  // 第十八批 K 段 93-R1（BSM:1323、1385；裁决 D-12）：商户服务工单类型 service 叫「其他服务请求」（同 MERCHANT_WORK_ORDER_TYPE_LABELS；物业工单类型闭集无 service）。
+  work_order_type: { service: "其他服务请求" },
   currency: { CNY: "人民币" },
 };

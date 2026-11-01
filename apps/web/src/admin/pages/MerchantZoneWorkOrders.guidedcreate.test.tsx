@@ -90,4 +90,23 @@ describe("MerchantZoneWorkOrdersPage 引导式新建工单(phase-8)", () => {
     expect(screen.queryByTestId("merchant-zone-work-order-guided-summary")).toBeNull();
     expect(lastPostBody).toBeNull();
   });
+
+  // 第 93 条 93-R1：BSM:1323「我的工单（报修/保洁/投诉/其他服务请求自己发起……）」；裁决 D-12（不含整改、含保洁）。
+  it("93-R1：类型下拉正好是报修、保洁、投诉、其他服务请求，选保洁提交带 work_order_type=cleaning", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-work-order-create-open")).toBeTruthy());
+    expect(screen.getByTestId("merchant-zone-work-orders-page").textContent).not.toContain("整改");
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-create-open"));
+    const select = screen.getByTestId("merchant-zone-work-order-type") as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => [option.value, option.textContent])).toEqual([
+      ["repair", "报修"], ["cleaning", "保洁"], ["complaint", "投诉"], ["service", "其他服务请求"],
+    ]);
+    fireEvent.change(select, { target: { value: "cleaning" } });
+    fireEvent.change(screen.getByTestId("merchant-zone-work-order-title"), { target: { value: "门口保洁" } });
+    fireEvent.change(screen.getByTestId("merchant-zone-work-order-description"), { target: { value: "门口地面有污渍" } });
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("merchant-zone-work-order-guided-summary").textContent).toContain("保洁"));
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-submit"));
+    await waitFor(() => expect(lastPostBody).toMatchObject({ work_order_type: "cleaning" }));
+  });
 });

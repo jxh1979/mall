@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -102,6 +102,15 @@ describe("MerchantScopePage KPI 聚焦视图", () => {
     const text = screen.getByTestId("merchant-scope-work-orders-table").textContent ?? "";
     expect(text).toContain("报修");
     expect(text).not.toContain("repair");
+  });
+
+  // 第 93 条 93-R1：类型中文名与商户专区同一张四类表（BSM:1323「其他服务请求」）。
+  it("93-R1：工单类型 service 显示为「其他服务请求」", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => Promise.resolve(envelope(String(input).includes("work-orders")
+      ? [{ id: "wo-s", merchant_id: "m-1", work_order_type: "service", title: "工单丁", priority: "low", status: "created" }] : []))));
+    render(<MerchantScopePage api={new AdminApi("test-token")} user={{ id: "u1", username: "merchant", accountType: "merchant_admin", merchantId: "m-1" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} navigateTo={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId("merchant-scope-work-order-row-wo-s").textContent).toContain("其他服务请求"));
   });
 
   it("本商户看不见其他商户的工单和账单", async () => {

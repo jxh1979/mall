@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -153,6 +153,14 @@ public class BarTableSessionService {
             repository.releaseHold(reservation.id());
         }
         repository.saveTable(tableWithStatus(table, "opened", now));
+        // 第十八批 I 段 86-R2（BSM 第 1021 行「由有销售归属的订台开台的，自动记营销带客并带出该销售人员；……直接到店开台默认记自来客——此时现场可
+        // 人工补选营销带客并选定销售人员」）：带订台一律取该订台的销售（员工代订＝经手员工，客人自助订台为空），请求销售只在直接到店时作现场补选。
+        String sales = reservation != null ? reservation.salesStaffId() : trimToNull(actual.salesStaffId());
+        // 第十八批 K 段 95-R1（BSM 第 1021 行「经平台自有渠道订台或购票到店的，自动记平台自有渠道」；裁决 21「开台记来源只看有没有订台、订台从哪里来；
+        // 开台时不对客人的门票」）：带订台且不是员工代订（客人在 App／小程序自助订台）记平台自有渠道；否则有销售记营销带客；否则自来客。
+        // 来源与销售成对（营销带客⇔有销售），提成判定（账单无销售不计提成）即引用此记录。
+        String guestSource = reservation != null && !"staff".equals(reservation.orderSource()) ? "platform_own"
+                : sales != null ? "marketing" : "walk_in";
         BarTableSessionRecord created = repository.saveTableSession(new BarTableSessionRecord(
                 "session_" + slug(actual.idempotencyKey()),
                 barId,
@@ -164,10 +172,9 @@ public class BarTableSessionService {
                 nonNegative(actual.guestCount(), "guest_count"),
                 table.minConsumptionCent(),
                 table.allowedPassFreeGuestCount(),
-                // 第十八批 I 段 86-R2（BSM 第 1021 行「由有销售归属的订台开台的，自动记营销带客并带出该销售人员；……直接到店开台默认记自来客——此时现场可
-                // 人工补选营销带客并选定销售人员」）：带订台一律取该订台的销售（员工代订＝经手员工，客人自助订台为空），请求销售只在直接到店时作现场补选。
-                reservation != null ? reservation.salesStaffId() : trimToNull(actual.salesStaffId()),
+                sales,
                 serviceStaffId,
+                guestSource,
                 "open",
                 now,
                 null,
@@ -492,7 +499,7 @@ public class BarTableSessionService {
         return new BarTableSessionRecord(
                 session.id(), session.barId(), session.merchantId(), session.businessDate(), session.tableId(),
                 session.reservationId(), session.customerId(), session.guestCount(), session.minConsumptionSnapshotCent(),
-                session.allowedPassFreeGuestCountSnapshot(), session.salesStaffId(), session.serviceStaffId(),
+                session.allowedPassFreeGuestCountSnapshot(), session.salesStaffId(), session.serviceStaffId(), session.guestSource(),
                 reopen ? "open" : session.status(), session.openedAt(), reopen ? null : session.closedAt(),
                 sourceSessionId, session.sessionVersion() + 1, session.createdAt(), now);
     }
@@ -511,47 +518,6 @@ public class BarTableSessionService {
                 .reduce((a, b) -> a + "," + b).orElse("");
         return base.substring(0, base.length() - 1) + ",\"mode\":\"" + jsonText(mode) + "\",\"split_session_ids\":[" + rootList
                 + "],\"tree_before\":[" + tree + "],\"order_assignments\":[" + orders + "]}";
-    }
-
-    BarTableSessionAdjustmentRecord renewTableSession(String sessionId, BarTableRenewRequest request) {
-        BarTableRenewRequest actual = requireRequest(request);
-        BarTableSessionRecord session = requireOpenTableSession(sessionId);
-        checkMerchantOwnership(session.merchantId());
-        requireSessionVersion(session, actual.sessionVersion());
-        String requestedBy = authorizationService.currentActor().id();
-        Instant renewedUntil = requireInstant(actual.renewedUntil(), "renewed_until");
-        Instant now = Instant.now();
-        if (!renewedUntil.isAfter(now)) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "续台截止时间必须晚于当前时间");
-        }
-        long additionalMinConsumption = nonNegative(actual.additionalMinConsumptionCent(), "additional_min_consumption_cent");
-        long additionalDeposit = nonNegative(actual.additionalDepositAmountCent(), "additional_deposit_amount_cent");
-        long additionalServiceFee = nonNegative(actual.additionalServiceFeeCent(), "additional_service_fee_cent");
-        // 2c-5：DB 级乐观锁 CAS，防并发续台重复追加低消/押金。
-        BarTableSessionRecord updated = sessionWithNextVersion(session, now);
-        if (!repository.updateTableSessionIfVersionMatches(updated, session.sessionVersion())) {
-            throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
-        }
-        return repository.saveTableSessionAdjustment(newAdjustment(
-                "renew",
-                updated,
-                null,
-                null,
-                session.tableId(),
-                session.tableId(),
-                session.minConsumptionSnapshotCent(),
-                session.minConsumptionSnapshotCent() + additionalMinConsumption,
-                renewedUntil,
-                additionalMinConsumption,
-                additionalDeposit,
-                additionalServiceFee,
-                requireText(actual.reason(), "reason"),
-                requestedBy,
-                additionalMinConsumption > 0 || additionalDeposit > 0 || additionalServiceFee > 0,
-                actual.idempotencyKey(),
-                safeList(actual.evidenceAttachmentIds()),
-                sessionSnapshot(session, updated)
-        ));
     }
 
     private BarTableSessionRecord requireOpenTableSession(String sessionId) {
@@ -618,6 +584,7 @@ public class BarTableSessionService {
                 table.allowedPassFreeGuestCount(),
                 session.salesStaffId(),
                 targetStaff,
+                session.guestSource(),
                 session.status(),
                 session.openedAt(),
                 session.closedAt(),
@@ -642,6 +609,7 @@ public class BarTableSessionService {
                 session.allowedPassFreeGuestCountSnapshot(),
                 session.salesStaffId(),
                 session.serviceStaffId(),
+                session.guestSource(),
                 session.status(),
                 session.openedAt(),
                 session.closedAt(),
@@ -666,6 +634,7 @@ public class BarTableSessionService {
                 session.allowedPassFreeGuestCountSnapshot(),
                 session.salesStaffId(),
                 session.serviceStaffId(),
+                session.guestSource(),
                 "merged",
                 session.openedAt(),
                 now,
@@ -681,7 +650,7 @@ public class BarTableSessionService {
         return new BarTableSessionRecord(
                 session.id(), session.barId(), session.merchantId(), session.businessDate(), session.tableId(),
                 session.reservationId(), session.customerId(), session.guestCount(), session.minConsumptionSnapshotCent(),
-                session.allowedPassFreeGuestCountSnapshot(), session.salesStaffId(), session.serviceStaffId(), status,
+                session.allowedPassFreeGuestCountSnapshot(), session.salesStaffId(), session.serviceStaffId(), session.guestSource(), status,
                 session.openedAt(), session.closedAt(), session.sourceSessionId(), session.sessionVersion() + 1,
                 session.createdAt(), now);
     }
