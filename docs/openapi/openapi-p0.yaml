@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.43
+  version: V0.44
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -9213,6 +9213,81 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/merchant-service/work-order-close-methods:
+    get:
+      tags:
+        - "merchant-service"
+      operationId: "listMerchantServiceWorkOrderCloseMethods"
+      summary: "商户服务工单关单方式（报修、其他服务请求）"
+      description: "第十八批 L 段第 102 条 102-R3（第十八批裁决 26「在商户工单的处理时限配置里，给报修、其他服务请求各选一种关单方式：「处理人完成即结束」「员工验收后关闭」或「须商户确认」」）：列出报修 repair、其他服务请求 service 的关单方式 close_method（handler 处理人完成即结束、staff_acceptance 员工验收后关闭、merchant_confirm 须商户确认）。出厂照物业工单出厂配置同类型的验收方式：报修员工验收后关闭、其他服务请求处理人完成即结束（V585）。保洁（处理人完成即结束）与投诉（须商户确认，商户未确认的由客户关怀部记关闭缘由后关闭）照 BSM:1385 写死，不在此列。持查看码即可读：后台处理时限小节与商户专区（只在须商户确认的单上出「确认已解决」）都读。"
+      x-permission: "merchant.service_work_order.view"
+      x-data-scope: "platform"
+      x-terminal-allowed:
+        - "web"
+        - "merchant_portal"
+        - "merchant_app"
+      x-idempotency-required: false
+      x-audit-event-success: "not_applicable"
+      x-audit-event-failure: "not_applicable"
+      x-auth-context: "staff-token"
+      responses:
+        "200":
+          description: "关单方式列表；data 为 MerchantWorkOrderCloseMethodRecord 数组（按类型排序）。"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: "object"
+                    properties:
+                      data:
+                        type: "array"
+                        items:
+                          $ref: "#/components/schemas/MerchantWorkOrderCloseMethodRecord"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    put:
+      tags:
+        - "merchant-service"
+      operationId: "saveMerchantServiceWorkOrderCloseMethod"
+      summary: "保存报修或其他服务请求的关单方式"
+      description: "第十八批 L 段第 102 条 102-R3（裁决 26）：work_order_type 只能是 repair、service（保洁、投诉照 BSM:1385 写死），close_method 三选一，否则 400 VALIDATION_FAILED。按单子关单时的类型配置判：handler 的单处理人标已处理即关闭；staff_acceptance 的单由员工在已处理待关闭后关单；merchant_confirm 的单由商户在商户专区确认关闭、员工关单 409 MERCHANT_CONFIRM_REQUIRED。商户账号与外包账号 403 PLATFORM_SCOPE_REQUIRED。"
+      x-permission: "merchant.service_work_order.assign"
+      x-data-scope: "platform"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "merchant_service.work_order_close_method_saved"
+      x-audit-event-failure: "merchant_service.work_order_close_method_save_failed"
+      x-auth-context: "staff-token"
+      requestBody:
+        $ref: "#/components/requestBodies/MerchantWorkOrderCloseMethodRequest"
+      responses:
+        "200":
+          description: "关单方式已保存；data 为 MerchantWorkOrderCloseMethodRecord。"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: "object"
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/MerchantWorkOrderCloseMethodRecord"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-service/work-orders/{id}/actions:
     post:
       tags:
@@ -9220,7 +9295,7 @@ paths:
       operationId: addMerchantServiceWorkOrderAction
       summary: Append merchant service work order action
       description: Append merchant service work order action. This P1 merchant service workflow must enforce server-side
-        permissions, idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。
+        permissions, idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。 第 102 条 102-R3（BSM:1385「保洁等无争议类由处理人完成即结束」；第十八批裁决 26）：关单方式为处理人完成即结束的单（保洁；配成处理人完成即结束的报修、其他服务请求，其他服务请求出厂即是）target_status=resolved 即关闭，处理说明即处理结论，动作记 closed。
       x-permission: merchant.service_work_order.process
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9262,7 +9337,7 @@ paths:
       operationId: assignMerchantServiceWorkOrder
       summary: Assign merchant service work order
       description: Assign merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。
+        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。 第十八批 L 段第 102 条 102-R1（BSM:1380「派单到具体人员或班组」）：owner_user_id 须为在用、无商户归属、非外包、有效持 merchant.service_work_order.process、有员工档案、处理码可触及该单商户任一经营项目的平台员工（候选见 owner-candidates），否则 400 WORK_ORDER_OWNER_INVALID、单子不动、记派单失败；在状态判断之后校验。
       x-permission: merchant.service_work_order.assign
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9297,6 +9372,49 @@ paths:
             type: string
             maxLength: 64
           description: Merchant service work order id within the current authorized data scope.
+  /api/v1/merchant-service/work-orders/{id}/owner-candidates:
+    get:
+      tags:
+        - "merchant-service"
+      operationId: "listMerchantServiceWorkOrderOwnerCandidates"
+      summary: "商户服务工单派单负责人候选"
+      description: "第十八批 L 段第 102 条 102-R1（BSM:1380「派单到具体人员或班组」；BSM:1385「工单由客户关怀部负责处理」）：返回可派的负责人——在用、无商户归属、非外包、有效持 merchant.service_work_order.process、有员工档案、处理码可触及该单商户任一经营项目（主项目或追加的经营项目）的平台员工，每项 user_id、username、staff_name。读闸同派单：平台管理员不限；商户账号只本商户，否则 403 CROSS_MERCHANT_FORBIDDEN；其余平台员工按派单码可触及该商户经营项目，否则 403 CROSS_PROJECT_FORBIDDEN；外包账号 403；工单不存在 404 WORK_ORDER_NOT_FOUND。不记审计（同处理时限列表）。"
+      x-permission: "merchant.service_work_order.assign"
+      x-data-scope: "project-merchant"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "not_applicable"
+      x-audit-event-failure: "not_applicable"
+      x-auth-context: "staff-token"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            maxLength: 64
+          description: "Merchant service work order id within the current authorized data scope."
+      responses:
+        "200":
+          description: "负责人候选；data 为 MerchantWorkOrderOwnerCandidate 数组。"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: "object"
+                    properties:
+                      data:
+                        type: "array"
+                        items:
+                          $ref: "#/components/schemas/MerchantWorkOrderOwnerCandidate"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/merchant-service/work-orders/{id}/close:
     post:
       tags:
@@ -9304,7 +9422,7 @@ paths:
       operationId: closeMerchantServiceWorkOrder
       summary: Close merchant service work order
       description: Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions,
-        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。
+        idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。 第 102 条 102-R2（BSM:1385「问题已解决但商户未确认解决或未点击关闭的，客户关怀部记录相关信息及关闭缘由后，可以关闭投诉」「满意度在回访/验收时由提单方评分」）：投诉须带 close_reason，否则 400 VALIDATION_FAILED，关闭动作说明与留痕记该缘由；satisfaction_score 可不填。102-R3（裁决 26）：配成须商户确认的报修、其他服务请求员工不能关，409 MERCHANT_CONFIRM_REQUIRED。
       x-permission: merchant.service_work_order.close
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -9339,6 +9457,46 @@ paths:
             type: string
             maxLength: 64
           description: Merchant service work order id within the current authorized data scope.
+  /api/v1/merchant-service/work-orders/{id}/merchant-confirm:
+    post:
+      tags:
+        - "merchant-service"
+      operationId: "confirmMerchantServiceWorkOrderByMerchant"
+      summary: "商户确认工单已解决并关闭"
+      description: "第十八批 L 段第 102 条 102-R2（BSM:1385「商户投诉须由商户确认投诉已解决」「问题已解决但商户未确认解决或未点击关闭的」「满意度在回访/验收时由提单方评分」；ENUM:264「待商户确认、已处理待关闭」）：商户在商户专区「我的工单」确认已解决即关闭，satisfaction_score 可不填、填则 1～5（否则 400 VALIDATION_FAILED），关闭动作操作人为商户账号、说明「商户确认已解决」。闸在幂等之前：只有本商户账号能确认——平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED，别的商户 403 CROSS_MERCHANT_FORBIDDEN；已关闭或已取消 409 WORK_ORDER_CLOSED。状态须为待商户确认或已处理待关闭，否则 409 INVALID_STATE；102-R3（裁决 26）：只对关单方式为须商户确认的单（投诉；配成须商户确认的报修、其他服务请求），否则 409 MERCHANT_CONFIRM_NOT_APPLICABLE。"
+      x-permission: "merchant.service_work_order.create"
+      x-data-scope: "merchant"
+      x-terminal-allowed:
+        - "web"
+        - "merchant_portal"
+        - "merchant_app"
+      x-idempotency-required: true
+      x-audit-event-success: "merchant_service.work_order.merchant_confirmed"
+      x-audit-event-failure: "merchant_service.work_order.merchant_confirm_failed"
+      x-auth-context: "staff-token"
+      requestBody:
+        $ref: "#/components/requestBodies/MerchantWorkOrderMerchantConfirmRequest"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            maxLength: 64
+          description: "Merchant service work order id within the current authorized data scope."
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/ops/production-readiness/checks:
     post:
       tags:
@@ -29128,7 +29286,7 @@ paths:
         - merchant-portal
       operationId: getMerchantPortalFeeStatement
       summary: 商户专区·费用总表与当期综合账单(本商户)
-      description: 18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、工单用料费(商户承担)、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。商户账号读到即记该月所列台账行已读(首页未读账单提醒，第 92 条)。
+      description: 18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、工单用料费(商户承担)、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。有付款时点固化的普通内部结算往来(通票分账追收、单店门票综合服务费及其应退、补偿履约追收、停车抵免成本)到出账日、在商户专区可查看后才列入，与门票分账列表、异议截止日同一时刻(BSM L1597/L1673)。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。商户账号读到即记该月所列台账行已读(首页未读账单提醒，第 92 条)。
       x-permission: merchant.billing.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -29162,7 +29320,7 @@ paths:
         - merchant-portal
       operationId: getMerchantPortalUnreadBills
       summary: 商户专区·首页未读账单提醒(本商户)
-      description: 第 92 条(BSM L1597「商户专区首页保留未读账单提醒，该提醒不因异议期届满而消失。」)。bill_months＝当期综合账单所列本商户台账行中商户还没看过的，按计费自然月计笔数(month、unread_count，新月在前)，商户打开我的账单该月即算已读，持 merchant.billing.view 才返回；ticket_settlement_unread_count＝我的对账门票分账里已可查看、应付本商户、商户还没看过的笔数，商户打开门票分账即算已读，持 merchant.portal.settlement.view 才返回；dividend_statements＝审批通过后商户还没在我的分红看到的分红单(id、period_label、kind)，持 finance.dividend.view 才返回；没持对应查看码的那组为 null。已读按商户记(同商户任一账号看过即算)，登录不算读，提醒不因异议期届满而消失。三个码都没有 403；无商户归属 403 MERCHANT_SCOPE_REQUIRED。
+      description: 第 92 条(BSM L1597「商户专区首页保留未读账单提醒，该提醒不因异议期届满而消失。」)。bill_months＝当期综合账单所列本商户台账行中商户还没看过的(出账日前的不计)，按计费自然月计笔数(month、unread_count，新月在前)，商户打开我的账单该月即算已读，持 merchant.billing.view 才返回；ticket_settlement_unread_count＝我的对账门票分账里已可查看、应付本商户、商户还没看过的笔数，商户打开门票分账即算已读，持 merchant.portal.settlement.view 才返回；dividend_statements＝审批通过后商户还没在我的分红看到的分红单(id、period_label、kind)，持 finance.dividend.view 才返回；没持对应查看码的那组为 null。已读按商户记(同商户任一账号看过即算)，登录不算读，提醒不因异议期届满而消失。三个码都没有 403；无商户归属 403 MERCHANT_SCOPE_REQUIRED。
       x-permission: merchant.billing.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -38675,6 +38833,9 @@ paths:
         - CROSS_MERCHANT_FORBIDDEN
         - VOUCHER_DYNAMIC_CODE_REQUIRED
         - VOUCHER_REDEEM_CODE_EXPIRED
+        - TRACE_CODE_INCOMPLETE
+        - TRACE_CODE_NOT_FOUND
+        - TRACE_CODE_MISMATCH
       requestBody:
         $ref: "#/components/requestBodies/VoucherRedeemRequest"
       responses:
@@ -38690,7 +38851,7 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-      description: " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人；过期、已换新码或转赠后 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码一律 409 VOUCHER_DYNAMIC_CODE_REQUIRED；按 voucher_instance_id 定位的员工台账路径不变。核销成功同事务把该动态码置已用。有在途转赠照常核销，核销成功即作废在途转赠（void_reason=holder_redeemed；操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。"
+      description: " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人；过期、已换新码或转赠后 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码一律 409 VOUCHER_DYNAMIC_CODE_REQUIRED；按 voucher_instance_id 定位的员工台账路径不变。核销成功同事务把该动态码置已用。有在途转赠照常核销，核销成功即作废在途转赠（void_reason=holder_redeemed；操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。第十八批 L 段 103-R1（BSM 第 1197 行「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」）：店内实物券须带 trace_codes 逐件核验物品码——去空白去重后个数须等于每张券件数（400 TRACE_CODE_INCOMPLETE），每个码须已登记（404 TRACE_CODE_NOT_FOUND）、属本商户（403 CROSS_MERCHANT_FORBIDDEN）、登记的是本券货品（400 TRACE_CODE_MISMATCH），核验不过券与库存都不动；物品码随 voucher.redeemed 审计事件留存。"
   /api/v1/vouchers/overview:
     get:
       tags:
@@ -55648,6 +55809,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/MerchantWorkOrderCloseRequest"
+    MerchantWorkOrderMerchantConfirmRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MerchantWorkOrderMerchantConfirmRequest"
+    MerchantWorkOrderCloseMethodRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MerchantWorkOrderCloseMethodRequest"
     SupervisorReviewEvaluateRequest:
       required: true
       content:
@@ -62384,12 +62557,111 @@ components:
           type: integer
           minimum: 1
           maximum: 5
-          description: Merchant satisfaction score from 1 to 5.
+          nullable: true
+          description: Merchant satisfaction score from 1 to 5. 可不填（第 102 条 102-R2：不替提单方默认评分）。
         operator_user_id:
           type: string
           maxLength: 64
           description: Operator user id.
+        close_reason:
+          type: "string"
+          maxLength: 2000
+          description: "关闭缘由；投诉由客户关怀部关闭时必填（第 102 条 102-R2，BSM:1385）。"
       description: MerchantWorkOrderCloseRequest payload.
+    MerchantWorkOrderMerchantConfirmRequest:
+      type: "object"
+      description: "商户确认工单已解决（第 102 条 102-R2）。"
+      additionalProperties: false
+      required:
+        - "idempotency_key"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键。"
+          maxLength: 128
+        satisfaction_score:
+          type: "integer"
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: "提单方满意度评分 1～5，可不填。"
+    MerchantWorkOrderCloseMethodRequest:
+      type: "object"
+      description: "报修或其他服务请求的关单方式（第 102 条 102-R3，裁决 26）。"
+      additionalProperties: false
+      required:
+        - "idempotency_key"
+        - "work_order_type"
+        - "close_method"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键。"
+          maxLength: 128
+        work_order_type:
+          type: "string"
+          description: "工单类型（报修/其他服务请求）。"
+          enum:
+            - "repair"
+            - "service"
+        close_method:
+          type: "string"
+          description: "关单方式（处理人完成即结束/员工验收后关闭/须商户确认）。"
+          enum:
+            - "handler"
+            - "staff_acceptance"
+            - "merchant_confirm"
+    MerchantWorkOrderCloseMethodRecord:
+      type: "object"
+      description: "报修或其他服务请求的关单方式（第 102 条 102-R3）。"
+      additionalProperties: false
+      required:
+        - "work_order_type"
+        - "close_method"
+        - "updated_at"
+      properties:
+        work_order_type:
+          type: "string"
+          description: "工单类型（报修/其他服务请求）。"
+          enum:
+            - "repair"
+            - "service"
+        close_method:
+          type: "string"
+          description: "关单方式（处理人完成即结束/员工验收后关闭/须商户确认）。"
+          enum:
+            - "handler"
+            - "staff_acceptance"
+            - "merchant_confirm"
+        updated_by:
+          type: "string"
+          nullable: true
+          maxLength: 64
+          description: "最后修改人；出厂值为空。"
+        updated_at:
+          type: "string"
+          format: "date-time"
+          description: "最后修改时间。"
+    MerchantWorkOrderOwnerCandidate:
+      type: "object"
+      description: "派单负责人候选（第 102 条 102-R1）。"
+      additionalProperties: false
+      required:
+        - "user_id"
+        - "username"
+      properties:
+        user_id:
+          type: "string"
+          maxLength: 64
+          description: "负责人账号编号。"
+        username:
+          type: "string"
+          maxLength: 128
+          description: "负责人登录名。"
+        staff_name:
+          type: "string"
+          maxLength: 128
+          description: "员工姓名。"
     MerchantWorkOrderRecord:
       type: object
       additionalProperties: false
@@ -64051,7 +64323,7 @@ components:
     RegisterTraceCodeRequest:
       type: object
       description: 请求载荷 `RegisterTraceCodeRequest`（V128/REQ-39 溯源码贴码登记，入库）；status=registered，merchant_id
-        强制取自认证上下文不由请求体传入。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。
+        强制取自认证上下文不由请求体传入。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。平台账号（无商户范围）登记按物料归属商户（第十八批 L 段 103-R2）。
       additionalProperties: false
       required:
         - item_id
@@ -67015,6 +67287,12 @@ components:
           type: string
           maxLength: 500
           description: 核销备注（选填）。
+        trace_codes:
+          type: array
+          items:
+            type: string
+            maxLength: 128
+          description: 店内实物券必填：逐件扫的物品码，个数等于每张券件数、不得重复；每个码须已登记为本券货品且属本商户（第十八批 L 段 103-R1，BSM 第 1197 行）。
     CanaryRolloutRequest:
       type: object
       description: 请求载荷 `CanaryRolloutRequest`；开/关某「端 × 能力」的灰度试点（按 端×能力 唯一，重复提交即覆盖）。

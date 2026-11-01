@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -73,7 +73,7 @@ class DeviceCredentialVerifierTests {
     private DeviceCredentialVerifier verifier(String defaultMode) {
         return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit, customerRepo,
                 Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC),
-                defaultMode, "", "", "", "", "", "", 300);
+                defaultMode, "", "", "", "", "", "", "", 300);
     }
 
     private MockHttpServletRequest signedRequest(String method, long ts, String nonce, String sigB64) {
@@ -117,6 +117,7 @@ class DeviceCredentialVerifierTests {
     @Test
     void webLoginWithoutCookieSessionPassesUnderEnforce() {
         // #553：登录时浏览器还没有会话 Cookie，web/经销商门户的登录请求不能因缺 Cookie 被拒；其他写请求照旧拒（见上一条用例）。
+        noStaffLogin(); // 登录请求还没有登录主体。
         for (String type : java.util.List.of("web", "dealer_portal")) {
             MockHttpServletRequest login = new MockHttpServletRequest("POST", "/api/v1/auth/login");
             login.addHeader("X-Terminal-Type", type);
@@ -256,12 +257,13 @@ class DeviceCredentialVerifierTests {
     private DeviceCredentialVerifier verifierWith(String defaultMode, String webMode, String appMode, String miniappMode) {
         return new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit, customerRepo,
                 Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC),
-                defaultMode, "", "", "", webMode, appMode, miniappMode, 300);
+                defaultMode, "", "", "", "", webMode, appMode, miniappMode, 300);
     }
 
     // ---------- ROOT-03-R2 客人两端：证明＝已验证客人会话，会话锁定登录端 ----------
 
     private MockHttpServletRequest customerRequest(String method, String uri, String terminal, String token) {
+        noStaffLogin(); // 客人请求本无员工登录主体（第 100 条 100-R2 只改判员工账号）。
         MockHttpServletRequest r = new MockHttpServletRequest(method, uri);
         r.setRequestURI(uri);
         if (terminal != null) {
@@ -387,6 +389,7 @@ class DeviceCredentialVerifierTests {
 
     @Test
     void appWriteRejectedUnderEnforce() {
+        noStaffLogin();
         org.springframework.mock.web.MockHttpServletRequest r =
                 new org.springframework.mock.web.MockHttpServletRequest("POST", "/api/v1/services/orders");
         r.addHeader("X-Terminal-Type", "app");
@@ -511,6 +514,69 @@ class DeviceCredentialVerifierTests {
         MockHttpServletRequest r = new MockHttpServletRequest("GET", "/api/v1/merchant-portal/settlements");
         r.addHeader("X-Terminal-Type", "web");
         assertThat(verifier("grace").verify(r).terminalType()).isEqualTo("web");
+    }
+
+    // ---- 第 100 条 100-R2：无商户归属的员工账号改报他端一律按 Web 前端判 ----
+
+    /** 平台员工（无商户归属）改报经销商门户、移动管理端、商户网页门户：派生终端为 web；不带终端头维持未识别。 */
+    @Test
+    void nonMerchantStaffSelfReportIsJudgedAsWeb() {
+        for (String claimed : java.util.List.of("dealer_portal", "mobile_admin", "merchant_portal")) {
+            assertThat(verifier("grace").verify(staffGet(claimed)).terminalType()).as(claimed).isEqualTo("web");
+        }
+        assertThat(verifier("grace").verify(staffGet(null)).terminalType()).as("不带终端头").isNull();
+    }
+
+    /** 设备绑定型不改判：报平板而无登记设备仍为 tablet。 */
+    @Test
+    void nonMerchantStaffDeviceBoundClaimIsNotReclassified() {
+        assertThat(verifier("grace").verify(staffGet("tablet")).terminalType()).isEqualTo("tablet");
+    }
+
+    /** 经销商账号报经销商门户、带商户归属的外包账号报商户网页门户：维持自报。 */
+    @Test
+    void dealerAndMerchantBoundVendorKeepSelfReport() {
+        when(authz.currentActor()).thenReturn(new AccessActor("u1", "dealer", "dealer", "org", null, "active"));
+        assertThat(verifier("grace").verify(staffGet("dealer_portal")).terminalType()).isEqualTo("dealer_portal");
+        when(authz.currentActor()).thenReturn(new AccessActor("u1", "vendor", "outsourced_vendor", "org", "m1", "active"));
+        assertThat(verifier("grace").verify(staffGet("merchant_portal")).terminalType()).isEqualTo("merchant_portal");
+    }
+
+    // ---- 第 100 条 100-R3：私人手机逐类验签开关 ----
+
+    /** default=grace、staff_private_phone=enforce：私人手机无签名写请求 403（credential_required）；同配置下商户账号报商户网页门户的
+     *  无证明写仍按 default 留痕放行（翻私人手机不连带商户网页门户）。 */
+    @Test
+    void privatePhoneEnforceDoesNotFlipMerchantPortal() {
+        DeviceCredentialVerifier v = new DeviceCredentialVerifier(deviceRepo, staffRepo, signingKeyStore, authz, audit, customerRepo,
+                Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC), "grace", "", "", "", "enforce", "", "", "", 300);
+        MockHttpServletRequest phone = new MockHttpServletRequest("POST", URI);
+        phone.addHeader("X-Terminal-Type", "staff_private_phone");
+        phone.addHeader("X-Device-Id", "fp");
+        assertThatThrownBy(() -> v.verify(phone))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+        org.mockito.Mockito.verify(audit).recordSuccess(any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.argThat(m -> "credential_required".equals(m.get("reason"))));
+
+        when(authz.currentActor()).thenReturn(new AccessActor("u1", "user", "staff", "org", "m1", "active"));
+        MockHttpServletRequest portal = new MockHttpServletRequest("POST", "/api/v1/merchant-portal/settlements/s1/dispute");
+        portal.addHeader("X-Terminal-Type", "merchant_portal");
+        assertThat(v.verify(portal).terminalType()).isEqualTo("merchant_portal");
+        org.mockito.Mockito.verify(audit).recordSuccess(any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.argThat(m -> "grace_allow_unproven_write".equals(m.get("reason"))));
+    }
+
+    /** 无员工登录主体（登录请求、客人请求）。 */
+    private void noStaffLogin() {
+        org.mockito.Mockito.doThrow(ApiException.unauthorized("UNAUTHENTICATED", "需要登录后操作")).when(authz).currentActor();
+    }
+
+    private static MockHttpServletRequest staffGet(String claimedType) {
+        MockHttpServletRequest r = new MockHttpServletRequest("GET", "/api/v1/bar/void-reason-codes");
+        if (claimedType != null) {
+            r.addHeader("X-Terminal-Type", claimedType);
+        }
+        return r;
     }
 
     /** 84-R1 交叉向量：与终端 DeviceRequestHeadersTest 同一组输入（business_type=manual_backfill；file 字段 a.jpg、字节 abc）摘要逐字相同。 */

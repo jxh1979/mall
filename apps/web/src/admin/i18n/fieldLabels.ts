@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -436,6 +436,7 @@ export const FIELD_LABELS: Record<string, string> = {
   approval_note: "审批意见",
   archive_reason: "归档原因",
   close_reason: "关闭原因",
+  close_method: "关单方式",
   handle_minutes: "处理时长",
   response_minutes: "响应时长",
   remind_minutes: "最晚到店前提醒分钟数",
@@ -2879,6 +2880,8 @@ export const VALUE_LABELS: Record<string, string> = {
   inventory_item_high_value_marked: "高价值标记已更新",
   inventory_item_safety_stock_updated: "安全库存已修改",
   inventory_item_created: "库存商品规格已新建",
+  inventory_warehouse_created: "库房已新建",
+  inventory_trace_code_registered: "物品码已登记",
   inventory_high_value_review_decided: "高价值复核已处理",
   inventory_trace_backfill_submitted: "交接缺扫码补录已提交，待主管复核",
   inventory_trace_exception_reviewed: "交接异常已复核",
@@ -2924,12 +2927,14 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_work_order_processed: "商户工单已处理",
   merchant_work_order_closed: "商户工单已关闭",
   merchant_work_order_policy_saved: "处理时限已保存",
+  merchant_work_order_close_method_saved: "关单方式已保存",
   merchant_zone_fee_recipient_saved: "收费接收人已保存",
   merchant_zone_fee_recipient_deactivated: "收费接收人已停用",
   merchant_zone_payee_account_approved: "收款账户已批准",
   merchant_zone_settlement_disputed: "结算单已提出争议",
   merchant_zone_settlement_resolution_rejected: "争议处理结论已驳回",
   merchant_zone_work_order_submitted: "商户专区工单已提交",
+  merchant_zone_work_order_confirmed: "商户已确认解决并关闭",
   notification_window_saved: "通知时段已保存",
   operating_params_saved: "经营参数已保存",
   anomaly_config_saved: "异常规则已保存",
@@ -3242,11 +3247,15 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   settlement_mode: { none: "不结算", internal_price: "内部结算价挂应付" },
   movement_type: { outbound: "出库", redeem_consume: "兑换核销出库" },
   table_type: { card_seat: "卡座", bar_counter: "吧台位", vip: "贵宾包坐", loose_table: "散台" },
+  // 第十八批 L 段 105-R1（ENUM:160「库房分类｜总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区」）。
+  warehouse_type: { main: "总库", bar: "酒吧库", bar_counter: "吧台库存", consumable: "消耗品库", gift: "礼品库", saved_bottle: "存酒区" },
   // 第十八批 K 段 95-R1（BSM:1021）：开台客人来源；回流渠道随第三方团购接入（清单第 47 条）再加。
   guest_source: { platform_own: "平台自有渠道", marketing: "营销带客", walk_in: "自来客" },
   // 第十八批 K 段 97-R3（BSM:1065「按杯、按瓶、套餐」）：吧台消耗统计的销售形式。
   sale_form: { by_glass: "按杯", by_bottle: "按瓶", combo: "套餐" },
   // 第十八批 K 段 93-R1（BSM:1323、1385；裁决 D-12）：商户服务工单类型 service 叫「其他服务请求」（同 MERCHANT_WORK_ORDER_TYPE_LABELS；物业工单类型闭集无 service）。
   work_order_type: { service: "其他服务请求" },
+  // 第十八批 L 段 102-R3（第十八批裁决 26）：报修、其他服务请求的关单方式（同 MerchantWorkOrdersPage CLOSE_METHOD_LABELS）。
+  close_method: { handler: "处理人完成即结束", staff_acceptance: "员工验收后关闭", merchant_confirm: "须商户确认" },
   currency: { CNY: "人民币" },
 };

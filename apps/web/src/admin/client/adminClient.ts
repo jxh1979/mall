@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { apiErrorFromResponse } from "../../shared/apiError";
 import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
 import type { DownloadedFile } from "../types";
@@ -150,9 +150,6 @@ const PAGE_VIEWS_PATH = "/api/v1/security/page-views";
 export class AdminApi {
   private readonly apiBaseUrl = getApiBaseUrl();
 
-  /** 3.19 二期：当前所在菜单模块（AdminApp 路由切换时更新），随请求带 X-Module-Code 供终端开关按模块闸。 */
-  moduleCode: string | null = null;
-
   /** 商户专区（3.18 方案A）：merchant 归属账号按 merchant_portal 终端上报，受 V197 商户门户总开关约束；员工/平台账号仍为 web。商户手机应用里一律 merchant_app（第 25 条 25-R3）。 */
   terminalType: string = merchantApp ? "merchant_app" : "web";
 
@@ -203,7 +200,6 @@ export class AdminApi {
     const buildInit = (): RequestInit => {
       const headers = new Headers();
       headers.set("x-terminal-type", this.terminalType);
-      if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
       this.applyAuth(headers, "POST");
       return { method: "POST", headers, body: form, credentials: credentialsMode() };
     };
@@ -256,7 +252,6 @@ export class AdminApi {
     const headers = new Headers();
     // 3.19 二期：声明终端后后端按 terminal.enabled 逐请求强制（矩阵页关端/关模块=接口硬拒）。
     headers.set("x-terminal-type", this.terminalType);
-    if (this.moduleCode) headers.set("x-module-code", this.moduleCode);
     this.applyAuth(headers, method);
     // 令牌在 HttpOnly Cookie 里，浏览器自动携带（credentials:include 覆盖同源/跨源），JS 不再手动加 Authorization 头；商户手机应用除外（见 applyAuth）。
     const init: RequestInit = { method, headers, credentials: credentialsMode() };

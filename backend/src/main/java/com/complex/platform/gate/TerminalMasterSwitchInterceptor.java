@@ -12,6 +12,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 业务请求先过 {@link TerminalSwitchGuard} 的 {@code terminal.enabled} 闸——矩阵页关掉某端/某模块后，
  * 该端的业务接口被后端硬拒（403 TERMINAL_DISABLED + terminal.access_rejected 留痕），不再只是前端不可见。
  * scope 维度（module/device/merchant/project…）由 guard 解析，取最严；开关读取异常 fail-closed 拒绝。
+ * Web 前端与商户网页门户的 module 维度由服务端按所调接口定（第 100 条 100-R1，{@link ServerModuleRoutes}），不看自报 X-Module-Code。
  *
  * <p><b>2026-08-03 收口（治理地图「关闭后菜单不可见或不可点，接口也要拒绝业务动作」「开关拉取失败时按
  * 兜底关闭处理，写操作一律拒绝；前端隐藏只是辅助，后端接口必须独立校验」）</b>：终端类型改取

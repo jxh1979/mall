@@ -329,7 +329,7 @@ function renderMarkdown(state) {
   const gapRows = state.matrices.requirements.external_gaps;
   return `# 闭环当前态快照 V0.1
 
-> 本文由 \`tools/generate-closed-loop-current-state.mjs\` 从需求矩阵、代码行数、安全扫描、生产证据提交状态和 NAS 当前漂移证据生成。它用于证明“当前可联调/可业务验收，但不可宣称生产上线就绪”的边界，不替代真实测试命令输出。
+> 本文由 \`tools/generate-closed-loop-current-state.mjs\` 从需求矩阵、代码行数、安全扫描、生产证据提交状态和 NAS 当前漂移证据生成。它给出联调、业务验收、生产上线就绪三项判断（见第 1 节），不替代真实测试命令输出。
 
 机器识别标记：
 

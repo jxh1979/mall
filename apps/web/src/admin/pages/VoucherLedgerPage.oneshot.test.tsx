@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -78,6 +78,9 @@ describe("VoucherLedgerPage 同一次核销／发放没拿到结果再提交", (
     renderPage();
     await waitFor(() => expect(screen.getByTestId("voucher-redeem-open-vi_1")).toBeTruthy(), { timeout: 5000 });
     fireEvent.click(screen.getByTestId("voucher-redeem-open-vi_1"));
+    // 第十八批 L 段 103-R1：店内实物券核销逐件填物品码（本券每张 1 件）。
+    await waitFor(() => expect(screen.getByTestId("voucher-redeem-trace-codes")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("voucher-redeem-trace-codes"), { target: { value: "TRC-001" } });
     fireEvent.change(screen.getByTestId("voucher-redeem-note"), { target: { value: "客人到店领取" } });
     fireEvent.click(screen.getByTestId("voucher-redeem-guided-next"));
     await waitFor(() => expect(screen.getByTestId("voucher-redeem-guided-summary")).toBeTruthy(), { timeout: 5000 });

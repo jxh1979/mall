@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -216,5 +216,22 @@ describe("MerchantScopePage 行明细抽屉", () => {
     expect(text).toContain("100.00 元");
     expect(text).toContain("已出账");
     expect(text).not.toContain("CNY");
+  });
+});
+
+// 第十八批 L 段第 102 条 102-R2：ENUM:264「待商户确认、已处理待关闭」——商户服务工单状态用本链中文名，不走共享字典的「商户待处理」「已解决」。
+describe("MerchantScopePage 商户服务工单状态中文名", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("102-R2：pending_merchant 显示「待商户确认」，resolved 显示「已处理待关闭」", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => Promise.resolve(envelope(String(input).includes("work-orders")
+      ? [{ id: "wo-pm", merchant_id: "m-1", work_order_type: "complaint", title: "工单戊", priority: "low", status: "pending_merchant" },
+        { id: "wo-rs", merchant_id: "m-1", work_order_type: "repair", title: "工单己", priority: "low", status: "resolved" }] : []))));
+    render(<MerchantScopePage api={new AdminApi("test-token")} user={{ id: "u1", username: "merchant", accountType: "merchant_admin", merchantId: "m-1" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} navigateTo={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByTestId("merchant-scope-work-order-row-wo-pm")?.textContent ?? "").toContain("待商户确认"));
+    expect(screen.getByTestId("merchant-scope-work-order-row-wo-rs").textContent).toContain("已处理待关闭");
   });
 });

@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -20,7 +20,8 @@ import org.springframework.stereotype.Service;
 /**
  * 18E 第 21 条 商户专区费用总表与当期综合账单（BSM:1323「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……
  * 系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」；决策台账 DEC-R4-2026-08-04-58）。只读，不新建收费：
- * 金额只取应收应付台账里已出账的应收。本期＝计费自然月（BSM:1673「自然月计费」、BSM:1688）：内部应付计划的计费月 → 物业费计费单的期 →
+ * 金额只取应收应付台账里已出账的应收；有付款时点固化的普通内部结算往来到出账日（visible_at，与门票分账、异议截止日同一时刻；BSM:1597、BSM:1673、DEC-R8-55）才列入。
+ * 本期＝计费自然月（BSM:1673「自然月计费」、BSM:1688）：内部应付计划的计费月 → 物业费计费单的期 →
  * 台账账期 → 到期日所在月，一律取冲正链最早那张原行的（冲正行、重述行沿 origin_item_id 一直追到原行），冲正与重述跟原行同月、计入净额；
  * 门票综合服务费付清后退票只挂的应退（payable）按所属计费月（single_bar_service_fee_adjustments → 计费月）从该名目净额扣除（BSM:755）。本商户＝往来对方是本商户（积分发行费往来对方是销售主体，按 merchant_id）；
  * merchant_id 只是账本归属，派驻提成拨付等别人欠的款不算本商户应付。商户范围 fail-closed：无商户归属 403 MERCHANT_SCOPE_REQUIRED。
@@ -90,6 +91,7 @@ public class MerchantFeeStatementService {
     /**
      * 当期综合账单所列本商户台账行（一行一笔，带计费自然月 bill_month）；参数：本商户、本商户。
      * 第 92 条：综合账单汇总与账单已读、未读都按这同一组行取（BSM:1597 首页未读账单提醒）。
+     * 第 101 条：有付款时点固化的普通内部结算往来到出账日（visible_at，与门票分账、异议截止日同一时刻）才列入；冲正、重述行随原行。
      */
     private static final String BILL_ROWS = """
             WITH RECURSIVE chain(item_id, root_id, next_id) AS (
@@ -113,6 +115,7 @@ public class MerchantFeeStatementService {
               LEFT JOIN contract_rent_bills crb ON a.source_type = 'contract_rent' AND crb.ar_ap_item_id = o.id
               LEFT JOIN contracts c ON c.id = crb.contract_id
              WHERE (a.direction = 'receivable' OR sba.refund_due_item_id IS NOT NULL)
+               AND (ips.ar_ap_item_id IS NULL OR ips.visible_at <= now())
             """;
 
     private final JdbcTemplate jdbc;

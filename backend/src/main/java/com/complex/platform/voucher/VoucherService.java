@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -529,11 +529,13 @@ public class VoucherService implements VoucherIssuePort {
                 AuditedOperation.of("voucher.redeemed", "voucher.redeem_failed", REDEEM_PERM, BUSINESS_TYPE),
                 () -> redeemInternal(request),
                 VoucherService::businessId,
-                Map.of());
+                // 第十八批 L 段 103-R1：逐件扫的物品码随 voucher.redeemed 审计事件留存。
+                request.traceCodes() == null || request.traceCodes().isEmpty()
+                        ? Map.<String, Object>of() : Map.<String, Object>of("trace_codes", request.traceCodes()));
     }
 
     private VoucherRedemptionEntryRecord redeemInternal(VoucherRedeemRequest request) {
-        return redeemInternal(request.code(), request.voucherInstanceId(), request.note(), null);
+        return redeemInternal(request.code(), request.voucherInstanceId(), request.note(), null, request.traceCodes());
     }
 
     /** 第十批 TK-28：结账抵扣上下文——账单归属商户 / 账单标识 / 本次可抵扣的应付额（不含小费）。 */
@@ -550,10 +552,11 @@ public class VoucherService implements VoucherIssuePort {
     public VoucherRedemptionEntryRecord redeemForBill(
             String code, String instanceId, String billMerchantId, String billType, String billId, long deductibleCent) {
         return redeemInternal(code, instanceId, null,
-                new BillDeduction(requireText(billMerchantId, "merchant_id"), billType, requireText(billId, "bill_id"), deductibleCent));
+                new BillDeduction(requireText(billMerchantId, "merchant_id"), billType, requireText(billId, "bill_id"), deductibleCent), null);
     }
 
-    private VoucherRedemptionEntryRecord redeemInternal(String rawCode, String rawInstanceId, String note, BillDeduction bill) {
+    private VoucherRedemptionEntryRecord redeemInternal(String rawCode, String rawInstanceId, String note, BillDeduction bill,
+            List<String> traceCodes) {
         Instant now = Instant.now();
         String code = blankToNull(rawCode);
         String instanceId = blankToNull(rawInstanceId);
@@ -597,6 +600,9 @@ public class VoucherService implements VoucherIssuePort {
         int goodsQuantity = 0;
         if ("in_store_goods".equals(definition.voucherKind())) {
             goodsQuantity = goodsQuantity(definition);
+            // 第十八批 L 段 103-R1（BSM:1197「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」；ENUM:81「到店由店员核销领取时才实扣」）：
+            // 礼品在店员核销时出库，逐件核验物品码；不过则券与库存都不动。
+            inventoryService.requireTraceCodesOfItem(traceCodes, definition.inventoryItemId(), goodsQuantity);
             if (!instance.stockReserved()) {
                 // 历史券（本轮 V312 前发放，未预占）：仍走旧 available 直扣前置校验；缺货直接拒绝，券保持 issued。
                 int available = inventoryService.availableStock(definition.inventoryItemId(), definition.stockLocationId());

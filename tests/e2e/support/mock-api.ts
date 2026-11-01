@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -446,6 +446,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
       { merchantId: "merchant-2", merchantName: "轻微逾期商户", outstandingCent: 300000, oldestDueDate: "2026-06-15", overdueDays: 16, bucket: "a0_30" },
     ],
     "/api/v1/merchant-service/work-orders": state.merchantWorkOrders,
+    "/api/v1/merchant-service/work-orders/mswo-1/owner-candidates": [{ userId: "staff_owner", username: "staff_owner", staffName: "张师傅" }],
     "/api/v1/merchant-billing/bills": state.merchantBills,
     "/api/v1/merchant-portal/settlements": state.merchantZoneSettlements,
     "/api/v1/merchant-billing/fee-notification-recipients": state.merchantZoneFeeRecipients,

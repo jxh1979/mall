@@ -7,11 +7,14 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderActionRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderAssignRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseMethodRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteApprovalRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteDecision;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderDeleteRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderMerchantConfirmRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderOwnerCandidate;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderPolicyRequest;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,6 +55,13 @@ public class MerchantServiceController {
         return ApiResponse.ok(service.createWorkOrder(request));
     }
 
+    // 第十八批 L 段第 102 条 102-R1：派单负责人下拉（同派单闸）。
+    @GetMapping("/work-orders/{id}/owner-candidates")
+    public ApiResponse<List<MerchantWorkOrderOwnerCandidate>> listOwnerCandidates(@PathVariable String id) {
+        authorizationService.requirePermission("merchant.service_work_order.assign");
+        return ApiResponse.ok(service.listOwnerCandidates(id));
+    }
+
     @PostMapping("/work-orders/{id}/assign")
     public ApiResponse<MerchantWorkOrderRecord> assignWorkOrder(
             @PathVariable String id,
@@ -82,6 +92,17 @@ public class MerchantServiceController {
         return ApiResponse.ok(service.closeWorkOrder(id, request));
     }
 
+    // 第十八批 L 段第 102 条 102-R2：商户在商户专区确认已解决即关闭（提单方权限）。
+    @PostMapping("/work-orders/{id}/merchant-confirm")
+    public ApiResponse<MerchantWorkOrderRecord> confirmByMerchant(
+            @PathVariable String id,
+            @RequestBody MerchantWorkOrderMerchantConfirmRequest request
+    ) {
+        authorizationService.requirePermission("merchant.service_work_order.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.confirmByMerchant(id, request));
+    }
+
     // ── 第十八批 I 段 77-R3 处理时限（工单类型×优先级）───────────────────────
     @GetMapping("/work-order-policies")
     public ApiResponse<List<MerchantWorkOrderPolicyRecord>> listPolicies() {
@@ -94,6 +115,21 @@ public class MerchantServiceController {
         authorizationService.requirePermission("merchant.service_work_order.assign");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.savePolicy(request));
+    }
+
+    // ── 第十八批 L 段第 102 条 102-R3 关单方式（报修、其他服务请求；裁决 26）───────────────
+    // 读按查看码：后台处理时限小节与商户专区（只在「须商户确认」的单上出确认按钮）都要读。
+    @GetMapping("/work-order-close-methods")
+    public ApiResponse<List<MerchantWorkOrderCloseMethodRecord>> listCloseMethods() {
+        authorizationService.requirePermission("merchant.service_work_order.view");
+        return ApiResponse.ok(service.listCloseMethods());
+    }
+
+    @PutMapping("/work-order-close-methods")
+    public ApiResponse<MerchantWorkOrderCloseMethodRecord> saveCloseMethod(@RequestBody MerchantWorkOrderCloseMethodRequest request) {
+        authorizationService.requirePermission("merchant.service_work_order.assign");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.saveCloseMethod(request));
     }
 
     // ── V264 数据存档与审批后删除 ──────────────────────────────────────────

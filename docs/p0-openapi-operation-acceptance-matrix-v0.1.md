@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.43
+# P0 OpenAPI Operation 验收矩阵 V0.44
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1210 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1214 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -259,9 +259,13 @@
 | merchant-service | `POST` | `/api/v1/merchant-service/work-orders` | `createMerchantServiceWorkOrder` | Create merchant service work order | `MerchantWorkOrderCreateRequest` | `merchant.service_work_order.create` | `staff-token` | `project-merchant` | web, mobile_admin, merchant_portal, merchant_app | 是 | `merchant_service.createMerchantServiceWorkOrder.succeeded` | `merchant_service.createMerchantServiceWorkOrder.failed` |
 | merchant-service | `GET` | `/api/v1/merchant-service/work-order-policies` | `listMerchantServiceWorkOrderPolicies` | 商户服务工单处理时限列表（工单类型×优先级） | `-` | `merchant.service_work_order.assign` | `staff-token` | `platform` | web | 否 | `merchant_service.listMerchantServiceWorkOrderPolicies.succeeded` | `merchant_service.listMerchantServiceWorkOrderPolicies.failed` |
 | merchant-service | `PUT` | `/api/v1/merchant-service/work-order-policies` | `saveMerchantServiceWorkOrderPolicy` | 保存商户服务工单处理时限（工单类型×优先级一格） | `MerchantWorkOrderPolicyRequest` | `merchant.service_work_order.assign` | `staff-token` | `platform` | web | 是 | `merchant_service.work_order_policy_saved` | `merchant_service.work_order_policy_save_failed` |
+| merchant-service | `GET` | `/api/v1/merchant-service/work-order-close-methods` | `listMerchantServiceWorkOrderCloseMethods` | 商户服务工单关单方式（报修、其他服务请求） | `-` | `merchant.service_work_order.view` | `staff-token` | `platform` | web, merchant_portal, merchant_app | 否 | `not_applicable` | `not_applicable` |
+| merchant-service | `PUT` | `/api/v1/merchant-service/work-order-close-methods` | `saveMerchantServiceWorkOrderCloseMethod` | 保存报修或其他服务请求的关单方式 | `MerchantWorkOrderCloseMethodRequest` | `merchant.service_work_order.assign` | `staff-token` | `platform` | web | 是 | `merchant_service.work_order_close_method_saved` | `merchant_service.work_order_close_method_save_failed` |
 | merchant-service | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | `addMerchantServiceWorkOrderAction` | Append merchant service work order action | `MerchantWorkOrderActionRequest` | `merchant.service_work_order.process` | `staff-token` | `project-merchant` | web, mobile_admin, merchant_portal, merchant_app | 是 | `merchant_service.addMerchantServiceWorkOrderAction.succeeded` | `merchant_service.addMerchantServiceWorkOrderAction.failed` |
 | merchant-service | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | `assignMerchantServiceWorkOrder` | Assign merchant service work order | `MerchantWorkOrderAssignRequest` | `merchant.service_work_order.assign` | `staff-token` | `project-merchant` | web, mobile_admin, merchant_portal, merchant_app | 是 | `merchant_service.assignMerchantServiceWorkOrder.succeeded` | `merchant_service.assignMerchantServiceWorkOrder.failed` |
+| merchant-service | `GET` | `/api/v1/merchant-service/work-orders/{id}/owner-candidates` | `listMerchantServiceWorkOrderOwnerCandidates` | 商户服务工单派单负责人候选 | `-` | `merchant.service_work_order.assign` | `staff-token` | `project-merchant` | web | 否 | `not_applicable` | `not_applicable` |
 | merchant-service | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | `closeMerchantServiceWorkOrder` | Close merchant service work order | `MerchantWorkOrderCloseRequest` | `merchant.service_work_order.close` | `staff-token` | `project-merchant` | web, mobile_admin, merchant_portal, merchant_app | 是 | `merchant_service.closeMerchantServiceWorkOrder.succeeded` | `merchant_service.closeMerchantServiceWorkOrder.failed` |
+| merchant-service | `POST` | `/api/v1/merchant-service/work-orders/{id}/merchant-confirm` | `confirmMerchantServiceWorkOrderByMerchant` | 商户确认工单已解决并关闭 | `MerchantWorkOrderMerchantConfirmRequest` | `merchant.service_work_order.create` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 是 | `merchant_service.work_order.merchant_confirmed` | `merchant_service.work_order.merchant_confirm_failed` |
 | ops | `POST` | `/api/v1/ops/production-readiness/checks` | `createProductionReadinessCheck` | 执行生产前置准入检查 | `ProductionReadinessCheckRequest` | `ops.production_readiness.check` | `staff-token` | `project` | web, mobile_admin | 是 | `production_readiness.checked` | `production_readiness.check_failed` |
 | ops | `GET` | `/api/v1/ops/production-readiness/items` | `listProductionReadinessItems` | 查询生产前置责任状态 | `-` | `ops.production_readiness.view` | `staff-token` | `project` | web, mobile_admin | 否 | `production_readiness.viewed` | `production_readiness.view_failed` |
 | ops | `PUT` | `/api/v1/ops/production-readiness/items/{id}` | `updateProductionReadinessItem` | 更新生产前置责任状态 | `ProductionReadinessItemUpdateRequest` | `ops.production_readiness.manage` | `staff-token` | `project` | web, mobile_admin | 是 | `production_readiness.updated` | `production_readiness.update_failed` |

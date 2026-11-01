@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -2674,13 +2674,13 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 () -> {
                     RegisterTraceCodeRequest actual = requireRequest(request);
                     String itemId = requireText(actual.itemId(), "item_id");
-                    repository.findInventoryItemById(itemId)
+                    InventoryItemRecord item = repository.findInventoryItemById(itemId)
                             .orElseThrow(() -> ApiException.notFound(
                                     "INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
-                    // 归属隔离:商户范围用户强制用自身商户;平台管理员(无范围)代登记须在请求指定归属商户,
-                    // 二者皆无则返回干净业务错(而非 NOT NULL 崩溃)。
+                    // 归属隔离:商户范围用户强制用自身商户;平台管理员(无范围)代登记取请求指定的归属商户,
+                    // 未指定按物料归属商户（第十八批 L 段 103-R2）；平台自有物料（无归属商户）仍返回干净业务错(而非 NOT NULL 崩溃)。
                     String merchantId = authorizationService.currentMerchantScope()
-                            .orElseGet(() -> trimToNull(actual.merchantId()));
+                            .orElseGet(() -> Optional.ofNullable(trimToNull(actual.merchantId())).orElseGet(() -> trimToNull(item.merchantId())));
                     if (merchantId == null) {
                         throw ApiException.badRequest("MERCHANT_REQUIRED", "平台代登记溯源码需先选定所属商户");
                     }
@@ -2744,6 +2744,29 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             traceCode.createdBy(), traceCode.createdAt(), now);
                 }
         );
+    }
+
+    /**
+     * 第十八批 L 段 103-R1（BSM:1197「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」；ENUM:81「到店由店员核销领取时才实扣」）：
+     * 店内实物券核销逐件核验物品码。去空白去重后个数须等于每张券件数（400 TRACE_CODE_INCOMPLETE）；每个码须已登记（404 TRACE_CODE_NOT_FOUND）、
+     * 属本商户（403 CROSS_MERCHANT_FORBIDDEN），且登记的是本券货品（400 TRACE_CODE_MISMATCH）。
+     */
+    public void requireTraceCodesOfItem(List<String> codes, String itemId, int quantity) {
+        java.util.LinkedHashSet<String> distinct = new java.util.LinkedHashSet<>();
+        for (String code : codes == null ? List.<String>of() : codes) {
+            String trimmed = trimToNull(code);
+            if (trimmed != null) {
+                distinct.add(trimmed);
+            }
+        }
+        if (distinct.size() != quantity) {
+            throw ApiException.badRequest("TRACE_CODE_INCOMPLETE", "须逐件扫 " + quantity + " 个物品码");
+        }
+        for (String code : distinct) {
+            if (!java.util.Objects.equals(loadTraceCodeScoped(code).itemId(), itemId)) {
+                throw ApiException.badRequest("TRACE_CODE_MISMATCH", "该物品码登记的不是本券的货品：" + code);
+            }
+        }
     }
 
     /** 按 id 或 trace_code 读取溯源码并校验归属（merchant scope）。不存在抛 404，跨商户抛 403。 */

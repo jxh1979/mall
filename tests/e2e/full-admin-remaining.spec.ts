@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -1194,6 +1194,7 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("证据附件");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-MER-001")!);
+    await page.getByTestId("merchant-work-order-owner-user").selectOption("staff_owner");
     await page.getByTestId("merchant-work-order-assign").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("商户工单已分派");
     await expect(page.getByTestId("admin-action-result")).toContainText("提交编号");

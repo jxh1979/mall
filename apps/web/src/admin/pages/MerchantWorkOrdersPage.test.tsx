@@ -96,13 +96,17 @@ describe("MerchantWorkOrdersPage 无建单入口", () => {
   });
 
   it("93-R2：全套权限也没有建单入口；派单只调 /{id}/assign", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(envelope(ROWS)));
+    const fetchMock = vi.fn().mockImplementation((url: string) => Promise.resolve(String(url).includes("/owner-candidates")
+      ? envelope([{ user_id: "usr_pa", username: "pa", staff_name: "张师傅" }])
+      : envelope(ROWS.map((row) => (row.id === "wo-1" ? { ...row, status: "created" } : row)))));
     vi.stubGlobal("fetch", fetchMock);
     render(<MerchantWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
       setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
     await waitFor(() => expect(screen.getByTestId("merchant-work-order-row-wo-1")).toBeTruthy());
     expect(screen.queryByTestId("merchant-work-order-create-open")).toBeNull();
     fireEvent.click(screen.getByTestId("merchant-work-order-select-wo-1"));
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-owner-user").textContent).toContain("张师傅"));
+    fireEvent.change(screen.getByTestId("merchant-work-order-owner-user"), { target: { value: "usr_pa" } });
     fireEvent.click(screen.getByTestId("merchant-work-order-assign"));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders/wo-1/assign"))).toBe(true));
     expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST" && String(url).endsWith("/api/v1/merchant-service/work-orders"))).toBe(false);
@@ -192,5 +196,100 @@ describe("MerchantWorkOrdersPage 处理时限", () => {
     const [putUrl, putInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT")!;
     expect(String(putUrl)).toContain("/api/v1/merchant-service/work-order-policies");
     expect(JSON.parse(String(putInit.body))).toMatchObject({ work_order_type: "repair", priority: "critical", handle_minutes: 90 });
+  });
+});
+
+// 第十八批 L 段第 102 条：BSM:1380「派单到具体人员或班组」；BSM:1385「商户投诉须由商户确认投诉已解决；……客户关怀部记录相关信息及关闭缘由后，可以关闭投诉」
+// 「满意度在回访/验收时由提单方评分」；ENUM:264「待商户确认、已处理待关闭」；第十八批裁决 26（报修、其他服务请求的关单方式在处理时限配置里三选一）。
+describe("MerchantWorkOrdersPage 第 102 条 派单负责人与关单", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/work-orders");
+  });
+
+  const ROWS_102 = [
+    { id: "wo-c", merchant_id: "m-1", work_order_type: "repair", title: "新报修", priority: "high", status: "created" },
+    { id: "wo-p", merchant_id: "m-1", work_order_type: "complaint", title: "噪音投诉", priority: "high", status: "resolved" },
+    { id: "wo-m", merchant_id: "m-1", work_order_type: "complaint", title: "异味投诉", priority: "low", status: "pending_merchant" },
+  ];
+
+  function json(data: unknown): Response {
+    return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+  }
+
+  function mockFetch() {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (String(url).includes("/owner-candidates")) return Promise.resolve(json([{ user_id: "usr_pa", username: "pa", staff_name: "张师傅" }]));
+      if (String(url).includes("/work-order-close-methods") && method === "GET") {
+        return Promise.resolve(json([{ work_order_type: "repair", close_method: "staff_acceptance" }, { work_order_type: "service", close_method: "handler" }]));
+      }
+      if (method !== "GET") return Promise.resolve(json({ id: "wo-c", status: "assigned" }));
+      if (String(url).includes("/work-order-policies")) return Promise.resolve(json([]));
+      return Promise.resolve(envelope(ROWS_102));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MerchantWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    return fetchMock;
+  }
+
+  const posts = (fetchMock: ReturnType<typeof vi.fn>, suffix: string) =>
+    fetchMock.mock.calls.filter(([url, init]) => init?.method === "POST" && String(url).endsWith(suffix));
+
+  it("102-R1：负责人是候选下拉、不预填 staff_owner；不选点派单出错不发请求；选候选后派单 body 带所选负责人", async () => {
+    const fetchMock = mockFetch();
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-owner-user").tagName).toBe("SELECT"));
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-owner-user").textContent).toContain("张师傅（usr_pa）"));
+    const owner = screen.getByTestId("merchant-work-order-owner-user") as HTMLSelectElement;
+    expect(owner.value).toBe("");
+    expect(owner.textContent).toContain("请选择负责人");
+    expect(owner.textContent).not.toContain("staff_owner");
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/api/v1/merchant-service/work-orders/wo-c/owner-candidates"))).toBe(true);
+
+    fireEvent.click(screen.getByTestId("merchant-work-order-assign"));
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-error").textContent).toContain("派单必须选择负责人。"));
+    expect(posts(fetchMock, "/wo-c/assign")).toHaveLength(0);
+
+    fireEvent.change(owner, { target: { value: "usr_pa" } });
+    fireEvent.click(screen.getByTestId("merchant-work-order-assign"));
+    await waitFor(() => expect(posts(fetchMock, "/wo-c/assign")).toHaveLength(1));
+    expect(JSON.parse(String(posts(fetchMock, "/wo-c/assign")[0]![1].body))).toMatchObject({ owner_user_id: "usr_pa" });
+  });
+
+  it("102-R2：状态列显示「待商户确认」「已处理待关闭」；投诉不填关闭缘由点关闭出错不发请求，填了才发且带 close_reason，满意度不填发 null", async () => {
+    const fetchMock = mockFetch();
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-row-wo-m").textContent).toContain("待商户确认"));
+    expect(screen.getByTestId("merchant-work-order-row-wo-p").textContent).toContain("已处理待关闭");
+    const target = screen.getByTestId("merchant-work-order-target-status") as HTMLSelectElement;
+    expect(Array.from(target.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["待商户确认", "已处理待关闭"]));
+
+    fireEvent.click(screen.getByTestId("merchant-work-order-select-wo-p"));
+    fireEvent.click(screen.getByTestId("merchant-work-order-close"));
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-error").textContent).toContain("投诉工单由客户关怀部关闭须填写关闭缘由。"));
+    expect(posts(fetchMock, "/wo-p/close")).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("merchant-work-order-close-reason"), { target: { value: "商户多次联系未回复" } });
+    fireEvent.click(screen.getByTestId("merchant-work-order-close"));
+    await waitFor(() => expect(posts(fetchMock, "/wo-p/close")).toHaveLength(1));
+    expect(JSON.parse(String(posts(fetchMock, "/wo-p/close")[0]![1].body))).toMatchObject({ close_reason: "商户多次联系未回复", satisfaction_score: null });
+  });
+
+  it("102-R3：处理时限小节列出报修、其他服务请求的关单方式；保存发 PUT（work_order_type/close_method）", async () => {
+    const fetchMock = mockFetch();
+    await waitFor(() => expect(screen.queryByTestId("merchant-work-order-close-method-repair")?.textContent ?? "").toContain("员工验收后关闭"));
+    expect(screen.getByTestId("merchant-work-order-close-method-service").textContent).toContain("处理人完成即结束");
+    const type = screen.getByTestId("merchant-work-order-close-method-type") as HTMLSelectElement;
+    expect(Array.from(type.options).map((option) => [option.value, option.textContent])).toEqual([["repair", "报修"], ["service", "其他服务请求"]]);
+    const method = screen.getByTestId("merchant-work-order-close-method") as HTMLSelectElement;
+    expect(Array.from(method.options).map((option) => option.textContent)).toEqual(["处理人完成即结束", "员工验收后关闭", "须商户确认"]);
+
+    fireEvent.change(type, { target: { value: "repair" } });
+    fireEvent.change(method, { target: { value: "merchant_confirm" } });
+    fireEvent.click(screen.getByTestId("merchant-work-order-close-method-save"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "PUT" && String(url).includes("/work-order-close-methods"))).toBe(true));
+    const [, putInit] = fetchMock.mock.calls.find(([url, init]) => init?.method === "PUT" && String(url).includes("/work-order-close-methods"))!;
+    expect(JSON.parse(String(putInit.body))).toMatchObject({ work_order_type: "repair", close_method: "merchant_confirm" });
   });
 });

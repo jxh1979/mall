@@ -50,6 +50,7 @@ class MerchantServiceJdbcIntegrationTests {
 
     private static final String POLICIES = "/api/v1/merchant-service/work-order-policies";
     private static final String WORK_ORDERS = "/api/v1/merchant-service/work-orders";
+    private static final String CLOSE_METHODS = "/api/v1/merchant-service/work-order-close-methods";
 
     @Autowired
     private JdbcMerchantServiceRepository repository;
@@ -70,6 +71,7 @@ class MerchantServiceJdbcIntegrationTests {
     private RequestPostProcessor dispatcherA;
     private RequestPostProcessor dispatcherB;
     private RequestPostProcessor dispatcherC;
+    private RequestPostProcessor processorA;
 
     @AfterEach
     void clearSecurity() {
@@ -299,14 +301,14 @@ class MerchantServiceJdbcIntegrationTests {
         listIds(dispatcherB).andExpect(jsonPath("$.data.items[*].id").value(hasItem(id)));
         listIds(dispatcherC).andExpect(jsonPath("$.data.items[*].id").value(not(hasItem(id))));
 
-        assign(dispatcherC, id).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assign(dispatcherC, id, user("pa")).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
         Map<String, Object> row = jdbcTemplate.queryForMap("SELECT status, owner_user_id FROM merchant_service_work_orders WHERE id = ?", id);
         assertThat(row.get("status")).isEqualTo("created");
         assertThat(row.get("owner_user_id")).isNull();
         List<String> events = jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id);
         assertThat(events).contains("merchant_service.work_order.assign_failed").doesNotContain("merchant_service.work_order.assigned");
 
-        assign(dispatcherB, id).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("assigned"));
+        assign(dispatcherB, id, user("pa")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("assigned"));
 
         listIds(account("adm", "platform_admin", project("c"), null, role("adm", "merchant.service_work_order.view")))
                 .andExpect(jsonPath("$.data.items[*].id").value(hasItem(id)));
@@ -318,19 +320,218 @@ class MerchantServiceJdbcIntegrationTests {
         listIds(dispatcherC).andExpect(jsonPath("$.data.items[*].id").value(hasItem(id)));
     }
 
+    // ── 第十八批 L 段第 102 条：派单负责人与按类型关单（真库＋真实入口＋真实授权链，请求体一律按前端蛇形键） ──
+    // BSM:1380「派单到具体人员或班组」；BSM:1385「验收按工单类型分别配置——保洁等无争议类由处理人完成即结束；……商户投诉须由商户确认投诉已解决；
+    // ……问题已解决但商户未确认解决或未点击关闭的，客户关怀部记录相关信息及关闭缘由后，可以关闭投诉」「满意度在回访/验收时由提单方评分」；
+    // ENUM:264「待商户确认、已处理待关闭」；第十八批裁决 26（报修、其他服务请求的关单方式按后台配置三选一）。
+
+    /**
+     * 102-R1：负责人候选只含在岗、持处理权限、能管到该商户经营项目的平台员工（pa 在项目 A），不含只到项目 C 的 pc、商户账号与只持派单码的派单员；
+     * 按后台派单的蛇形键派给不存在的 staff_owner 或 pc 一律 400 WORK_ORDER_OWNER_INVALID、单子不动、记派单失败；派给 pa 成功。
+     */
+    @Test
+    void assignOwnerMustBeOnDutyStaffWhoCanProcessTheMerchantsProjects() throws Exception {
+        seedOperatingMerchant();
+        String id = createAsMerchant("repair", "high", "");
+
+        mockMvc.perform(get(WORK_ORDERS + "/" + id + "/owner-candidates").with(dispatcherB))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].user_id").value(hasItem(user("pa"))))
+                .andExpect(jsonPath("$.data[?(@.user_id=='" + user("pa") + "')].staff_name").value(hasItem("pa")))
+                .andExpect(jsonPath("$.data[*].user_id").value(not(hasItem(user("pc")))))
+                .andExpect(jsonPath("$.data[*].user_id").value(not(hasItem(user("m")))))
+                .andExpect(jsonPath("$.data[*].user_id").value(not(hasItem(user("a")))));
+
+        for (String owner : List.of("staff_owner", user("pc"))) {
+            assign(dispatcherB, id, owner).andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("WORK_ORDER_OWNER_INVALID"));
+            Map<String, Object> row = jdbcTemplate.queryForMap("SELECT status, owner_user_id FROM merchant_service_work_orders WHERE id = ?", id);
+            assertThat(row.get("status")).isEqualTo("created");
+            assertThat(row.get("owner_user_id")).isNull();
+        }
+        assertThat(jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id))
+                .contains("merchant_service.work_order.assign_failed").doesNotContain("merchant_service.work_order.assigned");
+
+        assign(dispatcherB, id, user("pa")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("assigned"))
+                .andExpect(jsonPath("$.data.owner_user_id").value(user("pa")));
+    }
+
+    /**
+     * 102-R2：投诉到待商户确认后，别的商户确认 403 CROSS_MERCHANT_FORBIDDEN，持建单码的平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED；
+     * 本商户按专区蛇形键确认（带评分 4）即关闭，关闭动作操作人是商户账号、留痕 merchant_confirmed；处理中的投诉确认 409 INVALID_STATE。
+     */
+    @Test
+    void merchantConfirmsComplaintResolvedFromMerchantZone() throws Exception {
+        seedOperatingMerchant();
+        String id = createAsMerchant("complaint", "high", "");
+        moveTo(id, "pending_merchant");
+
+        String otherMerchant = "mch_102_" + suffix;
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id) "
+                + "VALUES (?, ?, 'retail', 'active', now(), now(), ?)", otherMerchant, "别家商户" + suffix, project("a"));
+        String creator = role("creator", "merchant.service_work_order.view", "merchant.service_work_order.create");
+        merchantConfirm(account("m2", project("a"), otherMerchant, creator), id).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        merchantConfirm(account("sc", project("a"), null, creator), id).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("MERCHANT_SCOPE_REQUIRED"));
+        merchantConfirm(account("adm", "platform_admin", project("a"), null, creator), id).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("MERCHANT_SCOPE_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, id))
+                .isEqualTo("pending_merchant");
+
+        merchantConfirm(merchantAccount, id).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("closed"))
+                .andExpect(jsonPath("$.data.satisfaction_score").value(4));
+        Map<String, Object> row = jdbcTemplate.queryForMap("SELECT status, closed_at, satisfaction_score FROM merchant_service_work_orders WHERE id = ?", id);
+        assertThat(row.get("status")).isEqualTo("closed");
+        assertThat(row.get("closed_at")).isNotNull();
+        assertThat(row.get("satisfaction_score")).isEqualTo(4);
+        assertThat(jdbcTemplate.queryForList("SELECT operator_user_id FROM merchant_service_work_order_actions WHERE work_order_id = ? AND action_type = 'closed'",
+                String.class, id)).containsExactly(user("m"));
+        assertThat(jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id))
+                .contains("merchant_service.work_order.merchant_confirmed");
+
+        String processing = createAsMerchant("complaint", "high", "");
+        moveTo(processing, "processing");
+        merchantConfirm(merchantAccount, processing).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("INVALID_STATE"));
+    }
+
+    /**
+     * 102-R2：员工关投诉不填关闭缘由 400 VALIDATION_FAILED、单子仍已处理待关闭、记关单失败；填了缘由、不填满意度即关闭，
+     * 关闭动作说明为该缘由、满意度为空（不替提单方评分）。报修不填关闭缘由照样关。
+     */
+    @Test
+    void staffClosingComplaintRequiresCloseReasonWithoutDefaultScore() throws Exception {
+        seedOperatingMerchant();
+        RequestPostProcessor closer = account("k", project("a"), null, role("closer", "merchant.service_work_order.view", "merchant.service_work_order.close"));
+        String id = createAsMerchant("complaint", "high", "");
+        moveTo(id, "resolved");
+
+        close(closer, id, "").andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, id)).isEqualTo("resolved");
+        assertThat(jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id))
+                .contains("merchant_service.work_order.close_failed");
+
+        close(closer, id, ",\"close_reason\":\"商户多次联系未回复，按既有规则关闭\"").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("closed"));
+        assertThat(jdbcTemplate.queryForObject("SELECT satisfaction_score FROM merchant_service_work_orders WHERE id = ?", Integer.class, id)).isNull();
+        assertThat(jdbcTemplate.queryForList("SELECT operator_note FROM merchant_service_work_order_actions WHERE work_order_id = ? AND action_type = 'closed'",
+                String.class, id)).containsExactly("商户多次联系未回复，按既有规则关闭");
+
+        String repair = createAsMerchant("repair", "high", "");
+        moveTo(repair, "resolved");
+        close(closer, repair, "").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("closed"));
+    }
+
+    /** 102-R3：保洁单处理人标已处理即关闭（BSM:1385「保洁等无争议类由处理人完成即结束」），处理说明即处理结论、动作记 closed。 */
+    @Test
+    void cleaningClosesWhenHandlerMarksResolved() throws Exception {
+        seedOperatingMerchant();
+        String id = createAsMerchant("cleaning", "high", "");
+        moveTo(id, "processing");
+        act(processorA, id, "resolved", "已清理完毕").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("closed"));
+        Map<String, Object> row = jdbcTemplate.queryForMap("SELECT status, closed_at, resolution FROM merchant_service_work_orders WHERE id = ?", id);
+        assertThat(row.get("status")).isEqualTo("closed");
+        assertThat(row.get("closed_at")).isNotNull();
+        assertThat(row.get("resolution")).isEqualTo("已清理完毕");
+        assertThat(jdbcTemplate.queryForList("SELECT action_type FROM merchant_service_work_order_actions WHERE work_order_id = ?", String.class, id))
+                .contains("closed");
+    }
+
+    /**
+     * 102-R3（裁决 26）：出厂报修＝员工验收后关闭、其他服务请求＝处理人完成即结束（照物业工单出厂配置）；报修标已处理后仍待员工关、商户确认 409；
+     * 平台员工在处理时限配置里把报修改成「须商户确认」（商户账号改不了）后，员工关报修 409 MERCHANT_CONFIRM_REQUIRED，商户确认即关闭。
+     */
+    @Test
+    void repairAndServiceCloseByConfiguredCloseMethod() throws Exception {
+        seedOperatingMerchant();
+        RequestPostProcessor closer = account("k", project("a"), null, role("closer", "merchant.service_work_order.view", "merchant.service_work_order.close"));
+        mockMvc.perform(get(CLOSE_METHODS).with(merchantAccount))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.work_order_type=='repair')].close_method").value(hasItem("staff_acceptance")))
+                .andExpect(jsonPath("$.data[?(@.work_order_type=='service')].close_method").value(hasItem("handler")));
+
+        String service = createAsMerchant("service", "high", "");
+        moveTo(service, "resolved");
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, service)).isEqualTo("closed");
+
+        String repair = createAsMerchant("repair", "high", "");
+        moveTo(repair, "resolved");
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, repair)).isEqualTo("resolved");
+        merchantConfirm(merchantAccount, repair).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("MERCHANT_CONFIRM_NOT_APPLICABLE"));
+        close(closer, repair, "").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("closed"));
+
+        saveCloseMethod(merchantAccount, "repair", "merchant_confirm").andExpect(status().isForbidden());
+        saveCloseMethod(dispatcherA, "cleaning", "merchant_confirm").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        saveCloseMethod(dispatcherA, "repair", "merchant_confirm").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.close_method").value("merchant_confirm"));
+
+        String confirmed = createAsMerchant("repair", "high", "");
+        moveTo(confirmed, "resolved");
+        close(closer, confirmed, "").andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("MERCHANT_CONFIRM_REQUIRED"));
+        merchantConfirm(merchantAccount, confirmed).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("closed"));
+    }
+
+    /** 派给 pa，由 pa 按后台处理的蛇形键依次走到目标状态（assigned 之后先 processing）。 */
+    private void moveTo(String id, String target) throws Exception {
+        assign(dispatcherB, id, user("pa")).andExpect(status().isOk());
+        act(processorA, id, "processing", "已到场处理").andExpect(status().isOk());
+        if (!"processing".equals(target)) {
+            act(processorA, id, target, "已处理").andExpect(status().isOk());
+        }
+    }
+
+    /** 照后台 ADM-MER-001 追加处理（MerchantWorkOrdersPage.processWorkOrder）的请求形状。 */
+    private ResultActions act(RequestPostProcessor who, String id, String targetStatus, String note) throws Exception {
+        return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/actions").with(who).contentType(MediaType.APPLICATION_JSON).content("""
+                {"idempotency_key":"%s","operator_note":"%s","evidence_attachment_ids":["att-merchant-work-order-process"],
+                 "target_status":"%s","operator_user_id":"staff_processor"}
+                """.formatted(UUID.randomUUID(), note, targetStatus)));
+    }
+
+    /** 照后台 ADM-MER-001 关闭（MerchantWorkOrdersPage.closeWorkOrder）的请求形状，满意度不填发 null；extra 为追加的键。 */
+    private ResultActions close(RequestPostProcessor who, String id, String extra) throws Exception {
+        return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/close").with(who).contentType(MediaType.APPLICATION_JSON).content("""
+                {"idempotency_key":"%s","operator_note":"完整后台关闭商户服务工单","evidence_attachment_ids":["att-merchant-work-order-close"],
+                 "resolution":"已维修完成并确认关闭","satisfaction_score":null,"operator_user_id":"staff_closer"%s}
+                """.formatted(UUID.randomUUID(), extra)));
+    }
+
+    /** 照商户专区「确认已解决」（MerchantZoneWorkOrdersPage.confirmWorkOrder）的请求形状。 */
+    private ResultActions merchantConfirm(RequestPostProcessor who, String id) throws Exception {
+        return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/merchant-confirm").with(who).contentType(MediaType.APPLICATION_JSON).content("""
+                {"idempotency_key":"%s","satisfaction_score":4}
+                """.formatted(UUID.randomUUID())));
+    }
+
+    /** 照后台 ADM-MER-001 处理时限小节保存关单方式（MerchantWorkOrdersPage.saveCloseMethod）的请求形状。 */
+    private ResultActions saveCloseMethod(RequestPostProcessor who, String type, String closeMethod) throws Exception {
+        return mockMvc.perform(put(CLOSE_METHODS).with(who).contentType(MediaType.APPLICATION_JSON).content("""
+                {"work_order_type":"%s","close_method":"%s","idempotency_key":"%s"}
+                """.formatted(type, closeMethod, UUID.randomUUID())));
+    }
+
     private ResultActions listIds(RequestPostProcessor who) throws Exception {
         return mockMvc.perform(get(WORK_ORDERS).with(who)).andExpect(status().isOk());
     }
 
-    /** 照后台 ADM-MER-001 派单（MerchantWorkOrdersPage.assignWorkOrder）的请求形状。 */
-    private ResultActions assign(RequestPostProcessor who, String id) throws Exception {
+    /** 照后台 ADM-MER-001 派单（MerchantWorkOrdersPage.assignWorkOrder）的请求形状；负责人从候选下拉里选（102-R1）。 */
+    private ResultActions assign(RequestPostProcessor who, String id, String ownerUserId) throws Exception {
         return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/assign").with(who).contentType(MediaType.APPLICATION_JSON).content("""
                 {"idempotency_key":"%s","operator_note":"完整后台商户工单派单","evidence_attachment_ids":["att-merchant-work-order-assign"],
-                 "owner_department":"property","owner_user_id":"staff_owner","operator_user_id":"staff_dispatcher"}
-                """.formatted(UUID.randomUUID())));
+                 "owner_department":"property","owner_user_id":"%s","operator_user_id":"staff_dispatcher"}
+                """.formatted(UUID.randomUUID(), ownerUserId)));
     }
 
-    /** 项目 A、B、C；商户 M 主项目 A、已批准追加经营项目 B；A、B、C 各一名派单员（角色只到本人项目、有员工档案）；M 的商户账号也持派单码、有档案。 */
+    /**
+     * 项目 A、B、C；商户 M 主项目 A、已批准追加经营项目 B；A、B、C 各一名派单员（角色只到本人项目、有员工档案）；M 的商户账号也持派单码、有档案。
+     * 102-R1：另有处理员 pa（查看＋处理，只到项目 A）与 pc（处理，只到项目 C），都有员工档案。
+     */
     private void seedOperatingMerchant() {
         for (String tag : List.of("a", "b", "c")) {
             jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now())",
@@ -345,6 +546,8 @@ class MerchantServiceJdbcIntegrationTests {
         dispatcherC = account("c", project("c"), null, dispatch);
         merchantAccount = account("m", project("a"), merchant, role("merchant", "merchant.service_work_order.view",
                 "merchant.service_work_order.create", "merchant.service_work_order.assign"));
+        processorA = account("pa", project("a"), null, role("process", "merchant.service_work_order.view", "merchant.service_work_order.process"));
+        account("pc", project("c"), null, role("processc", "merchant.service_work_order.process"));
     }
 
     private ResultActions savePolicy(RequestPostProcessor who, String type, String priority, int minutes) throws Exception {

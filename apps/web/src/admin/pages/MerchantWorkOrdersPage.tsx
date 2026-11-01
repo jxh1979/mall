@@ -14,7 +14,8 @@ import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
-import { MERCHANT_WORK_ORDER_TYPE_LABELS } from "./MerchantZoneWorkOrdersPage";
+import { MERCHANT_WORK_ORDER_STATUS_LABELS, MERCHANT_WORK_ORDER_TYPE_LABELS } from "./MerchantZoneWorkOrdersPage";
+import { shortId } from "../format/ids";
 
 const WO_ASSIGN = ["merchant.service_work_order.assign"];
 const WO_PROCESS = ["merchant.service_work_order.process"];
@@ -24,19 +25,35 @@ const TYPE_OPTIONS = Object.entries(MERCHANT_WORK_ORDER_TYPE_LABELS);
 // 第 93 条 93-R1：类型用商户工单自己的四类中文名（service＝其他服务请求，不用共享字典的「服务」）。
 const typeName = (code?: string | null) => MERCHANT_WORK_ORDER_TYPE_LABELS[code ?? ""] ?? formatBusinessStatus(code);
 const PRIORITY_OPTIONS: Array<[string, string]> = [["low", "低"], ["medium", "中"], ["high", "高"], ["critical", "紧急"]];
+// 第 102 条 102-R2：状态用本链 ENUM:264 中文名（待商户确认、已处理待关闭）。
+const statusName = (code?: string | null) => MERCHANT_WORK_ORDER_STATUS_LABELS[code ?? ""] ?? formatBusinessStatus(code);
+// 第 102 条 102-R3（裁决 26）：报修、其他服务请求的关单方式三选一；保洁、投诉照 BSM:1385 写死。
+const CLOSE_METHODS = "/api/v1/merchant-service/work-order-close-methods";
+const CLOSE_METHOD_LABELS: Record<string, string> = { handler: "处理人完成即结束", staff_acceptance: "员工验收后关闭", merchant_confirm: "须商户确认" };
+const CLOSE_METHOD_TYPE_OPTIONS = TYPE_OPTIONS.filter(([value]) => value === "repair" || value === "service");
+type MerchantWorkOrderCloseMethodRow = { workOrderType: string; closeMethod: string };
+// 第 102 条 102-R1：派单负责人候选（在岗、持处理权限、能管到该商户经营项目的平台员工）。
+type OwnerCandidate = { userId: string; username?: string; staffName?: string };
 
 // 第 77 条 77-R3：处理时限按「工单类型×优先级」后台配置（BSM:1385），商户单只有处理时限、没有响应时限。
 type MerchantWorkOrderPolicyRow = { workOrderType: string; priority: string; handleMinutes: number };
 
 const TEXT = {
   title: "商户服务工单",
-  description: "商户在商户专区自助提报修、保洁、投诉和其他服务请求；本页派单、处理、关闭并配置处理时限",
-  evidence: "接口证据：读取 /api/v1/merchant-service/work-orders；派单 POST /api/v1/merchant-service/work-orders/{id}/assign；处理 POST /api/v1/merchant-service/work-orders/{id}/actions；关闭 POST /api/v1/merchant-service/work-orders/{id}/close。",
+  description: "商户在商户专区自助提报修、保洁、投诉和其他服务请求；本页派单、处理、关闭并配置处理时限与关单方式",
+  evidence: "接口证据：读取 /api/v1/merchant-service/work-orders；负责人候选 GET /api/v1/merchant-service/work-orders/{id}/owner-candidates；派单 POST /api/v1/merchant-service/work-orders/{id}/assign；处理 POST /api/v1/merchant-service/work-orders/{id}/actions；关闭 POST /api/v1/merchant-service/work-orders/{id}/close；关单方式 GET/PUT /api/v1/merchant-service/work-order-close-methods。",
   loadFailed: "商户服务工单读取失败",
   actionFailed: "商户服务工单操作失败",
   noWorkOrder: "当前没有可操作工单。",
   processNoteRequired: "处理动作必须填写处理说明。",
   resolutionRequired: "关闭工单必须填写处理结论。",
+  ownerRequired: "派单必须选择负责人。",
+  ownerPlaceholder: "请选择负责人",
+  closeReason: "关闭缘由",
+  closeReasonRequired: "投诉工单由客户关怀部关闭须填写关闭缘由。",
+  closeMethodTitle: "关单方式",
+  closeMethodHint: "保洁由处理人完成即结束；投诉须商户确认，商户未确认的由客户关怀部填关闭缘由后关闭，这两类不可改。报修、其他服务请求在此各选一种。",
+  closeMethodSave: "保存关单方式",
   workOrderCount: "工单总数",
   pending: "待处理",
   highPriority: "高优先级",
@@ -112,11 +129,14 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [rows, setRows] = React.useState<MerchantWorkOrderRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [ownerDepartment, setOwnerDepartment] = React.useState("property");
-  const [ownerUserId, setOwnerUserId] = React.useState("staff_owner");
+  const [ownerUserId, setOwnerUserId] = React.useState("");
+  const [ownerCandidates, setOwnerCandidates] = React.useState<OwnerCandidate[]>([]);
+  const [closeReason, setCloseReason] = React.useState("");
   const [processNote, setProcessNote] = React.useState("已到场处理，等待商户确认");
   const [targetStatus, setTargetStatus] = React.useState("processing");
   const [resolution, setResolution] = React.useState("已维修完成并确认关闭");
-  const [satisfactionScore, setSatisfactionScore] = React.useState("5");
+  // 102-R2：不替提单方默认评分（BSM:1385「满意度在回访/验收时由提单方评分」），不填发 null。
+  const [satisfactionScore, setSatisfactionScore] = React.useState("");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该工单完整字段（枚举中文·截止时间中文·引用 TraceLink）。
@@ -124,6 +144,8 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [policies, setPolicies] = React.useState<MerchantWorkOrderPolicyRow[]>([]);
   const [policyForm, setPolicyForm] = React.useState({ workOrderType: "repair", priority: "high", handleMinutes: "" });
   const canSetPolicy = useCan(effectivePermissions, WO_ASSIGN);
+  const [closeMethods, setCloseMethods] = React.useState<MerchantWorkOrderCloseMethodRow[]>([]);
+  const [closeMethodForm, setCloseMethodForm] = React.useState({ workOrderType: "repair", closeMethod: "staff_acceptance" });
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -153,11 +175,28 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       const workOrders = await api.get<MerchantWorkOrderRow[]>("/api/v1/merchant-service/work-orders");
       setRows(workOrders);
       // 时限读写都要派单权限（与后端同码）；没有的不读，免得整页读取失败。
-      if (canSetPolicy) setPolicies(await api.get<MerchantWorkOrderPolicyRow[]>(POLICIES));
+      if (canSetPolicy) {
+        setPolicies(await api.get<MerchantWorkOrderPolicyRow[]>(POLICIES));
+        setCloseMethods(await api.get<MerchantWorkOrderCloseMethodRow[]>(CLOSE_METHODS));
+      }
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
 
+
+  // 102-R1：选中已提交的单且有派单权限时取负责人候选；换单即清空所选。
+  const ownerOrderId = selected?.id;
+  const ownerOrderStatus = selected?.status;
+  React.useEffect(() => {
+    setOwnerUserId("");
+    setOwnerCandidates([]);
+    if (!ownerOrderId || ownerOrderStatus !== "created" || !canSetPolicy) return;
+    let alive = true;
+    api.get<OwnerCandidate[]>(`/api/v1/merchant-service/work-orders/${ownerOrderId}/owner-candidates`)
+      .then((list) => { if (alive) setOwnerCandidates(list); })
+      .catch(() => { if (alive) setOwnerCandidates([]); });
+    return () => { alive = false; };
+  }, [api, ownerOrderId, ownerOrderStatus, canSetPolicy]);
 
   const pendingCount = rows.filter(nonTerminal).length;
   const highPriorityCount = rows.filter((row) => ["high", "critical"].includes(row.priority ?? "")).length;
@@ -185,6 +224,10 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   async function assignWorkOrder() {
     if (!selected) {
       setFormError(TEXT.noWorkOrder);
+      return;
+    }
+    if (!ownerUserId) {
+      setFormError(TEXT.ownerRequired);
       return;
     }
     const request = {
@@ -226,13 +269,18 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       setFormError(TEXT.resolutionRequired);
       return;
     }
+    if (selected.workOrderType === "complaint" && !closeReason.trim()) {
+      setFormError(TEXT.closeReasonRequired);
+      return;
+    }
     const request = {
       idempotencyKey: nextKey("merchant-work-order-close"),
       operatorNote: "完整后台关闭商户服务工单",
       evidenceAttachmentIds: ["att-merchant-work-order-close"],
       resolution,
-      satisfactionScore: Number(satisfactionScore || 5),
+      satisfactionScore: satisfactionScore.trim() ? Number(satisfactionScore) : null,
       operatorUserId: "staff_closer",
+      ...(closeReason.trim() ? { closeReason: closeReason.trim() } : {}),
     };
     await runAction("merchant_work_order_closed", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/close`, request));
   }
@@ -252,6 +300,15 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     await runAction("merchant_work_order_policy_saved", request, () => api.put(POLICIES, request));
   }
 
+  async function saveCloseMethod() {
+    const request = {
+      idempotencyKey: nextKey("merchant-work-order-close-method"),
+      workOrderType: closeMethodForm.workOrderType,
+      closeMethod: closeMethodForm.closeMethod,
+    };
+    await runAction("merchant_work_order_close_method_saved", request, () => api.put(CLOSE_METHODS, request));
+  }
+
   function openWorkOrderDetail(row: MerchantWorkOrderRow) {
     setDetail({
       title: `工单明细 · ${row.title ?? row.id}`,
@@ -260,7 +317,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
         { label: TEXT.merchant, value: <TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}>{row.merchantId ?? "-"}</TraceLink> },
         { label: TEXT.type, value: typeName(row.workOrderType) },
         { label: TEXT.priority, value: formatBusinessStatus(row.priority) },
-        { label: TEXT.status, value: formatBusinessStatus(row.status) },
+        { label: TEXT.status, value: statusName(row.status) },
         { label: TEXT.ownerDepartment, value: row.ownerDepartment || "-" },
         { label: TEXT.ownerUser, value: <TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink> },
         { label: TEXT.dueAt, value: cnDate(row.dueAt) },
@@ -273,7 +330,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="merchant_service.work_order.viewed / assigned / action_added / closed" />
+      <AuditTrailHint event="merchant_service.work_order.viewed / assigned / action_added / closed / work_order_close_method_saved" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="merchant-work-orders-kpi-focus-banner">
@@ -295,11 +352,15 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
 
         <div className="admin-form-grid" data-testid="merchant-work-order-action-form">
           <label>{TEXT.ownerDepartment}<input data-testid="merchant-work-order-owner-department" value={ownerDepartment} onChange={(event) => setOwnerDepartment(event.target.value)} /></label>
-          <label>{TEXT.ownerUser}<input data-testid="merchant-work-order-owner-user" value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)} /></label>
+          <label>{TEXT.ownerUser}<select data-testid="merchant-work-order-owner-user" value={ownerUserId} onChange={(event) => setOwnerUserId(event.target.value)}>
+            <option value="">{TEXT.ownerPlaceholder}</option>
+            {ownerCandidates.map((candidate) => <option key={candidate.userId} value={candidate.userId}>{candidate.staffName || candidate.username || candidate.userId}（{shortId(candidate.userId)}）</option>)}
+          </select></label>
           <label>{TEXT.processNote}<input data-testid="merchant-work-order-process-note" value={processNote} onChange={(event) => setProcessNote(event.target.value)} /></label>
-          <label>{TEXT.targetStatus}<select data-testid="merchant-work-order-target-status" value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)}><option value="assigned">已派单</option><option value="processing">处理中</option><option value="pending_merchant">商户待处理</option><option value="resolved">已解决</option></select></label>
+          <label>{TEXT.targetStatus}<select data-testid="merchant-work-order-target-status" value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)}><option value="assigned">已派单</option><option value="processing">处理中</option><option value="pending_merchant">待商户确认</option><option value="resolved">已处理待关闭</option></select></label>
           <label>{TEXT.resolution}<input data-testid="merchant-work-order-resolution" value={resolution} onChange={(event) => setResolution(event.target.value)} /></label>
-          <label>{TEXT.satisfaction}<input data-testid="merchant-work-order-satisfaction" value={satisfactionScore} onChange={(event) => setSatisfactionScore(event.target.value)} /></label>
+          <label>{TEXT.closeReason}<input data-testid="merchant-work-order-close-reason" value={closeReason} placeholder="投诉必填" onChange={(event) => setCloseReason(event.target.value)} /></label>
+          <label>{TEXT.satisfaction}<input data-testid="merchant-work-order-satisfaction" value={satisfactionScore} placeholder="提单方评分 1～5，可不填" onChange={(event) => setSatisfactionScore(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="merchant-work-order-actions">
           <PermissionButton permissionsState={effectivePermissions} permissions={WO_ASSIGN} data-testid="merchant-work-order-assign" disabled={busyAction !== ""} onClick={() => void assignWorkOrder()}>{TEXT.assign}</PermissionButton>
@@ -324,6 +385,14 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
               <tbody>{policies.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} data-testid={`merchant-work-order-policy-${row.workOrderType}-${row.priority}`}><td>{typeName(row.workOrderType)}</td><td>{formatBusinessStatus(row.priority)}</td><td>{row.handleMinutes}</td></tr>)}</tbody>
             </table>
           </div>
+          <h4>{TEXT.closeMethodTitle}</h4>
+          <span className="admin-muted-action">{TEXT.closeMethodHint}</span>
+          <div className="admin-inline-form" data-testid="merchant-work-order-close-method-form">
+            <select data-testid="merchant-work-order-close-method-type" aria-label={TEXT.type} value={closeMethodForm.workOrderType} onChange={(event) => setCloseMethodForm({ ...closeMethodForm, workOrderType: event.target.value })}>{CLOSE_METHOD_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <select data-testid="merchant-work-order-close-method" aria-label={TEXT.closeMethodTitle} value={closeMethodForm.closeMethod} onChange={(event) => setCloseMethodForm({ ...closeMethodForm, closeMethod: event.target.value })}>{Object.entries(CLOSE_METHOD_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <PermissionButton permissionsState={effectivePermissions} permissions={WO_ASSIGN} data-testid="merchant-work-order-close-method-save" disabled={busyAction !== ""} onClick={() => void saveCloseMethod()}>{TEXT.closeMethodSave}</PermissionButton>
+          </div>
+          <ul data-testid="merchant-work-order-close-methods">{closeMethods.map((row) => <li key={row.workOrderType} data-testid={`merchant-work-order-close-method-${row.workOrderType}`}>{typeName(row.workOrderType)}：{CLOSE_METHOD_LABELS[row.closeMethod] ?? "-"}</li>)}</ul>
         </div>
         ) : null}
         </>
@@ -348,7 +417,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                   <td>{row.title ?? row.id}<br /><span onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-GOV-002" objectId={row.merchantId}><small>商户 {row.merchantId}</small></TraceLink></span></td>
                   <td>{typeName(row.workOrderType)}</td>
                   <td>{formatBusinessStatus(row.priority)}</td>
-                  <td>{formatBusinessStatus(row.status)}</td>
+                  <td>{statusName(row.status)}</td>
                   <td>{row.ownerDepartment || "-"}</td>
                   <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink></td>
                   <td>{cnDate(row.dueAt)}</td>

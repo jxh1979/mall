@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.66
+文档版本：V0.67
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3930,6 +3930,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 23 | **第 96 条 设备「待归还」**（题面：「第 96 条设备状态「待归还」什么时候进入、谁办归还、之后去哪？HTML 只列了状态名。现在员工停岗或离职生效时只撤权限，名下的工作手机、扫码设备仍显示「在用」、持有人还是这个人；收回手机只能按「本班手机归还」办，会给已离职的人记一次下班。」）—— 操作员选「停岗离职转待归还（推荐）」：员工停岗或离职生效时，名下还在用的工作手机、扫码设备等自动转「待归还」并留痕；设备管理员收回实物后在后台办归还，回「待领用」，不给该员工记下班；收不回的在后台挂失。平常下班没还的仍显示在用。 | 第 96 条，18K 实现。 |
 | 24 | **第 96 条 设备「归档」**（题面：「第 96 条设备状态「归档」什么时候进入？进入后还能不能再出来？HTML 只列了状态名。现在报废是最后一步，已报废的设备一直留在台账里、不能再做任何操作。」）—— 操作员选「报废后可归档（推荐）」：设备管理员对已报废的设备办理归档，原因必填；归档后台账里仍可查、显示「已归档」，不能再恢复或领用。 | 第 96 条，18K 实现。 |
 | 25 | **第 99 条 真实后端界面验收**（题面：「第 99 条刷新运行验收证据：其中「真实后端界面验收」要临时起一个后端连数据库，得写一个和现有后端测试脚本同样的脚本：从 160 的 /etc/complex/complex.env 只取 3 个数据库连接变量（不打印），新建一次性空库，跑完就停进程、删库；正在运行的服务和生产库都不碰。允许吗？」）—— 操作员选「不跑这一项（推荐）」：其余几步照跑并重生成证据：后端全量、前端构建、常规界面验收，都不需要口令。证据如实记「真实后端界面验收未跑、运行验收未就绪」。这项检查会转绿；交付门禁总链还有另外三项过期，仍然是红的。 | 第 99 条，18K 实现。 |
+| 26 | **第 102 条 商户报修与其他服务请求怎么关单**（题面：「第 102 条：商户在商户专区报的「报修」和「其他服务请求」，处理完怎么关单？BSM:1385 只写了「验收按工单类型分别配置」，点名了保洁（处理人完成即结束）、商户投诉（商户确认、客户关怀部记缘由可关）和大型设备报修；商户专区的单不关联设备。物业工单你定过「没关联设备的普通报修按后台配置的验收方式」（第十二批裁决 12）。现在商户工单一律要员工填结论关单，商户没有确认按钮。」）—— 操作员选「同物业，按后台配置（推荐）」：和物业工单裁决 12 一致：在商户工单的处理时限配置里，给报修、其他服务请求各选一种关单方式：「处理人完成即结束」「员工验收后关闭」或「须商户确认」。 | 第 102 条，18L 实现。 |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -4293,3 +4294,50 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 第 95 条（BSM:1079「并台：……销售提成归属不变，仍跟各自的客人走」「销售提成跟客人走，由帮该客人预订的人取得，与台位无关」；BSM:1468「业绩记名人与销售提成归属人始终是同一人——都是帮该客人预订的那个人」）：BarSessionSalesBackfillTarget.applyAttribution（店长改派与 18F 销售归属补录共用）的写入集合改为只取本会话自己的订单及本会话开台以来本台位上无会话归属的订单（Ledger.ownOrders／ownBills），并台并入的子会话（含整体转台前旧链）的订单、账单与提成行不动；结清判定仍按台组（Ledger.settled）；补录原快照同取本会话。OpenAPI reassignBarTableSessionAttribution、submitBarTableSessionSalesBackfill 的 description 同步，改派描述删去「已关台或」（关台先回 409 BAR_TABLE_SESSION_NOT_ACTIVE）；酒吧 PRD §7.1、§11 实现现状与变更日志、html-prd-coverage.csv BSM-0151 同步。回归 BarSalesAttributionJdbcTests.reassignOnAMergedPrimaryLeavesTheMergedGuestsOrdersBillsAndCommission（两台各有销售、按蛇形键并台后改派主台）。
   - 第 94 条（BSM:1017「酒吧的合作方式可以是自营、联营、租赁、代运营、服务商接入或其他。」；BSM:1463、PGM:580「在商户档案上标注为自营的商户视同公司自有，其员工按公司自有员工路径办理。」；BSM:1197「出库须同时核验订单和物品码」）：InventoryService.listTraceOutboundOrders 与 createHandoverChain 的订单核验改为商户优先（同 listCostLedger）：有商户范围时不再按项目过滤，自营酒吧员工（归属公司）、追加经营项目员工也能列订单、建交接链。回归 TraceHandoverOutboundOrderJdbcTests.selfOperatedBarClerkUnderTheCompanyListsOrdersAndCreatesTheChain。
   - 第 93 条（BSM:1323「我的工单（报修/保洁/投诉/其他服务请求自己发起……）」；BSM:1385；裁决 D-12）：apps/web/src/admin/i18n/fieldLabels.ts KEY_VALUE_LABELS 加 work_order_type.service「其他服务请求」，结果区与表格、抽屉同名（物业工单类型闭集无 service，不受影响）。回归 ActionResultView.test.tsx V0.03「商户服务工单结果：工单类型 service 显示为「其他服务请求」」。
+
+18L 落地位置补记（2026-11-01）：第十八批 L 段（batch32）按待开发清单第 100～103、105 条（含上表第 26 条，即第十八批裁决 26）实现；第 104 条核实后转 B 类第 107 条；第 106 条的证据与审计文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.66→V0.67 与裁决表新增第 26 行外，其他历史字节保持。
+
+- 18L 落地位置补记·第 101 条（无新裁决；依据：BSM:1597「异议期自该账单在商户专区可查看之日的次日起算」「商户专区首页保留未读账单提醒，该提醒不因异议期届满而消失。」；BSM:1673「上述各时点虽可配置，但必须满足固定的先后顺序：月结定格 → 账单出账 → 异议期届满 → 付账日，后一环不得早于前一环。」「自然月计费、次月出账」；DEC-R8-55「账单在商户专区不可查看的期间不计入异议期」）。落地：商户专区综合账单取数 MerchantFeeStatementService.BILL_ROWS 加条件 `ips.ar_ap_item_id IS NULL OR ips.visible_at <= now()`。有付款时点固化的普通内部结算往来（通票分账追收、单店门票综合服务费及其应退、补偿履约追收、停车抵免成本）到出账日（internal_payable_schedules.visible_at）才列入综合账单；商户看过才记已读，到出账日后才计入首页未读账单月份（第 92 条）；与门票分账列表、异议截止日是同一时刻。冲正行、重述行随原行；没有付款时点固化的应收（租金、物业费、能源费、押金等）照常列入。不加迁移、接口，前端不改。OpenAPI getMerchantPortalFeeStatement、getMerchantPortalUnreadBills 两处描述已同步，merchant-portal-zone-prd-v0.1.md V0.23 的 §3.3、§6.2 已同步。回归测试：ParkingCreditCostMonthlyJdbcIntegrationTests.merchantPortalListsCostFromStatementDayOnly、MerchantPortalJdbcIntegrationTests.feeStatementNetsRefundDueOnlyFromItsStatementDay。
+- 第 100 条（核实 g100）18L 落地位置补记：
+  ① 100-R1 Web 前端与商户网页门户的模块由服务端按所调接口定。新增 backend/src/main/java/com/complex/platform/gate/ServerModuleRoutes.java：模块＝后台菜单组；只有某一菜单组的页面独用的接口才归该模块，按路径段边界取最长前缀；被几个菜单组的页面共用、后台外壳自己调、或所属菜单组没有模块行的接口不判。GateRequestContext.moduleCode()/orderedScopes() 对这两端不再读 X-Module-Code，客人两端仍按请求头。后台前端删掉自报模块码（apps/web/src/admin/client/adminClient.ts、AdminApp.tsx）。依据 PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」、PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」、PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限、商户范围和设备状态。」。
+  ② 100-R2 无商户归属的员工账号（不是经销商、客人）带终端头的非设备绑定型请求，一律按 Web 前端判总开关、模块开关与灰度（DeviceCredentialVerifier.verify）。依据 PGM:745「Web 前端（业务人员，客人无网页端）」、BSM:1874-1875「Web 前端｜业务人员、管理层、运营、财务、部分商户人员」。
+  ③ 100-R3 补私人手机逐类验签开关键 access.device_credential.enforcement.staff_private_phone（DeviceCredentialVerifier 构造器、application.yml），不翻转，生产翻转属运维。依据 PGM:744、PGM:747「同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发」。
+  文档：全链路操作留痕与终端开关 PRD V0.08（顶部横幅 AUD-010、§5.2、§5.4 实现现状，变更日志一行）；商户专区 PRD §10「终端」行。
+  本条不涉及新裁决号。
+- 18L 落地位置补记·第 105 条
+  - 依据：BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」；BSM:1192「库房分类｜总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区。」；ENUM:160「库房分类｜总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区」；BSM:1936「供应链连基础管理｜因为供应商、供应合同、库房、库位、采购人员、库管和审批权限都要先在基础管理中定义清楚。」；PGM:948「治理连接供应链｜供应商、供应合同、采购、库房、库存报损和盘点差异，都要看商户归属、合同范围和复核权限。」
+  - 裁决：没有新裁决号（核对阶段 blocked 为空）。
+  - 105-R1：后台库存台账页新增「库房」区块 apps/web/src/admin/pages/InventoryWarehousePanel.tsx。InventoryLedgerPage 只在持 inventory.warehouse.manage 时挂载；区块点开才加载。
+    - 列表显示库房编号、名称、中文分类、所属项目、归属（平台或商户）、状态。
+    - 「＋新建库房」按页面蛇形键 POST /api/v1/inventory/warehouses：所属项目只列在用项目，归属选平台或商户，六类分类，名称必填，不传 status。
+    - 动作码 inventory_warehouse_created「库房已新建」、KEY_VALUE_LABELS.warehouse_type 六值中文都在 fieldLabels.ts。
+    - 后端、OpenAPI、迁移不改。矩阵 ADM-INV-001 已同步：权限加 inventory.warehouse.manage、governance.project.view、merchant.profile.view，接口、动作「新建库房」、字段 warehouse_type、project_id、merchant_id、name。
+    - 回归：WarehouseCreateJdbcIntegrationTests、InventoryWarehousePanel.test.tsx、InventoryLedgerPage.test.tsx「库房区块（第十八批 L 段 105-R1）」。
+  - 105-R2：supply-chain-inventory-product-prd §6「库房管理」行补实现现状（V0.34），html-prd-coverage.csv BSM-0205、BSM-0223、BEQ-0050 写了代码现状。库位不单独建档（采购验收时填实际库位编号，首次入库挂到所选库房）；库房改名、停用未做；各酒吧存酒区等初始化属上线前数据准备（待开发清单 D 类第 70 条）。
+- 18L 落地位置补记·第 103 条
+  - 依据：BSM:1197「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码，全程交接留责任人。」；BSM:1166「给酒水、礼品、高价值物料和需追责耗材生成或绑定平台唯一二维码，可以入库贴码，也可以出库打印码。」；ENUM:81「②店内实物／服务——发券时从可用库存预占，到店由店员核销领取时才实扣，按内部结算价与承接商户结算」。
+  - 裁决：没有新裁决号（核对阶段 blocked 为空）。R1、R2 同一提交落地。
+  - 103-R1：
+    - VoucherRedeemRequest 加 trace_codes。
+    - VoucherService.redeemInternal 在店内实物券前置校验块（CAS 之前）调 InventoryService.requireTraceCodesOfItem：去空白去重后个数须等于每张券件数（400 TRACE_CODE_INCOMPLETE）；每个码须已登记（404 TRACE_CODE_NOT_FOUND）、属本商户（403 CROSS_MERCHANT_FORBIDDEN）、登记的是本券货品（400 TRACE_CODE_MISMATCH）。不过则券与库存都不动。
+    - 物品码随 voucher.redeemed 审计事件留存（metadata.trace_codes）；流水 trace_code 仍是 voucher_redemption:实例号。
+    - 后台券台账（VoucherLedgerPage）核销店内实物券时逐件填物品码。
+    - OpenAPI：redeemVoucher 与 VoucherRedeemRequest 已同步；FieldLabels.java 补 trace_codes。
+    - PRD 与对照：points-and-voucher PRD §10.4（V1.10）、supply-chain PRD §7.5；html-prd-coverage.csv BSM-0228；矩阵 ADM-CUS-002 key_fields 加 trace_codes。
+    - 回归：GiftVoucherTraceCodeRedeemJdbcTests、VoucherLedgerPage.tracecode.test.tsx。
+  - 103-R2：
+    - InventoryService.registerTraceCode：平台账号（无商户范围）没指定商户时按物料归属商户登记，平台自有物料仍 400 MERCHANT_REQUIRED；OpenAPI RegisterTraceCodeRequest 描述补一句。
+    - 后台库存台账物料行「登记物品码」（POST /api/v1/inventory/trace-codes，inventory.trace_code.register），动作码 inventory_trace_code_registered「物品码已登记」。不做打印，也不做码列表。
+    - 矩阵 ADM-INV-001 补权限、接口、动作「登记物品码」；html-prd-coverage.csv BSM-0209；supply-chain PRD §7.5。
+    - 回归：GiftVoucherTraceCodeRedeemJdbcTests.platformAccountRegistersCodeUnderItemOwnerAndPlatformOwnItemStillNeedsMerchant、InventoryLedgerPage.test.tsx「登记物品码（第十八批 L 段 103-R2）」。
+- 第 102 条（18L）落地位置补记：
+  ① 102-R1 派单负责人：MerchantServiceService.listOwnerCandidates/canOwn（与 77-R2 收件人同一口径，按处理码 merchant.service_work_order.process 取、处理码须能管到该商户任一经营项目）；GET /api/v1/merchant-service/work-orders/{id}/owner-candidates；派单负责人不合格 400 WORK_ORDER_OWNER_INVALID；后台 ADM-MER-001 负责人改候选下拉。依据 BSM:1380「派单到具体人员或班组」、BSM:1385「工单由客户关怀部负责处理」。
+  ② 102-R2：POST /api/v1/merchant-service/work-orders/{id}/merchant-confirm（MerchantServiceService.confirmByMerchant，只本商户账号，待商户确认或已处理待关闭时确认即关闭，可带 1～5 分）；员工关投诉须带 close_reason；员工关单不再默认 5 分；商户专区「确认已解决」；resolved 在三处页面显示「已处理待关闭」。依据 BSM:1385「商户投诉须由商户确认投诉已解决；按既有规则无法解决，或问题已解决但商户未确认解决或未点击关闭的，客户关怀部记录相关信息及关闭缘由后，可以关闭投诉」「满意度在回访/验收时由提单方评分」，ENUM:264「待商户确认、已处理待关闭」。
+  ③ 102-R3：保洁由处理人标已处理即关闭（MerchantServiceService.addActionOnce；BSM:1385「保洁等无争议类由处理人完成即结束」）。报修、其他服务请求按 V585 merchant_service_work_order_close_methods 三选一：处理人完成即结束、员工验收后关闭、须商户确认。接口 GET/PUT /api/v1/merchant-service/work-order-close-methods，在 ADM-MER-001「处理时限」小节里选；出厂报修为员工验收后关闭、其他服务请求为处理人完成即结束（照 V166 facility_work_order_policy 出厂 acceptance_by）。配成须商户确认的单员工关单 409 MERCHANT_CONFIRM_REQUIRED；商户确认只对关单方式为须商户确认的单（投诉与配成须商户确认的），否则 409 MERCHANT_CONFIRM_NOT_APPLICABLE。依据第十八批裁决 26「在商户工单的处理时限配置里，给报修、其他服务请求各选一种关单方式：「处理人完成即结束」「员工验收后关闭」或「须商户确认」」。
+- 18L 落地位置补记·第 100 条复核修复（无新裁决）
+  - 依据：PGM:744「……前端隐藏只是辅助，后端接口必须独立校验。」；PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」
+  - 改动：100-R1 服务端定模块，改为取应用内路径。GateRequestContext.moduleCode() 现用 UrlPathHelper.defaultInstance.getPathWithinApplication(request)，去掉 contextPath（含 X-Forwarded-Prefix 转发前缀），与 Spring MVC 路由同口径，不再用原始 getRequestURI()。
+  - 修前问题：server.forward-headers-strategy=framework 时，ForwardedHeaderFilter 会把客户端自带的 X-Forwarded-Prefix 拼进 getRequestURI()，nginx 又原样透传该头。所以加一个这样的头，就能让 Web 前端、商户网页门户的模块开关不判。
+  - 文档：全链路操作留痕与终端开关 PRD V0.08 的 §5.4 实现现状、变更日志行已同步。
+  - 回归：ServerModuleSwitchJdbcIntegrationTests 的 (a) barModuleOffRejectsBarApisWhateverModuleHeaderSays、(d) merchantZoneModuleOffRejectsMerchantPortalApisWithoutModuleHeader，各补一步「带 X-Forwarded-Prefix: /x 的写请求仍 403 TERMINAL_DISABLED、不落数据」。
+- 18L 落地位置补记·第 106 条（交付门禁链另外三项过期）：业务提交 614f5241 之后，按第十八批裁决 25 重刷运行验收证据：后端全量 6164 测 0 失败 0 错误，apps/web 构建通过，常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。三份生成器（generate-production-closure-gap-report.mjs、generate-closed-loop-current-state.mjs、generate-ui-experience-acceptance-report.mjs）里写死的就绪说法改成不下结论的中性句，「真实后端 UI」行在报告缺失时注明「（报告缺失，未跑）」。然后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告和无上线指挥台。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md 的行数、测试数、交付总闸口和就绪结论，联调、业务验收两项都写「否」（运行验收未就绪）。结果：closed-loop-current-state、production-closure-gap 两项转绿；final-closed-loop-audit 如实留 2 条红（integration-ready、business-acceptance-ready）。原因是校验器要求终验写「可以进入联调：是」「可以进入业务验收：是」，而裁决 25 定了不跑真实后端界面验收，运行验收未就绪，所以不写「是」。verify:delivery-gates 总链仍是红的，其余红项（coding-host-protection、external-dependency-gates、t3d-local-llm-ai-quality；NAS 两项未跑）见待开发清单第 114 条。

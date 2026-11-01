@@ -119,3 +119,53 @@ describe("MerchantZoneWorkOrdersPage 行明细抽屉（整行可点·日期中�
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });
+
+// 第十八批 L 段第 102 条 102-R2／R3：BSM:1385「商户投诉须由商户确认投诉已解决」「未点击关闭」「满意度在回访/验收时由提单方评分」；
+// ENUM:264「待商户确认、已处理待关闭」；第十八批裁决 26（报修、其他服务请求配成「须商户确认」的，同样由商户确认关闭）。
+describe("MerchantZoneWorkOrdersPage 商户确认已解决", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/merchant-zone/work-orders");
+  });
+
+  const ROWS_102 = [
+    { id: "wo-pm", work_order_type: "complaint", title: "噪音投诉", priority: "high", status: "pending_merchant" },
+    { id: "wo-pr", work_order_type: "complaint", title: "异味投诉", priority: "high", status: "processing" },
+    { id: "wo-rm", work_order_type: "repair", title: "门锁报修", priority: "medium", status: "resolved" },
+    { id: "wo-sv", work_order_type: "service", title: "搬运申请", priority: "low", status: "resolved" },
+  ];
+
+  function json(data: unknown): Response {
+    return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+  }
+
+  it("待商户确认的投诉与配成须商户确认的报修有「确认已解决」，处理中与按配置不由商户确认的没有；确认发 POST /merchant-confirm 带可选评分；已处理待关闭显示中文", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST") return Promise.resolve(json({ id: "wo-pm", status: "closed" }));
+      if (String(url).includes("/work-order-close-methods")) {
+        return Promise.resolve(json([{ work_order_type: "repair", close_method: "merchant_confirm" }, { work_order_type: "service", close_method: "staff_acceptance" }]));
+      }
+      return Promise.resolve(envelope(ROWS_102));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MerchantZoneWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "merchant", accountType: "merchant", merchantId: "m-1" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("merchant-zone-work-order-confirm-wo-pm")).not.toBeNull());
+    expect(screen.queryByTestId("merchant-zone-work-order-confirm-wo-rm")).not.toBeNull();
+    expect(screen.queryByTestId("merchant-zone-work-order-confirm-wo-pr")).toBeNull();
+    expect(screen.queryByTestId("merchant-zone-work-order-confirm-wo-sv")).toBeNull();
+    expect(screen.getByTestId("merchant-zone-work-order-row-wo-sv").textContent).toContain("已处理待关闭");
+
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-confirm-wo-pm"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+    fireEvent.change(screen.getByTestId("merchant-zone-work-order-confirm-score"), { target: { value: "4" } });
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-confirm-submit"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST"
+      && String(url).endsWith("/api/v1/merchant-service/work-orders/wo-pm/merchant-confirm"))).toBe(true));
+    const [, postInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(String(postInit.body))).toMatchObject({ satisfaction_score: 4 });
+  });
+});

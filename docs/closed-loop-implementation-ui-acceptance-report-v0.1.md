@@ -11,33 +11,33 @@
 - VISUAL_REGRESSION_BASELINES_TRACKED
 - NO_STALE_UI_ACCEPTANCE_COUNTS
 
-更新时间：2026-11-01T15:39:30.736Z
+更新时间：2026-11-01T18:57:21.115Z
 执行位置：192.168.88.160，`/home/james/complex-management`
 
 ## 1. 本轮闭环结论
 
-当前项目的 Web 管理端、完整后台首批/非首批页面、真实后端 UI 抽样、视觉回归和运行态证据已形成可复跑验收闭环；报告中的数字来自机器证据，不再保留旧口径。
+当前项目的 Web 管理端、完整后台首批/非首批页面、真实后端 UI 抽样、视觉回归和运行态证据的验收状态见下表与第 8 节；报告中的数字来自机器证据，不再保留旧口径。
 
 | 项目 | 当前值 | 证据 |
 |---|---:|---|
 | 需求矩阵完整实现 | 88/97 | `docs/closed-loop-current-state-snapshot-latest.json` |
 | 完整后台 MVP | 9/9 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` |
 | 完整后台非首批 | 22/22 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` |
-| 后端测试 | 6138 | `backend/target/surefire-reports` |
-| Web 单元测试定义 | 1486 | `apps/web/src/**/*.test.*` |
+| 后端测试 | 6164 | `backend/target/surefire-reports` |
+| Web 单元测试定义 | 1500 | `apps/web/src/**/*.test.*` |
 | Playwright 常规 UI | 47 | `playwright-report/index.html` |
-| Playwright 真实后端 UI | 3 | `playwright-report-real-backend/index.html` |
+| Playwright 真实后端 UI | 3（报告缺失，未跑） | `playwright-report-real-backend/index.html` |
 | 视觉回归截图基线 | 4 | `tests/e2e/**/*-snapshots/*.png` |
 | Semgrep | results=0, errors=0, paths_scanned=1984 | `semgrep-20260703-delivery-gates-clean` |
-| 可进入联调 | 是 | `closed-loop-current-state-snapshot-latest.json` |
-| 可进入业务验收 | 是 | `closed-loop-current-state-snapshot-latest.json` |
+| 可进入联调 | 否 | `closed-loop-current-state-snapshot-latest.json` |
+| 可进入业务验收 | 否 | `closed-loop-current-state-snapshot-latest.json` |
 | 可宣称生产上线就绪 | 否 | 生产证据与 NAS 当前状态 |
 
 ## 2. 前端构建与包体
 
 | 项目 | 当前值 |
 |---|---:|
-| main JS | apps/web/dist/assets/main-ChN52dna.js，4337 bytes |
+| main JS | apps/web/dist/assets/main-BMpCTihS.js，4337 bytes |
 | largest asset | apps/web/dist/assets/vendor-antd-CzvkKKQu.js，251112 bytes |
 | main bundle warning | 不预期出现 |
 | dist index | 存在 |
@@ -111,12 +111,12 @@
 
 | 文件 | 当前行数 |
 | --- | ---: |
-| apps/web/src/main.tsx | 43 |
-| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 905 |
-| backend/src/main/java/com/complex/platform/bar/BarService.java | 784 |
-| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1347 |
-| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 674 |
-| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 465 |
+| apps/web/src/main.tsx | 50 |
+| backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 1178 |
+| backend/src/main/java/com/complex/platform/bar/BarService.java | 938 |
+| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1740 |
+| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 1016 |
+| backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 726 |
 
 ## 6. 可复跑命令
 
@@ -137,7 +137,7 @@
 
 ## 8. 验收判断
 
-- 可进入开发联调：可以。
-- 可进入业务验收：可以。
+- 可进入开发联调：不可以。
+- 可进入业务验收：不可以。
 - 可宣称生产完全就绪：不可以。
 - 下一步重点：继续回填真实生产证据、恢复 NAS 当前挂载/演练证据，并保持 `npm run verify:ui-experience-acceptance`、`npm run verify:runtime-acceptance-evidence` 和 `npm run verify:delivery-gates` 绿色。
