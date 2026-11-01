@@ -30,8 +30,8 @@
     "owner_actions_without_manifest": 0
   },
   "go_no_go": {
-    "can_enter_integration": true,
-    "can_enter_business_acceptance": true,
+    "can_enter_integration": false,
+    "can_enter_business_acceptance": false,
     "can_claim_production_ready": false,
     "production_ready_blockers": [
       "15 production evidence submissions awaiting, including 13 P0",

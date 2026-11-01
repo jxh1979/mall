@@ -124,7 +124,7 @@ function render() {
     { item: "后端测试", value: runtime?.backend_surefire?.tests ?? "未记录", evidence: "backend/target/surefire-reports" },
     { item: "Web 单元测试", value: runtime?.web_unit_source?.test_count_from_source ?? "未记录", evidence: runtimePath },
     { item: "Playwright UI", value: runtime?.playwright?.normal?.test_count_from_source ?? "未记录", evidence: "playwright-report/index.html" },
-    { item: "真实后端 UI", value: runtime?.playwright?.real_backend?.test_count_from_source ?? "未记录", evidence: "playwright-report-real-backend/index.html" },
+    { item: "真实后端 UI", value: `${runtime?.playwright?.real_backend?.test_count_from_source ?? "未记录"}${runtime?.playwright?.real_backend?.report_exists ? "" : "（报告缺失，未跑）"}`, evidence: "playwright-report-real-backend/index.html" },
     { item: "Semgrep", value: `results=${semgrepResults}, errors=${semgrepErrors}, paths_scanned=${semgrepPaths}`, evidence: semgrepScanId },
   ];
 
@@ -166,7 +166,7 @@ function render() {
 
 ## 2. 结论
 
-截至 \`${generatedAt}\`，当前代码实现、接口契约、UI 自动化、真实后端 UI、交付闸口和 Semgrep 扫描已经形成可验证证据；但完整生产闭环仍未达成。阻断原因不是业务代码继续扩写，而是外部生产实施证据尚未提交：生产证据提交看板共有 **${counts.expected_submissions}** 个预期提交项，其中 **${p0ManifestCount}** 个为 P0，当前 **${counts.awaiting_submission}** 个仍为 \`awaiting_submission\`，有效提交为 **${counts.valid_submission}**。
+截至 \`${generatedAt}\`，当前代码实现、接口契约、UI 自动化、真实后端 UI 和 Semgrep 扫描的证据状态见第 3、4 节；完整生产闭环仍未达成。阻断原因不是业务代码继续扩写，而是外部生产实施证据尚未提交：生产证据提交看板共有 **${counts.expected_submissions}** 个预期提交项，其中 **${p0ManifestCount}** 个为 P0，当前 **${counts.awaiting_submission}** 个仍为 \`awaiting_submission\`，有效提交为 **${counts.valid_submission}**。
 
 本文用于给总控、实施负责人和各责任组看“还差什么才能把生产闭环真正关上”。本文不关闭任何阻断项；关闭必须通过对应 manifest、来源台账、findings register、NAS 当前状态和交付闸口复核。
 

@@ -89,12 +89,12 @@
     }
   },
   "architecture_line_counts": {
-    "apps/web/src/main.tsx": 43,
-    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 905,
-    "backend/src/main/java/com/complex/platform/bar/BarService.java": 784,
-    "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 1347,
-    "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 674,
-    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 465
+    "apps/web/src/main.tsx": 50,
+    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 1178,
+    "backend/src/main/java/com/complex/platform/bar/BarService.java": 938,
+    "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 1740,
+    "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 1016,
+    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 726
   },
   "gates": {
     "semgrep": {
@@ -128,15 +128,15 @@
       "reason": "current live mount check failed, and historical passed evidence cannot prove current automount or production recovery readiness"
     },
     "runtime_acceptance": {
-      "backend_tests": 2583,
+      "backend_tests": 6164,
       "backend_failures": 0,
       "backend_errors": 0,
-      "web_unit_tests": 741,
-      "ui_tests": 39,
+      "web_unit_tests": 1500,
+      "ui_tests": 47,
       "real_backend_ui_tests": 3,
       "last_run_passed": true,
       "web_main_bundle_ok": true,
-      "ready_for_integration_and_business_acceptance": true
+      "ready_for_integration_and_business_acceptance": false
     },
     "nas_diagnostic": {
       "live_status": "failed",
@@ -403,8 +403,8 @@
     ]
   },
   "go_no_go": {
-    "can_enter_integration": true,
-    "can_enter_business_acceptance": true,
+    "can_enter_integration": false,
+    "can_enter_business_acceptance": false,
     "can_claim_production_ready": false,
     "production_ready_blockers": [
       "15 production evidence submissions awaiting, including 13 P0",

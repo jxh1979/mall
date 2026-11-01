@@ -144,7 +144,7 @@ ${state.markers.map((marker) => `- ${marker}`).join("\n")}
 
 ## 1. 本轮闭环结论
 
-当前项目的 Web 管理端、完整后台首批/非首批页面、真实后端 UI 抽样、视觉回归和运行态证据已形成可复跑验收闭环；报告中的数字来自机器证据，不再保留旧口径。
+当前项目的 Web 管理端、完整后台首批/非首批页面、真实后端 UI 抽样、视觉回归和运行态证据的验收状态见下表与第 8 节；报告中的数字来自机器证据，不再保留旧口径。
 
 | 项目 | 当前值 | 证据 |
 |---|---:|---|
@@ -154,7 +154,7 @@ ${state.markers.map((marker) => `- ${marker}`).join("\n")}
 | 后端测试 | ${runtime.backend_surefire?.tests ?? "未记录"} | \`backend/target/surefire-reports\` |
 | Web 单元测试定义 | ${runtime.web_unit_source?.test_count_from_source ?? "未记录"} | \`apps/web/src/**/*.test.*\` |
 | Playwright 常规 UI | ${runtime.playwright?.normal?.test_count_from_source ?? "未记录"} | \`playwright-report/index.html\` |
-| Playwright 真实后端 UI | ${runtime.playwright?.real_backend?.test_count_from_source ?? "未记录"} | \`playwright-report-real-backend/index.html\` |
+| Playwright 真实后端 UI | ${runtime.playwright?.real_backend?.test_count_from_source ?? "未记录"}${runtime.playwright?.real_backend?.report_exists ? "" : "（报告缺失，未跑）"} | \`playwright-report-real-backend/index.html\` |
 | 视觉回归截图基线 | ${state.visual_snapshots.length} | \`tests/e2e/**/*-snapshots/*.png\` |
 | Semgrep | results=${state.semgrep.results}, errors=${state.semgrep.errors}, paths_scanned=${state.semgrep.paths_scanned} | \`${state.semgrep.scan_ref}\` |
 | 可进入联调 | ${state.go_no_go.can_enter_integration ? "是" : "否"} | \`closed-loop-current-state-snapshot-latest.json\` |

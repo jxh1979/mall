@@ -1,6 +1,6 @@
 # 闭环当前态快照 V0.1
 
-> 本文由 `tools/generate-closed-loop-current-state.mjs` 从需求矩阵、代码行数、安全扫描、生产证据提交状态和 NAS 当前漂移证据生成。它用于证明“当前可联调/可业务验收，但不可宣称生产上线就绪”的边界，不替代真实测试命令输出。
+> 本文由 `tools/generate-closed-loop-current-state.mjs` 从需求矩阵、代码行数、安全扫描、生产证据提交状态和 NAS 当前漂移证据生成。它给出联调、业务验收、生产上线就绪三项判断（见第 1 节），不替代真实测试命令输出。
 
 机器识别标记：
 
@@ -20,8 +20,8 @@
 
 | 判断项 | 当前值 |
 |---|---|
-| 可以进入联调 | 是 |
-| 可以进入业务验收 | 是 |
+| 可以进入联调 | 否 |
+| 可以进入业务验收 | 否 |
 | 可以宣称生产上线就绪 | 否 |
 
 ## 2. 需求矩阵当前态
@@ -36,19 +36,19 @@
 
 | 文件 | 当前行数 |
 |---|---:|
-| `apps/web/src/main.tsx` | 43 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 905 |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 784 |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1347 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 674 |
-| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 465 |
+| `apps/web/src/main.tsx` | 50 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 1178 |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 938 |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1740 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 1016 |
+| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 726 |
 
 ## 4. 安全与生产证据闸口
 
 | 闸口 | 当前态 |
 |---|---|
 | Semgrep | results=0，errors=0，paths_scanned=1984，scan_dir=`security-scans/semgrep-20260703-delivery-gates-clean` |
-| 运行时验收证据 | backend=2583 tests / failures=0 / errors=0，web_unit=741，ui=39，real_backend_ui=3，ready=true |
+| 运行时验收证据 | backend=6164 tests / failures=0 / errors=0，web_unit=1500，ui=47，real_backend_ui=3，ready=false |
 | 生产证据提交 | expected=15，awaiting=15，valid=0，invalid=0 |
 | Production blocker register | readiness=6, credential=4, findings=2, blocking_total=12, complete=false |
 | P0 生产证据 | expected=13，awaiting=13，valid=0，invalid=0 |

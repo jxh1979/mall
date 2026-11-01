@@ -21,7 +21,7 @@
 
 ## 1. 审计结论
 
-当前代码库已经完成“开发文档 -> 代码实现 -> 页面体验 -> 自动化验收 -> 安全扫描 -> 交付闸口”的核心闭环。可以进入联调和业务验收；不应宣称生产完全上线就绪，因为 8 条需求仍依赖真实供应商、真实生产证据或线下设备资料回填。 这 8 条 partial 需求已通过 `external-evidence-requirement-traceability-v0.1.md` and `partial-requirement-mock-coverage-v0.1.md` 逐条绑定到责任组、生产证据 item_id、模板和目标 manifest 路径。
+当前代码库已经完成“开发文档 -> 代码实现 -> 页面体验 -> 自动化验收 -> 安全扫描 -> 交付闸口”的核心闭环。可以进入联调和业务验收：否（运行验收未就绪：真实后端界面验收按第十八批裁决 25 未跑）；不应宣称生产完全上线就绪，因为 8 条需求仍依赖真实供应商、真实生产证据或线下设备资料回填。 这 8 条 partial 需求已通过 `external-evidence-requirement-traceability-v0.1.md` and `partial-requirement-mock-coverage-v0.1.md` 逐条绑定到责任组、生产证据 item_id、模板和目标 manifest 路径。
 
 ## 2. 需求覆盖总览
 
@@ -36,8 +36,8 @@
 | 模块 | 文档/矩阵证据 | 页面/路由证据 | API/服务证据 | 测试/验证证据 | 状态 |
 |---|---|---|---|---|---|
 | 总控/完整后台 | `full-admin-srs-v0.1.md`、`full-admin-page-permission-field-matrix-v0.1.csv` | `/admin/*` 30 个页面 | `apps/web/src/admin/*`、`DynamicPricingPage`、`TicketOrdersPage`、`BarOrdersPage`、`StoredWinePage`、`BarCommissionsPage`、`InventoryLedgerPage`、`ReconciliationPage`、`MerchantWorkOrdersPage`、`MerchantScopePage`、`AmusementSafetyPage`、`SupervisorReviewPage`、`SubjectBindingsPage`、`ContractApprovalPage`、`RiskAlertsPage`、`IntegrationEventsPage`、`AuditEventsPage`、`BusinessAnalyticsPage`、`AdmissionAuditsPage`、`GovernanceTopologyPage`、`OrganizationMerchantPage`、`AmusementSessionsPage`、`AmusementGroupBookingsPage`、正式 `/api/v1` 路径 | `tools/verify-full-admin-page-matrix.mjs`、`tests/e2e/full-admin-*.spec.ts` | 已闭环 |
-| 票务/动态定价 | `p2-ticket-dynamic-pricing-api-contract-v0.1.md`、需求矩阵 REQ-01~REQ-16 | `/admin/ticketing/policies`、`/admin/ticketing/dynamic-pricing`、旧控制台 ticketing 页 | `TicketingService` 879 行 facade，`TicketPricingService`、`TicketOrderService`、`TicketVerificationService` | `TicketingServiceTests`、OpenAPI 校验、UI 验收 | 已闭环 |
-| 酒吧/卡座/账单/提成 | `bar-business-operations-product-prd-v0.1.md`、P1 酒吧账单契约 | `/admin/bar/*`、旧控制台 bar 页 | `BarService` 784 行 facade，`BarOrderService`、`BarBillingService`、`BarTableSessionService`、`BarEntryService` | `BarServiceTests`、`BarJdbcIntegrationTests`、UI 验收；新增重复出品、跨订单出品、部分数量出品拒绝、出品照片证据保留测试 | 内部流程已闭环，真实支付/人脸/视频证据依赖外部 |
+| 票务/动态定价 | `p2-ticket-dynamic-pricing-api-contract-v0.1.md`、需求矩阵 REQ-01~REQ-16 | `/admin/ticketing/policies`、`/admin/ticketing/dynamic-pricing`、旧控制台 ticketing 页 | `TicketingService` 1178 行 facade，`TicketPricingService`、`TicketOrderService`、`TicketVerificationService` | `TicketingServiceTests`、OpenAPI 校验、UI 验收 | 已闭环 |
+| 酒吧/卡座/账单/提成 | `bar-business-operations-product-prd-v0.1.md`、P1 酒吧账单契约 | `/admin/bar/*`、旧控制台 bar 页 | `BarService` 938 行 facade，`BarOrderService`、`BarBillingService`、`BarTableSessionService`、`BarEntryService` | `BarServiceTests`、`BarJdbcIntegrationTests`、UI 验收；新增重复出品、跨订单出品、部分数量出品拒绝、出品照片证据保留测试 | 内部流程已闭环，真实支付/人脸/视频证据依赖外部 |
 | 游乐/安全/团体包场 | `amusement-*` PRD/接口契约 | `/admin/amusement/*`、旧控制台 amusement 页 | `Amusement*` 服务与 OpenAPI | `Amusement*Tests`、UI 验收 | 已闭环 |
 | 平台治理/主体绑定/主管复核 | `platform-governance-*`、`business-entity-binding-development-design-v0.1.md` | `/admin/governance/*`、平台地基拓扑 | `PlatformService`、`SupervisorReviewService` | `SupervisorReview*Tests`、UI 验收、domain scope 审计 | 已闭环 |
 | 财务/应收应付/对账 | `finance-ar-ap-ledger-development-design-v0.1.md` | `/admin/finance/*` | `FinanceService`、AR/AP 与 reconciliation API | `Finance*Tests`、UI 验收 | 已闭环 |
@@ -65,52 +65,52 @@
 
 ## 6. 当前代码质量与架构状态
 
-- `apps/web/src/main.tsx` 为 43 行入口（三壳路由分流：默认 admin、customer、legacy 前缀）。
+- `apps/web/src/main.tsx` 为 50 行入口（三壳路由分流：默认 admin、customer、legacy 前缀）。
 - legacy 控制台已于 2026-06-23 整体退役删除（commit `9e20a44`）；其鉴权错误 UI 呈现验收由 admin 壳 `ADM-MVP-09/10` 承接。
 - 旧控制台业务动作已拆分到 `ticketingActions.ts`、`barActions.ts`、`amusementActions.ts`、`foundationActions.ts`、`floorPlanActions.ts`、`riskAndIntegrationActions.ts`。
-- `TicketingService` 当前 879 行，`BarService` 当前 784 行，仍为入口编排 + 子服务委托（行数随 R5/R6/goal 阶段新增业务回升）。
+- `TicketingService` 当前 1178 行，`BarService` 当前 938 行，仍为入口编排 + 子服务委托（行数随 R5/R6/goal 阶段新增业务回升）。
 - `BarOrderService` 已新增出品前订单项归属校验、已出品校验和完整数量校验，防止跨订单串单、重复出品、部分数量出品误完成、二次扣库存，并保证 `delivery_photo_attachment_ids` 合并进入出品事件和库存流水审计证据链。
-- 后续可优化项：`BarValidation` 已抽出 131 行公共校验与 JSON 辅助，`BarBillRecords` 已抽出 108 行账单记录/快照辅助；`BarOrderService` 1347 行、`BarBillingService` 674 行、`BarTableSessionService` 465 行；R5/R6/goal 各阶段新增退菜退酒/反结/沽清、pour cost 强制采集、void 驳回反向冲销（含 FOR UPDATE 行锁与 facade 委派修复）、MDM 门控、班结对账等业务后行数明显回升，列为后续可继续瘦身项。
+- 后续可优化项：`BarValidation` 已抽出 139 行公共校验与 JSON 辅助，`BarBillRecords` 已抽出 174 行账单记录/快照辅助；`BarOrderService` 1740 行、`BarBillingService` 1016 行、`BarTableSessionService` 726 行；R5/R6/goal 各阶段新增退菜退酒/反结/沽清、pour cost 强制采集、void 驳回反向冲销（含 FOR UPDATE 行锁与 facade 委派修复）、MDM 门控、班结对账等业务后行数明显回升，列为后续可继续瘦身项。
 
 ### 6.1 机器校验行数快照
 
 | 文件 | 当前行数 | 口径 |
 |---|---:|---|
-| `apps/web/src/main.tsx` | 43 行 | Web 入口薄层 |
-| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 905 行 | 票务 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 784 行 | 酒吧 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1347 行 | 酒吧订单/出品子服务 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 674 行 | 酒吧账单编排子服务 |
-| `backend/src/main/java/com/complex/platform/bar/BarBillRecords.java` | 108 行 | 酒吧账单记录/审计快照辅助 |
-| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 465 行 | 酒吧卡座/会话子服务 |
+| `apps/web/src/main.tsx` | 50 行 | Web 入口薄层 |
+| `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 1178 行 | 票务 facade |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 938 行 | 酒吧 facade |
+| `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1740 行 | 酒吧订单/出品子服务 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 1016 行 | 酒吧账单编排子服务 |
+| `backend/src/main/java/com/complex/platform/bar/BarBillRecords.java` | 174 行 | 酒吧账单记录/审计快照辅助 |
+| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 726 行 | 酒吧卡座/会话子服务 |
 
 ## 7. 最新验证证据
 
 | 验证项 | 结果 |
 |---|---|
 | Web typecheck | 通过：`npm run typecheck --workspace apps/web`，2026-06-17 03:52 UTC 复跑通过 |
-| Web 单元测试 | 通过：741 个前端单元测试(源码定义计数)，2026-07-22 复跑 `verify:delivery-gates` 通过 |
+| Web 单元测试 | 通过：1500 个前端单元测试(源码定义计数)；2026-11-01 19:00 UTC 在工作树实跑 `npm run verify:unit`，五个工作区全过（apps/web 298 个文件 1611 例，customer-core 73 例，customer-app 127 例，customer-miniapp 82 例，merchant-app 4 例） |
 | Web build | 通过，主包约 108.02 kB，无主包过大 warning，2026-06-17 03:52 UTC 复跑通过 |
-| UI 自动化 | 通过：`npm run verify:ui -- --reporter=line`，39 条 Playwright 验收；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
+| UI 自动化 | 通过：47 条 Playwright 用例（源码定义计数），常规界面验收（接口全部 mock）实跑 40 条全过（2026-11-01，`VITE_API_PROXY_TARGET=http://127.0.0.1:9 npm run verify:ui`）；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
 | 商户服务后端专项 | 通过：`mvn -q -Dtest=MerchantServiceControllerTests,MerchantServiceServiceTests,MerchantServiceJdbcIntegrationTests test` |
 | 酒吧后端专项 | 通过：`mvn -q -Dtest=BarServiceTests test` 与 `mvn -q -Dtest=BarJdbcIntegrationTests test`；覆盖重复出品拒绝、跨订单订单项拒绝、部分数量出品拒绝、出品照片证据保留和库存不二次扣减 |
-| 后端完整测试 | 通过：`npm run test:backend`，579 个测试通过；最新运行态证据由 `docs/runtime-acceptance-evidence-latest.json` 记录 |
-| 交付总闸口 | 通过：`npm run verify:delivery-gates`，新增生产闭环缺口报告和已有证据差距审计后复跑通过 |
+| 后端完整测试 | 通过：6164 个测试，0 失败，0 错误（2026-11-01，把工作树镜像到 160 上的一次性目录、连一次性测试库跑后端全量 `~/audit-tmp/b32_test.sh --fresh`，surefire 报告拷回工作树 `backend/target/surefire-reports`）；最新运行态证据由 `docs/runtime-acceptance-evidence-latest.json` 记录 |
+| 交付总闸口 | 未通过：`npm run verify:delivery-gates`；2026-11-01 在工作树逐项跑子项（总链遇红即停），仍红：`verify:coding-host-protection`（写死主仓路径；用 `COMPLEX_EXPECTED_CODING_REPO_ROOT` 指向工作树复跑仍红在基线文档与证据里的 canonical_repo_root）、`verify:external-dependency-gates`（`docs/t3-coding-entry-pack-v0.1.md` 缺 T3-C、T3-D 两个阻断标记）、`verify:t3d-local-llm-ai-quality`（要求的 `AiTextRedactor.java` 不存在）、`verify:final-closed-loop-audit`（只剩 integration-ready、business-acceptance-ready 两条就绪结论校验，运行验收未就绪）；`verify:nas-current-state-drift`、`verify:nas-diagnostics` 的现场探测未跑；其余子项通过 |
 | OpenAPI/客户端契约 | 通过：`verify:p0-contract`、client routes、client OpenAPI、payload policy 均在交付闸口内通过 |
 | Semgrep | 通过：results=0，errors=0，paths_scanned=1984，scan_ref=security-scans/semgrep-20260703-delivery-gates-clean；3 条 detect-non-literal-regexp(隔离工具+e2e导航助手,硬编码正则输入)已 nosemgrep 抑制，openapi 大契约/keyvault heredoc 脚本/_archive 经 .semgrepignore 排除,清扫后无发现。 |
 | Git 交接洁净度 | 通过：本轮新增 Semgrep 证据和最终审计文档已纳入交接；`git diff --cached --check` 已复跑通过，当前无未跟踪文件残留 |
 | 完整后台视觉回归 | 通过：`npx playwright test tests/e2e/full-admin-visual.spec.ts --reporter=line`，2 条通过；覆盖总控驾驶舱桌面、生产 blocker 与证据桌面、酒吧订单/出品/账单移动端、动态定价移动端，4 张截图基线稳定且无材料级横向溢出 |
-| 真实后端 UI 验收 | `npm run verify:ui:real-backend:seeded`，3 条；REAL-UI-01 覆盖健康检查、真实登录、admin 壳总控台与退出，REAL-UI-02 覆盖 admin 票务/酒吧/财务/第三方接口页面真实后端数据加载；legacy 控制台退役后 REAL-UI-01/02 已改在 admin 壳，自动打包 Java 后端、启动 18080 临时 Spring Boot、使用 5174 独立 Vite 前端端口，待真实后端环境复跑 |
-| 闭环运行态总验收 | 通过：`npm run verify:closed-loop-runtime` 覆盖后端 579 个测试、Web typecheck/build、28 条 Playwright UI 和 2 条真实后端 UI 验收；当前运行态证据额外记录 16 条前端单元测试定义 |
-| 闭环当前态快照 | 通过：`docs/closed-loop-current-state-snapshot-v0.1.md` / `docs/closed-loop-current-state-snapshot-latest.json` 与 `npm run verify:closed-loop-current-state`；快照结论为可联调、可业务验收、不可宣称生产上线就绪 |
+| 真实后端 UI 验收 | `npm run verify:ui:real-backend:seeded`，3 条；REAL-UI-01 覆盖健康检查、真实登录、admin 壳总控台与退出，REAL-UI-02 覆盖 admin 票务/酒吧/财务/第三方接口页面真实后端数据加载；legacy 控制台退役后 REAL-UI-01/02 已改在 admin 壳，自动打包 Java 后端、启动 18080 临时 Spring Boot、使用 5174 独立 Vite 前端端口；按第十八批裁决 25 未跑，报告缺失 |
+| 闭环运行态总验收 | 未完整跑：未跑 `npm run verify:closed-loop-runtime` 整条，按第十八批裁决 25 只跑了后端全量、前端构建和常规界面验收，运行验收未就绪 |
+| 闭环当前态快照 | 通过：`docs/closed-loop-current-state-snapshot-v0.1.md` / `docs/closed-loop-current-state-snapshot-latest.json` 与 `npm run verify:closed-loop-current-state`；快照结论为不可联调、不可业务验收（运行验收未就绪）、不可宣称生产上线就绪 |
 | 生产证据缺口审计 | 通过：新增 `production-evidence-closure-gap-report-v0.1.md`、`production-existing-evidence-to-manifest-gap-audit-v0.1.md`、`nas-current-state-drift-report-v0.1.md` 和 `external-evidence-requirement-traceability-v0.1.md`，并接入 `verify:production-closure-gap-reports` 与 `verify:external-evidence-requirement-traceability`；明确 15 份 manifest / 13 份 P0 仍待真实外部证据，8 条 partial 需求均已追踪到责任组和目标 manifest，未伪关闭任何 blocker |
 
 Semgrep latest summary: results=0, errors=0, paths_scanned=1984, scan_ref=`security-scans/semgrep-20260703-delivery-gates-clean`; excluded_from_semgrep_due_to_bash_parser_warnings=[docs/openapi/openapi-p0.yaml, ops/keyvault/**, docs/_archive/**].
 
 ## 8. 联调/验收/上线结论
 
-- 可以进入联调：是。
-- 可以进入业务验收：是。
+- 可以进入联调：否（运行验收未就绪：真实后端界面验收按第十八批裁决 25 未跑）。
+- 可以进入业务验收：否（运行验收未就绪：真实后端界面验收按第十八批裁决 25 未跑）。
 - 可以直接生产上线：否。
 - 不可直接上线原因：真实外部供应商资料、真实支付/POS/人脸/视频/机器人或人工交接生产证据、生产账号与凭证轮换证据仍需按 production evidence 台账回填；当前 `production-evidence-closure-gap-report-v0.1.md` 明确 15 份 manifest 仍待提交，其中 13 份为 P0；`nas-current-state-drift-report-v0.1.md` 显示 NAS current live status failed，`SEC-P0-OPS-RECOVERY-001` 仍不可关闭。
 

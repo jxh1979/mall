@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-01T15:39:30.736Z",
+  "generated_at": "2026-11-01T18:57:21.115Z",
   "git": {
-    "head": "68e502591113ec0568433e485888bc32c9fd00bf",
-    "head_short": "68e50259",
-    "branch": "feature/business-code-batch31-20261029",
+    "head": "614f52415993308df8f485a32e3cbe115805771d",
+    "head_short": "614f5241",
+    "branch": "feature/business-code-batch32-20261101",
     "worktree_dirty": false,
-    "source_fingerprint": "c33aa379eb684e8666b1feba912ea68076d8c200d7d83d22b5d7ef42a523e6fa",
-    "source_fingerprint_file_count": 3169,
+    "source_fingerprint": "17c5bd10374529fd127291c2bef8ae9b9ef23c3a07628ee59d80fca4a5878db0",
+    "source_fingerprint_file_count": 3183,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 482,
-    "tests": 6138,
+    "suites": 487,
+    "tests": 6164,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-10-30T05:22:25.297Z",
+    "latest_mtime": "2026-11-01T18:54:44.403Z",
     "passed": true
   },
   "web_unit_source": {
@@ -212,6 +212,7 @@
       "apps/web/src/admin/pages/InventoryLedgerPage.test.tsx",
       "apps/web/src/admin/pages/InventoryQuarantinePanel.test.tsx",
       "apps/web/src/admin/pages/InventoryTransferWorkbenchPage.test.tsx",
+      "apps/web/src/admin/pages/InventoryWarehousePanel.test.tsx",
       "apps/web/src/admin/pages/LeasingRentalStatusPage.test.tsx",
       "apps/web/src/admin/pages/LeasingWorkbenchPage.gate.test.tsx",
       "apps/web/src/admin/pages/LeasingWorkbenchPage.guidedcreate.test.tsx",
@@ -344,6 +345,7 @@
       "apps/web/src/admin/pages/VenueBusinessHoursPage.test.tsx",
       "apps/web/src/admin/pages/VoucherLedgerPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/VoucherLedgerPage.oneshot.test.tsx",
+      "apps/web/src/admin/pages/VoucherLedgerPage.tracecode.test.tsx",
       "apps/web/src/admin/pages/VoucherLedgerPage.voucher.test.tsx",
       "apps/web/src/admin/pages/WecomComplianceReviewPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/WorkOrderSlaPage.kpi.test.tsx",
@@ -357,8 +359,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 296,
-    "test_count_from_source": 1486
+    "file_count": 298,
+    "test_count_from_source": 1500
   },
   "web_build": {
     "dist_index_exists": true,
@@ -379,15 +381,15 @@
     "asset_count": 167,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-ChN52dna.js",
+        "path": "apps/web/dist/assets/main-BMpCTihS.js",
         "size_bytes": 4337,
-        "mtime": "2026-10-30T05:22:33.145Z"
+        "mtime": "2026-11-01T18:54:52.300Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-10-30T05:22:33.373Z"
+      "mtime": "2026-11-01T18:54:52.302Z"
     },
     "no_main_bundle_warning_expected": true
   },
