@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-10-26T10:00:52.948Z",
+  "generated_at": "2026-11-01T15:39:30.736Z",
   "git": {
-    "head": "3db3b0d3d3e5ee52f262aba0084f6ca67badc126",
-    "head_short": "3db3b0d3",
-    "branch": "feature/business-code-batch19-20261026",
-    "worktree_dirty": true,
-    "source_fingerprint": "49fef8910ad44172aa3c882704cf30901c0029452af82d3b2f76e7ee667feb2d",
-    "source_fingerprint_file_count": 2963,
+    "head": "68e502591113ec0568433e485888bc32c9fd00bf",
+    "head_short": "68e50259",
+    "branch": "feature/business-code-batch31-20261029",
+    "worktree_dirty": false,
+    "source_fingerprint": "c33aa379eb684e8666b1feba912ea68076d8c200d7d83d22b5d7ef42a523e6fa",
+    "source_fingerprint_file_count": 3169,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,21 +50,27 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 410,
-    "tests": 5671,
+    "suites": 482,
+    "tests": 6138,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-10-26T09:51:22.566Z",
+    "latest_mtime": "2026-10-30T05:22:25.297Z",
     "passed": true
   },
   "web_unit_source": {
     "files": [
+      "apps/web/src/admin/AdminApp.businessDay.test.tsx",
+      "apps/web/src/admin/AdminApp.merchantApp.test.tsx",
       "apps/web/src/admin/AdminApp.oneshot.test.tsx",
       "apps/web/src/admin/AdminApp.payroll.test.tsx",
       "apps/web/src/admin/AdminApp.purchase.test.tsx",
       "apps/web/src/admin/AdminApp.result.test.tsx",
+      "apps/web/src/admin/AdminApp.sensitive.test.tsx",
+      "apps/web/src/admin/AdminApp.unreadBills.test.tsx",
+      "apps/web/src/admin/AdminApp.watermark.test.tsx",
       "apps/web/src/admin/adminRoutes.test.ts",
+      "apps/web/src/admin/client/adminClient.merchantApp.test.ts",
       "apps/web/src/admin/client/adminClient.payroll.test.ts",
       "apps/web/src/admin/client/adminClient.purchase.test.ts",
       "apps/web/src/admin/client/adminClient.test.ts",
@@ -116,6 +122,7 @@
       "apps/web/src/admin/pages/BarCommissionsPage.kpi.test.tsx",
       "apps/web/src/admin/pages/BarCommissionsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/BarCommissionsPage.rowdetail.test.tsx",
+      "apps/web/src/admin/pages/BarOrdersPage.anomaly.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.deliver.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.kpi.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.member.test.tsx",
@@ -126,13 +133,18 @@
       "apps/web/src/admin/pages/BarPayrollPage.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.rowdetail.test.tsx",
+      "apps/web/src/admin/pages/BarProductsPage.test.tsx",
       "apps/web/src/admin/pages/BarRefundBreakdownPanel.test.tsx",
+      "apps/web/src/admin/pages/BarTableSessionsPage.backfill.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.barb14.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.clear.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.robustness.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.rowdetail.test.tsx",
+      "apps/web/src/admin/pages/BarTableSessionsPage.sales86.test.tsx",
+      "apps/web/src/admin/pages/BarTableSessionsPage.source95.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.split.test.tsx",
+      "apps/web/src/admin/pages/BarTableSessionsPage.staffbooking.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.transfer.test.tsx",
       "apps/web/src/admin/pages/BusinessAnalyticsPage.degraded.test.tsx",
       "apps/web/src/admin/pages/BusinessAnalyticsPage.disposition.test.tsx",
@@ -140,6 +152,7 @@
       "apps/web/src/admin/pages/BusinessAnalyticsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/BusinessAnalyticsPage.test.tsx",
       "apps/web/src/admin/pages/ComplianceRemindersPage.guidedcreate.test.tsx",
+      "apps/web/src/admin/pages/ComplianceRemindersPage.test.tsx",
       "apps/web/src/admin/pages/ContractWorkbenchPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/ContractWorkbenchPage.parking.test.tsx",
       "apps/web/src/admin/pages/ContractWorkbenchPage.robustness.test.tsx",
@@ -160,6 +173,7 @@
       "apps/web/src/admin/pages/EnergyWorkbenchPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/EnergyWorkbenchPage.test.tsx",
       "apps/web/src/admin/pages/EnergyWorkflowPanel.test.tsx",
+      "apps/web/src/admin/pages/ExportDownloads.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.alarm.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.customercomplaint.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.degraded.test.tsx",
@@ -193,11 +207,13 @@
       "apps/web/src/admin/pages/IntegrationEventsPage.kpi.test.tsx",
       "apps/web/src/admin/pages/IntegrationEventsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/InternalPriceCatalogPage.test.tsx",
+      "apps/web/src/admin/pages/InventoryHighValueReviewPage.test.tsx",
       "apps/web/src/admin/pages/InventoryLedgerPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/InventoryLedgerPage.test.tsx",
       "apps/web/src/admin/pages/InventoryQuarantinePanel.test.tsx",
       "apps/web/src/admin/pages/InventoryTransferWorkbenchPage.test.tsx",
       "apps/web/src/admin/pages/LeasingRentalStatusPage.test.tsx",
+      "apps/web/src/admin/pages/LeasingWorkbenchPage.gate.test.tsx",
       "apps/web/src/admin/pages/LeasingWorkbenchPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/LeasingWorkbenchPage.test.tsx",
       "apps/web/src/admin/pages/M006AccessGovernance.test.tsx",
@@ -206,20 +222,22 @@
       "apps/web/src/admin/pages/MdmWhitelistPage.test.tsx",
       "apps/web/src/admin/pages/MediaPerformanceShowPage.test.tsx",
       "apps/web/src/admin/pages/MemberLoyaltyConfigPage.test.tsx",
+      "apps/web/src/admin/pages/MerchantPenaltyPage.test.tsx",
       "apps/web/src/admin/pages/MerchantScopePage.test.tsx",
-      "apps/web/src/admin/pages/MerchantWorkOrdersPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/MerchantWorkOrdersPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneBillsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneContractsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneDividendsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneFeeRecipientsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneFeeRecipientsPage.test.tsx",
+      "apps/web/src/admin/pages/MerchantZoneLicensesPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneSettlementsPage.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneWorkOrders.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/MerchantZoneWorkOrdersPage.test.tsx",
       "apps/web/src/admin/pages/MetricDetailPage.groups.test.tsx",
       "apps/web/src/admin/pages/MetricDetailPage.test.tsx",
       "apps/web/src/admin/pages/MonthlyComparisonPage.kpi.test.tsx",
+      "apps/web/src/admin/pages/MySecurityExportsPage.test.tsx",
       "apps/web/src/admin/pages/NotificationWindowsPage.test.tsx",
       "apps/web/src/admin/pages/OccupancyAnalyticsPage.rentToSales.test.tsx",
       "apps/web/src/admin/pages/OccupancyAnalyticsPage.robustness.test.tsx",
@@ -257,8 +275,9 @@
       "apps/web/src/admin/pages/ServiceOrdersPage.robustness.test.tsx",
       "apps/web/src/admin/pages/SettlementConfigPage.test.tsx",
       "apps/web/src/admin/pages/SettlementInvoicePage.test.tsx",
+      "apps/web/src/admin/pages/SettlementReviewPage.channelfee.test.tsx",
       "apps/web/src/admin/pages/SettlementReviewPage.metricdetail.test.tsx",
-      "apps/web/src/admin/pages/SettlementReviewPage.specialapproval.test.tsx",
+      "apps/web/src/admin/pages/SettlementReviewPage.passpool.test.tsx",
       "apps/web/src/admin/pages/SiteEntryCompletion.test.tsx",
       "apps/web/src/admin/pages/SmsNotificationSwitchesPage.test.tsx",
       "apps/web/src/admin/pages/SpaceTypesPage.guidedcreate.test.tsx",
@@ -291,11 +310,13 @@
       "apps/web/src/admin/pages/StoredWinePage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/StudentCertificationsPage.test.tsx",
       "apps/web/src/admin/pages/SubjectBindingsPage.test.tsx",
+      "apps/web/src/admin/pages/SupervisorReviewPage.backfill.test.tsx",
       "apps/web/src/admin/pages/SupervisorReviewPage.chain.test.tsx",
       "apps/web/src/admin/pages/SupervisorReviewPage.homecontent.test.tsx",
       "apps/web/src/admin/pages/SupervisorReviewPage.test.tsx",
       "apps/web/src/admin/pages/T3AReadonlyAnalyticsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/T3AReadonlyAnalyticsPage.test.tsx",
+      "apps/web/src/admin/pages/TerminalDevicesPage.test.tsx",
       "apps/web/src/admin/pages/TicketOrderTrace.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.anomaly.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.degraded.test.tsx",
@@ -310,6 +331,7 @@
       "apps/web/src/admin/pages/TicketingPoliciesPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.kpi.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.pricing.test.tsx",
+      "apps/web/src/admin/pages/TraceHandoverBackfillPage.test.tsx",
       "apps/web/src/admin/pages/TraceLinkDrilldown.test.tsx",
       "apps/web/src/admin/pages/TraceLinkP2A.test.tsx",
       "apps/web/src/admin/pages/TraceLinkP2c.test.tsx",
@@ -335,8 +357,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 274,
-    "test_count_from_source": 1298
+    "file_count": 296,
+    "test_count_from_source": 1486
   },
   "web_build": {
     "dist_index_exists": true,
@@ -354,25 +376,25 @@
         "exists": true
       }
     ],
-    "asset_count": 156,
+    "asset_count": 167,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BKx9d_TE.js",
-        "size_bytes": 4216,
-        "mtime": "2026-10-26T09:54:26.279Z"
+        "path": "apps/web/dist/assets/main-ChN52dna.js",
+        "size_bytes": 4337,
+        "mtime": "2026-10-30T05:22:33.145Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-10-26T09:54:26.282Z"
+      "mtime": "2026-10-30T05:22:33.373Z"
     },
     "no_main_bundle_warning_expected": true
   },
   "playwright": {
     "normal": {
       "report_path": "playwright-report/index.html",
-      "report_exists": false,
+      "report_exists": true,
       "spec_files": [
         "tests/e2e/customer-account-lifecycle-live-evidence.spec.ts",
         "tests/e2e/customer-journey.spec.ts",
@@ -394,8 +416,11 @@
       ],
       "test_count_from_source": 3
     },
-    "last_run": null,
-    "last_run_passed": false
+    "last_run": {
+      "status": "passed",
+      "failedTests": []
+    },
+    "last_run_passed": true
   },
   "semgrep": {
     "scan_id": "semgrep-20260703-delivery-gates-clean",
