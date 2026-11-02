@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 // 客人端响应类型（对齐后端 customer 域 record，camelCase 化后口径）
 
 export type TicketProduct = {
@@ -349,6 +349,9 @@ export type CustomerSavedBottle = {
 
 export type SavedBottlePickupCode = { savedBottleId: string; code: string; expiresAt: string; refreshIntervalSeconds: number };
 export type SavedBottleRenewal = { id: string; savedBottleId: string; newExpireAt: string; status: string };
+
+// 第十八批 M 段第 111 条 111-R4：投诉表单「涉及门店」选项（后端 CustomerComplaintService.StoreOption）。
+export type ComplaintStoreOption = { merchantId: string; merchantName: string };
 
 // clients-R8 我的投诉（后端 CustomerComplaintService.ComplaintView）。
 export type CustomerComplaint = {

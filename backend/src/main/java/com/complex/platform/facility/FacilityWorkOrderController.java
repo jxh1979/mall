@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -14,6 +14,7 @@ import com.complex.platform.facility.dto.FacilityWorkOrderConfirmerRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderPolicyRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderReassignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
+import com.complex.platform.facility.dto.WorkOrderMaterialRequests;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -169,6 +170,40 @@ public class FacilityWorkOrderController {
         authorizationService.requirePermission(PERM);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.resume(workOrderId, request));
+    }
+
+    /** 第十八批 M 段第 117 条（BSM:1380）：工单用料面板——用料明细与合计、费用承担方、承担方争议记录、本项目平台库房余额行与经营商户下拉。 */
+    @GetMapping("/{work_order_id}/materials")
+    public ApiResponse<WorkOrderMaterialService.Materials> materials(@PathVariable("work_order_id") String workOrderId) {
+        authorizationService.requirePermission(PERM);
+        return ApiResponse.ok(service.materials(workOrderId));
+    }
+
+    /** 第十八批 M 段第 117 条：登记用料——从所选库位出库一次，按当前平均进货价计成本、挂本工单（只限处理中）。 */
+    @PostMapping("/{work_order_id}/materials")
+    public ApiResponse<WorkOrderMaterialService.Materials> issueMaterial(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody WorkOrderMaterialRequests.Issue request) {
+        authorizationService.requirePermission(PERM);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.issueMaterial(workOrderId, request));
+    }
+
+    /** 第十八批 M 段第 117 条：标明费用承担方（物业承担／商户承担＋商户）。 */
+    @PostMapping("/{work_order_id}/cost-bearer")
+    public ApiResponse<WorkOrderMaterialService.Materials> markCostBearer(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody WorkOrderMaterialRequests.Bearer request) {
+        authorizationService.requirePermission(PERM);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markCostBearer(workOrderId, request));
+    }
+
+    /** 第十八批 M 段第 117 条 117-R2：承担方有争议——工单挂起，转上级在审批链判定（意见即判定依据）。 */
+    @PostMapping("/{work_order_id}/bearer-dispute")
+    public ApiResponse<FacilityWorkOrderRecord> disputeBearer(
+            @PathVariable("work_order_id") String workOrderId, @RequestBody WorkOrderMaterialRequests.Dispute request) {
+        authorizationService.requirePermission(PERM);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.disputeBearer(workOrderId, request));
     }
 
     @PostMapping("/mark-overdue")

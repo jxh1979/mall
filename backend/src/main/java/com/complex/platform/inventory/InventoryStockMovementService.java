@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -30,7 +30,8 @@ final class InventoryStockMovementService {
     // FS-018 R1: 报损族（damage/loss/waste）移出直接扣减白名单——该族由 Controller 转入 createStockAdjustment
     //（高价值判定 + 照片/视频双证据 + 主管复核批准后才扣库存），服务层不再有先扣库存的直接路径。
     private static final Set<String> ALLOWED_TYPED_MOVEMENT_TYPES =
-            Set.of("outbound", "redeem_consume");
+            // 第十八批 M 段 112-R3：加 gift_claim_consume（礼物领取消耗，营销赠发的店内实物券核销），与积分兑换消耗分开记（BSM:1194）。
+            Set.of("outbound", "redeem_consume", "gift_claim_consume");
 
     static final Set<String> TYPED_DAMAGE_FAMILY = Set.of("damage", "loss", "waste");
 
@@ -383,6 +384,28 @@ final class InventoryStockMovementService {
             );
         }
         return last;
+    }
+
+    /**
+     * 第十八批 M 段第 117 条（BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本」）：工单登记用料即从所选库位出库一次，流水挂工单
+     * （business_type/business_id），成本由仓储层按移动加权均价定稿；幂等与审计由工单侧做。调用方已限平台口径（无商户归属），出库的是平台库房，
+     * 物料与余额不按商户范围过滤（商户范围的 requireItemOwnership/decreaseBalance 对无商户归属的项目员工会 403）。
+     */
+    StockMovementRecord issueForWorkOrder(String businessType, String workOrderId, String locationId, String itemId,
+            Integer quantity, String idempotencyKey) {
+        requireText(locationId, "location_id");
+        requireNoActiveStocktake(locationId);
+        repository.findInventoryItemById(requireText(itemId, "item_id"))
+                .orElseThrow(() -> ApiException.notFound("INVENTORY_ITEM_NOT_FOUND", "库存商品不存在或已被删除"));
+        if (quantity == null || quantity <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "quantity 必须为正整数");
+        }
+        if (repository.atomicDecreaseStockBalance(itemId, locationId, quantity, null) == 0) {
+            throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足");
+        }
+        consumeBatchesFefo(itemId, locationId, quantity);
+        return saveMovement("movement_" + slug(idempotencyKey + ":" + itemId + ":" + businessType), "outbound", itemId, locationId,
+                null, quantity, null, businessType, workOrderId, null, List.of(), null);
     }
 
     /**

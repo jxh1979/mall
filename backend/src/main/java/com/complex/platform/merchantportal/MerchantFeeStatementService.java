@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -69,7 +69,7 @@ public class MerchantFeeStatementService {
             new FeeName("积分发行费", "积分发行费 ＝ 转为可用的积分数 × 全国统一积分发行单价", true), // ENUM:75
             new FeeName("押金", "押金金额 ＝ 收取月数 × 该商户签约时的月租金", true), // BSM:1347
             new FeeName("违约金", "按合同约定", true), // BSM:1347「并按合同计违约金」
-            new FeeName("工单用料费（商户承担）", "用料必须从指定库房出库并按当前平均进货价计成本", false), // BSM:1380
+            new FeeName("工单用料费（商户承担）", "用料必须从指定库房出库并按当前平均进货价计成本", true), // BSM:1380；第十八批 M 段第 117 条
             new FeeName("违规罚款", null, false), // HTML 没写计费基数，不自拟
             new FeeName("车位月租", "商户月租车位按合同约定、按月出账", true), // BSM:1437
             new FeeName("门票综合服务费", "按比例与按固定金额两种逐票计费方式互斥；单一酒吧门票按同一物理项目、同一酒吧的计费月汇总各票应计服务费，"
@@ -86,7 +86,8 @@ public class MerchantFeeStatementService {
             Map.entry("termination_penalty", "违约金"),
             Map.entry("contract_parking_monthly", "车位月租"),
             Map.entry("single_bar_service_fee", "门票综合服务费"),
-            Map.entry("parking_credit_cost", "停车抵免成本"));
+            Map.entry("parking_credit_cost", "停车抵免成本"),
+            Map.entry("work_order_material", "工单用料费（商户承担）"));
 
     /**
      * 当期综合账单所列本商户台账行（一行一笔，带计费自然月 bill_month）；参数：本商户、本商户。

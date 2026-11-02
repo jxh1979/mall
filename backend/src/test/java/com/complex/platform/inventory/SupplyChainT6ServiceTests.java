@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,6 +47,7 @@ class SupplyChainT6ServiceTests {
     private AuthorizationService authorizationService;
     private WarehouseService warehouseService;
     private SupplierQualificationService qualificationService;
+    private InMemoryAudit auditRepo;
 
     @BeforeEach
     void setUp() {
@@ -56,7 +57,7 @@ class SupplyChainT6ServiceTests {
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
         IdempotencyService idem =
                 new IdempotencyService(new InMemoryIdem(), new ObjectMapper());
-        var auditRepo = new InMemoryAudit();
+        auditRepo = new InMemoryAudit();
         AuditEventService audit = new AuditEventService(auditRepo);
         warehouseService = new WarehouseService(repo, idem, audit, authorizationService);
         qualificationService = new SupplierQualificationService(repo, idem, audit, authorizationService);
@@ -116,6 +117,7 @@ class SupplyChainT6ServiceTests {
         }
         // 含 setUp 种子资质共 8 条。
         assertThat(qualificationService.listQualifications("supplier_1").items()).hasSize(8);
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("inventory.supplier_qualification.create");
     }
 
     @Test
@@ -132,6 +134,7 @@ class SupplyChainT6ServiceTests {
                 "qk-nosup", "supplier_404", "business_license", null, null, null, null, List.of(), null)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("供应商不存在");
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("inventory.supplier_qualification.create_failed");
     }
 
     @Test
@@ -185,6 +188,7 @@ class SupplyChainT6ServiceTests {
         assertThat(tiers).filteredOn(SupplierSettlementMethodRecord::isDefault).hasSize(1);
         assertThat(tiers).extracting(SupplierSettlementMethodRecord::paymentTermDays)
                 .contains(30, 0, 60);
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("inventory.supplier_settlement_method.create");
     }
 
     @Test
@@ -193,6 +197,7 @@ class SupplyChainT6ServiceTests {
                 "sk-bad", "supplier_1", "barter", 10, null, false, null)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("settlement_method");
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("inventory.supplier_settlement_method.create_failed");
     }
 
     @Test
@@ -201,6 +206,17 @@ class SupplyChainT6ServiceTests {
                 "sk-neg", "supplier_1", "monthly", -5, null, false, null)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("payment_term_days");
+    }
+
+    // ── 第十八批 M 段 113-R1：列表失败按 OpenAPI 声明的失败名留痕（PGM:738「访问被拒绝也要留痕」） ──
+    @Test
+    void listFailuresRecordOpenApiDeclaredFailureEvents() {
+        when(authorizationService.currentMerchantScope()).thenThrow(ApiException.forbidden("X", "x"));
+        assertThatThrownBy(() -> warehouseService.listWarehouses()).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> qualificationService.listQualifications(null)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> qualificationService.listSettlementMethods(null)).isInstanceOf(ApiException.class);
+        assertThat(auditRepo.events).extracting(AuditEvent::eventName).contains("inventory.warehouse.list_failed",
+                "inventory.supplier_qualification.list_failed", "inventory.supplier_settlement_method.list_failed");
     }
 
     // ── 内存测试替身 ────────────────────────────────────────────────────────────

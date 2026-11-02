@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.GiftReversedEvent;
@@ -19,7 +19,7 @@ import static com.complex.platform.common.Strings.trimToNull;
  * R5 T15 赠饮兑换消费者（事件驱动，同步 @EventListener）。
  *
  * <p>监听 ticketing 域 {@link GiftVerifiedEvent}：生成 0 元 bar_order(order_type='gift') + 出品 ticket，
- * 并在有可靠 SKU 映射(itemRef)时 deliver 扣吧台库存(movement_type=redeem_consume)，回填 inventory_movement_id
+ * 并在有可靠 SKU 映射(itemRef)时 deliver 扣吧台库存(movement_type=gift_claim_consume 礼物领取消耗)，回填 inventory_movement_id
  * 到出品 deliver 事件与 bar_gift_redemptions。监听 {@link GiftReversedEvent}：将赠饮单置 reversed 并（若已扣）回补库存。
  *
  * <p><b>幂等</b>：bar_gift_redemptions 的 verification_id 唯一键保证一次核销至多一单；重复事件即跳过。
@@ -135,7 +135,8 @@ public class BarGiftConsumer {
                 now
         ));
 
-        // 3) 扣减：movement_type=redeem_consume（积分/兑换扣减白名单，复用 bar 既有原子扣减能力）。
+        // 3) 扣减：movement_type=gift_claim_consume（礼物领取消耗；第十八批 M 段 112-R3 按 BSM:1194、BSM:1179、BSM:1049
+        //    与积分兑换消耗、销售消耗分开记，复用 bar 既有原子扣减能力）。
         //    S5：按商品自己的「是否需扣库存」决定——不需扣库的赠品（如现调、外采直供）本就没有库存物料，
         //    以前一律硬扣、物料为空就崩。需扣库的商品必有库存物料（建权益模板时已 fail-closed 校验）。
         //    AUD-015：库存不足（含并发抢到最后一件的失败方）→ 抛错回滚，绝不标记 delivered。
@@ -161,7 +162,7 @@ public class BarGiftConsumer {
             }
             repository.saveStockMovement(new StockMovementSnapshot(
                     inventoryMovementId,
-                    "redeem_consume",
+                    "gift_claim_consume",
                     inventoryItemId,
                     STOCK_LOCATION_DEFAULT,
                     null,
@@ -176,7 +177,7 @@ public class BarGiftConsumer {
                     standardPour,
                     giftLoss
             ));
-            note = "gift redeemed; stock decreased via redeem_consume";
+            note = "gift redeemed; stock decreased via gift_claim_consume";
         }
         if (merchantId == null) {
             // S5：自营吧无商户对手方 → 不挂应付，但成本已按内部结算价固化在本行，明记原因不留黑洞。
@@ -279,7 +280,7 @@ public class BarGiftConsumer {
             return; // 已冲正：幂等。
         }
         Instant now = Instant.now();
-        // 若此前已实际扣减库存，则回补（反向 movement，redeem_consume 反向）。
+        // 若此前已实际扣减库存，则回补（反向 movement，gift_claim_consume 反向；DEC-R7-04 冲正不新增类型）。
         // S5：itemRef 是提供方商品 id，库存走它绑定的库存物料（与正向扣减同一把钥匙）。
         BarProductRecord reverseProduct = redemption.itemRef() == null ? null
                 : repository.findProductById(redemption.itemRef()).orElse(null);
@@ -289,7 +290,7 @@ public class BarGiftConsumer {
         if (redemption.inventoryMovementId() != null && reverseInventoryItemId != null) {
             repository.saveStockMovement(new StockMovementSnapshot(
                     "movement_" + slug("gift_reverse:" + verificationId),
-                    "redeem_consume",
+                    "gift_claim_consume",
                     reverseInventoryItemId,
                     // P1-5 修复：赠饮冲正是「返库」(余额 +1)，流水方向须为入库(source=null→target=default)，与余额恢复同向；
                     // 此前误写出库形态(source=default,target=null)，致按流水重建库存重复扣减、账实偏差累积。

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -73,8 +73,8 @@ public class SupplierQualificationService {
     // ── 资质：CRUD ──────────────────────────────────────────────────────────────
     public PageResponse<SupplierQualificationRecord> listQualifications(String supplierId) {
         return readPage(
-                "inventory.supplier_qualification.viewed",
-                "inventory.supplier_qualification.view_failed",
+                "inventory.supplier_qualification.list",
+                "inventory.supplier_qualification.list_failed",
                 "inventory.supplier.qualification.manage",
                 "supplier_qualification",
                 () -> {
@@ -97,8 +97,8 @@ public class SupplierQualificationService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 SupplierQualificationRecord.class,
-                "inventory.supplier_qualification.changed",
-                "inventory.supplier_qualification.change_failed",
+                "inventory.supplier_qualification.create",
+                "inventory.supplier_qualification.create_failed",
                 "inventory.supplier.qualification.manage",
                 "supplier_qualification",
                 () -> {
@@ -135,8 +135,8 @@ public class SupplierQualificationService {
     // ── 结算档：CRUD ────────────────────────────────────────────────────────────
     public PageResponse<SupplierSettlementMethodRecord> listSettlementMethods(String supplierId) {
         return readPage(
-                "inventory.supplier_settlement.viewed",
-                "inventory.supplier_settlement.view_failed",
+                "inventory.supplier_settlement_method.list",
+                "inventory.supplier_settlement_method.list_failed",
                 "inventory.supplier.settlement.manage",
                 "supplier_settlement_method",
                 () -> {
@@ -159,8 +159,8 @@ public class SupplierQualificationService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 SupplierSettlementMethodRecord.class,
-                "inventory.supplier_settlement.changed",
-                "inventory.supplier_settlement.change_failed",
+                "inventory.supplier_settlement_method.create",
+                "inventory.supplier_settlement_method.create_failed",
                 "inventory.supplier.settlement.manage",
                 "supplier_settlement_method",
                 () -> {

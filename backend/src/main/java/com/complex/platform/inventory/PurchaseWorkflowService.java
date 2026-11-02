@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -71,7 +71,12 @@ public class PurchaseWorkflowService {
                 .filter(row->row.get("merchant_id")==null||(owner.isPresent()?owner.get().equals(row.get("merchant_id")):merchantIds.contains(row.get("merchant_id")))).toList());
         result.put("inventory_items",inventory.listInventoryItems().stream().filter(item->"active".equals(item.status()))
                 .filter(item->item.merchantId()==null||(owner.isPresent()?owner.get().equals(item.merchantId()):merchantIds.contains(item.merchantId()))).toList());
-        result.put("warehouses",inventory.listWarehouses().stream().filter(w->"active".equals(w.status())&&optionVisible(w.projectId(),w.merchantId())).toList());
+        var warehouses=inventory.listWarehouses().stream().filter(w->"active".equals(w.status())&&optionVisible(w.projectId(),w.merchantId())).toList();
+        result.put("warehouses",warehouses);
+        // 第十八批 M 段第 119 条 119-R1（BSM:1936）：验收「实际库位编号」只能选所选仓库下已建档的库位，随可见仓库带出（不借用库房管理权限）。
+        var warehouseIds=warehouses.stream().map(WarehouseRecord::id).collect(java.util.stream.Collectors.toSet());
+        result.put("locations",inventory.listWarehouseLocations().stream().filter(l->warehouseIds.contains(l.warehouseId()))
+                .map(l->Map.of("id",l.id(),"warehouse_id",l.warehouseId())).toList());
         result.put("contracts",inventory.listSupplyContracts().stream().filter(c->optionVisible(c.projectId(),c.merchantId()))
                 .filter(c->"approved".equals(c.approvalStatus())||auth.currentActorHasPermission(CONTRACT)&&visible(c.projectId(),c.merchantId(),CONTRACT))
                 .map(this::maskContract).toList());
@@ -282,6 +287,8 @@ public class PurchaseWorkflowService {
             if(r.unitCostCent()==null||r.unitCostCent()<0)throw invalid("须录入实际到货单价");
             requireActualTime(r.receivedAt(),p.orderedAt());checkEvidence("inventory_purchase_request",id,r.evidenceAttachmentIds());
             String wh=requireText(r.warehouseId(),"warehouse_id"),location=requireText(r.locationId(),"location_id");requireWarehouse(p,wh,location);
+            // 第十八批 M 段第 119 条 119-R1（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：只收接收仓库下已建档的库位（退供交接只扣减，不在 requireWarehouse 里查）。
+            if(!inventory.isWarehouseLocation(wh,location))throw invalid("库位须为接收仓库下已建档的库位，请先在库存台账「库房」区块建库位");
             String receipt="prec_"+slug(id+":"+r.idempotencyKey());String batch=null,movement=null;
             if(r.acceptedQuantity()>0){
                 lockStock(p.itemId(),location,wh,(String)f.get("project_id"),p.merchantId());

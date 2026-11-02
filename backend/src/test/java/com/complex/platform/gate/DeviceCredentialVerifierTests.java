@@ -1,8 +1,9 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -533,13 +534,23 @@ class DeviceCredentialVerifierTests {
         assertThat(verifier("grace").verify(staffGet("tablet")).terminalType()).isEqualTo("tablet");
     }
 
-    /** 经销商账号报经销商门户、带商户归属的外包账号报商户网页门户：维持自报。 */
+    /** 经销商账号报经销商门户：维持自报。 */
     @Test
-    void dealerAndMerchantBoundVendorKeepSelfReport() {
+    void dealerKeepsSelfReport() {
         when(authz.currentActor()).thenReturn(new AccessActor("u1", "dealer", "dealer", "org", null, "active"));
         assertThat(verifier("grace").verify(staffGet("dealer_portal")).terminalType()).isEqualTo("dealer_portal");
+    }
+
+    /** 第十八批 M 段第 109 条（PGM:745「……Web 前端（业务人员，客人无网页端）……商户网页门户……」）：带商户归属的外包账号改报他端一律按 Web 前端判；
+     *  设备绑定型（报平板而无登记设备）不改判，不带终端头维持未识别。 */
+    @Test
+    void merchantBoundVendorIsJudgedAsWeb() {
         when(authz.currentActor()).thenReturn(new AccessActor("u1", "vendor", "outsourced_vendor", "org", "m1", "active"));
-        assertThat(verifier("grace").verify(staffGet("merchant_portal")).terminalType()).isEqualTo("merchant_portal");
+        for (String claimed : java.util.List.of("merchant_portal", "merchant_app", "dealer_portal", "mobile_admin")) {
+            assertThat(verifier("grace").verify(staffGet(claimed)).terminalType()).as(claimed).isEqualTo("web");
+        }
+        assertThat(verifier("grace").verify(staffGet("tablet")).terminalType()).isEqualTo("tablet");
+        assertThat(verifier("grace").verify(staffGet(null)).terminalType()).as("不带终端头").isNull();
     }
 
     // ---- 第 100 条 100-R3：私人手机逐类验签开关 ----
@@ -564,6 +575,74 @@ class DeviceCredentialVerifierTests {
         assertThat(v.verify(portal).terminalType()).isEqualTo("merchant_portal");
         org.mockito.Mockito.verify(audit).recordSuccess(any(), any(), any(), any(), any(), any(),
                 org.mockito.ArgumentMatchers.argThat(m -> "grace_allow_unproven_write".equals(m.get("reason"))));
+    }
+
+    /**
+     * 第十八批 M 段第 115 条（BSM:940「同一账号允许在多台设备、多个端同时登录。」；PGM:906「员工注册审批、设备绑定、换机解绑重绑。」）：
+     * 设备绑定型的登录在设备证明建立之前，enforce 下无设备证明也放行并留痕 bootstrap_without_credential（登录时还没有员工主体）。
+     */
+    @Test
+    void deviceBoundLoginPassesWithoutCredentialUnderEnforce() {
+        noStaffLogin(); // 登录请求还没有登录主体。
+        for (String type : java.util.List.of("staff_work_phone", "tablet", "staff_private_phone")) {
+            MockHttpServletRequest login = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+            login.addHeader("X-Terminal-Type", type);
+            TerminalIdentityHolder.VerifiedTerminal vt = passesUnderEnforce(login);
+            assertThat(vt.terminalType()).isEqualTo(type);
+            assertThat(vt.verified()).isFalse();
+        }
+        org.mockito.Mockito.verify(audit, org.mockito.Mockito.times(3)).recordSuccess(any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.argThat(m -> "bootstrap_without_credential".equals(m.get("reason"))));
+    }
+
+    /** 第 115 条：设备绑定、登记签名公钥、私人手机凭证绑定（本机公钥还没登记或还没生效）在 enforce 下无设备证明也放行并留痕。 */
+    @Test
+    void deviceBindingBootstrapWritesPassWithoutCredentialUnderEnforce() {
+        for (String[] call : new String[][] {
+                {"staff_work_phone", "/api/v1/terminals/devices/bind"},
+                {"staff_work_phone", "/api/v1/terminals/devices/dev-x/signing-key"},
+                {"staff_private_phone", "/api/v1/staff/device-credentials"}}) {
+            MockHttpServletRequest r = new MockHttpServletRequest("POST", call[1]);
+            r.addHeader("X-Terminal-Type", call[0]);
+            TerminalIdentityHolder.VerifiedTerminal vt = passesUnderEnforce(r);
+            assertThat(vt.terminalType()).isEqualTo(call[0]);
+            assertThat(vt.verified()).isFalse();
+        }
+        org.mockito.Mockito.verify(audit, org.mockito.Mockito.times(3)).recordSuccess(any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.argThat(m -> "bootstrap_without_credential".equals(m.get("reason"))));
+    }
+
+    /** 第 115 条：enforce 下这条请求不抛（未放行时抛 DEVICE_CREDENTIAL_INVALID credential_required，记为断言失败）。 */
+    private TerminalIdentityHolder.VerifiedTerminal passesUnderEnforce(MockHttpServletRequest request) {
+        java.util.concurrent.atomic.AtomicReference<TerminalIdentityHolder.VerifiedTerminal> vt =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        assertThatCode(() -> vt.set(verifier("enforce").verify(request))).doesNotThrowAnyException();
+        return vt.get();
+    }
+
+    /** 第 115 条对照：启动放行只认四条路径整串；归还、请假、凭证撤销等其他设备绑定型写请求无证明在 enforce 下照旧拒。 */
+    @Test
+    void otherDeviceBoundWritesStillNeedCredentialUnderEnforce() {
+        for (String[] call : new String[][] {
+                {"staff_work_phone", "/api/v1/terminals/devices/return"},
+                {"staff_work_phone", "/api/v1/staff/leaves"},
+                {"staff_private_phone", "/api/v1/staff/device-credentials/c1/revoke"}}) {
+            MockHttpServletRequest r = new MockHttpServletRequest("POST", call[1]);
+            r.addHeader("X-Terminal-Type", call[0]);
+            assertThatThrownBy(() -> verifier("enforce").verify(r))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+        }
+    }
+
+    /** 第 115 条对照：只放行无证明；登录带登记设备号与错误签名仍按 bad_signature 拒（默认员工桩 u1 取得到该机的钥）。 */
+    @Test
+    void loginWithBadSignatureStillRejectedUnderEnforce() throws Exception {
+        MockHttpServletRequest login = signedRequest("POST", NOW, "n1", sign("POST", NOW, "n1"));
+        login.setRequestURI("/api/v1/auth/login");
+        assertThatThrownBy(() -> verifier("enforce").verify(login))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEVICE_CREDENTIAL_INVALID"));
+        org.mockito.Mockito.verify(audit).recordSuccess(any(), any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.argThat(m -> "bad_signature".equals(m.get("reason"))));
     }
 
     /** 无员工登录主体（登录请求、客人请求）。 */

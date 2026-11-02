@@ -1,11 +1,14 @@
 package com.complex.platform.gate;
 
+// 文件版本：V0.01
+
 import com.complex.platform.common.api.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.util.UrlPathHelper;
 
 /**
  * 3.19 二期 · 终端总开关逐请求后端强制（业务 HTML「终端开关」节 + PRD §6.3 后端拒绝铁律）：
@@ -29,6 +32,10 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 矩阵页重新打开（死锁）；②<b>非终端通道</b>——第三方开放平台回调、一体机自助端点不是「受管一方端」，
  * 各有自己的签名 / X-Device-Token 认证，且一体机路径同样豁免于 {@link DeviceCredentialInterceptor}
  * （拿不到可信身份），不进本闸，否则第三方回调与一体机心跳会被写请求 fail-closed 误杀。
+ *
+ * <p>第十八批 M 段第 116 条（PGM:747「……员工自有手机只开放低风险功能……」；PGM:744；PGM:738「访问被拒绝也要留痕……」）：可信终端是员工私人手机时，
+ * 只放行 {@link StaffAppFunctions} 私人手机清单内的接口，读写都判；清单外的先留痕 {@code private_phone_function_not_allowed} 再 403 TERMINAL_NOT_ALLOWED。
+ * 豁免前缀照旧先放行。
  */
 @Component
 public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
@@ -83,6 +90,11 @@ public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
                         "无法识别终端身份，业务写操作已被拒绝（终端开关兜底关闭）");
             }
             return true;
+        }
+        if (DeviceCredentialVerifier.STAFF_PRIVATE_PHONE.equals(terminalType) && !StaffAppFunctions.privatePhoneAllows(
+                request.getMethod(), UrlPathHelper.defaultInstance.getPathWithinApplication(request))) {
+            guard.auditRejection(terminalType, null, "private_phone_function_not_allowed", null, null);
+            throw ApiException.forbidden("TERMINAL_NOT_ALLOWED", "员工自有手机只开放低风险功能，此操作请在公司工作手机上办理");
         }
         // 关/读取失败 → guard 抛 TERMINAL_DISABLED（DispatcherServlet 内，GlobalExceptionHandler 统一 403 JSON）。
         // 总开关 AND 语义:global 行关闭即硬拒,不被模块/设备行覆盖(商户专区活证据揭出的缺陷)。

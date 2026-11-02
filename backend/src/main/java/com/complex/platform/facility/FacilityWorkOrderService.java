@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -18,6 +18,7 @@ import com.complex.platform.facility.dto.FacilityWorkOrderConfirmerRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderPolicyRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderReassignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderRequest;
+import com.complex.platform.facility.dto.WorkOrderMaterialRequests;
 import com.complex.platform.governance.PlatformService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -79,6 +80,10 @@ public class FacilityWorkOrderService {
     /** 第 77 条 77-R1：超时升级通知主管的员工站内通知。字段注入，不改既有构造（单测直接 new，为空时只升级不通知）。 */
     @Autowired(required = false)
     JdbcStaffRepository staffRepository;
+    /** 第十八批 M 段第 117 条：工单用料与费用承担方。字段注入，单测直接 new 时为空＝跳过；@Lazy 断开库存门面经要货流转回到本服务的环。 */
+    @Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    WorkOrderMaterialService materials;
 
     @Autowired
     public FacilityWorkOrderService(FacilityWorkOrderRepository repository, FacilityRepository facilityRepository,
@@ -275,6 +280,9 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderRecord cur = loadForUpdate(id);
         enforceAssignedScope(actor, cur);
         requireStatus(cur, "processing", "只有处理中的工单才能完成");
+        if (materials != null) {
+            materials.requireBearerIfMaterials(BUSINESS_TYPE, id); // 第十八批 M 段第 117 条：用了库房物料须先标明承担方
+        }
         // 双闸（关联设备的报修）完工即进待验收，不看配置的验收方式；每次完工开始新一轮验收：之前的主管验收、提单确认与评分作废
         // （挂起→恢复→再完工同此）。
         boolean fresh = dual(cur);
@@ -295,6 +303,7 @@ public class FacilityWorkOrderService {
         recordCustomerFeedbackOnClose(cur, completed, r);
         repository.updateWorkOrder(completed);
         resetEquipmentIfClosed(cur, completed);
+        postMaterialReceivable(cur, completed, r.idempotencyKey());
         audit("facility.work_order_completed", completed.id(), r.idempotencyKey(), metadata(completed, r.note()));
         return completed;
     }
@@ -316,6 +325,7 @@ public class FacilityWorkOrderService {
         recordCustomerFeedbackOnClose(cur, closed, r);
         repository.updateWorkOrder(closed);
         resetEquipmentIfClosed(cur, closed);
+        postMaterialReceivable(cur, closed, r.idempotencyKey());
         audit("facility.work_order_accepted", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
         return closed;
     }
@@ -353,6 +363,7 @@ public class FacilityWorkOrderService {
             recordCustomerFeedbackOnClose(cur, closed, r);
             repository.updateWorkOrder(closed);
             resetEquipmentIfClosed(cur, closed);
+            postMaterialReceivable(cur, closed, r.idempotencyKey());
             audit("facility.work_order_reviewed", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
             return closed;
         } catch (RuntimeException exception) {
@@ -483,12 +494,122 @@ public class FacilityWorkOrderService {
         FacilityWorkOrderRecord cur = loadForUpdate(id);
         requireReach(cur.projectId());
         requireStatus(cur, "suspended", "只有已挂起的工单才能恢复");
+        if (materials != null) {
+            materials.requireNoPendingDispute(BUSINESS_TYPE, id); // 第十八批 M 段 117-R2：承担方争议判定前不能恢复
+        }
         // 待派单时挂起的（没有处理人）恢复回待派单：派单仍只走 assign 及其告警接手闸（BSM L1417「接手后派相应维修人员」），
         // 不会出现没有处理人的处理中工单。
         FacilityWorkOrderRecord resumed = withStatus(cur, cur.assigneeId() == null ? "pending_assign" : "processing", Instant.now());
         repository.updateWorkOrder(resumed);
         audit("facility.work_order_resumed", resumed.id(), r.idempotencyKey(), metadata(resumed, r.note()));
         return resumed;
+    }
+
+    /** 第十八批 M 段第 117 条（BSM:1380）：工单用料面板——用料明细与合计、费用承担方、承担方争议记录、本项目平台库房余额行与经营商户下拉。 */
+    public WorkOrderMaterialService.Materials materials(String id) {
+        authorizationService.requirePlatformScope();
+        FacilityWorkOrderRecord cur = load(id);
+        requireReach(cur.projectId());
+        return materials.view(BUSINESS_TYPE, id, cur.projectId());
+    }
+
+    /** 第十八批 M 段第 117 条：处理中的工单登记用料＝从所选库位出库一次，按当前平均进货价计成本、挂本工单。 */
+    @Transactional
+    public WorkOrderMaterialService.Materials issueMaterial(String id, WorkOrderMaterialRequests.Issue request) {
+        String key = request == null ? null : request.idempotencyKey();
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            requireReach(load(id).projectId()); // 82b-R1：范围闸在幂等之前
+            return idempotencyService.execute("facilityWorkOrderMaterial:" + id, key, request, () -> {
+                FacilityWorkOrderRecord cur = loadForUpdate(id);
+                requireStatus(cur, "processing", "只有处理中的工单才能登记用料");
+                var movement = materials.issue(BUSINESS_TYPE, id, request.locationId(), request.itemId(), request.quantity(), key);
+                audit("facility.work_order_material_issued", id, key, Map.of("item_id", movement.itemId(),
+                        "location_id", movement.sourceLocationId(), "quantity", movement.quantity(),
+                        "total_cost_cent", Objects.toString(movement.totalCostCent(), "")));
+                return materials.view(BUSINESS_TYPE, id, cur.projectId());
+            }, WorkOrderMaterialService.Materials.class);
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_material_issue_failed", id, key, exception);
+            throw exception;
+        }
+    }
+
+    /** 第十八批 M 段第 117 条：标明费用承担方（物业承担／商户承担＋商户）；已关闭的不能改，承担方争议待判定时不能改。 */
+    @Transactional
+    public WorkOrderMaterialService.Materials markCostBearer(String id, WorkOrderMaterialRequests.Bearer request) {
+        String key = request == null ? null : request.idempotencyKey();
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            requireReach(load(id).projectId()); // 82b-R1：范围闸在幂等之前
+            return idempotencyService.execute("facilityWorkOrderCostBearer:" + id, key, request, () -> {
+                FacilityWorkOrderRecord cur = loadForUpdate(id);
+                if ("closed".equals(cur.status())) {
+                    throw ApiException.badRequest("INVALID_STATE", "已关闭的工单不能再改费用承担方");
+                }
+                materials.requireNoPendingDispute(BUSINESS_TYPE, id);
+                materials.markBearer(BUSINESS_TYPE, id, request.costBearer(), request.merchantId());
+                WorkOrderMaterialService.Materials view = materials.view(BUSINESS_TYPE, id, cur.projectId());
+                audit("facility.work_order_cost_bearer_marked", id, key, Map.of("cost_bearer", view.bearer().costBearer(),
+                        "merchant_id", Objects.toString(view.bearer().merchantId(), "")));
+                return view;
+            }, WorkOrderMaterialService.Materials.class);
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_cost_bearer_mark_failed", id, key, exception);
+            throw exception;
+        }
+    }
+
+    /**
+     * 第十八批 M 段第 117 条 117-R2（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」；PGM:528）：进行中的工单
+     * 提出承担方争议即挂起，转提出人的直接上级（或其指定的最终审批人）在审批链判定；判定前不能恢复，挂起中不能完工、验收与确认。
+     */
+    @Transactional
+    public FacilityWorkOrderRecord disputeBearer(String id, WorkOrderMaterialRequests.Dispute request) {
+        String key = request == null ? null : request.idempotencyKey();
+        try {
+            authorizationService.requirePlatformScope();
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            requireReach(load(id).projectId()); // 82b-R1：范围闸在幂等之前
+            return idempotencyService.execute("facilityWorkOrderBearerDispute:" + id, key, request, () -> {
+                FacilityWorkOrderRecord cur = loadForUpdate(id);
+                materials.requireNoPendingDispute(BUSINESS_TYPE, id);
+                if (!ACTIVE_STATUSES.contains(cur.status())) {
+                    throw ApiException.badRequest("INVALID_STATE", "只有进行中的工单才能挂起");
+                }
+                WorkOrderMaterialService.Dispute dispute = materials.openDispute(BUSINESS_TYPE, id, "工单 " + cur.code(), request.claimedCostBearer(),
+                        request.claimedMerchantId(), request.reason(), request.finalApproverId(), key);
+                FacilityWorkOrderRecord suspended = withStatus(cur, "suspended", Instant.now());
+                repository.updateWorkOrder(suspended);
+                audit("facility.work_order_suspended", id, key, metadata(suspended, dispute.reason()));
+                audit("facility.work_order_bearer_disputed", id, key, Map.of("review_id", dispute.reviewId(),
+                        "from_cost_bearer", dispute.fromCostBearer(), "claimed_cost_bearer", dispute.claimedCostBearer()));
+                return suspended;
+            }, FacilityWorkOrderRecord.class);
+        } catch (RuntimeException exception) {
+            recordFailure("facility.work_order_bearer_dispute_failed", id, key, exception);
+            throw exception;
+        }
+    }
+
+    /** 第十八批 M 段第 117 条：本次转为关闭时按最终承担方给商户生成一笔应收（物业承担不生成），生成了即留痕。 */
+    private void postMaterialReceivable(FacilityWorkOrderRecord before, FacilityWorkOrderRecord after, String idempotencyKey) {
+        if (materials == null || "closed".equals(before.status()) || !"closed".equals(after.status())) {
+            return;
+        }
+        String item = materials.postReceivableOnClose(BUSINESS_TYPE, after.id(), "工单用料费（工单 " + after.code() + "）",
+                after.projectId());
+        if (item != null) {
+            audit("facility.work_order_material_receivable_posted", after.id(), idempotencyKey, Map.of("ar_ap_item_id", item));
+        }
     }
 
     /**
@@ -696,6 +817,18 @@ public class FacilityWorkOrderService {
                 cur.reporterConfirmedBy());
         repository.updateWorkOrder(closed);
         audit("facility.work_order_closed_by_system", closed.id(), null, Map.of("status", "closed", "source", closed.source()));
+    }
+
+    /**
+     * 第十八批 M 段第 111 条 111-R3 客诉跟进的物业工单链闸＝回访关单的闸（BSM:1385「工单由客户关怀部负责处理」）：平台口径、
+     * 持 facility.work_order.manage、工单项目在可触及范围内（平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN。
+     */
+    public FacilityWorkOrderRecord findForComplaintFollowup(String id) {
+        authorizationService.requirePlatformScope();
+        authorizationService.requirePermission(PERM);
+        FacilityWorkOrderRecord record = load(id);
+        requireReach(record.projectId());
+        return record;
     }
 
     /** clients-R8 本人投诉列表：只返回提单方为本人的客人投诉。 */

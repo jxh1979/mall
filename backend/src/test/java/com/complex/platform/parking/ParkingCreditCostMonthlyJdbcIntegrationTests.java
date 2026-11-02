@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -10,7 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.common.LocalZone;
+import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.customer.CustomerRepository;
+import com.complex.platform.settlement.MerchantSettlementStatementNoticeJob;
 import com.complex.platform.support.InternalPayDayFixtures;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -33,6 +35,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -54,6 +57,8 @@ class ParkingCreditCostMonthlyJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private CustomerRepository customers;
     @Autowired private ParkingCreditCostMonthlyJob job;
+    @Autowired private MerchantSettlementStatementNoticeJob notice;
+    @Autowired private PiiCipher cipher;
 
     private ParkingFixture f;
     private String[] a;
@@ -94,9 +99,6 @@ class ParkingCreditCostMonthlyJdbcIntegrationTests {
                 .isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM parking_credit_cost_allocations WHERE project_id=? AND merchant_id IS NOT NULL"
                 + " AND monthly_id IS NULL", Integer.class, f.project)).isZero();
-        // 商户应收应付变化一律短信：未配置通知联系人时留失败审计，不影响入账。
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='parking.credit_cost.notification.not_sent'"
-                + " AND business_id IN (SELECT id FROM parking_credit_cost_months WHERE project_id=?)", Integer.class, f.project)).isEqualTo(2);
     }
 
     @Test
@@ -144,6 +146,57 @@ class ParkingCreditCostMonthlyJdbcIntegrationTests {
         assertThat(reads(item)).isEqualTo(1);
     }
 
+    /**
+     * 第 110 条（BSM:1597「结算金额出账与调整……通知中写明金额、原因与异议截止日期」「异议期自该账单在商户专区可查看之日的次日起算」、
+     * BSM:1673「月结定格 → 账单出账 → 异议期届满 → 付账日」、DEC-R8-55）：停车抵免成本入账不发短信，到出账日（visible_at）随结算金额出账
+     * 短信通知承担商户，写明金额、原因与异议截止日（与商户专区门票分账列表同一截止日），重跑不重发。通知在提交后才发，本例不回滚。
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void costStatementSmsSentOnStatementDayWithReasonAndDeadline() throws Exception {
+        String phone = "136" + String.format("%08d", Math.floorMod(f.suffix.hashCode(), 100_000_000));
+        jdbc.update("UPDATE merchants SET contact_phone=? WHERE id=?", cipher.encrypt(phone), a[0]);
+        job.run(Instant.now());
+        String item = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type='parking_credit_cost' AND project_id=? AND counterparty_id=?",
+                String.class, f.project, a[0]);
+        String monthId = jdbc.queryForObject("SELECT id FROM parking_credit_cost_months WHERE ar_ap_item_id=?", String.class, item);
+        String[] requests = {"parking-credit-cost:" + monthId, "mamt:settlement_statement:" + item};
+        assertThat(sms(requests)).as("入账不发").isEmpty();
+
+        jdbc.update("UPDATE internal_payable_schedules SET visible_at = now() + interval '1 day' WHERE ar_ap_item_id=?", item);
+        notice.notifyVisibleStatements(Instant.now());
+        assertThat(sms(requests)).as("出账日未到不发").isEmpty();
+
+        jdbc.update("UPDATE internal_payable_schedules SET visible_at = now() - interval '1 minute' WHERE ar_ap_item_id=?", item);
+        notice.notifyVisibleStatements(Instant.now());
+        notice.notifyVisibleStatements(Instant.now());
+        String deadline = jdbc.queryForObject("SELECT objection_deadline::text FROM internal_payable_schedules WHERE ar_ap_item_id=?",
+                String.class, item);
+        String user = "usr_pcs_" + f.suffix;
+        RequestPostProcessor shop = new StaffRequestFixture(jdbc).staff(user, "staff", null, a[0], "merchant.portal.settlement.view");
+        jdbc.update("UPDATE roles SET role_name=? WHERE id=?", "停车抵免出账短信回归" + Long.parseLong(f.suffix, 16), "role_" + user);
+        JsonNode listed = portal(get("/api/v1/merchant-portal/ticket-settlements"), shop);
+        assertThat(listed.findValuesAsText("ar_ap_item_id")).containsExactly(item);
+        assertThat(listed.get(0).path("objection_deadline").asText()).isEqualTo(deadline);
+        long aShare = share(a[0]);
+        assertThat(sms(requests)).singleElement().satisfies(r -> {
+            assertThat(r.get("request_id")).isEqualTo(requests[1]);
+            assertThat(r.get("domain")).isEqualTo("merchant_amount");
+            assertThat(r.get("event_key")).isEqualTo("settlement_statement");
+            assertThat(r.get("template_code")).isEqualTo("sms.merchant_amount.settlement_statement");
+            assertThat(cipher.decrypt((String) r.get("recipient"))).isEqualTo(phone);
+            assertThat(r.get("amount")).isEqualTo(String.valueOf(aShare));
+            assertThat((String) r.get("reason")).contains("停车抵免成本出账：商户应付");
+            assertThat(r.get("deadline")).isEqualTo(deadline);
+        });
+    }
+
+    private List<Map<String, Object>> sms(String[] requests) {
+        return jdbc.queryForList("""
+                SELECT request_id, domain, event_key, template_code, recipient, params->>'amount_cent' AS amount, params->>'reason' AS reason,
+                       params->>'objection_deadline' AS deadline FROM notification_send_log WHERE request_id IN (?,?)""", requests[0], requests[1]);
+    }
+
     private JsonNode portal(MockHttpServletRequestBuilder request, RequestPostProcessor who) throws Exception {
         String body = mockMvc.perform(request.with(who)).andExpect(status().isOk()).andReturn().getResponse()
                 .getContentAsString(StandardCharsets.UTF_8);
@@ -176,7 +229,7 @@ class ParkingCreditCostMonthlyJdbcIntegrationTests {
         for (Map.Entry<String, Long> bill : bills) {
             f.barBill(bill.getKey(), c[0], null, bill.getValue(), entered.plus(Duration.ofMinutes(1)));
         }
-        String session = f.session("M" + tag, plate, entered.toString());
+        String session = f.session("M" + tag + "_" + f.suffix, plate, entered.toString());
         mockMvc.perform(post("/api/v1/customer/parking/payments").header("X-Terminal-Type", "miniapp").header("X-Customer-Token", c[1])
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"parking_session_id\":\"" + session + "\",\"idempotency_key\":\"pcm_" + tag + "_" + f.suffix + "\"}"))

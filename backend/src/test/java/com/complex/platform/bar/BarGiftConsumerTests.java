@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -76,7 +76,7 @@ class BarGiftConsumerTests {
         // S5：库存按商品绑定的库存物料扣减 1（不是按 bar_item_ref 本身）。
         assertThat(repository.findStockBalance(INVENTORY_ITEM_ID, LOCATION).orElseThrow().availableQuantity()).isEqualTo(9);
         assertThat(repository.stockMovements).hasSize(1);
-        assertThat(repository.stockMovements.getFirst().movementType()).isEqualTo("redeem_consume");
+        assertThat(repository.stockMovements.getFirst().movementType()).isEqualTo("gift_claim_consume");
         String movementId = repository.stockMovements.getFirst().id();
 
         // 出品 deliver 事件回填 inventory_movement_id。

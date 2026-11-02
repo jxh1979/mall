@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -426,6 +426,22 @@ data class StaffDeviceIntegrityReportRequest(
   val integrityStatus: String? = null,
 )
 
+/** 第十八批 M 段第 116 条：服务端按可信终端下发的员工 App 功能码（GET /api/v1/terminals/staff-app-functions）。 */
+@Serializable
+data class StaffAppFunctionsResponse(
+  val terminalType: String? = null,
+  val functions: List<String> = emptyList(),
+)
+
+/** 第十八批 M 段第 116 条（PGM:747「……能做什么由后台按设备类型统一下发……」；BSM:936「员工安装私人手机 App 时生成并绑定一个该手机专属的设备标识……」）：
+ *  首页是否显示该功能。本机还没声明身份时只给建立身份的入口（员工设备凭证、平板点单 POS、一体机模式——第十八批 M 段 112-R2）；已声明身份按服务端下发的清单，
+ *  清单还没取到时全部显示（服务端仍按清单拒，PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）。 */
+fun homeShows(terminalType: String?, functions: Set<String>?, code: String): Boolean = when {
+  terminalType == null -> code == "staff_device" || code == "tablet_pos" || code == "kiosk_claim"
+  functions.isNullOrEmpty() -> true
+  else -> code in functions
+}
+
 @Serializable
 data class StaffDeviceCredentialRecord(
   val id: String = "",
@@ -552,6 +568,91 @@ data class MyWorkOrderRecord(
     userId != null && confirmerId == userId && assigneeId != userId && reporterConfirmedAt == null &&
       status in setOf("pending_acceptance", "accepted")
 }
+
+/** 第十八批 M 段第 111 条 111-R1（BSM:1466「我的工单：只看派给自己的工单和处理进度。」）：派给本人的商户服务工单（只看）。 */
+@Serializable
+data class MyMerchantWorkOrderRecord(
+  val id: String? = null,
+  val title: String? = null,
+  val workOrderType: String? = null,
+  val priority: String? = null,
+  val status: String? = null,
+  val dueAt: String? = null,
+)
+
+/** ENUM:264 商户服务工单状态七态。 */
+fun merchantWorkOrderStatusZh(status: String?): String = when (status) {
+  "created" -> "已提交"
+  "assigned" -> "已派单"
+  "processing" -> "处理中"
+  "pending_merchant" -> "待商户确认"
+  "resolved" -> "已处理待关闭"
+  "closed" -> "已关闭"
+  "cancelled" -> "已取消"
+  else -> status ?: "-"
+}
+
+/** 商户服务工单四类（第十八批 K 段第 93 条）。 */
+fun merchantWorkOrderTypeZh(type: String?): String = when (type) {
+  "repair" -> "报修"
+  "cleaning" -> "保洁"
+  "complaint" -> "投诉"
+  "service" -> "其他服务请求"
+  else -> type ?: "-"
+}
+
+// ── 第十八批 M 段第 112 条 112-R1（BSM:947「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」）：礼物（券）查券与核销 ──
+
+@Serializable
+data class VoucherRedeemPreviewRequest(val code: String)
+
+/** 查券结果：goodsQuantity＝店内实物券每张件数（要逐件扫的物品码个数），其他券为空；blockReason 为空＝可核销。 */
+@Serializable
+data class VoucherRedeemPreview(
+  val voucherInstanceId: String = "",
+  val name: String? = null,
+  val voucherKind: String? = null,
+  val goodsQuantity: Int? = null,
+  val status: String? = null,
+  val expiresAt: String? = null,
+  val blockReason: String? = null,
+)
+
+/** 券核销：code＝客人出示的券动态码；店内实物券带逐件扫的物品码（BSM:1197「出库须同时核验订单和物品码」）。 */
+@Serializable
+data class VoucherRedeemRequest(
+  val idempotencyKey: String,
+  val code: String,
+  val traceCodes: List<String>? = null,
+)
+
+@Serializable
+data class VoucherRedemption(
+  val id: String = "",
+  val voucherInstanceId: String = "",
+  val voucherKind: String? = null,
+)
+
+/** 券状态（与后台券台账页同词）。 */
+fun voucherStatusZh(status: String?): String = when (status) {
+  "issued" -> "已发放"
+  "redeemed" -> "已核销"
+  "expired" -> "已过期"
+  "revoked" -> "已作废"
+  else -> status ?: "-"
+}
+
+/** 查券不可核销的原因（同核销拒绝码）。 */
+fun voucherBlockReasonZh(reason: String?): String = when (reason) {
+  "VOUCHER_ALREADY_REDEEMED" -> "已核销"
+  "VOUCHER_EXPIRED" -> "已过期"
+  "VOUCHER_REVOKED" -> "已作废"
+  else -> reason ?: "-"
+}
+
+/** 逐件扫的物品码：按空格、逗号、换行拆开，去空白去重。 */
+fun scannedTraceCodes(raw: String): List<String> =
+  raw.split(Regex("[\\s,，]+")).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
 /** 我的工单「确认」（POST /review）与「退回返工」（POST /rework，note＝不通过原因，必填）。 */
 @Serializable

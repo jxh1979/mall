@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.time.Instant;
 import java.util.List;
@@ -30,6 +30,9 @@ public interface InventoryRepository {
     default List<InventoryTransferLineRecord> listTransferLinesByOrder(String orderId) { return java.util.List.of(); }
     default void saveTraceOwnershipHistory(InventoryTraceOwnershipHistoryRecord history) { }
     default int updateTraceCodeOwnerIfExists(String traceCode, String fromOwnerId, String ownerType, String ownerId, java.time.Instant now) { return 0; }
+    // 第十八批 M 段 112-R4（BSM:1201「买断时溯源码归属从原主体变更到接收主体」）：买断收货翻所有权，码的归属商户与登记物料随转为接收方及其所选物品（CAS 同上）。
+    default int transferTraceCodeOwnership(String traceCode, String fromOwnerId, String ownerType, String ownerId, String itemId,
+            java.time.Instant now) { return 0; }
     // FS-019 借用只转保管责任：所有权（owner）不动，只改当前保管主体与在借单（CAS：所有权须为 ownerId；所有权未登记的按借出方登记）。
     default int updateTraceCodeCustodianIfOwnedBy(String traceCode, String ownerId, String custodianType, String custodianId,
             String lendingOrderId, java.time.Instant now) { return 0; }
@@ -436,6 +439,21 @@ public interface InventoryRepository {
     /** 第十八批 C 段第 17 条：按 id 读库房。无库替身返回空。 */
     default Optional<WarehouseRecord> findWarehouseById(String warehouseId) {
         return Optional.empty();
+    }
+
+    /** 第十八批 M 段第 119 条 119-R1（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：库位建档；编号已存在返回 false。无库替身返回 false。 */
+    default boolean saveWarehouseLocation(WarehouseLocationRecord location) {
+        return false;
+    }
+
+    /** 第十八批 M 段第 119 条 119-R1：全部已建档库位。无库替身返回空。 */
+    default List<WarehouseLocationRecord> listWarehouseLocations() {
+        return List.of();
+    }
+
+    /** 第十八批 M 段第 119 条 119-R1：库位是否已建档在该库房下。无库替身返回 false。 */
+    default boolean isWarehouseLocation(String warehouseId, String locationId) {
+        return false;
     }
 
     /** OBS-13-02：项目内归属该商户（merchantId 为空＝平台方）的在用存酒库房。 */

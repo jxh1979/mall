@@ -1,9 +1,9 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { Alert, Button, Card, Empty, Input, List, Select, Space, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 
-import type { CustomerComplaint, CustomerProject, CustomerService } from "@complex/customer-core";
+import type { ComplaintStoreOption, CustomerComplaint, CustomerProject, CustomerService } from "@complex/customer-core";
 
 import { platform, type AudioRecording, type MediaKind } from "../platform";
 
@@ -19,11 +19,14 @@ const MEDIA_BUTTONS: Array<{ kind: MediaKind; label: string }> = [
 // 投诉与反馈（BSM「客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」）＋我的投诉（BSM「消费客人的投诉，由客户关怀部记录问题解决方案
 // 及客人反馈」；BSM「满意度在回访/验收时由提单方评分」）：只列本人提交的投诉；写了处理结论、尚未评过的才可评 1～5 分，同单只评一次。
 // 语音在 App 内现场录（与小程序同口径），录音中不可提交。客人端已暂停服务的综合体不列（PGM「关闭后菜单不可见或不可点」），所选综合体报给外壳
-// （请求带 X-Project-Id，后端按综合体拒绝）。
+// （请求带 X-Project-Id，后端按综合体拒绝）。第十八批 M 段第 111 条 111-R4（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部
+// 可以更正」）：「涉及门店」列所选综合体的在营商户，选填；门店加载失败不影响投诉。
 export function ComplaintsPage({ service, projectOpen = () => true, onProject }: { service: CustomerService;
   projectOpen?: (projectId: string) => boolean; onProject?: (projectId: string) => void }): React.ReactElement {
   const [projects, setProjects] = useState<CustomerProject[]>([]);
   const [projectId, setProjectId] = useState<string | undefined>();
+  const [stores, setStores] = useState<ComplaintStoreOption[]>([]);
+  const [storeId, setStoreId] = useState<string | undefined>();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -38,6 +41,9 @@ export function ComplaintsPage({ service, projectOpen = () => true, onProject }:
   const choose = (id: string) => {
     setProjectId(id);
     onProject?.(id);
+    setStoreId(undefined);
+    setStores([]);
+    service.listComplaintStores(id).then((rows) => setStores(rows ?? [])).catch(() => setStores([]));
   };
 
   const loadMine = useCallback(() => {
@@ -78,8 +84,10 @@ export function ComplaintsPage({ service, projectOpen = () => true, onProject }:
     setBusy(true);
     setError(null);
     try {
-      setSubmitted(await service.submitComplaint({ projectId, title: title.trim(), description: description.trim() || undefined, files }));
+      setSubmitted(await service.submitComplaint({ projectId, title: title.trim(), description: description.trim() || undefined,
+        ...(storeId ? { storeMerchantId: storeId } : {}), files }));
       setTitle("");
+      setStoreId(undefined);
       setDescription("");
       setFiles([]);
       loadMine();
@@ -112,6 +120,10 @@ export function ComplaintsPage({ service, projectOpen = () => true, onProject }:
           {projects.length > 1 ? (
             <Select aria-label="投诉所在综合体" value={projectId} onChange={choose} style={{ width: "100%" }}
               options={projects.map((item) => ({ value: item.projectId, label: item.projectName }))} />
+          ) : null}
+          {stores.length ? (
+            <Select aria-label="涉及门店（选填）" placeholder="涉及门店（选填）" allowClear value={storeId} onChange={setStoreId}
+              style={{ width: "100%" }} options={stores.map((item) => ({ value: item.merchantId, label: item.merchantName }))} />
           ) : null}
           <label htmlFor="complaint-title">投诉标题</label>
           <Input id="complaint-title" maxLength={100} value={title} onChange={(e) => setTitle(e.target.value)} />

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,7 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * 第十八批第 13 条（BSM 第 1597 行「结算金额出账……通知中写明金额、原因与异议截止日期……异议期自该账单在商户专区可查看之日的次日起算」）：
- * 普通内部结算往来到出账日（商户专区可查看）逐笔通知对方商户，异议截止日取往来固化值；未到出账日、停车抵免（另有出账短信）、对方非商户不发；
+ * 普通内部结算往来到出账日（商户专区可查看）逐笔通知对方商户，异议截止日取往来固化值；未到出账日、对方非商户不发；
  * 重跑不重发。操作员裁决第十八批第 2 条：通票赠饮应付不逐笔发，在门票分销出账短信里一并写明本期净额。
  */
 @SpringBootTest(properties = {
@@ -60,7 +60,6 @@ class MerchantSettlementStatementNoticeJobTests {
         LocalDate deadline = LocalDate.now(LocalZone.ID).plusDays(12);
         String statement = schedule("ticket_distribution", merchant, "payable", 5_000L, past, deadline);
         String future = schedule("ticket_distribution", merchant, "payable", 6_000L, Instant.now().plusSeconds(86_400), deadline);
-        String parking = schedule("parking_credit_cost", merchant, "receivable", 700L, past, deadline);
         String entity = schedule("ticket_distribution", "mss_entity_" + suffix, "payable", 800L, past, deadline);
         String drink1 = drink("payable", "v1");
         String drink2 = drink("payable", "v2");
@@ -84,8 +83,8 @@ class MerchantSettlementStatementNoticeJobTests {
             assertThat((String) r.get("reason")).contains("门票分销出账：应付商户").contains("另含本期通票赠饮应付 30.00 元");
         });
         assertThat(jdbc.queryForObject("SELECT count(*) FROM notification_send_log WHERE request_id LIKE 'mamt:%' AND (request_id LIKE ? "
-                        + "OR request_id LIKE ? OR request_id LIKE ? OR request_id LIKE ? OR request_id LIKE ? OR request_id LIKE ?)",
-                Integer.class, "%" + future, "%" + parking, "%" + entity, "%" + drink1, "%" + drink2, "%" + drinkReversal)).isZero();
+                        + "OR request_id LIKE ? OR request_id LIKE ? OR request_id LIKE ? OR request_id LIKE ?)",
+                Integer.class, "%" + future, "%" + entity, "%" + drink1, "%" + drink2, "%" + drinkReversal)).isZero();
     }
 
     /**

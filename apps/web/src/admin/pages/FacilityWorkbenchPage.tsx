@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -11,6 +11,8 @@ import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { ComplaintFollowupDialog } from "./ComplaintFollowupDialog";
+import { WorkOrderMaterialsPanel } from "./WorkOrderMaterialsPanel";
 import type { AdminPageProps, GovernanceProjectRow } from "../types";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { Tabs } from "antd";
@@ -27,6 +29,8 @@ type FacilityWorkOrderRow = {
   // HP-F02 双闸：主管／物业验收与提单方确认分别留存；confirmerId＝自动大型维修工单或员工手工建的关联设备报修单（裁决第 15 条）的提单确认承接人。
   source?: string | null; reporterType?: string | null; confirmerId?: string | null; verifierId?: string | null; verifiedAt?: string | null;
   reporterConfirmedAt?: string | null; reporterConfirmedBy?: string | null;
+  // 第十八批 M 段第 117 条：工单关联商户（用料面板「商户承担」默认选中）。
+  merchantId?: string | null;
 };
 // ROOT-03 clients-R8 客人投诉附件（后端 CustomerComplaintService.MediaView）。
 type CustomerMediaRow = { id: string; contentType: string; fileSize: number; createdAt: string };
@@ -158,6 +162,10 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [equipment, setEquipment] = React.useState<FacilityEquipmentRow[]>([]);
   const [maintenanceDue, setMaintenanceDue] = React.useState<FacilityEquipmentRow[]>([]);
   const [workOrders, setWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
+  // 第十八批 M 段第 111 条 111-R3：投诉行的客诉跟进弹窗（BSM:1385「客诉须经客户关怀部确认后方可视为形成闭环」）。
+  const [complaintFollowup, setComplaintFollowup] = React.useState<FacilityWorkOrderRow | null>(null);
+  // 第十八批 M 段第 117 条 117-R3：工单行「用料」面板（BSM:1380 用料出库、标明费用承担方、承担方争议）。
+  const [materialsRow, setMaterialsRow] = React.useState<FacilityWorkOrderRow | null>(null);
   const [overdueWorkOrders, setOverdueWorkOrders] = React.useState<FacilityWorkOrderRow[]>([]);
   // 批2 派生视图副资源容错：维保到期/逾期工单是 equipment/work-orders 的服务端派生视图，可单独降级。
   const [maintenanceDueNotice, setMaintenanceDueNotice] = React.useState<string | null>(null);
@@ -970,6 +978,8 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
                     if ((row.source === "equipment_alarm" || staffReported) && row.status !== "closed" && !row.reporterConfirmedAt) wo.push({ key: "confirmer", label: "指定确认人", permissions: WORK_ORDER, onClick: () => void designateConfirmer(row.id), testId: `facility-work-order-designate-confirmer-${row.id}` });
                     if (row.status !== "closed" && row.status !== "suspended") wo.push({ key: "suspend", label: "挂起", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "suspend"), testId: `facility-work-order-suspend-${row.id}` });
                     if (row.status === "suspended") wo.push({ key: "resume", label: "恢复", permissions: WORK_ORDER, onClick: () => void workOrderActionPost(row.id, "resume"), testId: `facility-work-order-resume-${row.id}` });
+                    if (row.workOrderType === "complaint") wo.push({ key: "complaint-followup", label: "客诉跟进", permissions: WORK_ORDER, onClick: () => setComplaintFollowup(row), testId: `facility-work-order-complaint-followup-${row.id}` });
+                    wo.push({ key: "materials", label: "用料", permissions: WORK_ORDER, onClick: () => setMaterialsRow(row), testId: `facility-work-order-materials-${row.id}` });
                     return <RowActions actions={wo} permissionsState={effectivePermissions} testId={`facility-work-order-actions-${row.id}`} />;
                   })()}
                 </td>
@@ -1210,6 +1220,18 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       />
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      {complaintFollowup ? (
+        <ComplaintFollowupDialog api={api} chain="facility" workOrderId={complaintFollowup.id} closed={complaintFollowup.status === "closed"}
+          onClose={() => setComplaintFollowup(null)} setActionResult={setActionResult} setGlobalError={setGlobalError} />
+      ) : null}
+      {materialsRow ? (
+        <WorkOrderMaterialsPanel api={api} basePath={`/api/v1/facility/work-orders/${encodeURIComponent(materialsRow.id)}`}
+          title={`用料 · ${materialsRow.code ?? materialsRow.id}`} canIssue={materialsRow.status === "processing"}
+          canMarkBearer={materialsRow.status !== "closed"}
+          canDispute={["pending_assign", "assigned", "processing", "pending_review", "pending_acceptance", "accepted"].includes(materialsRow.status)}
+          allowMerchantPick defaultMerchantId={materialsRow.merchantId} disputeHint="工单已挂起，待上级判定；判定后在工单行点「恢复」继续处理"
+          setActionResult={setActionResult} onChanged={() => void reload()} onClose={() => setMaterialsRow(null)} />
+      ) : null}
     </section>
   );
 }

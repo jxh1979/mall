@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -318,12 +318,18 @@ public class InventoryTransferFlowService {
         return move(o, "pending_receipt", complete ? "completed" : "discrepancy", trimToNull(r.operatorNote()));
     }
 
-    /** 收货仓库须为接收方本商户在用仓库（否则 400），仓库或库位盘点冻结 409；返回仓库所属项目。 */
+    /**
+     * 收货仓库须为接收方本商户在用仓库（否则 400），仓库或库位盘点冻结 409；返回仓库所属项目。
+     * 第十八批 M 段第 119 条 119-R1（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：收货库位须为该仓库下已建档的库位（否则 400）。
+     */
     private String requireReceiveWarehouse(InventoryTransferOrderRecord o, String warehouseId, String locationId) {
         Map<String, Object> warehouse = jdbc.queryForList("SELECT project_id,merchant_id,status FROM warehouses WHERE id=?", warehouseId)
                 .stream().findFirst().orElse(Map.of());
         if (!"active".equals(warehouse.get("status")) || !o.toOwnerId().equals(warehouse.get("merchant_id"))) {
             throw ApiException.badRequest("TRANSFER_RECEIVE_WAREHOUSE_INVALID", "收货仓库须为本门店在用仓库");
+        }
+        if (!repository.isWarehouseLocation(warehouseId, locationId)) {
+            throw ApiException.badRequest("TRANSFER_RECEIVE_WAREHOUSE_INVALID", "收货库位须为该仓库下已建档的库位");
         }
         if (repository.hasActiveStocktakeForWarehouse(warehouseId) || repository.hasActiveStocktakeForWarehouse(locationId)) {
             throw ApiException.conflict("INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED", "仓库正在盘点中，盘点结束前库存变动已冻结");
@@ -335,8 +341,9 @@ public class InventoryTransferFlowService {
      * 第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」「收货时扫码核对防调包」；ENUM:162「调拨」）：借调买断收货由接收方
      * 本商户账号办理（平台管理员除外，403 STORE_RECEIPT_ONLY）；物品档案按商户归属，接收方逐行选本商户物品（缺行、不存在或不属接收方 400），
      * 全部数量入接收方在用仓库库位、记调拨（transfer）入库流水，单价取建单锁定内部结算价。与翻码、应付同一事务。
+     * 第十八批 M 段 112-R4：返回随货溯源码→该行接收方所选物品，翻码时码的登记物料随转（BSM:1201）。
      */
-    void purchaseStockIn(InventoryTransferOrderRecord o, ReceiveTransferRequest r, Instant now) {
+    Map<String, String> purchaseStockIn(InventoryTransferOrderRecord o, ReceiveTransferRequest r, Instant now) {
         requireStoreMerchant(o);
         String warehouseId = requireText(r == null ? null : r.warehouseId(), "warehouse_id");
         String locationId = requireText(r.locationId(), "location_id");
@@ -354,9 +361,12 @@ public class InventoryTransferFlowService {
         }
         String actor = auth.currentActor().id();
         String receiptNo = "trp_" + Hashing.idempotencyCode(o.id());
+        Map<String, String> itemByCode = new LinkedHashMap<>();
         for (InventoryTransferLineRecord line : lines) {
             stockIn(o, line, itemByLine.get(line.id()), line.quantity(), warehouseId, locationId, projectId, receiptNo, actor, now, "transfer");
+            line.traceCodes().forEach(code -> itemByCode.put(code, itemByLine.get(line.id())));
         }
+        return itemByCode;
     }
 
     // ── 差异处理 ──

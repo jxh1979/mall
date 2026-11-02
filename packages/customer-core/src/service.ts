@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 // 客人端业务服务层（三端共用）：封装客人用到的真实端点（客人接口 customer 前缀等），接口以 docs/openapi/openapi-p0.yaml 为准。
 // 请求经注入的 CustomerApi 发出（各端自带 transport），本文件不依赖浏览器。
 
@@ -12,6 +12,7 @@ import type {
   BarInvitationPreview,
   BarTableBillItem,
   CustomerBarReservation,
+  ComplaintStoreOption,
   CustomerComplaint,
   CustomerConsent,
   CustomerSavedBottle,
@@ -498,11 +499,19 @@ export class CustomerService {
     return this.api.post<SavedBottleRenewal>(`/api/v1/customer/saved-bottles/${encodeURIComponent(savedBottleId)}/renew`, { smsCode });
   }
 
-  // clients-R8 投诉（文字＋照片、视频、语音，附件合计不超过 9 个，类型由服务端按扩展名判定）、我的投诉、满意度（1～5）。
-  submitComplaint(payload: { projectId: string; title: string; description?: string; files: CustomerUploadFile[] }): Promise<CustomerComplaint> {
+  // clients-R8 投诉（文字＋照片、视频、语音，附件合计不超过 9 个，类型由服务端按扩展名判定）、我的投诉、满意度（1～5）；
+  // 第十八批 M 段第 111 条 111-R4：涉及门店选填（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正」）。
+  submitComplaint(payload: { projectId: string; title: string; description?: string; storeMerchantId?: string;
+    files: CustomerUploadFile[] }): Promise<CustomerComplaint> {
     const fields: Record<string, string> = { projectId: payload.projectId, title: payload.title };
     if (payload.description) fields.description = payload.description;
+    if (payload.storeMerchantId) fields.storeMerchantId = payload.storeMerchantId;
     return this.api.postForm<CustomerComplaint>("/api/v1/customer/complaints", fields, payload.files.map(asFormFile));
+  }
+
+  // 111-R4：投诉表单「涉及门店」选项＝所选综合体的在营商户。
+  listComplaintStores(projectId: string): Promise<ComplaintStoreOption[]> {
+    return this.api.get<ComplaintStoreOption[]>(`/api/v1/customer/complaints/store-options?project_id=${encodeURIComponent(projectId)}`);
   }
 
   listMyComplaints(): Promise<CustomerComplaint[]> {

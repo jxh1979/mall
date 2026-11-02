@@ -11,10 +11,13 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.facility.WorkOrderMaterialService;
+import com.complex.platform.facility.dto.WorkOrderMaterialRequests;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.governance.PlatformRepository;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderActionRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderAssignRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderCancelRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseMethodRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
@@ -33,6 +36,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -76,6 +80,12 @@ public class MerchantServiceService {
     private static final Set<String> CLOSE_METHODS = Set.of("handler", "staff_acceptance", "merchant_confirm");
     // 102-R2：商户能确认关闭的状态＝ENUM:264「待商户确认、已处理待关闭」。
     private static final Set<String> MERCHANT_CONFIRM_STATUSES = Set.of("pending_merchant", "resolved");
+    // 第 111 条 111-R2（第十八批裁决 27）：派单前（已提交）商户自己取消；派单后、关闭前由客户关怀部取消。
+    private static final Set<String> MERCHANT_CANCEL_STATUSES = Set.of("created");
+    private static final Set<String> STAFF_CANCEL_STATUSES = Set.of("assigned", "processing", "pending_merchant", "resolved");
+    private static final String CLOSE_PERMISSION = "merchant.service_work_order.close";
+    // 第十八批 M 段第 117 条 117-R5：能登记用料的状态＝已派单、处理中、待商户确认（已处理待关闭之前）。
+    private static final Set<String> MATERIAL_STATUSES = Set.of("assigned", "processing", "pending_merchant");
     private static final Map<String, String> TYPE_NAMES =
             Map.of("repair", "报修", "cleaning", "保洁", "complaint", "投诉", "service", "其他服务请求");
     private static final Map<String, String> PRIORITY_NAMES = Map.of("low", "低", "medium", "中", "high", "高", "critical", "紧急");
@@ -97,6 +107,11 @@ public class MerchantServiceService {
 
     @Autowired(required = false)
     PlatformRepository platformRepository;
+
+    // 第十八批 M 段第 117 条 117-R5：工单用料与费用承担方（字段注入；单测直接 new 时为空＝跳过）；@Lazy 同设施工单（库存门面经要货流转成环）。
+    @Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    WorkOrderMaterialService materials;
 
     public MerchantServiceService(
             MerchantServiceRepository repository,
@@ -134,6 +149,21 @@ public class MerchantServiceService {
                 Map.of("count", records.size())
         );
         return new PageResponse<>(records, 1, DEFAULT_PAGE_LIMIT, records.size());
+    }
+
+    /** 第十八批 M 段第 111 条 111-R1（BSM:1466「我的工单：只看派给自己的工单和处理进度。」）：员工手机「我的工单」只读列出派给本人的商户服务工单。 */
+    public PageResponse<MerchantWorkOrderRecord> listAssignedToMe() {
+        List<MerchantWorkOrderRecord> records = repository.findWorkOrdersByOwner(authorizationService.currentActor().id(), 200);
+        auditEventService.recordSuccess(
+                "merchant_service.work_order.viewed",
+                PROCESS_PERMISSION,
+                BUSINESS_TYPE,
+                "all",
+                requestId(),
+                null,
+                Map.of("scope", "assigned_to_me", "count", records.size())
+        );
+        return new PageResponse<>(records, 1, 200, records.size());
     }
 
     @Transactional
@@ -236,6 +266,71 @@ public class MerchantServiceService {
                 },
                 () -> confirmByMerchantOnce(workOrderId, request)
         );
+    }
+
+    /**
+     * 第十八批 M 段第 111 条 111-R2（第十八批裁决 27「派单前商户自己取消」；ENUM:264「已取消（商户专区发起……）」）：还没派单（已提交）的单，
+     * 本商户账号填原因取消即为已取消；闸同 {@link #confirmByMerchant}（平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED，别的商户 403
+     * CROSS_MERCHANT_FORBIDDEN），在幂等之前。
+     */
+    @Transactional
+    public MerchantWorkOrderRecord cancelByMerchant(String id, MerchantWorkOrderCancelRequest request) {
+        String workOrderId = requireText(id, "id");
+        return executeWrite(
+                "cancelMerchantWorkOrder:" + workOrderId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                "merchant_service.work_order.cancel_failed",
+                "merchant.service_work_order.create",
+                workOrderId,
+                () -> {
+                    validateCancelRequest(request);
+                    MerchantWorkOrderRecord existing = findWorkOrder(workOrderId);
+                    rejectTerminal(existing);
+                    String merchantId = authorizationService.currentMerchantScope()
+                            .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "只有提单商户能取消未派单的工单"));
+                    if (!merchantId.equals(existing.merchantId())) {
+                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的工单");
+                    }
+                },
+                () -> cancelOnce(workOrderId, request, MERCHANT_CANCEL_STATUSES, "merchant.service_work_order.create",
+                        "只有已提交（未派单）的工单才能由商户取消；已派单的照常处理关单")
+        );
+    }
+
+    /**
+     * 111-R2（第十八批裁决 27「派单后，重复提或误提的由客户关怀部填原因取消」；BSM:1385「工单由客户关怀部负责处理」）：已派单、未关闭的单，
+     * 持关闭权限的员工填原因取消；闸同员工关单（{@link #ensureWorkOrderCanChange}），在幂等之前。
+     */
+    @Transactional
+    public MerchantWorkOrderRecord cancelByStaff(String id, MerchantWorkOrderCancelRequest request) {
+        String workOrderId = requireText(id, "id");
+        return executeWrite(
+                "staffCancelMerchantWorkOrder:" + workOrderId,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                "merchant_service.work_order.cancel_failed",
+                CLOSE_PERMISSION,
+                workOrderId,
+                () -> {
+                    validateCancelRequest(request);
+                    ensureWorkOrderCanChange(workOrderId, CLOSE_PERMISSION);
+                },
+                () -> cancelOnce(workOrderId, request, STAFF_CANCEL_STATUSES, CLOSE_PERMISSION,
+                        "只有已派单、未关闭的工单才能由客户关怀部取消；未派单的由商户自己取消")
+        );
+    }
+
+    /**
+     * 第十八批 M 段第 111 条 111-R3 客诉跟进的商户服务工单链闸＝员工关单的闸（BSM:1385「工单由客户关怀部负责处理」）：平台口径、持关闭权限、
+     * 该单商户的经营项目在关闭权限可触及范围内（平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN。
+     */
+    public MerchantWorkOrderRecord findForComplaintFollowup(String id) {
+        authorizationService.requirePlatformScope();
+        authorizationService.requirePermission(CLOSE_PERMISSION);
+        MerchantWorkOrderRecord order = findWorkOrder(id);
+        checkMerchantOwnership(order.merchantId(), CLOSE_PERMISSION);
+        return order;
     }
 
     /**
@@ -501,6 +596,9 @@ public class MerchantServiceService {
         if (targetStatus != null) {
             targetStatus = normalizeAllowed(targetStatus, "target_status", ACTION_TARGET_STATUSES);
             requireValidActionTransition(existing.status(), targetStatus);
+            if ("resolved".equals(targetStatus) && !"resolved".equals(existing.status())) {
+                requireMaterialsSettled(id); // 117-R5：用了库房物料须先标明承担方；承担方争议判定前不能转已处理待关闭（裁决 29）
+            }
             if ("resolved".equals(targetStatus) && !"resolved".equals(existing.status())
                     && "handler".equals(closeMethod(existing.workOrderType()))) {
                 // 102-R3：处理人完成即结束（BSM:1385「保洁等无争议类由处理人完成即结束」；报修、其他服务请求按裁决 26 配置），处理说明即处理结论
@@ -520,6 +618,7 @@ public class MerchantServiceService {
                 operatorNote,
                 evidenceIds(request.evidenceAttachmentIds())
         ));
+        postMaterialReceivable(saved); // 117-R5：处理人完成即结束的关单
         auditEventService.recordSuccess(
                 "merchant_service.work_order.action_added",
                 "merchant.service_work_order.process",
@@ -550,11 +649,13 @@ public class MerchantServiceService {
         } else if ("merchant_confirm".equals(closeMethod(existing.workOrderType()))) {
             throw ApiException.conflict("MERCHANT_CONFIRM_REQUIRED", "该类工单按后台配置须商户确认后关闭");
         }
+        requireMaterialsSettled(id); // 117-R5／裁决 29
         MerchantWorkOrderRecord closed = repository.saveWorkOrder(existing.close(
                 resolution,
                 request.satisfactionScore(),
                 Instant.now()
         ));
+        postMaterialReceivable(closed);
         repository.saveAction(action(
                 id,
                 "closed",
@@ -585,7 +686,9 @@ public class MerchantServiceService {
         if (!"merchant_confirm".equals(closeMethod(existing.workOrderType()))) {
             throw ApiException.conflict("MERCHANT_CONFIRM_NOT_APPLICABLE", "该类工单不由商户确认关闭");
         }
+        requireMaterialsSettled(id); // 117-R5／裁决 29
         MerchantWorkOrderRecord closed = repository.saveWorkOrder(existing.close(existing.resolution(), request.satisfactionScore(), Instant.now()));
+        postMaterialReceivable(closed);
         repository.saveAction(action(id, "closed", existing.status(), "closed", authorizationService.currentActor().id(), "商户确认已解决", List.of()));
         auditEventService.recordSuccess(
                 "merchant_service.work_order.merchant_confirmed",
@@ -598,6 +701,136 @@ public class MerchantServiceService {
                         : Map.of("status", closed.status(), "satisfaction_score", request.satisfactionScore())
         );
         return closed;
+    }
+
+    /** 111-R2：取消即为已取消（关闭时间不写），取消动作的操作人为当前账号、说明为原因。 */
+    private MerchantWorkOrderRecord cancelOnce(String id, MerchantWorkOrderCancelRequest request, Set<String> allowedStatuses,
+            String permissionCode, String stateMessage) {
+        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        rejectTerminal(existing);
+        if (!allowedStatuses.contains(existing.status())) {
+            throw ApiException.conflict("INVALID_STATE", stateMessage);
+        }
+        String reason = requireText(request.reason(), "reason");
+        MerchantWorkOrderRecord cancelled = repository.saveWorkOrder(existing.transitionTo("cancelled", Instant.now()));
+        repository.saveAction(action(id, "cancelled", existing.status(), "cancelled", authorizationService.currentActor().id(), reason, List.of()));
+        auditEventService.recordSuccess(
+                "merchant_service.work_order.cancelled",
+                permissionCode,
+                BUSINESS_TYPE,
+                cancelled.id(),
+                requestId(),
+                request.idempotencyKey(),
+                Map.of("status", cancelled.status(), "from_status", existing.status(), "reason", reason)
+        );
+        return cancelled;
+    }
+
+    // ================= 第十八批 M 段第 117 条 117-R5 工单用料与费用承担方 =================
+    // BSM:1372「商户自己在商户专区报的单，按枚举速查表「商户服务工单状态」那条的状态走」；BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本，
+    // 同时在工单上标明费用承担方……商户自有设施、以及因商户责任导致损坏的用料由该商户承担，并自动生成一笔应收进入其费用账单。承担方有争议的，
+    // 工单挂起转上级判定，判定结果与依据留痕后才能结案。」；第十八批裁决 29「不加状态，停在原状态」：有争议时单子停在原状态转上级判定，判定前不能转
+    // 「已处理待关闭」、不能关闭；判定结果与依据留痕后照常往下走（复用 117-R2 的审批策略与判定回写）。只给平台员工（商户账号不登记库房出库），
+    // 闸同处理（持处理码、该单商户的经营项目可触及），在幂等之前；商户承担的商户就是提单商户。
+
+    /** 117-R5：用料面板——用料明细与合计、承担方、争议记录、工单项目的平台库房余额行。 */
+    public WorkOrderMaterialService.Materials materials(String id) {
+        return materialView(materialOrder(id));
+    }
+
+    /** 117-R5：已派单、处理中、待商户确认的工单登记用料＝从所选库位出库一次，按当前平均进货价计成本、挂本工单。 */
+    @Transactional
+    public WorkOrderMaterialService.Materials issueMaterial(String id, WorkOrderMaterialRequests.Issue request) {
+        String key = request == null ? null : request.idempotencyKey();
+        return materialWrite("merchantWorkOrderMaterial:", id, key, request, "merchant_service.work_order.material_issue_failed", () -> {
+            MerchantWorkOrderRecord order = findWorkOrder(id);
+            if (!MATERIAL_STATUSES.contains(order.status())) {
+                throw ApiException.conflict("INVALID_STATE", "只有已派单、处理中或待商户确认的工单才能登记用料");
+            }
+            var movement = materials.issue(BUSINESS_TYPE, id, request.locationId(), request.itemId(), request.quantity(), key);
+            auditEventService.recordSuccess("merchant_service.work_order.material_issued", PROCESS_PERMISSION, BUSINESS_TYPE, id, requestId(), key,
+                    Map.of("item_id", movement.itemId(), "location_id", movement.sourceLocationId(), "quantity", movement.quantity(),
+                            "total_cost_cent", Objects.toString(movement.totalCostCent(), "")));
+            return materialView(order);
+        });
+    }
+
+    /** 117-R5：标明费用承担方（物业承担／商户承担＝提单商户）；已关闭或已取消的不能改，承担方争议待判定时不能改。 */
+    @Transactional
+    public WorkOrderMaterialService.Materials markCostBearer(String id, WorkOrderMaterialRequests.Bearer request) {
+        String key = request == null ? null : request.idempotencyKey();
+        return materialWrite("merchantWorkOrderCostBearer:", id, key, request, "merchant_service.work_order.cost_bearer_mark_failed", () -> {
+            MerchantWorkOrderRecord order = findWorkOrder(id);
+            rejectTerminal(order);
+            materials.requireNoPendingDispute(BUSINESS_TYPE, id);
+            materials.markBearer(BUSINESS_TYPE, id, request.costBearer(), order.merchantId());
+            WorkOrderMaterialService.Materials view = materialView(order);
+            auditEventService.recordSuccess("merchant_service.work_order.cost_bearer_marked", PROCESS_PERMISSION, BUSINESS_TYPE, id, requestId(), key,
+                    Map.of("cost_bearer", view.bearer().costBearer()));
+            return view;
+        });
+    }
+
+    /**
+     * 117-R5（第十八批裁决 29）：承担方有争议的，单子停在原状态转提出人的直接上级（或其指定的最终审批人）在审批链判定，审批意见即判定依据；
+     * 须已标承担方、原因必填；判定前不能转已处理待关闭、不能关闭、不能改承担方、不能再提。
+     */
+    @Transactional
+    public WorkOrderMaterialService.Materials disputeBearer(String id, WorkOrderMaterialRequests.Dispute request) {
+        String key = request == null ? null : request.idempotencyKey();
+        return materialWrite("merchantWorkOrderBearerDispute:", id, key, request, "merchant_service.work_order.bearer_dispute_failed", () -> {
+            MerchantWorkOrderRecord order = findWorkOrder(id);
+            rejectTerminal(order);
+            materials.requireNoPendingDispute(BUSINESS_TYPE, id);
+            WorkOrderMaterialService.Dispute dispute = materials.openDispute(BUSINESS_TYPE, id, "商户服务工单 " + id, request.claimedCostBearer(),
+                    order.merchantId(), request.reason(), request.finalApproverId(), key);
+            auditEventService.recordSuccess("merchant_service.work_order.bearer_disputed", PROCESS_PERMISSION, BUSINESS_TYPE, id, requestId(), key,
+                    Map.of("review_id", dispute.reviewId(), "from_cost_bearer", dispute.fromCostBearer(),
+                            "claimed_cost_bearer", dispute.claimedCostBearer()));
+            return materialView(order);
+        });
+    }
+
+    private WorkOrderMaterialService.Materials materialView(MerchantWorkOrderRecord order) {
+        return materials.view(BUSINESS_TYPE, order.id(), materials.merchantServiceProjectId(order.id()));
+    }
+
+    /** 117-R5 闸：平台口径（商户账号不登记库房出库），该单商户的经营项目在处理码可触及范围内。 */
+    private MerchantWorkOrderRecord materialOrder(String id) {
+        authorizationService.requirePlatformScope();
+        MerchantWorkOrderRecord order = findWorkOrder(requireText(id, "id"));
+        checkMerchantOwnership(order.merchantId(), PROCESS_PERMISSION);
+        return order;
+    }
+
+    private WorkOrderMaterialService.Materials materialWrite(String operation, String id, String key, Object request, String failureEvent,
+            Supplier<WorkOrderMaterialService.Materials> action) {
+        try {
+            if (request == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+            }
+            materialOrder(id); // 范围闸在幂等之前
+            return idempotencyService.execute(operation + id, key, request, action, WorkOrderMaterialService.Materials.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure(failureEvent, PROCESS_PERMISSION, BUSINESS_TYPE, id, requestId(), key, errorCode(exception));
+            throw exception;
+        }
+    }
+
+    /** 117-R5：转已处理待关闭与关闭前——用了库房物料须先标明承担方；承担方争议待上级判定时不能转、不能关（裁决 29）。 */
+    private void requireMaterialsSettled(String id) {
+        if (materials != null) {
+            materials.requireBearerIfMaterials(BUSINESS_TYPE, id);
+            materials.requireNoPendingDispute(BUSINESS_TYPE, id);
+        }
+    }
+
+    /** 117-R5：本次转为关闭时按最终承担方给提单商户生成一笔应收（物业承担不生成）。 */
+    private void postMaterialReceivable(MerchantWorkOrderRecord saved) {
+        if (materials != null && "closed".equals(saved.status())) {
+            materials.postReceivableOnClose(BUSINESS_TYPE, saved.id(), "工单用料费（商户服务工单 " + saved.id() + "）",
+                    materials.merchantServiceProjectId(saved.id()));
+        }
     }
 
     // ================= 第十八批 I 段 77-R3 处理时限（工单类型×优先级） =================
@@ -835,6 +1068,14 @@ public class MerchantServiceService {
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.resolution(), "resolution");
         validateSatisfactionScore(request.satisfactionScore());
+    }
+
+    private void validateCancelRequest(MerchantWorkOrderCancelRequest request) {
+        if (request == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
+        }
+        requireText(request.idempotencyKey(), "idempotency_key");
+        requireText(request.reason(), "reason");
     }
 
     private MerchantWorkOrderActionRecord action(

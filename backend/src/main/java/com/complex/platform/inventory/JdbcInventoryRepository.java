@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -2282,6 +2282,30 @@ class JdbcInventoryRepository implements InventoryRepository {
                 """, Map.of("id", warehouseId), rowMapper::mapWarehouse).stream().findFirst();
     }
 
+    // 第十八批 M 段第 119 条 119-R1（BSM:1936）：库位主数据；编号全平台唯一，重复编号不覆盖、返回 false。
+    @Override
+    public boolean saveWarehouseLocation(WarehouseLocationRecord location) {
+        return jdbcTemplate.update("""
+                INSERT INTO warehouse_locations (id, warehouse_id, created_at) VALUES (:id, :warehouse_id, :created_at)
+                ON CONFLICT (id) DO NOTHING
+                """, new MapSqlParameterSource().addValue("id", location.id()).addValue("warehouse_id", location.warehouseId())
+                .addValue("created_at", offset(location.createdAt()))) == 1;
+    }
+
+    @Override
+    public List<WarehouseLocationRecord> listWarehouseLocations() {
+        return jdbcTemplate.query("SELECT id, warehouse_id, created_at FROM warehouse_locations ORDER BY warehouse_id, id",
+                (rs, rowNum) -> new WarehouseLocationRecord(rs.getString("id"), rs.getString("warehouse_id"),
+                        rs.getTimestamp("created_at").toInstant()));
+    }
+
+    @Override
+    public boolean isWarehouseLocation(String warehouseId, String locationId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM warehouse_locations WHERE id = :id AND warehouse_id = :warehouse_id)",
+                new MapSqlParameterSource().addValue("id", locationId).addValue("warehouse_id", warehouseId), Boolean.class));
+    }
+
     @Override
     public List<WarehouseRecord> listWarehouses() {
         return jdbcTemplate.query("""
@@ -2956,6 +2980,15 @@ class JdbcInventoryRepository implements InventoryRepository {
                 UPDATE inventory_trace_codes SET owner_type = :ot, owner_id = :oid, updated_at = :now
                  WHERE trace_code = :tc AND (owner_id = :fromId OR owner_id IS NULL)
                 """, new MapSqlParameterSource().addValue("ot", ownerType).addValue("oid", ownerId)
+                .addValue("now", offset(now)).addValue("tc", traceCode).addValue("fromId", fromOwnerId));
+    }
+
+    @Override
+    public int transferTraceCodeOwnership(String traceCode, String fromOwnerId, String ownerType, String ownerId, String itemId, Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE inventory_trace_codes SET owner_type = :ot, owner_id = :oid, merchant_id = :oid, item_id = :item, updated_at = :now
+                 WHERE trace_code = :tc AND (owner_id = :fromId OR owner_id IS NULL)
+                """, new MapSqlParameterSource().addValue("ot", ownerType).addValue("oid", ownerId).addValue("item", itemId)
                 .addValue("now", offset(now)).addValue("tc", traceCode).addValue("fromId", fromOwnerId));
     }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -448,6 +448,7 @@ test.describe("batch05 procurement and business day browser acceptance", () => {
       projects: [{ id: "complex-b05", name: "本综合体" }], suppliers: [{ id: "supplier-b05", supplier_name: "供应商" }],
       inventory_items: [{ id: "item_A_01", item_name: "瓶装饮品", unit: "瓶" }],
       warehouses: [{ id: "warehouse-b05", name: "本综合体仓库", project_id: "complex-b05", status: "active" }],
+      locations: [{ id: "location-b05", warehouse_id: "warehouse-b05" }],
       entities: [], merchants: [], contracts: [],
     } } }));
     await page.route("**/api/v1/inventory/purchase-requests**", async route => {
@@ -471,10 +472,12 @@ test.describe("batch05 procurement and business day browser acceptance", () => {
     await page.getByRole("button", { name: "登记本次验收", exact: true }).click();
     for (const [label, value] of [
       ["本次实到数量", "20"], ["本次合格接收数量", "18"], ["本次拒收数量", "2"],
-      ["实际到货单价（分）", "125"], ["实际库位编号", "location-b05"],
+      ["实际到货单价（分）", "125"],
       ["实际验收时间（当前设备时区）", "2026-01-11T10:00"], ["验收说明", "两瓶破损拒收"],
     ] as const) await page.getByLabel(label, { exact: true }).fill(value);
     await page.getByLabel("接收仓库", { exact: true }).selectOption("warehouse-b05");
+    // 第十八批 M 段第 119 条 119-R2（BSM:1936）：实际库位编号只能选所选仓库下已建档的库位。
+    await page.getByLabel("实际库位编号", { exact: true }).selectOption("location-b05");
     await page.getByLabel("本次真实凭证", { exact: true }).setInputFiles({
       name: "收货凭证.txt", mimeType: "text/plain", buffer: Buffer.from("实际收货凭证字节", "utf8"),
     });

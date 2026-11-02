@@ -16,13 +16,15 @@ const WO_CREATE = ["merchant.service_work_order.create"];
 
 const TEXT = {
   title: "我的工单",
-  description: "提交本商户的报修 / 保洁 / 投诉 / 其他服务请求工单并跟踪进展;派单与处理由平台侧闭环,本页只见本商户工单。投诉（以及平台配成须商户确认的报修、其他服务请求）到待商户确认或已处理待关闭时，点「确认已解决」即关闭，可同时打满意度。",
+  description: "提交本商户的报修 / 保洁 / 投诉 / 其他服务请求工单并跟踪进展;派单与处理由平台侧闭环,本页只见本商户工单。投诉（以及平台配成须商户确认的报修、其他服务请求）到待商户确认或已处理待关闭时，点「确认已解决」即关闭，可同时打满意度。还没派单（已提交）的单可以填原因取消；已派单的照常处理。",
   loadFailed: "工单读取失败",
   actionFailed: "工单提交失败",
   titleRequired: "提交工单必须填写标题。",
   descriptionRequired: "提交工单必须填写问题描述。",
   submit: "提交工单",
   confirm: "确认已解决",
+  cancel: "取消",
+  cancelReasonRequired: "取消工单必须填写原因。",
   focusClear: "清除筛选，返回全部",
 };
 
@@ -98,6 +100,9 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   const [closeMethods, setCloseMethods] = React.useState<Record<string, string>>({});
   const [confirmTarget, setConfirmTarget] = React.useState<MerchantWorkOrderRow | null>(null);
   const [confirmScore, setConfirmScore] = React.useState("");
+  // 第 111 条 111-R2（第十八批裁决 27「派单前商户自己取消」）：已提交的单填原因取消。
+  const [cancelTarget, setCancelTarget] = React.useState<MerchantWorkOrderRow | null>(null);
+  const [cancelReason, setCancelReason] = React.useState("");
 
   function openWorkOrderDetail(row: MerchantWorkOrderRow) {
     setDetail({
@@ -200,6 +205,14 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
     if (ok) setConfirmTarget(null);
   }
 
+  async function cancelWorkOrder() {
+    if (!cancelTarget) return;
+    const request = { idempotencyKey: nextKey("merchant-zone-work-order-cancel"), reason: cancelReason.trim() };
+    const ok = await runAction("merchant_zone_work_order_cancelled", request,
+      () => api.post(`/api/v1/merchant-service/work-orders/${cancelTarget.id}/cancel`, request));
+    if (ok) setCancelTarget(null);
+  }
+
   const openCount = rows.filter(nonTerminal).length;
   // 聚焦时按 KPI 子集收窄再分页；非聚焦=全量。
   const baseRows = kpiFocus?.table === "open" ? rows.filter(nonTerminal) : rows;
@@ -208,7 +221,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   return (
     <section data-testid="merchant-zone-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_service.work_order.viewed / merchant_service.work_order.created / merchant_service.work_order.merchant_confirmed" />
+      <AuditTrailHint event="merchant_service.work_order.viewed / merchant_service.work_order.created / merchant_service.work_order.merchant_confirmed / merchant_service.work_order.cancelled" />
       <div className="admin-form-row" data-testid="merchant-zone-work-order-form">
         <PermissionButton
           permissionsState={effectivePermissions}
@@ -252,6 +265,10 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
                     <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid={`merchant-zone-work-order-confirm-${row.id}`}
                       disabled={busyAction !== ""} onClick={() => { setFormError(""); setConfirmScore(""); setConfirmTarget(row); }}>{TEXT.confirm}</PermissionButton>
                   ) : null}
+                  {row.status === "created" ? (
+                    <PermissionButton permissionsState={effectivePermissions} permissions={WO_CREATE} data-testid={`merchant-zone-work-order-cancel-${row.id}`}
+                      disabled={busyAction !== ""} onClick={() => { setFormError(""); setCancelReason(""); setCancelTarget(row); }}>{TEXT.cancel}</PermissionButton>
+                  ) : null}
                   <button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={() => openWorkOrderDetail(row)}>查看详情</button></td></tr>
               ))}
             </tbody>
@@ -276,6 +293,21 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
           <option value="">不评分</option>
           {["5", "4", "3", "2", "1"].map((score) => <option key={score} value={score}>{score} 分</option>)}
         </select></label>
+      </FormModal>
+      <FormModal
+        open={cancelTarget !== null}
+        title="取消工单"
+        description={`取消「${cancelTarget?.title ?? cancelTarget?.id ?? ""}」后工单即为已取消，不再派单处理。`}
+        testId="merchant-zone-work-order-cancel-form"
+        submitTestId="merchant-zone-work-order-cancel-submit"
+        submitLabel="确认取消"
+        submitting={busyAction === "merchant_zone_work_order_cancelled"}
+        error={formError || undefined}
+        validate={() => (cancelReason.trim() ? null : TEXT.cancelReasonRequired)}
+        onClose={() => setCancelTarget(null)}
+        onSubmit={() => void cancelWorkOrder()}
+      >
+        <label>取消原因<input data-testid="merchant-zone-work-order-cancel-reason" value={cancelReason} placeholder="如：提错了、重复提单、问题已自行解决" onChange={(event) => setCancelReason(event.target.value)} /></label>
       </FormModal>
       <GuidedFlowModal
         open={createOpen}

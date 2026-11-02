@@ -1,7 +1,9 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
 import java.net.URI
 import java.net.http.HttpRequest
 import kotlinx.serialization.encodeToString
@@ -80,5 +82,114 @@ class TerminalApiClientHeadersTest {
     ).jsonObject
     assertEquals("staff_1", json["staff_id"]?.jsonPrimitive?.content)
     assertEquals("staff_work_phone", json["terminal_type"]?.jsonPrimitive?.content)
+  }
+
+  // ── 第十八批 M 段第 108 条（PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限、商户范围和设备状态。」；
+  //    PGM:906「员工注册审批、设备绑定、换机解绑重绑。」）：未绑定的手机发绑定、登记签名公钥、私人手机凭证绑定三条请求时，
+  //    按所绑类型声明终端头（其他请求未绑定时照旧不发，见 unboundClientDeclaresNoTerminalTypeAndNoDeviceHeaders）。 ──
+
+  /** 本机 HttpServer 收下客户端真实发出的请求：路径、终端头、设备头、请求体。客户端未绑定（没有终端类型与设备号），只有登录令牌。 */
+  private fun captured(response: String, call: (TerminalApiClient) -> Unit): Map<String, String?> {
+    val got = mutableMapOf<String, String?>()
+    val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    server.createContext("/") { exchange ->
+      got["path"] = exchange.requestURI.path
+      got["type"] = exchange.requestHeaders.getFirst("X-Terminal-Type")
+      got["device"] = exchange.requestHeaders.getFirst("X-Device-Id")
+      got["body"] = exchange.requestBody.readBytes().toString(Charsets.UTF_8)
+      val bytes = response.toByteArray(Charsets.UTF_8)
+      exchange.sendResponseHeaders(200, bytes.size.toLong()); exchange.responseBody.use { it.write(bytes) }
+    }
+    server.start()
+    try {
+      call(TerminalApiClient("http://127.0.0.1:${server.address.port}").apply { accessToken = "admin" })
+    } finally { server.stop(0) }
+    return got
+  }
+
+  private fun bodyOf(got: Map<String, String?>) = api.json.parseToJsonElement(got["body"]!!).jsonObject
+
+  @Test
+  fun unboundBindDeviceDeclaresTheBoundTerminalType() {
+    val phone = captured("""{"code":"OK","data":{"id":"td1","status":"bound"}}""") {
+      it.bindDevice(BindDeviceRequest(deviceId = "dev-1", staffId = "sp_1", idempotencyKey = "b1"))
+    }
+    assertEquals("/api/v1/terminals/devices/bind", phone["path"])
+    assertEquals("staff_work_phone", phone["type"])
+    assertNull(phone["device"])
+    assertEquals("sp_1", bodyOf(phone)["staff_id"]?.jsonPrimitive?.content)
+    assertEquals("staff_work_phone", bodyOf(phone)["terminal_type"]?.jsonPrimitive?.content)
+
+    val tablet = captured("""{"code":"OK","data":{"id":"td2","status":"bound"}}""") {
+      it.bindDevice(BindDeviceRequest(deviceId = "pos-1", terminalType = "tablet", idempotencyKey = "b2"))
+    }
+    assertEquals("tablet", tablet["type"])
+    assertNull(tablet["device"])
+  }
+
+  @Test
+  fun unboundSigningKeyRegistrationDeclaresTheBoundTerminalType() {
+    val got = captured("""{"code":"OK","data":{"status":"registered"}}""") {
+      it.registerDeviceSigningKey("dev-1", "PUB", "k1", "staff_work_phone")
+    }
+    assertEquals("/api/v1/terminals/devices/dev-1/signing-key", got["path"])
+    assertEquals("staff_work_phone", got["type"])
+    assertNull(got["device"])
+    assertEquals(setOf("public_key", "idempotency_key"), bodyOf(got).keys)
+    assertEquals("PUB", bodyOf(got)["public_key"]?.jsonPrimitive?.content)
+    assertEquals("k1", bodyOf(got)["idempotency_key"]?.jsonPrimitive?.content)
+  }
+
+  @Test
+  fun unboundStaffDeviceCredentialBindDeclaresPrivatePhone() {
+    val got = captured("""{"code":"OK","data":{"id":"c1","bind_status":"pending_review"}}""") {
+      it.bindStaffDeviceCredential(StaffDeviceBindRequest(idempotencyKey = "c1", staffProfileId = "sp_1",
+        devicePublicKey = "PUB", deviceFingerprintHash = "fp1"))
+    }
+    assertEquals("/api/v1/staff/device-credentials", got["path"])
+    assertEquals(STAFF_PRIVATE_PHONE, got["type"])
+    assertNull(got["device"])
+    val body = bodyOf(got)
+    assertEquals("c1", body["idempotency_key"]?.jsonPrimitive?.content)
+    assertEquals("sp_1", body["staff_profile_id"]?.jsonPrimitive?.content)
+    assertEquals("PUB", body["device_public_key"]?.jsonPrimitive?.content)
+    assertEquals("fp1", body["device_fingerprint_hash"]?.jsonPrimitive?.content)
+  }
+
+  /** 第十八批 M 段第 116 条 116-R3：已声明身份的本机（工作手机）绑定员工设备凭证，照原类型发。 */
+  @Test
+  fun declaredClientStaffDeviceCredentialBindKeepsItsTerminalType() {
+    val got = captured("""{"code":"OK","data":{"id":"c2","bind_status":"pending_review"}}""") {
+      it.terminalType = "staff_work_phone"
+      it.bindStaffDeviceCredential(StaffDeviceBindRequest(idempotencyKey = "c2", staffProfileId = "sp_1",
+        devicePublicKey = "PUB", deviceFingerprintHash = "fp2"))
+    }
+    assertEquals("/api/v1/staff/device-credentials", got["path"])
+    assertEquals("staff_work_phone", got["type"])
+  }
+
+  /** 第十八批 M 段第 112 条 112-R1：工作手机身份下查券与核销带工作手机终端头与本机设备号。 */
+  @Test
+  fun workPhoneVoucherCallsDeclareWorkPhone() {
+    for (call in listOf<(TerminalApiClient) -> Unit>({ it.previewVoucherRedeem("vrc_1") },
+        { it.redeemVoucher(VoucherRedeemRequest("k1", "vrc_1")) })) {
+      val got = captured("""{"code":"OK","data":{}}""") {
+        it.terminalType = "staff_work_phone"; it.deviceId = "dev-1"; it.deviceSigner = { "sig" }; call(it)
+      }
+      assertEquals("staff_work_phone", got["type"])
+      assertEquals("dev-1", got["device"])
+    }
+  }
+
+  /** 第十八批 M 段第 112 条 112-R2：一体机身份下领取请求带 kiosk 终端头与本机设备号。 */
+  @Test
+  fun kioskClaimCallsDeclareKiosk() {
+    val got = captured("""{"code":"OK","data":{}}""") {
+      it.terminalType = "kiosk"; it.deviceId = "kiosk-1"; it.deviceSigner = { "sig" }
+      it.verify(kioskEntitlementRequest("ENT-1", "dev_kiosk_1", "space_1", "k1", "usr_1"))
+    }
+    assertEquals("/api/v1/ticketing/verifications", got["path"])
+    assertEquals("kiosk", got["type"])
+    assertEquals("kiosk-1", got["device"])
   }
 }

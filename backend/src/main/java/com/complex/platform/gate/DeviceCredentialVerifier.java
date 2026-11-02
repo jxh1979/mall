@@ -3,7 +3,7 @@ package com.complex.platform.gate;
 import com.complex.platform.auth.AuthCookies;
 import com.complex.platform.auth.AuthService;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -77,6 +77,16 @@ import org.springframework.web.util.WebUtils;
  * 带终端头的请求，除设备绑定型外一律按 {@code web} 判总开关、模块开关与灰度，改报商户网页门户、商户手机应用、经销商门户、移动管理端、
  * 客人端都一样（与后台网页无商户归属报 web 同口径）；不带终端头的维持未识别终端。
  *
+ * <p>第十八批 M 段第 109 条（PGM:745「……Web 前端（业务人员，客人无网页端）……商户网页门户……」；BSM:1879-1881「商户侧页面｜餐饮、零售、酒吧等商户｜
+ * ……处理本商户经营、供应/库存、对账、结算、员工和看板……」）：外包账号不论挂不挂商户，同上一律按 {@code web} 判（外包工作台是 Web 前端的模块）。
+ *
+ * <p>第十八批 M 段第 115 条（BSM:940「同一账号允许在多台设备、多个端同时登录。」；PGM:906「员工注册审批、设备绑定、换机解绑重绑。」；
+ * PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：设备绑定型的登录、设备绑定、登记签名公钥、私人手机凭证绑定四条启动请求，
+ * 无设备证明在 enforce 下也放行并留痕 {@code bootstrap_without_credential}。理由：登录时没有员工主体，工作手机与私人手机的验签钥按当前员工解析
+ * （{@link #resolveSigningKey}），客户端签了也验不出；设备绑定、登记签名公钥、私人手机凭证绑定时本机公钥还没登记或还没生效——这四条发生在
+ * 设备证明建立之前，与 web 登录不要求 Cookie 同口径；四条各有自己的校验（口令；terminal.device.bind 权限与项目范围；staff.device.bind
+ * 只许本人档案、换机须复核）。只放行无证明：坏签名、过期时间戳、设备未绑定、类型不符、归属不符照旧拒；其他设备绑定型写请求照旧要求验签。
+ *
  * <p>分级强制 {@code off|grace|enforce}（默认 grace=生产安全态）。读请求不因缺签名被拒。
  * <b>实际翻 enforce 依赖客户端实现签名 + 登记密钥（客户端侧工作，本 PR 不含）；本 PR 让服务端 ready-to-enforce。</b>
  */
@@ -100,6 +110,11 @@ public class DeviceCredentialVerifier {
     private static final java.util.regex.Pattern CUSTOMER_SCAN_ORDER_PATH =
             java.util.regex.Pattern.compile("/api/v1/customer/bar-tables/[^/]+/scan-orders(/[^/]+/confirm)?");
     static final Set<String> CUSTOMER_TERMINALS = Set.of("app", "miniapp");
+    /** 第十八批 M 段第 115 条：设备证明建立之前的启动请求（另含登录 {@link #WEB_LOGIN_PATH}），只认整串。 */
+    private static final String DEVICE_BIND_PATH = "/api/v1/terminals/devices/bind";
+    private static final String STAFF_DEVICE_CREDENTIAL_PATH = "/api/v1/staff/device-credentials";
+    private static final java.util.regex.Pattern DEVICE_SIGNING_KEY_PATH =
+            java.util.regex.Pattern.compile("/api/v1/terminals/devices/[^/]+/signing-key");
     private static final String EVENT = "terminal.device_credential";
     /** 哨兵：⑤ deviceId 与所用密钥归属不符（内部返回，非真实密钥）。 */
     private static final String INVALID_OWNER = " OWNER_MISMATCH";
@@ -221,9 +236,10 @@ public class DeviceCredentialVerifier {
         AccessActor actor = terminalType != null && DEVICE_BOUND_TYPES.contains(terminalType) ? null : currentActorQuietly();
         if (actor != null && AuthService.merchantAppAccount(actor.accountType(), actor.merchantId())) {
             terminalType = MERCHANT_PORTAL;
-        } else if (actor != null && terminalType != null && (actor.merchantId() == null || actor.merchantId().isBlank())
+        } else if (actor != null && terminalType != null
+                && (actor.merchantId() == null || actor.merchantId().isBlank() || "outsourced_vendor".equals(actor.accountType()))
                 && !"dealer".equals(actor.accountType()) && !"customer".equals(actor.accountType())) {
-            // 第 100 条 100-R2：无商户归属的员工账号带终端头的非设备绑定型请求按 Web 前端判。
+            // 第 100 条 100-R2：无商户归属的员工账号带终端头的非设备绑定型请求按 Web 前端判；第 109 条：外包账号挂了商户也一样。
             terminalType = WEB;
         }
 
@@ -241,6 +257,11 @@ public class DeviceCredentialVerifier {
                     throw unreachable();
                 case NO_PROOF:
                 default:
+                    // 第十八批 M 段第 115 条：登录、设备绑定、登记签名公钥、私人手机凭证绑定发生在设备证明建立之前，无证明也放行并留痕。
+                    if (write && deviceBootstrap(request.getRequestURI())) {
+                        audit(terminalType, deviceId, "bootstrap_without_credential", "success");
+                        return new TerminalIdentityHolder.VerifiedTerminal(terminalType, deviceId, false);
+                    }
                     if (mode == Mode.ENFORCE && write) {
                         reject(terminalType, deviceId, "credential_required");
                         throw unreachable();
@@ -404,6 +425,11 @@ public class DeviceCredentialVerifier {
         } catch (RuntimeException unauthenticated) {
             return null;
         }
+    }
+
+    private static boolean deviceBootstrap(String uri) {
+        return uri != null && (WEB_LOGIN_PATH.equals(uri) || DEVICE_BIND_PATH.equals(uri)
+                || STAFF_DEVICE_CREDENTIAL_PATH.equals(uri) || DEVICE_SIGNING_KEY_PATH.matcher(uri).matches());
     }
 
     private static boolean hasBearer(HttpServletRequest request) {

@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -209,6 +209,21 @@ public class TerminalDeviceController {
         // 避免"菜单按自报 web 显示、接口按真实 kiosk 拒绝"的错位。
         return ApiResponse.ok(service.listDisabledSwitchesFor(
                 com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(terminalType)));
+    }
+
+    /**
+     * 第十八批 M 段第 116 条（PGM:747「……能做什么由后台按设备类型统一下发……」）：员工 App 按服务端可信终端取功能清单。
+     * 与 capability-switches/effective 同口径，任何已登录主体可读、不设权限码。
+     */
+    @GetMapping("/staff-app-functions")
+    public ApiResponse<StaffAppFunctionsResponse> staffAppFunctions(
+            @RequestHeader(name = "X-Terminal-Type", required = false) String terminalType) {
+        String trusted = com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType(terminalType);
+        return ApiResponse.ok(new StaffAppFunctionsResponse(trusted,
+                com.complex.platform.gate.StaffAppFunctions.functionsFor(trusted)));
+    }
+
+    public record StaffAppFunctionsResponse(String terminalType, java.util.List<String> functions) {
     }
 
     @PutMapping("/capability-switches/{id}")

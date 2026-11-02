@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 投诉（照片/视频/语音上传）与满意度（BSM「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；BSM「满意度在回访/验收时
 // 由提单方评分」）：附件随文字一次提交（OpenAPI multipart，幂等键头与字段同值）；写了处理结论、尚未评过的才可评 1～5 分。
 // 学生认证（BSM「学生认证必须在本人注册会员后单独申请」；BSM「采集证件、人脸、支付账号、精确位置等敏感信息前先单独取得同意，并留同意版本、时间和范围」；
@@ -70,6 +70,29 @@ test("recordingFailureLeavesRecordingStateAndSaysWhy", async () => {
   await flush();
   expect(q(page, "#record-start")).not.toBeNull();
   expect(text(q(page, "#complaint-error"))).toContain("录音失败，请允许使用麦克风后重试");
+});
+
+// 第十八批 M 段第 111 条 111-R4（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正」）：列所选综合体的在营门店，
+// 选了随投诉一并提交。
+test("complaintStoreOptionalAndSubmitted", async () => {
+  const { requests } = installWx({
+    "GET /api/v1/customer/projects": ok([{ project_id: "p1", project_name: "长沙综合体", address: null, intro: null, announcement: null, business_hours: [] }]),
+    "GET /api/v1/customer/complaints": ok([]),
+    "GET /api/v1/customer/complaints/store-options": ok([{ merchant_id: "m1", merchant_name: "一号清吧" }]),
+    "POST /api/v1/customer/complaints": ok(complaint()),
+  }, TOKEN);
+  const page = mount("pages/complaints/index");
+  await flush();
+  expect(q(page, "#store-picker")).not.toBeNull();
+  expect(requests.find((r) => r.key === "GET /api/v1/customer/complaints/store-options")?.path).toContain("project_id=p1");
+  fire(page, ["#store-picker"], "change", { value: "1" });
+  await flush();
+  expect(text(q(page, "#store-picker"))).toContain("一号清吧");
+  fire(page, ["#complaint-title"], "input", { value: "服务差" });
+  fire(page, ["#complaint-submit"], "tap");
+  await flush();
+  const req = requests.find((r) => r.key === "POST /api/v1/customer/complaints");
+  expect(field(req.form, "store_merchant_id")).toBe("m1");
 });
 
 test("rateResolvedComplaintOnce", async () => {

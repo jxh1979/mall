@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -154,8 +154,11 @@ class InventoryTransferBorrowJdbcIntegrationTests {
         step(admin, id, "ship", "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}", "shipped");
         step(borrowerStaff, id, "receive", "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}", "received");
 
-        Map<String, Object> code = jdbc.queryForMap("SELECT owner_id,custodian_id,lending_order_id FROM inventory_trace_codes WHERE trace_code=?", codeA);
+        Map<String, Object> code = jdbc.queryForMap(
+                "SELECT owner_id,custodian_id,lending_order_id,merchant_id,item_id FROM inventory_trace_codes WHERE trace_code=?", codeA);
         assertThat(code).containsEntry("owner_id", lender).containsEntry("custodian_id", borrower).containsEntry("lending_order_id", id);
+        // 第十八批 M 段 112-R4：借只转保管不转所有权（BSM:1201），码的归属商户与登记物料不随转。
+        assertThat(code).containsEntry("merchant_id", lender).containsEntry("item_id", device);
         List<Map<String, Object>> history = jdbc.queryForList(
                 "SELECT change_kind,from_owner_id,to_owner_id FROM inventory_trace_ownership_history WHERE trace_code=? ORDER BY changed_at,id", codeA);
         assertThat(history).extracting(h -> h.get("change_kind")).containsExactly("custody", "custody");

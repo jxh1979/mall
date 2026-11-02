@@ -21,6 +21,14 @@ public interface MerchantServiceRepository {
         return List.of();
     }
 
+    /**
+     * 第十八批 M 段第 111 条 111-R1：派给该员工（负责人）的工单，不含已存档与已审批删除的，供员工手机「我的工单」只读列出。
+     * 默认空（内存桩）。
+     */
+    default List<MerchantWorkOrderRecord> findWorkOrdersByOwner(String userId, int limit) {
+        return List.of();
+    }
+
     Optional<MerchantWorkOrderRecord> findWorkOrderById(String id);
 
     /**

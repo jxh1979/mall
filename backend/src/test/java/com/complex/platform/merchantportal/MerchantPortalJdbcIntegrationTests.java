@@ -1,5 +1,5 @@
 package com.complex.platform.merchantportal;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -150,10 +150,10 @@ class MerchantPortalJdbcIntegrationTests {
         assertThat(fees.get("能源费").path("amount_cent").asLong()).isEqualTo(1500);
         assertThat(fees.get("门票综合服务费").path("amount_cent").asLong()).isEqualTo(800);
         assertThat(fees.get("积分发行费").path("amount_cent").asLong()).isEqualTo(600);
-        for (String noPath : List.of("会员系统服务费", "工单用料费（商户承担）", "违规罚款")) {
+        for (String noPath : List.of("会员系统服务费", "违规罚款")) {
             assertThat(fees.get(noPath).path("amount_cent").isNull()).as(noPath + " 没有出账路径").isTrue();
         }
-        for (String zero : List.of("每平米租金", "押金", "违约金", "车位月租", "停车抵免成本")) {
+        for (String zero : List.of("每平米租金", "押金", "违约金", "工单用料费（商户承担）", "车位月租", "停车抵免成本")) {
             assertThat(fees.get(zero).path("amount_cent").isNumber()).as(zero).isTrue();
             assertThat(fees.get(zero).path("amount_cent").asLong()).as(zero).isZero();
         }

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -134,6 +134,10 @@ public class SupervisorReviewService {
             // HP-F03（BSM L1408「楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证」）：
             // 恒阻断；发起人沿直接上级链到其指定的最终审批人（设备台账仅平台／项目物业方可写，所有权主体即该方）。
             new SupervisorReviewPolicyRecord("facility_equipment_scrap", "facility.equipment.scrap", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批 M 段第 117 条 117-R2（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」；PGM:528）：
+            // 恒阻断；提出人沿直接上级链到其指定的最终审批人，审批意见即判定依据（必填）。设施工单与商户服务工单共用（117-R5，裁决 29）。
+            new SupervisorReviewPolicyRecord("work_order_bearer_dispute", "work_order.bearer_dispute", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // 第十八批第 30 条（PGM L502「确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请」）：
             // 恒阻断；发起人沿直接上级链到其指定的最终审批人（PGM L540）。

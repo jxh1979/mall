@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -73,6 +73,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   jdbc.update("INSERT INTO inventory_suppliers(id,supplier_name,supplier_type,status,merchant_id,created_at,updated_at) VALUES(?,'采购测试供应商','general','active',?,now(),now())",supplier,merchant);
   jdbc.update("INSERT INTO supplier_qualifications(id,supplier_id,qualification_type,valid_from,valid_to,status,merchant_id) VALUES(?,?,'business_license',current_date-1,current_date+365,'active',?)","pc_qual_"+suffix,supplier,merchant);
   jdbc.update("INSERT INTO warehouses(id,project_id,warehouse_type,name,status,merchant_id) VALUES(?,?,'main','本项目仓库','active',?)",warehouse,project,merchant);
+  jdbc.update("INSERT INTO warehouse_locations(id,warehouse_id) VALUES(?,?)",location,warehouse);
   jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'采购测试显式岗位','project','active',now())",role,role);
   jdbc.update("""
     INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code IN(
@@ -182,6 +183,25 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThatThrownBy(()->receive(purchase,10,10,0,100L))
    .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PURCHASE_WORKFLOW_INVALID"));
   assertThat(number("SELECT count(*) FROM purchase_receipts WHERE purchase_id=?",purchase)).isZero();
+ }
+
+ /** 第十八批 M 段第 119 条 119-R1（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：验收只收接收仓库下已建档的库位——未建档、或建在别的库房下的库位都拦住，不入库。 */
+ @Test void receiveRejectsUnregisteredLocation(){
+  receiveIsRejectedAt("pc_loc_new_"+suffix);
+ }
+ @Test void receiveRejectsLocationRegisteredUnderAnotherWarehouse(){
+  String elsewhere="pc_loc_other_"+suffix,otherWarehouse="pc_wh_other_"+suffix;
+  jdbc.update("INSERT INTO warehouses(id,project_id,warehouse_type,name,status,merchant_id) VALUES(?,?,'main','另一仓库','active',?)",otherWarehouse,project,merchant);
+  jdbc.update("INSERT INTO warehouse_locations(id,warehouse_id) VALUES(?,?)",elsewhere,otherWarehouse);
+  receiveIsRejectedAt(elsewhere);
+ }
+ void receiveIsRejectedAt(String loc){
+  String purchase=ordered("credit_term","each_receipt",30,10);
+  var request=new PurchaseRequestReceiveRequest(key(),loc,warehouse,proof(purchase),"实际逐次验收",1500L,10,10,0,Instant.now());
+  assertThatThrownBy(()->purchases.receive(purchase,request))
+   .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.getMessage()).contains("已建档的库位"));
+  assertThat(number("SELECT count(*) FROM inventory_stock_balances WHERE location_id=?",loc)).isZero();
+  assertThat(number("SELECT accepted_quantity FROM inventory_purchase_requests WHERE id=?",purchase)).isZero();
  }
 
  @Test void prepaidAllocationUsesActualPaymentWithoutSecondCashRow(){
@@ -489,7 +509,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   movement(location,"inbound","bar_order_item_void",3,false,"1 hour");
   movement(location,"return","dealer_return_line",2,false,"1 hour");
   // 不计入销量：礼物领取消耗、门店要货签收（调拨）、手工出库、7 天窗口外的售出。
-  movement(location,"redeem_consume","bar_gift_redemption",5,true,"1 hour");
+  movement(location,"gift_claim_consume","bar_gift_redemption",5,true,"1 hour");
   movement(location,"inbound","inventory_transfer",6,false,"1 hour");
   movement(location,"outbound","manual",4,true,"1 hour");
   movement(location,"outbound","bar_order",100,true,"8 days");

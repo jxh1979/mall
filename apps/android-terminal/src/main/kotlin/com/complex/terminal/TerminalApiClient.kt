@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.net.URI
 import java.net.URLEncoder
@@ -61,16 +61,19 @@ class TerminalApiClient(
    *  员工私人手机通道固定声明 [STAFF_PRIVATE_PHONE]。未绑定时不发类型头（服务端缺头即拒，fail-close），不按路径改报、不自报 app。 */
   var terminalType: String? = null
 
-  fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String): JsonObject =
-    post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey))
+  fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String, terminalType: String): JsonObject =
+    post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey), terminalType)
 
   fun health(): HealthResponse = get("/api/v1/system/health")
+
+  /** 第十八批 M 段第 116 条：本端可用的员工 App 功能（服务端按可信终端下发）。 */
+  fun staffAppFunctions(): StaffAppFunctionsResponse = get("/api/v1/terminals/staff-app-functions")
 
   fun login(username: String, password: String): LoginResponse =
     post("/api/v1/auth/login", LoginRequest(username, password))
 
   fun bindDevice(request: BindDeviceRequest): DeviceBinding =
-    post("/api/v1/terminals/devices/bind", request)
+    post("/api/v1/terminals/devices/bind", request, request.terminalType)
 
   fun offlineEntitlements(merchantId: String?, venueId: String?, limit: Int = 200): OfflinePackageResponse {
     val query = listOfNotNull(
@@ -259,6 +262,10 @@ class TerminalApiClient(
   /** 我的工单(view_assigned):流转到自己的，加待我提单确认的(第十二批裁决第 13 条)。 */
   fun listMyWorkOrders(): List<MyWorkOrderRecord> = get<MyWorkOrderPage>("/api/v1/facility/work-orders/assigned-to-me").items
 
+  /** 第十八批 M 段第 111 条 111-R1：我的工单一并列出派给本人的商户服务工单（只看）。 */
+  fun listMyMerchantWorkOrders(): List<MyMerchantWorkOrderRecord> =
+    get<MyMerchantWorkOrderPage>("/api/v1/merchant-service/work-orders/assigned-to-me").items
+
   /** 我的工单「确认」：待我提单确认的单做提单确认（既有 /review，服务层对承接人放行）。 */
   fun confirmWorkOrder(id: String, request: WorkOrderConfirmationRequest): MyWorkOrderRecord =
     post("/api/v1/facility/work-orders/${urlEncode(id)}/review", request)
@@ -300,7 +307,7 @@ class TerminalApiClient(
     post("/api/v1/bar/reservations", request)
 
   fun bindStaffDeviceCredential(request: StaffDeviceBindRequest): StaffDeviceCredentialRecord =
-    post("/api/v1/staff/device-credentials", request)
+    post("/api/v1/staff/device-credentials", request, terminalType ?: STAFF_PRIVATE_PHONE)
 
   // 员工设备凭证：主管批准换机
   fun approveStaffDeviceRebind(
@@ -350,6 +357,17 @@ class TerminalApiClient(
   /** 缺段人工补录（附证据，进主管复核）。 */
   fun submitTraceStepBackfill(id: String, segment: String, request: TraceStepBackfillRequest): TraceHandoverBackfillRow =
     post("/api/v1/inventory/trace-handovers/${urlEncode(id)}/segments/${urlEncode(segment)}/backfill", request)
+
+  // ── 第十八批 M 段第 112 条 112-R1（BSM:947「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」）：礼物（券）查券与核销；
+  //    112-R2 一体机权益领取屏同用 ──
+
+  /** 按客人出示的券码查券（只读：不动券、库存与码）。 */
+  fun previewVoucherRedeem(code: String): VoucherRedeemPreview =
+    post("/api/v1/vouchers/redemptions/preview", VoucherRedeemPreviewRequest(code))
+
+  /** 券核销（店内实物券带逐件扫的物品码）。 */
+  fun redeemVoucher(request: VoucherRedeemRequest): VoucherRedemption =
+    post("/api/v1/vouchers/redemptions", request)
 
   /** 第 84 条 84-R1（BSM 第 1201 行「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）」）：工作手机签名上传交接补录证据。
    *  business_type 固定 manual_backfill；签名摘要取部件规范串（[multipartBodyDigest]）。
@@ -455,3 +473,6 @@ private data class FacilityAlarmPage(val items: List<FacilityAlarmRecord> = empt
 
 @Serializable
 private data class MyWorkOrderPage(val items: List<MyWorkOrderRecord> = emptyList())
+
+@Serializable
+private data class MyMerchantWorkOrderPage(val items: List<MyMerchantWorkOrderRecord> = emptyList())

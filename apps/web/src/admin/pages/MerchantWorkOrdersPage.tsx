@@ -14,6 +14,8 @@ import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps, MerchantWorkOrderRow } from "../types";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
+import { ComplaintFollowupDialog } from "./ComplaintFollowupDialog";
+import { WorkOrderMaterialsPanel } from "./WorkOrderMaterialsPanel";
 import { MERCHANT_WORK_ORDER_STATUS_LABELS, MERCHANT_WORK_ORDER_TYPE_LABELS } from "./MerchantZoneWorkOrdersPage";
 import { shortId } from "../format/ids";
 
@@ -41,7 +43,7 @@ type MerchantWorkOrderPolicyRow = { workOrderType: string; priority: string; han
 const TEXT = {
   title: "商户服务工单",
   description: "商户在商户专区自助提报修、保洁、投诉和其他服务请求；本页派单、处理、关闭并配置处理时限与关单方式",
-  evidence: "接口证据：读取 /api/v1/merchant-service/work-orders；负责人候选 GET /api/v1/merchant-service/work-orders/{id}/owner-candidates；派单 POST /api/v1/merchant-service/work-orders/{id}/assign；处理 POST /api/v1/merchant-service/work-orders/{id}/actions；关闭 POST /api/v1/merchant-service/work-orders/{id}/close；关单方式 GET/PUT /api/v1/merchant-service/work-order-close-methods。",
+  evidence: "接口证据：读取 /api/v1/merchant-service/work-orders；负责人候选 GET /api/v1/merchant-service/work-orders/{id}/owner-candidates；派单 POST /api/v1/merchant-service/work-orders/{id}/assign；处理 POST /api/v1/merchant-service/work-orders/{id}/actions；关闭 POST /api/v1/merchant-service/work-orders/{id}/close；取消 POST /api/v1/merchant-service/work-orders/{id}/staff-cancel；客诉跟进 GET /api/v1/complaint-followups/merchant_service/{id}、POST …/loop-confirm；用料 GET/POST /api/v1/merchant-service/work-orders/{id}/materials、POST /api/v1/merchant-service/work-orders/{id}/cost-bearer、POST /api/v1/merchant-service/work-orders/{id}/bearer-dispute；关单方式 GET/PUT /api/v1/merchant-service/work-order-close-methods。",
   loadFailed: "商户服务工单读取失败",
   actionFailed: "商户服务工单操作失败",
   noWorkOrder: "当前没有可操作工单。",
@@ -51,6 +53,11 @@ const TEXT = {
   ownerPlaceholder: "请选择负责人",
   closeReason: "关闭缘由",
   closeReasonRequired: "投诉工单由客户关怀部关闭须填写关闭缘由。",
+  cancel: "取消工单",
+  cancelReason: "取消原因",
+  cancelReasonRequired: "取消工单必须填写取消原因（重复提或误提）。",
+  complaintFollowup: "客诉跟进",
+  materials: "用料",
   closeMethodTitle: "关单方式",
   closeMethodHint: "保洁由处理人完成即结束；投诉须商户确认，商户未确认的由客户关怀部填关闭缘由后关闭，这两类不可改。报修、其他服务请求在此各选一种。",
   closeMethodSave: "保存关单方式",
@@ -132,6 +139,11 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [ownerUserId, setOwnerUserId] = React.useState("");
   const [ownerCandidates, setOwnerCandidates] = React.useState<OwnerCandidate[]>([]);
   const [closeReason, setCloseReason] = React.useState("");
+  // 第 111 条 111-R2（第十八批裁决 27「派单后，重复提或误提的由客户关怀部填原因取消」）；111-R3 投诉行的客诉跟进弹窗。
+  const [cancelReason, setCancelReason] = React.useState("");
+  const [complaintFollowup, setComplaintFollowup] = React.useState<MerchantWorkOrderRow | null>(null);
+  // 第十八批 M 段第 117 条 117-R5：选中工单的「用料」面板（BSM:1380；承担方争议按第十八批裁决 29 停在原状态转上级判定）。
+  const [materialsOpen, setMaterialsOpen] = React.useState(false);
   const [processNote, setProcessNote] = React.useState("已到场处理，等待商户确认");
   const [targetStatus, setTargetStatus] = React.useState("processing");
   const [resolution, setResolution] = React.useState("已维修完成并确认关闭");
@@ -285,6 +297,19 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     await runAction("merchant_work_order_closed", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/close`, request));
   }
 
+  async function cancelWorkOrder() {
+    if (!selected) {
+      setFormError(TEXT.noWorkOrder);
+      return;
+    }
+    if (!cancelReason.trim()) {
+      setFormError(TEXT.cancelReasonRequired);
+      return;
+    }
+    const request = { idempotencyKey: nextKey("merchant-work-order-cancel"), reason: cancelReason.trim() };
+    await runAction("merchant_work_order_cancelled", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/staff-cancel`, request));
+  }
+
   async function savePolicy() {
     const handleMinutes = Number(policyForm.handleMinutes);
     if (!Number.isInteger(handleMinutes) || handleMinutes <= 0) {
@@ -330,7 +355,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="merchant_service.work_order.viewed / assigned / action_added / closed / work_order_close_method_saved" />
+      <AuditTrailHint event="merchant_service.work_order.viewed / assigned / action_added / closed / cancelled / work_order_close_method_saved / complaint.loop_confirmed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="merchant-work-orders-kpi-focus-banner">
@@ -361,11 +386,14 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
           <label>{TEXT.resolution}<input data-testid="merchant-work-order-resolution" value={resolution} onChange={(event) => setResolution(event.target.value)} /></label>
           <label>{TEXT.closeReason}<input data-testid="merchant-work-order-close-reason" value={closeReason} placeholder="投诉必填" onChange={(event) => setCloseReason(event.target.value)} /></label>
           <label>{TEXT.satisfaction}<input data-testid="merchant-work-order-satisfaction" value={satisfactionScore} placeholder="提单方评分 1～5，可不填" onChange={(event) => setSatisfactionScore(event.target.value)} /></label>
+          <label>{TEXT.cancelReason}<input data-testid="merchant-work-order-cancel-reason" value={cancelReason} placeholder="已派单的重复提或误提单" onChange={(event) => setCancelReason(event.target.value)} /></label>
         </div>
         <div className="admin-form-row" data-testid="merchant-work-order-actions">
           <PermissionButton permissionsState={effectivePermissions} permissions={WO_ASSIGN} data-testid="merchant-work-order-assign" disabled={busyAction !== ""} onClick={() => void assignWorkOrder()}>{TEXT.assign}</PermissionButton>
           <PermissionButton permissionsState={effectivePermissions} permissions={WO_PROCESS} data-testid="merchant-work-order-process" disabled={busyAction !== ""} onClick={() => void processWorkOrder()}>{TEXT.process}</PermissionButton>
           <PermissionButton permissionsState={effectivePermissions} permissions={WO_CLOSE} data-testid="merchant-work-order-close" disabled={busyAction !== ""} onClick={() => void closeWorkOrder()}>{TEXT.close}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={WO_CLOSE} data-testid="merchant-work-order-cancel" disabled={busyAction !== ""} onClick={() => void cancelWorkOrder()}>{TEXT.cancel}</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={WO_PROCESS} data-testid="merchant-work-order-materials" disabled={!selected} onClick={() => setMaterialsOpen(true)}>{TEXT.materials}</PermissionButton>
         </div>
         {formError ? <div data-testid="merchant-work-order-error" className="admin-inline-error">{formError}</div> : null}
 
@@ -422,7 +450,10 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
                   <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.ownerUserId}>{row.ownerUserId || "-"}</TraceLink></td>
                   <td>{cnDate(row.dueAt)}</td>
                   <td>{evidenceList(row)}</td>
-                <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
+                <td className="admin-row-detail-cell">{row.workOrderType === "complaint" ? (
+                  <span onClick={(event) => event.stopPropagation()}><PermissionButton permissionsState={effectivePermissions} permissions={WO_CLOSE}
+                    data-testid={`merchant-work-order-complaint-followup-${row.id}`} onClick={() => setComplaintFollowup(row)}>{TEXT.complaintFollowup}</PermissionButton></span>
+                ) : null}<button type="button" className="admin-row-detail-btn" aria-label="查看工单详情" onClick={(event) => { event.stopPropagation(); openWorkOrderDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>
           </table>
@@ -431,6 +462,17 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
         )}
       </AdminDataState>
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
+      {complaintFollowup ? (
+        <ComplaintFollowupDialog api={api} chain="merchant_service" workOrderId={complaintFollowup.id} closed={complaintFollowup.status === "closed"}
+          onClose={() => setComplaintFollowup(null)} setActionResult={setActionResult} setGlobalError={setGlobalError} />
+      ) : null}
+      {materialsOpen && selected ? (
+        <WorkOrderMaterialsPanel api={api} basePath={`/api/v1/merchant-service/work-orders/${encodeURIComponent(selected.id)}`}
+          title={`用料 · ${selected.title ?? selected.id}`} canIssue={["assigned", "processing", "pending_merchant"].includes(selected.status ?? "")}
+          canMarkBearer={nonTerminal(selected)} canDispute={nonTerminal(selected)} allowMerchantPick={false}
+          disputeHint="已转上级判定；判定前不能转已处理待关闭、不能关闭，判定后照常处理"
+          setActionResult={setActionResult} onChanged={() => void reload()} onClose={() => setMaterialsOpen(false)} />
+      ) : null}
     </section>
   );
 }

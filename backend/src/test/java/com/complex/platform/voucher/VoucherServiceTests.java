@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -460,7 +460,8 @@ class VoucherServiceTests {
         // V312：核销转实扣＝先释放预占（reserved->available）再 redeem_consume（available->出库+quantity），净 reserved->出库。
         verify(inventoryService).releaseStockReservation("item_1", "loc_1", 2);
         // 实物出库发生在核销阶段（兑换只发券），出库幂等引用落核销记录。
-        verify(inventoryService).createTypedStockMovement(eq("redeem_consume"), any(StockMovementRequest.class));
+        // 第十八批 M 段 112-R3（BSM:1194 三种消耗分开记）：营销赠发的券（issueVouchers）核销记礼物领取消耗。
+        verify(inventoryService).createTypedStockMovement(eq("gift_claim_consume"), any(StockMovementRequest.class));
         assertThat(entry.stockMovementRef()).isEqualTo("voucher-redeem-" + instance.id());
         // 内部结算价挂应付（内部价范式复用），结算金额与应付 id 同落核销记录。
         assertThat(entry.settlementMode()).isEqualTo("internal_price");

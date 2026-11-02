@@ -1,4 +1,4 @@
-# P1 库存预警与供应商对账 API 合同 V0.1
+# P1 库存预警与供应商对账 API 合同 V0.11
 
 ## 1. 定位与边界
 
@@ -144,11 +144,11 @@
 
 ## 4. 留痕
 
-- 批次创建：`inventory.stock_batch.recorded`
-- 风险扫描：`inventory.risk_scan.completed`
-- 风险预警查询：`inventory.risk_alert.viewed`
-- 供应商对账创建：`inventory.supplier_reconciliation.created`
-- 供应商对账查询：`inventory.supplier_reconciliation.viewed`
+- 批次创建：`inventory.stock_batch.create`
+- 风险扫描：`inventory.risk.scan`
+- 风险预警查询：`inventory.risk_alert.list`
+- 供应商对账创建：`inventory.supplier_reconciliation.create`
+- 供应商对账查询：`inventory.supplier_reconciliation.list`
 
 失败事件使用对应 `*_failed` 或 `*_view_failed` 名称。
 

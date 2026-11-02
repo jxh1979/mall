@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PurchaseWorkbenchPage } from "./PurchaseWorkbenchPage";
@@ -25,7 +25,7 @@ function setup(config: { permissions?: string[]; detail?: Record<string, unknown
       data = path.endsWith("/purchase-requests") ? { id: "pur_1" } : { id: "result_1" };
     } else if (path.endsWith("/purchase-workbench-options")) {
       if (config.optionsFail) return new Response(JSON.stringify({ code: "FORBIDDEN", message: "目录读取范围不足" }), { status: 403 });
-      data = { projects: [{ id: "p_1", name: "长沙综合体" }], suppliers: [{ id: "supplier_1", supplier_name: "真实供应商" }], inventory_items: [{ id: "item_A_01", item_name: "瓶装饮品", unit: "瓶", status: "active" }], entities: [{ id: "entity_1", entity_name: "项目采购公司", project_id: "p_1" }], merchants: config.merchants ?? [], warehouses: [{ id: "wh_1", name: "中心仓", project_id: "p_1", status: "active" }], contracts: [actualContract] };
+      data = { projects: [{ id: "p_1", name: "长沙综合体" }], suppliers: [{ id: "supplier_1", supplier_name: "真实供应商" }], inventory_items: [{ id: "item_A_01", item_name: "瓶装饮品", unit: "瓶", status: "active" }], entities: [{ id: "entity_1", entity_name: "项目采购公司", project_id: "p_1" }], merchants: config.merchants ?? [], warehouses: [{ id: "wh_1", name: "中心仓", project_id: "p_1", status: "active" }], locations: [{ id: "actual_loc", warehouse_id: "wh_1" }, { id: "loc_9", warehouse_id: "wh_9" }], contracts: [actualContract] };
     } else if (path.endsWith("/purchase-requests")) data = { items: [purchase] };
     else if (path.endsWith("/purchase-requests/pur_1")) data = detail;
     else if (path.endsWith("/supply-contracts/sc_1/terms")) data = { contract: actualContract, terms: config.contractTerms };
@@ -53,6 +53,14 @@ it("真实上传后分别提交实到、合格、拒收；失败重试复用同�
   expect(posts[0]!.body).toMatchObject({ arrived_quantity: 20, accepted_quantity: 18, rejected_quantity: 2, unit_cost_cent: 125, location_id: "actual_loc", warehouse_id: "wh_1", evidence_attachment_ids: ["proof_1"] });
   expect(posts[0]!.body.idempotency_key).toBe(posts[1]!.body.idempotency_key);
   expect(posts[0]!.path).toBe("/api/v1/inventory/purchase-requests/pur_1/receive");
+});
+// 第十八批 M 段第 119 条 119-R2（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：验收「实际库位编号」只能选所选接收仓库下已建档的库位。
+it("登记验收选接收仓库后，「实际库位编号」只列该仓库下已建档的库位", async () => {
+  setup(); await selectPurchase(); click("登记本次验收"); fill("接收仓库", "wh_1");
+  await waitFor(() => expect(screen.getByLabelText("实际库位编号").tagName).toBe("SELECT"));
+  const values = Array.from((screen.getByLabelText("实际库位编号") as HTMLSelectElement).options, o => o.value);
+  expect(values).toContain("actual_loc");
+  expect(values).not.toContain("loc_9");
 });
 it("验收数量不平或超过剩余量时不提交业务请求", async () => {
   const { posts } = setup(); await selectPurchase(); click("登记本次验收"); fillReceive("17"); await upload(); click("确认登记本次验收");

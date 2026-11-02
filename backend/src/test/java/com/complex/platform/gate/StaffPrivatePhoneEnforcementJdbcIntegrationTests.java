@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 私人手机有自己的验签开关键 {@code access.device_credential.enforcement.staff_private_phone}，单独翻 enforce 生效。
  * 走真实生产登录链与授权链：员工登录（{login_name, password}）取访问令牌，按安卓私人手机提交请假的请求形状
  * （Authorization: Bearer、X-Terminal-Type: staff_private_phone、X-Device-Id＝凭证指纹、蛇形键请求体）调 POST /api/v1/staff/leaves。
- * 登录不带终端头：登录是不签名的写请求（安卓不对登录签名），报设备绑定型在 enforce 下同样被拒（工作手机、平板同此）。
+ * 登录按安卓私人手机的实际发法带私人手机终端头、不签名（第十八批 M 段第 115 条：设备绑定型的登录在 enforce 下无设备证明也放行）。
  */
 @AutoConfigureMockMvc
 @ActiveProfiles("prod")
@@ -100,6 +100,7 @@ class StaffPrivatePhoneEnforcementJdbcIntegrationTests {
                 VALUES (?, ?, ?, ?, 'active', 'trusted', now(), now(), now())
                 """, "scred_b32pp_" + suffix, profile, Base64.getEncoder().encodeToString(der), fingerprint);
         String token = objectMapper.readTree(mockMvc.perform(post("/api/v1/auth/login")
+                        .header("X-Terminal-Type", PHONE)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("login_name", user, "password", password))))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).at("/data/access_token").asText();

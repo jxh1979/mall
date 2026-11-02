@@ -1,4 +1,4 @@
-# P1 商户服务工单 API 契约 V0.1
+# P1 商户服务工单 API 契约 V0.11
 
 文档类型：Implementation / API Contract
 
@@ -30,17 +30,28 @@
 
 按类型关单（第十八批 L 段第 102 条；BSM:1385；第十八批裁决 26）：保洁处理人标 `resolved` 即 `closed`；投诉由商户确认即关闭，商户未确认的由客户关怀部在 `resolved` 后带 `close_reason` 关单；报修、其他服务请求按 V585 `merchant_service_work_order_close_methods` 配置——`handler` 处理人标 `resolved` 即 `closed`、`staff_acceptance` 员工在 `resolved` 后关单、`merchant_confirm` 只能由商户确认关闭（员工关单 409 `MERCHANT_CONFIRM_REQUIRED`）。
 
+取消（第十八批 M 段第 111 条 111-R2；第十八批裁决 27「派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消」）：`created` 由本商户账号经 `cancel` 填原因取消（平台员工与平台管理员 403 `MERCHANT_SCOPE_REQUIRED`，别的商户 403 `CROSS_MERCHANT_FORBIDDEN`）；`assigned`/`processing`/`pending_merchant`/`resolved` 由持关闭码的员工经 `staff-cancel` 填原因取消（闸同员工关单）；不在本方可取消的状态 409 `INVALID_STATE`。取消即为 `cancelled`，动作 `cancelled` 记操作人与原因。
+
+用料与费用承担方（第十八批 M 段第 117 条 117-R5；BSM:1380；第十八批裁决 29「不加状态，停在原状态」）：平台员工给 `assigned`/`processing`/`pending_merchant` 的单登记库房用料（出库流水挂本单、按当前平均进货价计成本），标明费用承担方（`property`／`merchant`，商户承担即提单商户）；用了物料未标承担方的不能转 `resolved` 或关闭；承担方有争议的单子停在原状态转提出人的直接上级在审批链判定（与设施工单同一策略 `work_order_bearer_dispute`），判定前不能转 `resolved`、不能关闭（员工关单与商户确认）、不能改承担方，判定结果与依据留痕后照常往下走；商户承担的单关闭时生成一笔工单用料费应收并短信。
+
 ## 3. 接口
 
 | Method | Path | Permission | 幂等 | 说明 |
 |---|---|---|---|---|
 | `GET` | `/api/v1/merchant-service/work-orders` | `merchant.service_work_order.view` | 否 | 查询工单列表 |
 | `POST` | `/api/v1/merchant-service/work-orders` | `merchant.service_work_order.create` | 是 | 创建商户服务工单 |
+| `GET` | `/api/v1/merchant-service/work-orders/assigned-to-me` | `merchant.service_work_order.process` | 否 | 员工手机「我的工单」只读列出派给本人（负责人）的工单，最近 200 条，不含已存档与已审批删除的；审计 `merchant_service.work_order.viewed`（metadata `scope=assigned_to_me`）（第十八批 M 段第 111 条 111-R1；BSM:1466「我的工单：只看派给自己的工单和处理进度。」） |
 | `GET` | `/api/v1/merchant-service/work-orders/{id}/owner-candidates` | `merchant.service_work_order.assign` | 否 | 派单负责人候选：在岗、持处理码且处理码可触及该商户经营项目的平台员工（102-R1） |
 | `POST` | `/api/v1/merchant-service/work-orders/{id}/assign` | `merchant.service_work_order.assign` | 是 | 派单；负责人不在候选口径内 400 `WORK_ORDER_OWNER_INVALID`（102-R1） |
 | `POST` | `/api/v1/merchant-service/work-orders/{id}/actions` | `merchant.service_work_order.process` | 是 | 追加处理动作 |
 | `POST` | `/api/v1/merchant-service/work-orders/{id}/close` | `merchant.service_work_order.close` | 是 | 关闭工单 |
 | `POST` | `/api/v1/merchant-service/work-orders/{id}/merchant-confirm` | `merchant.service_work_order.create` | 是 | 商户确认已解决即关闭，只本商户账号（102-R2） |
+| `POST` | `/api/v1/merchant-service/work-orders/{id}/cancel` | `merchant.service_work_order.create` | 是 | 派单前商户填原因取消，只本商户账号（111-R2） |
+| `POST` | `/api/v1/merchant-service/work-orders/{id}/staff-cancel` | `merchant.service_work_order.close` | 是 | 派单后重复提或误提的由客户关怀部填原因取消，闸同员工关单（111-R2） |
+| `GET` | `/api/v1/merchant-service/work-orders/{id}/materials` | `merchant.service_work_order.process` | 否 | 用料面板：用料明细与合计、承担方、争议记录、工单项目平台库房余额行，只给平台员工（117-R5） |
+| `POST` | `/api/v1/merchant-service/work-orders/{id}/materials` | `merchant.service_work_order.process` | 是 | 已派单、处理中、待商户确认的单登记用料＝从所选库位出库一次（117-R5） |
+| `POST` | `/api/v1/merchant-service/work-orders/{id}/cost-bearer` | `merchant.service_work_order.process` | 是 | 标明费用承担方，商户承担即提单商户（117-R5） |
+| `POST` | `/api/v1/merchant-service/work-orders/{id}/bearer-dispute` | `merchant.service_work_order.process` | 是 | 承担方争议，单子停在原状态转上级判定（117-R5，第十八批裁决 29） |
 | `GET` | `/api/v1/merchant-service/work-order-close-methods` | `merchant.service_work_order.view` | 否 | 报修、其他服务请求的关单方式（102-R3） |
 | `PUT` | `/api/v1/merchant-service/work-order-close-methods` | `merchant.service_work_order.assign` | 是 | 改报修或其他服务请求的关单方式，平台口径（102-R3） |
 
@@ -106,6 +117,11 @@
 | 派单 | `merchant_service.work_order.assigned` | `merchant_service.work_order.assign_failed` |
 | 处理 | `merchant_service.work_order.action_added` | `merchant_service.work_order.action_failed` |
 | 关闭 | `merchant_service.work_order.closed` | `merchant_service.work_order.close_failed` |
+| 取消 | `merchant_service.work_order.cancelled` | `merchant_service.work_order.cancel_failed` |
+| 登记用料 | `merchant_service.work_order.material_issued` | `merchant_service.work_order.material_issue_failed` |
+| 标明费用承担方 | `merchant_service.work_order.cost_bearer_marked` | `merchant_service.work_order.cost_bearer_mark_failed` |
+| 承担方争议 | `merchant_service.work_order.bearer_disputed` | `merchant_service.work_order.bearer_dispute_failed` |
+| 争议判定回写 | `merchant_service.work_order.bearer_ruled` | 暂不单列 |
 
 ## 6. 错误处理矩阵
 
@@ -117,6 +133,8 @@
 | 工单不存在 | ID 查不到 | 404 | `WORK_ORDER_NOT_FOUND` | 拒绝动作 |
 | 终态后修改 | `closed`/`cancelled` 后继续派单/处理/关闭 | 409 | `WORK_ORDER_CLOSED` | 拒绝动作 |
 | 幂等冲突 | 同 key 不同请求体 | 409 | `IDEMPOTENCY_CONFLICT` | 要求换 key 或查原请求 |
+| 用料未标承担方 | 有用料流水而未标承担方，转 `resolved` 或关闭 | 409 | `WORK_ORDER_MATERIAL_BEARER_REQUIRED` | 先标明费用承担方（117-R5） |
+| 承担方争议待判定 | 有待上级判定的争议，转 `resolved`、关闭、商户确认、改承担方或再提争议 | 409 | `WORK_ORDER_BEARER_DISPUTE_PENDING` | 等上级判定（117-R5，第十八批裁决 29） |
 
 ## 7. Anti-Patterns
 

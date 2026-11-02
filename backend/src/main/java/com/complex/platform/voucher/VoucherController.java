@@ -1,10 +1,13 @@
 package com.complex.platform.voucher;
 
+// 文件版本：V0.01
+
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.voucher.dto.VoucherDefinitionRequest;
 import com.complex.platform.voucher.dto.VoucherIssueRequest;
+import com.complex.platform.voucher.dto.VoucherRedeemPreviewRequest;
 import com.complex.platform.voucher.dto.VoucherRedeemRequest;
 import com.complex.platform.voucher.dto.VoucherRevokeRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -95,6 +98,13 @@ public class VoucherController {
                     result.page(), result.pageSize(), result.total());
         }
         return ApiResponse.ok(result);
+    }
+
+    /** 第十八批 M 段第 112 条 112-R1：按客人出示的券码查券（只读），工作手机与一体机核销前看能领什么、能领多少、是否已领。 */
+    @PostMapping("/redemptions/preview")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant // M723：查券只看能否核销，真正核销才扣；不扣单次授权（操作员 2026-10-03）
+    public ApiResponse<VoucherRedeemPreviewRecord> previewRedeem(@RequestBody VoucherRedeemPreviewRequest request) {
+        return ApiResponse.ok(service.previewRedeem(request == null ? null : request.code()));
     }
 
     @PostMapping("/redemptions")
