@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -410,7 +410,7 @@ class BarControllerTests {
                 "sku_beer",
                 "movement_1",
                 "delivered",
-                "gift redeemed; stock decreased via redeem_consume",
+                "gift redeemed; stock decreased via gift_claim_consume",
                 now,
                 now
         );

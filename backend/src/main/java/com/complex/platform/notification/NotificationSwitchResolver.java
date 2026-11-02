@@ -1,6 +1,6 @@
 package com.complex.platform.notification;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.terminal.TerminalCapabilitySwitchRecord;
 import com.complex.platform.terminal.TerminalDeviceRepository;
@@ -19,7 +19,7 @@ public class NotificationSwitchResolver {
      * OBS-13-04：BSM 第 1598 行「下列三类不在可关闭范围内，不得按类或按条关闭：涉及商户应收应付金额发生变化的通知、涉及客人金额发生变化的通知
      * （储值消费扣款、储值充值到账、消费扣款、定金没收、定金原路退回）、存酒到期提醒」——名单内事件不看总开关、域开关、事件开关，照常发送。
      * 房租/水电/物业账单出单属商户应收变化（BSM 第 1597 行异议期适用于这三类账单）；催缴另用 *_dunning 事件键，仍可关闭。
-     * 积分发行费月结出账、停车抵免费用出账生成商户应收。存酒「已过期」告知不在名单内。
+     * 积分发行费月结出账生成商户应收。存酒「已过期」告知不在名单内。
      * 第十八批第 13 条（BSM 第 1597 行「结算金额出账与调整、对账差异认定结果、押金抵扣与退还、违约金计提、分红出单与发放」）：
      * merchant_amount 域九个事件（MerchantAmountChangeNotifier）。
      */
@@ -33,7 +33,6 @@ public class NotificationSwitchResolver {
             "merchant_fee.utilities",
             "merchant_fee.property",
             "points.bill",
-            "parking.credit_cost",
             "merchant_amount.settlement_statement",
             "merchant_amount.adjustment",
             "merchant_amount.reconciliation_difference",
@@ -42,7 +41,9 @@ public class NotificationSwitchResolver {
             "merchant_amount.deposit_supplement",
             "merchant_amount.penalty",
             "merchant_amount.dividend_issued",
-            "merchant_amount.dividend_paid");
+            "merchant_amount.dividend_paid",
+            // 第十八批 M 段第 117 条（BSM:1380 商户承担的工单用料费自动生成应收；BSM:1597、1598）。
+            "merchant_amount.work_order_material");
 
     private final TerminalDeviceRepository terminalDeviceRepository;
 

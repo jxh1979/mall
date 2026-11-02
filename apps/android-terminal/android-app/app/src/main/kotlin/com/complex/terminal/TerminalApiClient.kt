@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -65,21 +65,25 @@ class TerminalApiClient(
   var accessToken: String? = null
   var deviceId: String? = null
   var deviceSigner: ((ByteArray) -> String)? = null
-  /** U01-001：终端身份由本机绑定类型决定并只声明一次（工作手机/平板）；未绑定不发类型头（服务端 fail-close）。 */
+  /** U01-001：终端身份由本机绑定类型决定并只声明一次（工作手机/平板）；未绑定不发类型头（服务端 fail-close）。
+   *  第十八批 M 段第 108 条：未绑定时其他请求不发类型头；绑定、登记签名公钥、私人手机凭证绑定三条按所绑类型声明（同自助注册两条路径的显式声明）。 */
   var terminalType: String? = null
 
-  fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String): JsonObject =
-    post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey))
+  fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String, terminalType: String): JsonObject =
+    post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey), terminalType)
 
   fun login(username: String, password: String): LoginResponse =
     post("/api/v1/auth/login", LoginRequest(username, password))
+
+  /** 第十八批 M 段第 116 条：本端可用的员工 App 功能（服务端按可信终端下发）。 */
+  fun staffAppFunctions(): StaffAppFunctionsResponse = get("/api/v1/terminals/staff-app-functions")
 
   /** 第 23 条 23-R6：员工手机在线屏打开即发暗纹码并留痕（与后台、商户专区同一接口；走设备签名，设备号由服务端按验签结果取登记设备号）。 */
   fun postPageView(request: PageViewRequest): PageViewMark =
     post("/api/v1/security/page-views", request)
 
   fun bindDevice(request: BindDeviceRequest): DeviceBinding =
-    post("/api/v1/terminals/devices/bind", request)
+    post("/api/v1/terminals/devices/bind", request, request.terminalType)
 
   fun offlineEntitlements(merchantId: String?, venueId: String?, limit: Int = 200): OfflinePackageResponse {
     val query = listOfNotNull(
@@ -234,6 +238,10 @@ class TerminalApiClient(
 
   fun listMyWorkOrders(): List<MyWorkOrderRecord> = get<Page<MyWorkOrderRecord>>("/api/v1/facility/work-orders/assigned-to-me").items
 
+  /** 第十八批 M 段第 111 条 111-R1：我的工单一并列出派给本人的商户服务工单（只看）。 */
+  fun listMyMerchantWorkOrders(): List<MyMerchantWorkOrderRecord> =
+    get<Page<MyMerchantWorkOrderRecord>>("/api/v1/merchant-service/work-orders/assigned-to-me").items
+
   /** 第十二批裁决第 13 条：我的工单里「待我提单确认」的单——确认（/review）与退回返工（/rework，带不通过原因）。 */
   fun confirmWorkOrder(id: String, request: WorkOrderConfirmationRequest): MyWorkOrderRecord =
     post("/api/v1/facility/work-orders/${urlEncode(id)}/review", request)
@@ -304,7 +312,7 @@ class TerminalApiClient(
     post("/api/v1/bar/bills/${urlEncode(billId)}/settle", request)
 
   fun bindStaffDeviceCredential(request: StaffDeviceBindRequest): StaffDeviceCredentialRecord =
-    post("/api/v1/staff/device-credentials", request)
+    post("/api/v1/staff/device-credentials", request, terminalType ?: STAFF_PRIVATE_PHONE)
 
   fun approveStaffDeviceRebind(
     credentialId: String,
@@ -345,6 +353,17 @@ class TerminalApiClient(
   /** 缺段人工补录（附证据，进主管复核）。 */
   fun submitTraceStepBackfill(id: String, segment: String, request: TraceStepBackfillRequest): TraceHandoverBackfillRow =
     post("/api/v1/inventory/trace-handovers/${urlEncode(id)}/segments/${urlEncode(segment)}/backfill", request)
+
+  // ── 第十八批 M 段第 112 条 112-R1（BSM:947「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」）：礼物（券）查券与核销；
+  //    112-R2 一体机权益领取屏同用 ──
+
+  /** 按客人出示的券码查券（只读：不动券、库存与码）。 */
+  fun previewVoucherRedeem(code: String): VoucherRedeemPreview =
+    post("/api/v1/vouchers/redemptions/preview", VoucherRedeemPreviewRequest(code))
+
+  /** 券核销（店内实物券带逐件扫的物品码）。 */
+  fun redeemVoucher(request: VoucherRedeemRequest): VoucherRedemption =
+    post("/api/v1/vouchers/redemptions", request)
 
   /** 第 84 条 84-R1（BSM 第 1201 行「扫码缺失的可事后人工补录，但一律须附证据（照片、录音、录像等）」）：工作手机签名上传交接补录证据。
    *  business_type 固定 manual_backfill；签名摘要取部件规范串（[multipartBodyDigest]）。

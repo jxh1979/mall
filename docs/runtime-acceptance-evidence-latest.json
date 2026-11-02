@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-01T18:57:21.115Z",
+  "generated_at": "2026-11-02T01:46:21.230Z",
   "git": {
-    "head": "614f52415993308df8f485a32e3cbe115805771d",
-    "head_short": "614f5241",
-    "branch": "feature/business-code-batch32-20261101",
+    "head": "5741cf41bf299f3db2c48d9cdcacc60b8fb76fcb",
+    "head_short": "5741cf41",
+    "branch": "feature/business-code-batch33-20261101",
     "worktree_dirty": false,
-    "source_fingerprint": "17c5bd10374529fd127291c2bef8ae9b9ef23c3a07628ee59d80fca4a5878db0",
-    "source_fingerprint_file_count": 3183,
+    "source_fingerprint": "932753dd6a2d45150f07d96c7fcaa8070bbe51a36147959c2b6cedec49fec390",
+    "source_fingerprint_file_count": 3215,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 487,
-    "tests": 6164,
+    "suites": 498,
+    "tests": 6216,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-01T18:54:44.403Z",
+    "latest_mtime": "2026-11-02T01:43:44.699Z",
     "passed": true
   },
   "web_unit_source": {
@@ -151,6 +151,7 @@
       "apps/web/src/admin/pages/BusinessAnalyticsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/BusinessAnalyticsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/BusinessAnalyticsPage.test.tsx",
+      "apps/web/src/admin/pages/ComplaintFollowupDialog.test.tsx",
       "apps/web/src/admin/pages/ComplianceRemindersPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/ComplianceRemindersPage.test.tsx",
       "apps/web/src/admin/pages/ContractWorkbenchPage.guidedcreate.test.tsx",
@@ -180,6 +181,7 @@
       "apps/web/src/admin/pages/FacilityWorkbenchPage.dualconfirm.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.maintenancetype.test.tsx",
+      "apps/web/src/admin/pages/FacilityWorkbenchPage.materials.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.reassign.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.scrap.test.tsx",
@@ -359,8 +361,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 298,
-    "test_count_from_source": 1500
+    "file_count": 300,
+    "test_count_from_source": 1521
   },
   "web_build": {
     "dist_index_exists": true,
@@ -378,18 +380,18 @@
         "exists": true
       }
     ],
-    "asset_count": 167,
+    "asset_count": 168,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BMpCTihS.js",
+        "path": "apps/web/dist/assets/main-5uOzZ8S9.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-01T18:54:52.300Z"
+        "mtime": "2026-11-02T01:43:52.496Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-01T18:54:52.302Z"
+      "mtime": "2026-11-02T01:43:52.499Z"
     },
     "no_main_bundle_warning_expected": true
   },

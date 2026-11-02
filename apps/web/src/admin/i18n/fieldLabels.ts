@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -233,6 +233,11 @@ export const FIELD_LABELS: Record<string, string> = {
   allowed_free_entry_count: "免费入场次数",
   voucher_instance_id: "券",
   voucher_kind: "券类别",
+  // 第十八批 M 段第 112 条 112-R1：按码查券（POST /api/v1/vouchers/redemptions/preview）。
+  goods_quantity: "件数",
+  block_reason: "不可核销原因",
+  // 第十八批 M 段第 116 条：员工 App 本端可用功能（GET /api/v1/terminals/staff-app-functions）。
+  functions: "可用功能",
   claim_code: "领取码",
   redeem_method: "兑换方式",
   redemption_id: "兑换单号",
@@ -437,6 +442,16 @@ export const FIELD_LABELS: Record<string, string> = {
   archive_reason: "归档原因",
   close_reason: "关闭原因",
   close_method: "关单方式",
+  // 第十八批 M 段第 111 条 111-R3：客诉跟进（GET/POST /api/v1/complaint-followups/{chain}/{work_order_id}）。
+  chain: "工单链",
+  complaint_class: "投诉类别",
+  classified_by: "认定人",
+  classified_at: "认定时间",
+  loop_confirmed_by: "闭环确认人",
+  loop_confirmed_at: "闭环确认时间",
+  // 第十八批 M 段第 111 条 111-R4：涉及门店（PUT /api/v1/complaint-followups/{chain}/{work_order_id}）。
+  store_merchant_id: "涉及门店",
+  store_candidates: "可选门店",
   handle_minutes: "处理时长",
   response_minutes: "响应时长",
   remind_minutes: "最晚到店前提醒分钟数",
@@ -1032,6 +1047,21 @@ export const FIELD_LABELS: Record<string, string> = {
   cooperation_form: "合作形式",
   corrections: "工资补差",
   cost_bearer: "费用承担方",
+  // 第十八批 M 段第 117 条：工单用料承担方争议（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」）。
+  claimed_cost_bearer: "主张的费用承担方",
+  claimed_merchant_id: "主张承担的商户",
+  ruling_basis: "判定依据",
+  // 用料面板（GET …/materials）返回的结构键。
+  disputes: "承担方争议记录",
+  options: "下拉选项",
+  stock: "可领用库存",
+  warehouse_name: "库房名称",
+  from_cost_bearer: "原费用承担方",
+  raised_by: "提出人",
+  ruled_by: "判定人",
+  ruled_at: "判定时间",
+  marked_by: "标注人",
+  marked_at: "标注时间",
   cost_cent: "成本",
   count: "数量",
   counted_qty: "盘点数量",
@@ -2599,6 +2629,7 @@ export const FIELD_LABELS: Record<string, string> = {
   suppliers: "供应商",
   inventory_items: "物料",
   warehouses: "仓库",
+  locations: "库位",
   contracts: "合同",
   contract: "合同",
   terms: "条款",
@@ -2881,6 +2912,7 @@ export const VALUE_LABELS: Record<string, string> = {
   inventory_item_safety_stock_updated: "安全库存已修改",
   inventory_item_created: "库存商品规格已新建",
   inventory_warehouse_created: "库房已新建",
+  inventory_warehouse_location_created: "库位已新建",
   inventory_trace_code_registered: "物品码已登记",
   inventory_high_value_review_decided: "高价值复核已处理",
   inventory_trace_backfill_submitted: "交接缺扫码补录已提交，待主管复核",
@@ -2926,6 +2958,14 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_work_order_assigned: "商户工单已分派",
   merchant_work_order_processed: "商户工单已处理",
   merchant_work_order_closed: "商户工单已关闭",
+  merchant_work_order_cancelled: "商户工单已取消",
+  // 第十八批 M 段第 117 条：工单用料面板。
+  work_order_material_issued: "工单用料已出库",
+  work_order_cost_bearer_marked: "费用承担方已标明",
+  work_order_bearer_disputed: "承担方争议已转上级判定",
+  complaint_loop_confirmed: "已确认闭环",
+  complaint_classified: "已认定投诉类别",
+  complaint_store_saved: "已更正涉及门店",
   merchant_work_order_policy_saved: "处理时限已保存",
   merchant_work_order_close_method_saved: "关单方式已保存",
   merchant_zone_fee_recipient_saved: "收费接收人已保存",
@@ -2935,6 +2975,7 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_zone_settlement_resolution_rejected: "争议处理结论已驳回",
   merchant_zone_work_order_submitted: "商户专区工单已提交",
   merchant_zone_work_order_confirmed: "商户已确认解决并关闭",
+  merchant_zone_work_order_cancelled: "商户已取消工单",
   notification_window_saved: "通知时段已保存",
   operating_params_saved: "经营参数已保存",
   anomaly_config_saved: "异常规则已保存",
@@ -3245,9 +3286,12 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   voucher_kind: { merchant_discount: "商户折扣券", in_store_goods: "店内实物券" },
   redeem_method: { in_store_staff: "店员核销", onsite_code: "场内扫码" },
   settlement_mode: { none: "不结算", internal_price: "内部结算价挂应付" },
-  movement_type: { outbound: "出库", redeem_consume: "兑换核销出库" },
+  movement_type: { outbound: "出库", redeem_consume: "积分兑换消耗", gift_claim_consume: "礼物领取消耗" },
   table_type: { card_seat: "卡座", bar_counter: "吧台位", vip: "贵宾包坐", loose_table: "散台" },
   // 第十八批 L 段 105-R1（ENUM:160「库房分类｜总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区」）。
+  // 第十八批 M 段第 117 条（BSM:1380 公区设施与楼宇主体设备的用料由物业承担；商户自有设施、以及因商户责任导致损坏的用料由该商户承担）。
+  cost_bearer: { property: "物业承担", merchant: "商户承担" },
+  claimed_cost_bearer: { property: "物业承担", merchant: "商户承担" },
   warehouse_type: { main: "总库", bar: "酒吧库", bar_counter: "吧台库存", consumable: "消耗品库", gift: "礼品库", saved_bottle: "存酒区" },
   // 第十八批 K 段 95-R1（BSM:1021）：开台客人来源；回流渠道随第三方团购接入（清单第 47 条）再加。
   guest_source: { platform_own: "平台自有渠道", marketing: "营销带客", walk_in: "自来客" },

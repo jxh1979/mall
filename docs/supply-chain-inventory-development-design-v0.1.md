@@ -1,6 +1,6 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.24
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.25
 
-> 版本：V0.24 ｜ 最后更新：2026-10-29 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
+> 版本：V0.25 ｜ 最后更新：2026-11-01 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
 > **M09 现行口径（2026-09-03）：** 三份业务 HTML 是业务真源；本文细化但不得新增业务。迁移、Java、OpenAPI、页面和测试只证明当前实现事实，不得反向定义业务规则。下文带“建议”“任务”或未标已落地的结构/API 均为目标设计或缺口，不代表当前实现。R7/R5 横幅仅作历史留痕，现行实现以本轮逐项标注为准。
@@ -599,14 +599,14 @@ HTML 十二类、目标机读 code 与当前实现须分列；目标 code 是技
 | 报损 | `damage` / `waste` | 仅损坏、长期存放过期两种业务原因 | typed/调整入口允许 `damage/waste/loss`，三者当前都映射 `damage_report`；`loss` 不得成为第三种业务原因 |
 | 报溢 | `gain` | 盘盈或异常增加 | 调整入口允许 `gain` |
 | 盘点调整 | `count_correction` | 盘点差异纠账 | 调整入口允许 `count_correction` |
-| 积分兑换消耗 | `redeem_consume` | 仅实物库存兑换实扣 | typed 入口允许 `redeem_consume` |
-| 礼物领取消耗 | `gift_claim_consume` | 店内礼品实例实扣 | Java 无该 code 写入路径 |
+| 积分兑换消耗 | `redeem_consume` | 仅实物库存兑换实扣 | typed 入口允许 `redeem_consume`；积分兑换来的店内实物券核销写入（`VoucherService` 按券实例来源 `points_redemption` 取类型，第十八批 M 段第 112 条） |
+| 礼物领取消耗 | `gift_claim_consume` | 店内礼品实例实扣 | typed 入口允许 `gift_claim_consume`；营销赠发的店内实物券核销（`VoucherService`，券实例来源 `marketing_grant`）与门票或套餐赠饮出品扣吧台库存及冲正反向行（`BarGiftConsumer`）写入（第十八批 M 段第 112 条，BSM:1194、BSM:1179、BSM:1937、BSM:1049） |
 | 回库 | `return_to_stock` | 客人退品回库、存酒到期转原酒吧库存 | 当前退品写 `inbound`，无该 code 写入路径 |
 | 借出 | `lend_out` | 不可消费品只转移保管责任 | 借用交货写 `lend_out`：扣借出方出货库位、不消耗批次（第十八批第 18 条，`InventoryService.shipOutLender`） |
 | 归还 | `lend_return` | 借用保管责任回转 | 借出方收货扫码归还写 `lend_return`：按该行 `lend_out` 原出库总成本累计分摊回出货库位（第十八批第 18 条，`InventoryService.lendReturn` → `saveSourceReturnMovement`） |
 
-> 当前实现事实：`inventory_stock_movements.movement_type` 本身无 DB CHECK。V046 的 CHECK 约束及 `{gain, loss, damage, waste, count_correction}` 白名单约束的是库存调整 `adjustment_type`；typed 流水白名单是 `{outbound, damage, waste, loss, redeem_consume}`。两种白名单都不构成 HTML 业务枚举。当前流水也没有分列的 `photo_refs`/`video_refs`，因此高价值报损、盘点差异和存酒作废的双证据要求（18D 裁决补充第 14 条）仍须由上层请求、复核载体和服务共同强制。
-> `consume`、`gift_claim_consume`、`return_to_stock` 均未形成完整、可无歧义回映射到 HTML 十二类的运行闭环；补齐前不得据本表认为十二类已实现。调拨不拆 `transfer_in/transfer_out`（第十八批第 18 条），`lend_out`、`lend_return` 由流转单内部写入、不进 typed 白名单。
+> 当前实现事实：`inventory_stock_movements.movement_type` 本身无 DB CHECK。V046 的 CHECK 约束及 `{gain, loss, damage, waste, count_correction}` 白名单约束的是库存调整 `adjustment_type`；typed 流水白名单是 `{outbound, damage, waste, loss, redeem_consume, gift_claim_consume}`。两种白名单都不构成 HTML 业务枚举。当前流水也没有分列的 `photo_refs`/`video_refs`，因此高价值报损、盘点差异和存酒作废的双证据要求（18D 裁决补充第 14 条）仍须由上层请求、复核载体和服务共同强制。
+> `consume`、`return_to_stock` 均未形成完整、可无歧义回映射到 HTML 十二类的运行闭环；补齐前不得据本表认为十二类已实现。调拨不拆 `transfer_in/transfer_out`（第十八批第 18 条），`lend_out`、`lend_return` 由流转单内部写入、不进 typed 白名单。
 > 冲正口径（DEC-R7-04）：**冲正不新增 `movement_type`**；保留原流水并按相反方向追加记录，具体状态 code 以正式迁移和 OpenAPI 为准。ENUM 十二类中不含「冲正」，不得自行新增第十三类。
 > 命名口径登记（GAP-38）：既有命名体系两表不一致（`transfer` vs `transfer_in`/`transfer_out`、`count_adjust` vs `count_correction` 等），统一命名属 **GAP-38 代码改造范畴**，落库前须先定统一口径；本轮既有 code 一个未改名。
 
@@ -807,6 +807,7 @@ V112 已建立两张子表并提供正式 list/create API；供应商主表没�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-01 | 改 | §6.13 积分兑换消耗、礼物领取消耗两行与表后实现事实句 | 版本升 V0.25；第十八批 M 段第 112 条 112-R3：积分兑换来的店内实物券核销写 `redeem_consume`，营销赠发的店内实物券核销与门票或套餐赠饮出品扣库（含冲正）写 `gift_claim_consume`，typed 白名单加 `gift_claim_consume` | BSM:1194、BSM:1179、BSM:1937、BSM:1049；ENUM:162 |
 | 2026-10-29 | 改 | 文首当前实现事实表追溯码/交接行、§5.5 当前实现 GAP 句、§10 酒吧经营行、§11、§12 GAP 表（吧台损耗率、五段交接/异常复核两行与末段）、§13B | V0.24 同版续记；第十八批 I 段第 76、84、85 条落地事实同步到现状与缺口句：按杯按容量扣库存、交接人工段按顺序放行与机器人段不计入完成、同段重复扫码不覆盖、工作手机交接扫码；缺段补录已于第十八批 F 段第 14 条接入通用人工补录主链，不再列为缺口；损耗率转核查工单仍未落地 | BSM L1065、L1168、L1201、L1891；ENUM L106 |
 | 2026-10-29 | 改 | §5.9 吧台按杯损耗率现状句 | 版本升 V0.24；第十八批 I 段第 76 条（V575）按杯按标准出酒量（按容量）扣减库存已落地，现状句同步；损耗率转核查工单仍未落地 | BSM L1065、L1168；ENUM L79、L106 |
 | 2026-10-28 | 改 | §1.1 现状表、§5.4 差距清单、§5.7、§6.11、§11、§12 GAP 表 | V0.23 同版续记；第十八批第 18、24、33 条落地事实同步到现状与缺口句：阈值只读全平台一行（V566 上下限、最高权限审批）、手工标记限库房主管并须理由留痕、借出／归还／调拨两侧流水与借用逾期工单（V564）、智能采购建议已实现，不再列为缺口 | 第十八批第 18、24、33 条；ENUM:162、164；BSM:1201、1211 |

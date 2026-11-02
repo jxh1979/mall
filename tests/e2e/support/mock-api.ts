@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -207,7 +207,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
   const routes: Record<string, ApiData> = {
     "/api/v1/system/health": { ok: true, service: "mock-api", time: now },
     "/api/v1/amusement/business-day-configs": { projects: [{ id: "venue-1", name: "本综合体" }], versions: [] },
-    "/api/v1/inventory/purchase-workbench-options": { projects: [], entities: [], merchants: [], suppliers: [], inventory_items: [], warehouses: [], contracts: [] },
+    "/api/v1/inventory/purchase-workbench-options": { projects: [], entities: [], merchants: [], suppliers: [], inventory_items: [], warehouses: [], locations: [], contracts: [] },
     "/api/v1/inventory/purchase-requests": [],
 
     "/api/v1/analytics/dashboards/p0-overview": { merchants: 1, ticketProducts: state.tickets.length, issuedTickets: state.issuedEntitlements.length, verifications: state.verifications.length, barOrders: 1, amusementSessions: state.amusementSessions.length, openRiskAlerts: 1, auditEvents: 2 },

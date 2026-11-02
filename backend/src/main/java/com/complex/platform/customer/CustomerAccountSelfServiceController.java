@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.trimToNull;
 
@@ -44,7 +44,10 @@ public class CustomerAccountSelfServiceController {
         this.studentCertifications = studentCertifications;
     }
 
-    /** clients-R8 提交投诉（multipart：project_id、title、description、files 0～9 个照片/视频/语音、idempotency_key）。 */
+    /**
+     * clients-R8 提交投诉（multipart：project_id、title、description、files 0～9 个照片/视频/语音、idempotency_key）；
+     * 第十八批 M 段第 111 条 111-R4：store_merchant_id 涉及门店（选填，第十八批裁决 28）。
+     */
     @PostMapping(value = "/complaints", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<CustomerComplaintService.ComplaintView> submitComplaint(
             @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
@@ -54,9 +57,19 @@ public class CustomerAccountSelfServiceController {
             @RequestParam(name = "project_id", required = false) String projectId,
             @RequestParam(name = "title", required = false) String title,
             @RequestParam(name = "description", required = false) String description,
+            @RequestParam(name = "store_merchant_id", required = false) String storeMerchantId,
             @RequestPart(name = "files", required = false) List<MultipartFile> files) {
         return ApiResponse.ok(complaints.submit(requireToken(customerToken, authorization), requireKey(idempotencyKey, bodyKey),
-                projectId, title, description, files));
+                projectId, title, description, storeMerchantId, files));
+    }
+
+    /** 第十八批 M 段第 111 条 111-R4（第十八批裁决 28）：投诉表单「涉及门店」选项——所选综合体的在营商户。 */
+    @GetMapping("/complaints/store-options")
+    public ApiResponse<List<CustomerComplaintService.StoreOption>> listComplaintStoreOptions(
+            @RequestHeader(name = "X-Customer-Token", required = false) String customerToken,
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            @RequestParam(name = "project_id", required = false) String projectId) {
+        return ApiResponse.ok(complaints.listStoreOptions(requireToken(customerToken, authorization), projectId));
     }
 
     /** clients-R8 我的投诉：只返回本人提交的投诉（状态中文、提交时间、处理结论、满意度）。 */

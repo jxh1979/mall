@@ -1,16 +1,19 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.customer.CustomerPointsAccountRecord;
 import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,7 +99,7 @@ class GiftVoucherTraceCodeRedeemJdbcTests {
         // 核验不过：券仍可核销、库存不动、不出库。
         assertThat(voucherStatus(voucher)).isEqualTo("issued");
         assertThat(stock()).isEqualTo(10);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM inventory_stock_movements WHERE movement_type = 'redeem_consume' AND item_id = ?",
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM inventory_stock_movements WHERE movement_type = 'gift_claim_consume' AND item_id = ?",
                 Integer.class, itemA)).isZero();
 
         String key = "gtc-redeem-ok-" + s;
@@ -140,6 +143,74 @@ class GiftVoucherTraceCodeRedeemJdbcTests {
                 .andExpect(jsonPath("$.detail_code").value("MERCHANT_REQUIRED"));
     }
 
+    /**
+     * 第十八批 M 段第 112 条 112-R3（BSM:1194「积分兑换消耗、礼物领取消耗（三种“消耗”分开记）」；BSM:1179「积分兑换的实物券发券时预占库存、
+     * 核销领取时才实扣」；ENUM:78「积分只兑换虚拟券」）：客人用积分兑换来的店内实物券核销记积分兑换消耗；营销赠发的同款券核销记礼物领取消耗。
+     */
+    @Test
+    void pointsRedeemedVoucherConsumesAsRedeemConsumeAndGrantedVoucherAsGiftClaimConsume() throws Exception {
+        String definition = goods(1);
+        String catalog = "redeem_gtc_" + s;
+        jdbc.update("INSERT INTO customer_redemption_catalog_items (id, item_name, item_type, points_cost, inventory_item_id, stock_location_id,"
+                + " stock_quantity, status, created_at, updated_at, voucher_definition_id)"
+                + " VALUES (?, '礼品兑换', 'goods', 100, ?, ?, 1, 'active', now(), now(), ?)", catalog, itemA, location, definition);
+        Instant now = Instant.now();
+        customers.savePoints(new CustomerPointsAccountRecord("points_" + f.customerId, f.customerId, 1000L, "base", Map.of(), 0L,
+                "active", now, 0L, null, null, 0, now, now));
+        String key = "gtc-points-" + s;
+        mockMvc.perform(post("/api/v1/customer/points/redemptions").header("X-Terminal-Type", "miniapp")
+                        .header("X-Customer-Token", f.token).header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", key, "catalog_item_id", catalog, "quantity", 1))))
+                .andExpect(status().isOk());
+        String pointsVoucher = jdbc.queryForObject(
+                "SELECT id FROM voucher_instances WHERE customer_id = ? AND source_type = 'points_redemption'", String.class, f.customerId);
+        String code = CustomerTicketPaymentFixture.read(mockMvc.perform(get("/api/v1/customer/vouchers/" + pointsVoucher + "/redeem-code")
+                .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", f.token)).andExpect(status().isOk()), "$.data.code");
+        redeemCode(code, List.of(code("TRC-A1"))).andExpect(status().isOk());
+        assertThat(consumed("redeem_consume")).isEqualTo(1);
+        assertThat(consumed("gift_claim_consume")).isZero();
+
+        RequestPostProcessor marketer = new StaffRequestFixture(jdbc)
+                .staff("usr_gtc_mkt_" + s, "staff", f.projectId, f.merchantId, "customer.voucher.manage");
+        String granted = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/vouchers/instances").with(marketer)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "gtc-grant-" + s, "definition_id", definition, "customer_id", f.customerId,
+                                "quantity", 1))))
+                .andExpect(status().isOk()), "$.data.instances[0].id");
+        redeem(granted, List.of(code("TRC-A2"))).andExpect(status().isOk());
+        assertThat(consumed("gift_claim_consume")).isEqualTo(1);
+        assertThat(consumed("redeem_consume")).isEqualTo(1);
+    }
+
+    /**
+     * 第十八批 M 段 V589（BSM:1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；第 112 条 112-R3）：营销赠发的店内实物券
+     * 库位为存酒区库房时，核销按礼物领取消耗落存酒库房处置待审单，批准前不扣库存。
+     */
+    @Test
+    void grantedVoucherAtSavedBottleWarehouseRedeemsIntoPendingGiftClaimDisposal() throws Exception {
+        String savedWarehouse = "gtc_wsb_" + s;
+        jdbc.update("INSERT INTO warehouses (id, project_id, warehouse_type, name, status, merchant_id) VALUES (?, ?, 'saved_bottle', '存酒库房', 'active', ?)",
+                savedWarehouse, f.projectId, f.merchantId);
+        jdbc.update("INSERT INTO inventory_stock_balances (id, item_id, location_id, quantity, reserved_quantity, available_quantity, updated_at, merchant_id)"
+                + " VALUES (?, ?, ?, 3, 0, 3, now(), ?)", "gtc_bal_sb_" + s, itemA, savedWarehouse, f.merchantId);
+        RequestPostProcessor marketer = new StaffRequestFixture(jdbc)
+                .staff("usr_gtc_mkt_" + s, "staff", f.projectId, f.merchantId, "customer.voucher.manage");
+        String granted = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/vouchers/instances").with(marketer)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "gtc-grant-sb-" + s, "definition_id", goods(1, savedWarehouse),
+                                "customer_id", f.customerId, "quantity", 1))))
+                .andExpect(status().isOk()), "$.data.instances[0].id");
+
+        redeem(granted, List.of(code("TRC-A1"))).andExpect(status().isOk());
+
+        assertThat(voucherStatus(granted)).isEqualTo("redeemed");
+        assertThat(jdbc.queryForMap("SELECT adjustment_type, status FROM inventory_stock_adjustments WHERE item_id = ? AND location_id = ?",
+                itemA, savedWarehouse)).containsEntry("adjustment_type", "gift_claim_consume").containsEntry("status", "pending_review");
+        assertThat(jdbc.queryForObject("SELECT quantity FROM inventory_stock_balances WHERE location_id = ?", Integer.class, savedWarehouse))
+                .isEqualTo(3);
+    }
+
     // ---------- helpers ----------
 
     private String code(String tag) {
@@ -152,10 +223,14 @@ class GiftVoucherTraceCodeRedeemJdbcTests {
     }
 
     private String goods(int quantity) {
+        return goods(quantity, location);
+    }
+
+    private String goods(int quantity, String stockLocation) {
         String id = "vdef_gtc_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         jdbc.update("INSERT INTO voucher_definitions (id, name, voucher_kind, redeem_method, settlement_mode, merchant_id, inventory_item_id,"
                 + " stock_location_id, stock_quantity, valid_days, status, transferable) VALUES (?, '礼品兑换券', 'in_store_goods', 'in_store_staff', 'none',"
-                + " ?, ?, ?, ?, 30, 'active', TRUE)", id, f.merchantId, itemA, location, quantity);
+                + " ?, ?, ?, ?, 30, 'active', TRUE)", id, f.merchantId, itemA, stockLocation, quantity);
         return id;
     }
 
@@ -188,6 +263,17 @@ class GiftVoucherTraceCodeRedeemJdbcTests {
         }
         return mockMvc.perform(post("/api/v1/vouchers/redemptions").with(cashier)
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
+    }
+
+    private ResultActions redeemCode(String redeemCode, List<String> codes) throws Exception {
+        return mockMvc.perform(post("/api/v1/vouchers/redemptions").with(cashier)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                        "idempotency_key", "gtc-redeem-" + UUID.randomUUID(), "code", redeemCode, "trace_codes", codes))));
+    }
+
+    private int consumed(String movementType) {
+        return jdbc.queryForObject("SELECT count(*) FROM inventory_stock_movements WHERE movement_type = ? AND item_id = ?",
+                Integer.class, movementType, itemA);
     }
 
     private ResultActions register(RequestPostProcessor who, String item, String traceCode) throws Exception {

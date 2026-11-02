@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.LocalZone;
@@ -13,8 +13,6 @@ import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.ArApItemSourceRecord;
 import com.complex.platform.finance.FinanceRepository;
 import com.complex.platform.finance.RefundPayableSettled;
-import com.complex.platform.merchantbilling.MerchantFeeNotificationRecipientResolver;
-import com.complex.platform.notification.NotificationService;
 import com.complex.platform.settlement.InternalPayDayService;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -42,7 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
  *       续缴按整次停车累计重算实际抵掉小时与成本（可升可降）；续缴后累计一分没少收的（如带抵免缴费后停到每日封顶），抵免退回可用、不计成本。
  *       成本＝实际抵掉的计费小时数×首次使用时固化的每小时内部结算价（内部结算价目录中城市项目公司「停车抵免（每小时）」生效条目）。</li>
  *   <li>分担：同一商户的组成先合并，按组成有效消费金额比例四舍五入到分，尾差单列一行由停车收款主体城市项目公司承担；
- *       按月合并为城市项目公司对各承担商户的普通内部结算应收（钱路 parking_credit_cost，付款时点按付账日规则固化），并短信通知商户。</li>
+ *       按月合并为城市项目公司对各承担商户的普通内部结算应收（钱路 parking_credit_cost，付款时点按付账日规则固化），到出账日由 MerchantSettlementStatementNoticeJob 随结算金额出账短信通知商户（金额、原因、异议截止日；第 110 条）。</li>
  *   <li>退款：对应酒吧账单退款成功后，未使用的按剩余有效消费重核或撤销；已使用的保留真实停车服务与原费用承担，不另扣、不冲已发生的内部应收应付。</li>
  * </ul>
  */
@@ -93,20 +91,15 @@ public class ParkingCreditService {
     private final AuditEventService audit;
     private final FinanceRepository finance;
     private final InternalPayDayService payDays;
-    private final NotificationService notifications;
-    private final MerchantFeeNotificationRecipientResolver recipients;
 
     public ParkingCreditService(JdbcTemplate jdbc, ParkingService parking, BusinessDayResolver businessDays, AuditEventService audit,
-            FinanceRepository finance, InternalPayDayService payDays, NotificationService notifications,
-            MerchantFeeNotificationRecipientResolver recipients) {
+            FinanceRepository finance, InternalPayDayService payDays) {
         this.jdbc = jdbc;
         this.parking = parking;
         this.businessDays = businessDays;
         this.audit = audit;
         this.finance = finance;
         this.payDays = payDays;
-        this.notifications = notifications;
-        this.recipients = recipients;
     }
 
     // ============ 资格 ============
@@ -318,16 +311,6 @@ public class ParkingCreditService {
         }
         audit.recordSuccess("parking.credit_cost.posted", "not_applicable", "parking_credit_cost_month", monthId, null, monthId,
                 Map.of("merchant_id", g.merchantId(), "cost_month", month.toString(), "amount_cent", amount, "ar_ap_item_id", itemId));
-        // BSM「商户应收应付变化一律短信」。
-        String request = "parking-credit-cost:" + monthId;
-        String phone = recipients.resolvePhone(g.merchantId(), null);
-        if (phone == null) {
-            audit.recordFailure("parking.credit_cost.notification.not_sent", "not_applicable", "parking_credit_cost_month", monthId, request,
-                    request, "缺少有效通知联系人，未发送；应收与付款时点不变");
-            return;
-        }
-        notifications.notify("parking", "credit_cost", phone, "PARKING_CREDIT_COST_BILLED", Map.of("cost_month", month.toString(),
-                "amount_cent", amount, "due_date", schedule.dueDate().toString()), request);
     }
 
     // ============ 退款重核 ============

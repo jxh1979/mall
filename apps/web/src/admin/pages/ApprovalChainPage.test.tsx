@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -266,7 +266,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       "settlement.high_value_threshold.configure", "compliance.expiry_item.grace", "security.export.editable_copy", "inventory.purchase_request",
       "inventory.purchase_terminate", "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution", "contract.new",
       "contract.expiry_termination", "contract.change", "energy.reading_anomaly_confirm", "energy.review_settings", "dealer.delivery_resolution",
-      "inventory.quarantine_disposition", "inventory.transfer_order.cancel", "inventory.transfer_order.unreturnable", "facility.equipment.scrap",
+      "inventory.quarantine_disposition", "inventory.transfer_order.cancel", "inventory.transfer_order.unreturnable", "facility.equipment.scrap", "work_order.bearer_dispute",
       "leasing.blacklist_exception", "leasing.intent.key_stage", "merchant.project.add", "inventory.trace.scan_backfill", "bar.sales.backfill", "bar.service.backfill",
       "parking.release.waive", "ticket.reward.rule", "ticket.reward.national", "ticket.reward.sales_contract", "staff.shift.publish", "staff.attendance.receipt.review",
       "staff.payroll.penalty_cap.adjust", "manual_release", "bill_waiver", "refund", "ar_ap_adjustment", "contract_violation", "base_definition_violation",
@@ -278,7 +278,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     const accessActions = ["access.role_viewable_projects.reduce", "access.position_role_template.delete", "access.scope_change", "access.scope_change.money",
       "access.grant_request", "access.grant_request.money"];
     const objectTypes = ["staff_profile", "staff_payroll_adjustment", "staff_payroll_adjustment_appeal", "contract", "bar_bill", "access_grant_request",
-      "facility_equipment_scrap", "parking_manual_release", "leasing_blacklist_exception", "leasing_intent", "merchant_project_request", "compliance_expiry_item",
+      "facility_equipment_scrap", "work_order_bearer_dispute", "parking_manual_release", "leasing_blacklist_exception", "leasing_intent", "merchant_project_request", "compliance_expiry_item",
       "export_file", "manual_backfill", "ar_ap_adjustment", "role_viewable_projects", "contract_change", "contract_settlement", "ticket_reward_config",
       "ticket_points_billing_rule", "ticket_points_calendar", "ticket_points_portal_outage", "ticket_points_objection_resolution", "purchase_prepayment_resolution",
       "inventory_transfer_order", "inventory_quarantine_disposition", "supply_contract", "inventory_purchase_request", "purchase_quantity_resolution",

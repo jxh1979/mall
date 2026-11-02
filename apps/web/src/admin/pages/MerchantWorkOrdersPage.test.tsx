@@ -293,3 +293,119 @@ describe("MerchantWorkOrdersPage 第 102 条 派单负责人与关单", () => {
     expect(JSON.parse(String(putInit.body))).toMatchObject({ work_order_type: "repair", close_method: "merchant_confirm" });
   });
 });
+
+// 第十八批 M 段第 111 条：111-R2 第十八批裁决 27「派单后，重复提或误提的由客户关怀部填原因取消」；
+// 111-R3 BSM:1385「客诉须经客户关怀部确认后方可视为形成闭环，未经其确认的一律不算闭环」。
+describe("MerchantWorkOrdersPage 客户关怀部取消与客诉跟进", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/work-orders");
+  });
+
+  const ROWS_111 = [
+    { id: "wo-dup", merchant_id: "m-1", work_order_type: "repair", title: "重复报修", priority: "high", status: "processing" },
+    { id: "wo-cp", merchant_id: "m-1", work_order_type: "complaint", title: "噪音投诉", priority: "medium", status: "closed" },
+  ];
+
+  function json(data: unknown): Response {
+    return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+  }
+
+  function mockFetch() {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST") return Promise.resolve(json({ id: "wo-dup", status: "cancelled" }));
+      if (String(url).includes("/complaint-followups/")) return Promise.resolve(json({ chain: "merchant_service", work_order_id: "wo-cp" }));
+      if (String(url).endsWith("/api/v1/merchant-service/work-orders")) return Promise.resolve(envelope(ROWS_111));
+      return Promise.resolve(json([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MerchantWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    return fetchMock;
+  }
+
+  it("选中已派单的重复单：未填取消原因不发请求；填原因点「取消工单」POST /staff-cancel 带幂等键与原因", async () => {
+    const fetchMock = mockFetch();
+    await waitFor(() => expect(screen.queryByTestId("merchant-work-order-cancel")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("merchant-work-order-select-wo-dup"));
+    fireEvent.click(screen.getByTestId("merchant-work-order-cancel"));
+    expect(screen.getByTestId("merchant-work-order-error").textContent).toContain("取消原因");
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    fireEvent.change(screen.getByTestId("merchant-work-order-cancel-reason"), { target: { value: "与上午那张重复" } });
+    fireEvent.click(screen.getByTestId("merchant-work-order-cancel"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST"
+      && String(url).endsWith("/api/v1/merchant-service/work-orders/wo-dup/staff-cancel"))).toBe(true));
+    const [, postInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    const body = JSON.parse(String(postInit.body));
+    expect(body).toMatchObject({ reason: "与上午那张重复" });
+    expect(body.idempotency_key).toBeTruthy();
+  });
+
+  it("投诉行有「客诉跟进」，点开读该单的商户链跟进；非投诉行没有", async () => {
+    const fetchMock = mockFetch();
+    await waitFor(() => expect(screen.queryByTestId("merchant-work-order-complaint-followup-wo-cp")).not.toBeNull());
+    expect(screen.queryByTestId("merchant-work-order-complaint-followup-wo-dup")).toBeNull();
+    fireEvent.click(screen.getByTestId("merchant-work-order-complaint-followup-wo-cp"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/api/v1/complaint-followups/merchant_service/wo-cp"))).toBe(true));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("complaint-loop-status").textContent).toContain("待客户关怀部确认闭环"));
+  });
+});
+
+// 第十八批 M 段第 117 条 117-R5：BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本，同时在工单上标明费用承担方」；
+// 第十八批裁决 29「不加状态，停在原状态」：商户服务工单承担方有争议时停在原状态转上级判定。承担的商户就是提单商户，不另选。
+describe("MerchantWorkOrdersPage 工单用料（第 117 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/merchant/work-orders");
+  });
+
+  const ROWS_117 = [{ id: "wo-1", merchant_id: "m-1", work_order_type: "repair", title: "水龙头漏水", priority: "high", status: "processing" }];
+  const MATERIALS = {
+    lines: [], total_cost_cent: 0, bearer: { cost_bearer: "merchant", merchant_id: "m-1", merchant_name: "甲商户" }, disputes: [],
+    options: { stock: [{ warehouse_id: "W", warehouse_name: "工程配件库", location_id: "L", item_id: "I", item_name: "阀芯", available_quantity: 3 }], merchants: [] },
+  };
+
+  function json(data: unknown): Response {
+    return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+  }
+
+  function mockFetch() {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (String(url).endsWith("/materials")) return Promise.resolve(json(MATERIALS));
+      if (String(url).endsWith("/api/v1/merchant-service/work-orders")) return Promise.resolve(envelope(ROWS_117));
+      return Promise.resolve(json([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MerchantWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    return fetchMock;
+  }
+
+  it("选中工单点「用料」读该单用料；领用出库只提交库位、物料与数量；商户承担不另选商户，有争议块", async () => {
+    const fetchMock = mockFetch();
+    await waitFor(() => expect(screen.queryByTestId("merchant-work-order-select-wo-1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("merchant-work-order-select-wo-1"));
+    await waitFor(() => expect(screen.queryByTestId("merchant-work-order-materials")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("merchant-work-order-materials"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/api/v1/merchant-service/work-orders/wo-1/materials"))).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId("work-order-materials-issue")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("work-order-materials-warehouse"), { target: { value: "W" } });
+    fireEvent.change(screen.getByTestId("work-order-materials-stock"), { target: { value: "I::L" } });
+    fireEvent.change(screen.getByTestId("work-order-materials-quantity"), { target: { value: "1" } });
+    fireEvent.click(screen.getByTestId("work-order-materials-issue-submit"));
+    const issued = () => fetchMock.mock.calls.filter(([url, init]) => init?.method === "POST"
+      && String(url).endsWith("/api/v1/merchant-service/work-orders/wo-1/materials"));
+    await waitFor(() => expect(issued()).toHaveLength(1));
+    const body = JSON.parse(String(issued()[0]![1].body));
+    expect(body).toMatchObject({ location_id: "L", item_id: "I", quantity: 1 });
+    expect(body.warehouse_id).toBeUndefined();
+
+    fireEvent.click(screen.getByTestId("work-order-materials-bearer-merchant"));
+    expect(screen.queryByTestId("work-order-materials-bearer-merchant-id")).toBeNull();
+    expect(screen.getByTestId("work-order-materials-dispute")).toBeTruthy();
+    expect(screen.queryByTestId("work-order-materials-claimed-merchant-id")).toBeNull();
+  });
+});

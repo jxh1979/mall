@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import android.app.Activity
 import android.content.Intent
@@ -56,6 +56,8 @@ class MainActivity : Activity() {
   private val posPrefs: SharedPreferences by lazy { getSharedPreferences("bar_pos", Context.MODE_PRIVATE) }
   private var posBarId: String? = null
   private val workPhonePrefs: SharedPreferences by lazy { getSharedPreferences("work_phone", Context.MODE_PRIVATE) }
+  // 第十八批 M 段第 112 条 112-R2：一体机模式绑定持久化（设备号、设备台账行、绑定点位），跨启动保留。
+  private val kioskPrefs: SharedPreferences by lazy { getSharedPreferences("kiosk", Context.MODE_PRIVATE) }
   // 当前桌台 + 购物车（本 Activity 会话态；下单成功清空）。
   private val posCart = LinkedHashMap<String, PosCartLine>()
   private var posTable: BarTableAvailabilityRow? = null
@@ -76,6 +78,9 @@ class MainActivity : Activity() {
   // 本地解码无网络依赖，结果回填目标输入框。
   private var scanTarget: EditText? = null
   private var scanResult: ((String) -> Unit)? = null
+  /** 第十八批 M 段第 116 条：服务端按设备类型下发的功能码，键＝取清单时的终端类型；没取到（或终端类型变了）按 [homeShows] 的口径。 */
+  private var appFunctions: Pair<String, Set<String>>? = null
+  private fun shows(code: String) = homeShows(api.terminalType, appFunctions?.takeIf { it.first == api.terminalType }?.second, code)
   private var nfcResult: ((String) -> Unit)? = null
 
   /** 84-R2：提示语可换（交接页对准酒水或物品上的平台二维码）；给了 onResult 就把扫到的码交给它，不回填输入框。 */
@@ -148,6 +153,8 @@ class MainActivity : Activity() {
   }
 
   private fun flushWorkPhoneReceipts(status: TextView? = null) {
+    // 第十八批 M 段第 116 条：领取事件与考勤上下文只认工作手机，别的终端不去调。
+    if (api.terminalType != "staff_work_phone") return
     val device = api.deviceId
     if (api.accessToken == null || device == null) {
       status?.text = "事件已保留，登录并登记后重试同步"
@@ -181,6 +188,8 @@ class MainActivity : Activity() {
     // U01-001：终端身份由本机绑定类型决定并只声明一次，重启后从本地绑定记录恢复（工作手机 / 平板 POS）。
     workPhonePrefs.getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = "staff_work_phone" }
     posPrefs.getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = "tablet" }
+    // 第十八批 M 段第 112 条 112-R2：一体机模式同样从本机绑定记录恢复 kiosk 身份。
+    kioskPrefs.getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = "kiosk" }
     // U01-007：私人手机在本人注册时已把 Keystore 公钥/指纹绑定为员工设备凭证，重启后按登记的指纹恢复私人手机身份（只声明一次）。
     getSharedPreferences("private_phone", MODE_PRIVATE).getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = STAFF_PRIVATE_PHONE }
     // U01-002：拔线接收器由常驻前台服务持有并在开机后重注册；本页只消费投递（进程被回收期间的拔线在下次登录后补记）。
@@ -329,7 +338,7 @@ class MainActivity : Activity() {
               deviceModel = android.os.Build.MODEL,
             ),
           )
-          api.registerDeviceSigningKey(d, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString())
+          api.registerDeviceSigningKey(d, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString(), "staff_work_phone")
           binding
         },
         onSuccess = { binding ->
@@ -348,7 +357,7 @@ class MainActivity : Activity() {
     setContentView(
       screen(
         title = "设备绑定",
-        children = listOf(status, deviceId, spaceId, bindButton, button("跳过，进入首页") { showHome() }),
+        children = listOf(status, deviceId, spaceId, staffId, bindButton, button("跳过，进入首页") { showHome() }),
       ),
     )
   }
@@ -357,40 +366,56 @@ class MainActivity : Activity() {
   // 屏 ③ 首页 / 功能入口
   // ---------------------------------------------------------------------------
   private fun showHome() {
+    // 第十八批 M 段第 112 条 112-R2：一体机首页只放权益领取与重新登录。
+    if (api.terminalType == "kiosk") { showKioskClaim(); return }
     val info = statusText(homeSummary())
+    // 第十八批 M 段第 116 条：每个按钮配服务端功能码（与 StaffAppFunctions.ALL 同名），按下发的清单显示。
+    fun entry(code: String, label: String, open: () -> Unit): View? = if (shows(code)) button(label) { open() } else null
+    val declared = api.terminalType
 
-    val children = mutableListOf<View>(
+    val children = listOfNotNull(
       info,
-      button("门票/权益核销") { showTicketVerify() },
-      button("酒水与物品交接扫码") { showTraceHandover() },
-      button("游乐核销") { showAmusementVerify() },
-      button("酒吧点酒下单 / 支付") { showBarOrder() },
-      button("平板点单 POS（图形）") { showPosEntry() },
-      button("游乐检修提交 / 主管确认") { showMaintenance() },
-      button("同步待提交任务") { syncTasksAction(info) },
-      button("员工设备凭证") { showStaffDevice() },
-      button("票务核销冲正") { showReverse() },
-      statusText("—— 员工自有手机(BYOD 一期) ——"),
-      button("待办与消息中心") { showInbox() },
-      button("公司公告") { showStaffNotices() },
-      button("我的工单") { showMyWorkOrders() },
-      button("我的接警（已收到并接手）") { showMyFacilityAlarms() },
-      button("酒吧空位 / 帮客订位") { showBarAvailability() },
-      button("我的排班") { showMyShifts() },
-      button("考勤打卡(NFC/扫码)") { showPunch() },
-      button("我的薪资") { showMyPayroll() },
-      button("考勤月视图") { showAttendanceMonth() },
-      button("请假") { showLeave() },
-      statusText("—— 服务点单(公司代收,月结分账) ——"),
-      button("代客点服务") { showServiceOrderCreate() },
-      button("我的服务收入") { showMyServiceOrders() },
-      button("主管排班(需排班权限)") { showShiftManage() },
-      button("商户员工注册申请（商户代提交）") { showStaffRegistration() },
-      button("我的资料(个人信息)") { showMyProfile() },
+      entry("ticket_verify", "门票/权益核销") { showTicketVerify() },
+      entry("voucher_redeem", "礼物/券核销") { showVoucherRedeem() },
+      entry("trace_handover", "酒水与物品交接扫码") { showTraceHandover() },
+      entry("amusement_verify", "游乐核销") { showAmusementVerify() },
+      entry("bar_order", "酒吧点酒下单 / 支付") { showBarOrder() },
+      entry("tablet_pos", "平板点单 POS（图形）") { showPosEntry() },
+      entry("kiosk_claim", "一体机模式（权益领取）") { showKioskEntry() },
+      entry("amusement_maintenance", "游乐检修提交 / 主管确认") { showMaintenance() },
+      entry("sync_tasks", "同步待提交任务") { syncTasksAction(info) },
+      entry("staff_device", "员工设备凭证") { showStaffDevice() },
+      entry("ticket_reverse", "票务核销冲正") { showReverse() },
+      declared?.let { statusText("—— 员工自有手机(BYOD 一期) ——") },
+      entry("inbox", "待办与消息中心") { showInbox() },
+      entry("notices", "公司公告") { showStaffNotices() },
+      entry("my_work_orders", "我的工单") { showMyWorkOrders() },
+      entry("my_alarms", "我的接警（已收到并接手）") { showMyFacilityAlarms() },
+      entry("bar_reservation", "酒吧空位 / 帮客订位") { showBarAvailability() },
+      entry("my_shifts", "我的排班") { showMyShifts() },
+      entry("attendance_punch", "考勤打卡(NFC/扫码)") { showPunch() },
+      entry("my_payroll", "我的薪资") { showMyPayroll() },
+      entry("attendance_month", "考勤月视图") { showAttendanceMonth() },
+      entry("leave", "请假") { showLeave() },
+      declared?.let { statusText("—— 服务点单(公司代收,月结分账) ——") },
+      entry("service_order_create", "代客点服务") { showServiceOrderCreate() },
+      entry("my_service_income", "我的服务收入") { showMyServiceOrders() },
+      entry("shift_manage", "主管排班(需排班权限)") { showShiftManage() },
+      entry("merchant_staff_registration", "商户员工注册申请（商户代提交）") { showStaffRegistration() },
+      entry("my_profile", "我的资料(个人信息)") { showMyProfile() },
       button("重新登录") { logoutAndRestart() },
     )
 
-    setContentView(screen(title = "现场操作首页", children = children, root = true))
+    val view = screen(title = "现场操作首页", children = children, root = true)
+    setContentView(view)
+    // 已声明身份：后台取一次本端的功能清单，取到后若仍在首页即重绘；取不到维持全部显示。
+    if (declared != null && appFunctions?.first != declared) {
+      runBackground(
+        action = { api.staffAppFunctions().functions.toSet() },
+        onSuccess = { appFunctions = declared to it; if (view.isAttachedToWindow) showHome() },
+        onError = { },
+      )
+    }
   }
 
   private fun homeSummary(): String {
@@ -486,6 +511,170 @@ class MainActivity : Activity() {
         children = listOf(status, credential, scanButton, previewButton, faceConsent, faceButton, verifyButton, backButton()),
       ),
     )
+  }
+
+  // ---------------------------------------------------------------------------
+  // 第十八批 M 段第 112 条 112-R1（BSM:947「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」；ENUM:81「到店由店员核销领取时才实扣」；
+  // BSM:1197「出库须同时核验订单和物品码」）：工作手机「礼物/券核销」——扫客人券包出示的券码先查券，店内实物券逐件扫物品码后核销。
+  // 112-R2（BSM:985、BSM:1948；BSM:980「……让客人或现场工作人员在固定点位完成查询、权益领取……」；BSM:1047「……权益领取自助操作。」）：
+  // 一体机权益领取屏同一套，另收门票权益码（走票务核销预览与核销）；登录员工进入后常驻，客人或现场工作人员都可在此扫码查看与领取。
+  // ---------------------------------------------------------------------------
+  private fun showVoucherRedeem() = showClaim(kiosk = false)
+
+  private fun showKioskClaim() = showClaim(kiosk = true)
+
+  private fun showClaim(kiosk: Boolean) {
+    val verb = if (kiosk) "领取" else "核销"
+    val code = editText(if (kiosk) "券码或权益码（扫码或手动输入）" else "券码（扫码或手动输入）")
+    val traceCodes = editText("物品码（逐件扫，空格或逗号分隔）").apply { visibility = View.GONE }
+    val status = statusText(if (kiosk) "扫码查看能领什么、能领多少、是否已领取，再点领取" else "扫客人券包里的券码，先查券再核销")
+    // 只认刚查过的那个码；店内实物券记下要逐件扫的物品码个数。
+    var checked: String? = null
+    var goodsQuantity: Int? = null
+    val scanTrace = button("扫物品码") {
+      launchScan(null, "对准礼品上的平台二维码") { c ->
+        traceCodes.setText(listOf(traceCodes.text.toString().trim(), c.trim()).filter { it.isNotEmpty() }.joinToString(" "))
+      }
+    }.apply { visibility = View.GONE }
+    fun showTrace(quantity: Int?) {
+      goodsQuantity = quantity
+      traceCodes.setText("")
+      traceCodes.visibility = if (quantity != null) View.VISIBLE else View.GONE
+      scanTrace.visibility = traceCodes.visibility
+    }
+    // 门票权益：设备＝本机设备台账行、点位＝本机绑定点位（一体机绑定时存下）。
+    fun kioskTarget(): Pair<String, String>? {
+      val device = kioskPrefs.getString("binding_id", null)
+      val point = kioskPrefs.getString("point_id", null)
+      if (device.isNullOrBlank() || point.isNullOrBlank()) { status.text = "本机未完成一体机绑定"; return null }
+      return device to point
+    }
+    val scanButton = button("扫码读取") { launchScan(code, "对准客人出示的券码或权益码") }
+    val previewButton = button(if (kiosk) "查看可领取" else "查券") {
+      val c = code.text.toString().trim()
+      if (c.isEmpty()) { status.text = "请扫码或输入"; return@button }
+      if (store.session == null) { status.text = "请先登录"; return@button }
+      checked = null
+      showTrace(null)
+      if (!kiosk || claimTarget(c) == ClaimTarget.VOUCHER) {
+        status.text = "正在查询…"
+        runBackground(
+          action = { api.previewVoucherRedeem(c) },
+          onSuccess = { p ->
+            checked = c
+            if (p.blockReason == null) showTrace(p.goodsQuantity)
+            status.text = buildString {
+              append(p.name ?: "券")
+              p.goodsQuantity?.let { append(" × ").append(it).append(" 件") }
+              append("\n状态：").append(voucherStatusZh(p.status))
+              p.expiresAt?.let { append("\n有效期至：").append(it) }
+              append('\n').append(p.blockReason?.let { "不可${verb}：${voucherBlockReasonZh(it)}" }
+                ?: p.goodsQuantity?.let { "可${verb}：须逐件扫 $it 个物品码" } ?: "可${verb}")
+            }
+          },
+          onError = { status.text = "查询失败：${friendly(it)}" },
+        )
+      } else {
+        val (device, point) = kioskTarget() ?: return@button
+        status.text = "正在查询…"
+        runBackground(
+          action = { api.preview(kioskEntitlementRequest(c, device, point, java.util.UUID.randomUUID().toString(), store.session?.staffId)) },
+          onSuccess = { r ->
+            checked = c
+            val e = r.entitlement
+            status.text = buildString {
+              append(entitlementTypeZh(e?.entitlementType))
+              if (e != null) {
+                append("\n剩余次数：").append(e.totalTimes - e.usedTimes).append("（共 ").append(e.totalTimes).append(" 次）")
+                e.validTo?.let { append("\n有效期至：").append(it) }
+                append("\n状态：").append(statusZh(e.status))
+              }
+              append('\n').append(if (r.allowed) "可领取" else "不可领取：${r.reason.ifBlank { "-" }}")
+            }
+          },
+          onError = { status.text = "查询失败：${friendly(it)}" },
+        )
+      }
+    }
+    val claimButton = button(verb) {
+      val c = code.text.toString().trim()
+      if (c.isEmpty() || c != checked) { status.text = if (kiosk) "请先查看可领取" else "请先查券"; return@button }
+      if (!kiosk || claimTarget(c) == ClaimTarget.VOUCHER) {
+        val quantity = goodsQuantity
+        val codes = scannedTraceCodes(traceCodes.text.toString())
+        if (quantity != null && codes.size != quantity) { status.text = "须逐件扫 $quantity 个物品码"; return@button }
+        status.text = "正在提交…"
+        runBackground(
+          // 每次新幂等键提交。
+          action = { api.redeemVoucher(VoucherRedeemRequest(java.util.UUID.randomUUID().toString(), c, codes.takeIf { quantity != null })) },
+          onSuccess = { checked = null; showTrace(null); status.text = "${verb}完成" },
+          onError = { status.text = "${verb}失败：${friendly(it)}" },
+        )
+      } else {
+        val (device, point) = kioskTarget() ?: return@button
+        status.text = "正在提交…"
+        runBackground(
+          action = { api.verify(kioskEntitlementRequest(c, device, point, java.util.UUID.randomUUID().toString(), store.session?.staffId)) },
+          onSuccess = { r ->
+            checked = null
+            status.text = if (r.status == "success") "领取完成" else "不可领取：${verifyStatusZh(r.status)} ${r.resultReason ?: ""}"
+          },
+          onError = { status.text = "领取失败：${friendly(it)}" },
+        )
+      }
+    }
+    setContentView(
+      screen(
+        title = if (kiosk) "一体机 · 权益领取" else "礼物 / 券核销",
+        children = listOf(status, code, scanButton, previewButton, traceCodes, scanTrace, claimButton,
+          if (kiosk) button("重新登录") { logoutAndRestart() } else backButton()),
+        root = kiosk,
+      ),
+    )
+  }
+
+  /** 112-R2：一体机模式入口——本机还没绑定为一体机时先绑定，之后进权益领取屏。 */
+  private fun showKioskEntry() {
+    if (store.session == null) { showLogin(); return }
+    if (kioskPrefs.getString("device_id", null).isNullOrBlank()) showKioskSetup() else showKioskClaim()
+  }
+
+  /** 112-R2：把本机绑定为一体机（服务模式、按空间绑定点位）并登记签名公钥；所属商户不在一体机上填（赠饮按设备所属商户判门店）。 */
+  private fun showKioskSetup() {
+    val deviceId = editText("设备编号")
+    val spaceId = editText("绑定点位")
+    val status = statusText("由设备管理员填写已登记的设备编号与点位。所属商户请管理员在后台设备台账页「所属商户」设置，未设置时赠饮领取会被拒绝。")
+    val bindButton = button("绑定并进入权益领取") {
+      val d = deviceId.text.toString().trim()
+      val space = spaceId.text.toString().trim()
+      if (d.isEmpty()) { status.text = "请输入设备编号"; return@button }
+      if (space.isEmpty()) { status.text = "请输入绑定点位"; return@button }
+      status.text = "正在绑定…"
+      runBackground(
+        action = {
+          val binding = workflow.bindDevice(
+            BindDeviceRequest(
+              deviceId = d,
+              terminalType = "kiosk",
+              bindingScope = "space",
+              boundSpaceId = space,
+              kioskMode = "service",
+              deviceModel = android.os.Build.MODEL,
+            ),
+          )
+          api.registerDeviceSigningKey(d, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString(), "kiosk")
+          binding
+        },
+        onSuccess = { binding ->
+          kioskPrefs.edit().putString("device_id", d).putString("binding_id", binding.id).putString("point_id", space).apply()
+          api.deviceId = d
+          api.terminalType = "kiosk"
+          showKioskClaim()
+        },
+        onError = { status.text = "绑定失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(title = "一体机 · 绑定", children = listOf(status, deviceId, spaceId, bindButton, backButton())))
   }
 
   // ---------------------------------------------------------------------------
@@ -683,15 +872,26 @@ class MainActivity : Activity() {
       val pid = profileId.text.toString().trim()
       if (pid.isEmpty()) { status.text = "请输入员工档案"; return@button }
       status.text = "正在绑定凭证…"
+      val fingerprint = DeviceKeystore.deviceFingerprintHash()
       runBackground(
         action = {
           workflow.bindStaffDeviceCredential(
             staffProfileId = pid,
             devicePublicKey = DeviceKeystore.devicePublicKeyBase64(),
-            deviceFingerprintHash = DeviceKeystore.deviceFingerprintHash(),
+            deviceFingerprintHash = fingerprint,
           )
         },
-        onSuccess = { rec -> status.text = "凭证绑定：${rec.id}（状态 ${statusZh(rec.bindStatus)}）" },
+        onSuccess = { rec ->
+          // 第十八批 M 段第 108 条 108-R3（PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」）：同自助注册成功分支，
+          // 本机以凭证指纹作设备编号、按私人手机声明身份并签名（换机审批通过后生效）。
+          // 第 116 条 116-R3：只在本机还没声明身份时采用私人手机身份，工作手机、平板不改；回首页即按私人手机重取功能清单。
+          if (api.terminalType == null) {
+            getSharedPreferences("private_phone", MODE_PRIVATE).edit().putString("device_id", fingerprint).apply()
+            api.deviceId = fingerprint
+            api.terminalType = STAFF_PRIVATE_PHONE
+          }
+          status.text = "凭证绑定：${rec.id}（状态 ${statusZh(rec.bindStatus)}）"
+        },
         onError = { status.text = "绑定失败：${friendly(it)}" },
       )
     }
@@ -1064,6 +1264,7 @@ class MainActivity : Activity() {
   /**
    * 我的工单：派给我的只读（处理在公司设备）；第十二批操作员裁决第 13 条：一并列出「待我提单确认」的单，
    * 点选后可「确认」（/review）或填不通过原因「退回返工」（/rework）。
+   * 第十八批 M 段第 111 条 111-R1：物业工单之后追加派给我的商户服务工单（只读，点选不回填）；两份各自拉取，一份失败只在状态行注明。
    */
   private fun showMyWorkOrders() {
     val status = statusText("正在拉取流转到我的工单…")
@@ -1073,9 +1274,15 @@ class MainActivity : Activity() {
     val me = store.session?.staffId
     val refresh = {
       runBackground(
-        action = { api.listMyWorkOrders() },
-        onSuccess = { orders ->
-          status.text = "我的工单 ${orders.size} 条（派给我的只读，处理在公司设备；待我提单确认的可确认或退回返工）"
+        action = { runCatching { api.listMyWorkOrders() } to runCatching { api.listMyMerchantWorkOrders() } },
+        onSuccess = { (facility, merchant) ->
+          val orders = facility.getOrDefault(emptyList())
+          val merchantOrders = merchant.getOrDefault(emptyList())
+          status.text = listOfNotNull(
+            "我的工单 ${orders.size + merchantOrders.size} 条（派给我的只读，处理在公司设备；待我提单确认的可确认或退回返工）",
+            facility.exceptionOrNull()?.let { "物业工单拉取失败：${friendly(it)}" },
+            merchant.exceptionOrNull()?.let { "商户工单拉取失败：${friendly(it)}" },
+          ).joinToString("\n")
           fillSelectableRows(
             list,
             orders.map { o ->
@@ -1083,6 +1290,8 @@ class MainActivity : Activity() {
               "${if (pending) "[待我提单确认] " else ""}${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""}\n优先级 ${o.priority ?: "-"} / 处理时限 ${o.handleDueAt ?: "-"}" to {
                 if (pending) { orderId.setText(o.id ?: ""); status.text = "已选待我提单确认：${o.code ?: o.id}" }
               }
+            } + merchantOrders.map { m ->
+              "[商户工单] ${m.title ?: m.id} [${merchantWorkOrderStatusZh(m.status)}]\n${merchantWorkOrderTypeZh(m.workOrderType)}/${m.priority ?: "-"} / 处理时限 ${m.dueAt ?: "-"}" to {}
             },
             emptyText = "暂无流转到你的工单",
           )
@@ -1770,6 +1979,8 @@ class MainActivity : Activity() {
         onError = { status.text = "拉取失败：${friendly(it)}" },
       )
     }
+    // 第十八批 M 段第 116 条：接单、完成履约是现场操作（BSM:1132），清单不含 service_order_fulfil 的终端（私人手机）不给这两个按钮。
+    val fulfil = shows("service_order_fulfil")
     val acceptButton = button("接单") {
       val id = orderId.text.toString().trim()
       if (id.isEmpty()) { status.text = "请填服务单"; return@button }
@@ -1791,8 +2002,7 @@ class MainActivity : Activity() {
     refresh()
     setContentView(screen(
       title = "我的服务任务",
-      children = listOf(status, list, orderId, acceptButton, completeButton,
-        backButton()),
+      children = if (fulfil) listOf(status, list, orderId, acceptButton, completeButton, backButton()) else listOf(status, list, backButton()),
       secure = true,
     ))
   }
@@ -1912,7 +2122,7 @@ class MainActivity : Activity() {
               deviceModel = android.os.Build.MODEL,
             ),
           )
-          api.registerDeviceSigningKey(dev, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString())
+          api.registerDeviceSigningKey(dev, DeviceKeystore.devicePublicKeyBase64(), java.util.UUID.randomUUID().toString(), "tablet")
           binding
         },
         onSuccess = { binding ->
@@ -2510,7 +2720,8 @@ class MainActivity : Activity() {
         runCatching { api.listMyWorkOrders() }.getOrDefault(emptyList()).forEach { o ->
           items.add("[待办工单] ${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""} 时限${o.handleDueAt ?: "-"}")
         }
-        runCatching { api.listMyFacilityAlarms() }.getOrDefault(emptyList())
+        // 第十八批 M 段第 116 条：清单不含我的接警的终端（私人手机）不去调，免得每开一次就留一条被拒记录。
+        (if (shows("my_alarms")) runCatching { api.listMyFacilityAlarms() }.getOrDefault(emptyList()) else emptyList())
           .filter { it.status == "awaiting_takeover" }
           .forEach { a -> items.add("[待接警] 设备 ${a.equipmentId ?: "-"} 优先级 ${a.priority ?: "-"} 时限${a.responseDueAt ?: "-"}（去「我的接警」明确接手）") }
         runCatching { api.listMyShifts() }.getOrDefault(emptyList()).forEach { s ->

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -1756,7 +1756,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 request == null ? null : request.idempotencyKey(),
                 request,
                 SavedBottleRecord.class,
-                "bar.saved_bottle.disputed",
+                "bar.saved_bottle.dispute",
                 "bar.saved_bottle.dispute_failed",
                 "bar.saved_bottle.manage",
                 "saved_bottle",
@@ -2810,8 +2810,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     public PageResponse<InventoryStockBatchRecord> listStockBatches() {
         return readPage(
-                "inventory.stock_batch.viewed",
-                "inventory.stock_batch.view_failed",
+                "inventory.stock_batch.list",
+                "inventory.stock_batch.list_failed",
                 "inventory.stock.view",
                 "inventory_stock_batch",
                 () -> {
@@ -2835,8 +2835,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 request == null ? null : request.idempotencyKey(),
                 request,
                 InventoryStockBatchRecord.class,
-                "inventory.stock_batch.recorded",
-                "inventory.stock_batch.record_failed",
+                "inventory.stock_batch.create",
+                "inventory.stock_batch.create_failed",
                 "inventory.stock.batch.manage",
                 "inventory_stock_batch",
                 () -> createStockBatchOnce(request)
@@ -2845,8 +2845,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     public PageResponse<InventoryRiskAlertRecord> listRiskAlerts() {
         return readPage(
-                "inventory.risk_alert.viewed",
-                "inventory.risk_alert.view_failed",
+                "inventory.risk_alert.list",
+                "inventory.risk_alert.list_failed",
                 "inventory.risk_alert.view",
                 "inventory_risk_alert",
                 () -> {
@@ -2865,8 +2865,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 request == null ? null : request.idempotencyKey(),
                 request,
                 InventoryRiskScanResult.class,
-                "inventory.risk_scan.completed",
-                "inventory.risk_scan.failed",
+                "inventory.risk.scan",
+                "inventory.risk.scan_failed",
                 "inventory.risk.scan",
                 "inventory_risk_scan",
                 () -> scanInventoryRisks(request)
@@ -2875,8 +2875,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     public PageResponse<SupplierReconciliationRecord> listSupplierReconciliations() {
         return readPage(
-                "inventory.supplier_reconciliation.viewed",
-                "inventory.supplier_reconciliation.view_failed",
+                "inventory.supplier_reconciliation.list",
+                "inventory.supplier_reconciliation.list_failed",
                 "inventory.supplier.reconcile",
                 "inventory_supplier_reconciliation",
                 () -> {
@@ -2895,7 +2895,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 request == null ? null : request.idempotencyKey(),
                 request,
                 SupplierReconciliationRecord.class,
-                "inventory.supplier_reconciliation.created",
+                "inventory.supplier_reconciliation.create",
                 "inventory.supplier_reconciliation.create_failed",
                 "inventory.supplier.reconcile",
                 "inventory_supplier_reconciliation",
@@ -3037,6 +3037,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     @Transactional
     public StockMovementRecord createTypedStockMovement(String movementType, StockMovementRequest request) {
         return stockMovementService.createTypedStockMovement(movementType, request);
+    }
+
+    /** 第十八批 M 段第 117 条（BSM:1380）：工单用料出库（见 InventoryStockMovementService#issueForWorkOrder）；调用方在事务内，幂等与审计由工单侧做。 */
+    public StockMovementRecord issueForWorkOrder(String businessType, String workOrderId, String locationId, String itemId,
+            Integer quantity, String idempotencyKey) {
+        return stockMovementService.issueForWorkOrder(businessType, workOrderId, locationId, itemId, quantity, idempotencyKey);
     }
 
     /** 券核销领取查商品在库位的可用量(缺货则退积分)。 */
@@ -3314,10 +3320,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     // 防调包:本单有随货溯源码时,收货必须逐码扫齐(空扫/漏扫拒绝),扫描集须与本单集完全一致。
                     java.util.LinkedHashSet<String> orderCodes = requireScannedAll(o, request == null ? null : request.scannedTraceCodes());
                     boolean borrow = isBorrow(o);
+                    // 第十八批 M 段 112-R4（BSM:1201「买断时溯源码归属从原主体变更到接收主体」）：买断翻码时码的归属商户与登记物料随转为接收方所选物品。
+                    java.util.Map<String, String> itemByCode = java.util.Map.of();
                     if (!borrow) {
                         // 第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货由接收方办理，入接收方本商户物品并写调拨流水；
                         // 办理人、仓库与逐行物品的校验先于翻码与挂账，同一事务失败整单回滚。
-                        transferFlow.purchaseStockIn(o, request, now);
+                        itemByCode = transferFlow.purchaseStockIn(o, request, now);
                     }
                     int seq = 0;
                     for (String code : orderCodes) {
@@ -3327,7 +3335,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                         // 借用型只改当前保管主体与在借单，所有权仍是借出方；买断型才翻转所有权。
                         int affected = borrow
                                 ? repository.updateTraceCodeCustodianIfOwnedBy(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), o.id(), now)
-                                : repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
+                                : repository.transferTraceCodeOwnership(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(),
+                                        itemByCode.get(code), now);
                         if (affected == 0 && repository.traceCodeExists(code)) {
                             throw ApiException.badRequest("TRACE_OWNER_MISMATCH",
                                     "溯源码属于其他主体，不能收货：" + code);

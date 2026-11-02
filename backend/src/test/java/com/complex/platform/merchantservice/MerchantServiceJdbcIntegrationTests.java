@@ -477,6 +477,86 @@ class MerchantServiceJdbcIntegrationTests {
         merchantConfirm(merchantAccount, confirmed).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("closed"));
     }
 
+    // ── 第十八批 M 段第 111 条 111-R2：商户服务工单取消（真库＋真实入口＋真实授权链，请求体一律按前端蛇形键） ──
+    // ENUM:264「商户服务工单状态｜已提交、已派单、处理中、待商户确认、已处理待关闭、已关闭、已取消（商户专区发起；……）」；
+    // 第十八批裁决 27「派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消」。
+
+    /**
+     * 111-R2：已提交（未派单）的单，本商户按专区蛇形键填原因取消即为已取消，取消动作操作人是商户账号、说明为原因；换幂等键再取消 409 WORK_ORDER_CLOSED。
+     * 不填原因 400；别的商户 403 CROSS_MERCHANT_FORBIDDEN；持建单码的平台员工 403 MERCHANT_SCOPE_REQUIRED，单子仍已提交；已派单的单商户取消 409 INVALID_STATE、状态不变。
+     */
+    @Test
+    void merchantCancelsUndispatchedWorkOrderWithReason() throws Exception {
+        seedOperatingMerchant();
+        String id = createAsMerchant("cleaning", "low", "");
+
+        merchantCancel(merchantAccount, id, "").andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        String otherMerchant = "mch_111_" + suffix;
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id) "
+                + "VALUES (?, ?, 'retail', 'active', now(), now(), ?)", otherMerchant, "别家商户" + suffix, project("a"));
+        String creator = role("creator", "merchant.service_work_order.view", "merchant.service_work_order.create");
+        merchantCancel(account("m2", project("a"), otherMerchant, creator), id, "误报").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        merchantCancel(account("sc", project("a"), null, creator), id, "误报").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("MERCHANT_SCOPE_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, id)).isEqualTo("created");
+
+        merchantCancel(merchantAccount, id, "误报，问题已自行解决").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("cancelled"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, id)).isEqualTo("cancelled");
+        assertThat(jdbcTemplate.queryForList("SELECT operator_user_id, operator_note, from_status FROM merchant_service_work_order_actions "
+                + "WHERE work_order_id = ? AND action_type = 'cancelled'", id))
+                .singleElement().satisfies(row -> assertThat(row).containsEntry("operator_user_id", user("m"))
+                        .containsEntry("operator_note", "误报，问题已自行解决").containsEntry("from_status", "created"));
+        assertThat(jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id))
+                .contains("merchant_service.work_order.cancelled", "merchant_service.work_order.cancel_failed");
+        merchantCancel(merchantAccount, id, "误报").andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("WORK_ORDER_CLOSED"));
+
+        String assigned = createAsMerchant("repair", "high", "");
+        assign(dispatcherB, assigned, user("pa")).andExpect(status().isOk());
+        merchantCancel(merchantAccount, assigned, "重复提单").andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("INVALID_STATE"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, assigned)).isEqualTo("assigned");
+    }
+
+    /**
+     * 111-R2：派单后重复提或误提的，由客户关怀部（持关闭码、能管到该商户经营项目的平台员工）按后台蛇形键填原因取消，取消动作操作人是该员工、说明为原因；
+     * 未派单的单员工取消 409 INVALID_STATE（派单前由商户自己取消）；只到项目 C 的员工 403 CROSS_PROJECT_FORBIDDEN、单子不动；不填原因 400。
+     */
+    @Test
+    void customerCareCancelsDispatchedDuplicateWithReason() throws Exception {
+        seedOperatingMerchant();
+        RequestPostProcessor care = account("k", project("a"), null, role("closer", "merchant.service_work_order.view", "merchant.service_work_order.close"));
+        RequestPostProcessor careC = account("kc", project("c"), null, role("closerc", "merchant.service_work_order.close"));
+        String created = createAsMerchant("repair", "high", "");
+        staffCancel(care, created, "重复提单").andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("INVALID_STATE"));
+
+        String id = createAsMerchant("repair", "high", "");
+        moveTo(id, "processing");
+        staffCancel(careC, id, "重复提单").andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        staffCancel(care, id, "").andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, id)).isEqualTo("processing");
+
+        staffCancel(care, id, "与上午那张重复").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("cancelled"));
+        assertThat(jdbcTemplate.queryForList("SELECT operator_user_id, operator_note, from_status FROM merchant_service_work_order_actions "
+                + "WHERE work_order_id = ? AND action_type = 'cancelled'", id))
+                .singleElement().satisfies(row -> assertThat(row).containsEntry("operator_user_id", user("k"))
+                        .containsEntry("operator_note", "与上午那张重复").containsEntry("from_status", "processing"));
+    }
+
+    /** 照商户专区「取消」（MerchantZoneWorkOrdersPage.cancelWorkOrder）的请求形状。 */
+    private ResultActions merchantCancel(RequestPostProcessor who, String id, String reason) throws Exception {
+        return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/cancel").with(who).contentType(MediaType.APPLICATION_JSON).content("""
+                {"idempotency_key":"%s","reason":"%s"}
+                """.formatted(UUID.randomUUID(), reason)));
+    }
+
+    /** 照后台 ADM-MER-001「取消工单」（MerchantWorkOrdersPage.cancelWorkOrder）的请求形状。 */
+    private ResultActions staffCancel(RequestPostProcessor who, String id, String reason) throws Exception {
+        return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/staff-cancel").with(who).contentType(MediaType.APPLICATION_JSON).content("""
+                {"idempotency_key":"%s","reason":"%s"}
+                """.formatted(UUID.randomUUID(), reason)));
+    }
+
     /** 派给 pa，由 pa 按后台处理的蛇形键依次走到目标状态（assigned 之后先 processing）。 */
     private void moveTo(String id, String target) throws Exception {
         assign(dispatcherB, id, user("pa")).andExpect(status().isOk());
@@ -514,6 +594,40 @@ class MerchantServiceJdbcIntegrationTests {
         return mockMvc.perform(put(CLOSE_METHODS).with(who).contentType(MediaType.APPLICATION_JSON).content("""
                 {"work_order_type":"%s","close_method":"%s","idempotency_key":"%s"}
                 """.formatted(type, closeMethod, UUID.randomUUID())));
+    }
+
+    /**
+     * 第十八批 M 段第 111 条 111-R1（BSM:1466「我的工单：只看派给自己的工单和处理进度。」）：派单员把商户工单派给 pa 后，pa 的员工手机「我的工单」
+     * 列出这张单（只看）；同项目另一持处理码员工列表为空；不持处理码的派单员 403；处理到关闭仍列出（看处理进度），存档后不再列出。
+     */
+    @Test
+    void ownerListsMerchantWorkOrdersAssignedToMe() throws Exception {
+        seedOperatingMerchant();
+        String id = createAsMerchant("cleaning", "medium", "");
+        assign(dispatcherB, id, user("pa")).andExpect(status().isOk());
+
+        assignedToMe(processorA).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(id))
+                .andExpect(jsonPath("$.data.items[0].status").value("assigned"))
+                .andExpect(jsonPath("$.data.items[0].owner_user_id").value(user("pa")));
+        RequestPostProcessor other = account("pd", project("a"), null, role("processd", "merchant.service_work_order.process"));
+        assignedToMe(other).andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty());
+        assignedToMe(dispatcherB).andExpect(status().isForbidden());
+
+        act(processorA, id, "processing", "已到场处理").andExpect(status().isOk());
+        act(processorA, id, "resolved", "已清理完毕").andExpect(status().isOk());
+        assignedToMe(processorA).andExpect(status().isOk()).andExpect(jsonPath("$.data.items[0].status").value("closed"));
+        RequestPostProcessor care = account("k", project("a"), null, role("closer", "merchant.service_work_order.close"));
+        mockMvc.perform(post(WORK_ORDERS + "/" + id + "/archive").with(care).contentType(MediaType.APPLICATION_JSON).content("""
+                {"reason":"已关闭归档"}
+                """)).andExpect(status().isOk());
+        assignedToMe(processorA).andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty());
+    }
+
+    /** 照员工手机「我的工单」（TerminalApiClient.listMyMerchantWorkOrders）的请求。 */
+    private ResultActions assignedToMe(RequestPostProcessor who) throws Exception {
+        return mockMvc.perform(get(WORK_ORDERS + "/assigned-to-me").with(who));
     }
 
     private ResultActions listIds(RequestPostProcessor who) throws Exception {

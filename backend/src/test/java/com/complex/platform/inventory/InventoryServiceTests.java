@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1223,7 +1223,7 @@ class InventoryServiceTests {
         assertThat(service.listRiskAlerts().total()).isEqualTo(3);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("inventory.risk_scan.completed", "inventory.risk_alert.viewed");
+                .contains("inventory.stock_batch.create", "inventory.risk.scan", "inventory.risk_alert.list");
     }
 
     @Test
@@ -1267,7 +1267,18 @@ class InventoryServiceTests {
         assertThat(service.listSupplierReconciliations().total()).isEqualTo(1);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("inventory.supplier_reconciliation.created", "inventory.supplier_reconciliation.viewed");
+                .contains("inventory.supplier_reconciliation.create", "inventory.supplier_reconciliation.list");
+    }
+
+    // 第十八批 M 段 113-R1：库存包列表失败按 OpenAPI 声明的失败名留痕（PGM:738「访问被拒绝也要留痕」）。
+    @Test
+    void inventoryListFailuresRecordOpenApiDeclaredFailureEvents() {
+        when(authorizationService.currentMerchantScope()).thenThrow(ApiException.forbidden("X", "x"));
+        assertThatThrownBy(() -> service.listStockBatches()).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.listRiskAlerts()).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> service.listSupplierReconciliations()).isInstanceOf(ApiException.class);
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("inventory.stock_batch.list_failed",
+                "inventory.risk_alert.list_failed", "inventory.supplier_reconciliation.list_failed");
     }
 
     // A1(REQ-30): 登记瓶底标签后，取酒 verificationCode 不一致进入人工复核且不出酒
@@ -1375,6 +1386,7 @@ class InventoryServiceTests {
         SavedBottleRecord disputed = service.disputeSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "dispute-1", null, List.of(), "客人质疑酒量", List.of(), List.of()));
         assertThat(disputed.status()).isEqualTo("disputed");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.saved_bottle.dispute");
     }
 
     // R5 T6: 高价值存酒作废缺视频（仅照片）→ 拒（双证据须分类）
@@ -2204,6 +2216,7 @@ class InventoryServiceTests {
                 Instant.parse("2026-12-31T00:00:00Z"), "active")))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("inventory.stock_batch.create_failed");
     }
 
     // C4【Medium】出库传不存在的 item_id → 显式 404 INVENTORY_ITEM_NOT_FOUND（此前靠 DB FK 兜底成 500）。

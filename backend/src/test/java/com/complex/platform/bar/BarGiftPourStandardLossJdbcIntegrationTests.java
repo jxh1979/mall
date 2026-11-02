@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -178,7 +178,7 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
 
     /**
      * 第十八批 I 段第 76 条 76-R4（BSM 第 1065 行「按杯按标准出酒量扣库存、超出记损耗」；BSM 第 1049 行「扣减吧台售卖消耗、赠饮消耗和报损」）：
-     * 未配设备吧台按杯赠饮按标准 25ml＋标准损耗 3ml 按容量扣（开一瓶 5→4、余 672ml），redeem_consume 流水记开瓶数、出酒量与损耗量；
+     * 未配设备吧台按杯赠饮按标准 25ml＋标准损耗 3ml 按容量扣（开一瓶 5→4、余 672ml），礼物领取消耗 gift_claim_consume 流水（第十八批 M 段 112-R3）记开瓶数、出酒量与损耗量；
      * 冲正只把标准量 25ml 加回已开瓶余量（损耗不退）、瓶数不变，冲正流水瓶数 0、带出酒量。
      */
     @Test
@@ -186,7 +186,7 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
         String verificationId = verifyGift();
         String order = giftOrder(verificationId);
         assertThat(balance()).containsEntry("quantity", 4).containsEntry("available_quantity", 4).containsEntry("opened_volume_ml", 672);
-        assertThat(giftMovement(order)).containsEntry("movement_type", "redeem_consume").containsEntry("quantity", 1)
+        assertThat(giftMovement(order)).containsEntry("movement_type", "gift_claim_consume").containsEntry("quantity", 1)
                 .containsEntry("volume_ml", 25).containsEntry("loss_volume_ml", 3);
 
         mockMvc.perform(post("/api/v1/ticketing/verifications/" + verificationId + "/reverse").with(platformStaff())
@@ -196,7 +196,7 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
         assertThat(balance()).containsEntry("quantity", 4).containsEntry("available_quantity", 4).containsEntry("opened_volume_ml", 697);
         assertThat(jdbc.queryForMap("SELECT movement_type, source_location_id, target_location_id, quantity, volume_ml, loss_volume_ml"
                         + " FROM inventory_stock_movements WHERE business_type = 'bar_gift_redemption_reverse' AND business_id = ?", order))
-                .containsEntry("movement_type", "redeem_consume").containsEntry("source_location_id", null)
+                .containsEntry("movement_type", "gift_claim_consume").containsEntry("source_location_id", null)
                 .containsEntry("target_location_id", "default").containsEntry("quantity", 0)
                 .containsEntry("volume_ml", 25).containsEntry("loss_volume_ml", null);
     }

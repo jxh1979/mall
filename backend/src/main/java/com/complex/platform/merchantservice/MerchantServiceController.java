@@ -5,8 +5,11 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.facility.WorkOrderMaterialService;
+import com.complex.platform.facility.dto.WorkOrderMaterialRequests;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderActionRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderAssignRequest;
+import com.complex.platform.merchantservice.dto.MerchantWorkOrderCancelRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseMethodRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCloseRequest;
 import com.complex.platform.merchantservice.dto.MerchantWorkOrderCreateRequest;
@@ -46,6 +49,13 @@ public class MerchantServiceController {
             @RequestParam(value = "include_archived", required = false, defaultValue = "false") boolean includeArchived) {
         authorizationService.requirePermission("merchant.service_work_order.view");
         return ApiResponse.ok(service.listWorkOrders(includeArchived));
+    }
+
+    // 第十八批 M 段第 111 条 111-R1：员工手机「我的工单」只读列出派给本人的商户服务工单（负责人本来就要持处理码，102-R1）。
+    @GetMapping("/work-orders/assigned-to-me")
+    public ApiResponse<PageResponse<MerchantWorkOrderRecord>> listAssignedToMe() {
+        authorizationService.requirePermission("merchant.service_work_order.process");
+        return ApiResponse.ok(service.listAssignedToMe());
     }
 
     @PostMapping("/work-orders")
@@ -101,6 +111,59 @@ public class MerchantServiceController {
         authorizationService.requirePermission("merchant.service_work_order.create");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.confirmByMerchant(id, request));
+    }
+
+    // 第十八批 M 段第 111 条 111-R2（第十八批裁决 27）：派单前商户在商户专区填原因取消（提单方权限）。
+    @PostMapping("/work-orders/{id}/cancel")
+    public ApiResponse<MerchantWorkOrderRecord> cancelByMerchant(
+            @PathVariable String id,
+            @RequestBody MerchantWorkOrderCancelRequest request
+    ) {
+        authorizationService.requirePermission("merchant.service_work_order.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.cancelByMerchant(id, request));
+    }
+
+    // 111-R2（第十八批裁决 27）：派单后重复提或误提的，由客户关怀部在后台填原因取消（同员工关单权限）。
+    @PostMapping("/work-orders/{id}/staff-cancel")
+    public ApiResponse<MerchantWorkOrderRecord> cancelByStaff(
+            @PathVariable String id,
+            @RequestBody MerchantWorkOrderCancelRequest request
+    ) {
+        authorizationService.requirePermission("merchant.service_work_order.close");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.cancelByStaff(id, request));
+    }
+
+    // ── 第十八批 M 段第 117 条 117-R5 工单用料与费用承担方（BSM:1380；承担方争议按第十八批裁决 29 停在原状态转上级判定）──────
+    @GetMapping("/work-orders/{id}/materials")
+    public ApiResponse<WorkOrderMaterialService.Materials> materials(@PathVariable String id) {
+        authorizationService.requirePermission("merchant.service_work_order.process");
+        return ApiResponse.ok(service.materials(id));
+    }
+
+    @PostMapping("/work-orders/{id}/materials")
+    public ApiResponse<WorkOrderMaterialService.Materials> issueMaterial(
+            @PathVariable String id, @RequestBody WorkOrderMaterialRequests.Issue request) {
+        authorizationService.requirePermission("merchant.service_work_order.process");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.issueMaterial(id, request));
+    }
+
+    @PostMapping("/work-orders/{id}/cost-bearer")
+    public ApiResponse<WorkOrderMaterialService.Materials> markCostBearer(
+            @PathVariable String id, @RequestBody WorkOrderMaterialRequests.Bearer request) {
+        authorizationService.requirePermission("merchant.service_work_order.process");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markCostBearer(id, request));
+    }
+
+    @PostMapping("/work-orders/{id}/bearer-dispute")
+    public ApiResponse<WorkOrderMaterialService.Materials> disputeBearer(
+            @PathVariable String id, @RequestBody WorkOrderMaterialRequests.Dispute request) {
+        authorizationService.requirePermission("merchant.service_work_order.process");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.disputeBearer(id, request));
     }
 
     // ── 第十八批 I 段 77-R3 处理时限（工单类型×优先级）───────────────────────

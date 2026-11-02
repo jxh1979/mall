@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -430,6 +430,10 @@ public final class FieldLabels {
         p("stocktake_id", "盘点单号");
         p("stock_location_id", "库位");
         p("location_id", "库位");
+        // 第十八批 M 段第 117 条：工单用料费用承担方与承担方争议（BSM:1380）。
+        p("cost_bearer", "费用承担方");
+        p("claimed_cost_bearer", "主张的费用承担方");
+        p("claimed_merchant_id", "主张承担的商户");
         p("from_location_id", "调出库位");
         p("to_location_id", "调入库位");
         p("warehouse_id", "仓库");
@@ -552,6 +556,11 @@ public final class FieldLabels {
         p("archive_reason", "归档原因");
         p("close_reason", "关闭原因");
         p("close_method", "关单方式");
+        // 第十八批 M 段第 111 条 111-R4、第 118 条 118-R1：客诉跟进的涉及门店与投诉类别。
+        p("complaint_class", "投诉类别");
+        p("store_merchant_id", "涉及门店");
+        // 第十八批 M 段第 116 条：员工 App 本端可用功能（GET /api/v1/terminals/staff-app-functions）。
+        p("functions", "可用功能");
         p("handle_minutes", "处理时长");
         p("response_minutes", "响应时长");
         p("remind_minutes", "最晚到店前提醒分钟数");

@@ -61,6 +61,10 @@ requireIncludes("docs/external-dependency-gates-v0.1.md", [
 requireIncludes("docs/t3-coding-entry-pack-v0.1.md", [
   "NO_T3_REAL_VENDOR_CONTROL_WITHOUT_SUPPLIER_READY",
   "NO_PYTHON_AI_SERVICE_WITHOUT_T3D_GATE",
+]);
+
+// b969b8cf 把入口包 §3 切片准入表搬到 scope-wide 规则正本 §B-19（同 U13-010 先例），判据读取面随之指向正本。
+requireIncludes("docs/scope-wide-coding-rule-canonical-V0.01.md", [
   "T3-C 机器人/视频/设备真实控制闭环 | 阻断",
   "T3-D 独立 Python AI 服务 | 阻断",
 ]);

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -132,6 +132,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("saved_bottle_remedy_recovery", "存酒退出承接垫付追收"),
             Map.entry("single_bar_service_fee", "单店门票综合服务费"),
             Map.entry("ticket_distribution_recovery", "通票分账追收"),
+            // 第十八批 M 段第 117 条（ENUM:256、BSM:1380）：商户承担的工单用料费应收。
+            Map.entry("work_order_material", "工单用料费（商户承担）"),
             // HP-P01（BSM L1437 账单类型「车位月租」；L1445「停车费收入归城市项目公司」）：合同车位月租应收、客人停车费内部核算。
             Map.entry("contract_parking_monthly", "车位月租"),
             Map.entry("parking_fee", "停车费"),
@@ -2578,6 +2580,20 @@ public class FinanceService implements TerminationSettlementPort {
         return persistDerivedArApItem("internal_accounting", requireText(bearerId, "bearer_id"),
                 "facility_equipment_scrap_loss", requireText(scrapId, "scrap_id"), amountCent,
                 requireText(idempotencyKey, "idempotency_key"), null, null, null, projectId);
+    }
+
+    /**
+     * 第十八批 M 段第 117 条（BSM:1380「商户自有设施、以及因商户责任导致损坏的用料由该商户承担，并自动生成一笔应收进入其费用账单」；ENUM:256
+     * 「工单用料费（商户承担）」；BSM:1597、1598）：工单结案按最终承担方给商户挂一笔应收（来源关联工单、归工单项目、到期日＝落账当日营业日），
+     * 业务提交后短信通知商户（金额、原因与异议截止日期，不可关闭）。
+     */
+    public ArApItemRecord postWorkOrderMaterial(String workOrderId, String reason, String merchantId, String projectId,
+            long amountCent) {
+        // 幂等键取工单号：派生台账 id 只取「来源_键」规整后的前 40 位，键再带业务类型前缀会把工单号截掉。
+        ArApItemRecord saved = persistDerivedArApItem("receivable", merchantId, "work_order_material", workOrderId, amountCent,
+                workOrderId, merchantId, null, null, projectId);
+        notifyMerchantAmount(merchantId, "work_order_material", amountCent, reason, today(), projectId, saved.id());
+        return saved;
     }
 
     /** FS-017（BSM L1072「该娱乐平台公司可经审批先垫付并向原门店追收」）：对原门店挂追收应收，经统一回写点 settleArApItem 收回。 */

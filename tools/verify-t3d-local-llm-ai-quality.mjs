@@ -73,20 +73,18 @@ if (client.includes("Authorization") || client.includes("Bearer ")) {
 }
 
 // R5 T8 重构：PII 分类脱敏标记上移到共享 PiiTextRedactor（analytics 质检 + 企微合规链共用），
-// analytics 的 AiTextRedactor 薄委派至此（避免规则双份漂移）。故标记契约校验指向标记真实所在文件，
-// 并断言 AI 质检入口 AiTextRedactor 仍委派到该共享脱敏器。
+// ee9ebe2f 删掉 analytics 的薄委派 AiTextRedactor，AI 质检入口 AnalyticsService 改为直接调用该共享脱敏器。故标记契约校验指向标记真实所在文件，
+// 并断言 AnalyticsService 仍调用 PiiTextRedactor.redactAndTruncate。
 requireIncludes("backend/src/main/java/com/complex/platform/common/PiiTextRedactor.java", [
   "[PHONE_REDACTED]",
   "[ID_REDACTED]",
   "[EMAIL_REDACTED]",
   "[CARD_REDACTED]",
 ]);
-requireIncludes("backend/src/main/java/com/complex/platform/analytics/AiTextRedactor.java", [
-  "PiiTextRedactor",
-]);
 
 requireIncludes("backend/src/main/java/com/complex/platform/analytics/AnalyticsService.java", [
   "analytics.local-llm-ai-quality-suggestion",
+  "PiiTextRedactor.redactAndTruncate",
   "analytics.ai_quality.local_llm_suggestion.created",
   "local_llm_suggestion",
   "manualReviewRequired",

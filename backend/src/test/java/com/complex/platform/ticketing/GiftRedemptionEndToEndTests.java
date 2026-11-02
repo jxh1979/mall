@@ -26,7 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * bar_gift_redemptions 桥表落地。修 R5「无端到端验收」缺口。
  *
  * <p>AUD-015：赠饮缺配置(无 bar_item_ref)/缺库存时核销 fail-closed（抛错回滚，票权益不被消费），绝不静默标记 delivered；
- * 配置齐全时链路（核销→0元单→出品 deliver 事件→扣库 redeem_consume→桥表）全打通且可追溯。
+ * 配置齐全时链路（核销→0元单→出品 deliver 事件→扣库 gift_claim_consume→桥表）全打通且可追溯。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
@@ -104,9 +104,9 @@ class GiftRedemptionEndToEndTests {
     }
 
     // R5 已落地#2：gift_drink 模板配 bar_item_ref=item_X → 核销 → 事件 itemRef=item_X →
-    // BarGiftConsumer 对 item_X 走 redeem_consume 扣减（接 T15）。
+    // BarGiftConsumer 对 item_X 走礼物领取消耗 gift_claim_consume 扣减（接 T15；第十八批 M 段 112-R3，BSM:1194 三种消耗分开记）。
     @Test
-    void giftDrinkWithBarItemRefDecreasesStockViaRedeemConsume() {
+    void giftDrinkWithBarItemRefDecreasesStockViaGiftClaimConsume() {
         String suffix = Long.toString(System.nanoTime());
         String barId = "bar_t15_" + suffix;
         seedBarTable(barId);
@@ -132,17 +132,17 @@ class GiftRedemptionEndToEndTests {
         // S5：itemRef 是提供方商品 id；库存扣的是该商品绑定的库存物料。
         assertThat(redemption.itemRef()).isEqualTo(productId);
         assertThat(redemption.inventoryMovementId()).isNotNull();
-        assertThat(redemption.note()).contains("stock decreased via redeem_consume");
+        assertThat(redemption.note()).contains("stock decreased via gift_claim_consume");
 
-        // 库存从 5 扣到 4（redeem_consume 扣 1）。
+        // 库存从 5 扣到 4（gift_claim_consume 扣 1）。
         Integer available = jdbcTemplate.queryForObject(
                 "SELECT available_quantity FROM inventory_stock_balances WHERE item_id = ? AND location_id = 'default'",
                 Integer.class, itemId);
         assertThat(available).isEqualTo(4);
 
-        // redeem_consume 流水落地，关联本赠饮单。
+        // gift_claim_consume 流水落地，关联本赠饮单。
         Integer movements = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM inventory_stock_movements WHERE item_id = ? AND movement_type = 'redeem_consume'",
+                "SELECT count(*) FROM inventory_stock_movements WHERE item_id = ? AND movement_type = 'gift_claim_consume'",
                 Integer.class, itemId);
         assertThat(movements).isEqualTo(1);
     }

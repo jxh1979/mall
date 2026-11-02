@@ -1,4 +1,4 @@
-<!-- 文件版本：V0.01 -->
+<!-- 文件版本：V0.02 -->
 <view class="page">
   <view wx:if="{{!loggedIn}}" id="login-required" class="card">
     <view>提交与查看投诉需要先登录</view>
@@ -12,6 +12,9 @@
       <view wx:if="{{submitted}}" id="complaint-submitted" class="alert success">{{submitted}}</view>
       <picker wx:if="{{projects.length > 1}}" id="project-picker" range="{{projectNames}}" value="{{projectIndex}}" bindchange="onProject">
         <view class="field">投诉所在综合体：{{projectNames[projectIndex]}}</view>
+      </picker>
+      <picker wx:if="{{stores.length}}" id="store-picker" range="{{storeNames}}" value="{{storeIndex}}" bindchange="onStore">
+        <view class="field">涉及门店（选填）：{{storeNames[storeIndex]}}</view>
       </picker>
       <view class="field"><input id="complaint-title" maxlength="100" value="{{title}}" placeholder="投诉标题" bindinput="onTitle" /></view>
       <view class="field"><textarea id="complaint-description" maxlength="4000" value="{{description}}" placeholder="文字留言" bindinput="onDescription" /></view>

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
@@ -20,7 +20,7 @@ type Payment = { id: string; amountCent: number; bankFlowRef?: string };
 type Detail = { purchase: Purchase; projectId: string; reviewId?: string; acceptedQuantity: number; terminatedQuantity: number; remainingQuantity: number; receipts: Receipt[]; resolutions: Resolution[]; consignmentSales: Sale[]; returns: Return[]; payables?: Payable[]; allocations?: Allocation[]; settlementTerms?: Terms; settlementMethod?: string; consignmentSaleBasis?: string; prepaymentCashPaidCent?: number; prepaymentAllocatedCent?: number; prepaymentResolutions?: PrepaymentResolution[]; prepaymentRefundReservedCent?: number; prepaymentPayments?: Payment[] };
 // 第十八批第 33 条：智能采购建议（GET /api/v1/inventory/purchase-suggestions，只读即时计算）。
 type Suggestion = { projectId: string; merchantId?: string | null; itemId: string; itemName: string; suggestedQuantity: number; reason: string };
-type Options = { projects: Option[]; entities: Option[]; merchants: Option[]; suppliers: Option[]; inventoryItems: Option[]; warehouses: Option[]; contracts: Contract[] };
+type Options = { projects: Option[]; entities: Option[]; merchants: Option[]; suppliers: Option[]; inventoryItems: Option[]; warehouses: Option[]; locations: { id: string; warehouseId: string }[]; contracts: Contract[] };
 type Action = "contract-create" | "terms" | "contract-approve" | "purchase-create" | "approve" | "order" | "arrive" | "receive" | "resolution" | "sale" | "sale-confirm" | "allocate" | "return" | "handover" | "finance-review" | "prepayment-resolution" | "prepayment-post";
 const VIEW = "inventory.purchase_request.view", MANAGE = "inventory.purchase_request.manage", CONTRACT = "inventory.supply_contract.manage", FINANCE = "finance.ar_ap.manage", EVIDENCE = "evidence.attachment.create";
 const actionNames: Record<Action, string> = { "contract-create": "新建供货合同", terms: "登记合同执行条款", "contract-approve": "发起合同审批", "purchase-create": "新建采购申请", approve: "发起采购审批", order: "登记已向供应商下单", arrive: "登记到货", receive: "登记本次验收", resolution: "处理未交及拒收余量", sale: "登记寄售实际售出", "sale-confirm": "复核寄售售出", allocate: "分配已付预付款", return: "申请退供应商", handover: "登记退供实际交接", "finance-review": "复核退供账款", "prepayment-resolution": "处理未用预付余额", "prepayment-post": "登记已批准预付调整" };
@@ -28,7 +28,7 @@ const statusNames: Record<string, string> = { created: "待提交", submitted: "
 const methods: Record<string, string> = { cash_on_delivery: "货到付款", monthly: "月结", credit_term: "合同账期", prepaid: "预付款", consignment: "寄售" };
 const anchors: Record<string, string> = { contract_signed: "合同签约", ordered: "采购下单", each_receipt: "每次合格接收", all_fulfilled: "全部数量处理完", month_end: "月末", fixed_date: "合同固定日期", confirmed_sale: "寄售售出确认" };
 const sourceNames: Record<string, string> = { purchase_prepayment: "采购预付款", purchase_inbound: "合格入库货款", purchase_consignment: "寄售结算", purchase_return_refund: "供应商应退货款", purchase_prepayment_refund: "供应商应退预付款" };
-const emptyOptions: Options = { projects: [], entities: [], merchants: [], suppliers: [], inventoryItems: [], warehouses: [], contracts: [] };
+const emptyOptions: Options = { projects: [], entities: [], merchants: [], suppliers: [], inventoryItems: [], warehouses: [], locations: [], contracts: [] };
 const money = (v?: number | null) => typeof v === "number" ? `¥${(v / 100).toFixed(2)}` : "未提供金额或无查看权限";
 const status = (v: string) => statusNames[v] ?? "状态待核实";
 const date = (v?: string) => v ? new Date(v).toLocaleString("zh-CN") : "尚未记录";
@@ -258,7 +258,7 @@ export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActi
       {action === "purchase-create" && <>{select("supplyContractId", "已批准供货合同", usableContracts.map(c => ({ id: c.id, label: `${c.contractNo}／${supplierName(c.supplierId)}` })), () => set("itemId", ""))}{selectedContract && <p>供应商：{supplierName(selectedContract.supplierId)}；合同有效期 {selectedContract.validFrom} 至 {selectedContract.validTo}</p>}{select("itemId", "采购商品", options.inventoryItems.filter(i => selectedContract?.purchasableScope.includes(i.id)).map(i => ({ id: i.id, label: itemName(i.id) })))}{input("quantity", "采购数量", "number")}{input("expectedArrivalDate", "预计到货日", "date")}{input("reason", "申请依据")}<p>一份采购申请只包含一个商品；其他商品分别建单。</p></>}
       {action === "approve" && <>{input("reason", "申请依据")}{approvalFields()}</>}
       {(action === "order" || action === "arrive") && input("reason", "实际进度说明")}
-      {action === "receive" && <>{input("arrivedQuantity", "本次实到数量", "number")}{input("acceptedQuantity", "本次合格接收数量", "number")}{input("rejectedQuantity", "本次拒收数量", "number")}{input("unitCostCent", "实际到货单价（分）", "number")}{select("warehouseId", "接收仓库", choices(activeWarehouses))}{input("locationId", "实际库位编号")}{input("receivedAt", "实际验收时间（当前设备时区）", "datetime-local")}{input("reason", "验收说明")}<p>只有合格接收部分进入可用库存；拒收及未交数量继续保留为未完成余量。</p></>}
+      {action === "receive" && <>{input("arrivedQuantity", "本次实到数量", "number")}{input("acceptedQuantity", "本次合格接收数量", "number")}{input("rejectedQuantity", "本次拒收数量", "number")}{input("unitCostCent", "实际到货单价（分）", "number")}{select("warehouseId", "接收仓库", choices(activeWarehouses), () => set("locationId", ""))}{select("locationId", "实际库位编号", options.locations.filter(l => l.warehouseId === form.warehouseId).map(l => ({ id: l.id, label: l.id })))}{input("receivedAt", "实际验收时间（当前设备时区）", "datetime-local")}{input("reason", "验收说明")}<p>只有合格接收部分进入可用库存；拒收及未交数量继续保留为未完成余量。</p></>}
       {action === "resolution" && <>{enumSelect("resolutionType", "余量处理方式", { replenishment: "跟进补货", terminate: "提交终止审批" })}{input("quantity", "余量处理数量", "number")}{input("reason", "处理依据")}{form.resolutionType === "replenishment" ? input("expectedArrivalDate", "补货预计到货日", "date") : approvalFields()}</>}
       {action === "sale" && <>{receiptSelect()}{input("quantity", "实际售出数量", "number")}{input("saleBasis", "合同售出确认依据")}{input("sourceReference", "实际售出原始单据编号")}{input("soldAt", "实际售出时间（当前设备时区）", "datetime-local")}<p>本次只记录事实，另由具备采购复核及财务权限的不同人员确认后形成应付。</p></>}
       {action === "sale-confirm" && <>{enumSelect("decision", "售出复核结果", { confirmed: "确认实际售出", rejected: "驳回" })}{input("reason", "复核依据")}</>}

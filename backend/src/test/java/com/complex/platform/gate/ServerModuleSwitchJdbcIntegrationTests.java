@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
  * PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限……」）。
  * 100-R1：Web 前端与商户网页门户的模块由服务端按接口定，不带或改报 X-Module-Code 都绕不过模块开关；别的模块关闭、共用接口照常可用。
  * 100-R2：无商户归属的员工账号改报他端一律按 Web 前端判总开关。
+ * 第十八批 M 段第 109 条：挂了商户的外包账号照前端现状自报商户网页门户，也按 Web 前端判总开关与外包工作台模块。
  * 走真实生产登录链与授权链（prod 档网页登录 {login_name, password} → 浏览器 Cookie 会话＋X-XSRF-TOKEN → 设备凭证拦截器 → 终端总开关 → 控制器权限）。
  */
 @AutoConfigureMockMvc
@@ -206,6 +207,71 @@ class ServerModuleSwitchJdbcIntegrationTests {
         for (String claimed : List.of("merchant_portal", "merchant_app", "dealer_portal", "mobile_admin", "app")) {
             mockMvc.perform(web(get(VOID_REASONS), session, claimed)).andExpect(status().isOk());
         }
+    }
+
+    private static final String SUBORDINATES = "/api/v1/partner/subordinates";
+
+    /** 第十八批 M 段第 109 条 (g)（PGM:745「……Web 前端（业务人员，客人无网页端）……商户网页门户……」；PGM:719「开关关闭时，端或模块就不能用」）：
+     *  挂了商户的外包账号，Web 外包工作台模块关闭——前端照现状自报商户网页门户，下属列表与开通下属都 403 并按 web、vendor 留痕，不落账号；
+     *  effective 返回外包工作台的关闭行（前端据此隐藏菜单组）。 */
+    @Test
+    void merchantBoundVendorIsGatedByWebVendorModule() throws Exception {
+        Cookie[] session = webSession(merchantBoundVendor());
+        close("tcs_web_mod_vendor");
+        int before = vendorModuleRejections();
+
+        mockMvc.perform(web(get(SUBORDINATES), session, "merchant_portal"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(vendorModuleRejections()).as("留痕 module_code=vendor、terminal_type=web").isEqualTo(before + 1);
+
+        String username = "b33vnd_sub_" + suffix;
+        mockMvc.perform(web(post(SUBORDINATES), session, "merchant_portal")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("idempotency_key", "b33vnd-sub-" + suffix, "username", username))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM access_users WHERE username = ?", Integer.class, username)).isZero();
+
+        mockMvc.perform(web(get("/api/v1/terminals/capability-switches/effective"), session, "merchant_portal"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.id == 'tcs_web_mod_vendor')]").exists());
+    }
+
+    /** 第 109 条 (h)：外包工作台模块开着、商户网页门户总开关关闭——同一账号照常可用；再关 Web 前端总开关即 403 并按 web 留痕。 */
+    @Test
+    void merchantBoundVendorFollowsWebSwitchNotMerchantPortal() throws Exception {
+        Cookie[] session = webSession(merchantBoundVendor());
+        close("tcs_term_merchant_portal");
+
+        mockMvc.perform(web(get(SUBORDINATES), session, "merchant_portal")).andExpect(status().isOk());
+
+        close("tcs_term_web");
+        int before = webRejections();
+        mockMvc.perform(web(get(SUBORDINATES), session, "merchant_portal"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(webRejections()).isEqualTo(before + 1);
+    }
+
+    /** 外部协作机构账号（后台「员工账号」页可选所属商户），绑到一个启用的外部机构上。 */
+    private String merchantBoundVendor() {
+        String vendor = "usr_b33vnd_" + suffix;
+        String org = "epo_b33vnd_" + suffix;
+        account(vendor, "outsourced_vendor", "mch_b33vnd_" + suffix, "partner.subordinate.view", "partner.subordinate.manage");
+        jdbc.update("""
+                INSERT INTO external_partner_orgs (id, project_id, org_name, org_category, max_subordinates, status, created_at, updated_at)
+                VALUES (?, 'proj_1', '第109条外包机构', 'facility_maintenance', 5, 'active', now(), now())
+                """, org);
+        jdbc.update("UPDATE access_users SET partner_org_id = ? WHERE id = ?", org, vendor);
+        return vendor;
+    }
+
+    private int vendorModuleRejections() {
+        return jdbc.queryForObject("""
+                SELECT count(*) FROM audit_events WHERE event_name = 'terminal.access_rejected'
+                   AND metadata->>'module_code' = 'vendor' AND metadata->>'terminal_type' = 'web'
+                """, Integer.class);
     }
 
     private void close(String switchId) {

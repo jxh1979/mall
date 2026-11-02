@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -1009,6 +1009,21 @@ public class InventoryController {
         authorizationService.requirePermission("inventory.warehouse.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(warehouseService.createWarehouse(request));
+    }
+
+    /** 第十八批 M 段第 119 条 119-R1（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：库位主数据，列表与新建同库房管理权限。 */
+    @GetMapping("/warehouse-locations")
+    public ApiResponse<PageResponse<WarehouseLocationRecord>> listWarehouseLocations() {
+        authorizationService.requirePermission("inventory.warehouse.manage");
+        return ApiResponse.ok(warehouseService.listLocations());
+    }
+
+    @PostMapping("/warehouse-locations")
+    public ApiResponse<WarehouseLocationRecord> createWarehouseLocation(
+            @RequestBody(required = false) com.complex.platform.inventory.dto.WarehouseLocationCreateRequest request) {
+        authorizationService.requirePermission("inventory.warehouse.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(warehouseService.createLocation(request));
     }
 
     /** 第十八批 C 段第 17 条（BSM 第 1065 行）：登记吧台是否配有出酒量采集设备。 */

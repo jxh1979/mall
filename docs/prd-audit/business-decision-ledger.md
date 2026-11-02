@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.67
+文档版本：V0.68
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3931,6 +3931,9 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 24 | **第 96 条 设备「归档」**（题面：「第 96 条设备状态「归档」什么时候进入？进入后还能不能再出来？HTML 只列了状态名。现在报废是最后一步，已报废的设备一直留在台账里、不能再做任何操作。」）—— 操作员选「报废后可归档（推荐）」：设备管理员对已报废的设备办理归档，原因必填；归档后台账里仍可查、显示「已归档」，不能再恢复或领用。 | 第 96 条，18K 实现。 |
 | 25 | **第 99 条 真实后端界面验收**（题面：「第 99 条刷新运行验收证据：其中「真实后端界面验收」要临时起一个后端连数据库，得写一个和现有后端测试脚本同样的脚本：从 160 的 /etc/complex/complex.env 只取 3 个数据库连接变量（不打印），新建一次性空库，跑完就停进程、删库；正在运行的服务和生产库都不碰。允许吗？」）—— 操作员选「不跑这一项（推荐）」：其余几步照跑并重生成证据：后端全量、前端构建、常规界面验收，都不需要口令。证据如实记「真实后端界面验收未跑、运行验收未就绪」。这项检查会转绿；交付门禁总链还有另外三项过期，仍然是红的。 | 第 99 条，18K 实现。 |
 | 26 | **第 102 条 商户报修与其他服务请求怎么关单**（题面：「第 102 条：商户在商户专区报的「报修」和「其他服务请求」，处理完怎么关单？BSM:1385 只写了「验收按工单类型分别配置」，点名了保洁（处理人完成即结束）、商户投诉（商户确认、客户关怀部记缘由可关）和大型设备报修；商户专区的单不关联设备。物业工单你定过「没关联设备的普通报修按后台配置的验收方式」（第十二批裁决 12）。现在商户工单一律要员工填结论关单，商户没有确认按钮。」）—— 操作员选「同物业，按后台配置（推荐）」：和物业工单裁决 12 一致：在商户工单的处理时限配置里，给报修、其他服务请求各选一种关单方式：「处理人完成即结束」「员工验收后关闭」或「须商户确认」。 | 第 102 条，18L 实现。 |
+| 27 | **第 111 条 商户服务工单取消**（题面：「第 111 条：商户在商户专区提的服务工单（报修、保洁、投诉、其他服务请求），什么时候、由谁可以取消？枚举速查表的商户工单状态里有「已取消」，但 HTML 没写谁能取消；现在商户和员工都没有取消按钮，提错或重复的单只能照常派单处理再关单。」）—— 操作员选「两者都有」：派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消。 | 第 111 条，18M 实现。 |
+| 28 | **第 111 条 客诉周报怎么归到门店**（题面：「第 111 条客诉周报：BSM:1385 写「店内的报送该店主理人与店长，各公司的报送该公司最高负责人与平台最高负责人」。客人投诉某家店（比如某酒吧的服务）时，系统怎么知道是哪家店？现在客人在 App、小程序投诉只选综合体、不选门店；员工在后台新建的投诉单也不填门店；只有商户自己在商户专区提的投诉记在该商户名下。」）—— 操作员选「客人投诉时自选门店」：客人投诉时自己选涉及的门店（选填），客户关怀部可以更正；其余同上（「同上」指同题推荐项的后半句原文：「标了门店的客人投诉，加上该店自己在商户专区提的投诉，进该店周报；全部客诉按所在项目进各公司周报。」）。 | 第 111 条，18M 实现。 |
+| 29 | **第 117 条 商户报的单用料承担方有争议怎么挂起**（题面：「第 117 条：商户在商户专区报的单（比如报修本店门锁），物业用了库房配件、标商户承担，商户认为不该自己出。BSM:1380 写「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」，但商户工单的状态里没有「已挂起」（物业工单有）。这种单怎么挂起？」）—— 操作员选「不加状态，停在原状态（推荐）」：有争议时单子停在原状态转上级判定，判定前不能转「已处理待关闭」、不能关闭；判定结果与依据留痕后照常往下走。 | 第 117 条，18M 实现。 |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -4341,3 +4344,224 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 文档：全链路操作留痕与终端开关 PRD V0.08 的 §5.4 实现现状、变更日志行已同步。
   - 回归：ServerModuleSwitchJdbcIntegrationTests 的 (a) barModuleOffRejectsBarApisWhateverModuleHeaderSays、(d) merchantZoneModuleOffRejectsMerchantPortalApisWithoutModuleHeader，各补一步「带 X-Forwarded-Prefix: /x 的写请求仍 403 TERMINAL_DISABLED、不落数据」。
 - 18L 落地位置补记·第 106 条（交付门禁链另外三项过期）：业务提交 614f5241 之后，按第十八批裁决 25 重刷运行验收证据：后端全量 6164 测 0 失败 0 错误，apps/web 构建通过，常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。三份生成器（generate-production-closure-gap-report.mjs、generate-closed-loop-current-state.mjs、generate-ui-experience-acceptance-report.mjs）里写死的就绪说法改成不下结论的中性句，「真实后端 UI」行在报告缺失时注明「（报告缺失，未跑）」。然后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告和无上线指挥台。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md 的行数、测试数、交付总闸口和就绪结论，联调、业务验收两项都写「否」（运行验收未就绪）。结果：closed-loop-current-state、production-closure-gap 两项转绿；final-closed-loop-audit 如实留 2 条红（integration-ready、business-acceptance-ready）。原因是校验器要求终验写「可以进入联调：是」「可以进入业务验收：是」，而裁决 25 定了不跑真实后端界面验收，运行验收未就绪，所以不写「是」。verify:delivery-gates 总链仍是红的，其余红项（coding-host-protection、external-dependency-gates、t3d-local-llm-ai-quality；NAS 两项未跑）见待开发清单第 114 条。
+
+18M 落地位置补记（2026-11-01）：第十八批 M 段（batch33）按待开发清单第 108～119 条（含上表第 27～29 条，即第十八批裁决 27～29）实现；第 114 条 114-R3 与运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.67→V0.68 与裁决表新增第 27～29 行外，其他历史字节保持。
+
+- 18M 落地位置补记·控制席判定（2026-11-01）：① 第 112 条 112-R3 改记礼物领取消耗后，存酒库房出库走待审调整单撞 V544 闭集，控制席按技术判定加迁移 V589（依据 BSM:1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」，存酒转库存后赠送属正常业务）。② 第 111 条客诉周报对已取消的投诉，控制席按 BSM:1385 字面判定：「列明当周客诉的笔数」——已取消的照计一笔，处理进度列已取消；「客诉须经客户关怀部确认后方可视为形成闭环，未经其确认的一律不算闭环」——已取消的不能确认闭环，计入未闭环；同类三人上升照常计入（同一提出人重复提不增加人数）。
+- 18M 落地位置补记·V589（第 112 条 112-R3 配套；控制席技术判定，无新裁决）
+  - 依据：BSM:1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；第 112 条 112-R3（BSM:1194「……积分兑换消耗、礼物领取消耗（三种“消耗”分开记）……」）把营销赠发的店内实物券核销改记 gift_claim_consume。这种券的库位可以是存酒库房（warehouses.warehouse_type='saved_bottle'），核销时走存酒库房处置待审调整单（V544），原闭集里没有 gift_claim_consume，插入违反约束、报 500。
+  - 改动：迁移 V589__saved_bottle_disposal_gift_claim_consume.sql 先 DROP、再重建 inventory_stock_adjustments.chk_stock_adjustment_type，在 V544 原闭集（gain、loss、damage、waste、count_correction、outbound、redeem_consume）上加 'gift_claim_consume'（NOT VALID，同 V544）。营销赠发的店内实物券库位为存酒库房时，核销落礼物领取消耗待审调整单，建 saved_bottle_stock_disposal 复核单，门店主管与财务两道批准前不扣库存。不改 Java、接口、前端，不回填存量（UD-07）。PRD：supply-chain-inventory-product-prd-v0.1.md §7.4 实现现状句与变更记录（V0.35 同版续记）。
+  - 回归：GiftVoucherTraceCodeRedeemJdbcTests.grantedVoucherAtSavedBottleWarehouseRedeemsIntoPendingGiftClaimDisposal。真实 POST /api/v1/vouchers/instances 赠发，真实 POST /api/v1/vouchers/redemptions（蛇形键 voucher_instance_id、trace_codes）核销，经真实授权链。断言：返回 200；券 redeemed；待审调整单 adjustment_type=gift_claim_consume、status=pending_review；存酒库房余额不变。RED：Status expected:<200> but was:<500>（violates check constraint "chk_stock_adjustment_type"）。
+- 同批测试修正（不入台账，只记录）：ParkingCreditCostMonthlyJdbcIntegrationTests 不回滚用例的角色显示名由「停车抵免出账短信回归＋十六进制后缀」改为「停车抵免出账短信回归＋十进制数字」，免得 AccessJdbcIntegrationTests.seededDisplayNamesAreChinese 在 CI 任意顺序下红。
+- 第 114 条（18M）：tools/verify-external-dependency-gates.mjs 的「T3-C 机器人/视频/设备真实控制闭环 | 阻断」「T3-D 独立 Python AI 服务 | 阻断」两个标记，改从 docs/scope-wide-coding-rule-canonical-V0.01.md §B-19 读。依据是 docs/t3-coding-entry-pack-v0.1.md:19「本段规则已归口至 docs/scope-wide-coding-rule-canonical-V0.01.md §B-19，本文不再重复记载。」，先例同 U13-010。tools/verify-t3d-local-llm-ai-quality.mjs 不再要求已删除的 analytics/AiTextRedactor.java，改为断言 AnalyticsService 调用 PiiTextRedactor.redactAndTruncate，依据是 ee9ebe2f 提交说明 F 项「AnalyticsService 唯一调用点改直用 common/PiiTextRedactor」。两项都是工具口径：无业务 HTML 依据，无对应裁决号。coding-host-protection 写死主仓路径，属工具口径，不做；NAS 两项现场探测未跑。
+- 18M 落地位置补记·第 110 条
+  - 依据：BSM:1597「凡涉及商户应收应付金额发生变化的事项一律短信通知，包括结算金额出账与调整……通知中写明金额、原因与异议截止日期」「异议期自该账单在商户专区可查看之日的次日起算」；BSM:1436「按内部结算价与城市项目公司走平台内部各主体之间的普通内部结算应收应付，按月结算」；BSM:1673「月结定格 → 账单出账 → 异议期届满 → 付账日，后一环不得早于前一环。」；DEC-R8-55「账单在商户专区不可查看的期间不计入异议期」。
+  - 裁决：没有新裁决号（核对阶段 blocked 为空）；与第十八批裁决第 2 条「只在结算账单出账时发一条」同向。
+  - 110-R1：ParkingCreditService.postMonth 删去入账当场发的停车专用短信（PARKING_CREDIT_COST_BILLED，参数只有计费月、金额、到期日）及缺联系人失败审计 parking.credit_cost.notification.not_sent；MerchantSettlementStatementNoticeJob 删去排除停车抵免的条件，停车抵免成本往来到出账日（internal_payable_schedules.visible_at，商户专区可查看）随结算金额出账短信 sms.merchant_amount.settlement_statement 逐笔通知承担商户，原因「停车抵免成本出账：商户应付」，异议截止日取往来固化的 objection_deadline，按 request_id mamt:settlement_statement:<往来号> 去重；收件人同其他出账短信（后台指定接收人，缺省商户主要联系人）。
+    - NotificationSwitchResolver.MANDATORY_EVENTS 删去已无发送方的 parking.credit_cost；OpenAPI updateCapabilitySwitch 描述删「、sms.notify.parking.credit_cost」（操作数不变）。不加迁移、接口、前端。
+    - 文档：real-estate-full-chain-domain-prd §6A 消费抵免成本分担与按月结算（V0.15）、third-party-business-access-product-prd §11A 说明（V0.10）；html-prd-coverage.csv BSM-0336 由 PARTIAL 改回 FULL（商户手机应用推送分句仍属第十八批 J 段第 25 条 B/D 类）。
+    - 回归：ParkingCreditCostMonthlyJdbcIntegrationTests.costStatementSmsSentOnStatementDayWithReasonAndDeadline（不回滚；真实 POST /api/v1/customer/parking/payments 造抵免，入账不发、出账日前不发、出账日后恰发一条且重跑不重发，异议截止日与商户账号经真实授权链 GET /api/v1/merchant-portal/ticket-settlements 所见一致）；MerchantSettlementStatementNoticeJobTests 去掉停车抵免排除断言。
+- 18M 落地位置补记——第 108 条（108-R1～R3，安卓员工端绑定与换机请求按所绑终端声明）：
+  - apps/android-terminal/android-app MainActivity.kt（V0.17）工作手机绑定屏放上「持有员工档案编号」输入框。
+  - 绑定设备、登记签名公钥两次请求按所绑类型声明终端：工作手机 staff_work_phone，平板 POS tablet。
+  - 「员工设备凭证」换机重绑请求声明 staff_private_phone，成功后本机记为私人手机（本机设备编号＝凭证指纹）。
+  - 两版 TerminalApiClient.kt（android-app V0.12、JVM 版 V0.11）：bindDevice 按请求体 terminal_type 声明；registerDeviceSigningKey 加终端类型参数；bindStaffDeviceCredential 声明私人手机。
+  - 依据：PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限、商户范围和设备状态。」；PGM:906「员工注册审批、设备绑定、换机解绑重绑。」；PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」；PGM:623「建设备台账，记录编号、型号、点位、责任人和状态。」；M723 裁决（三）「不带商户归属的项目员工能管本项目内的全部设备」（含绑定、登记签名公钥）。
+  第 115 条（115-R1，设备绑定型启动请求在 enforce 下放行）：
+  - backend gate/DeviceCredentialVerifier.java（V0.09）：工作手机、平板、私人手机等设备绑定型的登录、设备绑定、登记签名公钥、私人手机凭证绑定四条启动请求，没有设备证明在 enforce 下也放行，留痕 bootstrap_without_credential。坏签名、过期时间戳、设备未绑定、类型不符、归属不符照旧拒；其他写请求照旧要求验签。
+  - docs/operation-traceability-and-terminal-switch-prd-v0.1.md V0.09：AUD-010 横幅与变更日志同步。
+  - 依据：BSM:940「同一账号允许在多台设备、多个端同时登录。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；PGM:906。
+  - 生产翻转 enforce 属运维，不做。
+  回归测试：AndroidDeviceBootstrapJdbcIntegrationTests、DeviceCredentialVerifierTests、StaffPrivatePhoneEnforcementJdbcIntegrationTests、TerminalApiClientHeadersTest。本组不涉及裁决 27～29。
+- 18M 落地位置补记·第 112 条（112-R3、112-R4；无新裁决，按 HTML 字面定）
+  - 112-R3 依据：
+    - BSM:1194「……积分兑换消耗、礼物领取消耗（三种“消耗”分开记）……」；ENUM:162 库存流水类型闭集。
+    - BSM:1179「连接票务权益，门票赠饮和权益领取按规则扣减库存；积分兑换的实物券发券时预占库存、核销领取时才实扣。」（BSM:1937 同义）。
+    - BSM:1049「连接供应链库存，扣减吧台售卖消耗、赠饮消耗和报损；……」；ENUM:78「积分只兑换虚拟券。」
+    - 门票赠饮和其他权益领取与积分兑换实物券分列，赠饮又与售卖分列，闭集里只剩礼物领取消耗。未另起裁决。
+  - 112-R3 落地：
+    - VoucherService 核销店内实物券，按券实例来源取流水类型：points_redemption 写 redeem_consume，marketing_grant 写 gift_claim_consume。
+    - InventoryStockMovementService 的 typed 白名单加 gift_claim_consume。
+    - BarGiftConsumer 门票或套餐赠饮出品扣吧台库存，以及冲正反向行，都写 gift_claim_consume（DEC-R7-04 冲正不新增类型）。
+    - 吧台售卖仍写 outbound＋bar_order。
+    - 不加迁移（inventory_stock_movements.movement_type 无 CHECK），不改接口。
+    - 后台结果区 movement_type 中文名改为积分兑换消耗、礼物领取消耗。
+    - PRD 同步：supply-chain-inventory-product-prd-v0.1.md V0.35 §5.1、supply-chain-inventory-development-design-v0.1.md V0.25 §6.13、bar-business-operations-product-prd-v0.1.md V0.23 赠饮流程图、bar-operations-development-design.md V0.11 §7.8。
+    - 回归测试：GiftVoucherTraceCodeRedeemJdbcTests.pointsRedeemedVoucherConsumesAsRedeemConsumeAndGrantedVoucherAsGiftClaimConsume、BarGiftPourStandardLossJdbcIntegrationTests.byGlassGiftDeductsStandardPlusStandardLossByVolumeAndReversalReturnsStandardToOpenedVolume、GiftRedemptionEndToEndTests.giftDrinkWithBarItemRefDecreasesStockViaGiftClaimConsume。
+  - 112-R4 依据：
+    - BSM:1201「……「调」是买断，成交时所有权转移给接收方……买断时溯源码归属从原主体变更到接收主体，收货时扫码核对防调包。」
+    - BSM:1197「……出库须同时核验订单和物品码……」
+  - 112-R4 落地：
+    - InventoryService.receiveTransferOrder 买断分支改调 JdbcInventoryRepository.transferTraceCodeOwnership：翻所有权时，inventory_trace_codes.merchant_id 与 item_id 一并随转为接收方及其逐行所选物品。
+    - 码→物品映射由 InventoryTransferFlowService.purchaseStockIn 返回。CAS 与 TRACE_OWNER_MISMATCH 判定不变。
+    - 借用收货、门店要货签收不动。
+    - 不加迁移；OpenAPI receiveTransferOrder 描述补一句；PRD 同步 supply-chain-inventory-product-prd-v0.1.md §7.6.5。
+    - 回归测试：InventoryTransferRequisitionJdbcIntegrationTests.lendingPurchaseReceiptMovesTraceCodeMerchantAndItemToTheReceiver（接收方按码列订单、建交接链 200，出让方查该码 403）；InventoryTransferBorrowJdbcIntegrationTests.borrowReceiptChangesCustodianOnlyAndKeepsLenderAsOwner 加借用不随转断言。
+- 18M 落地位置补记·第 113 条（无新裁决）
+  - 依据：
+    - PGM:899「平台治理层要保证每个重要动作能追溯。……都要能查到。」
+    - PGM:738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」
+    - 先例：本台账「18K 落地位置补记·第 94 条」「代码落 OpenAPI 声明的事件，OpenAPI 不改。」
+  - 落地：库存包 12 个操作的审计事件名改落 OpenAPI 声明名。
+    - 读 6 个：
+      - WarehouseService.listWarehouses → inventory.warehouse.list / list_failed
+      - InventoryService.listStockBatches → inventory.stock_batch.list / list_failed
+      - InventoryService.listRiskAlerts → inventory.risk_alert.list / list_failed
+      - InventoryService.listSupplierReconciliations → inventory.supplier_reconciliation.list / list_failed
+      - SupplierQualificationService.listQualifications → inventory.supplier_qualification.list / list_failed
+      - SupplierQualificationService.listSettlementMethods → inventory.supplier_settlement_method.list / list_failed
+    - 写 6 个：
+      - disputeSavedBottle → bar.saved_bottle.dispute
+      - createStockBatch → inventory.stock_batch.create / create_failed
+      - runInventoryRiskScan → inventory.risk.scan / inventory.risk.scan_failed
+      - createSupplierReconciliation → inventory.supplier_reconciliation.create
+      - createQualification → inventory.supplier_qualification.create / create_failed
+      - createSettlementMethod → inventory.supplier_settlement_method.create / create_failed
+  - OpenAPI、迁移、前端都不改，操作数不变。docs/p1-inventory-alerts-reconciliation-api-contract-v0.1.md §4 留痕五行同步。
+  - 回归测试：WarehouseCreateJdbcIntegrationTests.inventoryListReadsRecordOpenApiDeclaredAuditEventNames、SupplyChainT6ServiceTests.listFailuresRecordOpenApiDeclaredFailureEvents、InventoryServiceTests.inventoryListFailuresRecordOpenApiDeclaredFailureEvents，以及既有用例上加的事件名断言。
+- 第 111 条（18M）落地位置补记·111-R2、111-R3：
+  ① 111-R2 商户服务工单取消（第十八批裁决 27「派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消」）
+    - 依据：ENUM:264「商户服务工单状态｜已提交、已派单、处理中、待商户确认、已处理待关闭、已关闭、已取消（商户专区发起；超过时限自动升级并标记）」。
+    - 迁移：V586 动作类型 CHECK 加 cancelled。
+    - 商户取消：POST /api/v1/merchant-service/work-orders/{id}/cancel（MerchantServiceService.cancelByMerchant），持 merchant.service_work_order.create，只本商户账号、只限已提交。平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED，别的商户 403 CROSS_MERCHANT_FORBIDDEN，已派单 409 INVALID_STATE。
+    - 客户关怀部取消：POST /api/v1/merchant-service/work-orders/{id}/staff-cancel（MerchantServiceService.cancelByStaff），持 merchant.service_work_order.close，闸同员工关单，只限已派单、处理中、待商户确认、已处理待关闭，已提交 409 INVALID_STATE。
+    - 原因必填，写在取消动作 cancelled 的说明里。审计 merchant_service.work_order.cancelled 与 cancel_failed。
+    - 页面：商户专区「我的工单」已提交行「取消」（动作码 merchant_zone_work_order_cancelled）；后台 ADM-MER-001「取消原因」「取消工单」（merchant_work_order_cancelled）。
+    - 文档：OpenAPI cancelMerchantServiceWorkOrder、cancelMerchantServiceWorkOrderByStaff；p1 商户服务工单契约 §2、§3、§5；merchant-portal-zone PRD §4（V0.24）；building-operations PRD §0、§1、§6 C、裁决 4（V1.15）；矩阵 ADM-MER-004、ADM-MER-001；html-prd-coverage.csv BEQ-0099 改 FULL。
+    - 回归：MerchantServiceJdbcIntegrationTests.merchantCancelsUndispatchedWorkOrderWithReason、customerCareCancelsDispatchedDuplicateWithReason；MerchantZoneWorkOrdersPage.test.tsx「派单前取消」；MerchantWorkOrdersPage.test.tsx「客户关怀部取消与客诉跟进」。
+  ② 111-R3 客诉闭环确认（无新裁决）
+    - 依据：BSM:1385「客诉须经客户关怀部确认后方可视为形成闭环，未经其确认的一律不算闭环」；PGM:502「设客户关怀部……职责为受理客人投诉与商户异议、监督与协调各责任部门处理、确认闭环，并负责工单处理」；DEC-R4-2026-08-04-12。
+    - 迁移：V586 新表 complaint_followups，主键 chain＋work_order_id，物业工单链与商户服务工单链共用；同表预置 118-R1 用的 complaint_class、classified_by、classified_at。
+    - 代码：ComplaintFollowupController、ComplaintFollowupService。接口 GET /api/v1/complaint-followups/{chain}/{work_order_id}、POST …/loop-confirm。
+    - 链闸在幂等之前，同该链员工关单：
+      - 物业链 FacilityWorkOrderService.findForComplaintFollowup：平台口径，持 facility.work_order.manage，工单项目可触及；
+      - 商户链 MerchantServiceService.findForComplaintFollowup：平台口径，持 merchant.service_work_order.close，商户经营项目可触及；
+      - 越范围 403 CROSS_PROJECT_FORBIDDEN。
+    - 规则：只有已关闭的投诉才能确认（否则 409 INVALID_STATE），每张只确认一次（否则 409 LOOP_ALREADY_CONFIRMED），不是投诉 409 NOT_A_COMPLAINT。记确认人与时间；审计 complaint.loop_confirmed 与 loop_confirm_failed。两条链现有的关单规则不改。
+    - 页面：ComplaintFollowupDialog（动作码 complaint_loop_confirmed）；楼宇运营工作台投诉行操作「客诉跟进」，ADM-MER-001 投诉行「客诉跟进」。
+    - 文档：OpenAPI getComplaintFollowup、confirmComplaintLoop；building-operations PRD §3 客诉闭环机制实现现状、§6 M；矩阵 ADM-FAC-001、ADM-MER-001；html-prd-coverage.csv BSM-0286。
+    - 回归：ComplaintFollowupJdbcIntegrationTests（三条）、ComplaintFollowupDialog.test.tsx、FacilityWorkbenchPage.customercomplaint.test.tsx「客诉跟进（第 111 条）」。
+- 第 117 条（18M）落地位置补记（117-R1、117-R2；无新裁决，商户服务工单部分见 117-R5 与第十八批裁决 29）：
+  ① 117-R1 工单用料出库与费用承担方：V587 建 work_order_cost_bearers（设施工单与商户服务工单共用；按工单标一个承担方：property 物业承担，或 merchant 商户承担并带商户；结案生成的应收回写 ar_ap_item_id），并给 inventory_stock_movements(business_type, business_id) 加索引。代码落点：facility.WorkOrderMaterialService（用料明细、本项目平台库房余额行与经营商户下拉、出库、标承担方、完工闸、结案应收）；InventoryService/InventoryStockMovementService.issueForWorkOrder（按库位出库，流水挂工单，成本取移动加权均价）；FacilityWorkOrderService.materials/issueMaterial/markCostBearer，complete 前完工闸 409 WORK_ORDER_MATERIAL_BEARER_REQUIRED，complete/accept/review 转为关闭时生成一笔应收；FinanceService.postWorkOrderMaterial（source_type=work_order_material，归工单项目，到期日＝落账当日营业日，业务提交后短信 merchant_amount.work_order_material，NotificationSwitchResolver 列为不可关闭）；MerchantFeeStatementService「工单用料费（商户承担）」改为有出账路径。接口：GET/POST /api/v1/facility/work-orders/{work_order_id}/materials、POST /api/v1/facility/work-orders/{work_order_id}/cost-bearer。依据 BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本，同时在工单上标明费用承担方：公区设施与楼宇主体设备的用料由物业承担；商户自有设施、以及因商户责任导致损坏的用料由该商户承担，并自动生成一笔应收进入其费用账单。」；BSM:1165；ENUM:256「工单用料费（商户承担）」；BSM:1597、1598。
+  ② 117-R2 承担方争议：V587 建 facility_work_order_bearer_disputes。POST /api/v1/facility/work-orders/{work_order_id}/bearer-dispute（FacilityWorkOrderService.disputeBearer）：须已标承担方，原因必填；工单置已挂起，进统一审批（策略 facility_work_order_bearer_dispute，动作 facility.work_order.bearer_dispute，one_level_up，可指定最终审批人；JdbcPlatformRepository.REVIEW_OBJECT_PROJECT_SQL 按工单项目判）。上级在审批链判定，审批意见必填，即判定依据；WorkOrderMaterialService.decided 回写判定结果、判定人、时间与依据，批准按主张改定承担方，驳回维持原承担方。判定前恢复、改承担方、再提争议一律 409 FACILITY_BEARER_DISPUTE_PENDING；判定后不自动恢复，由物业人员点「恢复」。依据 BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案。」；PGM:528。
+  ③ 回归：新增 FacilityWorkOrderMaterialJdbcIntegrationTests（7 条）；改 SupervisorReviewServiceTests（策略 54 条）、NotificationSwitchResolverTests、MerchantPortalJdbcIntegrationTests。OpenAPI 增 4 个操作；楼宇 PRD §3、§6 L、§7，商户专区 PRD 费用总表与金额通知，第三方接入 PRD §11A 实现现状同步。
+- 18M 落地位置补记（第 109 条、第 116 条；不涉及裁决 27～29）：
+  第 109 条 109-R1（挂了商户的外包账号按 Web 前端判）
+  - 落地位置：backend/src/main/java/com/complex/platform/gate/DeviceCredentialVerifier.java 的 verify。100-R2 分支条件补「或 accountType=outsourced_vendor」。外包账号不论挂不挂商户，带终端头的非设备绑定型请求一律按 web 判总开关、外包工作台模块开关 tcs_web_mod_vendor 与灰度；设备绑定型照设备登记与验签判。
+  - 回归：DeviceCredentialVerifierTests.merchantBoundVendorIsJudgedAsWeb；ServerModuleSwitchJdbcIntegrationTests.merchantBoundVendorIsGatedByWebVendorModule、merchantBoundVendorFollowsWebSwitchNotMerchantPortal。
+  - 依据：
+    - PGM:745「受控的十一类终端：客人手机应用、客人小程序、Web 前端（业务人员，客人无网页端）……商户网页门户……」
+    - BSM:1879-1881「商户侧页面｜餐饮、零售、酒吧等商户｜在授权业务范围内全开放，处理本商户经营、供应/库存、对账、结算、员工和看板，不看平台全局。」
+    - PGM:719「所有端都要有后台开关。开关关闭时，端或模块就不能用……」
+    - PGM:744「……前端隐藏只是辅助，后端接口必须独立校验。」
+  第 116 条 116-R1～R3（员工自有手机只开放低风险功能）
+  - 落地位置：
+    - 服务端：GET /api/v1/terminals/staff-app-functions（TerminalDeviceController.staffAppFunctions、gate/StaffAppFunctions）按可信终端下发员工 App 功能码。私人手机只有 staff_device、inbox、notices、my_work_orders、bar_reservation、my_shifts、my_payroll、attendance_month、leave、my_service_income、shift_manage、my_profile。TerminalMasterSwitchInterceptor 对私人手机只放行这些功能的接口（另加取清单、寄存柜扫码两条），其余读写一律 403 TERMINAL_NOT_ALLOWED，并留痕 terminal.access_rejected（reason=private_phone_function_not_allowed，TerminalSwitchGuard.auditRejection）。
+    - OpenAPI：新增 listStaffAppFunctions；75 个清单外操作的 x-terminal-allowed 去掉 staff_private_phone。
+    - 安卓：MainActivity.showHome 按下发清单显示，未声明身份时只给「员工设备凭证」「平板点单 POS」入口；「我的服务收入」在私人手机上不给接单、完成履约；待办中心在私人手机上不取我的接警；flushWorkPhoneReceipts 只在工作手机上跑。员工设备凭证绑定：未声明身份时按私人手机声明，成功后采用私人手机身份；已声明的照原类型、不改身份。
+    - 文档：终端页面 PRD §8.5 清单同步——「考勤打卡」改「查看考勤」；删私人手机「我的接警」；补「主管排班」「我的服务收入（只看）」。
+  - 回归：StaffAppFunctionsTests、StaffPrivatePhoneFunctionsJdbcIntegrationTests；安卓 StaffAppFunctionsTest、TerminalApiClientHeadersTest.declaredClientStaffDeviceCredentialBindKeepsItsTerminalType。
+  - 依据：
+    - PGM:747「同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、查看考勤、请假、查自己薪资等）。」
+    - BSM:1894-1896「……必须在现场完成的操作（代客下单、出示公司收款码、完成履约、扫码核销）在公司工作手机上做……」
+    - BSM:1474「主管在手机上也能排」
+    - BSM:1132「点单员代客下单、向客人出示收款码和点完成履约都是现场操作，一律在公司工作手机上办理……」
+    - BSM:936「员工安装私人手机 App 时生成并绑定一个该手机专属的设备标识……」
+    - PGM:744
+    - PGM:738「访问被拒绝也要留痕……」
+    - 第十二批裁决第 13 条（我的工单「确认」「退回返工」）
+    - 决策台账 V0.24「只在工作手机打卡」
+- 18M 落地位置补记·第 119 条（库位先在基础管理中建档）
+  依据：
+  - BSM:1936「供应链连基础管理｜因为供应商、供应合同、库房、库位、采购人员、库管和审批权限都要先在基础管理中定义清楚。」
+  - BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」
+  - PGM:480「供应链库存要知道库房和库位。」
+  没有新裁决号：决策台账全文、docs/decisions/、审计期 decisions 目录、实施台账 V0.70 都没有库位建档的裁决。
+  119-R1（后端）：
+  - 迁移 V588__warehouse_locations.sql 建表 warehouse_locations：id 为库位编号，全平台唯一；warehouse_id 外键到 warehouses。不预置行，不回填既有余额（UD-07）。
+  - WarehouseService.listLocations、createLocation 与 InventoryController 的 GET/POST /api/v1/inventory/warehouse-locations：
+    - 权限 inventory.warehouse.manage。
+    - 事件 inventory.warehouse_location.list／list_failed、inventory.warehouse_location.created／create_failed。
+    - 库房不存在 404 WAREHOUSE_NOT_FOUND；编号已被占用 409 WAREHOUSE_LOCATION_TAKEN。
+  - 入库只收所选仓库下已建档的库位：
+    - 采购验收 PurchaseWorkflowService.receive 在 requireWarehouse 之后校验，否则 409 PURCHASE_WORKFLOW_INVALID；退供交接只扣减，不校验。
+    - 门店要货签收与借调买断收货在 InventoryTransferFlowService.requireReceiveWarehouse 校验，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID。
+  - 采购工作台选项新增 locations，只带可见仓库下的库位。
+  - OpenAPI 新增 listWarehouseLocations、createWarehouseLocation，操作数 +2。
+  119-R2（前端）：
+  - 库存台账「库房」区块（InventoryWarehousePanel）：库房行列出库位，「＋库位」在该库房下建档。
+  - 采购验收（PurchaseWorkbenchPage）：「实际库位编号」改为只能选所选仓库下已建档的库位。
+  - 页面矩阵 ADM-INV-001 同步。
+  不改、不做：
+  - 系统自动入账（存酒到期转库存、盘点盘盈、经销回库与隔离）仍记到库房本身。
+  - 只扣减的入口不改。
+  - 调拨签收页的收货库位仍手填，由后端校验。
+  - 库位改名、停用、删除与属性，以及商户自建库位，HTML 没写，不做。
+  回归：
+  - 后端：WarehouseLocationJdbcIntegrationTests；PurchaseInboundPayableJdbcIntegrationTests.receiveRejectsUnregisteredLocation、receiveRejectsLocationRegisteredUnderAnotherWarehouse；InventoryTransferRequisitionJdbcIntegrationTests.receiptOnlyAcceptsLocationRegisteredUnderTheReceivingWarehouse。
+  - 前端：InventoryWarehousePanel.test.tsx、PurchaseWorkbenchPage.test.tsx。
+  - e2e：full-admin-remaining ADM-INV-003。
+  PRD 与覆盖表：供应链 PRD §5 库位行、§6 库房管理行（V0.35 同版续记）；html-prd-coverage BSM-0469 由 PARTIAL 改为 FULL，BSM-0205 同步改写。
+- 18M 落地位置补记（第 117 条 117-R3、117-R5、117-R4；第十八批裁决 29「不加状态，停在原状态（推荐）」：有争议时单子停在原状态转上级判定，判定前不能转「已处理待关闭」、不能关闭；判定结果与依据留痕后照常往下走）——前端共用用料面板 apps/web/src/admin/pages/WorkOrderMaterialsPanel.tsx（楼宇运营工作台 FacilityWorkbenchPage 工单行「用料」；商户服务工单页 MerchantWorkOrdersPage「用料」，商户承担即提单商户）；商户服务工单 MerchantServiceService.materials/issueMaterial/markCostBearer/disputeBearer，requireMaterialsSettled 拦转 resolved（含处理人完成即结束）、员工关单与商户确认关闭，postMaterialReceivable 在三处关单时按最终承担方生成一笔工单用料费应收；接口 GET/POST /api/v1/merchant-service/work-orders/{id}/materials、POST …/cost-bearer、POST …/bearer-dispute（merchant.service_work_order.process，只给平台员工）；承担方争议改两类工单共用：表 work_order_bearer_disputes（V587 续写，business_type 区分）、统一审批策略 work_order_bearer_dispute／动作 work_order.bearer_dispute（一级上级，审批意见即判定依据，WorkOrderMaterialService.decided 按工单类型回写）、错误码 WORK_ORDER_BEARER_DISPUTE_PENDING（设施工单同改）。依据 BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」、BSM:1372「商户自己在商户专区报的单，按枚举速查表「商户服务工单状态」那条的状态走」、ENUM:264；裁决 29。
+- 18M 落地位置补记——第 111 条 111-R4（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正；标了门店的客人投诉，加上该店自己在商户专区提的投诉，进该店周报；全部客诉按所在项目进各公司周报」）：客人端投诉表单「涉及门店（选填）」落在 apps/customer-app/src/pages/ComplaintsPage.tsx、apps/customer-miniapp/miniprogram/pages/complaints/index.js 与 index.wxml、packages/customer-core/src/service.ts（listComplaintStores、submitComplaint.storeMerchantId）；后端 GET /api/v1/customer/complaints/store-options（CustomerComplaintService.listStoreOptions、storeOptions：该综合体在营商户），POST /api/v1/customer/complaints 收 store_merchant_id（不在选项内 400、不建工单），写 complaint_followups.store_merchant_id（V586 续写）；客户关怀部更正走 PUT /api/v1/complaint-followups/{chain}/{work_order_id}（ComplaintFollowupService.update，只物业工单链）与后台 ComplaintFollowupDialog「涉及门店」。客诉周报落在 ComplaintWeeklyReportService.sendWeeklyReports 与 ComplaintWeeklyReportJob（prod 开，北京时间每周一 08:00），收件人按新码 complaint.weekly_report.receive（V586，授 role_platform_admin）取：商户账号收本店，平台员工按该码可触及项目收，员工系统通知 notice_cwr_<周一>_<员工档案>；依据 BSM:1385「系统每周自动生成客诉周报，列明当周客诉的笔数、类型、处理进度与闭环情况——店内的报送该店主理人与店长，各公司的报送该公司最高负责人与平台最高负责人」、DEC-R4-2026-08-04-12。第 118 条 118-R1：客户关怀部认定投诉类别走 PUT /api/v1/complaint-followups/{chain}/{work_order_id}（ComplaintFollowupService.update，后台 ComplaintFollowupDialog「投诉类别」）。类别有变化时由 ComplaintFollowupService.escalateIfSameClass 按提出时间取同类、前后一个月内的客诉（两条链）；本单提出人在其中别的单里没出现过，且存在一段含本单、首尾不超过一个月、不同提出人不少于三人的集合，即给持新码 complaint.escalation.receive（V586，授 role_platform_admin）、可触及涉及项目的平台员工发员工系统通知「同类投诉上升：类别」，审计 complaint.same_class_escalated。依据 BSM:1385「一个月内，同一类投诉由三个不同的人分别提出的，立即上升到项目负责人、娱乐平台负责人与公司最高负责人；是否属于同一类由客户关怀部认定。」、DEC-R4-2026-08-04-12。
+- 第十八批 M 段第 111 条 111-R1（员工手机「我的工单」含派给本人的商户服务工单，只看）落地位置：
+  - 后端：GET /api/v1/merchant-service/work-orders/assigned-to-me（MerchantServiceController.listAssignedToMe，权限 merchant.service_work_order.process）。MerchantServiceService.listAssignedToMe 按当前登录账号查负责人 owner_user_id，最多 200 条，不含已存档与已审批删除的；审计 merchant_service.work_order.viewed，metadata scope=assigned_to_me。仓库方法 JdbcMerchantServiceRepository.findWorkOrdersByOwner。
+  - 私人手机：低风险功能清单 StaffAppFunctions 的 my_work_orders 纳入该接口。
+  - 安卓：MainActivity.showMyWorkOrders 在物业工单之后追加「[商户工单]」行，状态按 ENUM:264 七态、类型按四类显示中文，只读、点选不回填；两份各自拉取，一份失败只在状态行注明。共享核心与 App 的 TerminalApiClient 各加 listMyMerchantWorkOrders。
+  - OpenAPI 操作 listMyMerchantServiceWorkOrders。
+  依据：BSM:1466「我的工单：只看派给自己的工单和处理进度。」；BSM:1380「派单到具体人员或班组」；PGM:747「员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、查看考勤、请假、查自己薪资等）」。
+  无新裁决：负责人持处理码沿用 18L 第 102 条 102-R1（裁决 26）。不加迁移。
+  回归：MerchantServiceJdbcIntegrationTests.ownerListsMerchantWorkOrdersAssignedToMe、StaffPrivatePhoneFunctionsJdbcIntegrationTests.privatePhoneListsMerchantWorkOrdersAssignedToMe、StaffAppFunctionsTests、安卓 MyMerchantWorkOrderApiTest。
+- 18M 落地位置补记·第 112 条（112-R1、112-R2）
+  - 依据：
+    - BSM:947「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」
+    - BSM:931「……扫码核销放行），一律在公司工作手机上做……」
+    - BSM:985「扫码查看客人当前可领取的赠饮、礼物、积分兑换权益和领取状态。」
+    - BSM:980「……它可以让客人或现场工作人员在固定点位完成查询、权益领取和部分下单……」
+    - BSM:1047「连接触摸屏一体机，承接订台、吧台买酒和权益领取自助操作。」
+    - BSM:1948「……需要扫码后在一体机上清楚看到能领什么、能领多少、是否已经领取，并把领取结果回写到权益记录。」
+    - BSM:1004「连接留痕与异常，一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」
+    - BSM:1197「……出库须同时核验订单和物品码，全程交接留责任人。」
+    - ENUM:81「……到店由店员核销领取时才实扣……」
+  - 裁决：
+    - 没有新裁决号（核对阶段 blocked 为空）。
+    - 查券不扣单次授权，沿用 M723 操作员 2026-10-03「预览、查询不扣一次性授权」。
+    - 票务核销预览接口按 DEC-R8-31 ③ 收窄为「检票环节内部不设预检」，不再标废止。
+    - R1、R2 同一提交落地。
+  - 112-R1：
+    - 后端：
+      - VoucherService.previewRedeem 加 POST /api/v1/vouchers/redemptions/preview（VoucherController，标 DoesNotConsumeSingleUseGrant；新增 VoucherRedeemPreviewRecord、dto VoucherRedeemPreviewRequest）。
+      - 按客人出示的码查券，定位与越权同核销；不锁券行、不改状态、不落惰性过期、不消费码。
+      - 查券留痕 voucher.redeem_previewed／voucher.redeem_preview_failed。
+      - 核销成功留痕 voucher.redeemed 的 metadata 另记可信终端 terminal_type、设备号 device_id，以及设备台账上的绑定点位 point_id。
+    - OpenAPI：
+      - 新增 previewVoucherRedemption。
+      - redeemVoucher 的 x-terminal-allowed 加 staff_work_phone、kiosk。
+    - 安卓：
+      - 两份 TerminalApiClient 加 previewVoucherRedeem、redeemVoucher。
+      - MainActivity 首页「礼物/券核销」（showVoucherRedeem）：查券显示券名、件数、状态、有效期和不可核销原因；店内实物券逐件扫物品码，个数不对本地拦下。
+    - 员工 App 功能码 StaffAppFunctions.ALL 加 voucher_redeem，不进私人手机清单。
+  - 112-R2：
+    - 安卓首页加「一体机模式（权益领取）」（功能码 kiosk_claim，未声明身份的本机也显示）。
+    - showKioskSetup：按设备编号和点位把本机绑成一体机（kiosk、space、service），并登记签名公钥；kioskPrefs 存设备号、设备台账行、点位，重启后恢复 kiosk 身份。
+    - kiosk 身份下首页就是常驻的权益领取屏（showKioskClaim），只有权益领取和重新登录两样。
+    - 共享核 KioskClaim.claimTarget 按 vrc_ 前缀分流：
+      - 券走 112-R1 的两个接口。
+      - 门票权益走 POST /api/v1/ticketing/verifications/preview：显示权益类型、剩余次数、有效期、状态。
+      - 确认后走 POST /api/v1/ticketing/verifications 领取：设备是本机设备台账行，点位是绑定点位；赠饮出 0 元赠饮单并扣吧台库存。
+    - 一体机所属商户由管理员在后台设备台账页设置，设置屏有提示。
+    - OpenAPI：
+      - previewTicketVerification、createTicketVerification 的 x-terminal-allowed 加 kiosk。
+      - previewTicketVerification 的描述收窄为检票环节内部不设预检，并补一句一体机展示用。
+      - StaffAppFunctionsResponse 的功能码闭集加 voucher_redeem、kiosk_claim。
+  - 文档：
+    - 积分与虚拟券 PRD V1.11（§10.4）。
+    - 终端与页面 PRD V0.09 同版（§11 一体机三行）。
+    - 票务权益核销 PRD V0.24（§10）。
+    - 安卓 README 的 P0 清单两行。
+    - html-prd-coverage.csv：BSM-0114、BSM-0131、BSM-0480、BSM-0218。
+    - fieldLabels.ts：goods_quantity、block_reason。
+  - 测试：
+    - 后端：WorkPhoneVoucherRedeemJdbcTests、KioskEntitlementClaimJdbcTests，StaffAppFunctionsTests 加一条。
+    - 安卓：VoucherRedeemApiTest、KioskClaimTest，TerminalApiClientHeadersTest 加两条，StaffAppFunctionsTest 加断言。
+- 18M 落地位置补记·第 114 条 114-R3 与本段运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 5741cf41 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6216 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告；无上线指挥台也重生成了，内容不变。三份生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1521，后端全量与常规界面验收的数字、日期改为本次实跑值，写入 npm run verify:unit 实跑结果。verify:unit 第一次实跑时 apps/web 有 1 例失败（PermissionTemplatesPage.test.tsx，本段未改），单独重跑与整套重跑都过。6 个被核文件的行数和上段一样，没改。交付门禁于 2026-11-02 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。external-dependency-gates、t3d-local-llm-ai-quality 已转通过，已从「交付总闸口」一行的仍红清单里去掉。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

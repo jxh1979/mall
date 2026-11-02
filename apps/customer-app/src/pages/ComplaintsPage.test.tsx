@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,7 @@ function makeService(overrides: Record<string, unknown> = {}) {
     listMyComplaints: vi.fn().mockResolvedValue([RESOLVED, OPEN, RATED]),
     submitComplaint: vi.fn().mockResolvedValue({ ...OPEN, workOrderId: "wo-9", code: "WO-009" }),
     rateComplaint: vi.fn().mockResolvedValue({ ...RESOLVED, satisfaction: 4 }),
+    listComplaintStores: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -53,6 +54,22 @@ describe("ComplaintsPage 投诉与我的投诉", () => {
     await waitFor(() => expect(service.submitComplaint).toHaveBeenCalledWith({ projectId: "prj-1", title: "灯坏了", description: "二楼走廊",
       files: [photo, voice] }));
     await waitFor(() => expect(screen.queryByTestId("complaint-submitted")?.textContent ?? "").toContain("WO-009"));
+  });
+
+  // 第十八批 M 段第 111 条 111-R4（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正」）：列所选综合体的在营门店，
+  // 选了随投诉一并提交，不选不带。
+  it("storeOptionalAndSubmitted：涉及门店选填，列所选综合体的门店，选了随投诉提交", async () => {
+    const service = makeService({ listComplaintStores: vi.fn().mockResolvedValue([{ merchantId: "mch-1", merchantName: "一号清吧" }]) });
+    render(<ComplaintsPage service={service as unknown as CustomerService} />);
+    await waitFor(() => expect(screen.queryByRole("combobox", { name: "涉及门店（选填）" })).not.toBeNull());
+    expect(service.listComplaintStores).toHaveBeenCalledWith("prj-1");
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "涉及门店（选填）" }));
+    await waitFor(() => expect(screen.queryByTitle("一号清吧")).not.toBeNull());
+    fireEvent.click(screen.getByTitle("一号清吧"));
+    fireEvent.change(screen.getByLabelText("投诉标题"), { target: { value: "服务差" } });
+    fireEvent.click(screen.getByTestId("complaint-submit"));
+    await waitFor(() => expect(service.submitComplaint).toHaveBeenCalledWith({ projectId: "prj-1", title: "服务差", description: undefined,
+      storeMerchantId: "mch-1", files: [] }));
   });
 
   it("microphoneDeniedSaysWhy：未允许使用麦克风时提示原因、不进录音状态", async () => {

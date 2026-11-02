@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
@@ -174,6 +174,14 @@ public class TerminalSwitchGuard {
      */
     private void reject(String terminalType, String capabilityCode, String reason,
             String scopeType, String scopeId) {
+        auditRejection(terminalType, capabilityCode, reason, scopeType, scopeId);
+        throw ApiException.forbidden("TERMINAL_DISABLED",
+                "该终端能力已停用：" + capabilityCode);
+    }
+
+    /** 写 terminal.access_rejected 留痕（不抛）；第十八批 M 段第 116 条私人手机清单外的拒绝也用它（PGM:738）。 */
+    void auditRejection(String terminalType, String capabilityCode, String reason,
+            String scopeType, String scopeId) {
         Map<String, Object> payload = new LinkedHashMap<>();
         // AuditEventService 用 Map.copyOf 持久化 metadata，含 null 值会抛 NPE，故仅在值非 null 时 put。
         putIfPresent(payload, "terminal_type", terminalType);
@@ -199,8 +207,6 @@ public class TerminalSwitchGuard {
         } catch (RuntimeException ignored) {
             // 留痕失败不得掩盖拒绝结果
         }
-        throw ApiException.forbidden("TERMINAL_DISABLED",
-                "该终端能力已停用：" + capabilityCode);
     }
 
     /** 仅在值非 null 时写入 payload，避免下游 Map.copyOf 对 null 值抛 NPE 吞掉拒绝留痕。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.notification;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -62,7 +62,8 @@ class NotificationSwitchResolverTests {
         set("sms_notification", false);
 
         for (String event : List.of("settlement_statement", "adjustment", "reconciliation_difference", "deposit_deduct",
-                "deposit_refund", "deposit_supplement", "penalty", "dividend_issued", "dividend_paid")) {
+                "deposit_refund", "deposit_supplement", "penalty", "dividend_issued", "dividend_paid",
+                "work_order_material")) {
             assertThat(resolver.resolve("merchant_amount", event).allowed()).as(event).isTrue();
             assertThat(NotificationSwitchResolver.isMandatorySwitch("sms.notify.merchant_amount." + event)).as(event).isTrue();
         }

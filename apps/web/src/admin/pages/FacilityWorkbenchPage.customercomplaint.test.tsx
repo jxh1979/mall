@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -76,5 +76,23 @@ describe("FacilityWorkbenchPage 客人投诉关闭（clients-R8）", () => {
     await waitFor(() => expect(screen.getByTestId("facility-work-order-customer-media")).toBeInTheDocument());
     expect(screen.getByText(/语音 1/).closest("a")?.getAttribute("href"))
       .toContain("/api/v1/facility/work-orders/wo-c1/customer-media/ccm_1/file");
+  });
+});
+
+// 第十八批 M 段第 111 条 111-R3：BSM:1385「客诉须经客户关怀部确认后方可视为形成闭环，未经其确认的一律不算闭环」。
+describe("FacilityWorkbenchPage 客诉跟进（第 111 条）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("投诉行的操作里有「客诉跟进」，点开读该单的物业链跟进", async () => {
+    const api = makeApi(vi.fn(async () => ({}) as unknown));
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("facility-work-order-actions-wo-c1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("facility-work-order-actions-wo-c1"));
+    await waitFor(() => expect(screen.queryByTestId("facility-work-order-complaint-followup-wo-c1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("facility-work-order-complaint-followup-wo-c1"));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/complaint-followups/facility/wo-c1"));
+    expect(screen.getByTestId("complaint-followup")).toBeTruthy();
   });
 });

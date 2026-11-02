@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -36,7 +36,7 @@ public class CustomerComplaintService {
     /** 单次投诉附件上限：照片、视频、语音合计 9 个。 */
     static final int MAX_FILES = 9;
     private static final String BUSINESS_TYPE = "customer_complaint";
-    static final Map<String, String> STATUS_LABELS = Map.of(
+    public static final Map<String, String> STATUS_LABELS = Map.of(
             "pending_assign", "待派单", "assigned", "已派单", "processing", "处理中", "pending_review", "待回访",
             "pending_acceptance", "待验收", "accepted", "已验收", "closed", "已关闭", "suspended", "已挂起");
 
@@ -49,8 +49,12 @@ public class CustomerComplaintService {
     public record MediaView(String id, String contentType, long fileSize, Instant createdAt) {
     }
 
+    /** 第十八批 M 段第 111 条 111-R4（第十八批裁决 28）：客人投诉表单「涉及门店」选项＝该综合体在营商户。 */
+    public record StoreOption(String merchantId, String merchantName) {
+    }
+
     /** 幂等指纹：同一请求编号重放须同一内容（文件按名称与大小）。 */
-    record SubmitFingerprint(String projectId, String title, String description, List<String> files) {
+    record SubmitFingerprint(String projectId, String title, String description, String storeMerchantId, List<String> files) {
     }
 
     record RateRequest(String idempotencyKey, Integer score) {
@@ -73,16 +77,20 @@ public class CustomerComplaintService {
         this.terminalSwitch = terminalSwitch;
     }
 
-    /** clients-R8 提交投诉：文字＋最多 9 个照片/视频/语音；工单类型投诉、来源 customer、提单方＝本人。幂等键必填。 */
+    /**
+     * clients-R8 提交投诉：文字＋最多 9 个照片/视频/语音；工单类型投诉、来源 customer、提单方＝本人。幂等键必填。
+     * 第十八批 M 段第 111 条 111-R4（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正」）：选了门店的须为该综合体在营商户
+     * （否则 400），记进客诉跟进（物业工单链），客户关怀部可在后台客诉跟进里更正。
+     */
     @Transactional
     public ComplaintView submit(String customerToken, String idempotencyKey, String projectId, String title, String description,
-            List<MultipartFile> files) {
+            String storeMerchantId, List<MultipartFile> files) {
         CustomerRecord customer = customers.requireCustomerRecord(customerToken);
         // PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以客人所选综合体（即工单所属综合体）在服务端判
         // （不取 X-Project-Id），先于幂等。
         terminalSwitch.checkTerminalEnabledAtProject(trimToNull(projectId));
         List<MultipartFile> actualFiles = files == null ? List.of() : files.stream().filter(f -> f != null && !f.isEmpty()).toList();
-        SubmitFingerprint fingerprint = new SubmitFingerprint(projectId, title, description,
+        SubmitFingerprint fingerprint = new SubmitFingerprint(projectId, title, description, storeMerchantId,
                 actualFiles.stream().map(f -> f.getOriginalFilename() + ":" + f.getSize()).toList());
         return operations.executeWrite("submitCustomerComplaint:" + customer.id(), idempotencyKey, fingerprint, ComplaintView.class,
                 AuditedOperation.of("customer.complaint_submitted", "customer.complaint_submit_failed", "not_applicable", BUSINESS_TYPE),
@@ -93,6 +101,10 @@ public class CustomerComplaintService {
                         throw ApiException.badRequest("VALIDATION_FAILED", "project_id is invalid");
                     }
                     String actualTitle = requireText(title, "title");
+                    String store = trimToNull(storeMerchantId);
+                    if (store != null && storeOptions(project).stream().noneMatch(option -> option.merchantId().equals(store))) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "store_merchant_id is invalid");
+                    }
                     if (actualFiles.size() > MAX_FILES) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "投诉附件最多 " + MAX_FILES + " 个");
                     }
@@ -101,6 +113,13 @@ public class CustomerComplaintService {
                     FacilityWorkOrderRecord order = workOrders.createCustomerComplaint(customer.id(), project, actualTitle,
                             trimToNull(description), idempotencyKey);
                     Instant now = Instant.now();
+                    if (store != null) {
+                        jdbc.update("""
+                                INSERT INTO complaint_followups (chain, work_order_id, store_merchant_id, updated_at)
+                                VALUES ('facility', :id, :store, :now)
+                                """, new MapSqlParameterSource("id", order.id()).addValue("store", store)
+                                .addValue("now", Timestamp.from(now)));
+                    }
                     for (EvidenceFileStorage.StoredFile stored : storedFiles) {
                         jdbc.update("""
                                 INSERT INTO customer_complaint_media (id, work_order_id, customer_id, object_key, content_type, file_size, created_at)
@@ -112,6 +131,25 @@ public class CustomerComplaintService {
                     }
                     return view(order, actualFiles.size());
                 }, value -> value instanceof ComplaintView v ? v.workOrderId() : null, Map.of());
+    }
+
+    /** 111-R4 客人投诉表单「涉及门店」选项（选填）：本人登录、按所选综合体的客人端开关在服务端判。 */
+    public List<StoreOption> listStoreOptions(String customerToken, String projectId) {
+        customers.requireCustomerRecord(customerToken);
+        String project = requireText(projectId, "project_id");
+        terminalSwitch.checkTerminalEnabledAtProject(project);
+        return storeOptions(project);
+    }
+
+    /** 该综合体在营商户：状态正常、未归档未删除，主项目或已批准的经营项目为该综合体（客人选项与后台客诉跟进的可选门店同一口径）。 */
+    public List<StoreOption> storeOptions(String projectId) {
+        return jdbc.query("""
+                SELECT m.id, m.merchant_name FROM merchants m
+                 WHERE m.status = 'active' AND m.archived_at IS NULL AND m.delete_status <> 'approved'
+                   AND (m.project_id = :project
+                        OR EXISTS (SELECT 1 FROM merchant_projects mp WHERE mp.merchant_id = m.id AND mp.project_id = :project))
+                 ORDER BY m.merchant_name, m.id
+                """, Map.of("project", projectId), (rs, n) -> new StoreOption(rs.getString("id"), rs.getString("merchant_name")));
     }
 
     /** clients-R8 我的投诉：只返回本人提交的投诉，带处理结论与满意度。 */

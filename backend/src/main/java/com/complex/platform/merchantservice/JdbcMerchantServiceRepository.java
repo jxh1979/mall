@@ -103,6 +103,25 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
                 new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("limit", limit), this::mapWorkOrder);
     }
 
+    /** 111-R1：派给本人的（owner_user_id），不含已存档与已审批删除的。 */
+    @Override
+    public List<MerchantWorkOrderRecord> findWorkOrdersByOwner(String userId, int limit) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
+                       title, description, reported_by_user_id, reported_channel, owner_department,
+                       owner_user_id, due_at, closed_at, resolution, satisfaction_score,
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by,
+                       delete_requested_at, delete_reason
+                  FROM merchant_service_work_orders
+                 WHERE owner_user_id = :user_id
+                   AND delete_status <> 'approved'
+                   AND archived_at IS NULL
+                 ORDER BY created_at DESC, id
+                 LIMIT :limit
+                """, Map.of("user_id", userId, "limit", limit), this::mapWorkOrder);
+    }
+
     @Override
     public Optional<MerchantWorkOrderRecord> findWorkOrderById(String id) {
         return jdbcTemplate.query("""

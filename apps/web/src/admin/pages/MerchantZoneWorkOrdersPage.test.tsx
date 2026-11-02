@@ -169,3 +169,46 @@ describe("MerchantZoneWorkOrdersPage 商户确认已解决", () => {
     expect(JSON.parse(String(postInit.body))).toMatchObject({ satisfaction_score: 4 });
   });
 });
+
+// 第十八批 M 段第 111 条 111-R2：ENUM:264「已取消（商户专区发起……）」；第十八批裁决 27「派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消」。
+describe("MerchantZoneWorkOrdersPage 派单前取消", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/merchant-zone/work-orders");
+  });
+
+  const ROWS_111 = [
+    { id: "wo-cr", work_order_type: "repair", title: "门锁报修", priority: "medium", status: "created" },
+    { id: "wo-as", work_order_type: "cleaning", title: "地面保洁", priority: "low", status: "assigned" },
+  ];
+
+  it("已提交的单有「取消」、已派单的没有；未填原因不发请求；填原因后 POST /cancel 带幂等键与原因", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: { id: "wo-cr", status: "cancelled" } }),
+          { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      if (String(url).includes("/work-order-close-methods")) return Promise.resolve(envelope([]));
+      return Promise.resolve(envelope(ROWS_111));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MerchantZoneWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "merchant", accountType: "merchant", merchantId: "m-1" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("merchant-zone-work-order-cancel-wo-cr")).not.toBeNull());
+    expect(screen.queryByTestId("merchant-zone-work-order-cancel-wo-as")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-cancel-wo-cr"));
+    expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-cancel-submit"));
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    fireEvent.change(screen.getByTestId("merchant-zone-work-order-cancel-reason"), { target: { value: "重复提单" } });
+    fireEvent.click(screen.getByTestId("merchant-zone-work-order-cancel-submit"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST"
+      && String(url).endsWith("/api/v1/merchant-service/work-orders/wo-cr/cancel"))).toBe(true));
+    const [, postInit] = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    const body = JSON.parse(String(postInit.body));
+    expect(body).toMatchObject({ reason: "重复提单" });
+    expect(body.idempotency_key).toBeTruthy();
+  });
+});

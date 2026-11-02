@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.44",
+    "version": "V0.45",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -8418,7 +8418,7 @@
                   },
                   "location_id": {
                     "type": "string",
-                    "description": "入库库位",
+                    "description": "入库库位：须为 warehouse_id 下已建档的库位，否则 409 PURCHASE_WORKFLOW_INVALID（第十八批 M 段第 119 条，BSM:1936）",
                     "maxLength": 64
                   },
                   "warehouse_id": {
@@ -10432,7 +10432,7 @@
         ],
         "operationId": "receiveTransferOrder",
         "summary": "调拨收货／门店要货签收",
-        "description": "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写调拨流水（movement_type=transfer，business_type=inventory_transfer；第十八批第 18 条 BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）；第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货须由接收方（to_owner_id）本商户账号办理（平台管理员除外，否则 403 STORE_RECEIPT_ONLY），带 warehouse_id（接收方在用仓库，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID，盘点冻结 409）、location_id 与逐行 lines[].item_id（接收方本商户物品；缺行、不存在或不属接收方 400 VALIDATION_FAILED），全部数量入该库位并写调拨流水（transfer，单价＝明细锁定内部结算价）。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
+        "description": "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写调拨流水（movement_type=transfer，business_type=inventory_transfer；第十八批第 18 条 BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）；第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货须由接收方（to_owner_id）本商户账号办理（平台管理员除外，否则 403 STORE_RECEIPT_ONLY），带 warehouse_id（接收方在用仓库，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID，盘点冻结 409）、location_id 与逐行 lines[].item_id（接收方本商户物品；缺行、不存在或不属接收方 400 VALIDATION_FAILED），全部数量入该库位并写调拨流水（transfer，单价＝明细锁定内部结算价）。第十八批 M 段第 112 条（BSM 第 1201 行「买断时溯源码归属从原主体变更到接收主体」）：买断收货时随货溯源码的归属商户与登记物料随转为接收方及其逐行所选物品。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。第十八批 M 段第 119 条（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：门店要货签收与借调买断收货的 location_id 须为该仓库下已建档的库位，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。",
         "x-permission": "inventory.transfer_order.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -11874,6 +11874,37 @@
         }
       }
     },
+    "/api/v1/merchant-service/work-orders/assigned-to-me": {
+      "get": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "listMyMerchantServiceWorkOrders",
+        "summary": "我的商户服务工单（员工手机「我的工单」）",
+        "description": "第十八批 M 段第 111 条 111-R1：员工手机「我的工单」只读列出派给本人（负责人）的商户服务工单，最近 200 条，不含已存档与已审批删除的；只按本人判，不见别人的单（BSM:1466「我的工单：只看派给自己的工单和处理进度。」）。负责人本来就要持处理码（第 102 条 102-R1）；员工私人手机的低风险功能清单含此接口（PGM:747）。",
+        "x-permission": "merchant.service_work_order.process",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_private_phone",
+          "staff_work_phone"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "merchant_service.work_order.viewed",
+        "x-audit-event-failure": "merchant_service.work_order.view_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/merchant-service/work-order-policies": {
       "get": {
         "tags": [
@@ -12070,7 +12101,7 @@
         ],
         "operationId": "addMerchantServiceWorkOrderAction",
         "summary": "Append merchant service work order action",
-        "description": "Append merchant service work order action. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。 第 102 条 102-R3（BSM:1385「保洁等无争议类由处理人完成即结束」；第十八批裁决 26）：关单方式为处理人完成即结束的单（保洁；配成处理人完成即结束的报修、其他服务请求，其他服务请求出厂即是）target_status=resolved 即关闭，处理说明即处理结论，动作记 closed。",
+        "description": "Append merchant service work order action. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。 第 102 条 102-R3（BSM:1385「保洁等无争议类由处理人完成即结束」；第十八批裁决 26）：关单方式为处理人完成即结束的单（保洁；配成处理人完成即结束的报修、其他服务请求，其他服务请求出厂即是）target_status=resolved 即关闭，处理说明即处理结论，动作记 closed。 第十八批 M 段第 117 条 117-R5（BSM:1380；第十八批裁决 29）：转 resolved（含处理人完成即结束）前，用了库房物料而未标费用承担方 409 WORK_ORDER_MATERIAL_BEARER_REQUIRED，承担方争议待上级判定 409 WORK_ORDER_BEARER_DISPUTE_PENDING；处理人完成即结束使单关闭且承担方为商户的，按用料合计生成一笔工单用料费应收并短信通知商户。",
         "x-permission": "merchant.service_work_order.process",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -12251,7 +12282,7 @@
         ],
         "operationId": "closeMerchantServiceWorkOrder",
         "summary": "Close merchant service work order",
-        "description": "Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。 第 102 条 102-R2（BSM:1385「问题已解决但商户未确认解决或未点击关闭的，客户关怀部记录相关信息及关闭缘由后，可以关闭投诉」「满意度在回访/验收时由提单方评分」）：投诉须带 close_reason，否则 400 VALIDATION_FAILED，关闭动作说明与留痕记该缘由；satisfaction_score 可不填。102-R3（裁决 26）：配成须商户确认的报修、其他服务请求员工不能关，409 MERCHANT_CONFIRM_REQUIRED。",
+        "description": "Close merchant service work order. This P1 merchant service workflow must enforce server-side permissions, idempotent writes, and audit evidence. 第 93 条 93-R3：平台管理员不限；商户账号只能处理本商户的工单；其余平台员工只能处理入口权限码可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；外包账号 403。 第 102 条 102-R2（BSM:1385「问题已解决但商户未确认解决或未点击关闭的，客户关怀部记录相关信息及关闭缘由后，可以关闭投诉」「满意度在回访/验收时由提单方评分」）：投诉须带 close_reason，否则 400 VALIDATION_FAILED，关闭动作说明与留痕记该缘由；satisfaction_score 可不填。102-R3（裁决 26）：配成须商户确认的报修、其他服务请求员工不能关，409 MERCHANT_CONFIRM_REQUIRED。 第十八批 M 段第 117 条 117-R5（第十八批裁决 29）：承担方争议待上级判定 409 WORK_ORDER_BEARER_DISPUTE_PENDING，用了库房物料而未标费用承担方 409 WORK_ORDER_MATERIAL_BEARER_REQUIRED；承担方为商户的，关闭时按用料合计生成一笔工单用料费应收并短信通知商户。",
         "x-permission": "merchant.service_work_order.close",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -12301,6 +12332,601 @@
         ]
       }
     },
+    "/api/v1/merchant-service/work-orders/{id}/cancel": {
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "cancelMerchantServiceWorkOrder",
+        "summary": "商户在派单前取消工单",
+        "description": "第十八批 M 段第 111 条 111-R2（第十八批裁决 27「派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消」；ENUM:264「已关闭、已取消（商户专区发起……）」）：还没派单（已提交）的单，商户在商户专区「我的工单」填原因取消即为已取消（reason 必填，否则 400 VALIDATION_FAILED），取消动作 cancelled 的操作人为商户账号、说明为原因。闸在幂等之前：只有本商户账号能取消——平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED，别的商户 403 CROSS_MERCHANT_FORBIDDEN；已关闭或已取消 409 WORK_ORDER_CLOSED。已派单的单 409 INVALID_STATE（照常处理关单；重复提或误提的由客户关怀部经 staff-cancel 取消）。",
+        "x-permission": "merchant.service_work_order.create",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "web",
+          "merchant_portal",
+          "merchant_app"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.work_order.cancelled",
+        "x-audit-event-failure": "merchant_service.work_order.cancel_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MerchantWorkOrderCancelRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/merchant-service/work-orders/{id}/staff-cancel": {
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "cancelMerchantServiceWorkOrderByStaff",
+        "summary": "客户关怀部取消已派单的重复或误提工单",
+        "description": "第十八批 M 段第 111 条 111-R2（第十八批裁决 27「派单后，重复提或误提的由客户关怀部填原因取消」；BSM:1385「工单由客户关怀部负责处理」）：已派单、处理中、待商户确认、已处理待关闭的单，持关闭权限的员工在后台填原因取消即为已取消（reason 必填，否则 400 VALIDATION_FAILED），取消动作 cancelled 的操作人为该员工、说明为原因。闸同员工关单、在幂等之前：平台管理员不限；其余平台员工只能取消关闭权限可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；已关闭或已取消 409 WORK_ORDER_CLOSED。未派单（已提交）的单 409 INVALID_STATE（由商户自己取消）。",
+        "x-permission": "merchant.service_work_order.close",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.work_order.cancelled",
+        "x-audit-event-failure": "merchant_service.work_order.cancel_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/MerchantWorkOrderCancelRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/complaint-followups/{chain}/{work_order_id}": {
+      "get": {
+        "tags": [
+          "facility",
+          "merchant-service"
+        ],
+        "operationId": "getComplaintFollowup",
+        "summary": "读取客诉跟进",
+        "description": "第十八批 M 段第 111 条 111-R3（BSM:1385「所有客诉必须有跟进、有记录、有结果，直至形成闭环；客诉须经客户关怀部确认后方可视为形成闭环，未经其确认的一律不算闭环」；PGM:502「……确认闭环，并负责工单处理」）：读一张投诉单的跟进（闭环确认人与时间、投诉类别与认定人；没有跟进时各项为空）。chain 只能是 facility 或 merchant_service，否则 400 VALIDATION_FAILED。链闸同该链员工关单、在幂等之前：平台口径（商户账号与外包账号 403）；facility 持 facility.work_order.manage、工单项目在可触及范围内，merchant_service 持 merchant.service_work_order.close、该商户经营项目（主项目或追加的经营项目）在可触及范围内，平台管理员不限，越范围 403 CROSS_PROJECT_FORBIDDEN；工单不存在 404；不是投诉 409 NOT_A_COMPLAINT。",
+        "x-permission": "facility.work_order.manage",
+        "x-permissions-any-of": [
+          "facility.work_order.manage",
+          "merchant.service_work_order.close"
+        ],
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "facility",
+                "merchant_service"
+              ]
+            },
+            "description": "工单链：facility＝物业工单链（客人投诉与员工新建的投诉），merchant_service＝商户服务工单链（商户投诉）。"
+          },
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "投诉工单编号。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "客诉跟进；data 为 ComplaintFollowup。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/ComplaintFollowup"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "facility",
+          "merchant-service"
+        ],
+        "operationId": "classifyComplaint",
+        "summary": "客户关怀部认定投诉类别、更正涉及门店",
+        "description": "第十八批 M 段第 118 条 118-R1（BSM:1385「一个月内，同一类投诉由三个不同的人分别提出的，立即上升到项目负责人、娱乐平台负责人与公司最高负责人；是否属于同一类由客户关怀部认定」；DEC-R4-2026-08-04-12）与第 111 条 111-R4（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正」）：complaint_class 与 store_merchant_id 各自可选、至少带一项，否则 400 VALIDATION_FAILED。complaint_class 去首尾空白后须 1～64 字（否则 400），记认定人（当前账号）与时间，可以改认定。store_merchant_id 只物业工单链收（商户投诉的门店就是提单商户，带了 400），传空串即清除，不存在的商户 400。类别有变化（原为空或不同）时在同一事务里判是否上升：取同类、提出时间（工单建单时间）在本单前后一个月内的客诉（两条链），本单提出人（物业工单为提单方，客人投诉即客人；商户服务工单为提单账号）在其中别的单里没出现过，且存在一段含本单、首尾提出时间相差不超过一个月、不同提出人不少于三人的集合，即给持 complaint.escalation.receive、可触及涉及项目的平台员工各发一条员工系统通知「同类投诉上升：类别」（审计 complaint.same_class_escalated）；同值重存不判，同一提出人再投诉同类不重复上升，第四位起每新增一人再上升一次。chain 只能是 facility 或 merchant_service，否则 400 VALIDATION_FAILED。链闸同该链员工关单、在幂等之前：平台口径（商户账号与外包账号 403）；facility 持 facility.work_order.manage、工单项目在可触及范围内，merchant_service 持 merchant.service_work_order.close、该商户经营项目（主项目或追加的经营项目）在可触及范围内，平台管理员不限，越范围 403 CROSS_PROJECT_FORBIDDEN；工单不存在 404；不是投诉 409 NOT_A_COMPLAINT。",
+        "x-permission": "facility.work_order.manage",
+        "x-permissions-any-of": [
+          "facility.work_order.manage",
+          "merchant.service_work_order.close"
+        ],
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "complaint.classified",
+        "x-audit-event-failure": "complaint.classify_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ComplaintFollowupUpdateRequest"
+        },
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "facility",
+                "merchant_service"
+              ]
+            },
+            "description": "工单链：facility＝物业工单链（客人投诉与员工新建的投诉），merchant_service＝商户服务工单链（商户投诉）。"
+          },
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "投诉工单编号。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "客诉跟进；data 为 ComplaintFollowup。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/ComplaintFollowup"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/complaint-followups/{chain}/{work_order_id}/loop-confirm": {
+      "post": {
+        "tags": [
+          "facility",
+          "merchant-service"
+        ],
+        "operationId": "confirmComplaintLoop",
+        "summary": "客户关怀部确认客诉闭环",
+        "description": "第十八批 M 段第 111 条 111-R3（BSM:1385「客诉须经客户关怀部确认后方可视为形成闭环，未经其确认的一律不算闭环」；DEC-R4-2026-08-04-12）：关单本身不算闭环，客户关怀部对已关闭的投诉单独确认闭环，记确认人（当前账号）与时间；两条链现有的关单规则不改。工单未关闭 409 INVALID_STATE；已确认过 409 LOOP_ALREADY_CONFIRMED。chain 只能是 facility 或 merchant_service，否则 400 VALIDATION_FAILED。链闸同该链员工关单、在幂等之前：平台口径（商户账号与外包账号 403）；facility 持 facility.work_order.manage、工单项目在可触及范围内，merchant_service 持 merchant.service_work_order.close、该商户经营项目（主项目或追加的经营项目）在可触及范围内，平台管理员不限，越范围 403 CROSS_PROJECT_FORBIDDEN；工单不存在 404；不是投诉 409 NOT_A_COMPLAINT。",
+        "x-permission": "facility.work_order.manage",
+        "x-permissions-any-of": [
+          "facility.work_order.manage",
+          "merchant.service_work_order.close"
+        ],
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "complaint.loop_confirmed",
+        "x-audit-event-failure": "complaint.loop_confirm_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ComplaintLoopConfirmRequest"
+        },
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "facility",
+                "merchant_service"
+              ]
+            },
+            "description": "工单链：facility＝物业工单链（客人投诉与员工新建的投诉），merchant_service＝商户服务工单链（商户投诉）。"
+          },
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "投诉工单编号。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "客诉跟进；data 为 ComplaintFollowup。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/ComplaintFollowup"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/merchant-service/work-orders/{id}/materials": {
+      "get": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "getMerchantServiceWorkOrderMaterials",
+        "summary": "商户服务工单用料面板",
+        "description": "第十八批 M 段第 117 条 117-R5（BSM:1372「商户自己在商户专区报的单，按枚举速查表「商户服务工单状态」那条的状态走」；BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本，同时在工单上标明费用承担方……承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」）：返回本单用料明细 lines、合计 total_cost_cent、费用承担方 bearer、承担方争议记录 disputes 与下拉选项 options，字段同 GET /api/v1/facility/work-orders/{work_order_id}/materials；options.stock＝工单项目（工单空间所在项目，无空间取商户主项目）平台库房（不属商户、在用）里有可用数量的余额行，options.merchants 为空（商户承担的商户就是提单商户）。闸在幂等之前：只给平台员工——商户账号与外包账号 403 PLATFORM_SCOPE_REQUIRED；平台管理员不限；其余平台员工只能处理处理权限可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；工单不存在 404 WORK_ORDER_NOT_FOUND。",
+        "x-permission": "merchant.service_work_order.process",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "issueMerchantServiceWorkOrderMaterial",
+        "summary": "登记商户服务工单用料",
+        "description": "第十八批 M 段第 117 条 117-R5（BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本」；BSM:1165）：已派单、处理中、待商户确认的单登记一次用料即从所选库位（用料面板 options.stock 的余额行）出库一次，写出库流水（movement_type=outbound、business_type=merchant_service_work_order、business_id＝工单 id），成本由移动加权均价定稿；其他状态 409 INVALID_STATE；可用库存不足 409 STOCK_INSUFFICIENT；库房盘点中 409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED；物料不存在 404 INVENTORY_ITEM_NOT_FOUND；数量须为正整数（400 VALIDATION_FAILED）。返回同 GET 的用料面板。闸在幂等之前：只给平台员工——商户账号与外包账号 403 PLATFORM_SCOPE_REQUIRED；平台管理员不限；其余平台员工只能处理处理权限可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；工单不存在 404 WORK_ORDER_NOT_FOUND。",
+        "x-permission": "merchant.service_work_order.process",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.work_order.material_issued",
+        "x-audit-event-failure": "merchant_service.work_order.material_issue_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderMaterialIssueRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/merchant-service/work-orders/{id}/cost-bearer": {
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "markMerchantServiceWorkOrderCostBearer",
+        "summary": "标明商户服务工单费用承担方",
+        "description": "第十八批 M 段第 117 条 117-R5（BSM:1380「公区设施与楼宇主体设备的用料由物业承担；商户自有设施、以及因商户责任导致损坏的用料由该商户承担，并自动生成一笔应收进入其费用账单」）：按工单标一个费用承担方，cost_bearer＝property 物业承担或 merchant 商户承担（承担的商户就是提单商户，不用填 merchant_id）；可重标覆盖；已关闭或已取消 409 WORK_ORDER_CLOSED；承担方争议待上级判定 409 WORK_ORDER_BEARER_DISPUTE_PENDING。用了库房物料的单须先标明承担方才能转已处理待关闭或关闭（409 WORK_ORDER_MATERIAL_BEARER_REQUIRED）；商户承担的单关闭（处理人完成即结束、员工关单或商户确认）时按用料合计生成一笔应收（source_type=work_order_material，来源关联工单、归工单项目、到期日＝落账当日营业日）进商户综合账单「工单用料费（商户承担）」，业务提交后短信通知商户（merchant_amount.work_order_material，写明金额、原因与异议截止日期，不可关闭）；物业承担不生成台账行。返回同 GET 的用料面板。闸在幂等之前：只给平台员工——商户账号与外包账号 403 PLATFORM_SCOPE_REQUIRED；平台管理员不限；其余平台员工只能处理处理权限可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；工单不存在 404 WORK_ORDER_NOT_FOUND。",
+        "x-permission": "merchant.service_work_order.process",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.work_order.cost_bearer_marked",
+        "x-audit-event-failure": "merchant_service.work_order.cost_bearer_mark_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderCostBearerRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/merchant-service/work-orders/{id}/bearer-dispute": {
+      "post": {
+        "tags": [
+          "merchant-service"
+        ],
+        "operationId": "disputeMerchantServiceWorkOrderCostBearer",
+        "summary": "商户服务工单费用承担方争议转上级判定",
+        "description": "第十八批 M 段第 117 条 117-R5（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」；第十八批裁决 29「不加状态，停在原状态」；PGM:528）：未关闭、未取消的单提出承担方争议：须已标承担方（否则 409 WORK_ORDER_MATERIAL_BEARER_REQUIRED），claimed_cost_bearer＝property 或 merchant（商户承担即提单商户，不用填 claimed_merchant_id），reason 必填；已有待判定争议 409 WORK_ORDER_BEARER_DISPUTE_PENDING；已关闭或已取消 409 WORK_ORDER_CLOSED。单子停在原状态，进统一审批（策略 work_order_bearer_dispute、动作 work_order.bearer_dispute，与设施工单共用，档位 one_level_up；final_approver_id 可指定最终审批人，空则沿直接上级）；上级在审批链 POST /api/v1/platform/supervisor-review/{review_id}/approve 判定，审批意见必填并作为判定依据：批准按主张改定承担方，驳回维持原承担方，判定人、判定时间与依据记入争议记录（审计 merchant_service.work_order.bearer_ruled）。判定前转已处理待关闭、员工关单、商户确认关闭与改承担方均 409 WORK_ORDER_BEARER_DISPUTE_PENDING；判定后照常往下走。返回同 GET 的用料面板。闸在幂等之前：只给平台员工——商户账号与外包账号 403 PLATFORM_SCOPE_REQUIRED；平台管理员不限；其余平台员工只能处理处理权限可触及项目内经营的商户（主项目或追加的经营项目，含可跨项目角色勾选的项目）的工单，越范围 403 CROSS_PROJECT_FORBIDDEN；工单不存在 404 WORK_ORDER_NOT_FOUND。",
+        "x-permission": "merchant.service_work_order.process",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant_service.work_order.bearer_disputed",
+        "x-audit-event-failure": "merchant_service.work_order.bearer_dispute_failed",
+        "x-auth-context": "staff-token",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderBearerDisputeRequest"
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Merchant service work order id within the current authorized data scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/merchant-service/work-orders/{id}/merchant-confirm": {
       "post": {
         "tags": [
@@ -12308,7 +12934,7 @@
         ],
         "operationId": "confirmMerchantServiceWorkOrderByMerchant",
         "summary": "商户确认工单已解决并关闭",
-        "description": "第十八批 L 段第 102 条 102-R2（BSM:1385「商户投诉须由商户确认投诉已解决」「问题已解决但商户未确认解决或未点击关闭的」「满意度在回访/验收时由提单方评分」；ENUM:264「待商户确认、已处理待关闭」）：商户在商户专区「我的工单」确认已解决即关闭，satisfaction_score 可不填、填则 1～5（否则 400 VALIDATION_FAILED），关闭动作操作人为商户账号、说明「商户确认已解决」。闸在幂等之前：只有本商户账号能确认——平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED，别的商户 403 CROSS_MERCHANT_FORBIDDEN；已关闭或已取消 409 WORK_ORDER_CLOSED。状态须为待商户确认或已处理待关闭，否则 409 INVALID_STATE；102-R3（裁决 26）：只对关单方式为须商户确认的单（投诉；配成须商户确认的报修、其他服务请求），否则 409 MERCHANT_CONFIRM_NOT_APPLICABLE。",
+        "description": "第十八批 L 段第 102 条 102-R2（BSM:1385「商户投诉须由商户确认投诉已解决」「问题已解决但商户未确认解决或未点击关闭的」「满意度在回访/验收时由提单方评分」；ENUM:264「待商户确认、已处理待关闭」）：商户在商户专区「我的工单」确认已解决即关闭，satisfaction_score 可不填、填则 1～5（否则 400 VALIDATION_FAILED），关闭动作操作人为商户账号、说明「商户确认已解决」。闸在幂等之前：只有本商户账号能确认——平台员工与平台管理员 403 MERCHANT_SCOPE_REQUIRED，别的商户 403 CROSS_MERCHANT_FORBIDDEN；已关闭或已取消 409 WORK_ORDER_CLOSED。状态须为待商户确认或已处理待关闭，否则 409 INVALID_STATE；102-R3（裁决 26）：只对关单方式为须商户确认的单（投诉；配成须商户确认的报修、其他服务请求），否则 409 MERCHANT_CONFIRM_NOT_APPLICABLE。第十八批 M 段第 117 条 117-R5（第十八批裁决 29）：承担方争议待上级判定 409 WORK_ORDER_BEARER_DISPUTE_PENDING，用了库房物料而未标费用承担方 409 WORK_ORDER_MATERIAL_BEARER_REQUIRED；承担方为商户的，关闭时按用料合计生成一笔工单用料费应收并短信通知商户。",
         "x-permission": "merchant.service_work_order.create",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -13714,6 +14340,69 @@
         }
       }
     },
+    "/api/v1/terminals/staff-app-functions": {
+      "get": {
+        "tags": [
+          "terminal"
+        ],
+        "operationId": "listStaffAppFunctions",
+        "summary": "员工 App 本端可用功能（按设备类型下发）",
+        "description": "第十八批 M 段第 116 条（PGM:747「同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、查看考勤、请假、查自己薪资等）。」）：按服务端可信终端返回员工 App 功能码。员工私人手机只返回低风险、可离场办理的功能（staff_device、inbox、notices、my_work_orders、bar_reservation、my_shifts、my_payroll、attendance_month、leave、my_service_income、shift_manage、my_profile），服务端对私人手机只放行这些功能的接口，其余一律 403 TERMINAL_NOT_ALLOWED 并留痕 terminal.access_rejected（reason=private_phone_function_not_allowed）；工作手机、平板与其他终端返回全部功能。与 capability-switches/effective 同口径，任何已登录主体可读、不设权限码。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "staff_private_phone",
+          "tablet"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "terminal.staff_app_functions_viewed",
+        "x-audit-event-failure": "terminal.staff_app_functions_view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "X-Terminal-Type",
+            "in": "header",
+            "required": false,
+            "description": "调用端自报终端类型；服务端以可信终端为准，认不出时才回落自报值。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "本端可用功能；data 为 StaffAppFunctionsResponse。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/StaffAppFunctionsResponse"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/terminals/capability-switches/{id}": {
       "put": {
         "tags": [
@@ -13721,7 +14410,7 @@
         ],
         "operationId": "updateCapabilitySwitch",
         "summary": "修改端能力开关",
-        "description": "后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如 payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位 NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。第十四批 OBS-13-04（BSM 第 1598 行「下列三类不在可关闭范围内，不得按类或按条关闭」）：把不可关闭的短信事件开关（sms.notify.stored_value.topup/consume、sms.notify.stored_wine.expiring、sms.notify.bar_reservation.deposit_forfeited/deposit_refunded、sms.notify.merchant_fee.rent/utilities/property、sms.notify.points.bill、sms.notify.parking.credit_cost）置为关闭一律 409 SMS_NOTIFICATION_NOT_CLOSABLE「该短信提醒属于不可关闭的通知，不能关闭」，记失败审计，开关保持原值；这些事件发送时不看总开关、域开关、事件开关。商户费用催缴另用 sms.notify.merchant_fee.*_dunning 事件开关，仍可关闭。",
+        "description": "后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如 payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位 NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。第十四批 OBS-13-04（BSM 第 1598 行「下列三类不在可关闭范围内，不得按类或按条关闭」）：把不可关闭的短信事件开关（sms.notify.stored_value.topup/consume、sms.notify.stored_wine.expiring、sms.notify.bar_reservation.deposit_forfeited/deposit_refunded、sms.notify.merchant_fee.rent/utilities/property、sms.notify.points.bill）置为关闭一律 409 SMS_NOTIFICATION_NOT_CLOSABLE「该短信提醒属于不可关闭的通知，不能关闭」，记失败审计，开关保持原值；这些事件发送时不看总开关、域开关、事件开关。商户费用催缴另用 sms.notify.merchant_fee.*_dunning 事件开关，仍可关闭。",
         "x-permission": "terminal.switch.manage",
         "x-data-scope": "project-device",
         "x-terminal-allowed": [
@@ -15504,7 +16193,8 @@
         "x-permission": "verification.execute",
         "x-data-scope": "project-point",
         "x-terminal-allowed": [
-          "staff_work_phone"
+          "staff_work_phone",
+          "kiosk"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "verification.succeeded",
@@ -15775,13 +16465,13 @@
           "ticketing"
         ],
         "operationId": "previewTicketVerification",
-        "summary": "票务核销预览（已废止，不得新增调用）",
-        "deprecated": true,
-        "description": "已废止（DEC-R6-08），待代码轮下线，不得新增调用。核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。 TK-06：响应 data.face_binding 仅在一人多次票且人脸供应商可用时出现——capture=本次首次入场须客人同意并拍照留存，match=须拍照按留存人脸比对；单次票、多人票或供应商不可用时为空。",
+        "summary": "票务核销预览",
+        "description": "检票环节内部不设预检（DEC-R8-31 ③）：核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。第十八批 M 段 112-R2（BSM 第 1948 行「……需要扫码后在一体机上清楚看到能领什么、能领多少、是否已经领取，并把领取结果回写到权益记录。」）：一体机权益领取屏扫码后用本端点展示可领取内容（权益类型、总次数与已用次数、有效期、状态），确认后再调 createTicketVerification 领取。 TK-06：响应 data.face_binding 仅在一人多次票且人脸供应商可用时出现——capture=本次首次入场须客人同意并拍照留存，match=须拍照按留存人脸比对；单次票、多人票或供应商不可用时为空。",
         "x-permission": "verification.execute",
         "x-data-scope": "project-point",
         "x-terminal-allowed": [
-          "staff_work_phone"
+          "staff_work_phone",
+          "kiosk"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "verification.previewed",
@@ -16902,6 +17592,109 @@
         "x-auth-context": "staff-token",
         "x-audit-operation": "approveSupplyContract:{id}",
         "description": "按真实项目与货权范围办理；写操作成功与失败保留实际业务原件及操作码。发起审批不表示已经批准，数量处理完成不表示款项结清。"
+      }
+    },
+    "/api/v1/inventory/warehouse-locations": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "listWarehouseLocations",
+        "summary": "查询库位列表",
+        "description": "第十八批 M 段第 119 条（BSM:1936「供应链连基础管理｜因为供应商、供应合同、库房、库位、采购人员、库管和审批权限都要先在基础管理中定义清楚。」）：列出全部已建档库位（id 即库位编号、warehouse_id 所属库房、created_at）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "inventory.warehouse.manage",
+        "x-data-scope": "warehouse",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "inventory.warehouse_location.list",
+        "x-audit-event-failure": "inventory.warehouse_location.list_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "operationId": "createWarehouseLocation",
+        "summary": "在库房下建库位",
+        "description": "第十八批 M 段第 119 条（BSM:1936；BSM:1162「管理库房和库位……」）：库位须先在库房下建档，采购验收、门店要货签收、借调买断收货只收所选仓库下已建档的库位。库位编号全平台唯一，已被占用 409 WAREHOUSE_LOCATION_TAKEN；库房不存在 404 WAREHOUSE_NOT_FOUND。返回库位记录（id、warehouse_id、created_at）。",
+        "x-permission": "inventory.warehouse.manage",
+        "x-data-scope": "project-warehouse-bar",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "tablet",
+          "web",
+          "mobile_admin"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "inventory.warehouse_location.created",
+        "x-audit-event-failure": "inventory.warehouse_location.create_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "warehouse_id",
+                  "location_id"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键",
+                    "maxLength": 128
+                  },
+                  "warehouse_id": {
+                    "type": "string",
+                    "description": "所属库房 id",
+                    "maxLength": 64
+                  },
+                  "location_id": {
+                    "type": "string",
+                    "description": "库位编号（全平台唯一，即余额、批次、流水里的 location_id）",
+                    "maxLength": 64
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
       }
     },
     "/api/v1/inventory/warehouses": {
@@ -30643,7 +31436,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -30743,7 +31535,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -33906,7 +34697,7 @@
         ],
         "operationId": "completeFacilityWorkOrder",
         "summary": "完成工单处理",
-        "description": "非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "description": "第十八批 M 段第 117 条（BSM:1380）：登记了用料而未标明费用承担方的 409 WORK_ORDER_MATERIAL_BEARER_REQUIRED；完工使工单关闭且费用承担方为商户的，按用料合计生成一笔工单用料费应收并短信通知商户。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -34250,7 +35041,7 @@
         ],
         "operationId": "resumeFacilityWorkOrder",
         "summary": "恢复工单",
-        "description": "恢复已挂起的工单：有处理人的回处理中；待派单时挂起、没有处理人的回待派单，派单仍走派单接口（设备告警自动生成的工单仍须接警单明确接手后才能派单，BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "description": "恢复已挂起的工单（有待上级判定的承担方争议时 409 WORK_ORDER_BEARER_DISPUTE_PENDING，第十八批 M 段 117-R2）：有处理人的回处理中；待派单时挂起、没有处理人的回待派单，派单仍走派单接口（设备告警自动生成的工单仍须接警单明确接手后才能派单，BSM「楼宇运营」告警条「接警不等于维修完成，接手后派相应维修人员并跟踪处理和验收」）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
         "x-permission": "facility.work_order.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -34274,6 +35065,223 @@
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/FacilityWorkOrderActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/materials": {
+      "get": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "getFacilityWorkOrderMaterials",
+        "summary": "工单用料面板",
+        "description": "第十八批 M 段第 117 条（BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本，同时在工单上标明费用承担方……承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」）：返回本工单用料明细 lines（movement_id、item_id、item_name、location_id、warehouse_id、warehouse_name、quantity、出库时的当前平均进货价 unit_cost_cent 与金额 total_cost_cent、created_at）、合计 total_cost_cent（成本为空按 0 计）、费用承担方 bearer（cost_bearer：property 物业承担、merchant 商户承担；merchant_id、merchant_name、结案生成的应收 ar_ap_item_id、marked_by、marked_at；未标为空）、承担方争议记录 disputes（按提出时间倒序：from_cost_bearer、from_merchant_id、claimed_cost_bearer、claimed_merchant_id、reason、status＝pending 待上级判定／approved 按主张改定／rejected 维持原承担方、raised_by、raised_at、ruled_by、ruled_at、判定依据 ruling_basis）与下拉选项 options：stock＝工单项目平台库房（不属商户、在用）里有可用数量的余额行（warehouse_id、warehouse_name、location_id、item_id、item_name、available_quantity），merchants＝在工单项目经营的商户（主项目或已批准的经营项目；merchant_id、merchant_name）。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "issueFacilityWorkOrderMaterial",
+        "summary": "登记工单用料",
+        "description": "第十八批 M 段第 117 条（BSM:1380「用料必须从指定库房出库并按当前平均进货价计成本」；BSM:1165）：处理中的工单登记一次用料即从所选库位（用料面板 options.stock 的余额行）出库一次，写出库流水（movement_type=outbound、business_type=facility_work_order、business_id＝工单 id），成本由移动加权均价定稿；不是处理中 400 INVALID_STATE；可用库存不足 409 STOCK_INSUFFICIENT；库房盘点中 409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED；物料不存在 404 INVENTORY_ITEM_NOT_FOUND；数量须为正整数（400 VALIDATION_FAILED）。返回同 GET 的用料面板。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_material_issued",
+        "x-audit-event-failure": "facility.work_order_material_issue_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderMaterialIssueRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/cost-bearer": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "markFacilityWorkOrderCostBearer",
+        "summary": "标明工单费用承担方",
+        "description": "第十八批 M 段第 117 条（BSM:1380「公区设施与楼宇主体设备的用料由物业承担；商户自有设施、以及因商户责任导致损坏的用料由该商户承担，并自动生成一笔应收进入其费用账单」）：按工单标一个费用承担方，cost_bearer＝property 物业承担（不带商户）或 merchant 商户承担（merchant_id 必填，否则 400 VALIDATION_FAILED）；可重标覆盖；已关闭 400 INVALID_STATE；承担方争议待上级判定 409 WORK_ORDER_BEARER_DISPUTE_PENDING。用了库房物料的工单须先标明承担方才能完工（409 WORK_ORDER_MATERIAL_BEARER_REQUIRED）；商户承担的工单关闭（完成、验收或提单确认使工单关闭）时按用料合计生成一笔应收（source_type=work_order_material，来源关联工单、归工单项目、到期日＝落账当日营业日）进商户综合账单「工单用料费（商户承担）」，业务提交后短信通知商户（merchant_amount.work_order_material，写明金额、原因与异议截止日期，不可关闭；审计 facility.work_order_material_receivable_posted）；物业承担不生成台账行。返回同 GET 的用料面板。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_cost_bearer_marked",
+        "x-audit-event-failure": "facility.work_order_cost_bearer_mark_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderCostBearerRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/facility/work-orders/{work_order_id}/bearer-dispute": {
+      "post": {
+        "tags": [
+          "facility"
+        ],
+        "operationId": "disputeFacilityWorkOrderCostBearer",
+        "summary": "工单费用承担方争议挂起",
+        "description": "第十八批 M 段第 117 条 117-R2（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」；PGM:528）：进行中的工单（待派单、已派单、处理中、待回访、待验收、已验收）提出承担方争议：须已标承担方（否则 409 WORK_ORDER_MATERIAL_BEARER_REQUIRED），claimed_cost_bearer 同标注口径（商户承担须带 claimed_merchant_id），reason 必填；已有待判定争议 409 WORK_ORDER_BEARER_DISPUTE_PENDING；不在进行中 400 INVALID_STATE。提出即工单置已挂起（审计 facility.work_order_suspended）并进统一审批（策略 work_order_bearer_dispute、动作 work_order.bearer_dispute（与商户服务工单共用）、档位 one_level_up；final_approver_id 可指定最终审批人，空则沿直接上级）；上级在审批链 POST /api/v1/platform/supervisor-review/{review_id}/approve 判定，审批意见必填并作为判定依据：批准按主张改定承担方，驳回维持原承担方，判定人、判定时间与依据记入争议记录（审计 facility.work_order_bearer_ruled）。判定前恢复 409 WORK_ORDER_BEARER_DISPUTE_PENDING；判定后工单仍为已挂起，由物业人员恢复后照常完工结案。返回挂起后的工单。非平台管理员只列出、只能处理入口权限码可触及项目内的记录（含可跨项目角色勾选的项目），项目为空的只给平台管理员；越范围 403 CROSS_PROJECT_FORBIDDEN（第 82 条 82b-R1）。",
+        "x-permission": "facility.work_order.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "facility.work_order_bearer_disputed",
+        "x-audit-event-failure": "facility.work_order_bearer_dispute_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "work_order_id",
+            "in": "path",
+            "required": true,
+            "description": "工单 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/FacilityWorkOrderBearerDisputeRequest"
         },
         "responses": {
           "200": {
@@ -34488,8 +35496,7 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "facility.alarm_mine.viewed",
@@ -34523,8 +35530,7 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "facility.alarm_taken_over",
@@ -38465,7 +39471,7 @@
         ],
         "operationId": "getMerchantPortalFeeStatement",
         "summary": "商户专区·费用总表与当期综合账单(本商户)",
-        "description": "18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、工单用料费(商户承担)、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。有付款时点固化的普通内部结算往来(通票分账追收、单店门票综合服务费及其应退、补偿履约追收、停车抵免成本)到出账日、在商户专区可查看后才列入，与门票分账列表、异议截止日同一时刻(BSM L1597/L1673)。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。商户账号读到即记该月所列台账行已读(首页未读账单提醒，第 92 条)。",
+        "description": "18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。有付款时点固化的普通内部结算往来(通票分账追收、单店门票综合服务费及其应退、补偿履约追收、停车抵免成本)到出账日、在商户专区可查看后才列入，与门票分账列表、异议截止日同一时刻(BSM L1597/L1673)。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。商户账号读到即记该月所列台账行已读(首页未读账单提醒，第 92 条)。",
         "x-permission": "merchant.billing.view",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -39796,8 +40802,7 @@
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web",
-          "staff_private_phone"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.shift.viewed",
@@ -39927,8 +40932,7 @@
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web",
-          "staff_private_phone"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.shift.submitted",
@@ -40296,7 +41300,6 @@
         "x-permission": "staff.shift.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
           "web"
         ],
         "x-idempotency-required": false,
@@ -40327,8 +41330,7 @@
         "x-permission": "staff.attendance.view",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web",
-          "staff_private_phone"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.attendance.viewed",
@@ -40526,8 +41528,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.payroll.adjustment_appeals_viewed",
@@ -40569,8 +41570,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.payroll.adjustment_appeal_submitted",
@@ -41139,7 +42139,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -41457,8 +42456,7 @@
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web",
-          "staff_private_phone"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.leave.viewed",
@@ -41533,8 +42531,7 @@
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web",
-          "staff_private_phone"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.leave.reviewed",
@@ -41691,8 +42688,7 @@
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web",
-          "staff_private_phone"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.leave.revoke_reviewed",
@@ -41873,7 +42869,6 @@
         "x-permission": "service.order.create",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
           "web",
           "tablet",
           "app"
@@ -42209,7 +43204,6 @@
         "x-permission": "service.order.perform",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
           "web"
         ],
         "x-idempotency-required": true,
@@ -42269,7 +43263,6 @@
         "x-permission": "service.order.perform",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
           "web"
         ],
         "x-idempotency-required": false,
@@ -42469,7 +43462,6 @@
         "x-permission": "service.order.perform",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
           "web"
         ],
         "x-idempotency-required": true,
@@ -42607,7 +43599,6 @@
         "x-permission": "service.order.create",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
           "web"
         ],
         "x-idempotency-required": true,
@@ -42857,7 +43848,6 @@
         "x-permission": "service.order.create",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "staff_private_phone",
           "web",
           "tablet"
         ],
@@ -51416,7 +52406,9 @@
         "x-permission": "customer.voucher.redeem",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
-          "web"
+          "web",
+          "staff_work_phone",
+          "kiosk"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "voucher.redeemed",
@@ -51458,7 +52450,82 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "description": " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人；过期、已换新码或转赠后 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码一律 409 VOUCHER_DYNAMIC_CODE_REQUIRED；按 voucher_instance_id 定位的员工台账路径不变。核销成功同事务把该动态码置已用。有在途转赠照常核销，核销成功即作废在途转赠（void_reason=holder_redeemed；操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。第十八批 L 段 103-R1（BSM 第 1197 行「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」）：店内实物券须带 trace_codes 逐件核验物品码——去空白去重后个数须等于每张券件数（400 TRACE_CODE_INCOMPLETE），每个码须已登记（404 TRACE_CODE_NOT_FOUND）、属本商户（403 CROSS_MERCHANT_FORBIDDEN）、登记的是本券货品（400 TRACE_CODE_MISMATCH），核验不过券与库存都不动；物品码随 voucher.redeemed 审计事件留存。"
+        "description": " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人；过期、已换新码或转赠后 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码一律 409 VOUCHER_DYNAMIC_CODE_REQUIRED；按 voucher_instance_id 定位的员工台账路径不变。核销成功同事务把该动态码置已用。有在途转赠照常核销，核销成功即作废在途转赠（void_reason=holder_redeemed；操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。第十八批 L 段 103-R1（BSM 第 1197 行「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」）：店内实物券须带 trace_codes 逐件核验物品码——去空白去重后个数须等于每张券件数（400 TRACE_CODE_INCOMPLETE），每个码须已登记（404 TRACE_CODE_NOT_FOUND）、属本商户（403 CROSS_MERCHANT_FORBIDDEN）、登记的是本券货品（400 TRACE_CODE_MISMATCH），核验不过券与库存都不动；物品码随 voucher.redeemed 审计事件留存。第十八批 M 段 112-R1（BSM 第 947 行「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」；BSM 第 1004 行「……领取……都要记录设备、点位和时间。」）：工作手机与一体机（112-R2）也调本端点，核销成功留痕 voucher.redeemed 的 metadata 另记可信终端 terminal_type、设备号 device_id 与该设备在设备台账上的绑定点位 point_id（有才记）。"
+      }
+    },
+    "/api/v1/vouchers/redemptions/preview": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "previewVoucherRedemption",
+        "summary": "按客人出示的券码查券（只读：不改券状态、不落惰性过期、不消费码、不动库存与预占）",
+        "description": "第十八批 M 段 112-R1（BSM 第 947 行「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」；BSM 第 985 行「扫码查看客人当前可领取的赠饮、礼物、积分兑换权益和领取状态。」）：工作手机与一体机（112-R2）核销或领取前按码查券。定位与越权同 redeemVoucher——code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人，否则 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码 409 VOUCHER_DYNAMIC_CODE_REQUIRED，不存在 404 VOUCHER_NOT_FOUND，他商户的券 403 CROSS_MERCHANT_FORBIDDEN。返回券名、券种、件数（店内实物券每张件数，即核销须逐件扫的物品码个数；其他券为空）、状态（到期未落库的按 expired 折算）、到期时间与不可核销原因（为空即可核销）。查券不扣单次授权（M723 操作员 2026-10-03）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "customer.voucher.redeem",
+        "x-data-scope": "merchant",
+        "x-terminal-allowed": [
+          "staff_work_phone",
+          "kiosk"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "voucher.redeem_previewed",
+        "x-audit-event-failure": "voucher.redeem_preview_failed",
+        "x-failure-codes": [
+          "VOUCHER_DYNAMIC_CODE_REQUIRED",
+          "VOUCHER_REDEEM_CODE_EXPIRED",
+          "VOUCHER_NOT_FOUND",
+          "CROSS_MERCHANT_FORBIDDEN"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoucherRedeemPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "查券结果；data 为 VoucherRedeemPreview。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/VoucherRedeemPreview"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/vouchers/overview": {
@@ -56265,8 +57332,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.profile.employment_status_change_requested",
@@ -56367,8 +57433,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.shift.visibility_viewed",
@@ -56409,8 +57474,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.shift.visibility_changed",
@@ -56495,8 +57559,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.payroll.penalty_cap_viewed",
@@ -56537,8 +57600,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.payroll.penalty_cap_requested",
@@ -56652,8 +57714,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.shift.history_viewed",
@@ -56866,8 +57927,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.shift.covered",
@@ -57024,8 +58084,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.shift.covers_viewed",
@@ -58018,8 +59077,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.business_handover.viewed",
@@ -58090,8 +59148,7 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "staff_private_phone"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.business_handover.assigned",
@@ -58789,7 +59846,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_private_phone",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -62173,7 +63229,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_private_phone",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -62288,7 +63343,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "web",
-          "staff_private_phone",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -62944,7 +63998,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -63062,7 +64115,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -63185,7 +64237,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -63289,7 +64340,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -63388,7 +64438,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -63497,7 +64546,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -63610,7 +64658,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -63709,7 +64756,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -65453,7 +66499,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -65567,7 +66612,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -65678,7 +66722,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -65791,7 +66834,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -65905,7 +66947,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -66016,7 +67057,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -66129,7 +67169,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -66243,7 +67282,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -66367,7 +67405,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -66484,7 +67521,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -66601,7 +67637,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -67943,7 +68978,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68044,7 +69078,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68143,7 +69176,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68253,7 +69285,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68354,7 +69385,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68453,7 +69483,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68563,7 +69592,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68673,7 +69701,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68772,7 +69799,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -68882,7 +69908,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69001,7 +70026,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69100,7 +70124,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69210,7 +70233,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69320,7 +70342,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69632,7 +70653,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69746,7 +70766,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69845,7 +70864,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -69944,7 +70962,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -70144,7 +71161,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -70204,7 +71220,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -70302,7 +71317,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -70412,7 +71426,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -70522,7 +71535,6 @@
           "merchant_portal",
           "miniapp",
           "mobile_admin",
-          "staff_private_phone",
           "staff_work_phone",
           "tablet",
           "web"
@@ -73564,7 +74576,7 @@
         ],
         "operationId": "submitCustomerComplaint",
         "summary": "客人提交投诉（文字＋照片、视频、语音）",
-        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：multipart 提交，建「投诉」工单（来源 customer、提单方＝客人本人、时限按「投诉×普通」策略），附件 0～9 个，类型由服务端按扩展名判定（照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm、语音 m4a/aac/mp3/amr/wav，其他 400 VALIDATION_FAILED，不建工单）。project_id 须为存在的综合体，title 必填。幂等键必填。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以客人所选综合体（project_id，即工单所属综合体）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建工单。",
+        "description": "ROOT-03 clients-R8（BSM 第 869 行「投诉与反馈：客人可在官方 App、小程序提交投诉，支持文字留言、照片、视频与语音」；第 1379 行「客人（消费客人通过客人端投诉，客人即提单方；客户关怀部记录问题解决方案及客人反馈后可以关闭）」）：multipart 提交，建「投诉」工单（来源 customer、提单方＝客人本人、时限按「投诉×普通」策略），附件 0～9 个，类型由服务端按扩展名判定（照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm、语音 m4a/aac/mp3/amr/wav，其他 400 VALIDATION_FAILED，不建工单）。project_id 须为存在的综合体，title 必填。幂等键必填。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以客人所选综合体（project_id，即工单所属综合体）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建工单。 第十八批 M 段第 111 条 111-R4：store_merchant_id 涉及门店选填（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正」），须为该综合体的在营商户，否则 400 VALIDATION_FAILED、不建工单。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -73606,6 +74618,11 @@
                     "maxLength": 4000,
                     "description": "文字留言。"
                   },
+                  "store_merchant_id": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "涉及门店（选填，第十八批裁决 28）：须为 project_id 综合体的在营商户（见 store-options），否则 400 VALIDATION_FAILED；记进客诉跟进，客户关怀部可在后台更正。"
+                  },
                   "files": {
                     "type": "array",
                     "maxItems": 9,
@@ -73634,6 +74651,55 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "customer-token"
+      }
+    },
+    "/api/v1/customer/complaints/store-options": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "listCustomerComplaintStoreOptions",
+        "summary": "客人投诉「涉及门店」选项",
+        "description": "第十八批 M 段第 111 条 111-R4（第十八批裁决 28「客人投诉时自己选涉及的门店（选填），客户关怀部可以更正」）：所选综合体的在营商户（状态正常、未归档未删除，主项目或已批准的经营项目为该综合体），data 为 ComplaintStoreOption 列表，按商户名排序。须客人登录；project_id 必填（否则 400 VALIDATION_FAILED）。PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以 project_id 所指综合体在服务端判，该综合体客人端已关→403 TERMINAL_DISABLED。",
+        "x-permission": "not_applicable",
+        "x-data-scope": "public-project",
+        "x-terminal-allowed": [
+          "app",
+          "miniapp"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "description": "投诉所在综合体。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -77370,6 +78436,36 @@
           }
         }
       },
+      "MerchantWorkOrderCancelRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MerchantWorkOrderCancelRequest"
+            }
+          }
+        }
+      },
+      "ComplaintLoopConfirmRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ComplaintLoopConfirmRequest"
+            }
+          }
+        }
+      },
+      "ComplaintFollowupUpdateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ComplaintFollowupUpdateRequest"
+            }
+          }
+        }
+      },
       "MerchantWorkOrderMerchantConfirmRequest": {
         "required": true,
         "content": {
@@ -78405,6 +79501,36 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/FacilityWorkOrderActionRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderMaterialIssueRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderMaterialIssueRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderCostBearerRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderCostBearerRequest"
+            }
+          }
+        }
+      },
+      "FacilityWorkOrderBearerDisputeRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/FacilityWorkOrderBearerDisputeRequest"
             }
           }
         }
@@ -84814,6 +85940,58 @@
           }
         }
       },
+      "StaffAppFunctionsResponse": {
+        "type": "object",
+        "description": "员工 App 本端可用功能（第十八批 M 段第 116 条）。",
+        "additionalProperties": false,
+        "required": [
+          "functions"
+        ],
+        "properties": {
+          "terminal_type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "服务端可信终端类型；认不出时为空。"
+          },
+          "functions": {
+            "type": "array",
+            "description": "员工 App 功能码，与员工 App 首页功能按钮一一对应（另含接单与完成履约 service_order_fulfil）。",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ticket_verify",
+                "voucher_redeem",
+                "trace_handover",
+                "amusement_verify",
+                "bar_order",
+                "tablet_pos",
+                "kiosk_claim",
+                "amusement_maintenance",
+                "sync_tasks",
+                "staff_device",
+                "ticket_reverse",
+                "inbox",
+                "notices",
+                "my_work_orders",
+                "my_alarms",
+                "bar_reservation",
+                "my_shifts",
+                "attendance_punch",
+                "my_payroll",
+                "attendance_month",
+                "leave",
+                "service_order_create",
+                "my_service_income",
+                "service_order_fulfil",
+                "shift_manage",
+                "merchant_staff_registration",
+                "my_profile"
+              ]
+            }
+          }
+        }
+      },
       "TerminalSyncTaskItem": {
         "type": "object",
         "additionalProperties": false,
@@ -86120,6 +87298,155 @@
           }
         },
         "description": "MerchantWorkOrderCloseRequest payload."
+      },
+      "MerchantWorkOrderCancelRequest": {
+        "type": "object",
+        "description": "取消商户服务工单（第 111 条 111-R2，第十八批裁决 27）：商户专区取消与后台客户关怀部取消共用。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "取消原因（必填），写在取消动作的说明里。"
+          }
+        }
+      },
+      "ComplaintLoopConfirmRequest": {
+        "type": "object",
+        "description": "客户关怀部确认客诉闭环（第 111 条 111-R3）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          }
+        }
+      },
+      "ComplaintFollowup": {
+        "type": "object",
+        "description": "一张投诉单的客诉跟进（第 111 条 111-R3；没有跟进时各项为空）。",
+        "additionalProperties": false,
+        "required": [
+          "chain",
+          "work_order_id"
+        ],
+        "properties": {
+          "chain": {
+            "type": "string",
+            "enum": [
+              "facility",
+              "merchant_service"
+            ],
+            "description": "工单链。"
+          },
+          "work_order_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "投诉工单编号。"
+          },
+          "complaint_class": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "客户关怀部认定的投诉类别。"
+          },
+          "classified_by": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "认定人账号编号。"
+          },
+          "classified_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "认定时间。"
+          },
+          "loop_confirmed_by": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "闭环确认人账号编号（客户关怀部）。"
+          },
+          "loop_confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "闭环确认时间；为空即未闭环。"
+          },
+          "store_merchant_id": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "涉及门店（物业工单链的客人投诉：客人投诉时自选，客户关怀部可更正；第十八批裁决 28）；商户投诉为空（门店就是提单商户）。"
+          },
+          "store_candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComplaintStoreOption"
+            },
+            "description": "物业工单链：该投诉项目内的在营门店（供更正涉及门店）；商户服务工单链为空。"
+          }
+        }
+      },
+      "ComplaintFollowupUpdateRequest": {
+        "type": "object",
+        "description": "客户关怀部认定投诉类别（第 118 条 118-R1）、更正涉及门店（第 111 条 111-R4）：两项各自可选、至少带一项。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "complaint_class": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "投诉类别（客户关怀部认定，去首尾空白后 1～64 字）。"
+          },
+          "store_merchant_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "涉及门店（只物业工单链；空串即清除）。"
+          }
+        }
+      },
+      "ComplaintStoreOption": {
+        "type": "object",
+        "description": "门店选项：在营商户（第 111 条 111-R4）。",
+        "additionalProperties": false,
+        "required": [
+          "merchant_id",
+          "merchant_name"
+        ],
+        "properties": {
+          "merchant_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "商户编号。"
+          },
+          "merchant_name": {
+            "type": "string",
+            "description": "商户名称。"
+          }
+        }
       },
       "MerchantWorkOrderMerchantConfirmRequest": {
         "type": "object",
@@ -90334,6 +91661,108 @@
           }
         }
       },
+      "FacilityWorkOrderMaterialIssueRequest": {
+        "type": "object",
+        "description": "工单登记用料：从所选库位出库的物料与数量（第十八批 M 段第 117 条）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "location_id",
+          "item_id",
+          "quantity"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "location_id": {
+            "type": "string",
+            "description": "库位（用料面板 options.stock 的 location_id）。",
+            "maxLength": 64
+          },
+          "item_id": {
+            "type": "string",
+            "description": "物料。",
+            "maxLength": 64
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "出库数量（正整数）。",
+            "minimum": 1
+          }
+        }
+      },
+      "FacilityWorkOrderCostBearerRequest": {
+        "type": "object",
+        "description": "标明工单费用承担方（第十八批 M 段第 117 条）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "cost_bearer"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "cost_bearer": {
+            "type": "string",
+            "description": "费用承担方：property 物业承担、merchant 商户承担。",
+            "enum": [
+              "property",
+              "merchant"
+            ]
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "商户承担时承担的商户（设施工单必填；商户服务工单承担的商户就是提单商户，不用填）。",
+            "maxLength": 64
+          }
+        }
+      },
+      "FacilityWorkOrderBearerDisputeRequest": {
+        "type": "object",
+        "description": "工单费用承担方争议（第十八批 M 段 117-R2、117-R5）。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "claimed_cost_bearer",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键。",
+            "maxLength": 128
+          },
+          "claimed_cost_bearer": {
+            "type": "string",
+            "description": "主张的费用承担方：property 物业承担、merchant 商户承担。",
+            "enum": [
+              "property",
+              "merchant"
+            ]
+          },
+          "claimed_merchant_id": {
+            "type": "string",
+            "description": "主张商户承担时承担的商户（设施工单必填；商户服务工单即提单商户，不用填）。",
+            "maxLength": 64
+          },
+          "reason": {
+            "type": "string",
+            "description": "争议原因。",
+            "maxLength": 1000
+          },
+          "final_approver_id": {
+            "type": "string",
+            "description": "最终审批人 user_id；可空，按审批档位沿直接上级链生成。",
+            "maxLength": 64
+          }
+        }
+      },
       "FacilityWorkOrderPolicyRequest": {
         "type": "object",
         "description": "工单 SLA/验收策略请求。",
@@ -92152,6 +93581,80 @@
               "maxLength": 128
             },
             "description": "店内实物券必填：逐件扫的物品码，个数等于每张券件数、不得重复；每个码须已登记为本券货品且属本商户（第十八批 L 段 103-R1，BSM 第 1197 行）。"
+          }
+        }
+      },
+      "VoucherRedeemPreviewRequest": {
+        "type": "object",
+        "description": "请求载荷 `VoucherRedeemPreviewRequest`（按码查券，第十八批 M 段 112-R1）。",
+        "additionalProperties": false,
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "客人券包出示的券动态码（vrc_ 前缀）。"
+          }
+        }
+      },
+      "VoucherRedeemPreview": {
+        "type": "object",
+        "description": "按码查券结果（第十八批 M 段 112-R1）：工作手机与一体机核销或领取前看能领什么、能领多少、是否已领。",
+        "additionalProperties": false,
+        "required": [
+          "voucher_instance_id",
+          "voucher_kind",
+          "status"
+        ],
+        "properties": {
+          "voucher_instance_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "券实例 ID。"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "券名称（对客展示）。"
+          },
+          "voucher_kind": {
+            "type": "string",
+            "enum": [
+              "merchant_discount",
+              "in_store_goods",
+              "external_partner"
+            ],
+            "description": "券种：merchant_discount 商户折扣券、in_store_goods 店内实物券、external_partner 外部伙伴券。"
+          },
+          "goods_quantity": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "description": "店内实物券每张件数（核销须逐件扫的物品码个数）；其他券为空。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "issued",
+              "redeemed",
+              "expired",
+              "revoked"
+            ],
+            "description": "券状态；已到期而未落库的 issued 按 expired 折算。"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "到期时间；为空＝不过期。"
+          },
+          "block_reason": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "不可核销原因，同核销拒绝码（VOUCHER_ALREADY_REDEEMED、VOUCHER_REVOKED、VOUCHER_EXPIRED、VOUCHER_NOT_REDEEMABLE）；为空即可核销。"
           }
         }
       },
@@ -101573,6 +103076,23 @@
             "type": "array",
             "items": {
               "type": "object"
+            }
+          },
+          "locations": {
+            "type": "array",
+            "description": "第十八批 M 段第 119 条（BSM:1936）：可见仓库下已建档的库位，采购验收「实际库位编号」只能从所选仓库下的库位里选",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "库位编号"
+                },
+                "warehouse_id": {
+                  "type": "string",
+                  "description": "所属库房 id"
+                }
+              }
             }
           },
           "contracts": {

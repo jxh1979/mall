@@ -7,6 +7,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.GuardedAction;
 import com.complex.platform.inventory.dto.WarehouseCreateRequest;
+import com.complex.platform.inventory.dto.WarehouseLocationCreateRequest;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -54,8 +55,8 @@ public class WarehouseService {
 
     public PageResponse<WarehouseRecord> listWarehouses() {
         return readPage(
-                "inventory.warehouse.viewed",
-                "inventory.warehouse.view_failed",
+                "inventory.warehouse.list",
+                "inventory.warehouse.list_failed",
                 "inventory.warehouse.manage",
                 "warehouse",
                 () -> {
@@ -98,6 +99,47 @@ public class WarehouseService {
                             now,
                             now
                     ));
+                }
+        );
+    }
+
+    /** 第十八批 M 段第 119 条 119-R1（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：已建档库位全量列表。 */
+    public PageResponse<WarehouseLocationRecord> listLocations() {
+        return readPage(
+                "inventory.warehouse_location.list",
+                "inventory.warehouse_location.list_failed",
+                "inventory.warehouse.manage",
+                "warehouse_location",
+                repository::listWarehouseLocations
+        );
+    }
+
+    /**
+     * 第十八批 M 段第 119 条 119-R1（BSM:1936；BSM:1162「管理库房和库位……」）：在库房下建库位。库房不存在 404 WAREHOUSE_NOT_FOUND；
+     * 库位编号全平台唯一，已被占用 409 WAREHOUSE_LOCATION_TAKEN。
+     */
+    @GuardedAction(capability = "inventory.warehouse.manage")
+    @Transactional
+    public WarehouseLocationRecord createLocation(WarehouseLocationCreateRequest request) {
+        return executeWrite(
+                "createWarehouseLocation",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                WarehouseLocationRecord.class,
+                "inventory.warehouse_location.created",
+                "inventory.warehouse_location.create_failed",
+                "inventory.warehouse.manage",
+                "warehouse_location",
+                () -> {
+                    WarehouseLocationCreateRequest actual = requireRequest(request);
+                    String locationId = requireText(actual.locationId(), "location_id");
+                    WarehouseRecord warehouse = repository.findWarehouseById(requireText(actual.warehouseId(), "warehouse_id"))
+                            .orElseThrow(() -> ApiException.notFound("WAREHOUSE_NOT_FOUND", "库房不存在"));
+                    WarehouseLocationRecord location = new WarehouseLocationRecord(locationId, warehouse.id(), Instant.now());
+                    if (!repository.saveWarehouseLocation(location)) {
+                        throw ApiException.conflict("WAREHOUSE_LOCATION_TAKEN", "库位编号已被占用");
+                    }
+                    return location;
                 }
         );
     }
@@ -208,6 +250,9 @@ public class WarehouseService {
     private String businessId(Object response) {
         if (response instanceof WarehouseRecord record) {
             return record.id();
+        }
+        if (response instanceof WarehouseLocationRecord location) {
+            return location.id();
         }
         return "unknown";
     }

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.merchantbilling.MerchantAmountChangeNotifier;
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 /**
  * 第十八批第 13 条：结算金额出账短信。BSM 第 1597 行「结算金额出账与调整……通知中写明金额、原因与异议截止日期……异议期自该账单在
  * 商户专区可查看之日的次日起算」——普通内部结算往来到出账日（visible_at，商户专区可查看）即逐笔通知对方商户，异议截止日取往来固化的
- * objection_deadline。停车抵免出账已由 ParkingCreditService 通知，不重发。去重靠发送日志 request_id，不加列。
+ * objection_deadline。停车抵免成本同此（第 110 条）。去重靠发送日志 request_id，不加列。
  * 操作员裁决（第十八批第 2 条「不逐笔发：只在结算账单出账时发一条，里面已含这些赠饮应付」）：通票赠饮逐杯挂给出品酒吧的应付不逐笔发；
  * 该酒吧本期赠饮应付净额只写进本期一条门票分销出账短信的原因里（同一酒吧同期有几条门票分销往来时取最先出账、编号最小的那条；追收不带）。
  * 逻辑在可直调的 {@link #notifyVisibleStatements(Instant)}；@Scheduled 薄包装，默认关，prod 开（每日一轮）。
@@ -62,12 +62,12 @@ public class MerchantSettlementStatementNoticeJob {
                   FROM internal_payable_schedules s
                   JOIN ar_ap_items i ON i.id = s.ar_ap_item_id
                   JOIN merchants m ON m.id = s.counterparty_id
-                 WHERE s.visible_at <= ? AND s.route <> ?
+                 WHERE s.visible_at <= ?
                    AND NOT EXISTS (SELECT 1 FROM notification_send_log l WHERE l.request_id = 'mamt:settlement_statement:' || s.ar_ap_item_id)
                  ORDER BY s.visible_at, s.ar_ap_item_id
                 """, (rs, n) -> new Row(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
                 rs.getObject(5, LocalDate.class), rs.getObject(6, LocalDate.class), rs.getLong(7), rs.getString(8),
-                rs.getBoolean(9)), Timestamp.from(now), InternalPayDayService.PARKING_CREDIT_COST);
+                rs.getBoolean(9)), Timestamp.from(now));
         for (Row r : rows) {
             String reason = FinanceService.sourceTypeLabel(r.route()) + "出账：" + ("payable".equals(r.direction()) ? "应付商户" : "商户应付");
             if (r.carriesDrinks()) {

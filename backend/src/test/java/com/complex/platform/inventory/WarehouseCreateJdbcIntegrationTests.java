@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
@@ -85,6 +85,23 @@ class WarehouseCreateJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.warehouses[*].id", hasItem(id)));
     }
 
+    /**
+     * 第十八批 M 段第 113 条 113-R1（PGM:899「平台治理层要保证每个重要动作能追溯……都要能查到」；决策台账 18K 第 94 条补记「代码落 OpenAPI 声明的事件，
+     * OpenAPI 不改」）：后台按库存台账真实请求逐个打开库存包六个列表，留痕事件名与 OpenAPI 声明一致（*.list），不再落旧名 *.viewed。
+     */
+    @Test
+    void inventoryListReadsRecordOpenApiDeclaredAuditEventNames() throws Exception {
+        for (String path : List.of("warehouses", "stock-batches", "risk-alerts", "supplier-reconciliations", "supplier-qualifications",
+                "supplier-settlement-methods")) {
+            mockMvc.perform(get("/api/v1/inventory/" + path).with(platformStaff())).andExpect(status().isOk());
+        }
+        assertThat(jdbc.queryForList("SELECT event_name FROM audit_events WHERE actor_id = ?", String.class, "whc_mgr_" + s))
+                .contains("inventory.warehouse.list", "inventory.stock_batch.list", "inventory.risk_alert.list",
+                        "inventory.supplier_reconciliation.list", "inventory.supplier_qualification.list",
+                        "inventory.supplier_settlement_method.list")
+                .noneMatch(name -> name.endsWith(".viewed"));
+    }
+
     /** 平台员工：库房管理（列表与新建同一权限码）与采购查看（采购工作台选项）。 */
     private RequestPostProcessor platformStaff() {
         String userId = "whc_mgr_" + s;
@@ -94,7 +111,9 @@ class WarehouseCreateJdbcIntegrationTests {
             String role = "role_" + userId;
             jdbc.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at) VALUES (?, ?, '库房新建回归', 'platform', 'active', now())",
                     role, role);
-            for (String permission : List.of("inventory.warehouse.manage", "inventory.purchase_request.view")) {
+            for (String permission : List.of("inventory.warehouse.manage", "inventory.purchase_request.view", "inventory.stock.view",
+                    "inventory.risk_alert.view", "inventory.supplier.reconcile", "inventory.supplier.qualification.manage",
+                    "inventory.supplier.settlement.manage")) {
                 jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, permission);
             }
             jdbc.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, role);
