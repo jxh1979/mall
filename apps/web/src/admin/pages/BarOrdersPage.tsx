@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { TechDetails } from "../components/TechDetails";
@@ -165,7 +165,6 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
   const [paymentAmount, setPaymentAmount] = React.useState("");
   const [paymentReference, setPaymentReference] = React.useState("");
   const paymentRetry = React.useRef<{ body: string; key: string } | null>(null);
-  const [cashierStaffId, setCashierStaffId] = React.useState("");
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
   const [paymentPhone, setPaymentPhone] = React.useState("");
   const [paymentSmsCode, setPaymentSmsCode] = React.useState("");
@@ -344,10 +343,6 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       setFormError("请填写付款手机号和短信验证码。");
       return false;
     }
-    if (paymentChannel === "cash" && !cashierStaffId.trim()) {
-      setFormError("现金结算需填现金收款人，供对账留痕。");
-      return false;
-    }
     if (paymentChannel === "pos" && !posTransactionNo.trim()) {
       setFormError("POS 结算需填 POS 流水号，供对账留痕。");
       return false;
@@ -384,7 +379,6 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       ...(paymentChannel === "stored_value" ? { phone: paymentPhone.trim(), smsCode: paymentSmsCode.trim() } : {}),
       ...(paymentAmount.trim() ? { settlementAmountCent: Math.round(Number(paymentAmount) * 100) } : {}),
       paymentChannel,
-      cashierStaffId: paymentChannel === "cash" ? cashierStaffId.trim() || undefined : undefined,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
       ...(voucherCode.trim() ? { voucherCode: voucherCode.trim() } : {}),
       ...(memberPhone.trim() ? { memberPhone: memberPhone.trim() } : {}),
@@ -590,9 +584,6 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
             <label>短信验证码<input inputMode="numeric" autoComplete="one-time-code" value={paymentSmsCode} onChange={(e) => setPaymentSmsCode(e.target.value)} /></label>
             <p>从付款客人在本商户的储值卡扣除本账单剩余应付金额，短信验证通过后才会扣款。</p>
           </> : null}
-          {paymentChannel === "cash" ? (
-            <label>现金收款人<input data-testid="bar-settle-cashier" value={cashierStaffId} onChange={(e) => setCashierStaffId(e.target.value)} placeholder="收款员工 ID" /></label>
-          ) : null}
           {paymentChannel === "pos" ? (
             <label>POS 流水号<input data-testid="bar-settle-pos-no" value={posTransactionNo} onChange={(e) => setPosTransactionNo(e.target.value)} placeholder="POS 交易流水号" /></label>
           ) : null}

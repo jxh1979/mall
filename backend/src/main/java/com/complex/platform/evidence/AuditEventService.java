@@ -1,18 +1,27 @@
 package com.complex.platform.evidence;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.gate.TerminalIdentityHolder;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Service
 public class AuditEventService {
 
     private final AuditEventRepository repository;
+
+    /** 第十八批 O 段第 127 条 127-R1：网页端执行设备取浏览器设备编号。字段注入免改既有手工构造点；手工构造时为 null，跳过浏览器编号。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.security.BrowserDeviceRegistry browserDevices;
 
     public AuditEventService(AuditEventRepository repository) {
         this.repository = repository;
@@ -111,6 +120,8 @@ public class AuditEventService {
         String actorType = "staff";
         String authContext = null;
         String merchantId = null;
+        Map<String, Object> meta = new LinkedHashMap<>(metadata == null ? Map.of() : metadata);
+        operatorTrace(meta);
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated()) {
@@ -145,11 +156,37 @@ public class AuditEventService {
                 businessId,
                 requestId,
                 idempotencyKey,
-                Map.copyOf(new LinkedHashMap<>(metadata == null ? Map.of() : metadata)),
+                Map.copyOf(meta),
                 merchantId,
                 eventCategory,
                 subjectType
         );
         return repository.save(event);
+    }
+
+    /**
+     * 第十八批 O 段第 127 条 127-R1（BSM:940「……收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」；
+     * DEC-R8-97-19；BSM:2028「……留痕要尽量自动生成，优先用登录、设备绑定……」）：每条留痕补记该次员工登录会话 login_session_id（令牌过滤器
+     * attachSession 放进请求属性 auth.sessionId；客人会话不放）与执行设备 operator_device_id（可信终端的设备号：员工手机、平板、一体机为请求设备号，
+     * 商户手机应用为会话设备编号；没有就取已登记的浏览器设备编号，第十八批裁决 6）。调用方已给同名键的不覆盖；没有请求（后台作业）不记；
+     * 补记失败不影响留痕本身。
+     */
+    private void operatorTrace(Map<String, Object> meta) {
+        try {
+            if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs)) {
+                return;
+            }
+            HttpServletRequest request = attrs.getRequest();
+            if (request.getAttribute("auth.sessionId") instanceof String session && !session.isBlank()) {
+                meta.putIfAbsent("login_session_id", session);
+            }
+            TerminalIdentityHolder.current().map(TerminalIdentityHolder.VerifiedTerminal::deviceId)
+                    .filter(id -> !id.isBlank())
+                    // ponytail: 后台网页请求每写一条留痕多一次按主键查 browser_devices，事件量成问题时再把编号缓存进请求属性
+                    .or(() -> browserDevices == null ? Optional.empty() : browserDevices.current(request))
+                    .ifPresent(device -> meta.putIfAbsent("operator_device_id", device.trim()));
+        } catch (RuntimeException ignored) {
+            // best-effort：补记失败不影响留痕本身
+        }
     }
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -8,14 +8,11 @@ import com.complex.platform.amusement.AmusementService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.terminal.MdmService;
-import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
-import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.Map;
@@ -89,7 +86,7 @@ public class TicketVerificationService {
             "ENTITLEMENT_NOT_ACTIVE", "ENTITLEMENT_NOT_YET_VALID", "ENTITLEMENT_EXPIRED", "ENTITLEMENT_USED_UP", "ENTITLEMENT_USED",
             "TICKET_INSTANCE_REFUND_IN_PROGRESS", "MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
             "ENTITLEMENT_PROVIDER_MISMATCH", "ENTITLEMENT_NOT_AMUSEMENT", "ENTITLEMENT_NOT_FOR_PROJECT",
-            "AMUSEMENT_ONLINE_REQUIRED", "AMUSEMENT_PROJECT_UNRESOLVED", "AMUSEMENT_BUSINESS_DAY_REQUIRED",
+            "AMUSEMENT_PROJECT_UNRESOLVED", "AMUSEMENT_BUSINESS_DAY_REQUIRED",
             "PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH",
             // TK-06 一人多次票留脸 / 核对同一使用人。
             "MULTI_USE_FACE_CONSENT_REQUIRED", "MULTI_USE_FACE_CAPTURE_REQUIRED", "MULTI_USE_HOLDER_MISMATCH");
@@ -258,24 +255,10 @@ public class TicketVerificationService {
         if ("failed".equals(response.status())) {
             // M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：在线核销以正常返回报告失败（过刷新窗口、签名失配，
             // verifyEntitlement 里落 failed 核销记录的两支），本次请求记为业务失败，请求事务切面据此撤回这次请求新用掉的
-            // 单次核销授权（失败核销记录照常提交，响应形状不变）。只在在线核销入口标记：终端离线同步（createSyncTask）
-            // 同样调 verifyEntitlement，但同步批次受理即这次同步操作成功，其单次授权照常算用掉。
+            // 单次核销授权（失败核销记录照常提交，响应形状不变）。
             IdempotentReplayContext.markBusinessFailed();
         }
         return response;
-    }
-
-    SyncTasksResponse syncTerminalTasks(TerminalSyncTasksRequest request) {
-        String deviceCode = requireText(request.deviceCode(), "device_code");
-        List<TerminalSyncTaskItemRequest> tasks = request.tasks() == null ? List.of() : request.tasks();
-        if (tasks.isEmpty()) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "tasks is required");
-        }
-        String staffId = trimToNull(request.staffId());
-        List<SyncTaskResult> results = tasks.stream()
-                .map(task -> syncTask(deviceCode, staffId, task))
-                .toList();
-        return new SyncTasksResponse(Instant.now().toString(), results);
     }
 
     /**
@@ -625,7 +608,7 @@ public class TicketVerificationService {
             return new VerificationResponse(invalid.id(), invalid.verificationNo(), invalid.status(), invalid.resultReason());
         }
         // 跨模块闭环②a：核销=高风险动作，过窗口判定通过、真正消费权益前接入 MDM 门控。
-        // 核销主链确实携带操作设备标识（VerificationRequest.deviceId，在线=设备 deviceId，离线同步=设备码），
+        // 核销主链确实携带操作设备标识（VerificationRequest.deviceId，即在线核销设备 deviceId），
         // 故此条链路【已强制门控】：开关开+未纳管/blocked/lost 设备硬拒绝（DEVICE_NOT_MANAGED/DEVICE_BLOCKED）。
         // 置于扣减前，确保被拒时不消费权益、不落 success 核销记录。
         requireManagedDeviceForVerification(request);
@@ -797,8 +780,6 @@ public class TicketVerificationService {
             VerificationRequest request, String sourceType, Instant now) {
         if(amusementService==null)
             throw ApiException.conflict("AMUSEMENT_PROJECT_UNRESOLVED","游乐核销服务不可用，不能转用通用核销");
-        if("android_terminal_offline".equals(sourceType))
-            throw ApiException.conflict("AMUSEMENT_ONLINE_REQUIRED","游乐权益必须在线核销，不接受离线补核销");
         String key=requireText(request.idempotencyKey(),"idempotency_key");
         var admission=amusementService.verifyAmusementEntry(new AmusementEntryRequest(
                 requireText(request.credentialPayload(),"credential_payload"),
@@ -1148,8 +1129,7 @@ public class TicketVerificationService {
      * （{@code enforceMerchantScope} 对空 scope 放行，那是权限层，管不了这件事）。
      *
      * <p>核销上下文 = 核销设备绑定的商户。设备没绑商户就说不清这杯酒是在哪家核的 → 一律拒绝（fail-closed），
-     * 让运营先去把设备归属配好，而不是先记一笔说不清的账。离线同步旁路复用本方法
-     * （device_code 已在 {@code createSyncTask} 里解析成设备 id），无须另写。
+     * 让运营先去把设备归属配好，而不是先记一笔说不清的账。
      */
     private void enforceProviderMerchantMatch(IssuedEntitlementRecord entitlement, VerificationRequest request) {
         if (!InternalSettlementPriceResolver.providerRedeemed(
@@ -1205,7 +1185,7 @@ public class TicketVerificationService {
 
     /**
      * 跨模块闭环②a：核销前置 MDM 高风险门控。
-     * device_id 在核销主链为必填（在线设备 deviceId / 离线同步设备码），故正常路径必有设备标识。
+     * device_id 在核销主链为必填（在线核销设备 deviceId），故正常路径必有设备标识。
      * mdmService 未注入（兼容构造，mdmService=null）或 device 缺失时安全跳过（不伪造假值），其余情形委托
      * {@link MdmService#requireManagedForHighRiskAction}：开关开+未纳管硬拒绝；blocked/lost 设备无论开关均硬拒绝。
      */
@@ -1218,128 +1198,6 @@ public class TicketVerificationService {
             return;
         }
         mdmService.requireManagedForHighRiskAction(deviceId, VERIFY_ACTION_TYPE);
-    }
-
-    private SyncTaskResult syncTask(String deviceCode, String staffId, TerminalSyncTaskItemRequest task) {
-        String clientTaskId = requireText(task.clientTaskId(), "client_task_id");
-        return repository.findTerminalSyncTask(deviceCode, clientTaskId)
-                .map(this::toSyncTaskResult)
-                .orElseGet(() -> createSyncTask(deviceCode, staffId, task));
-    }
-
-    private SyncTaskResult createSyncTask(String deviceCode, String staffId, TerminalSyncTaskItemRequest task) {
-        String taskType = requireText(task.taskType(), "task_type");
-        String clientTaskId = requireText(task.clientTaskId(), "client_task_id");
-        String occurredAt = requireText(task.occurredAt(), "occurred_at");
-        Map<String, String> payload = task.payload() == null ? Map.of() : task.payload();
-        String verificationId = null;
-        String verificationNo = null;
-        String taskStatus = "accepted";
-        String taskReason = null;
-
-        if ("offline_verification".equals(taskType)) {
-            String entitlementCode = firstPayload(payload, "entitlementCode", "entitlement_code", "credentialPayload", "credential_payload");
-            String pointId = firstPayloadOptional(payload, "pointId", "point_id", "gateId", "gate_id", "point");
-            // 同步请求携带 device_code(≠ 设备 PK id),须解析成真 id 才能落 ticket_verifications.device_id(FK);
-            // 查不到=设备未注册,抛干净业务错(避免下游 FK 违反污染事务)。
-            String resolvedDeviceId = repository.resolveTerminalDeviceId(deviceCode)
-                    .orElseThrow(() -> ApiException.badRequest(
-                            "DEVICE_NOT_REGISTERED", "设备未登记：" + deviceCode));
-            VerificationRequest verifyRequest = new VerificationRequest(
-                    "sync-task-" + clientTaskId,
-                    "qr",
-                    entitlementCode,
-                    resolvedDeviceId,
-                    pointId == null ? resolvedDeviceId : pointId,
-                    Map.of("source", "terminal_sync_task")
-            );
-            try {
-                VerificationResponse verification = verifyEntitlement(verifyRequest, "android_terminal_offline", clientTaskId);
-                verificationId = verification.id();
-                verificationNo = verification.verificationNo();
-            } catch (ApiException outcome) {
-                // CG-05：终端离线已发生的核销尝试，其结果按闭集落记录——规则不允许 → rejected，技术原因 → failed；
-                // 本任务结果同态，同批其他任务照常处理（不再整批抛错）。未归类的错误码维持原异常。
-                String status = outcomeStatusForCode(outcome.code());
-                if (status == null) {
-                    throw outcome;
-                }
-                taskStatus = status;
-                taskReason = outcome.code().toLowerCase(Locale.ROOT);
-                VerificationRecord recorded = recordOfflineOutcome(verifyRequest, status, taskReason, staffId, clientTaskId);
-                if (recorded != null) {
-                    verificationId = recorded.id();
-                    verificationNo = recorded.verificationNo();
-                }
-            }
-        }
-
-        TerminalSyncTaskRecord saved = repository.saveTerminalSyncTask(new TerminalSyncTaskRecord(
-                "sync_" + UUID.randomUUID().toString().replace("-", ""),
-                deviceCode,
-                staffId,
-                clientTaskId,
-                taskType,
-                taskStatus,
-                taskReason,
-                verificationId,
-                verificationNo,
-                occurredAt,
-                sanitizedSyncPayload(payload),
-                Instant.now()
-        ));
-        return toSyncTaskResult(saved);
-    }
-
-    /**
-     * CG-05：离线同步中被拒绝 / 失败的核销尝试落一条非成功核销记录（不消费权益、不落结算价）；
-     * 权益无法定位（凭证不存在等）时无记录可落，返回 null（任务结果仍带状态与原因）。
-     */
-    private VerificationRecord recordOfflineOutcome(VerificationRequest request, String status, String reason,
-            String staffId, String clientTaskId) {
-        IssuedEntitlementRecord entitlement;
-        try {
-            entitlement = entitlementByCredential(request);
-        } catch (ApiException unresolved) {
-            return null;
-        }
-        if(isAmusementEntitlement(entitlement)) requireAmusementSourceScope(entitlement);
-        return repository.saveVerification(new VerificationRecord(
-                "ver_" + UUID.randomUUID().toString().replace("-", ""),
-                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
-                entitlement.id(),
-                entitlement.entitlementCode(),
-                "qr",
-                verificationPayload(request.credentialPayload(), null),
-                request.deviceId(),
-                request.pointId(),
-                status,
-                reason,
-                "android_terminal_offline",
-                clientTaskId,
-                Instant.now(),
-                null,
-                staffId,
-                entitlement.merchantId(),
-                null,
-                null,
-                entitlement.numPeople(),
-                null,
-                null,
-                null,
-                null
-        ));
-    }
-
-    private SyncTaskResult toSyncTaskResult(TerminalSyncTaskRecord task) {
-        return new SyncTaskResult(
-                task.clientTaskId(),
-                task.status(),
-                task.reason(),
-                task.verificationId(),
-                task.verificationNo(),
-                null
-        );
     }
 
     private IssuedEntitlementRecord entitlementByCredential(VerificationRequest request) {
@@ -1428,10 +1286,6 @@ public class TicketVerificationService {
         return "sha256:" + hash(payload);
     }
 
-    private Map<String, String> sanitizedSyncPayload(Map<String, String> payload) {
-        return TerminalSyncPayloadSanitizer.sanitize(payload, this::hash);
-    }
-
     private TicketCredentialResponse toCredentialResponse(TicketCredentialRecord credential) {
         return new TicketCredentialResponse(
                 credential.id(),
@@ -1443,21 +1297,6 @@ public class TicketVerificationService {
                 credential.expiresAt(),
                 credential.refreshedCount()
         );
-    }
-
-    private String firstPayload(Map<String, String> payload, String... keys) {
-        String value = firstPayloadOptional(payload, keys);
-        return requireText(value, keys[0]);
-    }
-
-    private String firstPayloadOptional(Map<String, String> payload, String... keys) {
-        for (String key : keys) {
-            String value = payload.get(key);
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
     }
 
     private String hash(String value) {

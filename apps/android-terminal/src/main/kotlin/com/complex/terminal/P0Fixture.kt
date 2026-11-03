@@ -141,9 +141,7 @@ class P0Fixture(
         "default_total_times" to 2,
         "default_value_cent" to 9900,
         "status" to "active",
-        // 模板归属（merchant/venue/point）：发券时透传到 issued_entitlements，
-        // 使终端按 merchant_id+venue_id 拉取的离线权益包能命中本券。
-        // 缺省时券归属为空，会被按场地过滤的离线包排除（verifyOffline 找不到）。
+        // 模板归属（merchant/venue/point）：发券时透传到 issued_entitlements。
         "merchant_id" to merchant.id,
         "venue_id" to venue.id,
         "point_id" to point.id,

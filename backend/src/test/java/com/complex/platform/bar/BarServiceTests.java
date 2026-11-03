@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -4359,17 +4359,17 @@ class BarServiceTests {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
                 "open-1", "bar_1", "cashier_1", null, 50_000L, 0L, null));
 
-        // 三笔不同支付方式结算 + 一笔小费账单，均归属 cashier_1。
+        // 三笔不同支付方式结算 + 一笔小费账单，均归属 cashier_1（第十八批 O 段第 127 条 127-R3：收款人取结账登录人，以 cashier_1 身份结账）。
         BarBillRecord cashBill = billForOrder("agg-cash", "staff_sales");
-        service.settleBill(cashBill.id(), new BarBillSettleRequest(
+        settleAs("cashier_1", cashBill.id(), new BarBillSettleRequest(
                 "s-cash", null, List.of(), "pay_cash", cashBill.payableAmountCent(),
                 "cash", "cashier_1", null));
         BarBillRecord posBill = billForOrder("agg-pos", "staff_sales");
-        service.settleBill(posBill.id(), new BarBillSettleRequest(
+        settleAs("cashier_1", posBill.id(), new BarBillSettleRequest(
                 "s-pos", null, List.of(), "pay_pos", posBill.payableAmountCent(),
                 "pos", "cashier_1", "POS123"));
         BarBillRecord onlineBill = billForOrder("agg-online", "staff_sales");
-        service.settleBill(onlineBill.id(), new BarBillSettleRequest(
+        settleAs("cashier_1", onlineBill.id(), new BarBillSettleRequest(
                 "s-online", null, List.of(), "pay_online", onlineBill.payableAmountCent(),
                 "aggregate_pay", "cashier_1", null));
 
@@ -4377,7 +4377,7 @@ class BarServiceTests {
         BarBillRecord tipBill = billForOrder("agg-tip", "staff_sales");
         service.addBillTip(tipBill.id(), new BarBillTipRequest("tip-1", null, List.of(), 1_000L, null));
         BarBillRecord tippedReloaded = barRepository.findBillById(tipBill.id()).orElseThrow();
-        service.settleBill(tipBill.id(), new BarBillSettleRequest(
+        settleAs("cashier_1", tipBill.id(), new BarBillSettleRequest(
                 "s-tip", null, List.of(), "pay_tip",
                 tippedReloaded.payableAmountCent() + tippedReloaded.tipAmountCent(),
                 "aggregate_pay", "cashier_1", null));
@@ -4402,7 +4402,7 @@ class BarServiceTests {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
                 "open-diff", "bar_1", "cashier_diff", null, 20_000L, 0L, null));
         BarBillRecord cashBill = billForOrder("diff-cash", "staff_sales");
-        service.settleBill(cashBill.id(), new BarBillSettleRequest(
+        settleAs("cashier_diff", cashBill.id(), new BarBillSettleRequest(
                 "s-diff", null, List.of(), "pay_diff", cashBill.payableAmountCent(),
                 "cash", "cashier_diff", null));
 
@@ -4421,7 +4421,7 @@ class BarServiceTests {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
                 "open-bal", "bar_1", "cashier_bal", null, 10_000L, 500L, null));
         BarBillRecord cashBill = billForOrder("bal-cash", "staff_sales");
-        service.settleBill(cashBill.id(), new BarBillSettleRequest(
+        settleAs("cashier_bal", cashBill.id(), new BarBillSettleRequest(
                 "s-bal", null, List.of(), "pay_bal", cashBill.payableAmountCent(),
                 "cash", "cashier_bal", null));
 
@@ -4448,7 +4448,7 @@ class BarServiceTests {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
                 "open-refund", "bar_1", "cashier_refund", null, 0L, 0L, null));
         BarBillRecord bill = billForOrder("refund-bill", "staff_sales");
-        service.settleBill(bill.id(), new BarBillSettleRequest(
+        settleAs("cashier_refund", bill.id(), new BarBillSettleRequest(
                 "s-refund", null, List.of(), "pay_refund", bill.payableAmountCent(),
                 "cash", "cashier_refund", null));
         service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
@@ -5467,6 +5467,17 @@ class BarServiceTests {
             String operatorNote,
             List<String> evidenceAttachmentIds
     ) {
+    }
+
+    /** 第十八批 O 段第 127 条 127-R3（BSM:940「收银……收款……按……该次登录会话定位到操作人」）：收款人取结账登录人——以该收银员身份结账，办完恢复原身份。 */
+    private BarBillRecord settleAs(String cashier, String billId, BarBillSettleRequest request) {
+        var previous = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        TestSecurityActors.asPlatformAdmin(cashier);
+        try {
+            return service.settleBill(billId, request);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(previous);
+        }
     }
 
     /** 第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：退品审批由申请人以外的平台账号办理，办完恢复原身份。 */

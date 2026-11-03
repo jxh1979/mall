@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1240,7 +1240,8 @@ class FinanceServiceTests {
         assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::id).doesNotHaveDuplicates();
         assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::sourceStream)
                 .containsExactlyInAnyOrder(
-                        "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow");
+                        "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow",
+                        "bar_deposit");
         assertThat(summaries.items())
                 .filteredOn(s -> "official_ticket".equals(s.sourceStream()))
                 .extracting(DailyCloseSummaryRecord::amountCent, DailyCloseSummaryRecord::orderCount)

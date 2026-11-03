@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -137,13 +137,6 @@ data class OfflineEntitlement(
 )
 
 @Serializable
-data class OfflinePackageResponse(
-  val generatedAt: String = "",
-  val expiresAt: String = "",
-  val entitlements: List<OfflineEntitlement> = emptyList(),
-)
-
-@Serializable
 data class PreviewResponse(
   val allowed: Boolean = false,
   val reason: String = "",
@@ -171,58 +164,6 @@ data class VerificationResponse(
   val verificationNo: String = "",
   val status: String = "",
   val resultReason: String? = null,
-)
-
-enum class LocalTaskStatus {
-  PENDING,
-  SYNCED,
-  CONFLICT,
-}
-
-@Serializable
-data class LocalTask(
-  val clientTaskId: String,
-  val taskType: String,
-  val payload: Map<String, String>,
-  val occurredAt: String,
-  val status: LocalTaskStatus = LocalTaskStatus.PENDING,
-  // 归属固化:任务创建时记录原操作员(staffId)与设备(deviceCode)。换人后新员工
-  // 同步时按 originStaffId 校验,不得把上一员工的待同步任务冒充自己身份上送。
-  val originStaffId: String? = null,
-  val originDeviceCode: String? = null,
-)
-
-@Serializable
-data class SyncTaskRequest(
-  val clientTaskId: String,
-  val taskType: String,
-  val occurredAt: String,
-  val payload: Map<String, String>,
-)
-
-@Serializable
-data class SyncTasksRequest(
-  val idempotencyKey: String,
-  val operatorNote: String? = null,
-  val deviceCode: String,
-  val staffId: String? = null,
-  val tasks: List<SyncTaskRequest>,
-)
-
-@Serializable
-data class SyncTaskResult(
-  val clientTaskId: String = "",
-  val status: String = "",
-  val reason: String? = null,
-  val verificationId: String? = null,
-  val verificationNo: String? = null,
-  val riskAlertId: String? = null,
-)
-
-@Serializable
-data class SyncTasksResponse(
-  val syncedAt: String = "",
-  val results: List<SyncTaskResult> = emptyList(),
 )
 
 @Serializable
@@ -271,14 +212,12 @@ data class DeviceReturnRequest(
 )
 
 enum class ReturnStatus {
-  BLOCKED_PENDING_TASKS,
   RETURNED,
 }
 
 @Serializable
 data class ReturnDecision(
   val status: ReturnStatus,
-  val pendingTaskCount: Int,
   val remoteStatus: String? = null,
 )
 

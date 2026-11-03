@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.PublicKey;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -177,6 +178,35 @@ class StaffPrivatePhoneFunctionsJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].id").value(order))
                 .andExpect(jsonPath("$.data.items[0].work_order_type").value("repair"));
+    }
+
+    /**
+     * 第十八批 O 段第 128 条 128-R1（BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源、到店和取消结果。」；PGM:745 员工私人手机属受控终端；
+     * BSM:1896 私人手机可「帮客人订位」）：酒吧商户员工在私人手机「酒吧空位 / 帮客订位」按安卓真实请求形状代订，创建终端记员工私人手机、来源记员工代订。
+     */
+    @Test
+    void privatePhoneStaffBookingRecordsPrivatePhoneTerminal() throws Exception {
+        String bar = "bar_b35pp_" + suffix;
+        String profile = "sp_b35pp_" + suffix;
+        account(user, bar, "staff.device.bind", "bar.reservation.create");
+        jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '私人手机代订回归酒吧', 'bar', 'active', now(), now(), ?)", bar, project);
+        String table = "table_b35pp_" + suffix;
+        jdbc.update("INSERT INTO bar_tables (id, bar_id, merchant_id, table_code, table_name, table_type, capacity, allowed_pass_free_guest_count,"
+                + " min_consumption_cent, currency, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, ?, '卡座', 'card_seat', 6, 2, 50000, 'CNY', 'active', now(), now())", table, bar, bar, "K-PP-" + suffix);
+        profile(profile, user, bar, "私人手机帮客订位");
+        String token = login(user);
+        String fingerprint = bind(token, profile);
+        String id = data(mockMvc.perform(phone(post("/api/v1/bar/reservations"), token, fingerprint)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("idempotency_key", "b35pp-book-" + suffix, "bar_id", bar, "table_id", table,
+                                "reservation_time", Instant.now().plusSeconds(3600).toString(), "guest_count", 2,
+                                "salesperson_user_id", user, "latest_arrival_at", Instant.now().plusSeconds(7200).toString(),
+                                "customer_phone", "136" + String.format("%08d", Math.floorMod(suffix.hashCode(), 100_000_000))))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("id").asText();
+        assertThat(jdbc.queryForMap("SELECT order_source, created_terminal FROM bar_reservations WHERE id = ?", id))
+                .containsEntry("order_source", "staff").containsEntry("created_terminal", PHONE);
     }
 
     /** 安卓「员工设备凭证」绑定：按私人手机声明、不带设备号，蛇形键；返回本机指纹。 */

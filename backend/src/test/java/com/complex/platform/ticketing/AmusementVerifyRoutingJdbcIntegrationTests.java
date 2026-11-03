@@ -1,13 +1,12 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.amusement.*;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.ticketing.dto.*;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** 在线票务入口必须走真实游乐项目、场次及项目硬容量；缺定位、离线补核销均不得转通用消费。 */
+/** 在线票务入口必须走真实游乐项目、场次及项目硬容量；缺定位不得转通用消费。 */
 @SpringBootTest(properties={
     "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
     "spring.datasource.username=complex",
@@ -35,7 +34,6 @@ class AmusementVerifyRoutingJdbcIntegrationTests {
 
     @AfterEach void cleanup(){
         try {
-            if(f!=null) jdbc.update("DELETE FROM terminal_sync_tasks WHERE device_code=?","terminal_"+f.key());
             for(var ticket:seeded)AmusementTicketJdbcFixture.cleanupTicket(jdbc,ticket);
             if(f!=null)AmusementTicketJdbcFixture.cleanupProject(jdbc,f);
         } finally {org.springframework.security.core.context.SecurityContextHolder.clearContext();}
@@ -93,23 +91,6 @@ class AmusementVerifyRoutingJdbcIntegrationTests {
         assertThat(used(f)).isEqualTo(1);
         assertThat(entries()).isEqualTo(1);
         assertThat(inPlay()).isEqualTo(1);
-    }
-
-    @Test void offlineSyncResolvesActualDeviceCodeButRejectsAmusementConsumptionIdempotently() {
-        seed(5);
-        String deviceCode="terminal_"+f.key();
-        var request=new TerminalSyncTasksRequest("offline_"+f.key(),null,null,deviceCode,"gate",
-                List.of(new TerminalSyncTaskItemRequest("offline_task_"+f.key(),"offline_verification",Instant.now().toString(),
-                    Map.of("entitlementCode",f.code(),"pointId",f.point()))));
-        var first=tickets.syncTerminalTasks(request).results().getFirst();
-        var second=tickets.syncTerminalTasks(request).results().getFirst();
-        assertThat(first.status()).isEqualTo("rejected");
-        assertThat(first.reason()).isEqualTo("amusement_online_required");
-        assertThat(second.verificationId()).isEqualTo(first.verificationId());
-        assertThat(jdbc.queryForObject("SELECT device_id FROM ticket_verifications WHERE id=?",String.class,first.verificationId())).isEqualTo(f.device());
-        assertThat(used(f)).isZero();
-        assertThat(successes(f)).isZero();
-        assertThat(entries()).isZero();
     }
 
     private void seed(int capacity){f=AmusementTicketJdbcFixture.seed(jdbc,repository,lifecycle,days,reviews,3,"per_use",capacity);seeded.add(f);}

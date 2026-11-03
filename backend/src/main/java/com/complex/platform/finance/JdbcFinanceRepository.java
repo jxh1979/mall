@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1111,6 +1111,42 @@ class JdbcFinanceRepository implements FinanceRepository {
                            AND s.reversed = FALSE
                            AND (CAST(:merchant_id AS VARCHAR) IS NULL OR s.merchant_id = :merchant_id)) AS order_count
                 """.formatted(settled, refunded), params, (rs) -> {
+            if (!rs.next()) {
+                return DailyCloseSourceTotals.empty();
+            }
+            return new DailyCloseSourceTotals(rs.getLong("amount_cent"), rs.getLong("refund_cent"), rs.getInt("order_count"));
+        });
+    }
+
+    @Override
+    public DailyCloseSourceTotals aggregateBarDeposit(LocalDate businessDate, Instant from, Instant to, String scopeType,
+            String scopeId, Map<String, Instant[]> barWindows) {
+        // 第十八批 O 段第 126 条 126-R1：订台定金（bar_reservations）以 deposit_paid_at 落所属酒吧营业日窗归集，金额＝定金合计、count＝笔数
+        //   （各渠道；到账时点只在员工登记或线上到账时写，免收与待付为空、天然不计）。退款：已原路退回（refunded / refunded_on_threshold，
+        //   deposit_settled_at 只在实际退款成功时写）以 deposit_settled_at 落窗合计。merchant scope 仅归本商户订台，其余 scope 平台全量。
+        //   定金不抵扣消费、不计入酒吧源。
+        String merchantId = isMerchantScope(scopeType) ? scopeId : null;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("from", timestampWithTimeZone(from))
+                .addValue("to", timestampWithTimeZone(to))
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+        String paid = barWindowPredicate("r.deposit_paid_at", "r.bar_id", barWindows, params);
+        String refunded = barWindowPredicate("r.deposit_settled_at", "r.bar_id", barWindows, params);
+        return jdbcTemplate.query("""
+                SELECT (SELECT COALESCE(SUM(r.deposit_amount_cent), 0)
+                          FROM bar_reservations r
+                         WHERE %1$s
+                           AND (CAST(:merchant_id AS VARCHAR) IS NULL OR r.merchant_id = :merchant_id)) AS amount_cent,
+                       (SELECT COALESCE(SUM(r.deposit_amount_cent), 0)
+                          FROM bar_reservations r
+                         WHERE r.deposit_settlement IN ('refunded', 'refunded_on_threshold')
+                           AND %2$s
+                           AND (CAST(:merchant_id AS VARCHAR) IS NULL OR r.merchant_id = :merchant_id)) AS refund_cent,
+                       (SELECT COUNT(*)
+                          FROM bar_reservations r
+                         WHERE %1$s
+                           AND (CAST(:merchant_id AS VARCHAR) IS NULL OR r.merchant_id = :merchant_id)) AS order_count
+                """.formatted(paid, refunded), params, (rs) -> {
             if (!rs.next()) {
                 return DailyCloseSourceTotals.empty();
             }

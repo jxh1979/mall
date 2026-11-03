@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -15,7 +15,6 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
-import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
 import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
@@ -453,22 +452,6 @@ public class TicketingController {
         return ApiResponse.ok(service.listTicketRefundLines(refundId));
     }
 
-    @GetMapping("/terminals/offline-entitlements")
-    public ApiResponse<OfflinePackageResponse> offlineEntitlements(
-            @RequestParam(name = "merchant_id", required = false) String merchantId,
-            @RequestParam(name = "venue_id", required = false) String venueId,
-            @RequestParam(name = "merchantId", required = false) String camelMerchantId,
-            @RequestParam(name = "venueId", required = false) String camelVenueId,
-            @RequestParam(name = "limit", defaultValue = "200") int limit
-    ) {
-        authorizationService.requirePermission("terminal.device.bind");
-        return ApiResponse.ok(service.getOfflineEntitlements(
-                firstNonBlank(merchantId, camelMerchantId),
-                firstNonBlank(venueId, camelVenueId),
-                limit
-        ));
-    }
-
     @PostMapping("/ticketing/verifications/preview")
     @com.complex.platform.access.DoesNotConsumeSingleUseGrant // M723：核销预览只看权益能否核销，真正核销才扣；预览不扣单次授权（操作员 2026-10-03）
     public ApiResponse<VerificationPreviewResponse> previewVerification(@RequestBody @jakarta.validation.Valid VerificationRequest request) {
@@ -521,26 +504,12 @@ public class TicketingController {
         return ApiResponse.ok(service.resolveVerificationAnomaly(id, request, resolveReversedBy()));
     }
 
-    @PostMapping("/terminals/sync-tasks")
-    public ApiResponse<SyncTasksResponse> syncTerminalTasks(@RequestBody @jakarta.validation.Valid TerminalSyncTasksRequest request) {
-        authorizationService.requirePermission("terminal.device.bind");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.syncTerminalTasks(request));
-    }
-
     private String resolveReversedBy() {
         try {
             return authorizationService.currentActor().id();
         } catch (RuntimeException exception) {
             return null;
         }
-    }
-
-    private String firstNonBlank(String first, String second) {
-        if (first != null && !first.isBlank()) {
-            return first;
-        }
-        return second == null || second.isBlank() ? null : second;
     }
 
     // ── XM-009（PGM-1.15.2.c2 / c3）：员工端订单读接口只出脱敏购票人手机号，不见明文、不设关闭开关（无 pii 明文权限分支）；

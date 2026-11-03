@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import android.app.Activity
 import android.content.Intent
@@ -31,9 +31,8 @@ import kotlin.concurrent.thread
  * 本 Activity 仅负责界面与线程编排；所有业务逻辑直接调用已实现的端侧业务层：
  *   - [TerminalApiClient]：HTTP 契约（login / bindDevice / preview / verify /
  *     amusementVerify / createBarOrder / pay-intent / settle / submitMaintenance /
- *     confirmResume / 设备凭证 / 冲正 / syncTasks / offline …）。
- *   - [TerminalWorkflow]：组合上述调用 + 本地 [InMemoryLocalStore]（会话/绑定/离线包/
- *     待同步队列/事件）。
+ *     confirmResume / 设备凭证 / 冲正 …）。
+ *   - [TerminalWorkflow]：组合上述调用 + 本地 [InMemoryLocalStore]（会话/绑定/事件）。
  *
  * 网络调用一律在后台线程（kotlin.concurrent.thread）执行，回到 UI 线程刷新；
  * 失败/离线均给出中文提示。
@@ -386,7 +385,6 @@ class MainActivity : Activity() {
       entry("tablet_pos", "平板点单 POS（图形）") { showPosEntry() },
       entry("kiosk_claim", "一体机模式（权益领取）") { showKioskEntry() },
       entry("amusement_maintenance", "游乐检修提交 / 主管确认") { showMaintenance() },
-      entry("sync_tasks", "同步待提交任务") { syncTasksAction(info) },
       entry("staff_device", "员工设备凭证") { showStaffDevice() },
       entry("ticket_reverse", "票务核销冲正") { showReverse() },
       declared?.let { statusText("—— 员工自有手机(BYOD 一期) ——") },
@@ -428,9 +426,6 @@ class MainActivity : Activity() {
       append("员工：").append(s?.username ?: "未登录").append('\n')
       append("设备：").append(b?.deviceCode ?: "未绑定")
       if (b?.status != null) append("（").append(b.status).append("）")
-      append('\n')
-      append("离线权益包：").append(store.offlineEntitlementCount()).append(" 条 / 待同步任务：")
-      append(store.pendingTaskCount()).append(" 条")
     }
   }
 
@@ -1409,18 +1404,6 @@ class MainActivity : Activity() {
 
     setContentView(
       screen(title = "票务核销冲正", children = listOf(status, verificationId, reason, reverseButton, backButton())),
-    )
-  }
-
-  // 同步待提交任务（离线核销/人工补录）
-  private fun syncTasksAction(info: TextView) {
-    info.text = "正在同步待提交任务…"
-    runBackground(
-      action = { workflow.syncPendingTasks() },
-      onSuccess = { resp ->
-        info.text = "同步完成：${resp.results.size} 条结果\n" + homeSummary()
-      },
-      onError = { info.text = "同步失败：${friendly(it)}\n" + homeSummary() },
     )
   }
 

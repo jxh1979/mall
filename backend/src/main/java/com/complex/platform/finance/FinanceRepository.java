@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -487,6 +487,15 @@ public interface FinanceRepository {
     default DailyCloseSourceTotals aggregateBar(LocalDate businessDate, Instant from, Instant to, String scopeType,
             String scopeId, java.util.Map<String, Instant[]> barWindows) {
         return aggregateBar(businessDate, from, to, scopeType, scopeId);
+    }
+
+    /**
+     * 第十八批 O 段第 126 条 126-R1（BSM:990「……必须由授权员工记录到订单、账单、日结和对账里。」）：订台定金源——当日到账的定金（各渠道）
+     * 计金额与笔数，当日实际退回成功的定金计退款；与酒吧源同按各酒吧营业日窗。default 无库替身归零。
+     */
+    default DailyCloseSourceTotals aggregateBarDeposit(LocalDate businessDate, Instant from, Instant to, String scopeType,
+            String scopeId, java.util.Map<String, Instant[]> barWindows) {
+        return DailyCloseSourceTotals.empty();
     }
 
     default DailyCloseSourceTotals aggregateAmusement(

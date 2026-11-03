@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -15,8 +15,6 @@ import java.util.Map;
 
 final class JdbcTicketingRowMapper {
 
-    private static final TypeReference<Map<String, String>> STRING_MAP_TYPE = new TypeReference<>() {
-    };
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE = new TypeReference<>() {
     };
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {
@@ -184,23 +182,6 @@ final class JdbcTicketingRowMapper {
                 nullableInstant(resultSet, "reversed_at"),
                 nullableLong(resultSet, "settlement_price_cent"),
                 resultSet.getString("amusement_verification_id")
-        );
-    }
-
-    TerminalSyncTaskRecord mapTerminalSyncTask(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TerminalSyncTaskRecord(
-                resultSet.getString("id"),
-                resultSet.getString("device_code"),
-                resultSet.getString("staff_id"),
-                resultSet.getString("client_task_id"),
-                resultSet.getString("task_type"),
-                resultSet.getString("status"),
-                resultSet.getString("reason"),
-                resultSet.getString("verification_id"),
-                resultSet.getString("verification_no"),
-                resultSet.getString("occurred_at"),
-                readStringMap(resultSet.getString("payload")),
-                nullableInstant(resultSet, "created_at")
         );
     }
 
@@ -388,14 +369,6 @@ final class JdbcTicketingRowMapper {
         return resultSet.getBigDecimal(columnName);
     }
 
-
-    private Map<String, String> readStringMap(String value) {
-        try {
-            return value == null ? Map.of() : objectMapper.readValue(value, STRING_MAP_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("terminal sync payload is not readable", exception);
-        }
-    }
 
     private List<String> readStringList(String value) {
         try {

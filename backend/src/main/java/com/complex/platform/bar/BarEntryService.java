@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -191,6 +191,9 @@ public class BarEntryService {
         BarReservationRecord updated = reservation.withDepositState("paid", reservation.depositSettlement(),
                 trimToNull(actual.channel()), now, null, now);
         BarReservationRecord saved = repository.saveReservation(updated);
+        // 第十八批 O 段第 126 条 126-R2（BSM:1029「……要进入账单、日结、员工责任链和财务对账。」）：登记员工记为定金收款人，
+        // 班结按其归入现金/POS 应收（一体机上即授权员工，与账单 cashier_staff_id 同口径）。
+        repository.markReservationDepositCollector(saved.id(), authorizationService.currentActor().id());
         auditEventService.recordSuccess("bar.reservation_deposit_paid", "bar.reservation.manage",
                 "bar_reservation", saved.id(), null, actual.idempotencyKey(),
                 Map.of("deposit_amount_cent", saved.depositAmountCent(),

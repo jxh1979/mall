@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -36,8 +36,8 @@ public class ServiceOrderController {
     }
 
     /** 2026-07-03 用户裁决 + 审计 P1 收紧:私人手机不允许带入工作现场——确认收款(mark-paid)/完成履约(complete)/
-     * 下单/出示公司收款码为必须现场完成的资金动作,仅允许公司设备(工作手机 staff_work_phone / 后台 web / 平板)。
-     * fail-closed:缺省/空白 X-Terminal-Type 一律拒绝(正规客户端 web/staff_work_phone/tablet 均发标识,
+     * 下单/出示公司收款码为必须现场完成的资金动作,仅允许公司设备(工作手机 staff_work_phone / 后台 web)。
+     * fail-closed:缺省/空白 X-Terminal-Type 一律拒绝(正规客户端 web/staff_work_phone 均发标识,
      * 只挡无标识绕过);允许清单与 openapi-p0 两 operation 的 x-terminal-allowed 一致。 */
     static void requireCompanyTerminal(String terminalType, java.util.Set<String> allowed) {
         if (terminalType == null || terminalType.isBlank()) {
@@ -50,14 +50,14 @@ public class ServiceOrderController {
         }
     }
 
-    private static final java.util.Set<String> MARK_PAID_TERMINALS =
-            java.util.Set.of("staff_work_phone", "web", "tablet");
+    static final java.util.Set<String> MARK_PAID_TERMINALS =
+            java.util.Set.of("staff_work_phone", "web");
     private static final java.util.Set<String> COMPLETE_TERMINALS =
             java.util.Set.of("staff_work_phone", "web");
     /** 2026-07-03 补齐:代客下单(create)/出示公司收款码(payment-code)同为卡座现场动作,禁私人手机;
      * app=客人App自点预留,保留。与 openapi-p0 两 operation 的 x-terminal-allowed 一致。 */
     static final java.util.Set<String> CREATE_AND_CODE_TERMINALS =
-            java.util.Set.of("staff_work_phone", "web", "tablet", "app");
+            java.util.Set.of("staff_work_phone", "web", "app");
 
     @GetMapping("/catalog")
     public ApiResponse<PageResponse<ServiceCatalogItemRecord>> listCatalog() {

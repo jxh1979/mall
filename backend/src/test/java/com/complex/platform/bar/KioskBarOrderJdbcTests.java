@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -60,6 +60,8 @@ class KioskBarOrderJdbcTests {
     private RequestPostProcessor cashier;
     private RequestPostProcessor barStaff;
     private String cashierId;
+    private RequestPostProcessor webCashier;
+    private String webCashierId;
     private String product;
 
     @BeforeEach
@@ -86,6 +88,10 @@ class KioskBarOrderJdbcTests {
         // 授权员工：在一体机上当场登录登记现金。
         cashierId = "usr_kbo_cashier_" + s;
         cashier = staffs.staff(cashierId, "staff", project, bar, "finance.payment.register");
+        // 第十八批 O 段第 127 条 127-R3：后台网页收银员——开班、下单出账、结账、交班。
+        webCashierId = "usr_kbo_webcashier_" + s;
+        webCashier = staffs.staff(webCashierId, "staff", project, bar,
+                "bar.shift.manage", "bar.shift.close", "bar.order.create", "finance.payment.register");
         // 吧台员工：建商品、出品。
         barStaff = staffs.staff("usr_kbo_bar_" + s, "staff", project, bar, "bar.product.manage", "bar.order.create");
         // 管理员按后台真实请求把设备绑定为服务型一体机（按空间绑点位）。
@@ -137,7 +143,8 @@ class KioskBarOrderJdbcTests {
         settle.put("payment_id", key);
         settle.put("settlement_amount_cent", 10_000);
         settle.put("payment_channel", "cash");
-        settle.put("cashier_staff_id", cashierId);
+        // 第十八批 O 段第 127 条 127-R3（BSM:940、BSM:1066）：请求里填了别人也不采信，收款人记本次登录结账的授权员工。
+        settle.put("cashier_staff_id", "usr_kbo_other_" + s);
         mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(kiosk(cashier))
                         .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(settle)))
                 .andExpect(status().isOk())
@@ -148,6 +155,8 @@ class KioskBarOrderJdbcTests {
                 .containsEntry("settlement_amount_cent", 10_000L);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'payment.cash_received' AND business_id = ?",
                 Integer.class, billId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT metadata->>'cashier_staff_id' FROM audit_events WHERE event_name = 'payment.cash_received' AND business_id = ?",
+                String.class, billId)).isEqualTo(cashierId);
 
         // 吧台员工出品：扣吧台库存（既有路径）。
         List<Map<String, Object>> lines = jdbc.queryForList("SELECT id, quantity FROM bar_order_items WHERE order_id = ?", order);
@@ -170,6 +179,40 @@ class KioskBarOrderJdbcTests {
         String order = data(order(resident, "web").andExpect(status().isOk())).path("id").asText();
         assertThat(jdbc.queryForMap("SELECT order_source, created_terminal, device_id FROM bar_orders WHERE id = ?", order))
                 .containsEntry("order_source", "staff").containsEntry("created_terminal", "merchant_portal").containsEntry("device_id", null);
+    }
+
+    /**
+     * 第十八批 O 段第 127 条 127-R3（BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」；
+     * BSM:1066「POS（记流水号+收款人）」；BSM:1081「能够明确定位到具体收银员时，由该收银员补足」）：后台网页 POS 结账按网页现形状不带收款人，
+     * 收款人记执行结账的登录员工，交班对账把这笔 POS 归入该收银员。
+     */
+    @Test
+    void backOfficeWebPosSettlementRecordsLoggedInCashierAndShiftCloseCountsIt() throws Exception {
+        // 交班过合同准入闸（bar.shift_close 越合同业务范围即拦）：本酒吧有一份含酒吧业务的生效合同。
+        jdbc.update("INSERT INTO contracts(id,merchant_id,contract_subject_id,settlement_subject_id,effective_date,expiry_date,"
+                + "lifecycle_status,allowed_business_scope,created_at,updated_at) VALUES(?,?,?,?,current_date-1,current_date+365,"
+                + "'effective','[\"bar\"]'::jsonb,now(),now())", "kbo_ct_" + s, bar, bar, bar);
+        String shift = data(mockMvc.perform(post("/api/v1/bar/shifts/open").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-shift-" + s, "bar_id", bar,
+                                "cashier_user_id", webCashierId, "opening_cash_cent", 0))))
+                .andExpect(status().isOk())).path("id").asText();
+        String order = data(order(webCashier, "webpos").andExpect(status().isOk())).path("id").asText();
+        String billId = data(mockMvc.perform(post("/api/v1/bar/orders/" + order + "/bill").with(webCashier)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-webbill-" + s))))
+                .andExpect(status().isOk())).path("id").asText();
+        String key = "kbo-websettle-" + s;
+        mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", key, "payment_id", key,
+                                "settlement_amount_cent", 10_000, "payment_channel", "pos", "pos_transaction_no", "POS-" + s))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.settlement_status").value("settled"));
+        assertThat(jdbc.queryForObject("SELECT cashier_staff_id FROM bar_bill_settlements WHERE bill_id = ?", String.class, billId))
+                .isEqualTo(webCashierId);
+        mockMvc.perform(post("/api/v1/bar/shifts/" + shift + "/close").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-shiftclose-" + s, "declared_cash_cent", 0))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.system_pos_cent").value(10_000));
     }
 
     // ---------- helpers ----------

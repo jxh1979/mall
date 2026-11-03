@@ -1,19 +1,20 @@
 package com.complex.terminal
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
  * 现场工作流编排测试：使用 stub HttpClient 拦截请求，断言路径/请求体字段并返回固定响应。
- * 覆盖：游乐核销（成功/失败/离线）、游乐检修提交+主管确认、酒吧点酒+支付意图+结算、
+ * 覆盖：游乐核销（成功/失败/断网拒绝）、游乐检修提交+主管确认、酒吧点酒+支付意图+结算、
  * 员工设备换机绑定+批准+完整性上报、票务核销冲正。
  */
 class TerminalFieldWorkflowTest {
@@ -59,20 +60,6 @@ class TerminalFieldWorkflowTest {
     assertEquals("success", record.verificationResult)
     assertEquals(1, captured.size)
     assertTrue(store.pendingEvents().any { it.eventType == "terminal.amusement.verification.online" })
-  }
-
-  @Test
-  fun amusementVerifyOfflineQueuesTaskWithoutNetwork() {
-    val api = newApi { error("should not call network when offline") }
-    val store = storeWithSessionAndBinding()
-    val workflow = TerminalWorkflow(api, store)
-    workflow.networkOnline = false
-
-    val task = workflow.amusementVerifyOffline("E-AMUSE-2", sessionId = "sess-1")
-
-    assertEquals("offline_verification", task.taskType)
-    assertEquals("amusement_entry", task.payload["scenario"])
-    assertEquals(1, store.pendingTaskCount())
   }
 
   @Test
@@ -253,7 +240,8 @@ class TerminalFieldWorkflowTest {
 
   @Test
   fun offlineGuardBlocksFieldWorkflows() {
-    val api = newApi { error("network must not be called when offline") }
+    var calls = 0
+    val api = newApi { calls++; error("network must not be called when offline") }
     val store = storeWithSessionAndBinding()
     val workflow = TerminalWorkflow(api, store)
     workflow.networkOnline = false
@@ -265,36 +253,25 @@ class TerminalFieldWorkflowTest {
       threw = true
     }
     assertTrue(threw, "online amusement verify should require network")
+
+    // 第十八批 O 段第 129 条 129-R2（BSM:800「核销必须在线、不做离线核销」）：门票/权益核销断网时也只报错，不发请求、不入队。
+    assertFailsWith<IllegalStateException> { workflow.verifyOnline("E-1") }
+    assertEquals(0, calls, "断网时不得发出任何请求")
   }
 
+  // 第十八批 O 段第 129 条 129-R2（BSM:800「核销必须在线、不做离线核销」）：离线权益包、离线核销与人工补录的本地队列、
+  // 待同步任务回传入口都已删除，端上只剩在线核销。
   @Test
-  fun syncPendingTasksOnlyUploadsCurrentOperatorTasks() {
-    val syncBodies = mutableListOf<String>()
-    val api = newApi { req ->
-      assertEquals("/api/v1/terminals/sync-tasks", req.path)
-      syncBodies += req.body
-      okJson("""{"synced_at":"t","results":[]}""")
-    }
-    val store = storeWithSessionAndBinding() // 会话 staff-1
-    val workflow = TerminalWorkflow(api, store)
-
-    // staff-1 离线核销产生待同步任务(归属固化到 staff-1)。
-    workflow.networkOnline = false
-    val task = workflow.amusementVerifyOffline("E-AMUSE-9")
-    workflow.networkOnline = true
-
-    // 换人:同一设备换 staff-2 登录(binding 不变,仅会话改)。
-    store.saveSession(TerminalSession("token2", "staff-2", "operator2"))
-    workflow.syncPendingTasks()
-    assertTrue(syncBodies.isEmpty(), "新员工不得上送上一员工的待同步任务")
-    assertEquals(1, store.pendingTaskCount(), "外来任务应保持 PENDING")
-
-    // 原员工 staff-1 重登后可正常同步自己的任务,且以 staff-1 身份上送。
-    store.saveSession(TerminalSession("token1", "staff-1", "operator"))
-    workflow.syncPendingTasks()
-    assertEquals(1, syncBodies.size)
-    assertTrue(task.clientTaskId in syncBodies.first())
-    assertTrue("\"staff_id\":\"staff-1\"" in syncBodies.first())
+  fun offlineQueueAndSyncEntriesAreRemoved() {
+    val removed = setOf(
+      "refreshOfflinePackage", "verifyOffline", "amusementVerifyOffline", "addManualSupplement", "syncPendingTasks",
+      "offlineEntitlements", "syncTasks", "replaceOfflinePackage", "enqueue", "pendingTaskCount",
+    )
+    val present = listOf(TerminalWorkflow::class.java, TerminalApiClient::class.java, InMemoryLocalStore::class.java)
+      .flatMap { type -> type.methods.map { it.name.substringBefore('$') } }
+      .filter { it in removed }
+      .distinct()
+    assertEquals(emptyList(), present)
   }
 
   // TK-06（BSM:780 一人多次票首次核销留存人脸、后续以该人脸核对）：预检读 face_binding；核销带上本次拍照与客人同意。

@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -8,11 +8,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.auth.AuthService;
 import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
 import com.complex.platform.support.StaffRequestFixture;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.Cookie;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +28,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +54,7 @@ class WorkPhoneVoucherRedeemJdbcTests {
     @Autowired private ObjectMapper json;
     @Autowired private CustomerRepository customers;
     @Autowired private AuditEventService auditEvents;
+    @Autowired private AuthService auth;
 
     private CustomerTicketPaymentFixture f;
     private String s;
@@ -168,6 +173,70 @@ class WorkPhoneVoucherRedeemJdbcTests {
         assertThat(terminalOf("inventory.trace_code.registered", "idempotency_key", platformKey)).isEqualTo("web");
     }
 
+    /**
+     * 第十八批 O 段第 127 条 127-R1（BSM:940「同一账号允许在多台设备、多个端同时登录。收银、核销、收款、放行等现场动作，一律按执行该动作的
+     * 设备绑定与该次登录会话定位到操作人并留痕……」；DEC-R8-97-19；第十八批裁决 6 网页端设备号＝系统发给浏览器的编号）：同一账号同时在工作手机
+     * 与后台网页登录，留痕按执行该动作的端记该次登录会话 login_session_id 与执行设备 operator_device_id，不因账号在别处登录而转移；
+     * 失败留痕（独立事务）同样记。真实登录、真实入口与授权链，按两端真实形状请求。
+     */
+    @Test
+    void auditRecordsLoginSessionAndDeviceOfTheActingEnd() throws Exception {
+        String user = "usr_wpv_cash_" + s;
+        auth.provisionUser(user, user, "wpv-login-password", "staff", f.projectId, f.merchantId, "active");
+        // 工作手机按安卓真实形状登录：终端头、蛇形键，不带设备号。
+        JsonNode phoneLogin = body(login(user, "staff_work_phone"));
+        String phoneSession = phoneLogin.at("/data/session_id").asText();
+        String phoneToken = phoneLogin.at("/data/access_token").asText();
+        // 同一账号在后台网页登录（不带设备型终端头）：令牌种进 Cookie，并发浏览器设备编号。
+        MvcResult web = login(user, null);
+        String webSession = body(web).at("/data/session_id").asText();
+        Cookie access = web.getResponse().getCookie("admin_access_token");
+        Cookie csrf = web.getResponse().getCookie("XSRF-TOKEN");
+        Cookie browser = web.getResponse().getCookie("complex_device_no");
+        assertThat(phoneSession).startsWith("sess_").isNotEqualTo(webSession);
+        RequestPostProcessor phone = request -> {
+            request.addHeader("Authorization", "Bearer " + phoneToken);
+            request.addHeader("X-Terminal-Type", "staff_work_phone");
+            request.addHeader("X-Device-Id", device);
+            return request;
+        };
+        RequestPostProcessor webEnd = request -> {
+            request.setCookies(access, csrf, browser);
+            request.addHeader("X-XSRF-TOKEN", csrf.getValue());
+            request.addHeader("X-Terminal-Type", "web");
+            return request;
+        };
+
+        // 工作手机查券、核销：记工作手机那一次会话与登记设备号。
+        String voucher = goodsVoucher(1);
+        String code = redeemCode(voucher);
+        preview(phone, code).andExpect(status().isOk());
+        assertThat(trace("voucher.redeem_previewed", "business_id", voucher))
+                .containsEntry("login_session_id", phoneSession).containsEntry("operator_device_id", device);
+        String key = "wpv-sess-" + s;
+        mockMvc.perform(post("/api/v1/vouchers/redemptions").with(phone)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", key, "code", code, "trace_codes", List.of(code("TRC-A2"))))))
+                .andExpect(status().isOk());
+        assertThat(trace("voucher.redeemed", "idempotency_key", key))
+                .containsEntry("login_session_id", phoneSession).containsEntry("operator_device_id", device);
+
+        // 同一账号在后台网页查另一张券：记网页那一次会话与浏览器设备编号。
+        String other = goodsVoucher(1);
+        preview(webEnd, redeemCode(other)).andExpect(status().isOk());
+        assertThat(trace("voucher.redeem_previewed", "business_id", other))
+                .containsEntry("login_session_id", webSession).containsEntry("operator_device_id", browser.getValue());
+
+        // 工作手机核销不存在的码：失败留痕也记该次会话与设备。
+        String failKey = "wpv-sess-fail-" + s;
+        mockMvc.perform(post("/api/v1/vouchers/redemptions").with(phone)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", failKey, "code", "vrc_none_" + s, "trace_codes", List.of(code("TRC-A3"))))))
+                .andExpect(status().is4xxClientError());
+        assertThat(trace("voucher.redeem_failed", "idempotency_key", failKey))
+                .containsEntry("login_session_id", phoneSession).containsEntry("operator_device_id", device);
+    }
+
     /** 122-R1：没有请求（后台作业）也就没有终端信息，终端列记空，不兜底写 web。 */
     @Test
     void auditTerminalIsNullWithoutRequest() {
@@ -176,9 +245,32 @@ class WorkPhoneVoucherRedeemJdbcTests {
         auditEvents.recordSuccess("voucher.redeemed", "customer.voucher.redeem", "voucher", businessId, null, null, Map.of());
         assertThat(jdbc.queryForList("SELECT terminal FROM audit_events WHERE business_id = ?", String.class, businessId))
                 .containsExactly((String) null);
+        // 127-R1：没有请求也就没有登录会话与执行设备，两个键都不记。
+        assertThat(jdbc.queryForObject("SELECT metadata::text FROM audit_events WHERE business_id = ?", String.class, businessId))
+                .doesNotContain("login_session_id").doesNotContain("operator_device_id");
     }
 
     // ---------- helpers ----------
+
+    /** 127-R1：某条留痕补记的登录会话与执行设备。 */
+    private Map<String, Object> trace(String eventName, String column, String value) {
+        return jdbc.queryForMap("SELECT metadata->>'login_session_id' AS login_session_id, metadata->>'operator_device_id' AS operator_device_id"
+                + " FROM audit_events WHERE event_name = ? AND " + column + " = ?", eventName, value);
+    }
+
+    /** 真实登录：terminal 为空即后台网页（不带终端头）。 */
+    private MvcResult login(String user, String terminal) throws Exception {
+        var request = post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("login_name", user, "password", "wpv-login-password")));
+        if (terminal != null) {
+            request.header("X-Terminal-Type", terminal);
+        }
+        return mockMvc.perform(request).andExpect(status().isOk()).andReturn();
+    }
+
+    private JsonNode body(MvcResult result) throws Exception {
+        return json.readTree(result.getResponse().getContentAsString());
+    }
 
     private String terminalOf(String eventName, String column, String value) {
         return jdbc.queryForObject("SELECT terminal FROM audit_events WHERE event_name = ? AND " + column + " = ?",

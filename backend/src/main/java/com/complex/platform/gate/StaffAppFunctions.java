@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.Map;
@@ -13,6 +13,8 @@ import org.springframework.util.AntPathMatcher;
  * 收公告通知、查自己的工单、帮客人订位、看排班、查看考勤、请假、查薪资等可离场办理的事；必须在现场完成的操作（代客下单、出示公司收款码、
  * 完成履约、扫码核销）在公司工作手机上做……」）：员工 App 的功能清单由服务端按可信终端下发；私人手机只给低风险、可离场办理的功能，
  * {@link TerminalMasterSwitchInterceptor} 对私人手机只放行清单内的接口（PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）。
+ * 第十八批 O 段第 130 条（BSM:1901「只做酒吧点酒下单，绑定酒吧和卡座，校验最低消费，支持扫码支付。」；PGM:634「平板只负责酒吧点酒下单。」）：
+ * 平板只给酒吧点酒下单与平板点单 POS 两项，{@link TerminalMasterSwitchInterceptor} 对平板同样只放行清单内的接口。
  * 清单按 HTML 判据固定在这里，不做后台可配置。
  */
 public final class StaffAppFunctions {
@@ -25,7 +27,7 @@ public final class StaffAppFunctions {
     public static final List<String> ALL = List.of(
             "ticket_verify", "voucher_redeem", "trace_handover", "amusement_verify", "bar_order", "tablet_pos", "kiosk_claim",
             "amusement_maintenance",
-            "sync_tasks", "staff_device", "ticket_reverse", "inbox", "notices", "my_work_orders", "my_alarms",
+            "staff_device", "ticket_reverse", "inbox", "notices", "my_work_orders", "my_alarms",
             "bar_reservation", "my_shifts", "attendance_punch", "my_payroll", "attendance_month", "leave",
             "service_order_create", "my_service_income", "service_order_fulfil", "shift_manage",
             "merchant_staff_registration", "my_profile");
@@ -61,22 +63,44 @@ public final class StaffAppFunctions {
     private static final List<String> PRIVATE_PHONE_COMMON = List.of(
             "GET /api/v1/terminals/staff-app-functions", "POST /api/v1/staff/lockers/scan-token");
 
+    static final String TABLET = "tablet";
+
+    /** 平板清单（第 130 条）：功能码 → 该功能调用的接口（按安卓 showBarOrder/showBarPayment 与平板点单 POS 的实际调用）。 */
+    private static final Map<String, List<String>> TABLET_FUNCTIONS = Map.of(
+            "bar_order", List.of("POST /api/v1/bar/orders", "POST /api/v1/bar/bills/*/pay-intents", "POST /api/v1/bar/bills/*/settle"),
+            "tablet_pos", List.of("GET /api/v1/bar/tables/availability", "GET /api/v1/bar/catalog/categories",
+                    "GET /api/v1/bar/catalog/products", "GET /api/v1/bar/catalog/combos", "GET /api/v1/bar/catalog/images/*",
+                    "POST /api/v1/bar/orders", "POST /api/v1/bar/orders/*/bill", "POST /api/v1/bar/bills/*/settle"));
+
+    /** 平板公共三条（不对应首页按钮）：取本清单；第一次使用绑定所属酒吧（BSM:956）与登记签名公钥。 */
+    private static final List<String> TABLET_COMMON = List.of("GET /api/v1/terminals/staff-app-functions",
+            "POST /api/v1/terminals/devices/bind", "POST /api/v1/terminals/devices/*/signing-key");
+
+    /** 受清单约束的终端 → 功能清单、公共项；不在其中的终端不受清单约束。 */
+    private static final Map<String, Map<String, List<String>>> RESTRICTED = Map.of(
+            DeviceCredentialVerifier.STAFF_PRIVATE_PHONE, PRIVATE_PHONE, TABLET, TABLET_FUNCTIONS);
+    private static final Map<String, List<String>> COMMON = Map.of(
+            DeviceCredentialVerifier.STAFF_PRIVATE_PHONE, PRIVATE_PHONE_COMMON, TABLET, TABLET_COMMON);
+
     private static final AntPathMatcher MATCHER = new AntPathMatcher();
 
     private StaffAppFunctions() {
     }
 
-    /** 该终端可用的员工 App 功能码：私人手机为清单内的（按 {@link #ALL} 顺序），其他终端与未识别终端为全部。 */
+    /** 该终端可用的员工 App 功能码：私人手机、平板为各自清单内的（按 {@link #ALL} 顺序），其他终端与未识别终端为全部。 */
     public static List<String> functionsFor(String terminalType) {
-        return DeviceCredentialVerifier.STAFF_PRIVATE_PHONE.equals(terminalType)
-                ? ALL.stream().filter(PRIVATE_PHONE::containsKey).toList()
-                : ALL;
+        Map<String, List<String>> functions = terminalType == null ? null : RESTRICTED.get(terminalType);
+        return functions == null ? ALL : ALL.stream().filter(functions::containsKey).toList();
     }
 
-    /** 私人手机能否调这个接口。 */
-    static boolean privatePhoneAllows(String method, String path) {
+    /** 该终端能否调这个接口：私人手机、平板只放行各自清单内与公共项的接口，其他终端不受清单约束。 */
+    static boolean allows(String terminalType, String method, String path) {
+        Map<String, List<String>> functions = terminalType == null ? null : RESTRICTED.get(terminalType);
+        if (functions == null) {
+            return true;
+        }
         String prefix = method + " ";
-        return Stream.concat(PRIVATE_PHONE.values().stream().flatMap(List::stream), PRIVATE_PHONE_COMMON.stream())
+        return Stream.concat(functions.values().stream().flatMap(List::stream), COMMON.get(terminalType).stream())
                 .anyMatch(rule -> rule.startsWith(prefix) && MATCHER.match(rule.substring(prefix.length()), path));
     }
 }

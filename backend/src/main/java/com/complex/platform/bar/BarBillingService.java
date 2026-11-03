@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -341,11 +341,14 @@ public class BarBillingService {
                 merchantRewards.bindIfAbsent(com.complex.platform.customer.MerchantConsumptionRewardService.BAR_BILL, bill.id(), svCustomerId);
             }
         }
+        // 第十八批 O 段第 127 条 127-R3（BSM:940「收银……收款……按执行该动作的设备绑定与该次登录会话定位到操作人」；BSM:1066「扫客人付款码的收款记操作员为收款人」）：
+        // 各渠道收款人一律取执行结账的那一次登录会话的操作人，不读请求的 cashier_staff_id；交班对账按它归入收银员（BSM:1081）。
+        String cashier = authorizationService.currentActor().id();
         repository.saveBillSettlement(new BarBillSettlementRecord(
                 "settle_" + slug(actual.idempotencyKey()),
                 bill.id(),
                 channel,
-                trimToNull(actual.cashierStaffId()),
+                cashier,
                 trimToNull(actual.posTransactionNo()),
                 settlementAmount,
                 bill.merchantId(),
@@ -354,8 +357,7 @@ public class BarBillingService {
         if ("cash".equals(channel)) {
             auditEventService.recordSuccess("payment.cash_received", "bar.bill.settle", "bar_bill",
                     bill.id(), null, actual.idempotencyKey(),
-                    Map.of("amount_cent", settlementAmount, "cashier_staff_id",
-                            String.valueOf(actual.cashierStaffId())));
+                    Map.of("amount_cent", settlementAmount, "cashier_staff_id", cashier));
         } else if ("pos".equals(channel)) {
             auditEventService.recordSuccess("payment.pos_received", "bar.bill.settle", "bar_bill",
                     bill.id(), null, actual.idempotencyKey(),

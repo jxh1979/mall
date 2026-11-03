@@ -8,13 +8,8 @@ data class P0TerminalSmokeResult(
   val health: Boolean,
   val login: Boolean,
   val deviceBound: Boolean,
-  val offlinePackageCount: Int,
   val onlinePreviewAllowed: Boolean,
   val onlineVerificationStatus: String,
-  val offlineTaskQueued: Boolean,
-  val returnBlockedBeforeSync: Boolean,
-  val syncAccepted: Boolean,
-  val manualSupplementSynced: Boolean,
   val eventsReported: Int,
   val returned: Boolean,
   val backendEvents: Int,
@@ -50,21 +45,9 @@ fun main() {
     ),
   )
 
-  val offlinePackage = workflow.refreshOfflinePackage(fixture.merchantId, fixture.venueId)
   val preview = workflow.previewOnline(fixture.entitlementCode)
   val onlineVerification = workflow.verifyOnline(fixture.entitlementCode)
 
-  workflow.networkOnline = false
-  val offlineTask = workflow.verifyOffline(fixture.entitlementCode)
-  workflow.networkOnline = true
-
-  val blockedBeforeSync = workflow.returnDevice("P0 smoke pending task check")
-  val sync = workflow.syncPendingTasks()
-  val manualTask = workflow.addManualSupplement(
-    reason = "scanner_unreadable",
-    note = "P0 smoke placeholder photo",
-  )
-  val manualSync = workflow.syncPendingTasks()
   val events = workflow.reportDeviceEvents()
   val returned = workflow.returnDevice("P0 smoke shift closed")
   val backendEvents = api.events(limit = 30)
@@ -73,13 +56,8 @@ fun main() {
     health = health.ok,
     login = terminalSession.accessToken.isNotBlank(),
     deviceBound = binding.status == "bound",
-    offlinePackageCount = offlinePackage.entitlements.size,
     onlinePreviewAllowed = preview.allowed,
     onlineVerificationStatus = onlineVerification.status,
-    offlineTaskQueued = offlineTask.clientTaskId.isNotBlank(),
-    returnBlockedBeforeSync = blockedBeforeSync.status == ReturnStatus.BLOCKED_PENDING_TASKS,
-    syncAccepted = sync.results.any { it.clientTaskId == offlineTask.clientTaskId && it.status == "accepted" },
-    manualSupplementSynced = manualSync.results.any { it.clientTaskId == manualTask.clientTaskId && it.status == "accepted" },
     eventsReported = events.accepted,
     returned = returned.status == ReturnStatus.RETURNED,
     backendEvents = backendEvents.size,
@@ -87,13 +65,8 @@ fun main() {
 
   check(result.login)
   check(result.deviceBound)
-  check(result.offlinePackageCount > 0)
   check(result.onlinePreviewAllowed)
   check(result.onlineVerificationStatus == "success")
-  check(result.offlineTaskQueued)
-  check(result.returnBlockedBeforeSync)
-  check(result.syncAccepted)
-  check(result.manualSupplementSynced)
   check(result.eventsReported > 0)
   check(result.returned)
 

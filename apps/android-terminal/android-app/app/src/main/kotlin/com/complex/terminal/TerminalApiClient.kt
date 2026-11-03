@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -106,23 +106,11 @@ class TerminalApiClient(
   fun bindDevice(request: BindDeviceRequest): DeviceBinding =
     post("/api/v1/terminals/devices/bind", request, request.terminalType)
 
-  fun offlineEntitlements(merchantId: String?, venueId: String?, limit: Int = 200): OfflinePackageResponse {
-    val query = listOfNotNull(
-      merchantId?.let { "merchantId=${urlEncode(it)}" },
-      venueId?.let { "venueId=${urlEncode(it)}" },
-      "limit=$limit",
-    ).joinToString("&")
-    return get("/api/v1/terminals/offline-entitlements?$query")
-  }
-
   fun preview(request: VerificationRequest): PreviewResponse =
     post("/api/v1/ticketing/verifications/preview", request)
 
   fun verify(request: VerificationRequest): VerificationResponse =
     post("/api/v1/ticketing/verifications", request)
-
-  fun syncTasks(request: SyncTasksRequest): SyncTasksResponse =
-    post("/api/v1/terminals/sync-tasks", request)
 
   fun reportEvents(request: EventBatchRequest): EventBatchResponse =
     post("/api/v1/evidence/events", request)

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 // 文件版本：V0.03
 
@@ -28,8 +28,6 @@ import com.complex.platform.finance.RefundAuthorizationService;
 import com.complex.platform.finance.RefundAutoRuleRecord;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
-import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
-import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
@@ -120,7 +118,6 @@ class TicketingServiceTests {
                 new TicketRefundService(ticketingRepository, event -> { }, null, null),
                 verificationService,
                 new TicketCredentialService(verificationService, auditEventService),
-                new TicketOfflinePackageService(ticketingRepository, auditEventService, null, false),
                 new TicketingOperationExecutor(operations),
                 authorizationService,
                 null
@@ -1080,49 +1077,6 @@ class TicketingServiceTests {
     }
 
     @Test
-    void syncTaskAcceptsOfflineVerificationAndDoesNotConsumeDuplicateClientTaskTwice() {
-        IssuedEntitlementRecord entitlement = issueSingleEntitlement("sync");
-        TerminalSyncTaskItemRequest task = new TerminalSyncTaskItemRequest(
-                "client-task-1",
-                "offline_verification",
-                "2026-06-14T00:00:00Z",
-                Map.of(
-                        "entitlementCode", entitlement.entitlementCode(),
-                        "entitlement_id", entitlement.id(),
-                        "mode", "offline"
-                )
-        );
-
-        SyncTasksResponse first = service.syncTerminalTasks(new TerminalSyncTasksRequest(
-                "sync-first",
-                "sync",
-                List.of(),
-                "P0-ANDROID-1",
-                "staff_1",
-                List.of(task)
-        ));
-        SyncTasksResponse duplicate = service.syncTerminalTasks(new TerminalSyncTasksRequest(
-                "sync-second-key",
-                "sync duplicate",
-                List.of(),
-                "P0-ANDROID-1",
-                "staff_1",
-                List.of(task)
-        ));
-
-        assertThat(first.results()).singleElement()
-                .extracting(SyncTaskResult::status)
-                .isEqualTo("accepted");
-        assertThat(duplicate.results()).singleElement()
-                .extracting(SyncTaskResult::verificationId)
-                .isEqualTo(first.results().getFirst().verificationId());
-        assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
-                .get()
-                .extracting(IssuedEntitlementRecord::usedTimes)
-                .isEqualTo(1);
-    }
-
-    @Test
     void createPriceRuleIsIdempotentAndListWritesViewAuditEvent() {
         TicketTypeRecord ticketType = createTicketType("price-rule-ticket");
         TicketPriceRuleRequest request = new TicketPriceRuleRequest(
@@ -1709,35 +1663,6 @@ class TicketingServiceTests {
                 .allSatisfy(payload -> assertThat(payload)
                         .startsWith("sha256:")
                         .doesNotContain(credential.credentialToken()));
-    }
-
-    @Test
-    void offlineSyncTaskStoresHashedDynamicCredentialPayloadOnly() {
-        IssuedEntitlementRecord entitlement = issueSingleEntitlement("sync-credential-payload-hash");
-        TicketCredentialResponse credential = service.getTicketCredential(entitlement.id());
-        TerminalSyncTaskItemRequest task = new TerminalSyncTaskItemRequest(
-                "client-dynamic-credential-task",
-                "offline_verification",
-                "2026-06-14T00:00:00Z",
-                Map.of(
-                        "credentialPayload", credential.credentialToken(),
-                        "pointId", "gate_1"
-                )
-        );
-
-        service.syncTerminalTasks(new TerminalSyncTasksRequest(
-                "sync-dynamic-credential",
-                "sync dynamic credential",
-                List.of(),
-                "P0-ANDROID-1",
-                "staff_1",
-                List.of(task)
-        ));
-
-        TerminalSyncTaskRecord saved = ticketingRepository.findTerminalSyncTask("P0-ANDROID-1", "client-dynamic-credential-task")
-                .orElseThrow();
-        assertThat(saved.payload().get("credentialPayload")).startsWith("sha256:");
-        assertThat(saved.payload().values()).doesNotContain(credential.credentialToken());
     }
 
     @Test
@@ -3003,7 +2928,7 @@ class TicketingServiceTests {
     }
 
     @Test
-    void offlineEntitlementFilterExcludesOtherMerchantsWhenMerchantIdPopulated() {
+    void issuedEntitlementCarriesMerchantIdFromSecurityContext() {
         TestSecurityActors.asMerchantUser("mch_filter_test");
         try {
             TicketTypeRecord ticketType = createTicketType("merchant-filter");
@@ -3021,18 +2946,6 @@ class TicketingServiceTests {
                     .toList();
             org.assertj.core.api.Assertions.assertThat(entitlements).hasSize(1);
             org.assertj.core.api.Assertions.assertThat(entitlements.getFirst().merchantId()).isEqualTo("mch_filter_test");
-
-            // Same merchant can see its own entitlement
-            List<OfflineEntitlementResponse> visible = ticketingRepository.listOfflineEntitlements("mch_filter_test", null, 100);
-            org.assertj.core.api.Assertions.assertThat(visible)
-                    .extracting(OfflineEntitlementResponse::entitlementCode)
-                    .contains(entitlements.getFirst().entitlementCode());
-
-            // Different merchant cannot see it
-            List<OfflineEntitlementResponse> invisible = ticketingRepository.listOfflineEntitlements("mch_other", null, 100);
-            org.assertj.core.api.Assertions.assertThat(invisible)
-                    .extracting(OfflineEntitlementResponse::entitlementCode)
-                    .doesNotContain(entitlements.getFirst().entitlementCode());
         } finally {
             TestSecurityActors.clear();
         }
@@ -4048,7 +3961,6 @@ class TicketingServiceTests {
         // AUD-066 可控场次（测试用）：非 null 时 resolveOpenSessionForVenue 返回它（模拟当前 open 场次），否则回退自然日。
         String openSessionId = null;
         private final Map<String, VerificationRecord> verifications = new LinkedHashMap<>();
-        private final Map<String, TerminalSyncTaskRecord> terminalSyncTasks = new LinkedHashMap<>();
         private final Map<String, TicketPriceRuleRecord> priceRules = new LinkedHashMap<>();
         private final Map<String, TicketDynamicPricingRuleRecord> dynamicPricingRules = new LinkedHashMap<>();
         private final Map<String, TicketOrderRecord> ticketOrders = new LinkedHashMap<>();
@@ -4233,16 +4145,6 @@ class TicketingServiceTests {
         }
 
         @Override
-        public List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit) {
-            return issuedEntitlements.values().stream()
-                    .filter(entitlement -> merchantId == null || merchantId.equals(entitlement.merchantId()))
-                    .filter(entitlement -> venueId == null || venueId.equals(entitlement.venueId()))
-                    .limit(limit)
-                    .map(TicketEntitlementMapper::toOfflineEntitlementResponse)
-                    .toList();
-        }
-
-        @Override
         public VerificationRecord saveVerification(VerificationRecord verification) {
             verifications.put(verification.id(), verification);
             return verification;
@@ -4273,17 +4175,6 @@ class TicketingServiceTests {
             ,
             null));
             return 1;
-        }
-
-        @Override
-        public Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId) {
-            return Optional.ofNullable(terminalSyncTasks.get(deviceCode + ":" + clientTaskId));
-        }
-
-        @Override
-        public TerminalSyncTaskRecord saveTerminalSyncTask(TerminalSyncTaskRecord task) {
-            terminalSyncTasks.put(task.deviceCode() + ":" + task.clientTaskId(), task);
-            return task;
         }
 
         @Override

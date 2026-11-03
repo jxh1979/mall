@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 // M006-027：现场储值扣款必须先核验报出的手机号和短信验证码。
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -258,6 +258,9 @@ class M006StoredValuePaymentTests {
     }
 
     @Test void validPhoneAndSmsPayTheActualUnboundBill() throws Exception {
+        // 第十八批 O 段第 127 条 127-R3（BSM:940）：收款人取结账那一次登录会话的操作人——现场储值结账由登录收银员办理。
+        when(auth.currentActor()).thenReturn(new com.complex.platform.access.AccessActor(
+                "usr_cashier_1", "cashier_1", "staff", "org_1", "merchant_1", "active"));
         BarBillRecord result = settle("13800138000", "123456");
         assertThat(balance.get().balanceCent()).isEqualTo(7000L);
         assertThat(result.paidAmountCent()).isEqualTo(3000L);

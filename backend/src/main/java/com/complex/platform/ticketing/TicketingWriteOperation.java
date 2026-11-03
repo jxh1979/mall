@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -48,7 +48,6 @@ enum TicketingWriteOperation implements AuditedOperation {
     // TK-14（ENUM「核销记录状态」「异常状态的统一出口」）：成功核销提起异常复核 / 主管二选一处置。
     RAISE_VERIFICATION_ANOMALY("ticket.verification_anomaly_raised", "ticket.verification_anomaly_raise_failed", "verification.execute", "ticket_verification"),
     RESOLVE_VERIFICATION_ANOMALY("ticket.verification_anomaly_resolved", "ticket.verification_anomaly_resolve_failed", "ticket.verify.anomaly.resolve", "ticket_verification"),
-    SYNC_TERMINAL_TASKS("terminal.sync_task.accepted", "terminal.sync_task.accepted_failed", "terminal.device.bind", "terminal_sync_task"),
     // AUD-006 转赠发起/领取走 executeWrite 幂等+审计(事件名与 openapi x-audit-event 对齐;客人端权限=not_applicable)。
     INITIATE_TICKET_TRANSFER("ticket_transfer.created", "ticket_transfer.create_failed", "not_applicable", "ticket_transfer"),
     CLAIM_TICKET_TRANSFER("ticket_transfer.claimed", "ticket_transfer.claim_failed", "not_applicable", "ticket_transfer"),

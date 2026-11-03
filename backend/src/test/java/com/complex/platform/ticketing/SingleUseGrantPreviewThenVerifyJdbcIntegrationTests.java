@@ -1,9 +1,10 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,7 +44,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * M723-F04：预览用同一请求编号重复提交，响应不提示已完成（查看、预览、查询不提示）。
  * M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：以正常返回报告失败的核销（过刷新窗口、签名失配）不算用掉——失败核销记录保留、
  * 来源仍未消耗，同一请求编号重复提交返回第一次的失败结果，随后有效票码核销成功恰好消耗一次。
- * 边界守护：终端离线同步批次里有失败的离线核销时，同步操作本身成功，单次「终端设备绑定」授权照常算用掉。
+ * 第十八批 O 段第 129 条：离线核销同步与离线权益包两接口已下线（404），同一票码只能在线核销。
  *
  * <p>不开测试事务（消耗要真实提交才看得见）。权益使用普通单次酒水，专门验证一次性授权；游乐营业日由专用真实库用例覆盖。
  * 消耗日志与审计事件只追加不删，按后缀隔离留在库里。
@@ -79,7 +80,6 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
     @AfterEach
     void cleanUp() {
         SecurityContextHolder.clearContext();
-        jdbcTemplate.update("DELETE FROM terminal_sync_tasks WHERE device_code = ?", "DC-" + deviceCode);
         jdbcTemplate.update("DELETE FROM entitlement_day_activations WHERE entitlement_id = ?", "ent_" + code);
         com.complex.platform.support.AppendOnlyTestBypass.update(
                 jdbcTemplate, "DELETE FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
@@ -207,44 +207,41 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
         assertThat(usedTimes()).isEqualTo(1);
     }
 
-    // M723-F08 的边界守护：终端离线同步（POST /terminals/sync-tasks）与在线核销共用同一个核销方法，但同步批次受理即这次同步操作
-    // 成功。只持单次「终端设备绑定」授权（terminal.device.bind）的本商户员工同步一条过刷新窗口的离线核销任务：200、同步任务 accepted、
-    // 落一条 failed/window_expired 核销记录，本次用掉的单次授权照常算用掉——来源已消耗、恰好一条 consumed、没有 released；
-    // 授权已用掉，再同步被拒。把业务失败标记放回共用的核销方法（verifyEntitlement）则红：切面会把这次消耗撤回。
+    // 第十八批 O 段第 129 条（BSM:800「核销必须在线、不做离线核销」；BSM:891「二维码原始值不存在手机本地，只在线核验」）：
+    // 终端离线核销同步（POST /terminals/sync-tasks）与离线权益包（GET /terminals/offline-entitlements）两接口已下线。
+    // 持「终端设备绑定」与「执行核销」的本商户员工按蛇形键同步一条有效票码的离线核销任务、再拉离线权益包：都 404 NOT_FOUND，
+    // 权益不扣次、不落核销记录；随后同一票码在线核销：成功、恰好扣一次、来源为在线核销。修复前同步接口 200 并离线扣次，第一处 404 即红。
     @Test
-    void aTerminalSyncBatchWithAFailedOfflineVerificationStillUsesUpTheSingleUseGrant() throws Exception {
+    void theOfflineSyncAndOfflinePackageChannelsAreGoneAndOnlyOnlineVerificationConsumes() throws Exception {
         seedDevice();
         seedEntitlement();
-        staffWithSingleUseGrant("terminal.device.bind");
-        String expiredToken = "cred_m723f08_sync_" + suffix;
-        seedCredential("tcred_sync_" + code, expiredToken, Instant.now().minusSeconds(600), "not-checked-window-expired");
+        Instant now = Instant.now();
+        accessRepository.createUser(new AccessUser(userId, userId, "staff", "org", MERCHANT, "active", now));
+        accessRepository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId,
+                List.of("terminal.device.bind", VERIFY), now.minusSeconds(3600), now.plusSeconds(86_400), false, false,
+                "active", "第129条离线通道下线回归", "seed-admin", now, null, null));
 
         mockMvc.perform(post("/api/v1/terminals/sync-tasks").with(session())
-                        .contentType(MediaType.APPLICATION_JSON).content(syncJson("m723pv-f08-sync-" + suffix, "task-1", expiredToken)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.results[0].status").value("accepted"));
-        assertThat(verificationOutcomes()).containsExactly("failed/window_expired");
-        assertThat(jdbcTemplate.queryForList("SELECT status FROM terminal_sync_tasks WHERE device_code = ?",
-                String.class, "DC-" + deviceCode)).containsExactly("accepted");
-        assertConsumedOnce();
-        assertThat(releasedLogs()).isZero();
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "m723pv-o129-sync-%s", "device_code": "DC-%s", "staff_id": "%s",
+                                 "tasks": [{"client_task_id": "o129-%s", "task_type": "offline_verification", "occurred_at": "%s",
+                                            "payload": {"entitlement_code": "%s"}}]}
+                                """.formatted(suffix, deviceCode, userId, suffix, now, code)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("NOT_FOUND"));
+        mockMvc.perform(get("/api/v1/terminals/offline-entitlements").param("merchant_id", MERCHANT).with(session()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("NOT_FOUND"));
         assertThat(usedTimes()).isZero();
+        assertThat(verificationOutcomes()).isEmpty();
 
-        mockMvc.perform(post("/api/v1/terminals/sync-tasks").with(session())
-                        .contentType(MediaType.APPLICATION_JSON).content(syncJson("m723pv-f08-sync-again-" + suffix, "task-2", expiredToken)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
-        assertConsumedOnce();
-        assertThat(releasedLogs()).isZero();
-    }
-
-    // 离线同步请求：设备码（terminal_devices.device_code）＋一条离线核销任务，票码放在任务载荷里
-    private String syncJson(String key, String clientTaskId, String credentialPayload) {
-        return """
-                {"idempotency_key": "%s", "device_code": "DC-%s", "staff_id": "%s",
-                 "tasks": [{"client_task_id": "%s-%s", "task_type": "offline_verification", "occurred_at": "%s",
-                            "payload": {"credentialPayload": "%s", "pointId": "point_%s"}}]}
-                """.formatted(key, deviceCode, userId, clientTaskId, suffix, Instant.now(), credentialPayload, suffix);
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
+                        .contentType(MediaType.APPLICATION_JSON).content(verifyJson("m723pv-o129-verify-" + suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success"));
+        assertThat(usedTimes()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList("SELECT source_type FROM ticket_verifications WHERE entitlement_id = ?",
+                String.class, "ent_" + code)).containsExactly("android_terminal_online");
     }
 
     // 来源未消耗；本次消耗已撤回：consumed 行与 released 行各 rows 条、相抵为零
